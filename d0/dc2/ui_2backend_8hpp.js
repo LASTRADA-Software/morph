@@ -9,13 +9,14 @@ var ui_2backend_8hpp =
     [ "morph::ui::CheckboxWidget", "de/da9/classmorph_1_1ui_1_1CheckboxWidget.html", "de/da9/classmorph_1_1ui_1_1CheckboxWidget" ],
     [ "morph::ui::SelectWidget", "d6/d9f/classmorph_1_1ui_1_1SelectWidget.html", "d6/d9f/classmorph_1_1ui_1_1SelectWidget" ],
     [ "morph::ui::MenuEntry", "d6/d3f/structmorph_1_1ui_1_1MenuEntry.html", "d6/d3f/structmorph_1_1ui_1_1MenuEntry" ],
+    [ "morph::ui::MenuTrigger", "df/dd5/structmorph_1_1ui_1_1MenuTrigger.html", "df/dd5/structmorph_1_1ui_1_1MenuTrigger" ],
     [ "morph::ui::MenuWidget", "d4/dfc/classmorph_1_1ui_1_1MenuWidget.html", "d4/dfc/classmorph_1_1ui_1_1MenuWidget" ],
     [ "morph::ui::StackWidget", "d4/d07/classmorph_1_1ui_1_1StackWidget.html", "d4/d07/classmorph_1_1ui_1_1StackWidget" ],
     [ "morph::ui::GridWidget", "d1/d51/classmorph_1_1ui_1_1GridWidget.html", "d1/d51/classmorph_1_1ui_1_1GridWidget" ],
     [ "morph::ui::SpacerWidget", "d7/d87/classmorph_1_1ui_1_1SpacerWidget.html", null ],
     [ "morph::ui::PanelWidget", "df/d1c/classmorph_1_1ui_1_1PanelWidget.html", "df/d1c/classmorph_1_1ui_1_1PanelWidget" ],
     [ "morph::ui::ScrollWidget", "d1/d8b/classmorph_1_1ui_1_1ScrollWidget.html", null ],
-    [ "morph::ui::SlotWidget", "de/d98/classmorph_1_1ui_1_1SlotWidget.html", null ],
+    [ "morph::ui::SlotWidget", "de/d98/classmorph_1_1ui_1_1SlotWidget.html", "de/d98/classmorph_1_1ui_1_1SlotWidget" ],
     [ "morph::ui::TabsWidget", "de/d86/classmorph_1_1ui_1_1TabsWidget.html", "de/d86/classmorph_1_1ui_1_1TabsWidget" ],
     [ "morph::ui::DialogWidget", "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html", "d4/d7f/classmorph_1_1ui_1_1DialogWidget" ],
     [ "morph::ui::BusyWidget", "d3/d98/classmorph_1_1ui_1_1BusyWidget.html", "d3/d98/classmorph_1_1ui_1_1BusyWidget" ],
@@ -29,6 +30,7 @@ var ui_2backend_8hpp =
     [ "morph::ui::ProgressWidget", "d9/d83/classmorph_1_1ui_1_1ProgressWidget.html", "d9/d83/classmorph_1_1ui_1_1ProgressWidget" ],
     [ "morph::ui::StepsWidget", "d1/d8e/classmorph_1_1ui_1_1StepsWidget.html", "d1/d8e/classmorph_1_1ui_1_1StepsWidget" ],
     [ "morph::ui::KeyValueWidget", "dd/df9/classmorph_1_1ui_1_1KeyValueWidget.html", "dd/df9/classmorph_1_1ui_1_1KeyValueWidget" ],
+    [ "morph::ui::ChartWidget", "da/d13/classmorph_1_1ui_1_1ChartWidget.html", "da/d13/classmorph_1_1ui_1_1ChartWidget" ],
     [ "morph::ui::EmptyStateWidget", "de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html", "de/d82/classmorph_1_1ui_1_1EmptyStateWidget" ],
     [ "morph::ui::DrawerWidget", "de/d3c/classmorph_1_1ui_1_1DrawerWidget.html", "de/d3c/classmorph_1_1ui_1_1DrawerWidget" ],
     [ "morph::ui::SplitterWidget", "d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html", "d7/d2a/classmorph_1_1ui_1_1SplitterWidget" ],
@@ -36,5 +38,12 @@ var ui_2backend_8hpp =
     [ "morph::ui::DropZoneWidget", "df/df5/classmorph_1_1ui_1_1DropZoneWidget.html", "df/df5/classmorph_1_1ui_1_1DropZoneWidget" ],
     [ "morph::ui::CustomWidget", "d2/dd1/classmorph_1_1ui_1_1CustomWidget.html", "d2/dd1/classmorph_1_1ui_1_1CustomWidget" ],
     [ "morph::ui::CustomRequest", "d2/d54/structmorph_1_1ui_1_1CustomRequest.html", "d2/d54/structmorph_1_1ui_1_1CustomRequest" ],
-    [ "morph::ui::IViewBackend", "df/dae/classmorph_1_1ui_1_1IViewBackend.html", "df/dae/classmorph_1_1ui_1_1IViewBackend" ]
+    [ "morph::ui::IViewBackend", "df/dae/classmorph_1_1ui_1_1IViewBackend.html", "df/dae/classmorph_1_1ui_1_1IViewBackend" ],
+    [ "morph::ui::RowClick", "d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2", [
+      [ "Only", "d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2a8392461cf759088854e16710b9b75d1a", null ],
+      [ "Toggle", "d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2aa8875bbe4272c0bdd786cfaaedf77921", null ],
+      [ "Range", "d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2a87ba2ecc8b6915e8bd6f5089918229fd", null ]
+    ] ],
+    [ "morph::ui::widthClassOf", "d0/dc2/ui_2backend_8hpp.html#a14b0ac907b260865f8f1be0b88c444ad", null ],
+    [ "morph::ui::kExpandedWidthUnits", "d0/dc2/ui_2backend_8hpp.html#a8fac25a5ffe5feb09b970bba606e05ab", null ]
 ];

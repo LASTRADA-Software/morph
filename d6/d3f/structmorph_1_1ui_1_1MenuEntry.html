@@ -145,11 +145,15 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:af587beb316928aee86ad09aa6cd56ae9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the entry can be chosen, or its submenu opened.  <br /></td></tr>
 <tr class="memitem:a7846e1d06f96fdad2f34c906bfe1790c" id="r_a7846e1d06f96fdad2f34c906bfe1790c"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d6/d3f/structmorph_1_1ui_1_1MenuEntry.html">MenuEntry</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7846e1d06f96fdad2f34c906bfe1790c">items</a></td></tr>
 <tr class="memdesc:a7846e1d06f96fdad2f34c906bfe1790c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The submenu; empty for an entry that is chosen.  <br /></td></tr>
+<tr class="memitem:aa9ac620b4f52b9de37db1ba0a3951090" id="r_aa9ac620b4f52b9de37db1ba0a3951090"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aa9ac620b4f52b9de37db1ba0a3951090">separator</a> = false</td></tr>
+<tr class="memdesc:aa9ac620b4f52b9de37db1ba0a3951090"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the entry is a line between entries: never chosen, never opened, and its other fields empty.  <br /></td></tr>
+<tr class="memitem:a7c5e41c23fe83f346ffa6f2b3174ab3c" id="r_a7c5e41c23fe83f346ffa6f2b3174ab3c"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a7c5e41c23fe83f346ffa6f2b3174ab3c">description</a></td></tr>
+<tr class="memdesc:a7c5e41c23fe83f346ffa6f2b3174ab3c"><td class="mdescLeft">&#160;</td><td class="mdescRight">A muted line of help shown with the entry; empty shows none.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One entry of a menu as a <span class="tt"><a class="el" href="../../d4/dfc/classmorph_1_1ui_1_1MenuWidget.html" title="A menu of commands, with nested submenus.">MenuWidget</a></span> shows it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00276">276</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00357">357</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a3e8b4f43330f4adbd333c6e3050240a0" name="a3e8b4f43330f4adbd333c6e3050240a0"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a3e8b4f43330f4adbd333c6e3050240a0">&#9670;&#160;</a></span>operator==()</h2>
@@ -194,7 +198,7 @@ Public Attributes</h2></td></tr>
 
 <p>The caption. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00359">359</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -212,7 +216,7 @@ Public Attributes</h2></td></tr>
 
 <p>The icon's name in the theme's icon map; empty shows none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00361">361</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +234,7 @@ Public Attributes</h2></td></tr>
 
 <p>The chord shown beside the label; empty shows none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00363">363</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -248,7 +252,7 @@ Public Attributes</h2></td></tr>
 
 <p>Engaged: a checkable entry with this mark; <span class="tt">nullopt</span>: not checkable. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00284">284</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -266,7 +270,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the entry can be chosen, or its submenu opened. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00286">286</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00367">367</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -284,7 +288,43 @@ Public Attributes</h2></td></tr>
 
 <p>The submenu; empty for an entry that is chosen. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00288">288</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa9ac620b4f52b9de37db1ba0a3951090" name="aa9ac620b4f52b9de37db1ba0a3951090"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa9ac620b4f52b9de37db1ba0a3951090">&#9670;&#160;</a></span>separator</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::MenuEntry::separator = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the entry is a line between entries: never chosen, never opened, and its other fields empty. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00371">371</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7c5e41c23fe83f346ffa6f2b3174ab3c" name="a7c5e41c23fe83f346ffa6f2b3174ab3c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7c5e41c23fe83f346ffa6f2b3174ab3c">&#9670;&#160;</a></span>description</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::MenuEntry::description</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A muted line of help shown with the entry; empty shows none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00373">373</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

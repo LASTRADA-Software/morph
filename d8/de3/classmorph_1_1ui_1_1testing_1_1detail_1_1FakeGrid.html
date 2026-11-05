@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/de3/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>A fake <span class="tt"><a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html" title="Children laid out row-major in columns.">GridWidget</a></span>: properties <span class="tt">columns</span>, <span class="tt">gap</span>, <span class="tt">align</span>, and <span class="tt">span</span> on a child.  
+<p>A fake <span class="tt"><a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html" title="Children laid out row-major in columns.">GridWidget</a></span>: properties <span class="tt">columns</span>, <span class="tt">tracks</span>, <span class="tt">gap</span>, <span class="tt">align</span>, and <span class="tt">span</span> on a child.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>&gt;</code></p>
@@ -142,7 +142,11 @@ Inheritance diagram for morph::ui::testing::detail::FakeGrid:</div>
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a65b564f131032aa6e7fe4e6e22e10b83" id="r_a65b564f131032aa6e7fe4e6e22e10b83"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a65b564f131032aa6e7fe4e6e22e10b83">setColumns</a> (int columns) override</td></tr>
-<tr class="memdesc:a65b564f131032aa6e7fe4e6e22e10b83"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the column count.  <br /></td></tr>
+<tr class="memdesc:a65b564f131032aa6e7fe4e6e22e10b83"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the column count; the columns share the width.  <br /></td></tr>
+<tr class="memitem:afbcf182fc4758ecd842682fab9a8a401" id="r_afbcf182fc4758ecd842682fab9a8a401"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#afbcf182fc4758ecd842682fab9a8a401">setTracks</a> (std::vector&lt; <a class="el" href="../../df/dd6/structmorph_1_1ui_1_1GridTrack.html">GridTrack</a> &gt; const &amp;tracks) override</td></tr>
+<tr class="memdesc:afbcf182fc4758ecd842682fab9a8a401"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">tracks</span>, each as its width, then <span class="tt">;align=</span> where the track's alignment is not <span class="tt">Start</span>.  <br /></td></tr>
+<tr class="memitem:a3ecd5e7a3348b46959f7a1426ada77d7" id="r_a3ecd5e7a3348b46959f7a1426ada77d7"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a3ecd5e7a3348b46959f7a1426ada77d7">setMinColumnWidth</a> (int units) override</td></tr>
+<tr class="memdesc:a3ecd5e7a3348b46959f7a1426ada77d7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">minColumnWidth</span>.  <br /></td></tr>
 <tr class="memitem:a9c45a6635a3075fa7bacd8a8b54d315e" id="r_a9c45a6635a3075fa7bacd8a8b54d315e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9c45a6635a3075fa7bacd8a8b54d315e">setGap</a> (int gap) override</td></tr>
 <tr class="memdesc:a9c45a6635a3075fa7bacd8a8b54d315e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the space between cells.  <br /></td></tr>
 <tr class="memitem:ac8ea5d1b04a790fc1cf8b22190d057d5" id="r_ac8ea5d1b04a790fc1cf8b22190d057d5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac8ea5d1b04a790fc1cf8b22190d057d5">setAlign</a> (<a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> align) override</td></tr>
@@ -153,12 +157,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a96362e9a2facaf22cde143bce7b4a777 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer" id="r_a96362e9a2facaf22cde143bce7b4a777"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html#a96362e9a2facaf22cde143bce7b4a777">moveChild</a> (Widget &amp;child, std::size_t index) override</td></tr>
 <tr class="memdesc:a96362e9a2facaf22cde143bce7b4a777 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves a child among its siblings and logs it.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf&lt; GridWidget &gt;</a></td></tr>
-<tr class="memitem:a3315df8bc8818827aafd77198af851be pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a3315df8bc8818827aafd77198af851be"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> (std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; store, std::string kind, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> const *parent, <a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261">PropList</a> initial={})</td></tr>
-<tr class="memdesc:a3315df8bc8818827aafd77198af851be pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the new widget, appended to <code class="param">parent</code>, and logs its creation.  <br /></td></tr>
+<tr class="memitem:ae27ec5f87e24ebff660e66473bce4721 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_ae27ec5f87e24ebff660e66473bce4721"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> (std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; store, std::string kind, Widget const *parent, <a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261">PropList</a> initial={})</td></tr>
+<tr class="memdesc:ae27ec5f87e24ebff660e66473bce4721 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the new widget, appended to <code class="param">parent</code>, and logs its creation.  <br /></td></tr>
 <tr class="memitem:aa5eff9c8cf23b14288cdf8d538c43961 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aa5eff9c8cf23b14288cdf8d538c43961"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aa5eff9c8cf23b14288cdf8d538c43961">~FakeLeaf</a> () override</td></tr>
 <tr class="memdesc:aa5eff9c8cf23b14288cdf8d538c43961 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Forgets the widget and logs its destruction; its remaining children become roots.  <br /></td></tr>
 <tr class="memitem:a976acf10acc43f63ba7ecd953cda7b43 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a976acf10acc43f63ba7ecd953cda7b43"><td class="memItemLeft">
-<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> const &amp;)=delete</td></tr>
+<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> const &amp;)=delete</td></tr>
 <tr class="memitem:ac7b0a51f943e27762c21206eea802d08 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_ac7b0a51f943e27762c21206eea802d08"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ac7b0a51f943e27762c21206eea802d08">setVisible</a> (bool visible) override</td></tr>
 <tr class="memdesc:ac7b0a51f943e27762c21206eea802d08 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">visible</span>.  <br /></td></tr>
 <tr class="memitem:aa2a186efea65691285d01736b53a37ba pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aa2a186efea65691285d01736b53a37ba"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aa2a186efea65691285d01736b53a37ba">setEnabled</a> (bool enabled) override</td></tr>
@@ -180,7 +184,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:af8aea5416b8dd99e6888f53bc87d00d0 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_af8aea5416b8dd99e6888f53bc87d00d0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#af8aea5416b8dd99e6888f53bc87d00d0">setSurface</a> (std::string_view surface) override</td></tr>
 <tr class="memdesc:af8aea5416b8dd99e6888f53bc87d00d0 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">surface</span>.  <br /></td></tr>
 <tr class="memitem:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a872fcbbddffe07279c5594bc00feec57"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a872fcbbddffe07279c5594bc00feec57">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord) override</td></tr>
-<tr class="memdesc:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">keys</span>, the chords joined by commas, and keeps the chords and the handler for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c" title="Presses a keyboard chord with focus on a widget.">RecordingBackend::press</a></span>.  <br /></td></tr>
+<tr class="memdesc:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">keys</span>, the chords joined by commas, and keeps the chords and the handler for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c" title="Presses a keyboard chord with focus on a widget, in the key order every backend follows.">RecordingBackend::press</a></span>.  <br /></td></tr>
 <tr class="memitem:adca561be0edc99b3359b9cf29af4784f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_adca561be0edc99b3359b9cf29af4784f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adca561be0edc99b3359b9cf29af4784f">focus</a> () override</td></tr>
 <tr class="memdesc:adca561be0edc99b3359b9cf29af4784f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves the backend's recorded focus here, and logs <span class="tt"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adca561be0edc99b3359b9cf29af4784f">focus</a></span>.  <br /></td></tr>
 <tr class="memitem:aedc24008c529e4bd0b6b71468525b08e pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aedc24008c529e4bd0b6b71468525b08e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aedc24008c529e4bd0b6b71468525b08e">setOnHover</a> (std::function&lt; void()&gt; onHover) override</td></tr>
@@ -210,9 +214,9 @@ Additional Inherited Members</h2></td></tr>
 <tr class="memdesc:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's id.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html" title="Children laid out row-major in columns.">GridWidget</a></span>: properties <span class="tt">columns</span>, <span class="tt">gap</span>, <span class="tt">align</span>, and <span class="tt">span</span> on a child. </p>
+<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html" title="Children laid out row-major in columns.">GridWidget</a></span>: properties <span class="tt">columns</span>, <span class="tt">tracks</span>, <span class="tt">gap</span>, <span class="tt">align</span>, and <span class="tt">span</span> on a child. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01057">1057</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01280">1280</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a65b564f131032aa6e7fe4e6e22e10b83" name="a65b564f131032aa6e7fe4e6e22e10b83"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a65b564f131032aa6e7fe4e6e22e10b83">&#9670;&#160;</a></span>setColumns()</h2>
@@ -237,7 +241,7 @@ Additional Inherited Members</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Sets the column count. </p>
+<p>Sets the column count; the columns share the width. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">columns</td><td>At least one. </td></tr>
@@ -247,7 +251,81 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html#a69481ed2699041927acd9585556ceab1">morph::ui::GridWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01060">1060</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01283">1283</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="afbcf182fc4758ecd842682fab9a8a401" name="afbcf182fc4758ecd842682fab9a8a401"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afbcf182fc4758ecd842682fab9a8a401">&#9670;&#160;</a></span>setTracks()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeGrid::setTracks </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../df/dd6/structmorph_1_1ui_1_1GridTrack.html">GridTrack</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>tracks</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">tracks</span>, each as its width, then <span class="tt">;align=</span> where the track's alignment is not <span class="tt">Start</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">tracks</td><td>The tracks, in order. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html#a4bc1a60f49a9b9f8bfa69c99e1b82f35">morph::ui::GridWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01288">1288</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3ecd5e7a3348b46959f7a1426ada77d7" name="a3ecd5e7a3348b46959f7a1426ada77d7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3ecd5e7a3348b46959f7a1426ada77d7">&#9670;&#160;</a></span>setMinColumnWidth()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeGrid::setMinColumnWidth </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>units</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">minColumnWidth</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">units</td><td>The least column width in units. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html#a2c464f1448f3fc17adf418904baf57df">morph::ui::GridWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01299">1299</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -284,7 +362,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html#a6fddaf5a641b660e847a3a4ef51b65a7">morph::ui::GridWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01061">1061</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01300">1300</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -321,7 +399,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html#af7be649a4ac30a57aad9a731780b7f81">morph::ui::GridWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01062">1062</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01301">1301</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -369,7 +447,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html#ab0b5853aa5d33f6af01cd6393fcd8731">morph::ui::GridWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01068">1068</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01307">1307</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

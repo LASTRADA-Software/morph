@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d60/qt__tls
 <div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span>[[nodiscard]] <span class="keyword">inline</span> QSslConfiguration tlsPinnedConfig(<span class="keyword">const</span> QSslCertificate&amp; pinned) {</div>
 <div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span>    QSslConfiguration cfg = QSslConfiguration::defaultConfiguration();</div>
 <div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span>    cfg.setPeerVerifyMode(QSslSocket::VerifyPeer);</div>
-<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span>    cfg.setCaCertificates({pinned});</div>
+<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span>    cfg.setCaCertificates({<a class="code hl_function" href="../../d1/dc0/author_8hpp.html#a1e7a644ebb16f6738fffb1b458ef1f68">pinned</a>});</div>
 <div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span>    <span class="keywordflow">return</span> cfg;</div>
 <div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span>}</div>
 <div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span><span class="comment"></span> </div>
@@ -183,6 +183,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d60/qt__tls
 <div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>}</div>
 <div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span> </div>
 <div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span>}  <span class="comment">// namespace morph::qt</span></div>
+<div class="ttc" id="aauthor_8hpp_html_a1e7a644ebb16f6738fffb1b458ef1f68"><div class="ttname"><a href="../../d1/dc0/author_8hpp.html#a1e7a644ebb16f6738fffb1b458ef1f68">morph::ui::author::pinned</a></div><div class="ttdeci">Node pinned(Nodes const &amp;content, PinnedOptions const &amp;options={})</div><div class="ttdoc">Content that scrolls between bars that stay in view: a divided column that stretches both ways,...</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dc0/author_8hpp_source.html#l04210">author.hpp:4210</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

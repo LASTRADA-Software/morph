@@ -137,18 +137,18 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:adb82463a637734cb55c7046597c5b0e0" id="r_adb82463a637734cb55c7046597c5b0e0"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#adb82463a637734cb55c7046597c5b0e0">name</a></td></tr>
 <tr class="memdesc:adb82463a637734cb55c7046597c5b0e0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name a form reads: a ref's head, a query or mutation, a pref's point, a comprehension's variable, an <span class="tt">env</span>, <span class="tt">session</span> or <span class="tt">host</span> name.  <br /></td></tr>
 <tr class="memitem:a0f582d8764f5442b791d9fbb5a813753" id="r_a0f582d8764f5442b791d9fbb5a813753"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0f582d8764f5442b791d9fbb5a813753">fieldPath</a></td></tr>
-<tr class="memdesc:a0f582d8764f5442b791d9fbb5a813753"><td class="mdescLeft">&#160;</td><td class="mdescRight">The path after the head of a <span class="tt">Ref</span> or <span class="tt">Pref</span>, or the path of a <span class="tt"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a></span>.  <br /></td></tr>
+<tr class="memdesc:a0f582d8764f5442b791d9fbb5a813753"><td class="mdescLeft">&#160;</td><td class="mdescRight">The path after the head of a <span class="tt">Ref</span> or <span class="tt">Pref</span>, or the path of a <span class="tt"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a></span> or <span class="tt">Get</span>.  <br /></td></tr>
 <tr class="memitem:ab8290e149a2b24082509640e6de64589" id="r_ab8290e149a2b24082509640e6de64589"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#acdf25e669057d3af5e395c162caedc32">FunctionId</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab8290e149a2b24082509640e6de64589">function</a> = FunctionId::And</td></tr>
 <tr class="memdesc:ab8290e149a2b24082509640e6de64589"><td class="mdescLeft">&#160;</td><td class="mdescRight">The function of a <span class="tt">Call</span>.  <br /></td></tr>
 <tr class="memitem:af264e851a6a09f66b8dacd294e75df69" id="r_af264e851a6a09f66b8dacd294e75df69"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af264e851a6a09f66b8dacd294e75df69">args</a></td></tr>
-<tr class="memdesc:af264e851a6a09f66b8dacd294e75df69"><td class="mdescLeft">&#160;</td><td class="mdescRight">Operands: a call's arguments; <span class="tt">if</span>'s condition, then and else; a list's items; a comprehension's source and body.  <br /></td></tr>
+<tr class="memdesc:af264e851a6a09f66b8dacd294e75df69"><td class="mdescLeft">&#160;</td><td class="mdescRight">Operands: a call's arguments; <span class="tt">if</span>'s condition, then and else; a list's items; a comprehension's source and body (and a <span class="tt">sort</span>'s <span class="tt">order</span>, when given); the value a <span class="tt">get</span> reads from.  <br /></td></tr>
 <tr class="memitem:a4fcbb9d13a493a2c4ca3c8b61d013d3b" id="r_a4fcbb9d13a493a2c4ca3c8b61d013d3b"><td class="memItemLeft">std::vector&lt; std::pair&lt; std::string, <a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4fcbb9d13a493a2c4ca3c8b61d013d3b">fields</a></td></tr>
 <tr class="memdesc:a4fcbb9d13a493a2c4ca3c8b61d013d3b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The fields of an <span class="tt">Object</span>, in the order written.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One node of a parsed expression. Immutable once parsed; shared between the document and its readers. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a81b07aa5a87ad7b85c27ddf9a6c2bf8c" name="a81b07aa5a87ad7b85c27ddf9a6c2bf8c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a81b07aa5a87ad7b85c27ddf9a6c2bf8c">&#9670;&#160;</a></span>kind</h2>
@@ -164,7 +164,7 @@ Public Attributes</h2></td></tr>
 
 <p>The form. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00155">155</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -182,7 +182,7 @@ Public Attributes</h2></td></tr>
 
 <p>The JSON Pointer of the node inside its document, for refusals and diagnostics. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00157">157</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -200,7 +200,7 @@ Public Attributes</h2></td></tr>
 
 <p>The constant of a <span class="tt">Literal</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00159">159</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -218,7 +218,7 @@ Public Attributes</h2></td></tr>
 
 <p>The name a form reads: a ref's head, a query or mutation, a pref's point, a comprehension's variable, an <span class="tt">env</span>, <span class="tt">session</span> or <span class="tt">host</span> name. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -234,9 +234,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The path after the head of a <span class="tt">Ref</span> or <span class="tt">Pref</span>, or the path of a <span class="tt"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a></span>. </p>
+<p>The path after the head of a <span class="tt">Ref</span> or <span class="tt">Pref</span>, or the path of a <span class="tt"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a></span> or <span class="tt">Get</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00147">147</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00164">164</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +254,7 @@ Public Attributes</h2></td></tr>
 
 <p>The function of a <span class="tt">Call</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -270,9 +270,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Operands: a call's arguments; <span class="tt">if</span>'s condition, then and else; a list's items; a comprehension's source and body. </p>
+<p>Operands: a call's arguments; <span class="tt">if</span>'s condition, then and else; a list's items; a comprehension's source and body (and a <span class="tt">sort</span>'s <span class="tt">order</span>, when given); the value a <span class="tt">get</span> reads from. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -290,7 +290,7 @@ Public Attributes</h2></td></tr>
 
 <p>The fields of an <span class="tt">Object</span>, in the order written. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00171">171</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>

@@ -24,10 +24,12 @@ var searchData=
   ['workspace_21',['Workspace',['../d6/d77/classmorph_1_1ui_1_1Workspace.html',1,'morph::ui']]],
   ['workspacemodel_22',['WorkspaceModel',['../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html',1,'morph::ui']]],
   ['workspacemodeloptions_23',['WorkspaceModelOptions',['../d4/d5c/structmorph_1_1ui_1_1WorkspaceModelOptions.html',1,'morph::ui']]],
-  ['workspaceoptions_24',['WorkspaceOptions',['../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html',1,'morph::ui']]],
-  ['workspacescreen_25',['WorkspaceScreen',['../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html',1,'morph::ui']]],
-  ['workspacestart_26',['WorkspaceStart',['../d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html',1,'morph::ui']]],
-  ['workspacetab_27',['WorkspaceTab',['../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html',1,'morph::ui']]],
-  ['workspacetabid_28',['WorkspaceTabId',['../d5/d5c/structmorph_1_1ui_1_1WorkspaceTabId.html',1,'morph::ui']]],
-  ['workspacetabstate_29',['WorkspaceTabState',['../dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html',1,'morph::ui']]]
+  ['workspaceopened_24',['WorkspaceOpened',['../d1/da7/structmorph_1_1ui_1_1WorkspaceOpened.html',1,'morph::ui']]],
+  ['workspaceoptions_25',['WorkspaceOptions',['../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html',1,'morph::ui']]],
+  ['workspacescreen_26',['WorkspaceScreen',['../dd/dd9/structmorph_1_1ui_1_1WorkspaceScreen.html',1,'morph::ui']]],
+  ['workspacestart_27',['WorkspaceStart',['../d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html',1,'morph::ui']]],
+  ['workspacetab_28',['WorkspaceTab',['../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html',1,'morph::ui']]],
+  ['workspacetabid_29',['WorkspaceTabId',['../d5/d5c/structmorph_1_1ui_1_1WorkspaceTabId.html',1,'morph::ui']]],
+  ['workspacetabstate_30',['WorkspaceTabState',['../dc/d6d/structmorph_1_1ui_1_1WorkspaceTabState.html',1,'morph::ui']]],
+  ['wrappingrow_31',['WrappingRow',['../d9/d86/structmorph_1_1ui_1_1testing_1_1detail_1_1WrappingRow.html',1,'morph::ui::testing::detail']]]
 ];

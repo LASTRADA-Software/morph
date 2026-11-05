@@ -3,6 +3,7 @@ var classmorph_1_1ui_1_1WorkspaceModel =
     [ "WorkspaceModel", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a59abf2e501e4c249419202607c04846a", null ],
     [ "~WorkspaceModel", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a3047cc341e9db2059c9f61a75b0dd7e2", null ],
     [ "open", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a8889b38f2ec5e8f4c535cc2731441925", null ],
+    [ "openTab", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a3613909329fa688219a7ccbeae2862c9", null ],
     [ "start", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a6ef80d373a24f616909b8e97d1e6a10b", null ],
     [ "activate", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a47eac9485b561c7c1dca7757f90f7627", null ],
     [ "next", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a66396372ef5b5ec22374d58c36ccdda6", null ],

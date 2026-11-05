@@ -131,7 +131,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a340308fb37647b78ee0d5d12b133566e" id="r_a340308fb37647b78ee0d5d12b133566e"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a340308fb37647b78ee0d5d12b133566e">Workspace</a> (<a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html">reactive::Runtime</a> &amp;runtime, <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html">IViewBackend</a> &amp;backend, <a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html">DocumentScreenHost</a> &amp;host, <a class="el" href="../../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html">WorkspaceOptions</a> options={}, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent=nullptr, <a class="el" href="../../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ec">HeadPlacement</a> headPlacement=<a class="el" href="../../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50">HeadPlacement::InPage</a>)</td></tr>
 <tr class="memdesc:a340308fb37647b78ee0d5d12b133566e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The shell, its tab bar appended to <code class="param">parent</code>.  <br /></td></tr>
 <tr class="memitem:a5d77ac885f19e43986785df74f8bf255" id="r_a5d77ac885f19e43986785df74f8bf255"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a5d77ac885f19e43986785df74f8bf255">~Workspace</a> ()</td></tr>
-<tr class="memdesc:a5d77ac885f19e43986785df74f8bf255"><td class="mdescLeft">&#160;</td><td class="mdescRight">Unmounts every screen without asking, newest first, then the pages.  <br /></td></tr>
+<tr class="memdesc:a5d77ac885f19e43986785df74f8bf255"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every overlay without asking, newest first, then unmounts every tab's screen the same way, then the pages: a callee goes before the opener its call answers.  <br /></td></tr>
 <tr class="memitem:a11259d56e201b21163b10858807e351b" id="r_a11259d56e201b21163b10858807e351b"><td class="memItemLeft"><a id="a11259d56e201b21163b10858807e351b" name="a11259d56e201b21163b10858807e351b"></a>
 &#160;</td><td class="memItemRight"><b>Workspace</b> (Workspace const &amp;)=delete</td></tr>
 <tr class="memitem:a6865f2f2516c004839e6f19da91d7d61" id="r_a6865f2f2516c004839e6f19da91d7d61"><td class="memItemLeft"><a id="a6865f2f2516c004839e6f19da91d7d61" name="a6865f2f2516c004839e6f19da91d7d61"></a>
@@ -146,6 +146,16 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a7e33472efabd86a9aa0c10513b0c8218"><td class="mdescLeft">&#160;</td><td class="mdescRight">The tab logic the bar shows, for an application that reads or drives it by tab id.  <br /></td></tr>
 <tr class="memitem:a275a2594b0c3c45b75133aaf576e8083" id="r_a275a2594b0c3c45b75133aaf576e8083"><td class="memItemLeft">std::expected&lt; std::size_t, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a275a2594b0c3c45b75133aaf576e8083">open</a> (std::string_view screenId, <a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> const &amp;params)</td></tr>
 <tr class="memdesc:a275a2594b0c3c45b75133aaf576e8083"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens a screen, or focuses the tab that already shows it (<span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a8889b38f2ec5e8f4c535cc2731441925" title="Opens a screen, or focuses the tab that already shows it; the tab opened or focused is the active one...">WorkspaceModel::open</a></span>).  <br /></td></tr>
+<tr class="memitem:a75135439bb1348f256e6f7f06cafb725" id="r_a75135439bb1348f256e6f7f06cafb725"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d1/da7/structmorph_1_1ui_1_1WorkspaceOpened.html">WorkspaceOpened</a>, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a75135439bb1348f256e6f7f06cafb725">openTab</a> (std::string_view screenId, <a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> const &amp;params)</td></tr>
+<tr class="memdesc:a75135439bb1348f256e6f7f06cafb725"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens a screen as <span class="tt"><a class="el" href="#a275a2594b0c3c45b75133aaf576e8083" title="Opens a screen, or focuses the tab that already shows it (WorkspaceModel::open).">open</a></span> does, and says whether it mounted one (<span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a3613909329fa688219a7ccbeae2862c9" title="Opens a screen as open does, and says whether it mounted one: what a host needs to settle the call of...">WorkspaceModel::openTab</a></span>): what a host needs to settle the call of a navigation that only focused a tab.  <br /></td></tr>
+<tr class="memitem:aa573ab184c041849706ff9b28260a0ad" id="r_aa573ab184c041849706ff9b28260a0ad"><td class="memItemLeft">std::expected&lt; void, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa573ab184c041849706ff9b28260a0ad">openOverlay</a> (<a class="el" href="../../dc/d75/structmorph_1_1ui_1_1NavigateRequest.html">NavigateRequest</a> const &amp;request)</td></tr>
+<tr class="memdesc:aa573ab184c041849706ff9b28260a0ad"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a document screen over the tabs, as a dialog (<span class="tt">as: <a class="el" href="../../d8/d11/view_8hpp.html#ae7cf72ab608a903203628d39bf74cd1b" title="A modal overlay.">dialog</a></span>) or a drawer on the end side (<span class="tt">as: <a class="el" href="../../d8/d11/view_8hpp.html#ac32bc9fa7f17605e28fdaf77a96f3870" title="A panel that slides in from one edge.">drawer</a></span>), mounted with <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>, so the mount adopts the navigation's call.  <br /></td></tr>
+<tr class="memitem:a743f6e9f8c00082f7da4847f32be84f9" id="r_a743f6e9f8c00082f7da4847f32be84f9"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a743f6e9f8c00082f7da4847f32be84f9">screenClosed</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;screen)</td></tr>
+<tr class="memdesc:a743f6e9f8c00082f7da4847f32be84f9"><td class="mdescLeft">&#160;</td><td class="mdescRight">A screen the workspace shows closed itself, by <span class="tt">return</span> or <span class="tt"><a class="el" href="#a587dff86a721be64596642d75484ef13" title="Closes a tab through its screen&#39;s close protocol.">close</a>: self</span>: its overlay goes, or its tab does. What a host's <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a1863293949cffb6da4e6e5181c787342" title="A screen this host mounted closed itself, by return or close: self (spec 6 §16). Called after the scr...">DocumentScreenHost::onScreenClosed</a></span> forwards here.  <br /></td></tr>
+<tr class="memitem:a6af0c6bc02f87671cfc40615d3cc6acb" id="r_a6af0c6bc02f87671cfc40615d3cc6acb"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6af0c6bc02f87671cfc40615d3cc6acb">overlays</a> () const</td></tr>
+<tr class="memdesc:a6af0c6bc02f87671cfc40615d3cc6acb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screens shown over the tabs, oldest first.  <br /></td></tr>
+<tr class="memitem:acc36d8987a3fc36960efa4ff4eca1dda" id="r_acc36d8987a3fc36960efa4ff4eca1dda"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#acc36d8987a3fc36960efa4ff4eca1dda">setWidthClass</a> (std::string_view widthClass)</td></tr>
+<tr class="memdesc:acc36d8987a3fc36960efa4ff4eca1dda"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tells the workspace the window's width class changed, as the backend's <span class="tt">setOnWidthClass</span> listener reports it: each open dialog overlay is a sheet while it is <span class="tt">compact</span>.  <br /></td></tr>
 <tr class="memitem:ac38b96b3172d2c11ccab5df5fa3df267" id="r_ac38b96b3172d2c11ccab5df5fa3df267"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ac38b96b3172d2c11ccab5df5fa3df267">start</a> (<a class="el" href="../../d1/d90/structmorph_1_1ui_1_1WorkspaceStart.html">WorkspaceStart</a> const &amp;how)</td></tr>
 <tr class="memdesc:ac38b96b3172d2c11ccab5df5fa3df267"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens the start screens (<span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a6ef80d373a24f616909b8e97d1e6a10b" title="Opens the start screens: with resume, every recorded route whose screen is known and available,...">WorkspaceModel::start</a></span>).  <br /></td></tr>
 <tr class="memitem:a7611398d3d5f52041ebb516038d673e7" id="r_a7611398d3d5f52041ebb516038d673e7"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a7611398d3d5f52041ebb516038d673e7">flushRecord</a> ()</td></tr>
@@ -172,18 +182,38 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a0c05abb39feb16f73b579d7632c318d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen handle of a tab: what a client remounts for development reload and inspects.  <br /></td></tr>
 <tr class="memitem:a83bb553575e38fc48442a7eeba61ffd8" id="r_a83bb553575e38fc48442a7eeba61ffd8"><td class="memItemLeft"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a83bb553575e38fc48442a7eeba61ffd8">activeHandle</a> () const</td></tr>
 <tr class="memdesc:a83bb553575e38fc48442a7eeba61ffd8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's screen handle.  <br /></td></tr>
-<tr class="memitem:a38c3117886453a987f73cb47a07838b5" id="r_a38c3117886453a987f73cb47a07838b5"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a38c3117886453a987f73cb47a07838b5">headRowForActive</a> () const</td></tr>
-<tr class="memdesc:a38c3117886453a987f73cb47a07838b5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's head row, the same reactive content <span class="tt">headRow</span> builds for the body-embedded rendering, for a host that mounts it elsewhere (a shell's own top bar, say). Never null: an invisible, empty row stands in for "no active tab" rather than a null <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39" title="A view-tree node: immutable, shared data.">Node</a></span>, since a caller mounting this may not expect to handle one.  <br /></td></tr>
+<tr class="memitem:a1fdfed590ac3019f0c93e8e40616b3da" id="r_a1fdfed590ac3019f0c93e8e40616b3da"><td class="memItemLeft"><a class="el" href="../../d5/d48/structmorph_1_1ui_1_1HeadParts.html">HeadParts</a>&#160;</td><td class="memItemRight"><a class="el" href="#a1fdfed590ac3019f0c93e8e40616b3da">headPartsForActive</a> () const</td></tr>
+<tr class="memdesc:a1fdfed590ac3019f0c93e8e40616b3da"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's head as two parts, the same reactive content <span class="tt">headRow</span> builds for the in-page rendering, for a host that mounts them elsewhere (a shell's own top bar, say). Neither is null: with no active tab each is an invisible, empty container rather than a null <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39" title="A view-tree node: immutable, shared data.">Node</a></span>, since a caller mounting them may not expect to handle one.  <br /></td></tr>
+<tr class="memitem:a17070c044a2f7b20059d4a181165e1a8" id="r_a17070c044a2f7b20059d4a181165e1a8"><td class="memItemLeft"><a class="el" href="../../db/d42/interpreter_8hpp.html#a515941428b52ba7a96f0bbb068517186">LeadPlacement</a>&#160;</td><td class="memItemRight"><a class="el" href="#a17070c044a2f7b20059d4a181165e1a8">activeLeadPlacement</a> () const</td></tr>
+<tr class="memdesc:a17070c044a2f7b20059d4a181165e1a8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the active tab's head puts its lead. A tracked read.  <br /></td></tr>
+<tr class="memitem:af276f715b2e89c54135e1db404d0307c" id="r_af276f715b2e89c54135e1db404d0307c"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#af276f715b2e89c54135e1db404d0307c">activeHeadOneLine</a> () const</td></tr>
+<tr class="memdesc:af276f715b2e89c54135e1db404d0307c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the active tab's head is a single line: it has no eyebrow, and its lead is not drawn under the title (it has none, or it sits inline or at the end). A tracked read.  <br /></td></tr>
+<tr class="memitem:a2a9eee6d51533989b9c4acc052e4b7cf" id="r_a2a9eee6d51533989b9c4acc052e4b7cf"><td class="memItemLeft"><a class="el" href="../../db/d4f/shell__frame_8hpp.html#aa1bb3f4b9e6e3e5569701df3b781ac79">HeadTrailEnd</a>&#160;</td><td class="memItemRight"><a class="el" href="#a2a9eee6d51533989b9c4acc052e4b7cf">activeHeadTrailEnd</a> () const</td></tr>
+<tr class="memdesc:a2a9eee6d51533989b9c4acc052e4b7cf"><td class="mdescLeft">&#160;</td><td class="mdescRight">What ends the active tab's head trail, so a compact top bar can stand the line's end the right distance from the window's edge. A tracked read.  <br /></td></tr>
+<tr class="memitem:a09c93d4474b9fb737057bcc29be56b5f" id="r_a09c93d4474b9fb737057bcc29be56b5f"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a09c93d4474b9fb737057bcc29be56b5f">activeHeadJoined</a> () const</td></tr>
+<tr class="memdesc:a09c93d4474b9fb737057bcc29be56b5f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the active tab's page continues the head's block: the screen's shown root says so (<span class="tt"><a class="el" href="../../d6/db2/classmorph_1_1ui_1_1ScreenHead.html#ae2f47e76dd10f477481e0a60ef0d24e1" title="Whether the screen&#39;s shown root continues the head&#39;s block (the document&#39;s headJoined on the root,...">ScreenHead::headJoined</a></span>) and the page is not inset, which two tabs or more force. A tracked read.  <br /></td></tr>
+<tr class="memitem:a068d3be43b0ba67bba3141bbdde3d02c" id="r_a068d3be43b0ba67bba3141bbdde3d02c"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5">TextRole</a>&#160;</td><td class="memItemRight"><a class="el" href="#a068d3be43b0ba67bba3141bbdde3d02c">activeTitleRole</a> () const</td></tr>
+<tr class="memdesc:a068d3be43b0ba67bba3141bbdde3d02c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text role the active screen asks for its head's title. A tracked read.  <br /></td></tr>
+<tr class="memitem:a5f8c8d3679a1ea7a1b8cb624eafd01a8" id="r_a5f8c8d3679a1ea7a1b8cb624eafd01a8"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a5f8c8d3679a1ea7a1b8cb624eafd01a8">activeHeadSurface</a> () const</td></tr>
+<tr class="memdesc:a5f8c8d3679a1ea7a1b8cb624eafd01a8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The surface the active screen asks the shell to draw its top bar on. A tracked read.  <br /></td></tr>
+<tr class="memitem:ae77c71a9bea8ca220db3b1bcb1f0bf7d" id="r_ae77c71a9bea8ca220db3b1bcb1f0bf7d"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ae77c71a9bea8ca220db3b1bcb1f0bf7d">activePageSurface</a> () const</td></tr>
+<tr class="memdesc:ae77c71a9bea8ca220db3b1bcb1f0bf7d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The surface the active screen asks the shell to draw the page area on. A tracked read.  <br /></td></tr>
+<tr class="memitem:a17854af92ed7887d7938b618bf8eea76" id="r_a17854af92ed7887d7938b618bf8eea76"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a17854af92ed7887d7938b618bf8eea76">activeTitleSpans</a> () const</td></tr>
+<tr class="memdesc:a17854af92ed7887d7938b618bf8eea76"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's title as runs, which a shell that knows them draws in place of the tab's caption. A tracked read.  <br /></td></tr>
+<tr class="memitem:a0f7474361f23708eed40b3aa3fbcc2aa" id="r_a0f7474361f23708eed40b3aa3fbcc2aa"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a0f7474361f23708eed40b3aa3fbcc2aa">activePageInset</a> () const</td></tr>
+<tr class="memdesc:a0f7474361f23708eed40b3aa3fbcc2aa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the shell insets the page around the active tab's screen. A tracked read. The page is inset with no active tab and while the workspace's tab strip shows (two tabs or more), since the strip is a child of the page and would otherwise touch the window's edges; with one tab it is inset unless the screen's shown root lays itself at the page's edges (<span class="tt"><a class="el" href="../../d6/db2/classmorph_1_1ui_1_1ScreenHead.html#ad053fc7b5b04a0b063331335cfde4b30" title="Whether the screen&#39;s shown root lays itself at the page&#39;s edges, so a shell leaves the page uninset a...">ScreenHead::pageEdge</a></span>).  <br /></td></tr>
+<tr class="memitem:ab99b069a9f7529bf38938eb9041ee057" id="r_ab99b069a9f7529bf38938eb9041ee057"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ab99b069a9f7529bf38938eb9041ee057">activeHeadShown</a> () const</td></tr>
+<tr class="memdesc:ab99b069a9f7529bf38938eb9041ee057"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the active tab's head shows anything: an eyebrow, a subtitle, a badge, a tool, an action or a menu entry. A tracked read, so a shell that shows the head on a line of its own follows a tab switch and a head's own changes; the head row's own visibility is the same rule.  <br /></td></tr>
 <tr class="memitem:a2de906de11c865c7a7cc724bb7235b05" id="r_a2de906de11c865c7a7cc724bb7235b05"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2de906de11c865c7a7cc724bb7235b05">forceCloseAll</a> ()</td></tr>
-<tr class="memdesc:a2de906de11c865c7a7cc724bb7235b05"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every tab without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving.  <br /></td></tr>
+<tr class="memdesc:a2de906de11c865c7a7cc724bb7235b05"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every overlay, then every tab, without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. A callee goes before the opener its call answers, so the opener's <span class="tt">onCancel</span> runs in a live scope; then every call no mount adopted is cancelled.  <br /></td></tr>
 <tr class="memitem:a8f8c64f7fbce706b574150d9c7cf216c" id="r_a8f8c64f7fbce706b574150d9c7cf216c"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html">WorkspaceTab</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8f8c64f7fbce706b574150d9c7cf216c">tabs</a> () const</td></tr>
 <tr class="memdesc:a8f8c64f7fbce706b574150d9c7cf216c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The open tabs, in order.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: a tab bar over a <span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html" title="The workspace&#39;s tabs with no widgets: which screens are open, in which order, which is active,...">WorkspaceModel</a></span>, one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>, with the screen's head row above it or, when the placement is <span class="tt">External</span>, mounted by the host instead. </p>
-<p>The model holds the tab logic: tabs keep the order they were opened in, opening a screen whose identity an open tab already has focuses that tab, a singleton screen has one tab, and closing runs each screen's close protocol (spec 6 §3), one tab at a time, a walk over several tabs stopping at the first veto. The bar shows the model's tabs and takes Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+W, which documents may not declare. Neither copyable nor movable; owned by the owner thread of its runtime. </p>
+<p>The model holds the tab logic: tabs keep the order they were opened in, opening a screen whose identity an open tab already has focuses that tab, a singleton screen has one tab, and closing runs each screen's close protocol (spec 6 §3), one tab at a time, a walk over several tabs stopping at the first veto. The bar shows the model's tabs and takes Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+W, which documents may not declare. A screen a document navigates to as a dialog or a drawer is shown over the tabs (<span class="tt"><a class="el" href="#aa573ab184c041849706ff9b28260a0ad" title="Shows a document screen over the tabs, as a dialog (as: dialog) or a drawer on the end side (as: draw...">openOverlay</a></span>). Neither copyable nor movable; owned by the owner thread of its runtime. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a340308fb37647b78ee0d5d12b133566e" name="a340308fb37647b78ee0d5d12b133566e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a340308fb37647b78ee0d5d12b133566e">&#9670;&#160;</a></span>Workspace()</h2>
@@ -240,12 +270,12 @@ Public Member Functions</h2></td></tr>
     <tr><td class="paramname">host</td><td>What mounts the screens. Borrowed; it outlives the shell. </td></tr>
     <tr><td class="paramname">options</td><td>The screens' catalog facts. </td></tr>
     <tr><td class="paramname">parent</td><td>The container the shell is appended to; null makes it a backend root. </td></tr>
-    <tr><td class="paramname">headPlacement</td><td>Where the active screen's head row is drawn. <span class="tt">External</span> leaves the host to mount <span class="tt"><a class="el" href="#a38c3117886453a987f73cb47a07838b5" title="The active tab&#39;s head row, the same reactive content headRow builds for the body-embedded rendering,...">headRowForActive()</a></span> itself, so a shell with its own top bar shows the head once. </td></tr>
+    <tr><td class="paramname">headPlacement</td><td>Where the active screen's head row is drawn. <span class="tt">External</span> leaves the host to mount <span class="tt"><a class="el" href="#a1fdfed590ac3019f0c93e8e40616b3da" title="The active tab&#39;s head as two parts, the same reactive content headRow builds for the in-page renderin...">headPartsForActive()</a></span> itself, so a shell with its own top bar shows the head once. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,9 +302,9 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Unmounts every screen without asking, newest first, then the pages. </p>
+<p>Closes every overlay without asking, newest first, then unmounts every tab's screen the same way, then the pages: a callee goes before the opener its call answers. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -305,7 +335,7 @@ Public Member Functions</h2></td></tr>
 <p>The tab bar: the shell's root widget, which the host places. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -335,7 +365,7 @@ Public Member Functions</h2></td></tr>
 <p>The tab logic the bar shows, for an application that reads or drives it by tab id. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the shell. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00158">158</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -376,7 +406,184 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The tab's index, or why the screen could not be mounted; a refused mount opens nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00164">164</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a75135439bb1348f256e6f7f06cafb725" name="a75135439bb1348f256e6f7f06cafb725"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a75135439bb1348f256e6f7f06cafb725">&#9670;&#160;</a></span>openTab()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; <a class="el" href="../../d1/da7/structmorph_1_1ui_1_1WorkspaceOpened.html">WorkspaceOpened</a>, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt; morph::ui::Workspace::openTab </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>screenId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>params</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Opens a screen as <span class="tt"><a class="el" href="#a275a2594b0c3c45b75133aaf576e8083" title="Opens a screen, or focuses the tab that already shows it (WorkspaceModel::open).">open</a></span> does, and says whether it mounted one (<span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a3613909329fa688219a7ccbeae2862c9" title="Opens a screen as open does, and says whether it mounted one: what a host needs to settle the call of...">WorkspaceModel::openTab</a></span>): what a host needs to settle the call of a navigation that only focused a tab. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screenId</td><td>The screen id. </td></tr>
+    <tr><td class="paramname">params</td><td>Its params. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The tab and whether a screen was mounted for it, or why the screen could not be mounted. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00177">177</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa573ab184c041849706ff9b28260a0ad" name="aa573ab184c041849706ff9b28260a0ad"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa573ab184c041849706ff9b28260a0ad">&#9670;&#160;</a></span>openOverlay()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; void, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt; morph::ui::Workspace::openOverlay </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/d75/structmorph_1_1ui_1_1NavigateRequest.html">NavigateRequest</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>request</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows a document screen over the tabs, as a dialog (<span class="tt">as: <a class="el" href="../../d8/d11/view_8hpp.html#ae7cf72ab608a903203628d39bf74cd1b" title="A modal overlay.">dialog</a></span>) or a drawer on the end side (<span class="tt">as: <a class="el" href="../../d8/d11/view_8hpp.html#ac32bc9fa7f17605e28fdaf77a96f3870" title="A panel that slides in from one edge.">drawer</a></span>), mounted with <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>, so the mount adopts the navigation's call. </p>
+<p>It always mounts a new instance: it never focuses an open tab, so a call is never left unclaimed. The overlay is titled by the screen's title, and the screen's head actions are its footer's buttons; its badges, menu and tools are not shown, and a head with a menu or tools is reported once. A dialog is a sheet while the width class is <span class="tt">compact</span>, and follows <span class="tt"><a class="el" href="#acc36d8987a3fc36960efa4ff4eca1dda" title="Tells the workspace the window&#39;s width class changed, as the backend&#39;s setOnWidthClass listener repor...">setWidthClass</a></span> while it is open. A user's dismissal opens it again at once and asks the screen to close (<span class="tt">requestClose</span>); it goes only when the screen closed. A screen that closes itself goes through <span class="tt"><a class="el" href="#a743f6e9f8c00082f7da4847f32be84f9" title="A screen the workspace shows closed itself, by return or close: self: its overlay goes,...">screenClosed</a></span>. An overlay adds no tab, no record entry and no route. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">request</td><td>The navigation: a screen, its params, and <span class="tt">as</span> either <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ae7cf72ab608a903203628d39bf74cd1b" title="A modal overlay.">dialog</a></span> or <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ac32bc9fa7f17605e28fdaf77a96f3870" title="A panel that slides in from one edge.">drawer</a></span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Nothing, or why nothing was shown: an <span class="tt">as</span> that is not an overlay, a host screen, or a refused mount. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00192">192</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a743f6e9f8c00082f7da4847f32be84f9" name="a743f6e9f8c00082f7da4847f32be84f9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a743f6e9f8c00082f7da4847f32be84f9">&#9670;&#160;</a></span>screenClosed()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Workspace::screenClosed </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>screen</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A screen the workspace shows closed itself, by <span class="tt">return</span> or <span class="tt"><a class="el" href="#a587dff86a721be64596642d75484ef13" title="Closes a tab through its screen&#39;s close protocol.">close</a>: self</span>: its overlay goes, or its tab does. What a host's <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a1863293949cffb6da4e6e5181c787342" title="A screen this host mounted closed itself, by return or close: self (spec 6 §16). Called after the scr...">DocumentScreenHost::onScreenClosed</a></span> forwards here. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">screen</td><td>The closed screen's handle; one the workspace does not show does nothing. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00230">230</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6af0c6bc02f87671cfc40615d3cc6acb" name="a6af0c6bc02f87671cfc40615d3cc6acb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6af0c6bc02f87671cfc40615d3cc6acb">&#9670;&#160;</a></span>overlays()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; std::string &gt; morph::ui::Workspace::overlays </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The screens shown over the tabs, oldest first. </p>
+<dl class="section return"><dt>Returns</dt><dd>Each overlay's screen id. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="acc36d8987a3fc36960efa4ff4eca1dda" name="acc36d8987a3fc36960efa4ff4eca1dda"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acc36d8987a3fc36960efa4ff4eca1dda">&#9670;&#160;</a></span>setWidthClass()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Workspace::setWidthClass </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>widthClass</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Tells the workspace the window's width class changed, as the backend's <span class="tt">setOnWidthClass</span> listener reports it: each open dialog overlay is a sheet while it is <span class="tt">compact</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">widthClass</td><td>The class. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -412,7 +619,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The number of tabs opened. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00270">270</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -441,7 +648,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Writes the record now, cancelling a pending debounced write: what sign-out does before the session is cleared. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -471,7 +678,7 @@ Public Member Functions</h2></td></tr>
 <p>The record as it would be written now: the routes of the open tabs, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>The routes. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -506,7 +713,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00158">158</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -535,7 +742,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Shows the next tab in most-recently-used order (Ctrl+Tab). Repeated calls walk the order as it was at the first of them; any other activation starts a new walk. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00290">290</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -564,7 +771,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Shows the previous tab in most-recently-used order (Ctrl+Shift+Tab). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -604,7 +811,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00174">174</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -644,7 +851,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00188">188</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -679,7 +886,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00323">323</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -714,7 +921,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00327">327</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -744,7 +951,7 @@ Public Member Functions</h2></td></tr>
 <p>The active tab's index. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">std::nullopt</span> while no tab is open. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00207">207</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -780,7 +987,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its handle, valid while the tab is open; null past the end. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00218">218</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -810,12 +1017,12 @@ Public Member Functions</h2></td></tr>
 <p>The active tab's screen handle. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or null while no tab is open. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00225">225</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00349">349</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a38c3117886453a987f73cb47a07838b5" name="a38c3117886453a987f73cb47a07838b5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a38c3117886453a987f73cb47a07838b5">&#9670;&#160;</a></span>headRowForActive()</h2>
+<a id="a1fdfed590ac3019f0c93e8e40616b3da" name="a1fdfed590ac3019f0c93e8e40616b3da"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1fdfed590ac3019f0c93e8e40616b3da">&#9670;&#160;</a></span>headPartsForActive()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -824,7 +1031,7 @@ Public Member Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> morph::ui::Workspace::headRowForActive </td>
+          <td class="memname"><a class="el" href="../../d5/d48/structmorph_1_1ui_1_1HeadParts.html">HeadParts</a> morph::ui::Workspace::headPartsForActive </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td> const</td>
@@ -837,10 +1044,310 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>The active tab's head row, the same reactive content <span class="tt">headRow</span> builds for the body-embedded rendering, for a host that mounts it elsewhere (a shell's own top bar, say). Never null: an invisible, empty row stands in for "no active tab" rather than a null <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39" title="A view-tree node: immutable, shared data.">Node</a></span>, since a caller mounting this may not expect to handle one. </p>
-<dl class="section return"><dt>Returns</dt><dd>The row, reactive to the active tab changing and to its head's own content changing. </dd></dl>
+<p>The active tab's head as two parts, the same reactive content <span class="tt">headRow</span> builds for the in-page rendering, for a host that mounts them elsewhere (a shell's own top bar, say). Neither is null: with no active tab each is an invisible, empty container rather than a null <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39" title="A view-tree node: immutable, shared data.">Node</a></span>, since a caller mounting them may not expect to handle one. </p>
+<dl class="section return"><dt>Returns</dt><dd>The lead and the trail, reactive to the active tab changing and to its head's own content changing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00359">359</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a17070c044a2f7b20059d4a181165e1a8" name="a17070c044a2f7b20059d4a181165e1a8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a17070c044a2f7b20059d4a181165e1a8">&#9670;&#160;</a></span>activeLeadPlacement()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d42/interpreter_8hpp.html#a515941428b52ba7a96f0bbb068517186">LeadPlacement</a> morph::ui::Workspace::activeLeadPlacement </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Where the active tab's head puts its lead. A tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd>The place; <span class="tt">Below</span> with no active tab. With the head in the page (<span class="tt"><a class="el" href="../../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50" title="Above each page, inside the workspace.">HeadPlacement::InPage</a></span>) the tab bar carries the title, so <span class="tt">Inline</span> reads as <span class="tt">Below</span> there. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00392">392</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af276f715b2e89c54135e1db404d0307c" name="af276f715b2e89c54135e1db404d0307c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af276f715b2e89c54135e1db404d0307c">&#9670;&#160;</a></span>activeHeadOneLine()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Workspace::activeHeadOneLine </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the active tab's head is a single line: it has no eyebrow, and its lead is not drawn under the title (it has none, or it sits inline or at the end). A tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd>Whether the head is one line; <span class="tt">true</span> with no active tab. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00400">400</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2a9eee6d51533989b9c4acc052e4b7cf" name="a2a9eee6d51533989b9c4acc052e4b7cf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2a9eee6d51533989b9c4acc052e4b7cf">&#9670;&#160;</a></span>activeHeadTrailEnd()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d4f/shell__frame_8hpp.html#aa1bb3f4b9e6e3e5569701df3b781ac79">HeadTrailEnd</a> morph::ui::Workspace::activeHeadTrailEnd </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What ends the active tab's head trail, so a compact top bar can stand the line's end the right distance from the window's edge. A tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd>The last element of the trail, in its order (tools, actions, then the head menu): a head menu, whose trigger is an icon button, or a last action that is icon-only or ghost is <span class="tt">Unframed</span>; any other last action is <span class="tt">Framed</span>; with no action and no menu, a head tool is <span class="tt">Framed</span>; an empty trail, and no active tab, is <span class="tt">None</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a09c93d4474b9fb737057bcc29be56b5f" name="a09c93d4474b9fb737057bcc29be56b5f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a09c93d4474b9fb737057bcc29be56b5f">&#9670;&#160;</a></span>activeHeadJoined()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Workspace::activeHeadJoined </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the active tab's page continues the head's block: the screen's shown root says so (<span class="tt"><a class="el" href="../../d6/db2/classmorph_1_1ui_1_1ScreenHead.html#ae2f47e76dd10f477481e0a60ef0d24e1" title="Whether the screen&#39;s shown root continues the head&#39;s block (the document&#39;s headJoined on the root,...">ScreenHead::headJoined</a></span>) and the page is not inset, which two tabs or more force. A tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd>Whether the head is joined to the page. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00438">438</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a068d3be43b0ba67bba3141bbdde3d02c" name="a068d3be43b0ba67bba3141bbdde3d02c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a068d3be43b0ba67bba3141bbdde3d02c">&#9670;&#160;</a></span>activeTitleRole()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5">TextRole</a> morph::ui::Workspace::activeTitleRole </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The text role the active screen asks for its head's title. A tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">Heading</span>, or <span class="tt">Headline</span> where the screen asks for it; <span class="tt">Heading</span> with no active tab. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00450">450</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5f8c8d3679a1ea7a1b8cb624eafd01a8" name="a5f8c8d3679a1ea7a1b8cb624eafd01a8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5f8c8d3679a1ea7a1b8cb624eafd01a8">&#9670;&#160;</a></span>activeHeadSurface()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::Workspace::activeHeadSurface </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The surface the active screen asks the shell to draw its top bar on. A tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd>The surface's name; empty with no active tab and while the screen names none. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae77c71a9bea8ca220db3b1bcb1f0bf7d" name="ae77c71a9bea8ca220db3b1bcb1f0bf7d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae77c71a9bea8ca220db3b1bcb1f0bf7d">&#9670;&#160;</a></span>activePageSurface()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::Workspace::activePageSurface </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The surface the active screen asks the shell to draw the page area on. A tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd>The surface's name; empty with no active tab and while the screen names none. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00468">468</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a17854af92ed7887d7938b618bf8eea76" name="a17854af92ed7887d7938b618bf8eea76"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a17854af92ed7887d7938b618bf8eea76">&#9670;&#160;</a></span>activeTitleSpans()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; morph::ui::Workspace::activeTitleSpans </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The active tab's title as runs, which a shell that knows them draws in place of the tab's caption. A tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd>The runs; empty with no active tab, or while the active screen gives none. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00478">478</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0f7474361f23708eed40b3aa3fbcc2aa" name="a0f7474361f23708eed40b3aa3fbcc2aa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0f7474361f23708eed40b3aa3fbcc2aa">&#9670;&#160;</a></span>activePageInset()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Workspace::activePageInset </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the shell insets the page around the active tab's screen. A tracked read. The page is inset with no active tab and while the workspace's tab strip shows (two tabs or more), since the strip is a child of the page and would otherwise touch the window's edges; with one tab it is inset unless the screen's shown root lays itself at the page's edges (<span class="tt"><a class="el" href="../../d6/db2/classmorph_1_1ui_1_1ScreenHead.html#ad053fc7b5b04a0b063331335cfde4b30" title="Whether the screen&#39;s shown root lays itself at the page&#39;s edges, so a shell leaves the page uninset a...">ScreenHead::pageEdge</a></span>). </p>
+<dl class="section return"><dt>Returns</dt><dd>Whether the page is inset. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00488">488</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab99b069a9f7529bf38938eb9041ee057" name="ab99b069a9f7529bf38938eb9041ee057"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab99b069a9f7529bf38938eb9041ee057">&#9670;&#160;</a></span>activeHeadShown()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Workspace::activeHeadShown </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the active tab's head shows anything: an eyebrow, a subtitle, a badge, a tool, an action or a menu entry. A tracked read, so a shell that shows the head on a line of its own follows a tab switch and a head's own changes; the head row's own visibility is the same rule. </p>
+<dl class="section return"><dt>Returns</dt><dd>Whether there is an active tab whose head has content. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00503">503</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -867,9 +1374,9 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Closes every tab without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. </p>
+<p>Closes every overlay, then every tab, without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. A callee goes before the opener its call answers, so the opener's <span class="tt">onCancel</span> runs in a live scope; then every call no mount adopted is cancelled. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -899,7 +1406,7 @@ Public Member Functions</h2></td></tr>
 <p>The open tabs, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>Each tab's screen, identity and caption. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00252">252</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00518">518</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>

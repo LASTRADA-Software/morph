@@ -202,7 +202,7 @@ Additional Inherited Members</h2></td></tr>
 <p>Queued Effects run shallowest scope first: an <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a> a <span class="tt"><a class="el" href="../../de/df1/classmorph_1_1reactive_1_1Scope.html" title="Owns effects, computeds and adopted objects; destroys them in reverse creation order.">Scope</a></span> makes carries that scope's depth, so an owner's Effects run before those of the scopes it owns. Among Effects of one depth, older ones run first.</p>
 <p>An exception escaping it is a defect: reported (<span class="tt"><a class="el" href="../../d0/dd9/namespacemorph_1_1reactive_1_1detail_1_1site.html#a84634e7a1b59db93ad865b775a9aa41c" title="An exception escaped an Effect; the flush stops.">detail::site::kEffectThrew</a></span>), and the flush stops. A run that throws keeps every source it has read, before and during that run, so a later change to any of them runs it again. A body may destroy its own <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a> (a remount); the body's callable stays alive until the body returns, and the <a class="el" href="../../de/ddc/classmorph_1_1reactive_1_1Effect.html" title="A side effect: runs once on construction, then in a flush after any source it read changed.">Effect</a> is not touched afterwards. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d5f/signal_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../dd/d5f/signal_8hpp_source.html">signal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d5f/signal_8hpp_source.html#l00352">352</a> of file <a class="el" href="../../dd/d5f/signal_8hpp_source.html">signal.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a55174ea34b70f852a7523752e20c1a78" name="a55174ea34b70f852a7523752e20c1a78"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a55174ea34b70f852a7523752e20c1a78">&#9670;&#160;</a></span>Effect()</h2>
@@ -255,7 +255,7 @@ requires std::invocable&lt;F&amp;&gt; &amp;&amp; std::move_constructible&lt;F&gt
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d5f/signal_8hpp_source.html#l00361">361</a> of file <a class="el" href="../../dd/d5f/signal_8hpp_source.html">signal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d5f/signal_8hpp_source.html#l00363">363</a> of file <a class="el" href="../../dd/d5f/signal_8hpp_source.html">signal.hpp</a>.</p>
 
 </div>
 </div>

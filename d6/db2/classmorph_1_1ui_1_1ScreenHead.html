@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/db2/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>A screen's head beside its title: the subtitle, the status badges and the actions a shell shows above the screen (the document's <span class="tt"><a class="el" href="#a414ecb0148a1c1793379d2b8af6a39fd" title="The subtitle, as text; empty when the screen declares none.">subtitle</a></span>, <span class="tt"><a class="el" href="#af47c98f80d8766b6f917421a05412c57" title="The status badges that are visible, in order.">status</a></span> and <span class="tt"><a class="el" href="#ad4da8f9f14626826082c39563751c989" title="The actions that are visible, in order, each with whether it is enabled.">actions</a></span>).  
+<p>A screen's head beside its title: the eyebrow, the title's runs, the subtitle, the status badges, the tools, the actions and the head's own menu a shell shows above the screen (the document's <span class="tt"><a class="el" href="#aadf1d780d5fb3569ab42b63a9bf442b8" title="The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none.">eyebrow</a></span>, <span class="tt"><a class="el" href="#aff742f3ae126f276ba823500d7840e31" title="The title as runs, which a shell that knows them draws in its top bar in place of title.">titleSpans</a></span>, <span class="tt"><a class="el" href="#a414ecb0148a1c1793379d2b8af6a39fd" title="The subtitle, as text; empty when the screen declares none.">subtitle</a></span>, <span class="tt"><a class="el" href="#af47c98f80d8766b6f917421a05412c57" title="The status badges that are visible, in order.">status</a></span>, <span class="tt"><a class="el" href="#ac74dac62eb12307f11dd8d3c2d1d2999" title="The head&#39;s tools that are visible, in order: search fields and selects, each with its value.">tools</a></span>, <span class="tt"><a class="el" href="#ad4da8f9f14626826082c39563751c989" title="The actions that are visible, in order, each with whether it is enabled.">actions</a></span> and <span class="tt"><a class="el" href="#a224459e7180bc7305274a9ed8a54504b" title="The head&#39;s own menu: its visible entries, in order, each one that is chosen with its id.">menu</a></span>).  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>&gt;</code></p>
@@ -136,20 +136,323 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 &#160;</td><td class="memItemRight"><b>ScreenHead</b> (ScreenHead &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a7eb4c4be2d4964566d70b6d4a5645afc" id="r_a7eb4c4be2d4964566d70b6d4a5645afc"><td class="memItemLeft"><a id="a7eb4c4be2d4964566d70b6d4a5645afc" name="a7eb4c4be2d4964566d70b6d4a5645afc"></a>
 ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead &amp;&amp;)=delete</td></tr>
+<tr class="memitem:aff742f3ae126f276ba823500d7840e31" id="r_aff742f3ae126f276ba823500d7840e31"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#aff742f3ae126f276ba823500d7840e31">titleSpans</a> () const</td></tr>
+<tr class="memdesc:aff742f3ae126f276ba823500d7840e31"><td class="mdescLeft">&#160;</td><td class="mdescRight">The title as runs, which a shell that knows them draws in its top bar in place of <span class="tt">title</span>.  <br /></td></tr>
+<tr class="memitem:ad053fc7b5b04a0b063331335cfde4b30" id="r_ad053fc7b5b04a0b063331335cfde4b30"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; bool &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#ad053fc7b5b04a0b063331335cfde4b30">pageEdge</a> () const</td></tr>
+<tr class="memdesc:ad053fc7b5b04a0b063331335cfde4b30"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the screen's shown root lays itself at the page's edges, so a shell leaves the page uninset around it (the document's <span class="tt"><a class="el" href="#ad053fc7b5b04a0b063331335cfde4b30" title="Whether the screen&#39;s shown root lays itself at the page&#39;s edges, so a shell leaves the page uninset a...">pageEdge</a></span> on the root, seen through <span class="tt">switch</span> cases).  <br /></td></tr>
+<tr class="memitem:ae2f47e76dd10f477481e0a60ef0d24e1" id="r_ae2f47e76dd10f477481e0a60ef0d24e1"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; bool &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#ae2f47e76dd10f477481e0a60ef0d24e1">headJoined</a> () const</td></tr>
+<tr class="memdesc:ae2f47e76dd10f477481e0a60ef0d24e1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the screen's shown root continues the head's block (the document's <span class="tt"><a class="el" href="#ae2f47e76dd10f477481e0a60ef0d24e1" title="Whether the screen&#39;s shown root continues the head&#39;s block (the document&#39;s headJoined on the root,...">headJoined</a></span> on the root, seen through <span class="tt">switch</span> cases), so a shell leaves no rule between the head and what follows.  <br /></td></tr>
+<tr class="memitem:a14ecb8b37d4c1e55ba386985f369305c" id="r_a14ecb8b37d4c1e55ba386985f369305c"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; <a class="el" href="../../db/d42/interpreter_8hpp.html#a515941428b52ba7a96f0bbb068517186">LeadPlacement</a> &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#a14ecb8b37d4c1e55ba386985f369305c">leadPlacement</a> () const</td></tr>
+<tr class="memdesc:a14ecb8b37d4c1e55ba386985f369305c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the head's lead (the subtitle and the badges) sits.  <br /></td></tr>
+<tr class="memitem:a0c15a9e079f21e4c5e527859bb12033f" id="r_a0c15a9e079f21e4c5e527859bb12033f"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5">TextRole</a> &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#a0c15a9e079f21e4c5e527859bb12033f">titleRole</a> () const</td></tr>
+<tr class="memdesc:a0c15a9e079f21e4c5e527859bb12033f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text role of the head's title.  <br /></td></tr>
+<tr class="memitem:a3e1e82b097e6e802072cdfccd1695fff" id="r_a3e1e82b097e6e802072cdfccd1695fff"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::string &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#a3e1e82b097e6e802072cdfccd1695fff">headSurface</a> () const</td></tr>
+<tr class="memdesc:a3e1e82b097e6e802072cdfccd1695fff"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name of the surface a shell draws its top bar on while the screen is shown.  <br /></td></tr>
+<tr class="memitem:aec9605dea3d8b38ffb794963b51237e4" id="r_aec9605dea3d8b38ffb794963b51237e4"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::string &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#aec9605dea3d8b38ffb794963b51237e4">pageSurface</a> () const</td></tr>
+<tr class="memdesc:aec9605dea3d8b38ffb794963b51237e4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name of the surface a shell draws the page area on while the screen is shown.  <br /></td></tr>
+<tr class="memitem:aadf1d780d5fb3569ab42b63a9bf442b8" id="r_aadf1d780d5fb3569ab42b63a9bf442b8"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::string &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#aadf1d780d5fb3569ab42b63a9bf442b8">eyebrow</a> () const</td></tr>
+<tr class="memdesc:aadf1d780d5fb3569ab42b63a9bf442b8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none.  <br /></td></tr>
+<tr class="memitem:a86b960cfea459b4dc77810d526529850" id="r_a86b960cfea459b4dc77810d526529850"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#a86b960cfea459b4dc77810d526529850">eyebrowSpans</a> () const</td></tr>
+<tr class="memdesc:a86b960cfea459b4dc77810d526529850"><td class="mdescLeft">&#160;</td><td class="mdescRight">The eyebrow as runs, which a shell that knows them draws in place of <span class="tt"><a class="el" href="#aadf1d780d5fb3569ab42b63a9bf442b8" title="The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none.">eyebrow</a></span>.  <br /></td></tr>
 <tr class="memitem:a414ecb0148a1c1793379d2b8af6a39fd" id="r_a414ecb0148a1c1793379d2b8af6a39fd"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::string &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a414ecb0148a1c1793379d2b8af6a39fd">subtitle</a> () const =0</td></tr>
 <tr class="memdesc:a414ecb0148a1c1793379d2b8af6a39fd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The subtitle, as text; empty when the screen declares none.  <br /></td></tr>
+<tr class="memitem:ae6a7ecfe44e67c0db1b7f758bf43411f" id="r_ae6a7ecfe44e67c0db1b7f758bf43411f"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#ae6a7ecfe44e67c0db1b7f758bf43411f">subtitleSpans</a> () const</td></tr>
+<tr class="memdesc:ae6a7ecfe44e67c0db1b7f758bf43411f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The subtitle as runs, which a shell that knows them draws in place of <span class="tt"><a class="el" href="#a414ecb0148a1c1793379d2b8af6a39fd" title="The subtitle, as text; empty when the screen declares none.">subtitle</a></span>.  <br /></td></tr>
 <tr class="memitem:af47c98f80d8766b6f917421a05412c57" id="r_af47c98f80d8766b6f917421a05412c57"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../dd/d2f/structmorph_1_1ui_1_1HeadBadge.html">HeadBadge</a> &gt; &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#af47c98f80d8766b6f917421a05412c57">status</a> () const =0</td></tr>
 <tr class="memdesc:af47c98f80d8766b6f917421a05412c57"><td class="mdescLeft">&#160;</td><td class="mdescRight">The status badges that are visible, in order.  <br /></td></tr>
 <tr class="memitem:ad4da8f9f14626826082c39563751c989" id="r_ad4da8f9f14626826082c39563751c989"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../d3/d86/structmorph_1_1ui_1_1HeadAction.html">HeadAction</a> &gt; &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ad4da8f9f14626826082c39563751c989">actions</a> () const =0</td></tr>
 <tr class="memdesc:ad4da8f9f14626826082c39563751c989"><td class="mdescLeft">&#160;</td><td class="mdescRight">The actions that are visible, in order, each with whether it is enabled.  <br /></td></tr>
 <tr class="memitem:a85d4f1400f25d24e57665fd4f373cfbb" id="r_a85d4f1400f25d24e57665fd4f373cfbb"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="#a85d4f1400f25d24e57665fd4f373cfbb">run</a> (std::string_view actionId)=0</td></tr>
 <tr class="memdesc:a85d4f1400f25d24e57665fd4f373cfbb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Runs an action's <span class="tt">onClick</span> as a user event in the screen scope, in one batch.  <br /></td></tr>
+<tr class="memitem:a224459e7180bc7305274a9ed8a54504b" id="r_a224459e7180bc7305274a9ed8a54504b"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../d8/d69/structmorph_1_1ui_1_1HeadMenuEntry.html">HeadMenuEntry</a> &gt; &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#a224459e7180bc7305274a9ed8a54504b">menu</a> () const</td></tr>
+<tr class="memdesc:a224459e7180bc7305274a9ed8a54504b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's own menu: its visible entries, in order, each one that is chosen with its id.  <br /></td></tr>
+<tr class="memitem:a084185bff610c184a39d66a85cc205c3" id="r_a084185bff610c184a39d66a85cc205c3"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::string &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#a084185bff610c184a39d66a85cc205c3">menuLabel</a> () const</td></tr>
+<tr class="memdesc:a084185bff610c184a39d66a85cc205c3"><td class="mdescLeft">&#160;</td><td class="mdescRight">The accessible name of the head menu's trigger.  <br /></td></tr>
+<tr class="memitem:ace0897ac66d8cd0b5139749de9e4763c" id="r_ace0897ac66d8cd0b5139749de9e4763c"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="#ace0897ac66d8cd0b5139749de9e4763c">choose</a> (std::string_view entryId)</td></tr>
+<tr class="memdesc:ace0897ac66d8cd0b5139749de9e4763c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Runs a head menu entry's <span class="tt">onClick</span> as a user event in the screen scope, in one batch.  <br /></td></tr>
+<tr class="memitem:ac74dac62eb12307f11dd8d3c2d1d2999" id="r_ac74dac62eb12307f11dd8d3c2d1d2999"><td class="memItemLeft">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../dd/d27/structmorph_1_1ui_1_1HeadTool.html">HeadTool</a> &gt; &gt; const *&#160;</td><td class="memItemRight"><a class="el" href="#ac74dac62eb12307f11dd8d3c2d1d2999">tools</a> () const</td></tr>
+<tr class="memdesc:ac74dac62eb12307f11dd8d3c2d1d2999"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's tools that are visible, in order: search fields and selects, each with its value.  <br /></td></tr>
+<tr class="memitem:a04ee4273ede13065d1b9d935cff14bcd" id="r_a04ee4273ede13065d1b9d935cff14bcd"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="#a04ee4273ede13065d1b9d935cff14bcd">edit</a> (std::string_view toolId, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
+<tr class="memdesc:a04ee4273ede13065d1b9d935cff14bcd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reports a user's edit of a tool: runs a search's <span class="tt">onChange</span> with <span class="tt">event</span> the text, or a select's <span class="tt">onChoose</span> with <span class="tt">event</span> the chosen key, as a user event in the screen scope, in one batch. The tool's value changes only when the document's binding does.  <br /></td></tr>
+<tr class="memitem:ab360a014be7997c4848f65a48e1b6eb7" id="r_ab360a014be7997c4848f65a48e1b6eb7"><td class="memItemLeft">virtual bool&#160;</td><td class="memItemRight"><a class="el" href="#ab360a014be7997c4848f65a48e1b6eb7">submit</a> (std::string_view toolId)</td></tr>
+<tr class="memdesc:ab360a014be7997c4848f65a48e1b6eb7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reports a user's submit of a search tool: runs its <span class="tt">onSubmit</span> with <span class="tt">event</span> its text, as a user event in the screen scope, in one batch.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A screen's head beside its title: the subtitle, the status badges and the actions a shell shows above the screen (the document's <span class="tt"><a class="el" href="#a414ecb0148a1c1793379d2b8af6a39fd" title="The subtitle, as text; empty when the screen declares none.">subtitle</a></span>, <span class="tt"><a class="el" href="#af47c98f80d8766b6f917421a05412c57" title="The status badges that are visible, in order.">status</a></span> and <span class="tt"><a class="el" href="#ad4da8f9f14626826082c39563751c989" title="The actions that are visible, in order, each with whether it is enabled.">actions</a></span>). </p>
+<div class="textblock"><p>A screen's head beside its title: the eyebrow, the title's runs, the subtitle, the status badges, the tools, the actions and the head's own menu a shell shows above the screen (the document's <span class="tt"><a class="el" href="#aadf1d780d5fb3569ab42b63a9bf442b8" title="The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none.">eyebrow</a></span>, <span class="tt"><a class="el" href="#aff742f3ae126f276ba823500d7840e31" title="The title as runs, which a shell that knows them draws in its top bar in place of title.">titleSpans</a></span>, <span class="tt"><a class="el" href="#a414ecb0148a1c1793379d2b8af6a39fd" title="The subtitle, as text; empty when the screen declares none.">subtitle</a></span>, <span class="tt"><a class="el" href="#af47c98f80d8766b6f917421a05412c57" title="The status badges that are visible, in order.">status</a></span>, <span class="tt"><a class="el" href="#ac74dac62eb12307f11dd8d3c2d1d2999" title="The head&#39;s tools that are visible, in order: search fields and selects, each with its value.">tools</a></span>, <span class="tt"><a class="el" href="#ad4da8f9f14626826082c39563751c989" title="The actions that are visible, in order, each with whether it is enabled.">actions</a></span> and <span class="tt"><a class="el" href="#a224459e7180bc7305274a9ed8a54504b" title="The head&#39;s own menu: its visible entries, in order, each one that is chosen with its id.">menu</a></span>). </p>
+<p>The head is data: the screen evaluates it and the shell draws it, so a host screen's handle can implement it too. The menu and tool members have defaults, for a head that has neither. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
+<a id="aff742f3ae126f276ba823500d7840e31" name="aff742f3ae126f276ba823500d7840e31"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aff742f3ae126f276ba823500d7840e31">&#9670;&#160;</a></span>titleSpans()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; &gt; const  * morph::ui::ScreenHead::titleSpans </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The title as runs, which a shell that knows them draws in its top bar in place of <span class="tt">title</span>. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad053fc7b5b04a0b063331335cfde4b30" name="ad053fc7b5b04a0b063331335cfde4b30"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad053fc7b5b04a0b063331335cfde4b30">&#9670;&#160;</a></span>pageEdge()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; bool &gt; const  * morph::ui::ScreenHead::pageEdge </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the screen's shown root lays itself at the page's edges, so a shell leaves the page uninset around it (the document's <span class="tt"><a class="el" href="#ad053fc7b5b04a0b063331335cfde4b30" title="Whether the screen&#39;s shown root lays itself at the page&#39;s edges, so a shell leaves the page uninset a...">pageEdge</a></span> on the root, seen through <span class="tt">switch</span> cases). </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default, which a shell insets. It keeps its last value once the screen is closed. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae2f47e76dd10f477481e0a60ef0d24e1" name="ae2f47e76dd10f477481e0a60ef0d24e1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae2f47e76dd10f477481e0a60ef0d24e1">&#9670;&#160;</a></span>headJoined()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; bool &gt; const  * morph::ui::ScreenHead::headJoined </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the screen's shown root continues the head's block (the document's <span class="tt"><a class="el" href="#ae2f47e76dd10f477481e0a60ef0d24e1" title="Whether the screen&#39;s shown root continues the head&#39;s block (the document&#39;s headJoined on the root,...">headJoined</a></span> on the root, seen through <span class="tt">switch</span> cases), so a shell leaves no rule between the head and what follows. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a14ecb8b37d4c1e55ba386985f369305c" name="a14ecb8b37d4c1e55ba386985f369305c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a14ecb8b37d4c1e55ba386985f369305c">&#9670;&#160;</a></span>leadPlacement()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; <a class="el" href="../../db/d42/interpreter_8hpp.html#a515941428b52ba7a96f0bbb068517186">LeadPlacement</a> &gt; const  * morph::ui::ScreenHead::leadPlacement </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Where the head's lead (the subtitle and the badges) sits. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default, which is <span class="tt">below</span>. It keeps its last value once the screen is closed. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0c15a9e079f21e4c5e527859bb12033f" name="a0c15a9e079f21e4c5e527859bb12033f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0c15a9e079f21e4c5e527859bb12033f">&#9670;&#160;</a></span>titleRole()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5">TextRole</a> &gt; const  * morph::ui::ScreenHead::titleRole </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The text role of the head's title. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default, which is <span class="tt">Heading</span>. It keeps its last value once the screen is closed. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3e1e82b097e6e802072cdfccd1695fff" name="a3e1e82b097e6e802072cdfccd1695fff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3e1e82b097e6e802072cdfccd1695fff">&#9670;&#160;</a></span>headSurface()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::string &gt; const  * morph::ui::ScreenHead::headSurface </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The name of the surface a shell draws its top bar on while the screen is shown. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. An empty name is none. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aec9605dea3d8b38ffb794963b51237e4" name="aec9605dea3d8b38ffb794963b51237e4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aec9605dea3d8b38ffb794963b51237e4">&#9670;&#160;</a></span>pageSurface()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::string &gt; const  * morph::ui::ScreenHead::pageSurface </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The name of the surface a shell draws the page area on while the screen is shown. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. An empty name is the built-in <span class="tt">page</span> surface. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aadf1d780d5fb3569ab42b63a9bf442b8" name="aadf1d780d5fb3569ab42b63a9bf442b8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aadf1d780d5fb3569ab42b63a9bf442b8">&#9670;&#160;</a></span>eyebrow()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::string &gt; const  * morph::ui::ScreenHead::eyebrow </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a86b960cfea459b4dc77810d526529850" name="a86b960cfea459b4dc77810d526529850"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a86b960cfea459b4dc77810d526529850">&#9670;&#160;</a></span>eyebrowSpans()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; &gt; const  * morph::ui::ScreenHead::eyebrowSpans </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The eyebrow as runs, which a shell that knows them draws in place of <span class="tt"><a class="el" href="#aadf1d780d5fb3569ab42b63a9bf442b8" title="The eyebrow, the line a shell draws above the title, as text; empty when the screen declares none.">eyebrow</a></span>. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a414ecb0148a1c1793379d2b8af6a39fd" name="a414ecb0148a1c1793379d2b8af6a39fd"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a414ecb0148a1c1793379d2b8af6a39fd">&#9670;&#160;</a></span>subtitle()</h2>
 
@@ -175,6 +478,36 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
 
 <p>The subtitle, as text; empty when the screen declares none. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; it keeps its last value once the screen is closed. </dd></dl>
+
+</div>
+</div>
+<a id="ae6a7ecfe44e67c0db1b7f758bf43411f" name="ae6a7ecfe44e67c0db1b7f758bf43411f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae6a7ecfe44e67c0db1b7f758bf43411f">&#9670;&#160;</a></span>subtitleSpans()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; &gt; const  * morph::ui::ScreenHead::subtitleSpans </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The subtitle as runs, which a shell that knows them draws in place of <span class="tt"><a class="el" href="#a414ecb0148a1c1793379d2b8af6a39fd" title="The subtitle, as text; empty when the screen declares none.">subtitle</a></span>. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has none, as a host screen's by default. It keeps its last value once the screen is closed. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00119">119</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -265,6 +598,209 @@ ScreenHead &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHead
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it ran: <span class="tt">false</span>, with a diagnostic, for an id the head does not hold enabled and visible, and <span class="tt">false</span> for a closed screen. </dd></dl>
+
+</div>
+</div>
+<a id="a224459e7180bc7305274a9ed8a54504b" name="a224459e7180bc7305274a9ed8a54504b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a224459e7180bc7305274a9ed8a54504b">&#9670;&#160;</a></span>menu()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../d8/d69/structmorph_1_1ui_1_1HeadMenuEntry.html">HeadMenuEntry</a> &gt; &gt; const  * morph::ui::ScreenHead::menu </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The head's own menu: its visible entries, in order, each one that is chosen with its id. </p>
+<dl class="section return"><dt>Returns</dt><dd>They, valid as long as the head; null for a head that has no menu, as a host screen's by default. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a084185bff610c184a39d66a85cc205c3" name="a084185bff610c184a39d66a85cc205c3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a084185bff610c184a39d66a85cc205c3">&#9670;&#160;</a></span>menuLabel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::string &gt; const  * morph::ui::ScreenHead::menuLabel </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The accessible name of the head menu's trigger. </p>
+<dl class="section return"><dt>Returns</dt><dd>It, valid as long as the head; null for a head that has no menu, which a shell labels "More actions". </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ace0897ac66d8cd0b5139749de9e4763c" name="ace0897ac66d8cd0b5139749de9e4763c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ace0897ac66d8cd0b5139749de9e4763c">&#9670;&#160;</a></span>choose()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual bool morph::ui::ScreenHead::choose </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>entryId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Runs a head menu entry's <span class="tt">onClick</span> as a user event in the screen scope, in one batch. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">entryId</td><td>The entry's id. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether it ran: <span class="tt">false</span>, with a diagnostic, for an id the menu does not hold enabled and visible, and <span class="tt">false</span> for a closed screen or a head without a menu. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00147">147</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac74dac62eb12307f11dd8d3c2d1d2999" name="ac74dac62eb12307f11dd8d3c2d1d2999"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac74dac62eb12307f11dd8d3c2d1d2999">&#9670;&#160;</a></span>tools()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d4/d6f/classmorph_1_1reactive_1_1Computed.html">reactive::Computed</a>&lt; std::vector&lt; <a class="el" href="../../dd/d27/structmorph_1_1ui_1_1HeadTool.html">HeadTool</a> &gt; &gt; const  * morph::ui::ScreenHead::tools </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The head's tools that are visible, in order: search fields and selects, each with its value. </p>
+<dl class="section return"><dt>Returns</dt><dd>They, valid as long as the head; null for a head that has no tools, as a host screen's by default. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a04ee4273ede13065d1b9d935cff14bcd" name="a04ee4273ede13065d1b9d935cff14bcd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a04ee4273ede13065d1b9d935cff14bcd">&#9670;&#160;</a></span>edit()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual bool morph::ui::ScreenHead::edit </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>toolId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reports a user's edit of a tool: runs a search's <span class="tt">onChange</span> with <span class="tt">event</span> the text, or a select's <span class="tt">onChoose</span> with <span class="tt">event</span> the chosen key, as a user event in the screen scope, in one batch. The tool's value changes only when the document's binding does. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">toolId</td><td>The tool's id. </td></tr>
+    <tr><td class="paramname">value</td><td>A search's text, or a select's key. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether it ran: <span class="tt">false</span>, with a diagnostic, for an id the head does not hold enabled and visible, and <span class="tt">false</span> for a closed screen or a head without tools. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00163">163</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab360a014be7997c4848f65a48e1b6eb7" name="ab360a014be7997c4848f65a48e1b6eb7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab360a014be7997c4848f65a48e1b6eb7">&#9670;&#160;</a></span>submit()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual bool morph::ui::ScreenHead::submit </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>toolId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reports a user's submit of a search tool: runs its <span class="tt">onSubmit</span> with <span class="tt">event</span> its text, as a user event in the screen scope, in one batch. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">toolId</td><td>The tool's id. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether it ran: <span class="tt">false</span>, with a diagnostic, for an id the head does not hold enabled and visible, or holds as a select, and <span class="tt">false</span> for a closed screen or a head without tools. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00174">174</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>

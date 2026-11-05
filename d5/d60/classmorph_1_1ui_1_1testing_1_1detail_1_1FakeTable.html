@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/d60/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>A fake <span class="tt"><a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html" title="Keyed rows under column headers, with selection and activation by key.">TableWidget</a></span>: properties <span class="tt">columns</span>, <span class="tt">selectionMode</span>, <span class="tt">selection</span>, and <span class="tt">rowKey</span> on a row.  
+<p>A fake <span class="tt"><a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html" title="Keyed rows under column headers, with selection and activation by key.">TableWidget</a></span>: properties <span class="tt">columns</span>, <span class="tt">selectionMode</span>, <span class="tt">selection</span>, <span class="tt">sort</span>, <span class="tt">selectColumn</span>, <span class="tt">selectAllLabel</span>, and <span class="tt">rowKey</span>, <span class="tt">tone</span>, <span class="tt">label</span> and <span class="tt">heading</span> on a row.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>&gt;</code></p>
@@ -154,21 +154,37 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a5f502f51134667d48abfffc99911e7b6" id="r_a5f502f51134667d48abfffc99911e7b6"><td class="memItemLeft"><a id="a5f502f51134667d48abfffc99911e7b6" name="a5f502f51134667d48abfffc99911e7b6"></a>
 <a class="el" href="#a93a5b753ee0e31a0a92611e6ca8b6ad4">FakeTable</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a93a5b753ee0e31a0a92611e6ca8b6ad4">FakeTable</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:aae570eace1ea87b2930719f135da2b98" id="r_aae570eace1ea87b2930719f135da2b98"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aae570eace1ea87b2930719f135da2b98">setColumns</a> (std::vector&lt; <a class="el" href="../../df/ddf/structmorph_1_1ui_1_1TableColumn.html">TableColumn</a> &gt; const &amp;columns) override</td></tr>
-<tr class="memdesc:aae570eace1ea87b2930719f135da2b98"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">columns</span>, each as its escaped caption, a colon and its width.  <br /></td></tr>
+<tr class="memdesc:aae570eace1ea87b2930719f135da2b98"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">columns</span>, each as its escaped caption, a colon and its width, then <span class="tt">;align=</span> and <span class="tt">;valign=</span> where the column's alignment is not the default (<span class="tt">Start</span> across, <span class="tt">Center</span> down), and <span class="tt">;<a class="el" href="#ad109bcf2b00cd63c316ccb067bf13b3c" title="Whether the column at column is sortable, as setColumns gave it.">sortable</a>=true</span> for a sortable column, which <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a212cee0da95f36089b12da145437f426" title="Clicks a column&#39;s header as the user would: a sortable column&#39;s reaches onSort with its index; any ot...">RecordingBackend::clickHeader</a></span> reports, and <span class="tt">;wrap=false</span> for a column that keeps its text cells to one line, and <span class="tt">;shrink=true</span> for a stretch column that may be narrower than its header.  <br /></td></tr>
 <tr class="memitem:aa2f66f62b5a31c0d8d0a69676e765b72" id="r_aa2f66f62b5a31c0d8d0a69676e765b72"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa2f66f62b5a31c0d8d0a69676e765b72">setShowHeader</a> (bool shown) override</td></tr>
 <tr class="memdesc:aa2f66f62b5a31c0d8d0a69676e765b72"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">showHeader</span>.  <br /></td></tr>
 <tr class="memitem:a8b2bdca6a57de4f3e7be36bdf281a86e" id="r_a8b2bdca6a57de4f3e7be36bdf281a86e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a8b2bdca6a57de4f3e7be36bdf281a86e">setSelectionMode</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7">SelectionMode</a> mode) override</td></tr>
 <tr class="memdesc:a8b2bdca6a57de4f3e7be36bdf281a86e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">selectionMode</span>, which <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a08d9d6224edc7130a12913232eb99f49" title="Selects rows of a table by key: the table marks them, then onSelectionChange gets the keys.">RecordingBackend::selectRows</a></span> enforces.  <br /></td></tr>
 <tr class="memitem:a1c09d9ee362715a47f6d8965a368cfb0" id="r_a1c09d9ee362715a47f6d8965a368cfb0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1c09d9ee362715a47f6d8965a368cfb0">setRowKey</a> (Widget &amp;row, <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;key) override</td></tr>
 <tr class="memdesc:a1c09d9ee362715a47f6d8965a368cfb0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">rowKey</span> on <code class="param">row</code>, and marks the row when its key is requested.  <br /></td></tr>
+<tr class="memitem:aa63a00d86c8ac23f4498ad065d0e6c20" id="r_aa63a00d86c8ac23f4498ad065d0e6c20"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa63a00d86c8ac23f4498ad065d0e6c20">setRowHeading</a> (Widget &amp;row) override</td></tr>
+<tr class="memdesc:aa63a00d86c8ac23f4498ad065d0e6c20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the row's property <span class="tt">heading</span>; a heading row is never marked, selected or activated.  <br /></td></tr>
+<tr class="memitem:aafb3ee72cfad12f6f80af10a92e7fccd" id="r_aafb3ee72cfad12f6f80af10a92e7fccd"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aafb3ee72cfad12f6f80af10a92e7fccd">headingKey</a> (<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;key) const</td></tr>
+<tr class="memdesc:aafb3ee72cfad12f6f80af10a92e7fccd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the current row with <code class="param">key</code> is a heading.  <br /></td></tr>
 <tr class="memitem:a11d5922b80e92b97b59849b1b9361ed2" id="r_a11d5922b80e92b97b59849b1b9361ed2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a11d5922b80e92b97b59849b1b9361ed2">setRowTone</a> (Widget &amp;row, std::optional&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> &gt; tone) override</td></tr>
 <tr class="memdesc:a11d5922b80e92b97b59849b1b9361ed2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the row's property <span class="tt">tone</span> (<span class="tt">none</span> for no tone).  <br /></td></tr>
+<tr class="memitem:a09ad79f0fb399356d31f812d85348075" id="r_a09ad79f0fb399356d31f812d85348075"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a09ad79f0fb399356d31f812d85348075">setSelectColumn</a> (bool shown) override</td></tr>
+<tr class="memdesc:a09ad79f0fb399356d31f812d85348075"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">selectColumn</span>.  <br /></td></tr>
+<tr class="memitem:a4aa177c3412d176fa29223663c696933" id="r_a4aa177c3412d176fa29223663c696933"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4aa177c3412d176fa29223663c696933">setSelectAllLabel</a> (std::string_view label) override</td></tr>
+<tr class="memdesc:a4aa177c3412d176fa29223663c696933"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">selectAllLabel</span>.  <br /></td></tr>
+<tr class="memitem:ab5768c0ac7ee0693cd905eb9770c5223" id="r_ab5768c0ac7ee0693cd905eb9770c5223"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ab5768c0ac7ee0693cd905eb9770c5223">setRowLabel</a> (Widget &amp;row, std::string_view label) override</td></tr>
+<tr class="memdesc:ab5768c0ac7ee0693cd905eb9770c5223"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the row's property <span class="tt">label</span>.  <br /></td></tr>
 <tr class="memitem:a814af2dbe852c6bce8b52d95de8a184c" id="r_a814af2dbe852c6bce8b52d95de8a184c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a814af2dbe852c6bce8b52d95de8a184c">setSelection</a> (std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt; const &amp;keys) override</td></tr>
 <tr class="memdesc:a814af2dbe852c6bce8b52d95de8a184c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Requests the rows with <code class="param">keys</code>, and records property <span class="tt">selection</span> as the rows it marks.  <br /></td></tr>
-<tr class="memitem:a710e46821c89c90256bfba9bf1189771" id="r_a710e46821c89c90256bfba9bf1189771"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a710e46821c89c90256bfba9bf1189771">setOnSelectionChange</a> (std::function&lt; void(std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;)&gt; onSelectionChange) override</td></tr>
-<tr class="memdesc:a710e46821c89c90256bfba9bf1189771"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stores the handler <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a08d9d6224edc7130a12913232eb99f49" title="Selects rows of a table by key: the table marks them, then onSelectionChange gets the keys.">RecordingBackend::selectRows</a></span> calls.  <br /></td></tr>
+<tr class="memitem:aa65ab28be8717da5a6ef9fa15cef39bb" id="r_aa65ab28be8717da5a6ef9fa15cef39bb"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa65ab28be8717da5a6ef9fa15cef39bb">setOnSelectionChange</a> (std::function&lt; void(std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;, <a class="el" href="../../d8/d11/view_8hpp.html#a79cb82b263e10ec8a972604eb7085106">SelectionChange</a>)&gt; onSelectionChange) override</td></tr>
+<tr class="memdesc:aa65ab28be8717da5a6ef9fa15cef39bb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stores the handler <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a08d9d6224edc7130a12913232eb99f49" title="Selects rows of a table by key: the table marks them, then onSelectionChange gets the keys.">RecordingBackend::selectRows</a></span> calls.  <br /></td></tr>
 <tr class="memitem:acec88f085086dcd8b6237b2100fa3936" id="r_acec88f085086dcd8b6237b2100fa3936"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#acec88f085086dcd8b6237b2100fa3936">setOnActivate</a> (std::function&lt; void(<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a>)&gt; onActivate) override</td></tr>
 <tr class="memdesc:acec88f085086dcd8b6237b2100fa3936"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stores the handler <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a5062763c427edc06cc036713f66cfb8e" title="Activates a row of a table (Enter or a double click).">RecordingBackend::activateRow</a></span> calls.  <br /></td></tr>
+<tr class="memitem:a4069907b3e5a5dd9bcc1c76fd76d1a5a" id="r_a4069907b3e5a5dd9bcc1c76fd76d1a5a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4069907b3e5a5dd9bcc1c76fd76d1a5a">setSort</a> (std::optional&lt; <a class="el" href="../../d6/dab/structmorph_1_1ui_1_1TableSort.html">TableSort</a> &gt; sort) override</td></tr>
+<tr class="memdesc:a4069907b3e5a5dd9bcc1c76fd76d1a5a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">sort</span>: the column's index and direction, or <span class="tt">none</span>.  <br /></td></tr>
+<tr class="memitem:a3737e7c7b494514787d449d09dcdc8b4" id="r_a3737e7c7b494514787d449d09dcdc8b4"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a3737e7c7b494514787d449d09dcdc8b4">setOnSort</a> (std::function&lt; void(std::size_t)&gt; onSort) override</td></tr>
+<tr class="memdesc:a3737e7c7b494514787d449d09dcdc8b4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stores the handler <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a212cee0da95f36089b12da145437f426" title="Clicks a column&#39;s header as the user would: a sortable column&#39;s reaches onSort with its index; any ot...">RecordingBackend::clickHeader</a></span> calls.  <br /></td></tr>
+<tr class="memitem:ad109bcf2b00cd63c316ccb067bf13b3c" id="r_ad109bcf2b00cd63c316ccb067bf13b3c"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ad109bcf2b00cd63c316ccb067bf13b3c">sortable</a> (std::size_t column) const</td></tr>
+<tr class="memdesc:ad109bcf2b00cd63c316ccb067bf13b3c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the column at <code class="param">column</code> is sortable, as <span class="tt"><a class="el" href="#aae570eace1ea87b2930719f135da2b98" title="Records property columns, each as its escaped caption, a colon and its width, then ;align= and ;valig...">setColumns</a></span> gave it.  <br /></td></tr>
 <tr class="memitem:a25c475717b4eb72e67c7836fcfe0c3fd" id="r_a25c475717b4eb72e67c7836fcfe0c3fd"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a25c475717b4eb72e67c7836fcfe0c3fd">setRealizedWindow</a> (std::size_t first, std::size_t count, std::size_t total) override</td></tr>
 <tr class="memdesc:a25c475717b4eb72e67c7836fcfe0c3fd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">realizedWindow</span> as <span class="tt">&lt;first&gt;+&lt;count&gt;/&lt;total&gt;</span>.  <br /></td></tr>
 <tr class="memitem:aeef6d47a7be14ed28904eb6a143e446d" id="r_aeef6d47a7be14ed28904eb6a143e446d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aeef6d47a7be14ed28904eb6a143e446d">setOnVisibleRangeChanged</a> (std::function&lt; void(std::size_t, std::size_t)&gt; onVisibleRangeChanged) override</td></tr>
@@ -180,17 +196,27 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:ada61c1161d06ab82beaf3e4f130bb3d1" id="r_ada61c1161d06ab82beaf3e4f130bb3d1"><td class="memItemLeft">std::optional&lt; int &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ada61c1161d06ab82beaf3e4f130bb3d1">rowOf</a> (<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;key) const</td></tr>
 <tr class="memdesc:ada61c1161d06ab82beaf3e4f130bb3d1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The current row with <code class="param">key</code>.  <br /></td></tr>
 <tr class="memitem:a04c4e54b323722ccb2071f433223d79c" id="r_a04c4e54b323722ccb2071f433223d79c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a04c4e54b323722ccb2071f433223d79c">selectByUser</a> (std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt; const &amp;keys)</td></tr>
-<tr class="memdesc:a04c4e54b323722ccb2071f433223d79c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks the rows the user selected, as the requested keys; nothing is logged.  <br /></td></tr>
+<tr class="memdesc:a04c4e54b323722ccb2071f433223d79c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks the rows the user selected, as the requested keys; nothing is logged. The last key becomes the anchor of a later Shift-click.  <br /></td></tr>
+<tr class="memitem:a12e36bc303555d8adb03dd8e83858f8a" id="r_a12e36bc303555d8adb03dd8e83858f8a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a12e36bc303555d8adb03dd8e83858f8a">select</a> (std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt; const &amp;keys)</td></tr>
+<tr class="memdesc:a12e36bc303555d8adb03dd8e83858f8a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks the rows a user's click or key selected, as the requested keys, leaving the anchor where the input left it; nothing is logged.  <br /></td></tr>
+<tr class="memitem:afc0907c36fab4328afaefe162dba30ca" id="r_afc0907c36fab4328afaefe162dba30ca"><td class="memItemLeft">std::pair&lt; std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;, <a class="el" href="../../d8/d11/view_8hpp.html#a79cb82b263e10ec8a972604eb7085106">SelectionChange</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afc0907c36fab4328afaefe162dba30ca">clicked</a> (<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;key, <a class="el" href="../../d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2">RowClick</a> click)</td></tr>
+<tr class="memdesc:afc0907c36fab4328afaefe162dba30ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a click on the row with <code class="param">key</code> selects, as every backend's selection model has it, and makes the clicked row the anchor unless the click was a range.  <br /></td></tr>
+<tr class="memitem:afb12cb502b2b6e746db1838105301dbd" id="r_afb12cb502b2b6e746db1838105301dbd"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afb12cb502b2b6e746db1838105301dbd">allOrNone</a> () const</td></tr>
+<tr class="memdesc:afb12cb502b2b6e746db1838105301dbd"><td class="mdescLeft">&#160;</td><td class="mdescRight">What Ctrl+A selects in a <span class="tt">Multiple</span> table: every row, or none when every row is selected already.  <br /></td></tr>
+<tr class="memitem:aeada9ec36c3b78580cb1eedf5fd243d9" id="r_aeada9ec36c3b78580cb1eedf5fd243d9"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aeada9ec36c3b78580cb1eedf5fd243d9">rowKeys</a> () const</td></tr>
+<tr class="memdesc:aeada9ec36c3b78580cb1eedf5fd243d9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of the current data rows, in row order: a heading row is not one.  <br /></td></tr>
+<tr class="memitem:a659d506e3adc47b651b735ae28b9fb50" id="r_a659d506e3adc47b651b735ae28b9fb50"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a659d506e3adc47b651b735ae28b9fb50">markedKeys</a> () const</td></tr>
+<tr class="memdesc:a659d506e3adc47b651b735ae28b9fb50"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys of the rows the table marks: the requested keys, in the order requested, that a current row has.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html">morph::ui::testing::detail::FakeContainer&lt; TableWidget &gt;</a></td></tr>
 <tr class="memitem:a96362e9a2facaf22cde143bce7b4a777 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer" id="r_a96362e9a2facaf22cde143bce7b4a777"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html#a96362e9a2facaf22cde143bce7b4a777">moveChild</a> (Widget &amp;child, std::size_t index) override</td></tr>
 <tr class="memdesc:a96362e9a2facaf22cde143bce7b4a777 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves a child among its siblings and logs it.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf&lt; TableWidget &gt;</a></td></tr>
-<tr class="memitem:a3315df8bc8818827aafd77198af851be pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a3315df8bc8818827aafd77198af851be"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> (std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; store, std::string kind, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> const *parent, <a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261">PropList</a> initial={})</td></tr>
-<tr class="memdesc:a3315df8bc8818827aafd77198af851be pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the new widget, appended to <code class="param">parent</code>, and logs its creation.  <br /></td></tr>
+<tr class="memitem:ae27ec5f87e24ebff660e66473bce4721 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_ae27ec5f87e24ebff660e66473bce4721"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> (std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; store, std::string kind, Widget const *parent, <a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261">PropList</a> initial={})</td></tr>
+<tr class="memdesc:ae27ec5f87e24ebff660e66473bce4721 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the new widget, appended to <code class="param">parent</code>, and logs its creation.  <br /></td></tr>
 <tr class="memitem:aa5eff9c8cf23b14288cdf8d538c43961 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aa5eff9c8cf23b14288cdf8d538c43961"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aa5eff9c8cf23b14288cdf8d538c43961">~FakeLeaf</a> () override</td></tr>
 <tr class="memdesc:aa5eff9c8cf23b14288cdf8d538c43961 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Forgets the widget and logs its destruction; its remaining children become roots.  <br /></td></tr>
 <tr class="memitem:a976acf10acc43f63ba7ecd953cda7b43 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a976acf10acc43f63ba7ecd953cda7b43"><td class="memItemLeft">
-<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> const &amp;)=delete</td></tr>
+<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> const &amp;)=delete</td></tr>
 <tr class="memitem:ac7b0a51f943e27762c21206eea802d08 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_ac7b0a51f943e27762c21206eea802d08"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ac7b0a51f943e27762c21206eea802d08">setVisible</a> (bool visible) override</td></tr>
 <tr class="memdesc:ac7b0a51f943e27762c21206eea802d08 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">visible</span>.  <br /></td></tr>
 <tr class="memitem:aa2a186efea65691285d01736b53a37ba pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aa2a186efea65691285d01736b53a37ba"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aa2a186efea65691285d01736b53a37ba">setEnabled</a> (bool enabled) override</td></tr>
@@ -212,7 +238,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:af8aea5416b8dd99e6888f53bc87d00d0 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_af8aea5416b8dd99e6888f53bc87d00d0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#af8aea5416b8dd99e6888f53bc87d00d0">setSurface</a> (std::string_view surface) override</td></tr>
 <tr class="memdesc:af8aea5416b8dd99e6888f53bc87d00d0 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">surface</span>.  <br /></td></tr>
 <tr class="memitem:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a872fcbbddffe07279c5594bc00feec57"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a872fcbbddffe07279c5594bc00feec57">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord) override</td></tr>
-<tr class="memdesc:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">keys</span>, the chords joined by commas, and keeps the chords and the handler for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c" title="Presses a keyboard chord with focus on a widget.">RecordingBackend::press</a></span>.  <br /></td></tr>
+<tr class="memdesc:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">keys</span>, the chords joined by commas, and keeps the chords and the handler for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c" title="Presses a keyboard chord with focus on a widget, in the key order every backend follows.">RecordingBackend::press</a></span>.  <br /></td></tr>
 <tr class="memitem:adca561be0edc99b3359b9cf29af4784f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_adca561be0edc99b3359b9cf29af4784f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adca561be0edc99b3359b9cf29af4784f">focus</a> () override</td></tr>
 <tr class="memdesc:adca561be0edc99b3359b9cf29af4784f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves the backend's recorded focus here, and logs <span class="tt"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adca561be0edc99b3359b9cf29af4784f">focus</a></span>.  <br /></td></tr>
 <tr class="memitem:aedc24008c529e4bd0b6b71468525b08e pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aedc24008c529e4bd0b6b71468525b08e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aedc24008c529e4bd0b6b71468525b08e">setOnHover</a> (std::function&lt; void()&gt; onHover) override</td></tr>
@@ -245,10 +271,10 @@ Additional Inherited Members</h2></td></tr>
 <tr class="memdesc:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's id.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html" title="Keyed rows under column headers, with selection and activation by key.">TableWidget</a></span>: properties <span class="tt">columns</span>, <span class="tt">selectionMode</span>, <span class="tt">selection</span>, and <span class="tt">rowKey</span> on a row. </p>
+<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html" title="Keyed rows under column headers, with selection and activation by key.">TableWidget</a></span>: properties <span class="tt">columns</span>, <span class="tt">selectionMode</span>, <span class="tt">selection</span>, <span class="tt">sort</span>, <span class="tt">selectColumn</span>, <span class="tt">selectAllLabel</span>, and <span class="tt">rowKey</span>, <span class="tt">tone</span>, <span class="tt">label</span> and <span class="tt">heading</span> on a row. </p>
 <p><span class="tt">selection</span> shows the rows the widget marks: the requested keys, in the order requested, that one of its current rows has. The requested keys are kept, so a row that arrives with one of them is marked and a row that goes is unmarked; that re-marking is the widget's own doing and is not logged. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01376">1376</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01773">1773</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a93a5b753ee0e31a0a92611e6ca8b6ad4" name="a93a5b753ee0e31a0a92611e6ca8b6ad4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a93a5b753ee0e31a0a92611e6ca8b6ad4">&#9670;&#160;</a></span>FakeTable()</h2>
@@ -292,7 +318,7 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01382">1382</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01779">1779</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -321,7 +347,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Removes the hook that points at this table, so nothing calls it once the table is gone, even if the record outlives it because recording the destruction failed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01392">1392</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01790">1790</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -349,7 +375,7 @@ Additional Inherited Members</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Records property <span class="tt">columns</span>, each as its escaped caption, a colon and its width. </p>
+<p>Records property <span class="tt">columns</span>, each as its escaped caption, a colon and its width, then <span class="tt">;align=</span> and <span class="tt">;valign=</span> where the column's alignment is not the default (<span class="tt">Start</span> across, <span class="tt">Center</span> down), and <span class="tt">;<a class="el" href="#ad109bcf2b00cd63c316ccb067bf13b3c" title="Whether the column at column is sortable, as setColumns gave it.">sortable</a>=true</span> for a sortable column, which <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a212cee0da95f36089b12da145437f426" title="Clicks a column&#39;s header as the user would: a sortable column&#39;s reaches onSort with its index; any ot...">RecordingBackend::clickHeader</a></span> reports, and <span class="tt">;wrap=false</span> for a column that keeps its text cells to one line, and <span class="tt">;shrink=true</span> for a stretch column that may be narrower than its header. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">columns</td><td>The columns, in order. </td></tr>
@@ -359,7 +385,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a57e44fc23672c4b59cbd608a0f3f6431">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01407">1407</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01809">1809</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -396,7 +422,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#ae4237f96f6f3793dc28ec96f491cb532">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01415">1415</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01837">1837</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -433,7 +459,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#ac200cf43bffd4f746a674f14f54b97fe">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01419">1419</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01841">1841</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -481,7 +507,86 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#ae3017e5306e3fde63ec0366cca4983ff">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01428">1428</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01850">1850</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa63a00d86c8ac23f4498ad065d0e6c20" name="aa63a00d86c8ac23f4498ad065d0e6c20"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa63a00d86c8ac23f4498ad065d0e6c20">&#9670;&#160;</a></span>setRowHeading()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTable::setRowHeading </td>
+          <td>(</td>
+          <td class="paramtype">Widget &amp;</td>          <td class="paramname"><span class="paramname"><em>row</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records the row's property <span class="tt">heading</span>; a heading row is never marked, selected or activated. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">row</td><td>One of this table's rows. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::logic_error</td><td>when <code class="param">row</code> is not this table's child. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a50e3d6791f14fa0d7002ef5c6d3d72c1">morph::ui::TableWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01863">1863</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aafb3ee72cfad12f6f80af10a92e7fccd" name="aafb3ee72cfad12f6f80af10a92e7fccd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aafb3ee72cfad12f6f80af10a92e7fccd">&#9670;&#160;</a></span>headingKey()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::testing::detail::FakeTable::headingKey </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>key</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the current row with <code class="param">key</code> is a heading. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">key</td><td>The key. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>False when no current row has it, or the row is a data row. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01876">1876</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -529,7 +634,129 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a017d3b015da5d05d9a24478f9d497346">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01442">1442</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01885">1885</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a09ad79f0fb399356d31f812d85348075" name="a09ad79f0fb399356d31f812d85348075"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a09ad79f0fb399356d31f812d85348075">&#9670;&#160;</a></span>setSelectColumn()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTable::setSelectColumn </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>shown</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">selectColumn</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">shown</td><td>Whether the select column is drawn. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#aed5ee88b1fd88dc92ef300d82bed26f7">morph::ui::TableWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01895">1895</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4aa177c3412d176fa29223663c696933" name="a4aa177c3412d176fa29223663c696933"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4aa177c3412d176fa29223663c696933">&#9670;&#160;</a></span>setSelectAllLabel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTable::setSelectAllLabel </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>label</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">selectAllLabel</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">label</td><td>The header box's name. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#aa849e6e485957bb0984de342d01bca8c">morph::ui::TableWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01899">1899</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab5768c0ac7ee0693cd905eb9770c5223" name="ab5768c0ac7ee0693cd905eb9770c5223"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab5768c0ac7ee0693cd905eb9770c5223">&#9670;&#160;</a></span>setRowLabel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTable::setRowLabel </td>
+          <td>(</td>
+          <td class="paramtype">Widget &amp;</td>          <td class="paramname"><span class="paramname"><em>row</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>label</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records the row's property <span class="tt">label</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">row</td><td>One of this table's rows. </td></tr>
+    <tr><td class="paramname">label</td><td>The row's name. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::logic_error</td><td>when <code class="param">row</code> is not this table's child. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a0cfe2333c39bf4092e4926467e8de24f">morph::ui::TableWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01905">1905</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -566,12 +793,12 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#ae52b435d2acdb2e4d9c18594bf90a8c8">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01452">1452</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01915">1915</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a710e46821c89c90256bfba9bf1189771" name="a710e46821c89c90256bfba9bf1189771"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a710e46821c89c90256bfba9bf1189771">&#9670;&#160;</a></span>setOnSelectionChange()</h2>
+<a id="aa65ab28be8717da5a6ef9fa15cef39bb" name="aa65ab28be8717da5a6ef9fa15cef39bb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa65ab28be8717da5a6ef9fa15cef39bb">&#9670;&#160;</a></span>setOnSelectionChange()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -582,7 +809,7 @@ Additional Inherited Members</h2></td></tr>
         <tr>
           <td class="memname">void morph::ui::testing::detail::FakeTable::setOnSelectionChange </td>
           <td>(</td>
-          <td class="paramtype">std::function&lt; void(std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;)&gt;</td>          <td class="paramname"><span class="paramname"><em>onSelectionChange</em></span></td><td>)</td>
+          <td class="paramtype">std::function&lt; void(std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;, <a class="el" href="../../d8/d11/view_8hpp.html#a79cb82b263e10ec8a972604eb7085106">SelectionChange</a>)&gt;</td>          <td class="paramname"><span class="paramname"><em>onSelectionChange</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -601,9 +828,9 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a6f26c731e1f73666f5210be99bb3db52">morph::ui::TableWidget</a>.</p>
+<p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a77d0965830d028e1480f745d9a39e63b">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01459">1459</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01922">1922</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -640,7 +867,117 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#ac00fed62056c476c5aec27e4b40b71eb">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01465">1465</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01928">1928</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4069907b3e5a5dd9bcc1c76fd76d1a5a" name="a4069907b3e5a5dd9bcc1c76fd76d1a5a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4069907b3e5a5dd9bcc1c76fd76d1a5a">&#9670;&#160;</a></span>setSort()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTable::setSort </td>
+          <td>(</td>
+          <td class="paramtype">std::optional&lt; <a class="el" href="../../d6/dab/structmorph_1_1ui_1_1TableSort.html">TableSort</a> &gt;</td>          <td class="paramname"><span class="paramname"><em>sort</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">sort</span>: the column's index and direction, or <span class="tt">none</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">sort</td><td>The sort shown. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a321663734cad0c4cd382a51f0c21bcf7">morph::ui::TableWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01932">1932</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3737e7c7b494514787d449d09dcdc8b4" name="a3737e7c7b494514787d449d09dcdc8b4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3737e7c7b494514787d449d09dcdc8b4">&#9670;&#160;</a></span>setOnSort()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTable::setOnSort </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void(std::size_t)&gt;</td>          <td class="paramname"><span class="paramname"><em>onSort</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Stores the handler <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a212cee0da95f36089b12da145437f426" title="Clicks a column&#39;s header as the user would: a sortable column&#39;s reaches onSort with its index; any ot...">RecordingBackend::clickHeader</a></span> calls. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">onSort</td><td>The handler. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a1eded724c3f6d4d3e0434d87c549f80a">morph::ui::TableWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01936">1936</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad109bcf2b00cd63c316ccb067bf13b3c" name="ad109bcf2b00cd63c316ccb067bf13b3c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad109bcf2b00cd63c316ccb067bf13b3c">&#9670;&#160;</a></span>sortable()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::testing::detail::FakeTable::sortable </td>
+          <td>(</td>
+          <td class="paramtype">std::size_t</td>          <td class="paramname"><span class="paramname"><em>column</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the column at <code class="param">column</code> is sortable, as <span class="tt"><a class="el" href="#aae570eace1ea87b2930719f135da2b98" title="Records property columns, each as its escaped caption, a colon and its width, then ;align= and ;valig...">setColumns</a></span> gave it. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">column</td><td>The column's index. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>False for an index past the last column. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01941">1941</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -688,7 +1025,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a020a07b261a8647e6e39047e60ad1e70">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01471">1471</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01947">1947</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -725,7 +1062,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a486ab3fd77c43d5e42f7f7c327935449">morph::ui::TableWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01477">1477</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01953">1953</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -765,7 +1102,7 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01487">1487</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01963">1963</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -795,7 +1132,7 @@ Additional Inherited Members</h2></td></tr>
 <p>The selection mode last set. </p>
 <dl class="section return"><dt>Returns</dt><dd>The mode; <span class="tt">None</span> until <span class="tt"><a class="el" href="#a8b2bdca6a57de4f3e7be36bdf281a86e" title="Records property selectionMode, which RecordingBackend::selectRows enforces.">setSelectionMode</a></span> runs. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01495">1495</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01971">1971</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -831,7 +1168,7 @@ Additional Inherited Members</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The row's id, or <span class="tt">nullopt</span> when no current row has <code class="param">key</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01500">1500</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01976">1976</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -858,7 +1195,7 @@ Additional Inherited Members</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Marks the rows the user selected, as the requested keys; nothing is logged. </p>
+<p>Marks the rows the user selected, as the requested keys; nothing is logged. The last key becomes the anchor of a later Shift-click. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">keys</td><td>Keys of current rows. </td></tr>
@@ -866,7 +1203,173 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01511">1511</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01988">1988</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a12e36bc303555d8adb03dd8e83858f8a" name="a12e36bc303555d8adb03dd8e83858f8a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a12e36bc303555d8adb03dd8e83858f8a">&#9670;&#160;</a></span>select()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTable::select </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>keys</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Marks the rows a user's click or key selected, as the requested keys, leaving the anchor where the input left it; nothing is logged. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">keys</td><td>Keys of current rows. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01998">1998</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="afc0907c36fab4328afaefe162dba30ca" name="afc0907c36fab4328afaefe162dba30ca"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afc0907c36fab4328afaefe162dba30ca">&#9670;&#160;</a></span>clicked()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::pair&lt; std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;, <a class="el" href="../../d8/d11/view_8hpp.html#a79cb82b263e10ec8a972604eb7085106">SelectionChange</a> &gt; morph::ui::testing::detail::FakeTable::clicked </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>key</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2">RowClick</a></td>          <td class="paramname"><span class="paramname"><em>click</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What a click on the row with <code class="param">key</code> selects, as every backend's selection model has it, and makes the clicked row the anchor unless the click was a range. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">key</td><td>A current row's key. </td></tr>
+    <tr><td class="paramname">click</td><td>How the click was modified. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The keys then selected, in row order for a range, and the kind of change. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l02008">2008</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="afb12cb502b2b6e746db1838105301dbd" name="afb12cb502b2b6e746db1838105301dbd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afb12cb502b2b6e746db1838105301dbd">&#9670;&#160;</a></span>allOrNone()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt; morph::ui::testing::detail::FakeTable::allOrNone </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What Ctrl+A selects in a <span class="tt">Multiple</span> table: every row, or none when every row is selected already. </p>
+<dl class="section return"><dt>Returns</dt><dd>The keys, in row order. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l02033">2033</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aeada9ec36c3b78580cb1eedf5fd243d9" name="aeada9ec36c3b78580cb1eedf5fd243d9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aeada9ec36c3b78580cb1eedf5fd243d9">&#9670;&#160;</a></span>rowKeys()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt; morph::ui::testing::detail::FakeTable::rowKeys </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The keys of the current data rows, in row order: a heading row is not one. </p>
+<dl class="section return"><dt>Returns</dt><dd>The keys. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l02043">2043</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a659d506e3adc47b651b735ae28b9fb50" name="a659d506e3adc47b651b735ae28b9fb50"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a659d506e3adc47b651b735ae28b9fb50">&#9670;&#160;</a></span>markedKeys()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt; morph::ui::testing::detail::FakeTable::markedKeys </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The keys of the rows the table marks: the requested keys, in the order requested, that a current row has. </p>
+<dl class="section return"><dt>Returns</dt><dd>The keys. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l02056">2056</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

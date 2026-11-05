@@ -37,5 +37,6 @@ var searchData=
   ['queueitem_34',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]],
   ['queueoffline_35',['queueOffline',['../df/dd1/structmorph_1_1ui_1_1CallOptions.html#a360fe8bc334291e1df3e62947febca5b',1,'morph::ui::CallOptions']]],
   ['quick_20renderer_20headers_20include_20morph_20qt_5fquick_20sources_20in_20src_20qt_5fquick_36',['Qt Quick renderer headers (&lt;span class=&quot;tt&quot;&gt;include/morph/qt_quick/&lt;/span&gt;, sources in &lt;span class=&quot;tt&quot;&gt;src/qt_quick/&lt;/span&gt;)',['../index.html#qt-quick-renderer-headers-includemorphqt_quick-sources-in-srcqt_quick',1,'']]],
-  ['quit_37',['quit',['../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3d28810bb54dbbd4c2523505d31bde6b',1,'morph::ui::AppContext']]]
+  ['quiet_37',['Quiet',['../d4/d51/badge__style_8hpp.html#a1913d7e07652dc18c38e4eb27f028230a098753f8980036f4b936e3d4b6997111',1,'morph::ui']]],
+  ['quit_38',['quit',['../dd/db8/classmorph_1_1ui_1_1AppContext.html#a3d28810bb54dbbd4c2523505d31bde6b',1,'morph::ui::AppContext']]]
 ];

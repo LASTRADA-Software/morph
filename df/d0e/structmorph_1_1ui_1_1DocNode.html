@@ -140,6 +140,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a2c0419388a14b9af344095dd2cd1fa5d"><td class="mdescLeft">&#160;</td><td class="mdescRight">A plain string property.  <br /></td></tr>
 <tr class="memitem:a883a2f55c103c3f7f5397eb951036ee8" id="r_a883a2f55c103c3f7f5397eb951036ee8"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a883a2f55c103c3f7f5397eb951036ee8">flag</a> (std::string_view key) const</td></tr>
 <tr class="memdesc:a883a2f55c103c3f7f5397eb951036ee8"><td class="mdescLeft">&#160;</td><td class="mdescRight">A literal flag.  <br /></td></tr>
+<tr class="memitem:a49479f3a53d0dfd3f2dc5ded79923aa7" id="r_a49479f3a53d0dfd3f2dc5ded79923aa7"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a49479f3a53d0dfd3f2dc5ded79923aa7">flag</a> (std::string_view key, bool absent) const</td></tr>
+<tr class="memdesc:a49479f3a53d0dfd3f2dc5ded79923aa7"><td class="mdescLeft">&#160;</td><td class="mdescRight">A literal flag whose absence means something other than <span class="tt">false</span>.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
@@ -164,13 +166,13 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a7d154745b33bbdaaca2cbc6d3443386c" id="r_a7d154745b33bbdaaca2cbc6d3443386c"><td class="memItemLeft">std::map&lt; std::string, bool, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7d154745b33bbdaaca2cbc6d3443386c">flags</a></td></tr>
 <tr class="memdesc:a7d154745b33bbdaaca2cbc6d3443386c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Literal flags, by key (<span class="tt">showLabel</span> of an input).  <br /></td></tr>
 <tr class="memitem:a1eb0deaf380ab5a564b8415583c54aa6" id="r_a1eb0deaf380ab5a564b8415583c54aa6"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html">ScopeDecl</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1eb0deaf380ab5a564b8415583c54aa6">scope</a></td></tr>
-<tr class="memdesc:a1eb0deaf380ab5a564b8415583c54aa6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The declarations of the scope the node creates (dialog, drawer, switch case, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a1b59c075aa853e77789dbb8d74ef85d1" title="One widget per row of a keyed collection read through a binding (a Query&#39;s value() included).">forEach</a></span> or <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span> row); empty for a node that creates none.  <br /></td></tr>
+<tr class="memdesc:a1eb0deaf380ab5a564b8415583c54aa6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The declarations of the scope the node creates (dialog, drawer, switch case, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a85c5613ad529665babdb9bf7026d81bc" title="One widget per row of a keyed collection read through a binding (a Query&#39;s value() included).">forEach</a></span> or <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span> row); empty for a node that creates none.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A view node of the document (spec 5 §9), or a structured part of one (a table column, a tab, a switch case, a menu item, an <span class="tt">a11y</span>, <span class="tt">drag</span>, <span class="tt">drop</span> or <span class="tt">action</span> record, a form field overlay). </p>
 <p>Properties are kept by their document keys, so the interpreter reads a kind's properties by name; which keys a kind has, and what shape each takes, is the kind table of <span class="tt">docs/spec/ui/document.md</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00394">394</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00396">396</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="ae34a1ac1ff941576faaf5a668c79f3e9" name="ae34a1ac1ff941576faaf5a668c79f3e9"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae34a1ac1ff941576faaf5a668c79f3e9">&#9670;&#160;</a></span>prop()</h2>
@@ -204,7 +206,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The expression, or <span class="tt">nullptr</span> when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00423">423</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00425">425</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -240,7 +242,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The commands, or <span class="tt">nullptr</span> when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00431">431</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00433">433</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -276,7 +278,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The nodes; empty when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00439">439</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00441">441</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -312,7 +314,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The parts; empty when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00447">447</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00449">449</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -348,12 +350,12 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The string; empty when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00455">455</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00457">457</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a883a2f55c103c3f7f5397eb951036ee8" name="a883a2f55c103c3f7f5397eb951036ee8"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a883a2f55c103c3f7f5397eb951036ee8">&#9670;&#160;</a></span>flag()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a883a2f55c103c3f7f5397eb951036ee8">&#9670;&#160;</a></span>flag() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -384,7 +386,48 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its value; <span class="tt">false</span> when absent. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00463">463</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00465">465</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a49479f3a53d0dfd3f2dc5ded79923aa7" name="a49479f3a53d0dfd3f2dc5ded79923aa7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a49479f3a53d0dfd3f2dc5ded79923aa7">&#9670;&#160;</a></span>flag() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::DocNode::flag </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>key</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>absent</em></span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A literal flag whose absence means something other than <span class="tt">false</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">key</td><td>The key. </td></tr>
+    <tr><td class="paramname">absent</td><td>The value when the key is absent. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Its value; <code class="param">absent</code> when the key is absent. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00474">474</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -403,7 +446,7 @@ Public Attributes</h2></td></tr>
 
 <p>The node kind (<span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a></span>, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span>, …), or for a part its part kind (<span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808" title="Children stacked top to bottom.">column</a></span>, <span class="tt">tab</span>, <span class="tt">case</span>, …). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00396">396</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00398">398</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -421,7 +464,7 @@ Public Attributes</h2></td></tr>
 
 <p>The element id; empty when none is given. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00398">398</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00400">400</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -439,7 +482,7 @@ Public Attributes</h2></td></tr>
 
 <p>The node's JSON Pointer. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00400">400</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00402">402</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -457,7 +500,7 @@ Public Attributes</h2></td></tr>
 
 <p>Expression properties, by key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00402">402</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00404">404</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -475,7 +518,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../d9/d50/structmorph_1_1ui_1_1Command.html" title="One command. Which members a kind uses is listed with each member.">Command</a> lists, by key (<span class="tt">onClick</span>, …), including a custom node's <span class="tt">on</span> events as <span class="tt">on.&lt;<a class="el" href="#a35e9a46703cf903a044c876ad8080d14" title="A command list.">event</a>&gt;</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00404">404</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -493,7 +536,7 @@ Public Attributes</h2></td></tr>
 
 <p>Child node lists, by key (<span class="tt"><a class="el" href="#a18a0afaf234d82c94998876c804bfc1f" title="Child node lists, by key (children, header, loading, error, default, cell, fallback).">children</a></span>, <span class="tt">header</span>, <span class="tt">loading</span>, <span class="tt">error</span>, <span class="tt">default</span>, <span class="tt">cell</span>, <span class="tt">fallback</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00408">408</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -511,7 +554,7 @@ Public Attributes</h2></td></tr>
 
 <p>Structured parts, by key (<span class="tt">columns</span>, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ad8fe6a646863660b9d373f46ed7854f8" title="A tab bar over pages.">tabs</a></span>, <span class="tt">cases</span>, <span class="tt">items</span>, <span class="tt">a11y</span>, <span class="tt">action</span>, <span class="tt">fields</span>, …). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00408">408</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00410">410</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -529,7 +572,7 @@ Public Attributes</h2></td></tr>
 
 <p>Plain string properties, by key (<span class="tt">testId</span>, <span class="tt">surface</span>, <span class="tt"><a class="el" href="#a2c0419388a14b9af344095dd2cd1fa5d" title="A plain string property.">name</a></span> of a custom node, <span class="tt">model</span> and <span class="tt">action</span> of a form, <span class="tt">point</span> of <span class="tt">customize</span>, <span class="tt">role</span> of <span class="tt">a11y</span>, a column's <span class="tt"><a class="el" href="#aecba77cb28946a0dd4d8b468c535c98b" title="The element id; empty when none is given.">id</a></span>, …). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00411">411</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00413">413</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -547,7 +590,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2" title="The identity of a Switch case, a Select option, a ForEach or Table row and a drag payload.">Key</a> bindings: chord to commands. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00413">413</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -565,7 +608,7 @@ Public Attributes</h2></td></tr>
 
 <p>Literal flags, by key (<span class="tt">showLabel</span> of an input). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00417">417</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -581,9 +624,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The declarations of the scope the node creates (dialog, drawer, switch case, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a1b59c075aa853e77789dbb8d74ef85d1" title="One widget per row of a keyed collection read through a binding (a Query&#39;s value() included).">forEach</a></span> or <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span> row); empty for a node that creates none. </p>
+<p>The declarations of the scope the node creates (dialog, drawer, switch case, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a85c5613ad529665babdb9bf7026d81bc" title="One widget per row of a keyed collection read through a binding (a Query&#39;s value() included).">forEach</a></span> or <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a></span> row); empty for a node that creates none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00418">418</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00420">420</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

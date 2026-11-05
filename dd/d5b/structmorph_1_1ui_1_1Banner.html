@@ -131,7 +131,9 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:ac9e3fee86bb010283e437de8c1f36b3c" id="r_ac9e3fee86bb010283e437de8c1f36b3c"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac9e3fee86bb010283e437de8c1f36b3c">tone</a> = <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4aa4059b0251f66a18cb56f544728796875">Tone::Info</a></td></tr>
 <tr class="memdesc:ac9e3fee86bb010283e437de8c1f36b3c"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the message conveys.  <br /></td></tr>
 <tr class="memitem:a2cf705301a915b2dcc31f67cf64ab6ef" id="r_a2cf705301a915b2dcc31f67cf64ab6ef"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2cf705301a915b2dcc31f67cf64ab6ef">text</a></td></tr>
-<tr class="memdesc:a2cf705301a915b2dcc31f67cf64ab6ef"><td class="mdescLeft">&#160;</td><td class="mdescRight">The message.  <br /></td></tr>
+<tr class="memdesc:a2cf705301a915b2dcc31f67cf64ab6ef"><td class="mdescLeft">&#160;</td><td class="mdescRight">The message; not applied while the banner has spans.  <br /></td></tr>
+<tr class="memitem:ac8a69556068c77fa04142512f2d5bff4" id="r_ac8a69556068c77fa04142512f2d5bff4"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac8a69556068c77fa04142512f2d5bff4">spans</a></td></tr>
+<tr class="memdesc:ac8a69556068c77fa04142512f2d5bff4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The message as runs, each plain, strong or monospace; while bound or not empty, it is shown in place of <span class="tt"><a class="el" href="#a2cf705301a915b2dcc31f67cf64ab6ef" title="The message; not applied while the banner has spans.">text</a></span>.  <br /></td></tr>
 <tr class="memitem:aa02b1a1e68991abb0ead8703ed67bc22" id="r_aa02b1a1e68991abb0ead8703ed67bc22"><td class="memItemLeft"><a class="el" href="../../da/d14/structmorph_1_1ui_1_1ActionButton.html">ActionButton</a>&#160;</td><td class="memItemRight"><a class="el" href="#aa02b1a1e68991abb0ead8703ed67bc22">action</a> {}</td></tr>
 <tr class="memdesc:aa02b1a1e68991abb0ead8703ed67bc22"><td class="mdescLeft">&#160;</td><td class="mdescRight">The button beside the message; an empty label shows none.  <br /></td></tr>
 <tr class="memitem:a39bfb317c75d2faf9cac9ba4a80fd0d2" id="r_a39bfb317c75d2faf9cac9ba4a80fd0d2"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a39bfb317c75d2faf9cac9ba4a80fd0d2">dismissible</a> = false</td></tr>
@@ -140,11 +142,15 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ab9a7091dfee5f893c185230bc0472db2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called when the user dismisses it. The banner stays shown until the application hides it.  <br /></td></tr>
 <tr class="memitem:ab3eee4ac027dddedad009294a5a8b590" id="r_ab3eee4ac027dddedad009294a5a8b590"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab3eee4ac027dddedad009294a5a8b590">common</a> {}</td></tr>
 <tr class="memdesc:ab3eee4ac027dddedad009294a5a8b590"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visibility, enablement, layout, drag-and-drop.  <br /></td></tr>
+<tr class="memitem:ace547934dd9a5ec4ed9d93bfc32893fa" id="r_ace547934dd9a5ec4ed9d93bfc32893fa"><td class="memItemLeft"><a class="el" href="../../df/dcb/banner__action__style_8hpp.html#abcdbf41d48641704b3f48955e356c69b">BannerActionStyle</a>&#160;</td><td class="memItemRight"><a class="el" href="#ace547934dd9a5ec4ed9d93bfc32893fa">actionStyle</a> = <a class="el" href="../../df/dcb/banner__action__style_8hpp.html#abcdbf41d48641704b3f48955e356c69ba401357e57c765967393ba391a338e89b">BannerActionStyle::Ghost</a></td></tr>
+<tr class="memdesc:ace547934dd9a5ec4ed9d93bfc32893fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">How the action is drawn; set once. <span class="tt">Link</span> draws it inside the message, at the run of <span class="tt"><a class="el" href="#ac8a69556068c77fa04142512f2d5bff4" title="The message as runs, each plain, strong or monospace; while bound or not empty, it is shown in place ...">spans</a></span> marked <span class="tt"><a class="el" href="#aa02b1a1e68991abb0ead8703ed67bc22" title="The button beside the message; an empty label shows none.">action</a></span>, else after the message.  <br /></td></tr>
+<tr class="memitem:af2d54ce269e5ddcbb783bce40903abe7" id="r_af2d54ce269e5ddcbb783bce40903abe7"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#af2d54ce269e5ddcbb783bce40903abe7">actionStretch</a> = false</td></tr>
+<tr class="memdesc:af2d54ce269e5ddcbb783bce40903abe7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the action takes a line of its own under the message, as wide as the banner; set once. Not with <span class="tt">Link</span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A message across the top of a region, with an optional action and an optional dismissal. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00978">978</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01323">1323</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ac9e3fee86bb010283e437de8c1f36b3c" name="ac9e3fee86bb010283e437de8c1f36b3c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac9e3fee86bb010283e437de8c1f36b3c">&#9670;&#160;</a></span>tone</h2>
@@ -160,7 +166,7 @@ Public Attributes</h2></td></tr>
 
 <p>What the message conveys. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00980">980</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01325">1325</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,9 +182,27 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The message. </p>
+<p>The message; not applied while the banner has spans. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00982">982</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01327">1327</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac8a69556068c77fa04142512f2d5bff4" name="ac8a69556068c77fa04142512f2d5bff4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac8a69556068c77fa04142512f2d5bff4">&#9670;&#160;</a></span>spans</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::vector&lt;<a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a>&gt; &gt; morph::ui::Banner::spans</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The message as runs, each plain, strong or monospace; while bound or not empty, it is shown in place of <span class="tt"><a class="el" href="#a2cf705301a915b2dcc31f67cf64ab6ef" title="The message; not applied while the banner has spans.">text</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01330">1330</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -196,7 +220,7 @@ Public Attributes</h2></td></tr>
 
 <p>The button beside the message; an empty label shows none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00984">984</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01332">1332</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -214,7 +238,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the user can dismiss it; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00986">986</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01334">1334</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +256,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called when the user dismisses it. The banner stays shown until the application hides it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00988">988</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01336">1336</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,7 +274,43 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00990">990</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01338">1338</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ace547934dd9a5ec4ed9d93bfc32893fa" name="ace547934dd9a5ec4ed9d93bfc32893fa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ace547934dd9a5ec4ed9d93bfc32893fa">&#9670;&#160;</a></span>actionStyle</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../df/dcb/banner__action__style_8hpp.html#abcdbf41d48641704b3f48955e356c69b">BannerActionStyle</a> morph::ui::Banner::actionStyle = <a class="el" href="../../df/dcb/banner__action__style_8hpp.html#abcdbf41d48641704b3f48955e356c69ba401357e57c765967393ba391a338e89b">BannerActionStyle::Ghost</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>How the action is drawn; set once. <span class="tt">Link</span> draws it inside the message, at the run of <span class="tt"><a class="el" href="#ac8a69556068c77fa04142512f2d5bff4" title="The message as runs, each plain, strong or monospace; while bound or not empty, it is shown in place ...">spans</a></span> marked <span class="tt"><a class="el" href="#aa02b1a1e68991abb0ead8703ed67bc22" title="The button beside the message; an empty label shows none.">action</a></span>, else after the message. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01341">1341</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af2d54ce269e5ddcbb783bce40903abe7" name="af2d54ce269e5ddcbb783bce40903abe7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af2d54ce269e5ddcbb783bce40903abe7">&#9670;&#160;</a></span>actionStretch</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Banner::actionStretch = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the action takes a line of its own under the message, as wide as the banner; set once. Not with <span class="tt">Link</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01344">1344</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

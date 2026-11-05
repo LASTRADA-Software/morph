@@ -1,5 +1,7 @@
 var classmorph_1_1ui_1_1TextWidget =
 [
     [ "setText", "de/d89/classmorph_1_1ui_1_1TextWidget.html#a16267477b79fe06f8f0746948fc8ceb7", null ],
-    [ "setRole", "de/d89/classmorph_1_1ui_1_1TextWidget.html#a7a1ffecae895ab35f761afd6d3a765c3", null ]
+    [ "setRole", "de/d89/classmorph_1_1ui_1_1TextWidget.html#a7a1ffecae895ab35f761afd6d3a765c3", null ],
+    [ "setSpans", "de/d89/classmorph_1_1ui_1_1TextWidget.html#a8a7b39f07dbf87dd546a042253a0f233", null ],
+    [ "setAlign", "de/d89/classmorph_1_1ui_1_1TextWidget.html#a8b24d429fb9eead91a4c723a99dba4fa", null ]
 ];

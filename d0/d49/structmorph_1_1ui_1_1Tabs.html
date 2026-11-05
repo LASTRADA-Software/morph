@@ -129,18 +129,26 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d49/structm
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:a56e3728fa7372597bb75bee18bf1f83a" id="r_a56e3728fa7372597bb75bee18bf1f83a"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d2/d33/structmorph_1_1ui_1_1Tab.html">Tab</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a56e3728fa7372597bb75bee18bf1f83a">tabs</a></td></tr>
-<tr class="memdesc:a56e3728fa7372597bb75bee18bf1f83a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The pages, in order; set once.  <br /></td></tr>
+<tr class="memdesc:a56e3728fa7372597bb75bee18bf1f83a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The pages, in order; the list is set once, each caption may be bound.  <br /></td></tr>
 <tr class="memitem:a88314600ac3b02c0a1028491ff0eb991" id="r_a88314600ac3b02c0a1028491ff0eb991"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a88314600ac3b02c0a1028491ff0eb991">selected</a></td></tr>
 <tr class="memdesc:a88314600ac3b02c0a1028491ff0eb991"><td class="mdescLeft">&#160;</td><td class="mdescRight">The selected page's index; an index past the last page shows none.  <br /></td></tr>
 <tr class="memitem:a8d1535e0598ecba4719be4d65da5e4fb" id="r_a8d1535e0598ecba4719be4d65da5e4fb"><td class="memItemLeft">std::function&lt; void(std::size_t)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8d1535e0598ecba4719be4d65da5e4fb">onSelect</a></td></tr>
 <tr class="memdesc:a8d1535e0598ecba4719be4d65da5e4fb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with the index the user picked, and with the page still shown when a picked page fails to mount.  <br /></td></tr>
+<tr class="memitem:adacd9f285debe17b0146e11bebd9841e" id="r_adacd9f285debe17b0146e11bebd9841e"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#adacd9f285debe17b0146e11bebd9841e">moreLabel</a> = std::string{&quot;More&quot;}</td></tr>
+<tr class="memdesc:adacd9f285debe17b0146e11bebd9841e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The label of the menu that holds the tabs that do not fit in the bar, where a frontend has one.  <br /></td></tr>
 <tr class="memitem:a3742b9720dace103cdcee2b793b7945f" id="r_a3742b9720dace103cdcee2b793b7945f"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#a3742b9720dace103cdcee2b793b7945f">common</a> {}</td></tr>
 <tr class="memdesc:a3742b9720dace103cdcee2b793b7945f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visibility, enablement, layout, drag-and-drop.  <br /></td></tr>
+<tr class="memitem:ab53a1ea37ecfe3927173848af2e640aa" id="r_ab53a1ea37ecfe3927173848af2e640aa"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#ab53a1ea37ecfe3927173848af2e640aa">inset</a> = 0</td></tr>
+<tr class="memdesc:ab53a1ea37ecfe3927173848af2e640aa"><td class="mdescLeft">&#160;</td><td class="mdescRight">The strip's inset, a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>; set once. The strip and its rule span the node's width, the first tab starts this far in from the leading edge, and each page is padded by it on every side unless <span class="tt"><a class="el" href="#a4a76c20f9f3885046973d9bbbdd7707a" title="The padding of each page, a spacing step, 0 to kMaxSpacingStep; set once. Disengaged pads the pages b...">pageInset</a></span> says otherwise.  <br /></td></tr>
+<tr class="memitem:a4a76c20f9f3885046973d9bbbdd7707a" id="r_a4a76c20f9f3885046973d9bbbdd7707a"><td class="memItemLeft">std::optional&lt; int &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4a76c20f9f3885046973d9bbbdd7707a">pageInset</a></td></tr>
+<tr class="memdesc:a4a76c20f9f3885046973d9bbbdd7707a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The padding of each page, a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>; set once. Disengaged pads the pages by <span class="tt"><a class="el" href="#ab53a1ea37ecfe3927173848af2e640aa" title="The strip&#39;s inset, a spacing step, 0 to kMaxSpacingStep; set once. The strip and its rule span the no...">inset</a></span>. Each page pads its own content inside its scroll, so a child of a page can bleed to the node's edges whether or not the page scrolls.  <br /></td></tr>
+<tr class="memitem:a33ac79026bd69fd9aa14d8fcab1b9b4c" id="r_a33ac79026bd69fd9aa14d8fcab1b9b4c"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a33ac79026bd69fd9aa14d8fcab1b9b4c">stripSurface</a></td></tr>
+<tr class="memdesc:a33ac79026bd69fd9aa14d8fcab1b9b4c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The surface the strip, and nothing else, is drawn on; empty draws it on the surface around it. Set once.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A tab bar over pages. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00682">682</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00962">962</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a56e3728fa7372597bb75bee18bf1f83a" name="a56e3728fa7372597bb75bee18bf1f83a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a56e3728fa7372597bb75bee18bf1f83a">&#9670;&#160;</a></span>tabs</h2>
@@ -154,9 +162,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The pages, in order; set once. </p>
+<p>The pages, in order; the list is set once, each caption may be bound. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00684">684</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00964">964</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -174,7 +182,7 @@ Public Attributes</h2></td></tr>
 
 <p>The selected page's index; an index past the last page shows none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00686">686</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00966">966</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +200,25 @@ Public Attributes</h2></td></tr>
 
 <p>Called with the index the user picked, and with the page still shown when a picked page fails to mount. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00688">688</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00968">968</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adacd9f285debe17b0146e11bebd9841e" name="adacd9f285debe17b0146e11bebd9841e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adacd9f285debe17b0146e11bebd9841e">&#9670;&#160;</a></span>moreLabel</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::Tabs::moreLabel = std::string{&quot;More&quot;}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The label of the menu that holds the tabs that do not fit in the bar, where a frontend has one. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00970">970</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +236,61 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00690">690</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00972">972</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab53a1ea37ecfe3927173848af2e640aa" name="ab53a1ea37ecfe3927173848af2e640aa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab53a1ea37ecfe3927173848af2e640aa">&#9670;&#160;</a></span>inset</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int morph::ui::Tabs::inset = 0</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The strip's inset, a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>; set once. The strip and its rule span the node's width, the first tab starts this far in from the leading edge, and each page is padded by it on every side unless <span class="tt"><a class="el" href="#a4a76c20f9f3885046973d9bbbdd7707a" title="The padding of each page, a spacing step, 0 to kMaxSpacingStep; set once. Disengaged pads the pages b...">pageInset</a></span> says otherwise. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00976">976</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4a76c20f9f3885046973d9bbbdd7707a" name="a4a76c20f9f3885046973d9bbbdd7707a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4a76c20f9f3885046973d9bbbdd7707a">&#9670;&#160;</a></span>pageInset</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;int&gt; morph::ui::Tabs::pageInset</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The padding of each page, a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>; set once. Disengaged pads the pages by <span class="tt"><a class="el" href="#ab53a1ea37ecfe3927173848af2e640aa" title="The strip&#39;s inset, a spacing step, 0 to kMaxSpacingStep; set once. The strip and its rule span the no...">inset</a></span>. Each page pads its own content inside its scroll, so a child of a page can bleed to the node's edges whether or not the page scrolls. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00980">980</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a33ac79026bd69fd9aa14d8fcab1b9b4c" name="a33ac79026bd69fd9aa14d8fcab1b9b4c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a33ac79026bd69fd9aa14d8fcab1b9b4c">&#9670;&#160;</a></span>stripSurface</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::Tabs::stripSurface</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The surface the strip, and nothing else, is drawn on; empty draws it on the surface around it. Set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00982">982</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

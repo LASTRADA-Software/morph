@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dde/structm
 </div><!--header-->
 <div class="contents">
 
-<p>Options of <span class="tt"><a class="el" href="#aeb3194cd90e93cdf7a4dd427ff516dae" title="The text.">text</a></span>.  
+<p>Options of <span class="tt"><a class="el" href="#aeb3194cd90e93cdf7a4dd427ff516dae" title="The text; beside spans, what a client that does not know spans draws.">text</a></span>.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>&gt;</code></p>
@@ -129,16 +129,22 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dde/structm
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:aeb3194cd90e93cdf7a4dd427ff516dae" id="r_aeb3194cd90e93cdf7a4dd427ff516dae"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#aeb3194cd90e93cdf7a4dd427ff516dae">text</a></td></tr>
-<tr class="memdesc:aeb3194cd90e93cdf7a4dd427ff516dae"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text.  <br /></td></tr>
+<tr class="memdesc:aeb3194cd90e93cdf7a4dd427ff516dae"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text; beside <span class="tt"><a class="el" href="#a57e95748848507af8e6af908cc7fd531" title="The text as runs (spans), shown in place of text by a client that knows them.">spans</a></span>, what a client that does not know spans draws.  <br /></td></tr>
+<tr class="memitem:a57e95748848507af8e6af908cc7fd531" id="r_a57e95748848507af8e6af908cc7fd531"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a57e95748848507af8e6af908cc7fd531">spans</a></td></tr>
+<tr class="memdesc:a57e95748848507af8e6af908cc7fd531"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text as runs (<span class="tt"><a class="el" href="#a57e95748848507af8e6af908cc7fd531" title="The text as runs (spans), shown in place of text by a client that knows them.">spans</a></span>), shown in place of <span class="tt"><a class="el" href="#aeb3194cd90e93cdf7a4dd427ff516dae" title="The text; beside spans, what a client that does not know spans draws.">text</a></span> by a client that knows them.  <br /></td></tr>
 <tr class="memitem:aef3e93ca7d83638d375e92bb631bf2fc" id="r_aef3e93ca7d83638d375e92bb631bf2fc"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#aef3e93ca7d83638d375e92bb631bf2fc">role</a></td></tr>
 <tr class="memdesc:aef3e93ca7d83638d375e92bb631bf2fc"><td class="mdescLeft">&#160;</td><td class="mdescRight">The typographic role, such as <span class="tt">heading</span>.  <br /></td></tr>
+<tr class="memitem:a615a7df8d6380b5372a1c1391c813a9b" id="r_a615a7df8d6380b5372a1c1391c813a9b"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a615a7df8d6380b5372a1c1391c813a9b">tone</a></td></tr>
+<tr class="memdesc:a615a7df8d6380b5372a1c1391c813a9b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The tone (<span class="tt">ok</span>, <span class="tt">warn</span>, <span class="tt">err</span>, <span class="tt">info</span>; <span class="tt">neutral</span> or null for none) whose colour the text is drawn in, whatever its role: the role keeps the size, weight and face.  <br /></td></tr>
 <tr class="memitem:a99070efc1516b8e2262c53198a577c7b" id="r_a99070efc1516b8e2262c53198a577c7b"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a99070efc1516b8e2262c53198a577c7b">stale</a></td></tr>
 <tr class="memdesc:a99070efc1516b8e2262c53198a577c7b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the shown value is being recalculated.  <br /></td></tr>
+<tr class="memitem:ac24c227ec1675bb23e07cbd1a76b93e1" id="r_ac24c227ec1675bb23e07cbd1a76b93e1"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d1/d86/text__align_8hpp.html#ad7eac90b50f94b262c7675fb2b3f0dd5">TextAlign</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac24c227ec1675bb23e07cbd1a76b93e1">align</a></td></tr>
+<tr class="memdesc:ac24c227ec1675bb23e07cbd1a76b93e1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where each line sits within the text's width; unset keeps the start. It shows nothing on a text that is as wide as its content, so it belongs on a text that stretches or fills a table column.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Options of <span class="tt"><a class="el" href="#aeb3194cd90e93cdf7a4dd427ff516dae" title="The text.">text</a></span>. </p>
+<div class="textblock"><p>Options of <span class="tt"><a class="el" href="#aeb3194cd90e93cdf7a4dd427ff516dae" title="The text; beside spans, what a client that does not know spans draws.">text</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03114">3114</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03616">3616</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aeb3194cd90e93cdf7a4dd427ff516dae" name="aeb3194cd90e93cdf7a4dd427ff516dae"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aeb3194cd90e93cdf7a4dd427ff516dae">&#9670;&#160;</a></span>text</h2>
@@ -152,9 +158,27 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The text. </p>
+<p>The text; beside <span class="tt"><a class="el" href="#a57e95748848507af8e6af908cc7fd531" title="The text as runs (spans), shown in place of text by a client that knows them.">spans</a></span>, what a client that does not know spans draws. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03116">3116</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03618">3618</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a57e95748848507af8e6af908cc7fd531" name="a57e95748848507af8e6af908cc7fd531"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a57e95748848507af8e6af908cc7fd531">&#9670;&#160;</a></span>spans</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> morph::ui::author::TextOptions::spans</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The text as runs (<span class="tt"><a class="el" href="#a57e95748848507af8e6af908cc7fd531" title="The text as runs (spans), shown in place of text by a client that knows them.">spans</a></span>), shown in place of <span class="tt"><a class="el" href="#aeb3194cd90e93cdf7a4dd427ff516dae" title="The text; beside spans, what a client that does not know spans draws.">text</a></span> by a client that knows them. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03620">3620</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -172,7 +196,25 @@ Public Attributes</h2></td></tr>
 
 <p>The typographic role, such as <span class="tt">heading</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03118">3118</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03622">3622</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a615a7df8d6380b5372a1c1391c813a9b" name="a615a7df8d6380b5372a1c1391c813a9b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a615a7df8d6380b5372a1c1391c813a9b">&#9670;&#160;</a></span>tone</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> morph::ui::author::TextOptions::tone</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The tone (<span class="tt">ok</span>, <span class="tt">warn</span>, <span class="tt">err</span>, <span class="tt">info</span>; <span class="tt">neutral</span> or null for none) whose colour the text is drawn in, whatever its role: the role keeps the size, weight and face. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03625">3625</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -190,7 +232,25 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the shown value is being recalculated. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03120">3120</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03627">3627</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac24c227ec1675bb23e07cbd1a76b93e1" name="ac24c227ec1675bb23e07cbd1a76b93e1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac24c227ec1675bb23e07cbd1a76b93e1">&#9670;&#160;</a></span>align</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d1/d86/text__align_8hpp.html#ad7eac90b50f94b262c7675fb2b3f0dd5">TextAlign</a>&gt; morph::ui::author::TextOptions::align</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where each line sits within the text's width; unset keeps the start. It shows nothing on a text that is as wide as its content, so it belongs on a text that stretches or fills a table column. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03630">3630</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

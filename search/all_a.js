@@ -3,7 +3,7 @@ var searchData=
   ['jobinput_0',['JobInput',['../d9/d96/structmorph_1_1table_1_1detail_1_1JobInput.html',1,'morph::table::detail']]],
   ['jobresult_1',['JobResult',['../de/dbe/structmorph_1_1table_1_1detail_1_1JobResult.html',1,'morph::table::detail']]],
   ['jobs_2',['jobs',['../de/d18/structmorph_1_1table_1_1EngineStats.html#a92549edca4bbafb2c88f6b0d91d35605',1,'morph::table::EngineStats']]],
-  ['joined_3',['joined',['../d9/da5/explorer_8hpp.html#a5f6fd4c26e84c166856b1a5a4a9417eb',1,'morph::ui::detail::explorer::joined()'],['../d9/df6/ui_2theme_8hpp.html#a6b028815c6b756867a1f7fde67e9edd1',1,'morph::ui::detail::joined()']]],
+  ['joined_3',['joined',['../d1/d54/structmorph_1_1ui_1_1author_1_1ChartSeries.html#ad131714826ad140b05be9eac4cca7336',1,'morph::ui::author::ChartSeries::joined'],['../d9/dfd/structmorph_1_1ui_1_1ChartSeries.html#af59e2768a6fa79688d4989e2f8a74afe',1,'morph::ui::ChartSeries::joined'],['../d9/da5/explorer_8hpp.html#a5f6fd4c26e84c166856b1a5a4a9417eb',1,'morph::ui::detail::explorer::joined()'],['../d9/df6/ui_2theme_8hpp.html#a6b028815c6b756867a1f7fde67e9edd1',1,'morph::ui::detail::joined()']]],
   ['journal_20—_20ordered_20replayable_20action_20log_4',['&lt;span class=&quot;tt&quot;&gt;journal/&lt;/span&gt; — ordered, replayable action log',['../index.html#journal--ordered-replayable-action-log',1,'']]],
   ['journalmode_5',['journalMode',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#acf2c06305a38052b962b7fdd6d66b901',1,'morph::offline::SqliteOfflineQueue']]],
   ['json_6',['Json',['../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b',1,'morph::ui::Json'],['../d1/dc0/author_8hpp.html#a95426682ac3c0f37a78cc0d5db6ed9c8aeed8d85b888a6c015834240885ee6333',1,'Jsonmorph::ui::author']]],
@@ -13,7 +13,7 @@ var searchData=
   ['jsontextvalue_10',['jsonTextValue',['../db/d42/interpreter_8hpp.html#a2a87c57ab97796c06ccfaef30b4755b5',1,'morph::ui::detail']]],
   ['jsontype_11',['jsonType',['../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html#a63fa87e66ac01e645662124dd66678ca',1,'morph::forms::FieldSpec']]],
   ['justify_12',['Justify',['../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4',1,'morph::ui']]],
-  ['justify_13',['justify',['../d1/d7d/structmorph_1_1ui_1_1author_1_1ContainerOptions.html#ac16b631ab76472b5eb3803e81efdda28',1,'morph::ui::author::ContainerOptions::justify'],['../d1/d05/structmorph_1_1ui_1_1Column.html#abed9ca87522026d8aace7862496f7757',1,'morph::ui::Column::justify'],['../d7/da8/structmorph_1_1ui_1_1Row.html#a26605fdac1155e8aa5d6c536b5d9a43c',1,'morph::ui::Row::justify']]],
+  ['justify_13',['justify',['../d1/d7d/structmorph_1_1ui_1_1author_1_1ContainerOptions.html#ac16b631ab76472b5eb3803e81efdda28',1,'morph::ui::author::ContainerOptions::justify'],['../d2/dc4/structmorph_1_1ui_1_1author_1_1ActionBarOptions.html#aff4460f7209e0acffd21aa72c0b3d738',1,'morph::ui::author::ActionBarOptions::justify'],['../d1/d05/structmorph_1_1ui_1_1Column.html#abed9ca87522026d8aace7862496f7757',1,'morph::ui::Column::justify'],['../d7/da8/structmorph_1_1ui_1_1Row.html#a26605fdac1155e8aa5d6c536b5d9a43c',1,'morph::ui::Row::justify'],['../d6/dda/structmorph_1_1ui_1_1ActionBar.html#a65c519be52b48db25fc5421c7d306d84',1,'morph::ui::ActionBar::justify']]],
   ['justifyname_14',['justifyName',['../d1/dc0/author_8hpp.html#aac4092d72452a9298795c8dd6d9b77f4',1,'morph::ui::author::detail']]],
   ['justifyof_15',['justifyOf',['../db/d42/interpreter_8hpp.html#a3e1037b78c8cdaf9ecc47a952152d583',1,'morph::ui::detail']]]
 ];

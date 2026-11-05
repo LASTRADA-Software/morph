@@ -133,7 +133,7 @@ Inheritance diagram for morph::ui::BannerWidget:</div>
   <map id="morph_3A_3Aui_3A_3ABannerWidget_map" name="morph_3A_3Aui_3A_3ABannerWidget_map">
 <area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,303,24"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; BannerWidget &gt;" shape="rect" coords="0,112,303,136"/>
-<area href="../../d8/df8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBanner.html" title="A fake BannerWidget: properties tone, text, actionLabel, dismissible." alt="morph::ui::testing::detail::FakeBanner" shape="rect" coords="0,168,303,192"/>
+<area href="../../d8/df8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBanner.html" title="A fake BannerWidget: properties tone, text, spans (as formatSpans gives them), actionLabel,..." alt="morph::ui::testing::detail::FakeBanner" shape="rect" coords="0,168,303,192"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -143,6 +143,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a2d8fdfa77f47f6fa6e821ad3a2c417c8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what the message conveys.  <br /></td></tr>
 <tr class="memitem:ac851ab65508ad9abd75c114d81d4fdef" id="r_ac851ab65508ad9abd75c114d81d4fdef"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ac851ab65508ad9abd75c114d81d4fdef">setText</a> (std::string_view text)=0</td></tr>
 <tr class="memdesc:ac851ab65508ad9abd75c114d81d4fdef"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the message.  <br /></td></tr>
+<tr class="memitem:ad179316ac5fd097e2439367be57916c7" id="r_ad179316ac5fd097e2439367be57916c7"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ad179316ac5fd097e2439367be57916c7">setSpans</a> (std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; const &amp;spans)=0</td></tr>
+<tr class="memdesc:ad179316ac5fd097e2439367be57916c7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the message with runs, as <span class="tt"><a class="el" href="../../de/d89/classmorph_1_1ui_1_1TextWidget.html#a8a7b39f07dbf87dd546a042253a0f233" title="Replaces what the text shows with runs, in order, in the text&#39;s role: a strong run in the backend&#39;s b...">TextWidget::setSpans</a></span> does. The mount calls it in place of <span class="tt"><a class="el" href="#ac851ab65508ad9abd75c114d81d4fdef" title="Replaces the message.">setText</a></span> for a banner that has spans.  <br /></td></tr>
 <tr class="memitem:ab0d8bacc5686a2b7f4597b7ac6f780ed" id="r_ab0d8bacc5686a2b7f4597b7ac6f780ed"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ab0d8bacc5686a2b7f4597b7ac6f780ed">setActionLabel</a> (std::string_view label)=0</td></tr>
 <tr class="memdesc:ab0d8bacc5686a2b7f4597b7ac6f780ed"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the action button's caption.  <br /></td></tr>
 <tr class="memitem:adc39da7a96f9a818d469c639852b53ef" id="r_adc39da7a96f9a818d469c639852b53ef"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#adc39da7a96f9a818d469c639852b53ef">setOnAction</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> onAction)=0</td></tr>
@@ -151,6 +153,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:aee323cd1b65047fe3b6a2ef4fac2493e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets whether the user can dismiss the banner; called once, before the banner is shown.  <br /></td></tr>
 <tr class="memitem:acd6ac56f433e99367ab4fc36500c0754" id="r_acd6ac56f433e99367ab4fc36500c0754"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#acd6ac56f433e99367ab4fc36500c0754">setOnDismiss</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> onDismiss)=0</td></tr>
 <tr class="memdesc:acd6ac56f433e99367ab4fc36500c0754"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a dismissal calls. A dismissal leaves the banner shown: the application hides it.  <br /></td></tr>
+<tr class="memitem:a60f754d24ea20767fb6444ef67f326a7" id="r_a60f754d24ea20767fb6444ef67f326a7"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a60f754d24ea20767fb6444ef67f326a7">setActionStyle</a> (<a class="el" href="../../df/dcb/banner__action__style_8hpp.html#abcdbf41d48641704b3f48955e356c69b">BannerActionStyle</a> style, bool stretch)=0</td></tr>
+<tr class="memdesc:a60f754d24ea20767fb6444ef67f326a7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets how the action is drawn. The mount calls it once, only for a banner whose style is not <span class="tt">Ghost</span> or that stretches its action. A <span class="tt">Link</span> draws the action inside the message, at the span marked <span class="tt">action</span> or else after the message, and stays a button to assistive technology.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1Widget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">morph::ui::Widget</a></td></tr>
 <tr class="memitem:abbc2ba04f9c9e2e29b8b9c6993e9b46b pub_methods_classmorph_1_1ui_1_1Widget" id="r_abbc2ba04f9c9e2e29b8b9c6993e9b46b"><td class="memItemLeft">
 &#160;</td><td class="memItemRight"><b>Widget</b> (Widget const &amp;)=delete</td></tr>
@@ -179,7 +183,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <tr class="memitem:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget" id="r_aa92d96c22b5e09e0aecb8866b4481f57"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#aa92d96c22b5e09e0aecb8866b4481f57">setTooltip</a> (std::string_view text)=0</td></tr>
 <tr class="memdesc:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text shown while the pointer rests on the widget.  <br /></td></tr>
 <tr class="memitem:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7ceca74805a45b142f00838ee17dd747"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7ceca74805a45b142f00838ee17dd747">setSurface</a> (std::string_view surface)=0</td></tr>
-<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme.  <br /></td></tr>
+<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme. May be called again: each call restyles the widget and everything inside it.  <br /></td></tr>
 <tr class="memitem:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget" id="r_a96f94ca0cf2c093d8f8463091d91bbfb"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a96f94ca0cf2c093d8f8463091d91bbfb">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord)=0</td></tr>
 <tr class="memdesc:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Declares the keyboard chords the widget handles while focus is inside it.  <br /></td></tr>
 <tr class="memitem:a7eeebc91608f97e34f70fced77b40173 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7eeebc91608f97e34f70fced77b40173"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7eeebc91608f97e34f70fced77b40173">focus</a> ()=0</td></tr>
@@ -190,7 +194,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A message across the top of a region, with an optional action button and an optional dismissal. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00586">586</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00898">898</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a2d8fdfa77f47f6fa6e821ad3a2c417c8" name="a2d8fdfa77f47f6fa6e821ad3a2c417c8"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2d8fdfa77f47f6fa6e821ad3a2c417c8">&#9670;&#160;</a></span>setTone()</h2>
@@ -259,6 +263,41 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../d8/df8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBanner.html#ad8cfceb68561405081836b7fcd630066">morph::ui::testing::detail::FakeBanner</a>.</p>
+
+</div>
+</div>
+<a id="ad179316ac5fd097e2439367be57916c7" name="ad179316ac5fd097e2439367be57916c7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad179316ac5fd097e2439367be57916c7">&#9670;&#160;</a></span>setSpans()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::BannerWidget::setSpans </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>spans</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Replaces the message with runs, as <span class="tt"><a class="el" href="../../de/d89/classmorph_1_1ui_1_1TextWidget.html#a8a7b39f07dbf87dd546a042253a0f233" title="Replaces what the text shows with runs, in order, in the text&#39;s role: a strong run in the backend&#39;s b...">TextWidget::setSpans</a></span> does. The mount calls it in place of <span class="tt"><a class="el" href="#ac851ab65508ad9abd75c114d81d4fdef" title="Replaces the message.">setText</a></span> for a banner that has spans. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">spans</td><td>The runs. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d8/df8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBanner.html#ad7a0ae08289506b69c86f7e1b1f36dcc">morph::ui::testing::detail::FakeBanner</a>.</p>
 
 </div>
 </div>
@@ -399,6 +438,46 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../d8/df8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBanner.html#adf1fce458f4cc889f18bea2661e77fa5">morph::ui::testing::detail::FakeBanner</a>.</p>
+
+</div>
+</div>
+<a id="a60f754d24ea20767fb6444ef67f326a7" name="a60f754d24ea20767fb6444ef67f326a7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a60f754d24ea20767fb6444ef67f326a7">&#9670;&#160;</a></span>setActionStyle()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::BannerWidget::setActionStyle </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../df/dcb/banner__action__style_8hpp.html#abcdbf41d48641704b3f48955e356c69b">BannerActionStyle</a></td>          <td class="paramname"><span class="paramname"><em>style</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>stretch</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets how the action is drawn. The mount calls it once, only for a banner whose style is not <span class="tt">Ghost</span> or that stretches its action. A <span class="tt">Link</span> draws the action inside the message, at the span marked <span class="tt">action</span> or else after the message, and stays a button to assistive technology. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">style</td><td>How the action is drawn. </td></tr>
+    <tr><td class="paramname">stretch</td><td>Whether the action takes a line of its own under the message, as wide as the banner; never true with <span class="tt">Link</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d8/df8/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeBanner.html#a6254d5b1281b048d4706ae0b5e450914">morph::ui::testing::detail::FakeBanner</a>.</p>
 
 </div>
 </div>

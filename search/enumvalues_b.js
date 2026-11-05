@@ -1,11 +1,12 @@
 var searchData=
 [
-  ['label_0',['Label',['../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294fab021df6aac4654c454f46c77646e745f',1,'morph::forms::i18n']]],
+  ['label_0',['Label',['../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294fab021df6aac4654c454f46c77646e745f',1,'Labelmorph::forms::i18n'],['../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5ab021df6aac4654c454f46c77646e745f',1,'Labelmorph::ui']]],
   ['latest_1',['Latest',['../dc/dfd/control_8hpp.html#ac9b5149b64e788db3c18d8c5be3d552cacd118d21c3b0b4762c6e0063661e6e45',1,'Latestmorph::reactive'],['../d1/dc0/author_8hpp.html#a09f4371b2225fd190938f0d48a377ebbacd118d21c3b0b4762c6e0063661e6e45',1,'Latestmorph::ui::author'],['../dd/d39/document_8hpp.html#a0876310d8741d2490f5e6df05ee936c2acd118d21c3b0b4762c6e0063661e6e45',1,'Latestmorph::ui']]],
   ['less_2',['Less',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79a1cfdf0e8d0c87a228c1f40d9bee7888b',1,'morph::forms::RuleExpr']]],
   ['lessorequal_3',['LessOrEqual',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79aa4cbdbb6070a5abb35fc95ecf1e22c14',1,'morph::forms::RuleExpr']]],
   ['let_4',['Let',['../dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095acae6404c4aecf46684930fe2a86676a6',1,'morph::ui::detail']]],
   ['limitexceeded_5',['LimitExceeded',['../dd/d57/data__source_8hpp.html#a9461b7c9496ad6957796a6e7055ca5e0a2453589f6d709ada4015d828f93325a5',1,'morph::table']]],
-  ['list_6',['List',['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a4ee29ca12c7d126654bd0e5275de6135',1,'Listmorph::ui'],['../d6/dda/value_8hpp.html#a74142016692a252e33837a004cc227fba4ee29ca12c7d126654bd0e5275de6135',1,'Listmorph::ui'],['../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349a4ee29ca12c7d126654bd0e5275de6135',1,'Listmorph::ui']]],
-  ['literal_7',['Literal',['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663ad7da1b76e5799f53a399b7a96ba67437',1,'morph::ui']]]
+  ['link_6',['Link',['../df/dcb/banner__action__style_8hpp.html#abcdbf41d48641704b3f48955e356c69ba97e7c9a7d06eac006a28bf05467fcc8b',1,'morph::ui']]],
+  ['list_7',['List',['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a4ee29ca12c7d126654bd0e5275de6135',1,'Listmorph::ui'],['../d6/dda/value_8hpp.html#a74142016692a252e33837a004cc227fba4ee29ca12c7d126654bd0e5275de6135',1,'Listmorph::ui'],['../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349a4ee29ca12c7d126654bd0e5275de6135',1,'Listmorph::ui']]],
+  ['literal_8',['Literal',['../d3/d89/date__pattern_8hpp.html#a2ef946a43d5a988fd701e98130632c83ad7da1b76e5799f53a399b7a96ba67437',1,'Literalmorph::ui::detail::dates'],['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663ad7da1b76e5799f53a399b7a96ba67437',1,'Literalmorph::ui']]]
 ];

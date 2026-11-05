@@ -147,11 +147,13 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a482f896189b324b675c104049aae767c" id="r_a482f896189b324b675c104049aae767c"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a482f896189b324b675c104049aae767c">tooltip</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;text) const</td></tr>
 <tr class="memdesc:a482f896189b324b675c104049aae767c"><td class="mdescLeft">&#160;</td><td class="mdescRight">A tooltip.  <br /></td></tr>
 <tr class="memitem:aeb0de53da3ef7f26750888c36ea01352" id="r_aeb0de53da3ef7f26750888c36ea01352"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#aeb0de53da3ef7f26750888c36ea01352">sizing</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;sizing) const</td></tr>
-<tr class="memdesc:aeb0de53da3ef7f26750888c36ea01352"><td class="mdescLeft">&#160;</td><td class="mdescRight">The width's sizing: <span class="tt">"<a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content</a>"</span>, <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#ad8bc7066fe98cda8e15e050c51c8447d" title="A fixed sizing, {&quot;lit&quot;: {&quot;fixed&quot;: units}}.">fixed</a>": n}</span> or <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch</a>": w}</span>, such as <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content()</a></span>, <span class="tt">fixed(n)</span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch()</a></span> give.  <br /></td></tr>
+<tr class="memdesc:aeb0de53da3ef7f26750888c36ea01352"><td class="mdescLeft">&#160;</td><td class="mdescRight">The width's sizing: <span class="tt">"<a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content</a>"</span>, <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#ad8bc7066fe98cda8e15e050c51c8447d" title="A fixed sizing, {&quot;lit&quot;: {&quot;fixed&quot;: units}}.">fixed</a>": n}</span>, <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch</a>": w}</span> or <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#ad4bc2667313ba70da2385f3dae244b2b" title="A share-of-the-row sizing, {&quot;lit&quot;: {&quot;percent&quot;: n}}: that part of the width of the row,...">percent</a>": n}</span>, such as <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content()</a></span>, <span class="tt">fixed(n)</span>, <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch()</a></span> or <span class="tt">percent(n)</span> give.  <br /></td></tr>
 <tr class="memitem:abb74dfe29cbf7308b8adbce0875a0f4d" id="r_abb74dfe29cbf7308b8adbce0875a0f4d"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#abb74dfe29cbf7308b8adbce0875a0f4d">sizing</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;width, <a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;height) const</td></tr>
 <tr class="memdesc:abb74dfe29cbf7308b8adbce0875a0f4d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The sizing of both dimensions, as a <span class="tt">{width, height}</span> record; an absent one is content. Literal sizings (<span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content()</a></span>, <span class="tt">fixed(n)</span>, <span class="tt">stretch(w)</span>) make a literal record, which the loader checks; another is evaluated at mount.  <br /></td></tr>
 <tr class="memitem:a548e5c654a230539f8fece6c6a81cc51" id="r_a548e5c654a230539f8fece6c6a81cc51"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a548e5c654a230539f8fece6c6a81cc51">alignSelf</a> (<a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> align) const</td></tr>
 <tr class="memdesc:a548e5c654a230539f8fece6c6a81cc51"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the node sits in its row, column or grid, in place of the container's <span class="tt">align</span>.  <br /></td></tr>
+<tr class="memitem:a25665e069e027e562e8c75f966d4cca5" id="r_a25665e069e027e562e8c75f966d4cca5"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a25665e069e027e562e8c75f966d4cca5">bleed</a> () const</td></tr>
+<tr class="memdesc:a25665e069e027e562e8c75f966d4cca5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lays the node's sides at its parent's edges, past the parent's horizontal padding, while its siblings stay inside it. The parent is a column, a panel or a tab page, and the node its direct child; the loader refuses it anywhere else.  <br /></td></tr>
 <tr class="memitem:ad065d9c605a31d185a65d64f235e4997" id="r_ad065d9c605a31d185a65d64f235e4997"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad065d9c605a31d185a65d64f235e4997">minWidth</a> (int units) const</td></tr>
 <tr class="memdesc:ad065d9c605a31d185a65d64f235e4997"><td class="mdescLeft">&#160;</td><td class="mdescRight">The least width, in backend units.  <br /></td></tr>
 <tr class="memitem:a7e766e966e424b80a6b1c1118d63173d" id="r_a7e766e966e424b80a6b1c1118d63173d"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7e766e966e424b80a6b1c1118d63173d">maxWidth</a> (int units) const</td></tr>
@@ -168,6 +170,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a70064ab786aae09861600894c27f6465"><td class="mdescLeft">&#160;</td><td class="mdescRight">A stable identifier for automated tests.  <br /></td></tr>
 <tr class="memitem:a59cf3444d7344bbccdd343ed33ed171c" id="r_a59cf3444d7344bbccdd343ed33ed171c"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a59cf3444d7344bbccdd343ed33ed171c">surface</a> (std::string const &amp;name) const</td></tr>
 <tr class="memdesc:a59cf3444d7344bbccdd343ed33ed171c"><td class="mdescLeft">&#160;</td><td class="mdescRight">A named token set for the subtree.  <br /></td></tr>
+<tr class="memitem:a4003314f389f02eaff4b7be91db670ff" id="r_a4003314f389f02eaff4b7be91db670ff"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a4003314f389f02eaff4b7be91db670ff">surface</a> (char const *name) const</td></tr>
+<tr class="memdesc:a4003314f389f02eaff4b7be91db670ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">A named token set for the subtree, as a literal: the overload a string literal picks.  <br /></td></tr>
+<tr class="memitem:addd4fa5320a46770d3f461195c3c8d51" id="r_addd4fa5320a46770d3f461195c3c8d51"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#addd4fa5320a46770d3f461195c3c8d51">surface</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;name) const</td></tr>
+<tr class="memdesc:addd4fa5320a46770d3f461195c3c8d51"><td class="mdescLeft">&#160;</td><td class="mdescRight">A token set for the subtree that follows the data: the surface's name, or <span class="tt">""</span> for the theme's default.  <br /></td></tr>
 <tr class="memitem:a77c9fa70fd89e4624e0221e9503c87f5" id="r_a77c9fa70fd89e4624e0221e9503c87f5"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a77c9fa70fd89e4624e0221e9503c87f5">a11y</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;name, std::string const &amp;role={}) const</td></tr>
 <tr class="memdesc:a77c9fa70fd89e4624e0221e9503c87f5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The accessible name and role.  <br /></td></tr>
 <tr class="memitem:a19083af9f40b1b1aca2bad4ac9edacbf" id="r_a19083af9f40b1b1aca2bad4ac9edacbf"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a19083af9f40b1b1aca2bad4ac9edacbf">drag</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;payload) const</td></tr>
@@ -184,11 +190,17 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a7e2270d530d709d48a4a87b2513c4ae1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Errors shown on an input or text.  <br /></td></tr>
 <tr class="memitem:a25381bc869f62cb472d1eb80e867ece1" id="r_a25381bc869f62cb472d1eb80e867ece1"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a25381bc869f62cb472d1eb80e867ece1">stale</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;condition) const</td></tr>
 <tr class="memdesc:a25381bc869f62cb472d1eb80e867ece1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether an input or text shows a value that is being recalculated.  <br /></td></tr>
+<tr class="memitem:a961ed5a75849990c26d1f8c3f8a5b6a8" id="r_a961ed5a75849990c26d1f8c3f8a5b6a8"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a961ed5a75849990c26d1f8c3f8a5b6a8">description</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;text) const</td></tr>
+<tr class="memdesc:a961ed5a75849990c26d1f8c3f8a5b6a8"><td class="mdescLeft">&#160;</td><td class="mdescRight">A line that describes an input, drawn under it and announced as its accessible description; a text refuses it.  <br /></td></tr>
+<tr class="memitem:a2b4a68fba9a56b3f55bbfb2cbe64bb3e" id="r_a2b4a68fba9a56b3f55bbfb2cbe64bb3e"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a2b4a68fba9a56b3f55bbfb2cbe64bb3e">labelHint</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;text) const</td></tr>
+<tr class="memdesc:a2b4a68fba9a56b3f55bbfb2cbe64bb3e"><td class="mdescLeft">&#160;</td><td class="mdescRight">A hint drawn after an input's caption and its required mark, such as the range a value must lie in; a text refuses it, and an input that shows no caption draws none.  <br /></td></tr>
+<tr class="memitem:a7ebcfefe1848424fb5e169ab8dc720f9" id="r_a7ebcfefe1848424fb5e169ab8dc720f9"><td class="memItemLeft"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7ebcfefe1848424fb5e169ab8dc720f9">tone</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;tone) const</td></tr>
+<tr class="memdesc:a7ebcfefe1848424fb5e169ab8dc720f9"><td class="mdescLeft">&#160;</td><td class="mdescRight">An evaluation of an input's value that does not make it invalid (<span class="tt">ok</span>, <span class="tt">warn</span>, <span class="tt">err</span>, <span class="tt">info</span>; <span class="tt">null</span> for none): it outlines the input and colours its description. A text refuses it.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A view node (spec 5 §9). The kind's own properties come from its builder's options; the properties every node takes come from the member functions, each of which returns a copy with the property set. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01778">1778</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01950">1950</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ab4fdc36d9af74cf3d98e27c1121e658c" name="ab4fdc36d9af74cf3d98e27c1121e658c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ab4fdc36d9af74cf3d98e27c1121e658c">&#9670;&#160;</a></span>Node()</h2>
@@ -226,7 +238,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01783">1783</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01955">1955</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -257,7 +269,7 @@ Public Member Functions</h2></td></tr>
 <p>The node's JSON. </p>
 <dl class="section return"><dt>Returns</dt><dd>The JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01787">1787</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01959">1959</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -287,7 +299,7 @@ Public Member Functions</h2></td></tr>
 <p>The catalog facts of the models and actions the node names. </p>
 <dl class="section return"><dt>Returns</dt><dd>The facts. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01791">1791</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01963">1963</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -328,7 +340,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01797">1797</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01969">1969</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -369,7 +381,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01809">1809</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01981">1981</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -405,7 +417,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01818">1818</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01990">1990</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -441,7 +453,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01823">1823</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01995">1995</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -477,7 +489,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01828">1828</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02000">2000</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -513,7 +525,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01833">1833</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02005">2005</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -540,7 +552,7 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>The width's sizing: <span class="tt">"<a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content</a>"</span>, <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#ad8bc7066fe98cda8e15e050c51c8447d" title="A fixed sizing, {&quot;lit&quot;: {&quot;fixed&quot;: units}}.">fixed</a>": n}</span> or <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch</a>": w}</span>, such as <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content()</a></span>, <span class="tt">fixed(n)</span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch()</a></span> give. </p>
+<p>The width's sizing: <span class="tt">"<a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content</a>"</span>, <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#ad8bc7066fe98cda8e15e050c51c8447d" title="A fixed sizing, {&quot;lit&quot;: {&quot;fixed&quot;: units}}.">fixed</a>": n}</span>, <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch</a>": w}</span> or <span class="tt">{"<a class="el" href="../../d1/dc0/author_8hpp.html#ad4bc2667313ba70da2385f3dae244b2b" title="A share-of-the-row sizing, {&quot;lit&quot;: {&quot;percent&quot;: n}}: that part of the width of the row,...">percent</a>": n}</span>, such as <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a67b01f1b047b86ee729e53da221ea014" title="The content sizing, &quot;content&quot;: as much as the content needs.">content()</a></span>, <span class="tt">fixed(n)</span>, <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch()</a></span> or <span class="tt">percent(n)</span> give. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sizing</td><td>The sizing. </td></tr>
@@ -549,7 +561,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01839">1839</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02011">2011</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -590,7 +602,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01847">1847</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02019">2019</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -626,7 +638,37 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01872">1872</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02044">2044</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a25665e069e027e562e8c75f966d4cca5" name="a25665e069e027e562e8c75f966d4cca5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a25665e069e027e562e8c75f966d4cca5">&#9670;&#160;</a></span>bleed()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::bleed </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Lays the node's sides at its parent's edges, past the parent's horizontal padding, while its siblings stay inside it. The parent is a column, a panel or a tab page, and the node its direct child; the loader refuses it anywhere else. </p>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02050">2050</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -662,7 +704,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01877">1877</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02059">2059</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -698,7 +740,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01882">1882</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02064">2064</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -734,7 +776,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01887">1887</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02069">2069</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -770,7 +812,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01892">1892</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02074">2074</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -806,7 +848,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01897">1897</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02079">2079</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -842,7 +884,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01902">1902</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02084">2084</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -878,12 +920,12 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01907">1907</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02089">2089</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a59cf3444d7344bbccdd343ed33ed171c" name="a59cf3444d7344bbccdd343ed33ed171c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a59cf3444d7344bbccdd343ed33ed171c">&#9670;&#160;</a></span>surface()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a59cf3444d7344bbccdd343ed33ed171c">&#9670;&#160;</a></span>surface() <span class="overload">[1/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -914,7 +956,79 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01912">1912</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02094">2094</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4003314f389f02eaff4b7be91db670ff" name="a4003314f389f02eaff4b7be91db670ff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4003314f389f02eaff4b7be91db670ff">&#9670;&#160;</a></span>surface() <span class="overload">[2/3]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::surface </td>
+          <td>(</td>
+          <td class="paramtype">char const *</td>          <td class="paramname"><span class="paramname"><em>name</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A named token set for the subtree, as a literal: the overload a string literal picks. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">name</td><td>The token set. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02099">2099</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="addd4fa5320a46770d3f461195c3c8d51" name="addd4fa5320a46770d3f461195c3c8d51"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#addd4fa5320a46770d3f461195c3c8d51">&#9670;&#160;</a></span>surface() <span class="overload">[3/3]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::surface </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>name</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A token set for the subtree that follows the data: the surface's name, or <span class="tt">""</span> for the theme's default. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">name</td><td>An expression of the surface's name. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02105">2105</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -955,7 +1069,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01918">1918</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02111">2111</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -991,7 +1105,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01934">1934</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02127">2127</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1032,7 +1146,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01944">1944</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02137">2137</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1073,7 +1187,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01959">1959</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02152">2152</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1109,7 +1223,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01969">1969</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02162">2162</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1145,7 +1259,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01974">1974</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02167">2167</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1181,7 +1295,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with them. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01979">1979</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02172">2172</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1217,7 +1331,115 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l01984">1984</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02177">2177</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a961ed5a75849990c26d1f8c3f8a5b6a8" name="a961ed5a75849990c26d1f8c3f8a5b6a8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a961ed5a75849990c26d1f8c3f8a5b6a8">&#9670;&#160;</a></span>description()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::description </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A line that describes an input, drawn under it and announced as its accessible description; a text refuses it. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The line. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02183">2183</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2b4a68fba9a56b3f55bbfb2cbe64bb3e" name="a2b4a68fba9a56b3f55bbfb2cbe64bb3e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2b4a68fba9a56b3f55bbfb2cbe64bb3e">&#9670;&#160;</a></span>labelHint()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::labelHint </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A hint drawn after an input's caption and its required mark, such as the range a value must lie in; a text refuses it, and an input that shows no caption draws none. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The hint. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02189">2189</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7ebcfefe1848424fb5e169ab8dc720f9" name="a7ebcfefe1848424fb5e169ab8dc720f9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7ebcfefe1848424fb5e169ab8dc720f9">&#9670;&#160;</a></span>tone()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#ab4fdc36d9af74cf3d98e27c1121e658c">Node</a> morph::ui::author::Node::tone </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>tone</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An evaluation of an input's value that does not make it invalid (<span class="tt">ok</span>, <span class="tt">warn</span>, <span class="tt">err</span>, <span class="tt">info</span>; <span class="tt">null</span> for none): it outlines the input and colours its description. A text refuses it. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">tone</td><td>The tone's name. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node with it. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02195">2195</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

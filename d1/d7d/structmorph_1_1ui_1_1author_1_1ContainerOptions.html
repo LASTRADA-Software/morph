@@ -131,16 +131,32 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a24dda33443ea37bfd6e282f17098440f" id="r_a24dda33443ea37bfd6e282f17098440f"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a24dda33443ea37bfd6e282f17098440f">gap</a></td></tr>
 <tr class="memdesc:a24dda33443ea37bfd6e282f17098440f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The gap between children: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>.  <br /></td></tr>
 <tr class="memitem:a57f487bd1ec3da45dec8f7591ce63ff5" id="r_a57f487bd1ec3da45dec8f7591ce63ff5"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a57f487bd1ec3da45dec8f7591ce63ff5">columns</a></td></tr>
-<tr class="memdesc:a57f487bd1ec3da45dec8f7591ce63ff5"><td class="mdescLeft">&#160;</td><td class="mdescRight">A grid's columns; adaptive layouts read <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a19d670a24bfa61ce68d4f773b3346590" title="A client environment value, {&quot;env&quot;: name}: widthClass, locale, platform, online, backend.">env</a>("widthClass")</span>.  <br /></td></tr>
+<tr class="memdesc:a57f487bd1ec3da45dec8f7591ce63ff5"><td class="mdescLeft">&#160;</td><td class="mdescRight">A grid's columns, sharing its width; adaptive layouts read <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a19d670a24bfa61ce68d4f773b3346590" title="A client environment value, {&quot;env&quot;: name}: widthClass, locale, platform, online, backend.">env</a>("widthClass")</span>.  <br /></td></tr>
+<tr class="memitem:afb596e2e149b6fbe37f9a3596d160d70" id="r_afb596e2e149b6fbe37f9a3596d160d70"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../de/d35/structmorph_1_1ui_1_1author_1_1GridTrack.html">GridTrack</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afb596e2e149b6fbe37f9a3596d160d70">tracks</a></td></tr>
+<tr class="memdesc:afb596e2e149b6fbe37f9a3596d160d70"><td class="mdescLeft">&#160;</td><td class="mdescRight">A grid's column tracks, in place of <span class="tt"><a class="el" href="#a57f487bd1ec3da45dec8f7591ce63ff5" title="A grid&#39;s columns, sharing its width; adaptive layouts read env(&quot;widthClass&quot;).">columns</a></span>; empty writes none.  <br /></td></tr>
+<tr class="memitem:ac62d84e0456d4a56e9be6bbe728fd256" id="r_ac62d84e0456d4a56e9be6bbe728fd256"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#ac62d84e0456d4a56e9be6bbe728fd256">minColumnWidth</a></td></tr>
+<tr class="memdesc:ac62d84e0456d4a56e9be6bbe728fd256"><td class="mdescLeft">&#160;</td><td class="mdescRight">A grid's least column width in units, a literal 1 to 64: the grid shows as many of its <span class="tt"><a class="el" href="#a57f487bd1ec3da45dec8f7591ce63ff5" title="A grid&#39;s columns, sharing its width; adaptive layouts read env(&quot;widthClass&quot;).">columns</a></span> as fit that width, so its columns follow the room it is given. Needs <span class="tt"><a class="el" href="#a57f487bd1ec3da45dec8f7591ce63ff5" title="A grid&#39;s columns, sharing its width; adaptive layouts read env(&quot;widthClass&quot;).">columns</a></span> above one; the loader refuses it with <span class="tt"><a class="el" href="#afb596e2e149b6fbe37f9a3596d160d70" title="A grid&#39;s column tracks, in place of columns; empty writes none.">tracks</a></span>. Written by <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#aac17190012b6bb580026d8d47ddc26f3" title="A grid node.">grid</a></span> only.  <br /></td></tr>
 <tr class="memitem:a01e669bc66cdcef38d89f09b21a73501" id="r_a01e669bc66cdcef38d89f09b21a73501"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a01e669bc66cdcef38d89f09b21a73501">align</a></td></tr>
 <tr class="memdesc:a01e669bc66cdcef38d89f09b21a73501"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the children sit across the axis; absent stretches them.  <br /></td></tr>
 <tr class="memitem:ac16b631ab76472b5eb3803e81efdda28" id="r_ac16b631ab76472b5eb3803e81efdda28"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac16b631ab76472b5eb3803e81efdda28">justify</a></td></tr>
-<tr class="memdesc:ac16b631ab76472b5eb3803e81efdda28"><td class="mdescLeft">&#160;</td><td class="mdescRight">A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose columns share its width.  <br /></td></tr>
+<tr class="memdesc:ac16b631ab76472b5eb3803e81efdda28"><td class="mdescLeft">&#160;</td><td class="mdescRight">A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose columns are sized by their count or tracks.  <br /></td></tr>
+<tr class="memitem:adb2b6ba3d54f92487ebd2a0004feb38a" id="r_adb2b6ba3d54f92487ebd2a0004feb38a"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#adb2b6ba3d54f92487ebd2a0004feb38a">wrap</a> = false</td></tr>
+<tr class="memdesc:adb2b6ba3d54f92487ebd2a0004feb38a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a row's children continue on the next line when they do not fit. Only a <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span> has it; the loader refuses it on a <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span>.  <br /></td></tr>
+<tr class="memitem:a375916ba675ae9a89ab12004df146355" id="r_a375916ba675ae9a89ab12004df146355"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a375916ba675ae9a89ab12004df146355">divided</a> = false</td></tr>
+<tr class="memdesc:a375916ba675ae9a89ab12004df146355"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a column, or a row that does not wrap, draws a rule between its children. The loader refuses it on a row that wraps.  <br /></td></tr>
+<tr class="memitem:af697486f4efd6d70c8bba8dbe554b673" id="r_af697486f4efd6d70c8bba8dbe554b673"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#af697486f4efd6d70c8bba8dbe554b673">padding</a></td></tr>
+<tr class="memdesc:af697486f4efd6d70c8bba8dbe554b673"><td class="mdescLeft">&#160;</td><td class="mdescRight">The inset of the children from every edge of a <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span>: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>, or <span class="tt"><a class="el" href="#af697486f4efd6d70c8bba8dbe554b673" title="The inset of the children from every edge of a column or row: a spacing step, 0 to kMaxSpacingStep,...">padding(vertical, horizontal)</a></span>. Not on a grid.  <br /></td></tr>
+<tr class="memitem:ac42e94be7446ac43bd443860e0549f5e" id="r_ac42e94be7446ac43bd443860e0549f5e"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ac42e94be7446ac43bd443860e0549f5e">pageEdge</a> = false</td></tr>
+<tr class="memdesc:ac42e94be7446ac43bd443860e0549f5e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span> insets its own content and so is the page's edge: when it is the screen's shown root, the shell lays it at the page's edges and does not inset the page. Written for a grid too, so the loader refuses it rather than the author silently losing it.  <br /></td></tr>
+<tr class="memitem:ac19e1371768861094d6b4be2d8749fbb" id="r_ac19e1371768861094d6b4be2d8749fbb"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ac19e1371768861094d6b4be2d8749fbb">headJoined</a> = false</td></tr>
+<tr class="memdesc:ac19e1371768861094d6b4be2d8749fbb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the stack's first child continues the head's block: as the screen's shown root, the shell draws its top bar on the <span class="tt">toolbarJoined</span> surface, with no rule under it, and the first child draws the rule under the whole block. Needs <span class="tt"><a class="el" href="#ac42e94be7446ac43bd443860e0549f5e" title="Whether a column or row insets its own content and so is the page&#39;s edge: when it is the screen&#39;s sho...">pageEdge</a></span>, since an inset page has a margin between it and the head; the loader refuses it without. A <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span>; written for a grid too, so the loader refuses it.  <br /></td></tr>
+<tr class="memitem:a7d0f20e14b6713922002e0d6cb85ba7f" id="r_a7d0f20e14b6713922002e0d6cb85ba7f"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7d0f20e14b6713922002e0d6cb85ba7f">selected</a></td></tr>
+<tr class="memdesc:a7d0f20e14b6713922002e0d6cb85ba7f"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span> that is the chosen entry of a list: a condition. While it holds, the stack draws the accent's 3 px bar at its leading edge (inside its leading padding) and is a <span class="tt">Grouping</span> for assistive technology; absent writes no key. Not on a grid.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Options of <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span>, <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span> and <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#aac17190012b6bb580026d8d47ddc26f3" title="A grid node.">grid</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03357">3357</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03906">3906</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a24dda33443ea37bfd6e282f17098440f" name="a24dda33443ea37bfd6e282f17098440f"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a24dda33443ea37bfd6e282f17098440f">&#9670;&#160;</a></span>gap</h2>
@@ -156,7 +172,7 @@ Public Attributes</h2></td></tr>
 
 <p>The gap between children: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03359">3359</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03908">3908</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -172,9 +188,45 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>A grid's columns; adaptive layouts read <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a19d670a24bfa61ce68d4f773b3346590" title="A client environment value, {&quot;env&quot;: name}: widthClass, locale, platform, online, backend.">env</a>("widthClass")</span>. </p>
+<p>A grid's columns, sharing its width; adaptive layouts read <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a19d670a24bfa61ce68d4f773b3346590" title="A client environment value, {&quot;env&quot;: name}: widthClass, locale, platform, online, backend.">env</a>("widthClass")</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03361">3361</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03910">3910</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="afb596e2e149b6fbe37f9a3596d160d70" name="afb596e2e149b6fbe37f9a3596d160d70"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afb596e2e149b6fbe37f9a3596d160d70">&#9670;&#160;</a></span>tracks</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../de/d35/structmorph_1_1ui_1_1author_1_1GridTrack.html">GridTrack</a>&gt; morph::ui::author::ContainerOptions::tracks</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A grid's column tracks, in place of <span class="tt"><a class="el" href="#a57f487bd1ec3da45dec8f7591ce63ff5" title="A grid&#39;s columns, sharing its width; adaptive layouts read env(&quot;widthClass&quot;).">columns</a></span>; empty writes none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03912">3912</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac62d84e0456d4a56e9be6bbe728fd256" name="ac62d84e0456d4a56e9be6bbe728fd256"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac62d84e0456d4a56e9be6bbe728fd256">&#9670;&#160;</a></span>minColumnWidth</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> morph::ui::author::ContainerOptions::minColumnWidth</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A grid's least column width in units, a literal 1 to 64: the grid shows as many of its <span class="tt"><a class="el" href="#a57f487bd1ec3da45dec8f7591ce63ff5" title="A grid&#39;s columns, sharing its width; adaptive layouts read env(&quot;widthClass&quot;).">columns</a></span> as fit that width, so its columns follow the room it is given. Needs <span class="tt"><a class="el" href="#a57f487bd1ec3da45dec8f7591ce63ff5" title="A grid&#39;s columns, sharing its width; adaptive layouts read env(&quot;widthClass&quot;).">columns</a></span> above one; the loader refuses it with <span class="tt"><a class="el" href="#afb596e2e149b6fbe37f9a3596d160d70" title="A grid&#39;s column tracks, in place of columns; empty writes none.">tracks</a></span>. Written by <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#aac17190012b6bb580026d8d47ddc26f3" title="A grid node.">grid</a></span> only. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03916">3916</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +244,7 @@ Public Attributes</h2></td></tr>
 
 <p>Where the children sit across the axis; absent stretches them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03363">3363</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03918">3918</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -208,9 +260,117 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose columns share its width. </p>
+<p>A row's or column's spare length along its axis; absent packs at the start. Not on a grid, whose columns are sized by their count or tracks. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03366">3366</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03921">3921</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adb2b6ba3d54f92487ebd2a0004feb38a" name="adb2b6ba3d54f92487ebd2a0004feb38a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adb2b6ba3d54f92487ebd2a0004feb38a">&#9670;&#160;</a></span>wrap</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::author::ContainerOptions::wrap = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a row's children continue on the next line when they do not fit. Only a <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span> has it; the loader refuses it on a <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03924">3924</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a375916ba675ae9a89ab12004df146355" name="a375916ba675ae9a89ab12004df146355"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a375916ba675ae9a89ab12004df146355">&#9670;&#160;</a></span>divided</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::author::ContainerOptions::divided = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a column, or a row that does not wrap, draws a rule between its children. The loader refuses it on a row that wraps. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03927">3927</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af697486f4efd6d70c8bba8dbe554b673" name="af697486f4efd6d70c8bba8dbe554b673"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af697486f4efd6d70c8bba8dbe554b673">&#9670;&#160;</a></span>padding</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> morph::ui::author::ContainerOptions::padding</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The inset of the children from every edge of a <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span>: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>, or <span class="tt"><a class="el" href="#af697486f4efd6d70c8bba8dbe554b673" title="The inset of the children from every edge of a column or row: a spacing step, 0 to kMaxSpacingStep,...">padding(vertical, horizontal)</a></span>. Not on a grid. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03930">3930</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac42e94be7446ac43bd443860e0549f5e" name="ac42e94be7446ac43bd443860e0549f5e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac42e94be7446ac43bd443860e0549f5e">&#9670;&#160;</a></span>pageEdge</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::author::ContainerOptions::pageEdge = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span> insets its own content and so is the page's edge: when it is the screen's shown root, the shell lays it at the page's edges and does not inset the page. Written for a grid too, so the loader refuses it rather than the author silently losing it. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03934">3934</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac19e1371768861094d6b4be2d8749fbb" name="ac19e1371768861094d6b4be2d8749fbb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac19e1371768861094d6b4be2d8749fbb">&#9670;&#160;</a></span>headJoined</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::author::ContainerOptions::headJoined = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the stack's first child continues the head's block: as the screen's shown root, the shell draws its top bar on the <span class="tt">toolbarJoined</span> surface, with no rule under it, and the first child draws the rule under the whole block. Needs <span class="tt"><a class="el" href="#ac42e94be7446ac43bd443860e0549f5e" title="Whether a column or row insets its own content and so is the page&#39;s edge: when it is the screen&#39;s sho...">pageEdge</a></span>, since an inset page has a margin between it and the head; the loader refuses it without. A <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span>; written for a grid too, so the loader refuses it. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03939">3939</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7d0f20e14b6713922002e0d6cb85ba7f" name="a7d0f20e14b6713922002e0d6cb85ba7f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7d0f20e14b6713922002e0d6cb85ba7f">&#9670;&#160;</a></span>selected</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> morph::ui::author::ContainerOptions::selected</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a292c3d313d58e373d98df98e63251768" title="A column node.">column</a></span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a438bb476c49ef646b43bf5e61462f3aa" title="The innermost row, {&quot;row&quot;: &quot;&quot;}.">row</a></span> that is the chosen entry of a list: a condition. While it holds, the stack draws the accent's 3 px bar at its leading edge (inside its leading padding) and is a <span class="tt">Grouping</span> for assistive technology; absent writes no key. Not on a grid. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03943">3943</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

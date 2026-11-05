@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/dce/structm
 </div><!--header-->
 <div class="contents">
 
-<p>A vertical list of commands.  
+<p>A menu of commands: a bar of top-level entries, or one button that opens them.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>&gt;</code></p>
@@ -129,14 +129,22 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/dce/structm
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:a57f3e1d56521ea2d8411fa07d75057c4" id="r_a57f3e1d56521ea2d8411fa07d75057c4"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d4/dac/structmorph_1_1ui_1_1MenuItem.html">MenuItem</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a57f3e1d56521ea2d8411fa07d75057c4">items</a></td></tr>
-<tr class="memdesc:a57f3e1d56521ea2d8411fa07d75057c4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The entries, in order; the list itself is set once, each entry's label, check mark and enablement may be bound.  <br /></td></tr>
+<tr class="memdesc:a57f3e1d56521ea2d8411fa07d75057c4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The entries, in order; the list itself is set once, each entry's label, description, check mark, enablement and visibility may be bound.  <br /></td></tr>
 <tr class="memitem:adc080a3d0d024daf317d70b75899aa62" id="r_adc080a3d0d024daf317d70b75899aa62"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#adc080a3d0d024daf317d70b75899aa62">common</a> {}</td></tr>
 <tr class="memdesc:adc080a3d0d024daf317d70b75899aa62"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visibility, enablement, layout, drag-and-drop.  <br /></td></tr>
+<tr class="memitem:a7b11bc0302aef48cdf5ad04eabd70d83" id="r_a7b11bc0302aef48cdf5ad04eabd70d83"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879">MenuStyle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7b11bc0302aef48cdf5ad04eabd70d83">style</a> = <a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879addc35f88fa71b6ef142ae61f35364653">MenuStyle::Bar</a></td></tr>
+<tr class="memdesc:a7b11bc0302aef48cdf5ad04eabd70d83"><td class="mdescLeft">&#160;</td><td class="mdescRight">How the entries are presented; set once.  <br /></td></tr>
+<tr class="memitem:ae59d3689100819fc3da53228ee9b8a36" id="r_ae59d3689100819fc3da53228ee9b8a36"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae59d3689100819fc3da53228ee9b8a36">label</a></td></tr>
+<tr class="memdesc:ae59d3689100819fc3da53228ee9b8a36"><td class="mdescLeft">&#160;</td><td class="mdescRight">The trigger's label, for <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879a87b7760f14fbff78d8819291f36ab9a0" title="One button that opens the entries as a popup.">MenuStyle::Button</a></span>; empty draws the icon alone.  <br /></td></tr>
+<tr class="memitem:a12b509b7fc5d8faba11faf39eaac9ebb" id="r_a12b509b7fc5d8faba11faf39eaac9ebb"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a12b509b7fc5d8faba11faf39eaac9ebb">icon</a></td></tr>
+<tr class="memdesc:a12b509b7fc5d8faba11faf39eaac9ebb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The trigger's icon, for <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879a87b7760f14fbff78d8819291f36ab9a0" title="One button that opens the entries as a popup.">MenuStyle::Button</a></span>: a name in the theme's icon map; empty shows none. Set once.  <br /></td></tr>
+<tr class="memitem:a4279a6325529d7ec491f625d73d97cf5" id="r_a4279a6325529d7ec491f625d73d97cf5"><td class="memItemLeft"><a class="el" href="../../d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314">ButtonEmphasis</a>&#160;</td><td class="memItemRight"><a class="el" href="#a4279a6325529d7ec491f625d73d97cf5">emphasis</a> = <a class="el" href="../../d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314a960b44c579bc2f6818d2daaf9e4c16f0">ButtonEmphasis::Normal</a></td></tr>
+<tr class="memdesc:a4279a6325529d7ec491f625d73d97cf5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The trigger's emphasis, for <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879a87b7760f14fbff78d8819291f36ab9a0" title="One button that opens the entries as a popup.">MenuStyle::Button</a></span>; set once.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A vertical list of commands. </p>
+<div class="textblock"><p>A menu of commands: a bar of top-level entries, or one button that opens them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00734">734</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a57f3e1d56521ea2d8411fa07d75057c4" name="a57f3e1d56521ea2d8411fa07d75057c4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a57f3e1d56521ea2d8411fa07d75057c4">&#9670;&#160;</a></span>items</h2>
@@ -150,9 +158,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The entries, in order; the list itself is set once, each entry's label, check mark and enablement may be bound. </p>
+<p>The entries, in order; the list itself is set once, each entry's label, description, check mark, enablement and visibility may be bound. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00549">549</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00737">737</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -170,7 +178,79 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00551">551</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00739">739</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7b11bc0302aef48cdf5ad04eabd70d83" name="a7b11bc0302aef48cdf5ad04eabd70d83"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7b11bc0302aef48cdf5ad04eabd70d83">&#9670;&#160;</a></span>style</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879">MenuStyle</a> morph::ui::Menu::style = <a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879addc35f88fa71b6ef142ae61f35364653">MenuStyle::Bar</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>How the entries are presented; set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00741">741</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae59d3689100819fc3da53228ee9b8a36" name="ae59d3689100819fc3da53228ee9b8a36"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae59d3689100819fc3da53228ee9b8a36">&#9670;&#160;</a></span>label</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::Menu::label</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The trigger's label, for <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879a87b7760f14fbff78d8819291f36ab9a0" title="One button that opens the entries as a popup.">MenuStyle::Button</a></span>; empty draws the icon alone. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00743">743</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a12b509b7fc5d8faba11faf39eaac9ebb" name="a12b509b7fc5d8faba11faf39eaac9ebb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a12b509b7fc5d8faba11faf39eaac9ebb">&#9670;&#160;</a></span>icon</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::Menu::icon</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The trigger's icon, for <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879a87b7760f14fbff78d8819291f36ab9a0" title="One button that opens the entries as a popup.">MenuStyle::Button</a></span>: a name in the theme's icon map; empty shows none. Set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00746">746</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4279a6325529d7ec491f625d73d97cf5" name="a4279a6325529d7ec491f625d73d97cf5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4279a6325529d7ec491f625d73d97cf5">&#9670;&#160;</a></span>emphasis</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314">ButtonEmphasis</a> morph::ui::Menu::emphasis = <a class="el" href="../../d5/dae/button__emphasis_8hpp.html#a53f8810441ac7ca91cdf227b4bd5b314a960b44c579bc2f6818d2daaf9e4c16f0">ButtonEmphasis::Normal</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The trigger's emphasis, for <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879a87b7760f14fbff78d8819291f36ab9a0" title="One button that opens the entries as a popup.">MenuStyle::Button</a></span>; set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00748">748</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

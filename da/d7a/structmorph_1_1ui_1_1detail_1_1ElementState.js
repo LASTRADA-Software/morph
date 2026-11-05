@@ -11,6 +11,7 @@ var structmorph_1_1ui_1_1detail_1_1ElementState =
     [ "open", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#ad87d042dadc9f727e9062b781851b562", null ],
     [ "submitted", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#aa017ba064313e52ec7940afaaf67d9d9", null ],
     [ "selection", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#af6a1d021de4e988a2f469e4f9c8252bd", null ],
+    [ "sort", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a2f093daf50a0f2ee699368319ae7c7cf", null ],
     [ "activeKey", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a26352dc8319ff42f4023ecd372e1fe3f", null ],
     [ "checksVersion", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a5b4be90be97015ae801fe1552841aac3", null ],
     [ "inner", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a82a8d15fb0289ed726af398a91dfd1fe", null ],
@@ -18,6 +19,8 @@ var structmorph_1_1ui_1_1detail_1_1ElementState =
     [ "bound", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a85894188ea7ccc42fc85b315b47f0b6b", null ],
     [ "errors", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a9bcceb3094a1cdd51b8e99a5982e3180", null ],
     [ "rows", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a1e5d0c426d2c18cfb40a25d020127438", null ],
+    [ "sortBound", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a523ca3ee06ff2a4cf7de5588367c8a13", null ],
+    [ "view", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a90b6802c7cbbe5e8e7c9e99e3bfc1cbe", null ],
     [ "form", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a71536346fc591492bee40816ec25796a", null ],
     [ "collection", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a2386249559cbedb11911818a512e2c09", null ],
     [ "wizard", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a61861dd646bf624c7790632dcccdd9f5", null ]

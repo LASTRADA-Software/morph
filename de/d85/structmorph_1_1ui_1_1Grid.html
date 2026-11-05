@@ -129,7 +129,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d85/structm
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:af28559f0732d9f29f1eeed0d95ff1f81" id="r_af28559f0732d9f29f1eeed0d95ff1f81"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#af28559f0732d9f29f1eeed0d95ff1f81">columns</a> = 1</td></tr>
-<tr class="memdesc:af28559f0732d9f29f1eeed0d95ff1f81"><td class="mdescLeft">&#160;</td><td class="mdescRight">The column count.  <br /></td></tr>
+<tr class="memdesc:af28559f0732d9f29f1eeed0d95ff1f81"><td class="mdescLeft">&#160;</td><td class="mdescRight">The column count; ignored when <span class="tt"><a class="el" href="#a9bb2834fe0b9a0906d74722fb168cc11" title="The column tracks, set once; empty gives columns equal columns, a content-sized grid as wide as its w...">tracks</a></span> is not empty.  <br /></td></tr>
+<tr class="memitem:a9bb2834fe0b9a0906d74722fb168cc11" id="r_a9bb2834fe0b9a0906d74722fb168cc11"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/dd6/structmorph_1_1ui_1_1GridTrack.html">GridTrack</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9bb2834fe0b9a0906d74722fb168cc11">tracks</a></td></tr>
+<tr class="memdesc:a9bb2834fe0b9a0906d74722fb168cc11"><td class="mdescLeft">&#160;</td><td class="mdescRight">The column tracks, set once; empty gives <span class="tt"><a class="el" href="#af28559f0732d9f29f1eeed0d95ff1f81" title="The column count; ignored when tracks is not empty.">columns</a></span> equal columns, a content-sized grid as wide as its widest cell times the columns. Given, the column count is their number.  <br /></td></tr>
 <tr class="memitem:a602c5b97741e477cba1889200bbf38b0" id="r_a602c5b97741e477cba1889200bbf38b0"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/d66/structmorph_1_1ui_1_1GridCell.html">GridCell</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a602c5b97741e477cba1889200bbf38b0">cells</a></td></tr>
 <tr class="memdesc:a602c5b97741e477cba1889200bbf38b0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The cells, row-major.  <br /></td></tr>
 <tr class="memitem:adbd54d46363cd90a8d1dc0b59a1b2f11" id="r_adbd54d46363cd90a8d1dc0b59a1b2f11"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#adbd54d46363cd90a8d1dc0b59a1b2f11">gap</a> = 0</td></tr>
@@ -137,12 +139,14 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:ab0bae6331ef08a6def0bbc840d35b0c9" id="r_ab0bae6331ef08a6def0bbc840d35b0c9"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab0bae6331ef08a6def0bbc840d35b0c9">common</a> {}</td></tr>
 <tr class="memdesc:ab0bae6331ef08a6def0bbc840d35b0c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visibility, enablement, layout, drag-and-drop.  <br /></td></tr>
 <tr class="memitem:a2d0ea87670d01e45b9974f5da6800214" id="r_a2d0ea87670d01e45b9974f5da6800214"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&#160;</td><td class="memItemRight"><a class="el" href="#a2d0ea87670d01e45b9974f5da6800214">align</a> = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aafbb09a82eafab60150d0996e8fe46560">Align::Stretch</a></td></tr>
-<tr class="memdesc:a2d0ea87670d01e45b9974f5da6800214"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where each cell's content sits vertically in its row; set once. A grid's columns share its width, so there is no spare length to justify.  <br /></td></tr>
+<tr class="memdesc:a2d0ea87670d01e45b9974f5da6800214"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where each cell's content sits vertically in its row; set once. A grid's columns are sized by their count or tracks, so there is no spare length to justify.  <br /></td></tr>
+<tr class="memitem:a749e1f71d23077dafb662e44260fde5e" id="r_a749e1f71d23077dafb662e44260fde5e"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#a749e1f71d23077dafb662e44260fde5e">minColumnWidth</a> = 0</td></tr>
+<tr class="memdesc:a749e1f71d23077dafb662e44260fde5e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The least width of a column, in units, while above 0: the grid shows as many of its <span class="tt"><a class="el" href="#af28559f0732d9f29f1eeed0d95ff1f81" title="The column count; ignored when tracks is not empty.">columns</a></span> as fit that width, and at least one, so its columns follow the room it is given; its height follows the columns shown. Ignored with <span class="tt"><a class="el" href="#a9bb2834fe0b9a0906d74722fb168cc11" title="The column tracks, set once; empty gives columns equal columns, a content-sized grid as wide as its w...">tracks</a></span>; set once.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Cells laid out row-major in a fixed number of columns. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00603">603</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00876">876</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="af28559f0732d9f29f1eeed0d95ff1f81" name="af28559f0732d9f29f1eeed0d95ff1f81"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af28559f0732d9f29f1eeed0d95ff1f81">&#9670;&#160;</a></span>columns</h2>
@@ -156,9 +160,27 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The column count. </p>
+<p>The column count; ignored when <span class="tt"><a class="el" href="#a9bb2834fe0b9a0906d74722fb168cc11" title="The column tracks, set once; empty gives columns equal columns, a content-sized grid as wide as its w...">tracks</a></span> is not empty. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00605">605</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00878">878</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9bb2834fe0b9a0906d74722fb168cc11" name="a9bb2834fe0b9a0906d74722fb168cc11"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9bb2834fe0b9a0906d74722fb168cc11">&#9670;&#160;</a></span>tracks</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../df/dd6/structmorph_1_1ui_1_1GridTrack.html">GridTrack</a>&gt; morph::ui::Grid::tracks</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The column tracks, set once; empty gives <span class="tt"><a class="el" href="#af28559f0732d9f29f1eeed0d95ff1f81" title="The column count; ignored when tracks is not empty.">columns</a></span> equal columns, a content-sized grid as wide as its widest cell times the columns. Given, the column count is their number. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00881">881</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,7 +198,7 @@ Public Attributes</h2></td></tr>
 
 <p>The cells, row-major. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00607">607</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00883">883</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -194,7 +216,7 @@ Public Attributes</h2></td></tr>
 
 <p>Space between cells: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00609">609</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00885">885</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -212,7 +234,7 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00611">611</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00887">887</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -228,9 +250,27 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Where each cell's content sits vertically in its row; set once. A grid's columns share its width, so there is no spare length to justify. </p>
+<p>Where each cell's content sits vertically in its row; set once. A grid's columns are sized by their count or tracks, so there is no spare length to justify. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00614">614</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00890">890</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a749e1f71d23077dafb662e44260fde5e" name="a749e1f71d23077dafb662e44260fde5e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a749e1f71d23077dafb662e44260fde5e">&#9670;&#160;</a></span>minColumnWidth</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int morph::ui::Grid::minColumnWidth = 0</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The least width of a column, in units, while above 0: the grid shows as many of its <span class="tt"><a class="el" href="#af28559f0732d9f29f1eeed0d95ff1f81" title="The column count; ignored when tracks is not empty.">columns</a></span> as fit that width, and at least one, so its columns follow the room it is given; its height follows the columns shown. Ignored with <span class="tt"><a class="el" href="#a9bb2834fe0b9a0906d74722fb168cc11" title="The column tracks, set once; empty gives columns equal columns, a content-sized grid as wide as its w...">tracks</a></span>; set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00894">894</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

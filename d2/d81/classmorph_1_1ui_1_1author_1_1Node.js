@@ -12,6 +12,7 @@ var classmorph_1_1ui_1_1author_1_1Node =
     [ "sizing", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#aeb0de53da3ef7f26750888c36ea01352", null ],
     [ "sizing", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#abb74dfe29cbf7308b8adbce0875a0f4d", null ],
     [ "alignSelf", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a548e5c654a230539f8fece6c6a81cc51", null ],
+    [ "bleed", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a25665e069e027e562e8c75f966d4cca5", null ],
     [ "minWidth", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#ad065d9c605a31d185a65d64f235e4997", null ],
     [ "maxWidth", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a7e766e966e424b80a6b1c1118d63173d", null ],
     [ "minHeight", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#abdc4d77a985adc194e85c29bb1e8b1fa", null ],
@@ -20,6 +21,8 @@ var classmorph_1_1ui_1_1author_1_1Node =
     [ "autofocus", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a4ea7f300181586c0bd8747b28e84ebfb", null ],
     [ "testId", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a70064ab786aae09861600894c27f6465", null ],
     [ "surface", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a59cf3444d7344bbccdd343ed33ed171c", null ],
+    [ "surface", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a4003314f389f02eaff4b7be91db670ff", null ],
+    [ "surface", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#addd4fa5320a46770d3f461195c3c8d51", null ],
     [ "a11y", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a77c9fa70fd89e4624e0221e9503c87f5", null ],
     [ "drag", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a19083af9f40b1b1aca2bad4ac9edacbf", null ],
     [ "drop", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#adfa8e8f9a4b50682e9a396a7b2c25d67", null ],
@@ -27,5 +30,8 @@ var classmorph_1_1ui_1_1author_1_1Node =
     [ "readonly", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a05d2da767a69a6188cfa08dcce151692", null ],
     [ "required", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#aaf93bcb43ee2618e8e8e173a8b2ae1e8", null ],
     [ "errors", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a7e2270d530d709d48a4a87b2513c4ae1", null ],
-    [ "stale", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a25381bc869f62cb472d1eb80e867ece1", null ]
+    [ "stale", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a25381bc869f62cb472d1eb80e867ece1", null ],
+    [ "description", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a961ed5a75849990c26d1f8c3f8a5b6a8", null ],
+    [ "labelHint", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a2b4a68fba9a56b3f55bbfb2cbe64bb3e", null ],
+    [ "tone", "d2/d81/classmorph_1_1ui_1_1author_1_1Node.html#a7ebcfefe1848424fb5e169ab8dc720f9", null ]
 ];

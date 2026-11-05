@@ -135,7 +135,7 @@ Inheritance diagram for morph::ui::StackWidget:</div>
 <area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,323,24"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; StackWidget &gt;" shape="rect" coords="0,168,323,192"/>
 <area href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html" alt="morph::ui::testing::detail::FakeContainer&lt; StackWidget &gt;" shape="rect" coords="0,224,323,248"/>
-<area href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html" title="A fake StackWidget, of kind Column or Row: properties gap, align, justify." alt="morph::ui::testing::detail::FakeStack" shape="rect" coords="0,280,323,304"/>
+<area href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html" title="A fake StackWidget, of kind Column or Row: properties gap, align, justify, wrap, divided,..." alt="morph::ui::testing::detail::FakeStack" shape="rect" coords="0,280,323,304"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -147,6 +147,20 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:aaf8d93e99485a79df927a316123a494c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Places the children across the axis. A new stack stretches them; a child's own <span class="tt">alignSelf</span> wins.  <br /></td></tr>
 <tr class="memitem:a4181fe206ace369853214060b37285dc" id="r_a4181fe206ace369853214060b37285dc"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a4181fe206ace369853214060b37285dc">setJustify</a> (<a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a> justify)=0</td></tr>
 <tr class="memdesc:a4181fe206ace369853214060b37285dc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Places the spare length along the axis while no shown child stretches. A new stack packs at the start.  <br /></td></tr>
+<tr class="memitem:a07774c2903338bac4908255cc05c95d9" id="r_a07774c2903338bac4908255cc05c95d9"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a07774c2903338bac4908255cc05c95d9">setWrap</a> (bool wrap)=0</td></tr>
+<tr class="memdesc:a07774c2903338bac4908255cc05c95d9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a horizontal stack wrap: its children fill lines in order, and a child that does not fit after the ones already on a line starts the next. The mount calls it once, before the stack's first child, and only for a stack that wraps.  <br /></td></tr>
+<tr class="memitem:a01f199afda509da588b662fb385d3a53" id="r_a01f199afda509da588b662fb385d3a53"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a01f199afda509da588b662fb385d3a53">setDivided</a> (bool divided)=0</td></tr>
+<tr class="memdesc:a01f199afda509da588b662fb385d3a53"><td class="mdescLeft">&#160;</td><td class="mdescRight">Draws a 1 px rule in the theme's divider colour between each two shown children of a stack that does not wrap, centred in the gap: horizontal in a vertical stack, vertical in a row. The rule takes 1 px of its own, so a gap of 0 still separates the children. The mount calls it once, before the stack's first child, and only for a stack that is divided. A backend that cannot spare a row for a rule draws none: the terminal's lines are already apart.  <br /></td></tr>
+<tr class="memitem:a02c87fd802f15a5679e6e316b187e1da" id="r_a02c87fd802f15a5679e6e316b187e1da"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a02c87fd802f15a5679e6e316b187e1da">setPadding</a> (<a class="el" href="../../d7/d65/structmorph_1_1ui_1_1Padding.html">Padding</a> padding)=0</td></tr>
+<tr class="memdesc:a02c87fd802f15a5679e6e316b187e1da"><td class="mdescLeft">&#160;</td><td class="mdescRight">Insets the children from the stack's edges: the vertical step above and below, the horizontal step at the sides. The mount calls it once, before the stack's first child, and only for a stack that has padding. The stack's natural size includes the inset.  <br /></td></tr>
+<tr class="memitem:a0c85cd56ac2adcb97f7d4821e757267d" id="r_a0c85cd56ac2adcb97f7d4821e757267d"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a0c85cd56ac2adcb97f7d4821e757267d">setActionRow</a> ()=0</td></tr>
+<tr class="memdesc:a0c85cd56ac2adcb97f7d4821e757267d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks a horizontal stack as a row of actions: the buttons of an overlay's footer or of an <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a0680b5da5baee2db8a0adcf1dfcaea51" title="An action bar node.">actionBar</a></span>. A backend that reads the theme's <span class="tt">actions.gap</span> spaces the children by it while it is above 0, in place of the stack's <span class="tt">gap</span>; the terminal, which reads no dimension, keeps <span class="tt">gap</span>. The mount calls it once, before the stack's first child, and only for a row of actions.  <br /></td></tr>
+<tr class="memitem:ad90466322d76119cabb8eb77f0a538a2" id="r_ad90466322d76119cabb8eb77f0a538a2"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ad90466322d76119cabb8eb77f0a538a2">setSelected</a> (bool selected)=0</td></tr>
+<tr class="memdesc:ad90466322d76119cabb8eb77f0a538a2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks the stack as the chosen entry of a list, or not: while selected it draws the accent's 3 px bar at its leading edge, down its whole height, over its surface and under its children, inside its leading padding. The mount calls it for a stack that gives the key, at mount (possibly with false) and on every change; that first call is what tells a backend the stack can be selected, so one that reserves room for the bar reserves it from then on whether or not the stack is selected.  <br /></td></tr>
+<tr class="memitem:a8c644569bf43081c1727d7d17c70d54d" id="r_a8c644569bf43081c1727d7d17c70d54d"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a8c644569bf43081c1727d7d17c70d54d">setPassesBleed</a> (bool passes)=0</td></tr>
+<tr class="memdesc:a8c644569bf43081c1727d7d17c70d54d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes the stack transparent to <span class="tt">bleed</span>: a child of it that bleeds reaches past the padding of the stack's own container (a panel's padding, a tab page's), not past the stack's, as if the child were that container's. The mount calls it once, before the stack's first child, and only with true, for the column the interpreter inserts around a list of nodes. A table's row view ignores it.  <br /></td></tr>
+<tr class="memitem:ab7b03201b46ff0bd0ecc72535f1ae1e0" id="r_ab7b03201b46ff0bd0ecc72535f1ae1e0"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ab7b03201b46ff0bd0ecc72535f1ae1e0">setHeadBar</a> (bool headBar)=0</td></tr>
+<tr class="memdesc:ab7b03201b46ff0bd0ecc72535f1ae1e0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks the stack as the shell's expanded head bar: its gap, which pads the line between its two zero-height spacers, is then the theme's <span class="tt">head.paddingY</span> when the theme sets one (above 0), in place of the spacing step <span class="tt"><a class="el" href="#adcfeff7a2042c634ddb1c929d77e5e12" title="Sets the space between children.">setGap</a></span> gave. A new stack is not a head bar; the frame calls it with true while the shell is expanded and with false while it is compact. A backend that reads no such token, such as the terminal, keeps the gap it was given.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1ContainerWidget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">morph::ui::ContainerWidget</a></td></tr>
 <tr class="memitem:a0f85cf00d946d0fc63f6d7057310478d pub_methods_classmorph_1_1ui_1_1ContainerWidget" id="r_a0f85cf00d946d0fc63f6d7057310478d"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html#a0f85cf00d946d0fc63f6d7057310478d">moveChild</a> (Widget &amp;child, std::size_t index)=0</td></tr>
 <tr class="memdesc:a0f85cf00d946d0fc63f6d7057310478d pub_methods_classmorph_1_1ui_1_1ContainerWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves <code class="param">child</code> to position <code class="param">index:</code> it is removed, then inserted before the child now at <code class="param">index</code>.  <br /></td></tr>
@@ -178,7 +192,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <tr class="memitem:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget" id="r_aa92d96c22b5e09e0aecb8866b4481f57"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#aa92d96c22b5e09e0aecb8866b4481f57">setTooltip</a> (std::string_view text)=0</td></tr>
 <tr class="memdesc:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text shown while the pointer rests on the widget.  <br /></td></tr>
 <tr class="memitem:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7ceca74805a45b142f00838ee17dd747"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7ceca74805a45b142f00838ee17dd747">setSurface</a> (std::string_view surface)=0</td></tr>
-<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme.  <br /></td></tr>
+<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme. May be called again: each call restyles the widget and everything inside it.  <br /></td></tr>
 <tr class="memitem:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget" id="r_a96f94ca0cf2c093d8f8463091d91bbfb"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a96f94ca0cf2c093d8f8463091d91bbfb">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord)=0</td></tr>
 <tr class="memdesc:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Declares the keyboard chords the widget handles while focus is inside it.  <br /></td></tr>
 <tr class="memitem:a7eeebc91608f97e34f70fced77b40173 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7eeebc91608f97e34f70fced77b40173"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7eeebc91608f97e34f70fced77b40173">focus</a> ()=0</td></tr>
@@ -189,7 +203,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Children stacked along one axis, fixed at creation. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00310">310</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00420">420</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="adcfeff7a2042c634ddb1c929d77e5e12" name="adcfeff7a2042c634ddb1c929d77e5e12"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#adcfeff7a2042c634ddb1c929d77e5e12">&#9670;&#160;</a></span>setGap()</h2>
@@ -293,6 +307,245 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html#a74c96538a5cd2b7779dd1ba9c4233786">morph::ui::testing::detail::FakeStack</a>.</p>
+
+</div>
+</div>
+<a id="a07774c2903338bac4908255cc05c95d9" name="a07774c2903338bac4908255cc05c95d9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a07774c2903338bac4908255cc05c95d9">&#9670;&#160;</a></span>setWrap()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::StackWidget::setWrap </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>wrap</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Makes a horizontal stack wrap: its children fill lines in order, and a child that does not fit after the ones already on a line starts the next. The mount calls it once, before the stack's first child, and only for a stack that wraps. </p>
+<p>Each shown child has a basis along the row: a content child its natural width, a fixed child its amount, and a stretch child its minimum width, else its natural width; each clamped into the child's bounds and at most the row's width. A line always holds one child; a child whose basis is 0 takes no gap and never starts a line. On a line, the stretch children share the spare width by weight, each stopping at its maximum; a line with none places it by the stack's <span class="tt">justify</span>. A line is as tall as its tallest child, the stack's <span class="tt">align</span> places a child down its line, and lines are <span class="tt">gap</span> apart, the step children are apart along a line. A child wider than the stack sits alone on its line at the stack's width. The stack's natural width is its children's on one line, and its natural height the height of its lines at the width it is given. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">wrap</td><td>Always true: a stack that does not wrap is never told. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html#a1485d4bec4d6395c9b79c99ae157f73e">morph::ui::testing::detail::FakeStack</a>.</p>
+
+</div>
+</div>
+<a id="a01f199afda509da588b662fb385d3a53" name="a01f199afda509da588b662fb385d3a53"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a01f199afda509da588b662fb385d3a53">&#9670;&#160;</a></span>setDivided()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::StackWidget::setDivided </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>divided</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Draws a 1 px rule in the theme's divider colour between each two shown children of a stack that does not wrap, centred in the gap: horizontal in a vertical stack, vertical in a row. The rule takes 1 px of its own, so a gap of 0 still separates the children. The mount calls it once, before the stack's first child, and only for a stack that is divided. A backend that cannot spare a row for a rule draws none: the terminal's lines are already apart. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">divided</td><td>Always true: a stack that is not divided is never told. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html#a9185fce7ecac874f5d21efaba3a79eaf">morph::ui::testing::detail::FakeStack</a>.</p>
+
+</div>
+</div>
+<a id="a02c87fd802f15a5679e6e316b187e1da" name="a02c87fd802f15a5679e6e316b187e1da"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a02c87fd802f15a5679e6e316b187e1da">&#9670;&#160;</a></span>setPadding()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::StackWidget::setPadding </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d7/d65/structmorph_1_1ui_1_1Padding.html">Padding</a></td>          <td class="paramname"><span class="paramname"><em>padding</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Insets the children from the stack's edges: the vertical step above and below, the horizontal step at the sides. The mount calls it once, before the stack's first child, and only for a stack that has padding. The stack's natural size includes the inset. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">padding</td><td>The steps, each 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html#a8553b6fe0a542594d6606f4bc0aa66b5">morph::ui::testing::detail::FakeStack</a>.</p>
+
+</div>
+</div>
+<a id="a0c85cd56ac2adcb97f7d4821e757267d" name="a0c85cd56ac2adcb97f7d4821e757267d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0c85cd56ac2adcb97f7d4821e757267d">&#9670;&#160;</a></span>setActionRow()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::StackWidget::setActionRow </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Marks a horizontal stack as a row of actions: the buttons of an overlay's footer or of an <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a0680b5da5baee2db8a0adcf1dfcaea51" title="An action bar node.">actionBar</a></span>. A backend that reads the theme's <span class="tt">actions.gap</span> spaces the children by it while it is above 0, in place of the stack's <span class="tt">gap</span>; the terminal, which reads no dimension, keeps <span class="tt">gap</span>. The mount calls it once, before the stack's first child, and only for a row of actions. </p>
+
+<p>Implemented in <a class="el" href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html#a6fe3ac46746363afbde37b789165348f">morph::ui::testing::detail::FakeStack</a>.</p>
+
+</div>
+</div>
+<a id="ad90466322d76119cabb8eb77f0a538a2" name="ad90466322d76119cabb8eb77f0a538a2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad90466322d76119cabb8eb77f0a538a2">&#9670;&#160;</a></span>setSelected()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::StackWidget::setSelected </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>selected</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Marks the stack as the chosen entry of a list, or not: while selected it draws the accent's 3 px bar at its leading edge, down its whole height, over its surface and under its children, inside its leading padding. The mount calls it for a stack that gives the key, at mount (possibly with false) and on every change; that first call is what tells a backend the stack can be selected, so one that reserves room for the bar reserves it from then on whether or not the stack is selected. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">selected</td><td>Whether the stack is the chosen entry. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html#a02b8478c55ba619f523a41d34904fa2d">morph::ui::testing::detail::FakeStack</a>.</p>
+
+</div>
+</div>
+<a id="a8c644569bf43081c1727d7d17c70d54d" name="a8c644569bf43081c1727d7d17c70d54d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8c644569bf43081c1727d7d17c70d54d">&#9670;&#160;</a></span>setPassesBleed()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::StackWidget::setPassesBleed </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>passes</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Makes the stack transparent to <span class="tt">bleed</span>: a child of it that bleeds reaches past the padding of the stack's own container (a panel's padding, a tab page's), not past the stack's, as if the child were that container's. The mount calls it once, before the stack's first child, and only with true, for the column the interpreter inserts around a list of nodes. A table's row view ignores it. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">passes</td><td>Always true: a stack that is not a holder is never told. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html#ae99038cd7800b79dee501927f4b669e8">morph::ui::testing::detail::FakeStack</a>.</p>
+
+</div>
+</div>
+<a id="ab7b03201b46ff0bd0ecc72535f1ae1e0" name="ab7b03201b46ff0bd0ecc72535f1ae1e0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab7b03201b46ff0bd0ecc72535f1ae1e0">&#9670;&#160;</a></span>setHeadBar()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::StackWidget::setHeadBar </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>headBar</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Marks the stack as the shell's expanded head bar: its gap, which pads the line between its two zero-height spacers, is then the theme's <span class="tt">head.paddingY</span> when the theme sets one (above 0), in place of the spacing step <span class="tt"><a class="el" href="#adcfeff7a2042c634ddb1c929d77e5e12" title="Sets the space between children.">setGap</a></span> gave. A new stack is not a head bar; the frame calls it with true while the shell is expanded and with false while it is compact. A backend that reads no such token, such as the terminal, keeps the gap it was given. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">headBar</td><td>Whether the stack is the expanded head bar. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d7/df9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeStack.html#a567c387a0982d4be26f7010f0e3bc96a">morph::ui::testing::detail::FakeStack</a>.</p>
 
 </div>
 </div>

@@ -13,6 +13,8 @@ var classmorph_1_1ui_1_1testing_1_1ConformanceProbe =
     [ "drag", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a9ba4fc4917bf531b7f7793199cd94019", null ],
     [ "dismiss", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a94eb049d3c87d78053e32583e7eeca00", null ],
     [ "selectRows", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a1c4eecec7151c1fa2d7dfe89ce5d64e8", null ],
+    [ "clickRow", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a797ca2bb17667f8d7e648e95464e4936", null ],
+    [ "clickHeader", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a771794f60c627e84008d32898dd8a13a", null ],
     [ "selectedRows", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a220996b523fb123eb2841cf4778c8af6", null ],
     [ "moveCursor", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a20fa7e5d841aea70d010035e97418a56", null ],
     [ "cursorOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#abbf6ab8b783d44e9be88ffa085b52ac7", null ],
@@ -21,5 +23,7 @@ var classmorph_1_1ui_1_1testing_1_1ConformanceProbe =
     [ "chooseMenuEntry", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a5158ffa2f6eaa9d22bc022ee0d1eed0a", null ],
     [ "expand", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#acd96cdee9dbd020cddc43d192bd24600", null ],
     [ "dropFiles", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#ac5fc06f5c06036f4aed7c62881e2332e", null ],
-    [ "boundsOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a26efd279f0b1470fd1bbef23b136afe3", null ]
+    [ "descriptionOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#abda4835f07425d40af80a100aec47714", null ],
+    [ "boundsOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a26efd279f0b1470fd1bbef23b136afe3", null ],
+    [ "textExtentOf", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#ac650420799b6f5ca1ce254a3140c0ab3", null ]
 ];

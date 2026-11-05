@@ -136,12 +136,18 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ac5ff96f203cd4e4c71b2fb450a0eb918"><td class="mdescLeft">&#160;</td><td class="mdescRight">The messages shown with the field, in order; empty shows none. Which errors show, and when, is decided before they reach this property.  <br /></td></tr>
 <tr class="memitem:aff22fcd9162326588e22f40ead6be95f" id="r_aff22fcd9162326588e22f40ead6be95f"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aff22fcd9162326588e22f40ead6be95f">stale</a> = false</td></tr>
 <tr class="memdesc:aff22fcd9162326588e22f40ead6be95f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the value shown is the last known one while a newer one is computed.  <br /></td></tr>
+<tr class="memitem:a8e5c46fd1b6a08a2df1c04f2773baac0" id="r_a8e5c46fd1b6a08a2df1c04f2773baac0"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8e5c46fd1b6a08a2df1c04f2773baac0">description</a></td></tr>
+<tr class="memdesc:a8e5c46fd1b6a08a2df1c04f2773baac0"><td class="mdescLeft">&#160;</td><td class="mdescRight">A line that describes the field, under its control and announced as its accessible description; empty shows none. Not on a text.  <br /></td></tr>
+<tr class="memitem:aba04e97f4f16935b3f4e4135d37be965" id="r_aba04e97f4f16935b3f4e4135d37be965"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aba04e97f4f16935b3f4e4135d37be965">labelHint</a></td></tr>
+<tr class="memdesc:aba04e97f4f16935b3f4e4135d37be965"><td class="mdescLeft">&#160;</td><td class="mdescRight">A hint drawn after the caption and its required mark, such as the range a value must lie in; empty shows none. Drawn only while the input shows a caption. Not on a text.  <br /></td></tr>
+<tr class="memitem:a4c2f2292f554917be6ff8b10ab32a3c6" id="r_a4c2f2292f554917be6ff8b10ab32a3c6"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4c2f2292f554917be6ff8b10ab32a3c6">tone</a> = <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4aae9bb5320b3890b6747c91b5a71ae5a01">Tone::Neutral</a></td></tr>
+<tr class="memdesc:a4c2f2292f554917be6ff8b10ab32a3c6"><td class="mdescLeft">&#160;</td><td class="mdescRight">An evaluation of the value that does not make it invalid, drawn as the control's outline and the description's colour; <span class="tt">Neutral</span> is none. On a text it is the text's colour.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The state of a value a user edits or reads: whether it may be changed, must be given, is wrong, or is being recomputed. </p>
 <p>On text, which no user edits, <span class="tt"><a class="el" href="#aeeef863ad8fdead16933b6fe2d7fa876" title="Whether the user may not change the value. A read-only field shows its value and can take focus and h...">readonly</a></span> changes nothing; the other three mark it as they mark an input. A constant default calls no setter. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00386">386</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00501">501</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aeeef863ad8fdead16933b6fe2d7fa876" name="aeeef863ad8fdead16933b6fe2d7fa876"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aeeef863ad8fdead16933b6fe2d7fa876">&#9670;&#160;</a></span>readonly</h2>
@@ -157,7 +163,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the user may not change the value. A read-only field shows its value and can take focus and have its text selected; it takes no edit, submit or commit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00389">389</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00504">504</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -175,7 +181,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the field is marked as one that must be given. Only a mark: whether a value is missing is the application's to decide and show through <span class="tt"><a class="el" href="#ac5ff96f203cd4e4c71b2fb450a0eb918" title="The messages shown with the field, in order; empty shows none. Which errors show, and when,...">errors</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00392">392</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00507">507</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -193,7 +199,7 @@ Public Attributes</h2></td></tr>
 
 <p>The messages shown with the field, in order; empty shows none. Which errors show, and when, is decided before they reach this property. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00395">395</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00510">510</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -211,7 +217,61 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the value shown is the last known one while a newer one is computed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00397">397</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00512">512</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8e5c46fd1b6a08a2df1c04f2773baac0" name="a8e5c46fd1b6a08a2df1c04f2773baac0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8e5c46fd1b6a08a2df1c04f2773baac0">&#9670;&#160;</a></span>description</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::FieldState::description</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A line that describes the field, under its control and announced as its accessible description; empty shows none. Not on a text. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00515">515</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aba04e97f4f16935b3f4e4135d37be965" name="aba04e97f4f16935b3f4e4135d37be965"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aba04e97f4f16935b3f4e4135d37be965">&#9670;&#160;</a></span>labelHint</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::FieldState::labelHint</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A hint drawn after the caption and its required mark, such as the range a value must lie in; empty shows none. Drawn only while the input shows a caption. Not on a text. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00518">518</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4c2f2292f554917be6ff8b10ab32a3c6" name="a4c2f2292f554917be6ff8b10ab32a3c6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4c2f2292f554917be6ff8b10ab32a3c6">&#9670;&#160;</a></span>tone</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;<a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a>&gt; morph::ui::FieldState::tone = <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4aae9bb5320b3890b6747c91b5a71ae5a01">Tone::Neutral</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>An evaluation of the value that does not make it invalid, drawn as the control's outline and the description's colour; <span class="tt">Neutral</span> is none. On a text it is the text's colour. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00521">521</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

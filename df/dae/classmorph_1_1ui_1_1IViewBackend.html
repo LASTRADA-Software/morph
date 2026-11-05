@@ -157,8 +157,8 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <tr class="memdesc:a04c823843651fea8c9dac80ab5ab72c8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a check box.  <br /></td></tr>
 <tr class="memitem:a295d6e607bccd746b6ad061e578f1438" id="r_a295d6e607bccd746b6ad061e578f1438"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1SelectWidget.html">SelectWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a295d6e607bccd746b6ad061e578f1438">createSelect</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent, <a class="el" href="../../d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1">SelectStyle</a> style)=0</td></tr>
 <tr class="memdesc:a295d6e607bccd746b6ad061e578f1438"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a choice of one option.  <br /></td></tr>
-<tr class="memitem:ac980f626137f8bc216f3959a86af909e" id="r_ac980f626137f8bc216f3959a86af909e"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../d4/dfc/classmorph_1_1ui_1_1MenuWidget.html">MenuWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac980f626137f8bc216f3959a86af909e">createMenu</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent)=0</td></tr>
-<tr class="memdesc:ac980f626137f8bc216f3959a86af909e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a command list.  <br /></td></tr>
+<tr class="memitem:affad9f61a9557aaae36d7cb7215c0360" id="r_affad9f61a9557aaae36d7cb7215c0360"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../d4/dfc/classmorph_1_1ui_1_1MenuWidget.html">MenuWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#affad9f61a9557aaae36d7cb7215c0360">createMenu</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent, <a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879">MenuStyle</a> style)=0</td></tr>
+<tr class="memdesc:affad9f61a9557aaae36d7cb7215c0360"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a command list.  <br /></td></tr>
 <tr class="memitem:a7d60e8ca9b01e140c41d14eb34080701" id="r_a7d60e8ca9b01e140c41d14eb34080701"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html">StackWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7d60e8ca9b01e140c41d14eb34080701">createStack</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent, <a class="el" href="../../d8/d11/view_8hpp.html#ae4ee7d904483365c5e7cee041ab772d5">Axis</a> axis)=0</td></tr>
 <tr class="memdesc:a7d60e8ca9b01e140c41d14eb34080701"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a stack.  <br /></td></tr>
 <tr class="memitem:ac15b728240fb0da4bfdc8974582d8522" id="r_ac15b728240fb0da4bfdc8974582d8522"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html">GridWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac15b728240fb0da4bfdc8974582d8522">createGrid</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent)=0</td></tr>
@@ -197,6 +197,8 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <tr class="memdesc:a6d44e4ac49474fb4f8ed59c907096c69"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a steps indicator.  <br /></td></tr>
 <tr class="memitem:ae445beefd4cf40ede51fa368457674aa" id="r_ae445beefd4cf40ede51fa368457674aa"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../dd/df9/classmorph_1_1ui_1_1KeyValueWidget.html">KeyValueWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae445beefd4cf40ede51fa368457674aa">createKeyValue</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent)=0</td></tr>
 <tr class="memdesc:ae445beefd4cf40ede51fa368457674aa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a key-value list.  <br /></td></tr>
+<tr class="memitem:a77125112d0be229dfa4993ae6aef4410" id="r_a77125112d0be229dfa4993ae6aef4410"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../da/d13/classmorph_1_1ui_1_1ChartWidget.html">ChartWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a77125112d0be229dfa4993ae6aef4410">createChart</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent)=0</td></tr>
+<tr class="memdesc:a77125112d0be229dfa4993ae6aef4410"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a chart.  <br /></td></tr>
 <tr class="memitem:a55fd611d62ad8c732bd86f538c83d5e0" id="r_a55fd611d62ad8c732bd86f538c83d5e0"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html">EmptyStateWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a55fd611d62ad8c732bd86f538c83d5e0">createEmptyState</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent)=0</td></tr>
 <tr class="memdesc:a55fd611d62ad8c732bd86f538c83d5e0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes an empty state.  <br /></td></tr>
 <tr class="memitem:a2f0fd93a4538e13753d79c90d459da58" id="r_a2f0fd93a4538e13753d79c90d459da58"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html">DrawerWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2f0fd93a4538e13753d79c90d459da58">createDrawer</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent, <a class="el" href="../../d8/d11/view_8hpp.html#a8daf47ed0a8077e7aadb93f026ade76f">Side</a> side)=0</td></tr>
@@ -209,11 +211,15 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <tr class="memdesc:adb0d4528494cfbf9a2b53f49c295d93c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a drop zone.  <br /></td></tr>
 <tr class="memitem:a6528c7bb0bdc2531fe0d2349859a11b8" id="r_a6528c7bb0bdc2531fe0d2349859a11b8"><td class="memItemLeft">virtual std::unique_ptr&lt; <a class="el" href="../../d2/dd1/classmorph_1_1ui_1_1CustomWidget.html">CustomWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6528c7bb0bdc2531fe0d2349859a11b8">createCustom</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent, <a class="el" href="../../d2/d54/structmorph_1_1ui_1_1CustomRequest.html">CustomRequest</a> const &amp;request)</td></tr>
 <tr class="memdesc:a6528c7bb0bdc2531fe0d2349859a11b8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads the component a <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a38e1fcd2ff70b109ff5556ac786c3df7" title="A component loaded by name, mounted by Mounted as its fallback.">custom</a></span> node names, if this backend can. The only factory that may return null: null means "not loaded", and the mount shows the node's fallback instead. A backend that loads no components keeps this default.  <br /></td></tr>
+<tr class="memitem:a78d8a5bc452f99b64b0e44c27de571b0" id="r_a78d8a5bc452f99b64b0e44c27de571b0"><td class="memItemLeft">virtual std::string&#160;</td><td class="memItemRight"><a class="el" href="#a78d8a5bc452f99b64b0e44c27de571b0">widthClass</a> () const =0</td></tr>
+<tr class="memdesc:a78d8a5bc452f99b64b0e44c27de571b0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The width class of the surface this backend draws on, now: <span class="tt">compact</span>, <span class="tt">medium</span> or <span class="tt">expanded</span> (<span class="tt"><a class="el" href="../../d0/dc2/ui_2backend_8hpp.html#a14b0ac907b260865f8f1be0b88c444ad" title="A width in the vocabulary&#39;s units (what fixed(n) counts) as a width class: compact below 80 units,...">widthClassOf</a></span>), what <span class="tt">{"env": "<a class="el" href="#a78d8a5bc452f99b64b0e44c27de571b0" title="The width class of the surface this backend draws on, now: compact, medium or expanded (widthClassOf)...">widthClass</a>"}</span> reads.  <br /></td></tr>
+<tr class="memitem:a82ed4d3c4bcc1d720cd6db5a7824e324" id="r_a82ed4d3c4bcc1d720cd6db5a7824e324"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a82ed4d3c4bcc1d720cd6db5a7824e324">setOnWidthClass</a> (std::function&lt; void(std::string const &amp;)&gt; onWidthClass)=0</td></tr>
+<tr class="memdesc:a82ed4d3c4bcc1d720cd6db5a7824e324"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers the one listener told of each later change of <span class="tt"><a class="el" href="#a78d8a5bc452f99b64b0e44c27de571b0" title="The width class of the surface this backend draws on, now: compact, medium or expanded (widthClassOf)...">widthClass()</a></span>, on the owner and outside any layout pass; a backend reports to the shell mounted on it. It is not called at once: the caller reads <span class="tt"><a class="el" href="#a78d8a5bc452f99b64b0e44c27de571b0" title="The width class of the surface this backend draws on, now: compact, medium or expanded (widthClassOf)...">widthClass()</a></span> for the current class.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Makes widgets. Each factory appends the new widget to <code class="param">parent</code>, or makes a root when it is null, and never returns null, except <span class="tt"><a class="el" href="#a6528c7bb0bdc2531fe0d2349859a11b8" title="Loads the component a custom node names, if this backend can. The only factory that may return null: ...">createCustom</a></span>, whose null shows a custom node's fallback. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00810">810</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01195">1195</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a277c320382211edad7639e600c070e76" name="a277c320382211edad7639e600c070e76"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a277c320382211edad7639e600c070e76">&#9670;&#160;</a></span>createText()</h2>
@@ -395,7 +401,7 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">parent</td><td>The container to append to, or null for a root. </td></tr>
-    <tr><td class="paramname">style</td><td>Dropdown or radio. </td></tr>
+    <tr><td class="paramname">style</td><td>Dropdown, radio or segmented. </td></tr>
   </table>
   </dd>
 </dl>
@@ -405,8 +411,8 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 </div>
 </div>
-<a id="ac980f626137f8bc216f3959a86af909e" name="ac980f626137f8bc216f3959a86af909e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac980f626137f8bc216f3959a86af909e">&#9670;&#160;</a></span>createMenu()</h2>
+<a id="affad9f61a9557aaae36d7cb7215c0360" name="affad9f61a9557aaae36d7cb7215c0360"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#affad9f61a9557aaae36d7cb7215c0360">&#9670;&#160;</a></span>createMenu()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -417,8 +423,12 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
         <tr>
           <td class="memname">virtual std::unique_ptr&lt; <a class="el" href="../../d4/dfc/classmorph_1_1ui_1_1MenuWidget.html">MenuWidget</a> &gt; morph::ui::IViewBackend::createMenu </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span></td><td>)</td>
+          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype"><a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879">MenuStyle</a></td>          <td class="paramname"><span class="paramname"><em>style</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -432,12 +442,13 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">parent</td><td>The container to append to, or null for a root. </td></tr>
+    <tr><td class="paramname">style</td><td>A bar of top-level entries, or one button that opens them. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The widget. </dd></dl>
 
-<p>Implemented in <a class="el" href="../../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a2b95d3ab5237c666d23f626a2de067fa">morph::qt_quick::Backend</a>, <a class="el" href="../../d2/d8e/classmorph_1_1tui_1_1Backend.html#af2b89f36fd0084239ce2eb08288a6e14">morph::tui::Backend</a>, and <a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a50c15d1bc816e44cc44b0caaa15c57c5">morph::ui::testing::RecordingBackend</a>.</p>
+<p>Implemented in <a class="el" href="../../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a3fc7d85cd6fc5e84666f759bd7765821">morph::qt_quick::Backend</a>, <a class="el" href="../../d2/d8e/classmorph_1_1tui_1_1Backend.html#a926a5c772fbaaa260ff189af72191532">morph::tui::Backend</a>, and <a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a5b62499cc39756cdc50a8de4f3c8746b">morph::ui::testing::RecordingBackend</a>.</p>
 
 </div>
 </div>
@@ -1151,6 +1162,42 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 </div>
 </div>
+<a id="a77125112d0be229dfa4993ae6aef4410" name="a77125112d0be229dfa4993ae6aef4410"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a77125112d0be229dfa4993ae6aef4410">&#9670;&#160;</a></span>createChart()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual std::unique_ptr&lt; <a class="el" href="../../da/d13/classmorph_1_1ui_1_1ChartWidget.html">ChartWidget</a> &gt; morph::ui::IViewBackend::createChart </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Makes a chart. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">parent</td><td>The container to append to, or null for a root. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The widget. </dd></dl>
+
+<p>Implemented in <a class="el" href="../../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a83124b87f23fb862e336540f07139fee">morph::qt_quick::Backend</a>, <a class="el" href="../../d2/d8e/classmorph_1_1tui_1_1Backend.html#a39664d1f6c78174055405ae2165e5720">morph::tui::Backend</a>, and <a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#afccce565699314ec555d57c89b1b4feb">morph::ui::testing::RecordingBackend</a>.</p>
+
+</div>
+</div>
 <a id="a55fd611d62ad8c732bd86f538c83d5e0" name="a55fd611d62ad8c732bd86f538c83d5e0"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a55fd611d62ad8c732bd86f538c83d5e0">&#9670;&#160;</a></span>createEmptyState()</h2>
 
@@ -1380,7 +1427,72 @@ IViewBackend &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IViewBac
 
 <p>Reimplemented in <a class="el" href="../../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a410dca2d1bf22d65bb14655de56d3a5c">morph::qt_quick::Backend</a>, and <a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#afacd4f48d7f848bf775bf1ff3f3775eb">morph::ui::testing::RecordingBackend</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00988">988</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01379">1379</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a78d8a5bc452f99b64b0e44c27de571b0" name="a78d8a5bc452f99b64b0e44c27de571b0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a78d8a5bc452f99b64b0e44c27de571b0">&#9670;&#160;</a></span>widthClass()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual std::string morph::ui::IViewBackend::widthClass </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The width class of the surface this backend draws on, now: <span class="tt">compact</span>, <span class="tt">medium</span> or <span class="tt">expanded</span> (<span class="tt"><a class="el" href="../../d0/dc2/ui_2backend_8hpp.html#a14b0ac907b260865f8f1be0b88c444ad" title="A width in the vocabulary&#39;s units (what fixed(n) counts) as a width class: compact below 80 units,...">widthClassOf</a></span>), what <span class="tt">{"env": "<a class="el" href="#a78d8a5bc452f99b64b0e44c27de571b0" title="The width class of the surface this backend draws on, now: compact, medium or expanded (widthClassOf)...">widthClass</a>"}</span> reads. </p>
+<dl class="section return"><dt>Returns</dt><dd>The class. </dd></dl>
+
+<p>Implemented in <a class="el" href="../../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#afa41f91973a4cf36cb090445998ca07c">morph::qt_quick::Backend</a>, <a class="el" href="../../d2/d8e/classmorph_1_1tui_1_1Backend.html#a45ab62a5c5a8ea3609922b94b26bef3f">morph::tui::Backend</a>, and <a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a551c3d0f0fd9089965c337a2461d99e3">morph::ui::testing::RecordingBackend</a>.</p>
+
+</div>
+</div>
+<a id="a82ed4d3c4bcc1d720cd6db5a7824e324" name="a82ed4d3c4bcc1d720cd6db5a7824e324"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a82ed4d3c4bcc1d720cd6db5a7824e324">&#9670;&#160;</a></span>setOnWidthClass()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::IViewBackend::setOnWidthClass </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void(std::string const &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>onWidthClass</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Registers the one listener told of each later change of <span class="tt"><a class="el" href="#a78d8a5bc452f99b64b0e44c27de571b0" title="The width class of the surface this backend draws on, now: compact, medium or expanded (widthClassOf)...">widthClass()</a></span>, on the owner and outside any layout pass; a backend reports to the shell mounted on it. It is not called at once: the caller reads <span class="tt"><a class="el" href="#a78d8a5bc452f99b64b0e44c27de571b0" title="The width class of the surface this backend draws on, now: compact, medium or expanded (widthClassOf)...">widthClass()</a></span> for the current class. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">onWidthClass</td><td>The listener, given the new class; empty clears it. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a68ad617309b86656c83951abbab8cf42">morph::qt_quick::Backend</a>, <a class="el" href="../../d2/d8e/classmorph_1_1tui_1_1Backend.html#a25a3ddf0d196b5c586287dc50f122831">morph::tui::Backend</a>, and <a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#afea6ea787b720430633f9f5a7a4cad2a">morph::ui::testing::RecordingBackend</a>.</p>
 
 </div>
 </div>

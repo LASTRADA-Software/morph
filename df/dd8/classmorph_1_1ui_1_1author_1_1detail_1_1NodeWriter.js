@@ -5,6 +5,7 @@ var classmorph_1_1ui_1_1author_1_1detail_1_1NodeWriter =
     [ "put", "df/dd8/classmorph_1_1ui_1_1author_1_1detail_1_1NodeWriter.html#a43f85e991fbeb1127aa3c7503a94fb94", null ],
     [ "put", "df/dd8/classmorph_1_1ui_1_1author_1_1detail_1_1NodeWriter.html#ac4ff3dea5417c77b53c6c6635f440188", null ],
     [ "text", "df/dd8/classmorph_1_1ui_1_1author_1_1detail_1_1NodeWriter.html#abdd5471ae3951282a8d589b74910ea14", null ],
+    [ "flag", "df/dd8/classmorph_1_1ui_1_1author_1_1detail_1_1NodeWriter.html#af94ca01af4bb45e25f0610c6870effd7", null ],
     [ "raw", "df/dd8/classmorph_1_1ui_1_1author_1_1detail_1_1NodeWriter.html#a2dc2984d087c6a1f44fd51bda1508559", null ],
     [ "scope", "df/dd8/classmorph_1_1ui_1_1author_1_1detail_1_1NodeWriter.html#a101bb654955822d69889c06d6852fa8b", null ],
     [ "facts", "df/dd8/classmorph_1_1ui_1_1author_1_1detail_1_1NodeWriter.html#a4c6c0cdf7ce48069b00b7c73d4b5b0da", null ],

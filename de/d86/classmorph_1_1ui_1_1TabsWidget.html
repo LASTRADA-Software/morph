@@ -142,13 +142,21 @@ Inheritance diagram for morph::ui::TabsWidget:</div>
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a7004a5a7a5e9a23904dd025d1aa75615" id="r_a7004a5a7a5e9a23904dd025d1aa75615"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a7004a5a7a5e9a23904dd025d1aa75615">setTabs</a> (std::vector&lt; std::string &gt; const &amp;labels)=0</td></tr>
-<tr class="memdesc:a7004a5a7a5e9a23904dd025d1aa75615"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the tab captions.  <br /></td></tr>
+<tr class="memdesc:a7004a5a7a5e9a23904dd025d1aa75615"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the tab captions. A call with as many captions as the last one replaces them in place and keeps the highlight, the shown page and the keyboard focus.  <br /></td></tr>
 <tr class="memitem:a0c3b17111c1f016bdc9679f23e161029" id="r_a0c3b17111c1f016bdc9679f23e161029"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a0c3b17111c1f016bdc9679f23e161029">setSelected</a> (std::size_t index)=0</td></tr>
 <tr class="memdesc:a0c3b17111c1f016bdc9679f23e161029"><td class="mdescLeft">&#160;</td><td class="mdescRight">Highlights a tab. Never calls the <span class="tt">onSelect</span> handler.  <br /></td></tr>
 <tr class="memitem:ab26a51b8e9603780798c5dc4c90f027a" id="r_ab26a51b8e9603780798c5dc4c90f027a"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ab26a51b8e9603780798c5dc4c90f027a">setOnSelect</a> (std::function&lt; void(std::size_t)&gt; onSelect)=0</td></tr>
 <tr class="memdesc:ab26a51b8e9603780798c5dc4c90f027a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a user's tab choice calls, with its index.  <br /></td></tr>
 <tr class="memitem:a70289120b0f751daf75a4b1da408402c" id="r_a70289120b0f751daf75a4b1da408402c"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a70289120b0f751daf75a4b1da408402c">setBarShown</a> (bool shown)=0</td></tr>
 <tr class="memdesc:a70289120b0f751daf75a4b1da408402c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows or hides the strip of tab buttons. The selected page shows either way. A new tabs widget shows its strip.  <br /></td></tr>
+<tr class="memitem:a7fca69404c4b78660c9f171f589e918e" id="r_a7fca69404c4b78660c9f171f589e918e"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a7fca69404c4b78660c9f171f589e918e">setMoreLabel</a> (std::string_view label)=0</td></tr>
+<tr class="memdesc:a7fca69404c4b78660c9f171f589e918e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the label of the menu that holds the tabs that do not fit in the bar. A frontend that scrolls or marks its tabs instead stores it and draws nothing from it.  <br /></td></tr>
+<tr class="memitem:a61e846fe26fc8050f4c0adca6b79c282" id="r_a61e846fe26fc8050f4c0adca6b79c282"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a61e846fe26fc8050f4c0adca6b79c282">setInset</a> (int inset)=0</td></tr>
+<tr class="memdesc:a61e846fe26fc8050f4c0adca6b79c282"><td class="mdescLeft">&#160;</td><td class="mdescRight">Insets the strip and, unless <span class="tt"><a class="el" href="#a8c4c5bd6b67a1f840319555f33b7ad8e" title="Pads each page by its own step in place of setInset&#39;s. Each page pads its own content,...">setPageInset</a></span> is called, the pages: the strip and its rule span the widget's width, the first tab starts this far in from the leading edge, and each page is padded by it on every side, with nothing else between the strip's rule and the page. The mount calls it once, only for a nonzero step.  <br /></td></tr>
+<tr class="memitem:a8c4c5bd6b67a1f840319555f33b7ad8e" id="r_a8c4c5bd6b67a1f840319555f33b7ad8e"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a8c4c5bd6b67a1f840319555f33b7ad8e">setPageInset</a> (int inset)=0</td></tr>
+<tr class="memdesc:a8c4c5bd6b67a1f840319555f33b7ad8e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Pads each page by its own step in place of <span class="tt"><a class="el" href="#a61e846fe26fc8050f4c0adca6b79c282" title="Insets the strip and, unless setPageInset is called, the pages: the strip and its rule span the widge...">setInset</a></span>'s. Each page pads its own content, inside its scroll, so a page that scrolls clips at the widget's edges, shows its bar there, and lets a bleeding child reach them. The mount calls it once, only when the view gives a page inset, which may be 0.  <br /></td></tr>
+<tr class="memitem:a8d7f6c03c2a0dc2c816e4a37e024ebb1" id="r_a8d7f6c03c2a0dc2c816e4a37e024ebb1"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a8d7f6c03c2a0dc2c816e4a37e024ebb1">setStripSurface</a> (std::string_view surface)=0</td></tr>
+<tr class="memdesc:a8d7f6c03c2a0dc2c816e4a37e024ebb1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Draws the strip, and nothing else, on a surface across the widget's width. The mount calls it once, only for a nonempty name.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1ContainerWidget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">morph::ui::ContainerWidget</a></td></tr>
 <tr class="memitem:a0f85cf00d946d0fc63f6d7057310478d pub_methods_classmorph_1_1ui_1_1ContainerWidget" id="r_a0f85cf00d946d0fc63f6d7057310478d"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html#a0f85cf00d946d0fc63f6d7057310478d">moveChild</a> (Widget &amp;child, std::size_t index)=0</td></tr>
 <tr class="memdesc:a0f85cf00d946d0fc63f6d7057310478d pub_methods_classmorph_1_1ui_1_1ContainerWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves <code class="param">child</code> to position <code class="param">index:</code> it is removed, then inserted before the child now at <code class="param">index</code>.  <br /></td></tr>
@@ -180,7 +188,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <tr class="memitem:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget" id="r_aa92d96c22b5e09e0aecb8866b4481f57"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#aa92d96c22b5e09e0aecb8866b4481f57">setTooltip</a> (std::string_view text)=0</td></tr>
 <tr class="memdesc:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text shown while the pointer rests on the widget.  <br /></td></tr>
 <tr class="memitem:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7ceca74805a45b142f00838ee17dd747"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7ceca74805a45b142f00838ee17dd747">setSurface</a> (std::string_view surface)=0</td></tr>
-<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme.  <br /></td></tr>
+<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme. May be called again: each call restyles the widget and everything inside it.  <br /></td></tr>
 <tr class="memitem:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget" id="r_a96f94ca0cf2c093d8f8463091d91bbfb"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a96f94ca0cf2c093d8f8463091d91bbfb">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord)=0</td></tr>
 <tr class="memdesc:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Declares the keyboard chords the widget handles while focus is inside it.  <br /></td></tr>
 <tr class="memitem:a7eeebc91608f97e34f70fced77b40173 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7eeebc91608f97e34f70fced77b40173"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7eeebc91608f97e34f70fced77b40173">focus</a> ()=0</td></tr>
@@ -192,7 +200,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <div class="textblock"><p>A tab bar over page slots. </p>
 <p>Its children are page slots in the order they were first shown; the mount keeps exactly the selected page's slot visible. <span class="tt"><a class="el" href="#a0c3b17111c1f016bdc9679f23e161029" title="Highlights a tab. Never calls the onSelect handler.">setSelected</a></span> moves the bar's highlight only. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00391">391</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00591">591</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a7004a5a7a5e9a23904dd025d1aa75615" name="a7004a5a7a5e9a23904dd025d1aa75615"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7004a5a7a5e9a23904dd025d1aa75615">&#9670;&#160;</a></span>setTabs()</h2>
@@ -217,7 +225,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </table>
 </div><div class="memdoc">
 
-<p>Replaces the tab captions. </p>
+<p>Replaces the tab captions. A call with as many captions as the last one replaces them in place and keeps the highlight, the shown page and the keyboard focus. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">labels</td><td>One caption per tab, in order. </td></tr>
@@ -331,6 +339,146 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../d8/d0c/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTabs.html#ad4c12bf682aeb60183c48205cf5502ef">morph::ui::testing::detail::FakeTabs</a>.</p>
+
+</div>
+</div>
+<a id="a7fca69404c4b78660c9f171f589e918e" name="a7fca69404c4b78660c9f171f589e918e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7fca69404c4b78660c9f171f589e918e">&#9670;&#160;</a></span>setMoreLabel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::TabsWidget::setMoreLabel </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>label</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the label of the menu that holds the tabs that do not fit in the bar. A frontend that scrolls or marks its tabs instead stores it and draws nothing from it. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">label</td><td>The label, UTF-8. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d8/d0c/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTabs.html#a60508014e1a9036d70154e577edceba6">morph::ui::testing::detail::FakeTabs</a>.</p>
+
+</div>
+</div>
+<a id="a61e846fe26fc8050f4c0adca6b79c282" name="a61e846fe26fc8050f4c0adca6b79c282"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a61e846fe26fc8050f4c0adca6b79c282">&#9670;&#160;</a></span>setInset()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::TabsWidget::setInset </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>inset</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Insets the strip and, unless <span class="tt"><a class="el" href="#a8c4c5bd6b67a1f840319555f33b7ad8e" title="Pads each page by its own step in place of setInset&#39;s. Each page pads its own content,...">setPageInset</a></span> is called, the pages: the strip and its rule span the widget's width, the first tab starts this far in from the leading edge, and each page is padded by it on every side, with nothing else between the strip's rule and the page. The mount calls it once, only for a nonzero step. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">inset</td><td>A spacing step, 1 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>; the mount never passes another value. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d8/d0c/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTabs.html#a2a1ed3ce095be79c116756316248e38f">morph::ui::testing::detail::FakeTabs</a>.</p>
+
+</div>
+</div>
+<a id="a8c4c5bd6b67a1f840319555f33b7ad8e" name="a8c4c5bd6b67a1f840319555f33b7ad8e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8c4c5bd6b67a1f840319555f33b7ad8e">&#9670;&#160;</a></span>setPageInset()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::TabsWidget::setPageInset </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>inset</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Pads each page by its own step in place of <span class="tt"><a class="el" href="#a61e846fe26fc8050f4c0adca6b79c282" title="Insets the strip and, unless setPageInset is called, the pages: the strip and its rule span the widge...">setInset</a></span>'s. Each page pads its own content, inside its scroll, so a page that scrolls clips at the widget's edges, shows its bar there, and lets a bleeding child reach them. The mount calls it once, only when the view gives a page inset, which may be 0. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">inset</td><td>A spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d8/d0c/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTabs.html#af2fc592a05f39dd5f258010c8f783b49">morph::ui::testing::detail::FakeTabs</a>.</p>
+
+</div>
+</div>
+<a id="a8d7f6c03c2a0dc2c816e4a37e024ebb1" name="a8d7f6c03c2a0dc2c816e4a37e024ebb1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8d7f6c03c2a0dc2c816e4a37e024ebb1">&#9670;&#160;</a></span>setStripSurface()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::TabsWidget::setStripSurface </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>surface</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Draws the strip, and nothing else, on a surface across the widget's width. The mount calls it once, only for a nonempty name. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">surface</td><td>The surface's name, as <span class="tt"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7ceca74805a45b142f00838ee17dd747" title="Styles the widget and everything inside it with a named token set of the theme. May be called again: ...">Widget::setSurface</a></span> takes it. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d8/d0c/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTabs.html#a6f14cef586838b4b31a26de40f5b6d85">morph::ui::testing::detail::FakeTabs</a>.</p>
 
 </div>
 </div>

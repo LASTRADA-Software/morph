@@ -138,11 +138,13 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a1937d50b9f1792032251367b8ca58375"><td class="mdescLeft">&#160;</td><td class="mdescRight">The columns of every group's grid, 1 to 12; absent keeps the engine's.  <br /></td></tr>
 <tr class="memitem:ac50ff7ff0e740f95a85f37952d30738e" id="r_ac50ff7ff0e740f95a85f37952d30738e"><td class="memItemLeft">std::optional&lt;<a class="el" href="../../d0/d39/field__layout_8hpp.html#a39ec4932622e248d3e4b31648b22d8c2">::morph::forms::FieldLayout</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac50ff7ff0e740f95a85f37952d30738e">fieldLayout</a></td></tr>
 <tr class="memdesc:ac50ff7ff0e740f95a85f37952d30738e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where every cell puts its caption; absent stacks it over the control.  <br /></td></tr>
+<tr class="memitem:ac4001a7d64cb909469e8259bda2e0d57" id="r_ac4001a7d64cb909469e8259bda2e0d57"><td class="memItemLeft">std::optional&lt; int &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac4001a7d64cb909469e8259bda2e0d57">captionWidth</a></td></tr>
+<tr class="memdesc:ac4001a7d64cb909469e8259bda2e0d57"><td class="mdescLeft">&#160;</td><td class="mdescRight">The width of every inline caption column in units, 1 to 64; absent keeps the engine's. It needs <span class="tt"><a class="el" href="#ac50ff7ff0e740f95a85f37952d30738e" title="Where every cell puts its caption; absent stacks it over the control.">fieldLayout</a></span> <span class="tt">Inline</span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>How a <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#af020b669d18373ffc0f3b8e69f0f28b4" title="A form node: a schema form of the forms engine over an action (spec 2); each field takes its label fr...">form</a></span>, <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a7d36157a6129d5292611cf3ff244a08d" title="A collection node: the forms engine&#39;s list screen over an action.">collection</a></span> or <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#abab6c15d842c49ed038fa080bcd2aca3" title="A wizard node: the forms engine&#39;s wizard over an action.">wizard</a></span> presents its forms: the keys every one of them takes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04202">4202</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05512">5512</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ac128c92ab6cfaf27af488568e40e47d8" name="ac128c92ab6cfaf27af488568e40e47d8"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac128c92ab6cfaf27af488568e40e47d8">&#9670;&#160;</a></span>title</h2>
@@ -158,7 +160,7 @@ Public Attributes</h2></td></tr>
 
 <p>A heading over the fields; on a collection or a wizard, the view's heading in place of the schema's. Absent shows none on a form. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04205">4205</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05515">5515</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,7 +178,7 @@ Public Attributes</h2></td></tr>
 
 <p>The explicit-mode button's label, which the status line names; absent is <span class="tt">Submit</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04207">4207</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05517">5517</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -194,7 +196,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the status line shows; absent shows it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04209">4209</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05519">5519</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -212,7 +214,7 @@ Public Attributes</h2></td></tr>
 
 <p>The columns of every group's grid, 1 to 12; absent keeps the engine's. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04211">4211</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05521">5521</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +232,25 @@ Public Attributes</h2></td></tr>
 
 <p>Where every cell puts its caption; absent stacks it over the control. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04213">4213</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05523">5523</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac4001a7d64cb909469e8259bda2e0d57" name="ac4001a7d64cb909469e8259bda2e0d57"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac4001a7d64cb909469e8259bda2e0d57">&#9670;&#160;</a></span>captionWidth</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;int&gt; morph::ui::author::FormPresentation::captionWidth</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The width of every inline caption column in units, 1 to 64; absent keeps the engine's. It needs <span class="tt"><a class="el" href="#ac50ff7ff0e740f95a85f37952d30738e" title="Where every cell puts its caption; absent stacks it over the control.">fieldLayout</a></span> <span class="tt">Inline</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05526">5526</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

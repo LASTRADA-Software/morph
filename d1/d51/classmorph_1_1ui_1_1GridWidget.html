@@ -135,14 +135,18 @@ Inheritance diagram for morph::ui::GridWidget:</div>
 <area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,316,24"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; GridWidget &gt;" shape="rect" coords="0,168,316,192"/>
 <area href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html" alt="morph::ui::testing::detail::FakeContainer&lt; GridWidget &gt;" shape="rect" coords="0,224,316,248"/>
-<area href="../../d8/de3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeGrid.html" title="A fake GridWidget: properties columns, gap, align, and span on a child." alt="morph::ui::testing::detail::FakeGrid" shape="rect" coords="0,280,316,304"/>
+<area href="../../d8/de3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeGrid.html" title="A fake GridWidget: properties columns, tracks, gap, align, and span on a child." alt="morph::ui::testing::detail::FakeGrid" shape="rect" coords="0,280,316,304"/>
   </map>
 </div></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a69481ed2699041927acd9585556ceab1" id="r_a69481ed2699041927acd9585556ceab1"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a69481ed2699041927acd9585556ceab1">setColumns</a> (int columns)=0</td></tr>
-<tr class="memdesc:a69481ed2699041927acd9585556ceab1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the column count.  <br /></td></tr>
+<tr class="memdesc:a69481ed2699041927acd9585556ceab1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the column count; the columns share the width.  <br /></td></tr>
+<tr class="memitem:a4bc1a60f49a9b9f8bfa69c99e1b82f35" id="r_a4bc1a60f49a9b9f8bfa69c99e1b82f35"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a4bc1a60f49a9b9f8bfa69c99e1b82f35">setTracks</a> (std::vector&lt; <a class="el" href="../../df/dd6/structmorph_1_1ui_1_1GridTrack.html">GridTrack</a> &gt; const &amp;tracks)=0</td></tr>
+<tr class="memdesc:a4bc1a60f49a9b9f8bfa69c99e1b82f35"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the column tracks in place of a column count; the mount calls it once, before any child, and then never calls <span class="tt"><a class="el" href="#a69481ed2699041927acd9585556ceab1" title="Sets the column count; the columns share the width.">setColumns</a></span>.  <br /></td></tr>
+<tr class="memitem:a2c464f1448f3fc17adf418904baf57df" id="r_a2c464f1448f3fc17adf418904baf57df"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a2c464f1448f3fc17adf418904baf57df">setMinColumnWidth</a> (int units)=0</td></tr>
+<tr class="memdesc:a2c464f1448f3fc17adf418904baf57df"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes the column count follow the grid's width: the columns shown are <span class="tt">max(1, min(columns, floor((W + g) / (m * u + g) + e)))</span>, W the width inside the grid, g the gap, m the least width given here, u the unit and e 1e-6, so a width that holds exactly n columns, computed in floating point, gives n. The natural width is unchanged (<span class="tt">columns</span> times the widest cell, a span divided out); the natural height is that of the columns shown at the width the grid was last laid out at, so a grid whose columns drop pushes its siblings down. The mount calls it once, before any child, only for a grid without tracks that gives a least width above 0, and the tracks and this are never both given.  <br /></td></tr>
 <tr class="memitem:a6fddaf5a641b660e847a3a4ef51b65a7" id="r_a6fddaf5a641b660e847a3a4ef51b65a7"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a6fddaf5a641b660e847a3a4ef51b65a7">setGap</a> (int gap)=0</td></tr>
 <tr class="memdesc:a6fddaf5a641b660e847a3a4ef51b65a7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the space between cells.  <br /></td></tr>
 <tr class="memitem:ab0b5853aa5d33f6af01cd6393fcd8731" id="r_ab0b5853aa5d33f6af01cd6393fcd8731"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ab0b5853aa5d33f6af01cd6393fcd8731">setSpan</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;child, int span)=0</td></tr>
@@ -180,7 +184,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <tr class="memitem:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget" id="r_aa92d96c22b5e09e0aecb8866b4481f57"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#aa92d96c22b5e09e0aecb8866b4481f57">setTooltip</a> (std::string_view text)=0</td></tr>
 <tr class="memdesc:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text shown while the pointer rests on the widget.  <br /></td></tr>
 <tr class="memitem:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7ceca74805a45b142f00838ee17dd747"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7ceca74805a45b142f00838ee17dd747">setSurface</a> (std::string_view surface)=0</td></tr>
-<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme.  <br /></td></tr>
+<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme. May be called again: each call restyles the widget and everything inside it.  <br /></td></tr>
 <tr class="memitem:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget" id="r_a96f94ca0cf2c093d8f8463091d91bbfb"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a96f94ca0cf2c093d8f8463091d91bbfb">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord)=0</td></tr>
 <tr class="memdesc:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Declares the keyboard chords the widget handles while focus is inside it.  <br /></td></tr>
 <tr class="memitem:a7eeebc91608f97e34f70fced77b40173 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7eeebc91608f97e34f70fced77b40173"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7eeebc91608f97e34f70fced77b40173">focus</a> ()=0</td></tr>
@@ -191,7 +195,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Children laid out row-major in columns. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00326">326</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00494">494</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a69481ed2699041927acd9585556ceab1" name="a69481ed2699041927acd9585556ceab1"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a69481ed2699041927acd9585556ceab1">&#9670;&#160;</a></span>setColumns()</h2>
@@ -216,7 +220,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </table>
 </div><div class="memdoc">
 
-<p>Sets the column count. </p>
+<p>Sets the column count; the columns share the width. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">columns</td><td>At least one. </td></tr>
@@ -225,6 +229,76 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../d8/de3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeGrid.html#a65b564f131032aa6e7fe4e6e22e10b83">morph::ui::testing::detail::FakeGrid</a>.</p>
+
+</div>
+</div>
+<a id="a4bc1a60f49a9b9f8bfa69c99e1b82f35" name="a4bc1a60f49a9b9f8bfa69c99e1b82f35"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4bc1a60f49a9b9f8bfa69c99e1b82f35">&#9670;&#160;</a></span>setTracks()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::GridWidget::setTracks </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../df/dd6/structmorph_1_1ui_1_1GridTrack.html">GridTrack</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>tracks</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the column tracks in place of a column count; the mount calls it once, before any child, and then never calls <span class="tt"><a class="el" href="#a69481ed2699041927acd9585556ceab1" title="Sets the column count; the columns share the width.">setColumns</a></span>. </p>
+<p>Fixed tracks take their amount, content tracks their widest cell that spans only them, and stretch tracks share what is left by weight. A spanning cell covers its tracks and the gaps between them, and sizes none. Across its track, a text cell's text and a label-width cell sit where the track's <span class="tt">align</span> says (the first track's, for a spanning cell); a container cell fills the track. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">tracks</td><td>At least one. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d8/de3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeGrid.html#afbcf182fc4758ecd842682fab9a8a401">morph::ui::testing::detail::FakeGrid</a>.</p>
+
+</div>
+</div>
+<a id="a2c464f1448f3fc17adf418904baf57df" name="a2c464f1448f3fc17adf418904baf57df"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2c464f1448f3fc17adf418904baf57df">&#9670;&#160;</a></span>setMinColumnWidth()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::GridWidget::setMinColumnWidth </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>units</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Makes the column count follow the grid's width: the columns shown are <span class="tt">max(1, min(columns, floor((W + g) / (m * u + g) + e)))</span>, W the width inside the grid, g the gap, m the least width given here, u the unit and e 1e-6, so a width that holds exactly n columns, computed in floating point, gives n. The natural width is unchanged (<span class="tt">columns</span> times the widest cell, a span divided out); the natural height is that of the columns shown at the width the grid was last laid out at, so a grid whose columns drop pushes its siblings down. The mount calls it once, before any child, only for a grid without tracks that gives a least width above 0, and the tracks and this are never both given. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">units</td><td>The least column width in units, at least 1. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d8/de3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeGrid.html#a3ecd5e7a3348b46959f7a1426ada77d7">morph::ui::testing::detail::FakeGrid</a>.</p>
 
 </div>
 </div>

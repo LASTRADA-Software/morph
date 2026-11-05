@@ -140,8 +140,16 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a42676e9a7f87733023ce16447d575eba"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many rows the user can select; set once.  <br /></td></tr>
 <tr class="memitem:adfddeb586118e66890ff39b1df3e1680" id="r_adfddeb586118e66890ff39b1df3e1680"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#adfddeb586118e66890ff39b1df3e1680">selection</a></td></tr>
 <tr class="memdesc:adfddeb586118e66890ff39b1df3e1680"><td class="mdescLeft">&#160;</td><td class="mdescRight">The selected rows' keys. A key with no row selects nothing until such a row appears.  <br /></td></tr>
-<tr class="memitem:ab468e8742c42ea70ad5b59b45d7a98d1" id="r_ab468e8742c42ea70ad5b59b45d7a98d1"><td class="memItemLeft">std::function&lt; void(std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab468e8742c42ea70ad5b59b45d7a98d1">onSelectionChange</a></td></tr>
-<tr class="memdesc:ab468e8742c42ea70ad5b59b45d7a98d1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with the keys the user selected.  <br /></td></tr>
+<tr class="memitem:af5f339bebd806092066039a006f575c1" id="r_af5f339bebd806092066039a006f575c1"><td class="memItemLeft">std::function&lt; void(std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;, <a class="el" href="../../d8/d11/view_8hpp.html#a79cb82b263e10ec8a972604eb7085106">SelectionChange</a>)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#af5f339bebd806092066039a006f575c1">onSelectionChange</a></td></tr>
+<tr class="memdesc:af5f339bebd806092066039a006f575c1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with the keys the user selected and what kind of change it was.  <br /></td></tr>
+<tr class="memitem:aa1975043a2d728f59e76ee5955958fcc" id="r_aa1975043a2d728f59e76ee5955958fcc"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aa1975043a2d728f59e76ee5955958fcc">selectColumn</a> = false</td></tr>
+<tr class="memdesc:aa1975043a2d728f59e76ee5955958fcc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the table draws its selection as a leading column of check boxes, one per row, under a box that selects every row shown; set once. Only a <span class="tt">Multiple</span> table draws it.  <br /></td></tr>
+<tr class="memitem:abb0023c28ca8229cde9c51b93ad699d6" id="r_abb0023c28ca8229cde9c51b93ad699d6"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#abb0023c28ca8229cde9c51b93ad699d6">selectAllLabel</a> = std::string{&quot;Select all&quot;}</td></tr>
+<tr class="memdesc:abb0023c28ca8229cde9c51b93ad699d6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The accessible name of the select column's header box.  <br /></td></tr>
+<tr class="memitem:ae3119c0d9be0fe67ceae7b8b737dc583" id="r_ae3119c0d9be0fe67ceae7b8b737dc583"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::optional&lt; <a class="el" href="../../d6/dab/structmorph_1_1ui_1_1TableSort.html">TableSort</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae3119c0d9be0fe67ceae7b8b737dc583">sort</a></td></tr>
+<tr class="memdesc:ae3119c0d9be0fe67ceae7b8b737dc583"><td class="mdescLeft">&#160;</td><td class="mdescRight">The column whose header shows the sort, and its direction; none marks no header. The table never orders its rows itself: they come in the order shown.  <br /></td></tr>
+<tr class="memitem:a65dcfec62d593468182597ad2e5c04c2" id="r_a65dcfec62d593468182597ad2e5c04c2"><td class="memItemLeft">std::function&lt; void(std::size_t)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a65dcfec62d593468182597ad2e5c04c2">onSort</a></td></tr>
+<tr class="memdesc:a65dcfec62d593468182597ad2e5c04c2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with a sortable column's index when the user asks to sort by it (a click on its header).  <br /></td></tr>
 <tr class="memitem:aa4ecb394ff70268027e512451328aea7" id="r_aa4ecb394ff70268027e512451328aea7"><td class="memItemLeft">std::function&lt; void(<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a>)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa4ecb394ff70268027e512451328aea7">onActivate</a></td></tr>
 <tr class="memdesc:aa4ecb394ff70268027e512451328aea7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called with a row's key when the user activates it (Enter or a double click).  <br /></td></tr>
 <tr class="memitem:a67a560b650bdcbde8aa080a74285114d" id="r_a67a560b650bdcbde8aa080a74285114d"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#a67a560b650bdcbde8aa080a74285114d">common</a> {}</td></tr>
@@ -150,7 +158,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Keyed rows of cells under column headers. Each row's view is a <span class="tt"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a></span> whose children are the cells, one per column. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00888">888</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01220">1220</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ad8b8d3471b33c430e55d42137d013ddb" name="ad8b8d3471b33c430e55d42137d013ddb"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad8b8d3471b33c430e55d42137d013ddb">&#9670;&#160;</a></span>columns</h2>
@@ -166,7 +174,7 @@ Public Attributes</h2></td></tr>
 
 <p>The columns, in order; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00890">890</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01222">1222</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -184,7 +192,7 @@ Public Attributes</h2></td></tr>
 
 <p>The rows, the key function and the row view, type-erased; null shows no rows. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00892">892</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01224">1224</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -202,7 +210,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the header row is drawn; set once. <span class="tt">false</span> suits several tables sharing one header, or a header a document draws itself. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00895">895</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01227">1227</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -220,7 +228,7 @@ Public Attributes</h2></td></tr>
 
 <p>The row count and margin above which a row's widget is realized only near the visible range; set once. A row's own reactive state is unaffected either way. Only a backend that implements <span class="tt"><a class="el" href="../../d7/d70/classmorph_1_1ui_1_1TableWidget.html#a486ab3fd77c43d5e42f7f7c327935449" title="Sets what the backend calls when the user scrolls, asking the mount to realize roughly this range of ...">TableWidget::setOnVisibleRangeChanged</a></span> ever dewindows a row; every other backend realizes every row regardless of this setting, exactly as before it existed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00900">900</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01232">1232</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -238,7 +246,7 @@ Public Attributes</h2></td></tr>
 
 <p>How many rows the user can select; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00902">902</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01234">1234</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -256,25 +264,97 @@ Public Attributes</h2></td></tr>
 
 <p>The selected rows' keys. A key with no row selects nothing until such a row appears. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00904">904</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01236">1236</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ab468e8742c42ea70ad5b59b45d7a98d1" name="ab468e8742c42ea70ad5b59b45d7a98d1"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ab468e8742c42ea70ad5b59b45d7a98d1">&#9670;&#160;</a></span>onSelectionChange</h2>
+<a id="af5f339bebd806092066039a006f575c1" name="af5f339bebd806092066039a006f575c1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af5f339bebd806092066039a006f575c1">&#9670;&#160;</a></span>onSelectionChange</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">std::function&lt;void(std::vector&lt;<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a>&gt;)&gt; morph::ui::Table::onSelectionChange</td>
+          <td class="memname">std::function&lt;void(std::vector&lt;<a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a>&gt;, <a class="el" href="../../d8/d11/view_8hpp.html#a79cb82b263e10ec8a972604eb7085106">SelectionChange</a>)&gt; morph::ui::Table::onSelectionChange</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>Called with the keys the user selected. </p>
+<p>Called with the keys the user selected and what kind of change it was. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00906">906</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01238">1238</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa1975043a2d728f59e76ee5955958fcc" name="aa1975043a2d728f59e76ee5955958fcc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa1975043a2d728f59e76ee5955958fcc">&#9670;&#160;</a></span>selectColumn</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Table::selectColumn = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the table draws its selection as a leading column of check boxes, one per row, under a box that selects every row shown; set once. Only a <span class="tt">Multiple</span> table draws it. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01241">1241</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abb0023c28ca8229cde9c51b93ad699d6" name="abb0023c28ca8229cde9c51b93ad699d6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abb0023c28ca8229cde9c51b93ad699d6">&#9670;&#160;</a></span>selectAllLabel</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::Table::selectAllLabel = std::string{&quot;Select all&quot;}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The accessible name of the select column's header box. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01243">1243</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae3119c0d9be0fe67ceae7b8b737dc583" name="ae3119c0d9be0fe67ceae7b8b737dc583"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae3119c0d9be0fe67ceae7b8b737dc583">&#9670;&#160;</a></span>sort</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::optional&lt;<a class="el" href="../../d6/dab/structmorph_1_1ui_1_1TableSort.html">TableSort</a>&gt; &gt; morph::ui::Table::sort</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The column whose header shows the sort, and its direction; none marks no header. The table never orders its rows itself: they come in the order shown. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01246">1246</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a65dcfec62d593468182597ad2e5c04c2" name="a65dcfec62d593468182597ad2e5c04c2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a65dcfec62d593468182597ad2e5c04c2">&#9670;&#160;</a></span>onSort</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;void(std::size_t)&gt; morph::ui::Table::onSort</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Called with a sortable column's index when the user asks to sort by it (a click on its header). </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01248">1248</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -292,7 +372,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with a row's key when the user activates it (Enter or a double click). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00908">908</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01250">1250</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -310,7 +390,7 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00910">910</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01252">1252</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

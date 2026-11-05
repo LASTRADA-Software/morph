@@ -152,6 +152,10 @@ Public Member Functions</h2></td></tr>
 <a class="el" href="#a7b31dc5725321a729acd704ffd1c009b">Backend</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a7b31dc5725321a729acd704ffd1c009b">Backend</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a410dca2d1bf22d65bb14655de56d3a5c" id="r_a410dca2d1bf22d65bb14655de56d3a5c"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d2/dd1/classmorph_1_1ui_1_1CustomWidget.html">CustomWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a410dca2d1bf22d65bb14655de56d3a5c">createCustom</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent, <a class="el" href="../../d2/d54/structmorph_1_1ui_1_1CustomRequest.html">CustomRequest</a> const &amp;request) override</td></tr>
 <tr class="memdesc:a410dca2d1bf22d65bb14655de56d3a5c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads a custom component by name.  <br /></td></tr>
+<tr class="memitem:afa41f91973a4cf36cb090445998ca07c" id="r_afa41f91973a4cf36cb090445998ca07c"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#afa41f91973a4cf36cb090445998ca07c">widthClass</a> () const override</td></tr>
+<tr class="memdesc:afa41f91973a4cf36cb090445998ca07c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The host item's width class: its width in <span class="tt">Theme.unitWidth</span>s, classed by <span class="tt"><a class="el" href="../../d0/dc2/ui_2backend_8hpp.html#a14b0ac907b260865f8f1be0b88c444ad" title="A width in the vocabulary&#39;s units (what fixed(n) counts) as a width class: compact below 80 units,...">ui::widthClassOf</a></span>.  <br /></td></tr>
+<tr class="memitem:a68ad617309b86656c83951abbab8cf42" id="r_a68ad617309b86656c83951abbab8cf42"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a68ad617309b86656c83951abbab8cf42">setOnWidthClass</a> (std::function&lt; void(std::string const &amp;)&gt; onWidthClass) override</td></tr>
+<tr class="memdesc:a68ad617309b86656c83951abbab8cf42"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers the one listener told of each later change of <span class="tt"><a class="el" href="#afa41f91973a4cf36cb090445998ca07c" title="The host item&#39;s width class: its width in Theme.unitWidths, classed by ui::widthClassOf.">widthClass()</a></span>, on the owner and outside any layout pass; a backend reports to the shell mounted on it. It is not called at once: the caller reads <span class="tt"><a class="el" href="#afa41f91973a4cf36cb090445998ca07c" title="The host item&#39;s width class: its width in Theme.unitWidths, classed by ui::widthClassOf.">widthClass()</a></span> for the current class.     <br /></td></tr>
 <tr class="memitem:af52d2f06f31dda620055849bed27ceb7" id="r_af52d2f06f31dda620055849bed27ceb7"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../de/d89/classmorph_1_1ui_1_1TextWidget.html">ui::TextWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af52d2f06f31dda620055849bed27ceb7">createText</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
 <tr class="memdesc:af52d2f06f31dda620055849bed27ceb7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes read-only text.     <br /></td></tr>
 <tr class="memitem:ad1cb8ce9e6bba4e013afecee23775a34" id="r_ad1cb8ce9e6bba4e013afecee23775a34"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d3/dc2/classmorph_1_1ui_1_1ButtonWidget.html">ui::ButtonWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad1cb8ce9e6bba4e013afecee23775a34">createButton</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
@@ -162,8 +166,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a89395cc1455df827c3e8ac356c7379a6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a check box.     <br /></td></tr>
 <tr class="memitem:a039be1021ffdeac1d4cd3b46ed3711c1" id="r_a039be1021ffdeac1d4cd3b46ed3711c1"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d6/d9f/classmorph_1_1ui_1_1SelectWidget.html">ui::SelectWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a039be1021ffdeac1d4cd3b46ed3711c1">createSelect</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent, <a class="el" href="../../d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1">ui::SelectStyle</a> style) override</td></tr>
 <tr class="memdesc:a039be1021ffdeac1d4cd3b46ed3711c1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a choice of one option.     <br /></td></tr>
-<tr class="memitem:a2b95d3ab5237c666d23f626a2de067fa" id="r_a2b95d3ab5237c666d23f626a2de067fa"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d4/dfc/classmorph_1_1ui_1_1MenuWidget.html">ui::MenuWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2b95d3ab5237c666d23f626a2de067fa">createMenu</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
-<tr class="memdesc:a2b95d3ab5237c666d23f626a2de067fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a command list.     <br /></td></tr>
+<tr class="memitem:a3fc7d85cd6fc5e84666f759bd7765821" id="r_a3fc7d85cd6fc5e84666f759bd7765821"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d4/dfc/classmorph_1_1ui_1_1MenuWidget.html">ui::MenuWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3fc7d85cd6fc5e84666f759bd7765821">createMenu</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent, <a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879">ui::MenuStyle</a> style) override</td></tr>
+<tr class="memdesc:a3fc7d85cd6fc5e84666f759bd7765821"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a command list.     <br /></td></tr>
 <tr class="memitem:acddeeb65657d6ff5f26889a6f06fa4c0" id="r_acddeeb65657d6ff5f26889a6f06fa4c0"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html">ui::StackWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#acddeeb65657d6ff5f26889a6f06fa4c0">createStack</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent, <a class="el" href="../../d8/d11/view_8hpp.html#ae4ee7d904483365c5e7cee041ab772d5">ui::Axis</a> axis) override</td></tr>
 <tr class="memdesc:acddeeb65657d6ff5f26889a6f06fa4c0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a stack.     <br /></td></tr>
 <tr class="memitem:a38ee564192a8d5b3040abf3681ee91e2" id="r_a38ee564192a8d5b3040abf3681ee91e2"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d1/d51/classmorph_1_1ui_1_1GridWidget.html">ui::GridWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a38ee564192a8d5b3040abf3681ee91e2">createGrid</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
@@ -204,6 +208,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a2256e785db0c198b9fdf395a1a2596fd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a key-value list.     <br /></td></tr>
 <tr class="memitem:a527dd497ee9c2bc40a7749aa43da6af1" id="r_a527dd497ee9c2bc40a7749aa43da6af1"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html">ui::EmptyStateWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a527dd497ee9c2bc40a7749aa43da6af1">createEmptyState</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
 <tr class="memdesc:a527dd497ee9c2bc40a7749aa43da6af1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes an empty state.     <br /></td></tr>
+<tr class="memitem:a83124b87f23fb862e336540f07139fee" id="r_a83124b87f23fb862e336540f07139fee"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../da/d13/classmorph_1_1ui_1_1ChartWidget.html">ui::ChartWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a83124b87f23fb862e336540f07139fee">createChart</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent) override</td></tr>
+<tr class="memdesc:a83124b87f23fb862e336540f07139fee"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a chart.     <br /></td></tr>
 <tr class="memitem:ad71f9edaadff16c45ee3a4386c72c8a0" id="r_ad71f9edaadff16c45ee3a4386c72c8a0"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html">ui::DrawerWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad71f9edaadff16c45ee3a4386c72c8a0">createDrawer</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent, <a class="el" href="../../d8/d11/view_8hpp.html#a8daf47ed0a8077e7aadb93f026ade76f">ui::Side</a> side) override</td></tr>
 <tr class="memdesc:ad71f9edaadff16c45ee3a4386c72c8a0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a drawer.     <br /></td></tr>
 <tr class="memitem:a570b4392f83bf3a42d529b60a12178c4" id="r_a570b4392f83bf3a42d529b60a12178c4"><td class="memItemLeft">std::unique_ptr&lt; <a class="el" href="../../d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html">ui::SplitterWidget</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a570b4392f83bf3a42d529b60a12178c4">createSplitter</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *parent, <a class="el" href="../../d8/d11/view_8hpp.html#ae4ee7d904483365c5e7cee041ab772d5">ui::Axis</a> axis) override</td></tr>
@@ -231,7 +237,7 @@ Static Public Member Functions</h2></td></tr>
 <div class="textblock"><p><span class="tt"><a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html" title="Makes widgets. Each factory appends the new widget to parent, or makes a root when it is null,...">ui::IViewBackend</a></span> over Qt Quick: each widget is a Qt Quick item made from its kind's <span class="tt">MorphUi</span> component, or from the component the restyle map names for that kind. </p>
 <p>Every root a mount makes is appended to a column the backend adds to the host item, so several roots share it top to bottom. Neither copyable nor movable. It belongs to the thread of its engine, and every widget it makes is destroyed before it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d5b/qt__quick_2backend_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d7/d5b/qt__quick_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d5b/qt__quick_2backend_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d7/d5b/qt__quick_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a7b31dc5725321a729acd704ffd1c009b" name="a7b31dc5725321a729acd704ffd1c009b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7b31dc5725321a729acd704ffd1c009b">&#9670;&#160;</a></span>Backend()</h2>
@@ -262,7 +268,7 @@ Static Public Member Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">engine</td><td>The engine its components are compiled in. Borrowed. </td></tr>
     <tr><td class="paramname">host</td><td>The item its roots are shown in. Borrowed. </td></tr>
-    <tr><td class="paramname">options</td><td>The components and the width class callback. </td></tr>
+    <tr><td class="paramname">options</td><td>The components. </td></tr>
   </table>
   </dd>
 </dl>
@@ -342,6 +348,71 @@ Static Public Member Functions</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>The widget, or null when the fallback is shown instead. </dd></dl>
 
 <p>Reimplemented from <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a6528c7bb0bdc2531fe0d2349859a11b8">morph::ui::IViewBackend</a>.</p>
+
+</div>
+</div>
+<a id="afa41f91973a4cf36cb090445998ca07c" name="afa41f91973a4cf36cb090445998ca07c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afa41f91973a4cf36cb090445998ca07c">&#9670;&#160;</a></span>widthClass()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::qt_quick::Backend::widthClass </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The host item's width class: its width in <span class="tt">Theme.unitWidth</span>s, classed by <span class="tt"><a class="el" href="../../d0/dc2/ui_2backend_8hpp.html#a14b0ac907b260865f8f1be0b88c444ad" title="A width in the vocabulary&#39;s units (what fixed(n) counts) as a width class: compact below 80 units,...">ui::widthClassOf</a></span>. </p>
+<dl class="section return"><dt>Returns</dt><dd>The class. </dd></dl>
+
+<p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a78d8a5bc452f99b64b0e44c27de571b0">morph::ui::IViewBackend</a>.</p>
+
+</div>
+</div>
+<a id="a68ad617309b86656c83951abbab8cf42" name="a68ad617309b86656c83951abbab8cf42"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a68ad617309b86656c83951abbab8cf42">&#9670;&#160;</a></span>setOnWidthClass()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::qt_quick::Backend::setOnWidthClass </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void(std::string const &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>onWidthClass</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Registers the one listener told of each later change of <span class="tt"><a class="el" href="#afa41f91973a4cf36cb090445998ca07c" title="The host item&#39;s width class: its width in Theme.unitWidths, classed by ui::widthClassOf.">widthClass()</a></span>, on the owner and outside any layout pass; a backend reports to the shell mounted on it. It is not called at once: the caller reads <span class="tt"><a class="el" href="#afa41f91973a4cf36cb090445998ca07c" title="The host item&#39;s width class: its width in Theme.unitWidths, classed by ui::widthClassOf.">widthClass()</a></span> for the current class.    </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">onWidthClass</td><td>The listener, given the new class; empty clears it.    </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a82ed4d3c4bcc1d720cd6db5a7824e324">morph::ui::IViewBackend</a>.</p>
 
 </div>
 </div>
@@ -525,7 +596,7 @@ Static Public Member Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">parent</td><td>The container to append to, or null for a root. </td></tr>
-    <tr><td class="paramname">style</td><td>Dropdown or radio. </td></tr>
+    <tr><td class="paramname">style</td><td>Dropdown, radio or segmented. </td></tr>
   </table>
   </dd>
 </dl>
@@ -535,8 +606,8 @@ Static Public Member Functions</h2></td></tr>
 
 </div>
 </div>
-<a id="a2b95d3ab5237c666d23f626a2de067fa" name="a2b95d3ab5237c666d23f626a2de067fa"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2b95d3ab5237c666d23f626a2de067fa">&#9670;&#160;</a></span>createMenu()</h2>
+<a id="a3fc7d85cd6fc5e84666f759bd7765821" name="a3fc7d85cd6fc5e84666f759bd7765821"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3fc7d85cd6fc5e84666f759bd7765821">&#9670;&#160;</a></span>createMenu()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -547,8 +618,12 @@ Static Public Member Functions</h2></td></tr>
         <tr>
           <td class="memname">std::unique_ptr&lt; <a class="el" href="../../d4/dfc/classmorph_1_1ui_1_1MenuWidget.html">ui::MenuWidget</a> &gt; morph::qt_quick::Backend::createMenu </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span></td><td>)</td>
+          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype"><a class="el" href="../../d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879">ui::MenuStyle</a></td>          <td class="paramname"><span class="paramname"><em>style</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -562,12 +637,13 @@ Static Public Member Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">parent</td><td>The container to append to, or null for a root. </td></tr>
+    <tr><td class="paramname">style</td><td>A bar of top-level entries, or one button that opens them. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The widget.    </dd></dl>
 
-<p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#ac980f626137f8bc216f3959a86af909e">morph::ui::IViewBackend</a>.</p>
+<p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#affad9f61a9557aaae36d7cb7215c0360">morph::ui::IViewBackend</a>.</p>
 
 </div>
 </div>
@@ -1314,6 +1390,42 @@ Static Public Member Functions</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>The widget.    </dd></dl>
 
 <p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a55fd611d62ad8c732bd86f538c83d5e0">morph::ui::IViewBackend</a>.</p>
+
+</div>
+</div>
+<a id="a83124b87f23fb862e336540f07139fee" name="a83124b87f23fb862e336540f07139fee"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a83124b87f23fb862e336540f07139fee">&#9670;&#160;</a></span>createChart()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::unique_ptr&lt; <a class="el" href="../../da/d13/classmorph_1_1ui_1_1ChartWidget.html">ui::ChartWidget</a> &gt; morph::qt_quick::Backend::createChart </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ui::ContainerWidget</a> *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Makes a chart.    </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">parent</td><td>The container to append to, or null for a root. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The widget.    </dd></dl>
+
+<p>Implements <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html#a77125112d0be229dfa4993ae6aef4410">morph::ui::IViewBackend</a>.</p>
 
 </div>
 </div>

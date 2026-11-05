@@ -142,6 +142,18 @@ requires std::invocable&lt;F&amp;&gt; &amp;&amp; std::convertible_to&lt;std::inv
 requires std::invocable&lt;F&amp;&gt; &amp;&amp; std::convertible_to&lt;std::invoke_result_t&lt;F&amp;&gt;, T&gt;</td></tr>
 <tr class="memitem:a2f6fd4e8c547f732e9b6483f0507397a template"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a2f6fd4e8c547f732e9b6483f0507397a">Prop</a> (<a class="el" href="../../d7/d69/structmorph_1_1ui_1_1SlotBinding.html">SlotBinding</a>&lt; F &gt; binding)</td></tr>
 <tr class="memdesc:a2f6fd4e8c547f732e9b6483f0507397a"><td class="mdescLeft">&#160;</td><td class="mdescRight">A slot with an id, as <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916" title="A slot with an id.">ui::slot</a></span> makes it.  <br /></td></tr>
+<tr class="memitem:ab7943ef15696e5873e7e423c8ef91690" id="r_ab7943ef15696e5873e7e423c8ef91690"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ab7943ef15696e5873e7e423c8ef91690">Prop</a> (Prop const &amp;other)</td></tr>
+<tr class="memdesc:ab7943ef15696e5873e7e423c8ef91690"><td class="mdescLeft">&#160;</td><td class="mdescRight">A copy: the same constant, or a slot with the same id and a copy of its read.  <br /></td></tr>
+<tr class="memitem:ab1e2b2de231cbb790dcd9b1ac8c85933" id="r_ab1e2b2de231cbb790dcd9b1ac8c85933"><td class="memItemLeft"><a id="ab1e2b2de231cbb790dcd9b1ac8c85933" name="ab1e2b2de231cbb790dcd9b1ac8c85933"></a>
+&#160;</td><td class="memItemRight"><b>Prop</b> (Prop &amp;&amp;)=default</td></tr>
+<tr class="memdesc:ab1e2b2de231cbb790dcd9b1ac8c85933"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves the constant or the slot out of another property. <br /></td></tr>
+<tr class="memitem:a4043c49876ded100e87afb69a5c9ceb0" id="r_a4043c49876ded100e87afb69a5c9ceb0"><td class="memItemLeft"><a class="el" href="#af36de02925890716c666ce0b623a1ffd">Prop</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a4043c49876ded100e87afb69a5c9ceb0">operator=</a> (<a class="el" href="#af36de02925890716c666ce0b623a1ffd">Prop</a> const &amp;)=default</td></tr>
+<tr class="memdesc:a4043c49876ded100e87afb69a5c9ceb0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces this property with a copy of another.  <br /></td></tr>
+<tr class="memitem:a525a14b314e37f061df9844f87cc2770" id="r_a525a14b314e37f061df9844f87cc2770"><td class="memItemLeft"><a class="el" href="#af36de02925890716c666ce0b623a1ffd">Prop</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a525a14b314e37f061df9844f87cc2770">operator=</a> (<a class="el" href="#af36de02925890716c666ce0b623a1ffd">Prop</a> &amp;&amp;)=default</td></tr>
+<tr class="memdesc:a525a14b314e37f061df9844f87cc2770"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces this property with another, moved from.  <br /></td></tr>
+<tr class="memitem:a8b5933ac50736de260ae5e4efcd9f4fa" id="r_a8b5933ac50736de260ae5e4efcd9f4fa"><td class="memItemLeft"><a id="a8b5933ac50736de260ae5e4efcd9f4fa" name="a8b5933ac50736de260ae5e4efcd9f4fa"></a>
+&#160;</td><td class="memItemRight"><b>~Prop</b> ()=default</td></tr>
+<tr class="memdesc:a8b5933ac50736de260ae5e4efcd9f4fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys the constant or the slot. <br /></td></tr>
 <tr class="memitem:a72cd29b3ac74be290295405174c11930" id="r_a72cd29b3ac74be290295405174c11930"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a72cd29b3ac74be290295405174c11930">isBound</a> () const noexcept</td></tr>
 <tr class="memdesc:a72cd29b3ac74be290295405174c11930"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether this is a slot.  <br /></td></tr>
 <tr class="memitem:a27cf3f22c6cba67c2b7e7c0a12bf61dc" id="r_a27cf3f22c6cba67c2b7e7c0a12bf61dc"><td class="memItemLeft">T const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a27cf3f22c6cba67c2b7e7c0a12bf61dc">constant</a> () const</td></tr>
@@ -164,10 +176,10 @@ class morph::ui::Prop&lt; T &gt;</div><p>A node property: a constant, or a slot 
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00106">106</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="af36de02925890716c666ce0b623a1ffd" name="af36de02925890716c666ce0b623a1ffd"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af36de02925890716c666ce0b623a1ffd">&#9670;&#160;</a></span>Prop() <span class="overload">[1/4]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#af36de02925890716c666ce0b623a1ffd">&#9670;&#160;</a></span>Prop() <span class="overload">[1/5]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -193,12 +205,12 @@ template&lt;typename T&gt; </div>
 
 <p>The value-initialised constant. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00109">109</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00114">114</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
 <a id="ae498b7dbb579eebb36739124f7adfcf3" name="ae498b7dbb579eebb36739124f7adfcf3"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae498b7dbb579eebb36739124f7adfcf3">&#9670;&#160;</a></span>Prop() <span class="overload">[2/4]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#ae498b7dbb579eebb36739124f7adfcf3">&#9670;&#160;</a></span>Prop() <span class="overload">[2/5]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -240,12 +252,12 @@ requires (!std::invocable&lt;U&amp;&gt;) &amp;&amp; detail::ConstantConvertible&
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00124">124</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a95a98692bf6d2059afde7cc4964aa8cf" name="a95a98692bf6d2059afde7cc4964aa8cf"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a95a98692bf6d2059afde7cc4964aa8cf">&#9670;&#160;</a></span>Prop() <span class="overload">[3/4]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a95a98692bf6d2059afde7cc4964aa8cf">&#9670;&#160;</a></span>Prop() <span class="overload">[3/5]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -292,12 +304,12 @@ requires std::invocable&lt;F&amp;&gt; &amp;&amp; std::convertible_to&lt;std::inv
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00143">143</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a2f6fd4e8c547f732e9b6483f0507397a" name="a2f6fd4e8c547f732e9b6483f0507397a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2f6fd4e8c547f732e9b6483f0507397a">&#9670;&#160;</a></span>Prop() <span class="overload">[4/4]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a2f6fd4e8c547f732e9b6483f0507397a">&#9670;&#160;</a></span>Prop() <span class="overload">[4/5]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -344,11 +356,114 @@ requires std::invocable&lt;F&amp;&gt; &amp;&amp; std::convertible_to&lt;std::inv
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab7943ef15696e5873e7e423c8ef91690" name="ab7943ef15696e5873e7e423c8ef91690"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab7943ef15696e5873e7e423c8ef91690">&#9670;&#160;</a></span>Prop() <span class="overload">[5/5]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename T&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">morph::ui::Prop</a>&lt; T &gt;::Prop </td>
+          <td>(</td>
+          <td class="paramtype">Prop&lt; T &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>other</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A copy: the same constant, or a slot with the same id and a copy of its read. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">other</td><td>The property to copy. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::bad_variant_access</td><td>when <code class="param">other</code> was left without a value by an assignment that threw. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00161">161</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
+<a id="a4043c49876ded100e87afb69a5c9ceb0" name="a4043c49876ded100e87afb69a5c9ceb0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4043c49876ded100e87afb69a5c9ceb0">&#9670;&#160;</a></span>operator=() <span class="overload">[1/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename T&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#af36de02925890716c666ce0b623a1ffd">Prop</a> &amp; <a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">morph::ui::Prop</a>&lt; T &gt;::operator= </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="#af36de02925890716c666ce0b623a1ffd">Prop</a>&lt; T &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel default">default</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Replaces this property with a copy of another. </p>
+<dl class="section return"><dt>Returns</dt><dd>This property. </dd></dl>
+
+</div>
+</div>
+<a id="a525a14b314e37f061df9844f87cc2770" name="a525a14b314e37f061df9844f87cc2770"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a525a14b314e37f061df9844f87cc2770">&#9670;&#160;</a></span>operator=() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename T&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#af36de02925890716c666ce0b623a1ffd">Prop</a> &amp; <a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">morph::ui::Prop</a>&lt; T &gt;::operator= </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="#af36de02925890716c666ce0b623a1ffd">Prop</a>&lt; T &gt; &amp;&amp;</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel default">default</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Replaces this property with another, moved from. </p>
+<dl class="section return"><dt>Returns</dt><dd>This property. </dd></dl>
+
+</div>
+</div>
 <a id="a72cd29b3ac74be290295405174c11930" name="a72cd29b3ac74be290295405174c11930"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a72cd29b3ac74be290295405174c11930">&#9670;&#160;</a></span>isBound()</h2>
 
@@ -377,7 +492,7 @@ template&lt;typename T&gt; </div>
 <p>Whether this is a slot. </p>
 <dl class="section return"><dt>Returns</dt><dd>True for a slot, false for a constant. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00155">155</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00179">179</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -415,7 +530,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00160">160</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00184">184</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -453,7 +568,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00165">165</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00189">189</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -485,7 +600,7 @@ template&lt;typename T&gt; </div>
 <p>The slot's id. </p>
 <dl class="section return"><dt>Returns</dt><dd>The id given through <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916" title="A slot with an id.">ui::slot</a></span>; <span class="tt">nullopt</span> for a constant and for a slot made from a bare callable. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00193">193</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -517,7 +632,7 @@ template&lt;typename T&gt; </div>
 <p>The current value: the constant, or the slot read once. </p>
 <dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00176">176</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

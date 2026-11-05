@@ -203,7 +203,7 @@ Functions</h2></td></tr>
 <p>Mirrors <span class="tt">morph::journal::detail::defaultActionLogState()</span> — the same "mutex-guarded function-local static" shape used for the action-log and logger override seams elsewhere in the codebase. An empty <span class="tt">std::function</span> (the default) means "no override installed"; <span class="tt">DateTime::now()</span> falls back to <span class="tt">std::chrono::system_clock::now()</span> in that case. Forward-declared here (before <span class="tt">DateTime</span> is a complete type &ndash; a function signature only needs <span class="tt">DateTime</span> to be declared, not defined) and defined out-of-line just after the <span class="tt">DateTime</span> struct, before <span class="tt">DateTime::now()</span>'s first caller needs it.</p>
 <p>Defined out-of-line (after <span class="tt">DateTime</span> is a complete type) since the state is keyed on <span class="tt">std::function&lt;DateTime()&gt;</span>. </p><dl class="section return"><dt>Returns</dt><dd>Reference to the process-wide <span class="tt">(mutex, override callable)</span> pair; the callable is empty when no override is installed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00291">291</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -240,7 +240,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00319">319</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -281,7 +281,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">lhs - rhs</span> as a chrono duration, or <span class="tt">std::nullopt</span> if either is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00416">416</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00419">419</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>

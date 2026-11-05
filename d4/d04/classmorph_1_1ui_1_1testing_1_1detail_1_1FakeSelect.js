@@ -6,5 +6,6 @@ var classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect =
     [ "setOnOpen", "d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html#a8f72fac72ef3e061e57fa7f9f096fde7", null ],
     [ "setCaption", "d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html#ae258833a0188999ff78b0ee3754d9a28", null ],
     [ "offers", "d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html#a5bbe4af05f2aea87e2a9030d1cedddaa", null ],
-    [ "chooseByUser", "d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html#a0d1fda5d53c354d2b4892745fbffab6a", null ]
+    [ "chooseByUser", "d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html#a0d1fda5d53c354d2b4892745fbffab6a", null ],
+    [ "neighbour", "d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html#a8b4a30e0141f3faaa2971820c6c2a302", null ]
 ];

@@ -173,12 +173,22 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a1518e227276e358136b73299fdf7fa4f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Runs a command list for an event of the user's.  <br /></td></tr>
 <tr class="memitem:a65458c89d2c6bdcdbdff96e01459db91" id="r_a65458c89d2c6bdcdbdff96e01459db91"><td class="memItemLeft"><a class="el" href="../../db/d42/interpreter_8hpp.html#aab64f809e95347d45245abacf4fcce84">ActionModels</a>&#160;</td><td class="memItemRight"><a class="el" href="#a65458c89d2c6bdcdbdff96e01459db91">lowerActionParts</a> (std::span&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> const &gt; parts, <a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;ctx)</td></tr>
 <tr class="memdesc:a65458c89d2c6bdcdbdff96e01459db91"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lowers a list of <span class="tt">actionButton</span> parts into reactive models: label, icon, enabled and visible bound in <code class="param">ctx's</code> scope, and a run function that runs the part's <span class="tt">onClick</span> there as a user event.  <br /></td></tr>
+<tr class="memitem:a892cb475a9bfd1923e9ea16be490d372" id="r_a892cb475a9bfd1923e9ea16be490d372"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/d9e/structmorph_1_1ui_1_1detail_1_1HeadMenuModel.html">HeadMenuModel</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a892cb475a9bfd1923e9ea16be490d372">lowerHeadMenu</a> (std::span&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> const &gt; parts, <a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;ctx)</td></tr>
+<tr class="memdesc:a892cb475a9bfd1923e9ea16be490d372"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lowers a screen head's <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a7604d06fa5802c96e31050ee7ec2a1e3" title="A list of commands.">menu</a></span> in the scope <code class="param">ctx</code> names.  <br /></td></tr>
+<tr class="memitem:aa2c26d7eddfcf62b11aa97618512664a" id="r_aa2c26d7eddfcf62b11aa97618512664a"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d4/d0d/structmorph_1_1ui_1_1detail_1_1HeadToolModel.html">HeadToolModel</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa2c26d7eddfcf62b11aa97618512664a">lowerHeadTools</a> (std::span&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> const &gt; parts, <a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;ctx)</td></tr>
+<tr class="memdesc:aa2c26d7eddfcf62b11aa97618512664a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lowers a screen head's <span class="tt">tools</span> in the scope <code class="param">ctx</code> names.  <br /></td></tr>
 <tr class="memitem:a00a810c378213cdacb12da68dcf1ef28" id="r_a00a810c378213cdacb12da68dcf1ef28"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d5/d98/structmorph_1_1ui_1_1detail_1_1BadgeModel.html">BadgeModel</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a00a810c378213cdacb12da68dcf1ef28">lowerBadgeParts</a> (std::span&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> const &gt; parts, <a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;ctx)</td></tr>
 <tr class="memdesc:a00a810c378213cdacb12da68dcf1ef28"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lowers a screen head's <span class="tt">headBadge</span> parts, bound in <code class="param">ctx's</code> scope.  <br /></td></tr>
 <tr class="memitem:ab0e0356595c888ecda8e3182d524de57" id="r_ab0e0356595c888ecda8e3182d524de57"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab0e0356595c888ecda8e3182d524de57">lower</a> (<a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const &amp;node, <a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;ctx)</td></tr>
 <tr class="memdesc:ab0e0356595c888ecda8e3182d524de57"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lowers a document node to a view node.  <br /></td></tr>
-<tr class="memitem:afc9b26ecab4c765cb138847d08f2dc48" id="r_afc9b26ecab4c765cb138847d08f2dc48"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#afc9b26ecab4c765cb138847d08f2dc48">lowerAll</a> (std::span&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> const &gt; nodes, <a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;ctx)</td></tr>
-<tr class="memdesc:afc9b26ecab4c765cb138847d08f2dc48"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lowers a node list into one node: the node itself, or a column of them.  <br /></td></tr>
+<tr class="memitem:ab752f4d2c56e1009ca06516762eaa477" id="r_ab752f4d2c56e1009ca06516762eaa477"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab752f4d2c56e1009ca06516762eaa477">lowerAll</a> (std::span&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> const &gt; nodes, <a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;ctx, int gap=0)</td></tr>
+<tr class="memdesc:ab752f4d2c56e1009ca06516762eaa477"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lowers a node list into one node: the node itself, or a column of them.  <br /></td></tr>
+<tr class="memitem:a43b1ed4f575cd91c2664698ffa63649c" id="r_a43b1ed4f575cd91c2664698ffa63649c"><td class="memItemLeft"><a class="el" href="../../dc/d30/structmorph_1_1ui_1_1LayoutHints.html">LayoutHints</a>&#160;</td><td class="memItemRight"><a class="el" href="#a43b1ed4f575cd91c2664698ffa63649c">nodeHints</a> (<a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const &amp;node, std::set&lt; std::string, std::less&lt;&gt; &gt; const &amp;own, <a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;ctx)</td></tr>
+<tr class="memdesc:a43b1ed4f575cd91c2664698ffa63649c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The size request of one child of a holder.  <br /></td></tr>
+<tr class="memitem:a45fba4206f048567a11bd0a176ea1632" id="r_a45fba4206f048567a11bd0a176ea1632"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a45fba4206f048567a11bd0a176ea1632">fillHolder</a> (std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> &gt; &amp;children, std::string const &amp;path)</td></tr>
+<tr class="memdesc:a45fba4206f048567a11bd0a176ea1632"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reports each child of an overlay's or a case's content that sizes itself by a share, once at <code class="param">path</code>, and makes it fill the holder instead.  <br /></td></tr>
+<tr class="memitem:a7e9d644eab92743eecd20c201a1d8ede" id="r_a7e9d644eab92743eecd20c201a1d8ede"><td class="memItemLeft"><a class="el" href="../../dc/d30/structmorph_1_1ui_1_1LayoutHints.html">LayoutHints</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7e9d644eab92743eecd20c201a1d8ede">holderHints</a> (std::span&lt; <a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const *const &gt; content, <a class="el" href="../../d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html">ScopeDecl</a> const *decl, <a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;ctx)</td></tr>
+<tr class="memdesc:a7e9d644eab92743eecd20c201a1d8ede"><td class="mdescLeft">&#160;</td><td class="mdescRight">The size request of a holder of <code class="param">content:</code> the largest stretch of its children on each axis.  <br /></td></tr>
 <tr class="memitem:a12be639fee87a3b69d74343ce8e3ef6d" id="r_a12be639fee87a3b69d74343ce8e3ef6d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a12be639fee87a3b69d74343ce8e3ef6d">addPending</a> (int delta)</td></tr>
 <tr class="memdesc:a12be639fee87a3b69d74343ce8e3ef6d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Counts pending work in or out.  <br /></td></tr>
 <tr class="memitem:afa32d34a659b02ceca7434b510be769a" id="r_afa32d34a659b02ceca7434b510be769a"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afa32d34a659b02ceca7434b510be769a">keptState</a> (<a class="el" href="../../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html">RtScope</a> const &amp;scope, <a class="el" href="../../d2/de9/structmorph_1_1ui_1_1StateDecl.html">StateDecl</a> const &amp;decl) const</td></tr>
@@ -186,6 +196,8 @@ Public Member Functions</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
+<tr class="memitem:a98f191f800bf97f8eef8c1a6d9d5b043" id="r_a98f191f800bf97f8eef8c1a6d9d5b043"><td class="memItemLeft">static bool&#160;</td><td class="memItemRight"><a class="el" href="#a98f191f800bf97f8eef8c1a6d9d5b043">touchedWithin</a> (<a class="el" href="../../da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html">ElementState</a> const &amp;element)</td></tr>
+<tr class="memdesc:a98f191f800bf97f8eef8c1a6d9d5b043"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <code class="param">element</code> is a group with an element inside it the user touched: a group has no value of its own to touch, so its errors show under the <span class="tt">touched</span> policy once any of its inputs is.  <br /></td></tr>
 <tr class="memitem:a6efe4151c5b998a7b10510c75f6a3d9a" id="r_a6efe4151c5b998a7b10510c75f6a3d9a"><td class="memItemLeft">static <a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6efe4151c5b998a7b10510c75f6a3d9a">actionBarOf</a> (<a class="el" href="../../db/d42/interpreter_8hpp.html#aab64f809e95347d45245abacf4fcce84">ActionModels</a> actions)</td></tr>
 <tr class="memdesc:a6efe4151c5b998a7b10510c75f6a3d9a"><td class="mdescLeft">&#160;</td><td class="mdescRight">An overlay's actions as the action bar its footer shows: a button per action, test id <span class="tt">action_&lt;id&gt;</span>, shown and enabled as the action is.  <br /></td></tr>
 </table><table class="memberdecls">
@@ -235,7 +247,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One mounted screen's interpreter: its document, diagnostics, slots and preferences, and the code that declares scopes, lowers nodes and runs commands. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02266">2266</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02460">2460</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ad210f952c0974f91c563de5224ad8ffa" name="ad210f952c0974f91c563de5224ad8ffa"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad210f952c0974f91c563de5224ad8ffa">&#9670;&#160;</a></span>ScreenCore()</h2>
@@ -291,7 +303,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02274">2274</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02468">2468</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -320,7 +332,7 @@ Public Attributes</h2></td></tr>
 
 <p>Takes the screen off the session, so a later backend switch does not run its <span class="tt">onBackendChange</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02301">2301</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02495">2495</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -356,7 +368,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02305">2305</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02499">2499</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -386,7 +398,7 @@ Public Attributes</h2></td></tr>
 <p>The document. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02320">2320</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02514">2514</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -416,7 +428,7 @@ Public Attributes</h2></td></tr>
 <p>The runtime. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02324">2324</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02518">2518</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -456,7 +468,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02329">2329</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02523">2523</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -486,7 +498,7 @@ Public Attributes</h2></td></tr>
 <p>The next slot id: the interpreter numbers every bound property of the document. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02346">2346</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02540">2540</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -538,7 +550,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04040">4040</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04692">4692</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -578,7 +590,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02361">2361</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02555">2555</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -619,7 +631,43 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04477">4477</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05403">5403</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a98f191f800bf97f8eef8c1a6d9d5b043" name="a98f191f800bf97f8eef8c1a6d9d5b043"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a98f191f800bf97f8eef8c1a6d9d5b043">&#9670;&#160;</a></span>touchedWithin()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::detail::ScreenCore::touchedWithin </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html">ElementState</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>element</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether <code class="param">element</code> is a group with an element inside it the user touched: a group has no value of its own to touch, so its errors show under the <span class="tt">touched</span> policy once any of its inputs is. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">element</td><td>The element. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>True when it is such a group. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05536">5536</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -655,7 +703,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04465">4465</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05391">5391</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -701,7 +749,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04591">4591</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05549">5549</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -747,7 +795,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04621">4621</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05579">5579</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -793,7 +841,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02404">2404</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02603">2603</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -834,7 +882,89 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The models, in the parts' order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05854">5854</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07511">7511</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a892cb475a9bfd1923e9ea16be490d372" name="a892cb475a9bfd1923e9ea16be490d372"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a892cb475a9bfd1923e9ea16be490d372">&#9670;&#160;</a></span>lowerHeadMenu()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; <a class="el" href="../../df/d9e/structmorph_1_1ui_1_1detail_1_1HeadMenuModel.html">HeadMenuModel</a> &gt; morph::ui::detail::ScreenCore::lowerHeadMenu </td>
+          <td>(</td>
+          <td class="paramtype">std::span&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> const &gt;</td>          <td class="paramname"><span class="paramname"><em>parts</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>ctx</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Lowers a screen head's <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a7604d06fa5802c96e31050ee7ec2a1e3" title="A list of commands.">menu</a></span> in the scope <code class="param">ctx</code> names. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">parts</td><td>The <span class="tt">headMenuItem</span> parts. </td></tr>
+    <tr><td class="paramname">ctx</td><td>The scope. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The entries, in document order, submenus included. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07451">7451</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa2c26d7eddfcf62b11aa97618512664a" name="aa2c26d7eddfcf62b11aa97618512664a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa2c26d7eddfcf62b11aa97618512664a">&#9670;&#160;</a></span>lowerHeadTools()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; <a class="el" href="../../d4/d0d/structmorph_1_1ui_1_1detail_1_1HeadToolModel.html">HeadToolModel</a> &gt; morph::ui::detail::ScreenCore::lowerHeadTools </td>
+          <td>(</td>
+          <td class="paramtype">std::span&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> const &gt;</td>          <td class="paramname"><span class="paramname"><em>parts</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>ctx</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Lowers a screen head's <span class="tt">tools</span> in the scope <code class="param">ctx</code> names. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">parts</td><td>The <span class="tt">headTool</span> parts. </td></tr>
+    <tr><td class="paramname">ctx</td><td>The scope. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The tools, in document order. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07463">7463</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -868,9 +998,9 @@ Public Attributes</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The <span class="tt"><a class="el" href="../../d6/dda/structmorph_1_1ui_1_1ActionBar.html" title="A row of buttons in the footer of the dialog or drawer whose content holds it: what a document&#39;s over...">ActionBar</a></span> node. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The <span class="tt"><a class="el" href="../../d6/dda/structmorph_1_1ui_1_1ActionBar.html" title="A row of buttons: the actions of what holds it. Inside the content of a dialog or drawer,...">ActionBar</a></span> node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05881">5881</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07533">7533</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -911,7 +1041,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The badges, in the parts' order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05896">5896</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07557">7557</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -952,12 +1082,12 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The view node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l05707">5707</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07102">7102</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
-<a id="afc9b26ecab4c765cb138847d08f2dc48" name="afc9b26ecab4c765cb138847d08f2dc48"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#afc9b26ecab4c765cb138847d08f2dc48">&#9670;&#160;</a></span>lowerAll()</h2>
+<a id="ab752f4d2c56e1009ca06516762eaa477" name="ab752f4d2c56e1009ca06516762eaa477"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab752f4d2c56e1009ca06516762eaa477">&#9670;&#160;</a></span>lowerAll()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -973,7 +1103,12 @@ Public Attributes</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>ctx</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>ctx</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>gap</em></span><span class="paramdefsep"> = </span><span class="paramdefval">0</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -988,12 +1123,147 @@ Public Attributes</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">nodes</td><td>The nodes. </td></tr>
     <tr><td class="paramname">ctx</td><td>Where. </td></tr>
+    <tr><td class="paramname">gap</td><td>The spacing step between the nodes of a list of several; a single node is lowered unwrapped. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02449">2449</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07006">7006</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a43b1ed4f575cd91c2664698ffa63649c" name="a43b1ed4f575cd91c2664698ffa63649c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a43b1ed4f575cd91c2664698ffa63649c">&#9670;&#160;</a></span>nodeHints()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dc/d30/structmorph_1_1ui_1_1LayoutHints.html">LayoutHints</a> morph::ui::detail::ScreenCore::nodeHints </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>node</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::set&lt; std::string, std::less&lt;&gt; &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>own</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>ctx</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The size request of one child of a holder. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">node</td><td>The child. </td></tr>
+    <tr><td class="paramname">own</td><td>The names the holder's own scope declares. </td></tr>
+    <tr><td class="paramname">ctx</td><td>Where the holder is lowered. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The child's hints; content size where its sizing reads a name in <code class="param">own</code>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07042">7042</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a45fba4206f048567a11bd0a176ea1632" name="a45fba4206f048567a11bd0a176ea1632"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a45fba4206f048567a11bd0a176ea1632">&#9670;&#160;</a></span>fillHolder()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::detail::ScreenCore::fillHolder </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>children</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>path</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reports each child of an overlay's or a case's content that sizes itself by a share, once at <code class="param">path</code>, and makes it fill the holder instead. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">children</td><td>The content, lowered. </td></tr>
+    <tr><td class="paramname">path</td><td>Where the report points. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07033">7033</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7e9d644eab92743eecd20c201a1d8ede" name="a7e9d644eab92743eecd20c201a1d8ede"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7e9d644eab92743eecd20c201a1d8ede">&#9670;&#160;</a></span>holderHints()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dc/d30/structmorph_1_1ui_1_1LayoutHints.html">LayoutHints</a> morph::ui::detail::ScreenCore::holderHints </td>
+          <td>(</td>
+          <td class="paramtype">std::span&lt; <a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const *const &gt;</td>          <td class="paramname"><span class="paramname"><em>content</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html">ScopeDecl</a> const *</td>          <td class="paramname"><span class="paramname"><em>decl</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d0f/structmorph_1_1ui_1_1detail_1_1LowerCtx.html">LowerCtx</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>ctx</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The size request of a holder of <code class="param">content:</code> the largest stretch of its children on each axis. </p>
+<p>A literal sizing is read as written and a computed one is evaluated once in the enclosing scope. A computed sizing that reads a name the holder's own scope declares cannot be evaluated before the holder mounts; it is reported and counts as content. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">content</td><td>The holder's document children. </td></tr>
+    <tr><td class="paramname">decl</td><td>The declarations of the holder's own scope; <span class="tt">nullptr</span> for none. </td></tr>
+    <tr><td class="paramname">ctx</td><td>Where the holder is lowered. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The hints; bounds and <span class="tt">alignSelf</span> stay unset, because they belong to a child. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l07065">7065</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1028,7 +1298,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02495">2495</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02724">2724</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1069,7 +1339,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value, or nothing for a state that starts from its init. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02531">2531</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02760">2760</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1088,7 +1358,7 @@ Public Attributes</h2></td></tr>
 
 <p>The session. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02463">2463</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02692">2692</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1106,7 +1376,7 @@ Public Attributes</h2></td></tr>
 
 <p>The dispatcher. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02465">2465</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02694">2694</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1124,7 +1394,7 @@ Public Attributes</h2></td></tr>
 
 <p>The host; may be <span class="tt">nullptr</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02467">2467</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02696">2696</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1142,7 +1412,7 @@ Public Attributes</h2></td></tr>
 
 <p>The diagnostic callback. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02469">2469</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02698">2698</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1160,7 +1430,7 @@ Public Attributes</h2></td></tr>
 
 <p>Moves focus to a mounted element by its id; empty until the screen is mounted, and again once it is unmounting. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02472">2472</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02701">2701</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1178,7 +1448,7 @@ Public Attributes</h2></td></tr>
 
 <p>The models the opener lends. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02474">2474</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02703">2703</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1196,7 +1466,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen scope's reactive depth. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02476">2476</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02705">2705</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1214,7 +1484,7 @@ Public Attributes</h2></td></tr>
 
 <p>The diagnostics reported, in order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02478">2478</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02707">2707</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1232,7 +1502,7 @@ Public Attributes</h2></td></tr>
 
 <p>The paths and reasons already reported. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02480">2480</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02709">2709</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1250,7 +1520,7 @@ Public Attributes</h2></td></tr>
 
 <p>The customization choices, by point. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02482">2482</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02711">2711</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1268,7 +1538,7 @@ Public Attributes</h2></td></tr>
 
 <p>The points' defaults. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02484">2484</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02713">2713</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1286,7 +1556,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen's <span class="tt"><a class="el" href="#a1f4d8660d28caaad7e27e9281e744b7f" title="The screen&#39;s submitted.">submitted</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02486">2486</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02715">2715</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1304,7 +1574,7 @@ Public Attributes</h2></td></tr>
 
 <p>The open dialogs and drawers, the mutation runs and the transfers in flight, across every scope of the screen: what a close waits for (spec 6 §3). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02489">2489</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02718">2718</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1322,7 +1592,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether this screen records what the inspector reads: its session's <span class="tt">developmentTools</span>, read once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02491">2491</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02720">2720</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1340,7 +1610,7 @@ Public Attributes</h2></td></tr>
 
 <p>The document's own scope, once mounted. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02497">2497</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02726">2726</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1358,7 +1628,7 @@ Public Attributes</h2></td></tr>
 
 <p>The states of the own scope of the screen this one replaces, by name (<span class="tt"><a class="el" href="../../d3/d5c/structmorph_1_1ui_1_1MountOptions.html#a769d42c9428eb0a1e7f215c21d6a7403" title="The screen this mount replaces, such as one whose document changed; nullptr for a fresh mount....">MountOptions::keepStateOf</a></span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02506">2506</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02735">2735</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1376,7 +1646,7 @@ Public Attributes</h2></td></tr>
 
 <p>Every node lowered, in lowering order; an entry whose scope is gone is pruned as more are added. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02517">2517</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02746">2746</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1394,7 +1664,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen's live scopes, in creation order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02519">2519</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02748">2748</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1412,7 +1682,7 @@ Public Attributes</h2></td></tr>
 
 <p>The latest command lists run, oldest first, at most <span class="tt"><a class="el" href="../../db/d42/interpreter_8hpp.html#aa145390415cb3c86f0cef9a63320ee34" title="How many command lists the inspector&#39;s log keeps.">kCommandLogSize</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02521">2521</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02750">2750</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -1430,7 +1700,7 @@ Public Attributes</h2></td></tr>
 
 <p>Set while the inspector evaluates, so that an expression error it meets is not reported. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02523">2523</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02752">2752</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

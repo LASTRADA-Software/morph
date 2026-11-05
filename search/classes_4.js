@@ -4,7 +4,7 @@ var searchData=
   ['effect_1',['Effect',['../da/dae/structmorph_1_1effects_1_1Effect.html',1,'morph::effects::Effect'],['../de/ddc/classmorph_1_1reactive_1_1Effect.html',1,'morph::reactive::Effect']]],
   ['effectof_2',['EffectOf',['../dd/d86/structmorph_1_1effects_1_1detail_1_1EffectOf.html',1,'morph::effects::detail']]],
   ['effectsregistrationerror_3',['EffectsRegistrationError',['../d6/dea/structmorph_1_1model_1_1EffectsRegistrationError.html',1,'morph::model']]],
-  ['element_4',['Element',['../d7/d49/classmorph_1_1ui_1_1author_1_1Element.html',1,'morph::ui::author']]],
+  ['element_4',['Element',['../d7/d49/classmorph_1_1ui_1_1author_1_1Element.html',1,'morph::ui::author::Element'],['../db/d95/structmorph_1_1ui_1_1detail_1_1dates_1_1Element.html',1,'morph::ui::detail::dates::Element']]],
   ['elementstate_5',['ElementState',['../da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html',1,'morph::ui::detail']]],
   ['emitted_6',['Emitted',['../df/dd2/structmorph_1_1ui_1_1author_1_1Emitted.html',1,'morph::ui::author']]],
   ['emptystate_7',['EmptyState',['../d8/d99/structmorph_1_1ui_1_1EmptyState.html',1,'morph::ui']]],

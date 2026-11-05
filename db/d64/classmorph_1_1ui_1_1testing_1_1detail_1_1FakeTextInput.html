@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/d64/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>, <span class="tt">placeholder</span>, <span class="tt">unit</span>, <span class="tt">decimals</span>, <span class="tt">icon</span>, <span class="tt">caption</span>, <span class="tt">captionShown</span>, the field state, and a text cursor.  
+<p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>, <span class="tt">placeholder</span>, <span class="tt">unit</span>, <span class="tt">prefix</span>, <span class="tt">decimals</span>, <span class="tt">icon</span>, <span class="tt">emphasis</span>, <span class="tt">mono</span>, <span class="tt">align</span>, <span class="tt">caption</span>, <span class="tt">captionShown</span>, the field state, and a text cursor.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>&gt;</code></p>
@@ -155,10 +155,18 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a8329be7b8f20b0da3b2969794fa24206"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text shown while the field is empty.  <br /></td></tr>
 <tr class="memitem:af48362076821ac99777cfbc06a1201f6" id="r_af48362076821ac99777cfbc06a1201f6"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af48362076821ac99777cfbc06a1201f6">setUnit</a> (std::string_view unit) override</td></tr>
 <tr class="memdesc:af48362076821ac99777cfbc06a1201f6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the unit the input shows, muted, at its trailing edge, inside the field; empty shows none. Called only on a single-line or password input.  <br /></td></tr>
+<tr class="memitem:ad5f29b24a19a236539a16c9b5d051320" id="r_ad5f29b24a19a236539a16c9b5d051320"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ad5f29b24a19a236539a16c9b5d051320">setPrefix</a> (std::string_view prefix) override</td></tr>
+<tr class="memdesc:ad5f29b24a19a236539a16c9b5d051320"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text drawn muted at the field's leading edge, inside it, and announced before the value; empty shows none. Called only on a single-line or password input.  <br /></td></tr>
+<tr class="memitem:abd640658df49ce33be2abb33611d9ae2" id="r_abd640658df49ce33be2abb33611d9ae2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#abd640658df49ce33be2abb33611d9ae2">setMono</a> (bool mono) override</td></tr>
+<tr class="memdesc:abd640658df49ce33be2abb33611d9ae2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Draws the text and the placeholder in the <span class="tt">mono</span> text role's face. A new field uses the body face; the mount calls it once, only for <span class="tt">true</span>.  <br /></td></tr>
+<tr class="memitem:a804297d5f74f4d5756bec814d0b0a1ca" id="r_a804297d5f74f4d5756bec814d0b0a1ca"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a804297d5f74f4d5756bec814d0b0a1ca">setAlign</a> (<a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> align) override</td></tr>
+<tr class="memdesc:a804297d5f74f4d5756bec814d0b0a1ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">Places the text in the field. A new field's text starts at the leading edge; the mount calls it once, only for <span class="tt">Center</span> or <span class="tt">End</span>, and only on a single-line or password input. An <span class="tt">End</span> field draws its digits at one width each, so a column of values lines up.  <br /></td></tr>
 <tr class="memitem:a4180a94cc62059010620e1f06c4d8497" id="r_a4180a94cc62059010620e1f06c4d8497"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4180a94cc62059010620e1f06c4d8497">setDecimals</a> (int decimals) override</td></tr>
 <tr class="memdesc:a4180a94cc62059010620e1f06c4d8497"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the fraction digits a number is entered with: what a backend or a kit may use to align or format the text. Nothing is required of a backend that draws nothing from it. Called only on a single-line or password input.  <br /></td></tr>
 <tr class="memitem:a1095a354e94a1f1a6bac5816919d22c5" id="r_a1095a354e94a1f1a6bac5816919d22c5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1095a354e94a1f1a6bac5816919d22c5">setIcon</a> (std::string_view icon) override</td></tr>
 <tr class="memdesc:a1095a354e94a1f1a6bac5816919d22c5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the icon drawn at the field's leading edge; empty shows none. Called once, and only for a single-line or password input that has one.  <br /></td></tr>
+<tr class="memitem:a0a6bac92564e222c8d5f28907bc90749" id="r_a0a6bac92564e222c8d5f28907bc90749"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a0a6bac92564e222c8d5f28907bc90749">setEmphasis</a> (<a class="el" href="../../dd/d2f/input__emphasis_8hpp.html#a0013e8ab0619ac4e61147cfd117f6852">InputEmphasis</a> emphasis) override</td></tr>
+<tr class="memdesc:a0a6bac92564e222c8d5f28907bc90749"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets how much the input stands out: a prominent one is drawn as the screen's focal control, on Qt Quick larger and outlined in the accent, on the terminal in bold. The mount calls it once, only for <span class="tt">Prominent</span>, and never on a multiline input.  <br /></td></tr>
 <tr class="memitem:a87f41af6b53ead75af5c2c657b0dd9ff" id="r_a87f41af6b53ead75af5c2c657b0dd9ff"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a87f41af6b53ead75af5c2c657b0dd9ff">setCaption</a> (std::string_view label, bool shown) override</td></tr>
 <tr class="memdesc:a87f41af6b53ead75af5c2c657b0dd9ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the field's label, and whether the input draws it as a visible caption above its control. Without <span class="tt">shown</span>, the caption is drawn elsewhere (a form's cell), or not at all.  <br /></td></tr>
 <tr class="memitem:a4e6d2e3511b8b7cbb9954ce3188c14ac" id="r_a4e6d2e3511b8b7cbb9954ce3188c14ac"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4e6d2e3511b8b7cbb9954ce3188c14ac">setOnChange</a> (std::function&lt; void(std::string)&gt; onChange) override</td></tr>
@@ -176,13 +184,19 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a43959d49c9f7ef8e092f34767d80ef5f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">errors</span>, as <span class="tt"><a class="el" href="../../de/dd9/recording__backend_8hpp.html#aa6fbf75d22b98da76525eff2f51dc9d7" title="Formats a list as [a,b,c].">formatList</a></span> gives the messages.  <br /></td></tr>
 <tr class="memitem:a194266ed2d9a38f9a56838529e5285f7 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField" id="r_a194266ed2d9a38f9a56838529e5285f7"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a194266ed2d9a38f9a56838529e5285f7">setStale</a> (bool stale) override</td></tr>
 <tr class="memdesc:a194266ed2d9a38f9a56838529e5285f7 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">stale</span>.  <br /></td></tr>
+<tr class="memitem:afe2da6b51724cf2a077364b1fb5fbb06 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField" id="r_afe2da6b51724cf2a077364b1fb5fbb06"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#afe2da6b51724cf2a077364b1fb5fbb06">setDescription</a> (std::string_view description) override</td></tr>
+<tr class="memdesc:afe2da6b51724cf2a077364b1fb5fbb06 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">description</span>.  <br /></td></tr>
+<tr class="memitem:a99a55ddacc9c1eb1cdc253447132794a pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField" id="r_a99a55ddacc9c1eb1cdc253447132794a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a99a55ddacc9c1eb1cdc253447132794a">setCaptionHint</a> (std::string_view hint) override</td></tr>
+<tr class="memdesc:a99a55ddacc9c1eb1cdc253447132794a pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">captionHint</span>.  <br /></td></tr>
+<tr class="memitem:a5a86769e017bd1305b24fc34d364f8fa pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField" id="r_a5a86769e017bd1305b24fc34d364f8fa"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a5a86769e017bd1305b24fc34d364f8fa">setTone</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> tone) override</td></tr>
+<tr class="memdesc:a5a86769e017bd1305b24fc34d364f8fa pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">tone</span>.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf&lt; TextInputWidget &gt;</a></td></tr>
-<tr class="memitem:a3315df8bc8818827aafd77198af851be pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a3315df8bc8818827aafd77198af851be"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> (std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; store, std::string kind, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> const *parent, <a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261">PropList</a> initial={})</td></tr>
-<tr class="memdesc:a3315df8bc8818827aafd77198af851be pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the new widget, appended to <code class="param">parent</code>, and logs its creation.  <br /></td></tr>
+<tr class="memitem:ae27ec5f87e24ebff660e66473bce4721 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_ae27ec5f87e24ebff660e66473bce4721"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> (std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; store, std::string kind, Widget const *parent, <a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261">PropList</a> initial={})</td></tr>
+<tr class="memdesc:ae27ec5f87e24ebff660e66473bce4721 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the new widget, appended to <code class="param">parent</code>, and logs its creation.  <br /></td></tr>
 <tr class="memitem:aa5eff9c8cf23b14288cdf8d538c43961 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aa5eff9c8cf23b14288cdf8d538c43961"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aa5eff9c8cf23b14288cdf8d538c43961">~FakeLeaf</a> () override</td></tr>
 <tr class="memdesc:aa5eff9c8cf23b14288cdf8d538c43961 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Forgets the widget and logs its destruction; its remaining children become roots.  <br /></td></tr>
 <tr class="memitem:a976acf10acc43f63ba7ecd953cda7b43 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a976acf10acc43f63ba7ecd953cda7b43"><td class="memItemLeft">
-<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> const &amp;)=delete</td></tr>
+<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> const &amp;)=delete</td></tr>
 <tr class="memitem:ac7b0a51f943e27762c21206eea802d08 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_ac7b0a51f943e27762c21206eea802d08"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ac7b0a51f943e27762c21206eea802d08">setVisible</a> (bool visible) override</td></tr>
 <tr class="memdesc:ac7b0a51f943e27762c21206eea802d08 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">visible</span>.  <br /></td></tr>
 <tr class="memitem:aa2a186efea65691285d01736b53a37ba pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aa2a186efea65691285d01736b53a37ba"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aa2a186efea65691285d01736b53a37ba">setEnabled</a> (bool enabled) override</td></tr>
@@ -204,7 +218,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:af8aea5416b8dd99e6888f53bc87d00d0 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_af8aea5416b8dd99e6888f53bc87d00d0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#af8aea5416b8dd99e6888f53bc87d00d0">setSurface</a> (std::string_view surface) override</td></tr>
 <tr class="memdesc:af8aea5416b8dd99e6888f53bc87d00d0 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">surface</span>.  <br /></td></tr>
 <tr class="memitem:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a872fcbbddffe07279c5594bc00feec57"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a872fcbbddffe07279c5594bc00feec57">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord) override</td></tr>
-<tr class="memdesc:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">keys</span>, the chords joined by commas, and keeps the chords and the handler for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c" title="Presses a keyboard chord with focus on a widget.">RecordingBackend::press</a></span>.  <br /></td></tr>
+<tr class="memdesc:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">keys</span>, the chords joined by commas, and keeps the chords and the handler for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c" title="Presses a keyboard chord with focus on a widget, in the key order every backend follows.">RecordingBackend::press</a></span>.  <br /></td></tr>
 <tr class="memitem:adca561be0edc99b3359b9cf29af4784f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_adca561be0edc99b3359b9cf29af4784f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adca561be0edc99b3359b9cf29af4784f">focus</a> () override</td></tr>
 <tr class="memdesc:adca561be0edc99b3359b9cf29af4784f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves the backend's recorded focus here, and logs <span class="tt"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adca561be0edc99b3359b9cf29af4784f">focus</a></span>.  <br /></td></tr>
 <tr class="memitem:aedc24008c529e4bd0b6b71468525b08e pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aedc24008c529e4bd0b6b71468525b08e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aedc24008c529e4bd0b6b71468525b08e">setOnHover</a> (std::function&lt; void()&gt; onHover) override</td></tr>
@@ -234,10 +248,10 @@ Additional Inherited Members</h2></td></tr>
 <tr class="memdesc:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's id.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>, <span class="tt">placeholder</span>, <span class="tt">unit</span>, <span class="tt">decimals</span>, <span class="tt">icon</span>, <span class="tt">caption</span>, <span class="tt">captionShown</span>, the field state, and a text cursor. </p>
+<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html" title="An editable text field.">TextInputWidget</a></span>: properties <span class="tt">mode</span>, <span class="tt"><a class="el" href="#a3548f2b728bd82490dab53cc5e1e910f" title="The text the field shows.">text</a></span>, <span class="tt">placeholder</span>, <span class="tt">unit</span>, <span class="tt">prefix</span>, <span class="tt">decimals</span>, <span class="tt">icon</span>, <span class="tt">emphasis</span>, <span class="tt">mono</span>, <span class="tt">align</span>, <span class="tt">caption</span>, <span class="tt">captionShown</span>, the field state, and a text cursor. </p>
 <p>The cursor is a byte offset into the text. A user's edit puts it where the edit left it; <span class="tt"><a class="el" href="#afe78fab8c4a9468427c6e56d757dc129" title="Records property text; moves the cursor to the end only when the text changes.">setText</a></span> with the text the field shows leaves it alone, as the contract requires, and <span class="tt"><a class="el" href="#afe78fab8c4a9468427c6e56d757dc129" title="Records property text; moves the cursor to the end only when the text changes.">setText</a></span> with another text puts it at the end. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00906">906</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01072">1072</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="afe78fab8c4a9468427c6e56d757dc129" name="afe78fab8c4a9468427c6e56d757dc129"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#afe78fab8c4a9468427c6e56d757dc129">&#9670;&#160;</a></span>setText()</h2>
@@ -272,7 +286,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#aad96ac37b2f72fb9c275abec61352148">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00912">912</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01078">1078</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -312,7 +326,7 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00923">923</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01089">1089</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -347,7 +361,7 @@ Additional Inherited Members</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00931">931</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01097">1097</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -377,7 +391,7 @@ Additional Inherited Members</h2></td></tr>
 <p>Where the cursor is. </p>
 <dl class="section return"><dt>Returns</dt><dd>A byte offset into the text shown. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00935">935</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01101">1101</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -407,7 +421,7 @@ Additional Inherited Members</h2></td></tr>
 <p>The text the field shows. </p>
 <dl class="section return"><dt>Returns</dt><dd>The text, unformatted. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00939">939</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01105">1105</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -444,7 +458,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a5af001846d473ed5242e08e651b44908">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00941">941</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01107">1107</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -481,7 +495,118 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a336c18c4c6de6bd5758868562d2f3f95">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00942">942</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01108">1108</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad5f29b24a19a236539a16c9b5d051320" name="ad5f29b24a19a236539a16c9b5d051320"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad5f29b24a19a236539a16c9b5d051320">&#9670;&#160;</a></span>setPrefix()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTextInput::setPrefix </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>prefix</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the text drawn muted at the field's leading edge, inside it, and announced before the value; empty shows none. Called only on a single-line or password input. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">prefix</td><td>The prefix's display text, UTF-8. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#ad2d9b6717e87f6deb035bafb6dbec3e9">morph::ui::TextInputWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01109">1109</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abd640658df49ce33be2abb33611d9ae2" name="abd640658df49ce33be2abb33611d9ae2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abd640658df49ce33be2abb33611d9ae2">&#9670;&#160;</a></span>setMono()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTextInput::setMono </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>mono</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Draws the text and the placeholder in the <span class="tt">mono</span> text role's face. A new field uses the body face; the mount calls it once, only for <span class="tt">true</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">mono</td><td>Whether to. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a292f436e896c07c3caae37755a765eb5">morph::ui::TextInputWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01110">1110</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a804297d5f74f4d5756bec814d0b0a1ca" name="a804297d5f74f4d5756bec814d0b0a1ca"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a804297d5f74f4d5756bec814d0b0a1ca">&#9670;&#160;</a></span>setAlign()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTextInput::setAlign </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a></td>          <td class="paramname"><span class="paramname"><em>align</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Places the text in the field. A new field's text starts at the leading edge; the mount calls it once, only for <span class="tt">Center</span> or <span class="tt">End</span>, and only on a single-line or password input. An <span class="tt">End</span> field draws its digits at one width each, so a column of values lines up. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">align</td><td><span class="tt">Start</span>, <span class="tt">Center</span> or <span class="tt">End</span>; <span class="tt">Stretch</span> reads as <span class="tt">Start</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a6372c3807299142f86f4fa93df9a25b9">morph::ui::TextInputWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01111">1111</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -518,7 +643,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a4ac7ae0308c01088d5c1aef0354bce2b">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00943">943</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01118">1118</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -555,7 +680,44 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a73b512d9d4b745c52cb3c215764ccd42">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00944">944</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01119">1119</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0a6bac92564e222c8d5f28907bc90749" name="a0a6bac92564e222c8d5f28907bc90749"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0a6bac92564e222c8d5f28907bc90749">&#9670;&#160;</a></span>setEmphasis()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeTextInput::setEmphasis </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dd/d2f/input__emphasis_8hpp.html#a0013e8ab0619ac4e61147cfd117f6852">InputEmphasis</a></td>          <td class="paramname"><span class="paramname"><em>emphasis</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets how much the input stands out: a prominent one is drawn as the screen's focal control, on Qt Quick larger and outlined in the accent, on the terminal in bold. The mount calls it once, only for <span class="tt">Prominent</span>, and never on a multiline input. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">emphasis</td><td>The emphasis. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a436cce46e9c81c9a1fb04fab44574625">morph::ui::TextInputWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01120">1120</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -597,7 +759,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a485acba53524dffd9d48ae2cd4fbecb1">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00945">945</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01123">1123</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -634,7 +796,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#a0e937b2ee04f7d2b402ac6b64157b13f">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00949">949</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01127">1127</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -671,7 +833,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#aae1eb31ad6bb2c3bcad03efbc830cef6">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00950">950</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01128">1128</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -708,7 +870,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d9/d62/classmorph_1_1ui_1_1TextInputWidget.html#af53435cb83156025dc7db2f041870e96">morph::ui::TextInputWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00951">951</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01129">1129</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

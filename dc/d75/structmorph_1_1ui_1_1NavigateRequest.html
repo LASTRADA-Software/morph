@@ -136,11 +136,13 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a871e996a068bf2d61d04c670e6a933c8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The params.  <br /></td></tr>
 <tr class="memitem:afb0ba963c4a5f85241e81c9c9883212f" id="r_afb0ba963c4a5f85241e81c9c9883212f"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#afb0ba963c4a5f85241e81c9c9883212f">as</a></td></tr>
 <tr class="memdesc:afb0ba963c4a5f85241e81c9c9883212f"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">tab</span>, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ae7cf72ab608a903203628d39bf74cd1b" title="A modal overlay.">dialog</a></span>, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ac32bc9fa7f17605e28fdaf77a96f3870" title="A panel that slides in from one edge.">drawer</a></span> or <span class="tt">window</span>; empty for the shell's choice.  <br /></td></tr>
+<tr class="memitem:a99f2e8b722aa277b83d795ece2ffa1bc" id="r_a99f2e8b722aa277b83d795ece2ffa1bc"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a99f2e8b722aa277b83d795ece2ffa1bc">call</a> = false</td></tr>
+<tr class="memdesc:a99f2e8b722aa277b83d795ece2ffa1bc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the navigation filed a call (the command has <span class="tt">onResult</span> or <span class="tt">onCancel</span>), which the next mount of the screen with these params adopts. Set by the host that filed it, <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html" title="The framework&#39;s ScreenHost over UI documents: it mounts them through an Interpreter,...">DocumentScreenHost</a></span>; a host that handles such a navigation without mounting that screen settles the call.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What <span class="tt">navigate</span> asks the host to open (spec 6 §16, §20). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00186">186</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00187">187</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a9adb3b555b8c5b95139724d4941da941" name="a9adb3b555b8c5b95139724d4941da941"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a9adb3b555b8c5b95139724d4941da941">&#9670;&#160;</a></span>screen</h2>
@@ -156,7 +158,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen id; empty when <span class="tt"><a class="el" href="#aefcf167a4cab4c011b1f4711ae95f9fa" title="The route, when the command named one instead of a screen.">route</a></span> is given. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00188">188</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00189">189</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -174,7 +176,7 @@ Public Attributes</h2></td></tr>
 
 <p>The route, when the command named one instead of a screen. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00190">190</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +194,7 @@ Public Attributes</h2></td></tr>
 
 <p>The params. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00192">192</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00193">193</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +212,25 @@ Public Attributes</h2></td></tr>
 
 <p><span class="tt">tab</span>, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ae7cf72ab608a903203628d39bf74cd1b" title="A modal overlay.">dialog</a></span>, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ac32bc9fa7f17605e28fdaf77a96f3870" title="A panel that slides in from one edge.">drawer</a></span> or <span class="tt">window</span>; empty for the shell's choice. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00194">194</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a99f2e8b722aa277b83d795ece2ffa1bc" name="a99f2e8b722aa277b83d795ece2ffa1bc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a99f2e8b722aa277b83d795ece2ffa1bc">&#9670;&#160;</a></span>call</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::NavigateRequest::call = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the navigation filed a call (the command has <span class="tt">onResult</span> or <span class="tt">onCancel</span>), which the next mount of the screen with these params adopts. Set by the host that filed it, <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html" title="The framework&#39;s ScreenHost over UI documents: it mounts them through an Interpreter,...">DocumentScreenHost</a></span>; a host that handles such a navigation without mounting that screen settles the call. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

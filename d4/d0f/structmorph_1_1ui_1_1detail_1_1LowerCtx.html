@@ -134,11 +134,13 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a2b30da882b46f97e90daa20e158a63e4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The names bound here.  <br /></td></tr>
 <tr class="memitem:a15959720eb8ca233bf921c07df0a22b8" id="r_a15959720eb8ca233bf921c07df0a22b8"><td class="memItemLeft">std::shared_ptr&lt; <a class="el" href="../../dd/dd1/structmorph_1_1ui_1_1detail_1_1BoundaryRuntime.html">BoundaryRuntime</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a15959720eb8ca233bf921c07df0a22b8">boundary</a></td></tr>
 <tr class="memdesc:a15959720eb8ca233bf921c07df0a22b8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The innermost boundary.  <br /></td></tr>
+<tr class="memitem:aa28d8c880b8c738eb0d1891e3d1c7419" id="r_aa28d8c880b8c738eb0d1891e3d1c7419"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#aa28d8c880b8c738eb0d1891e3d1c7419">listGap</a> = 0</td></tr>
+<tr class="memdesc:aa28d8c880b8c738eb0d1891e3d1c7419"><td class="mdescLeft">&#160;</td><td class="mdescRight">The spacing step of the vertical list whose node is being lowered; 0 where the node sits in no such list. Only a <span class="tt">switch</span> reads it, so its cases space their nodes as the list around the switch does.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Where a node is lowered: its scope, the names bound there and the boundary that owns its queries. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02133">2133</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02211">2211</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="adb102588c2d12de88152feddd9113f37" name="adb102588c2d12de88152feddd9113f37"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#adb102588c2d12de88152feddd9113f37">&#9670;&#160;</a></span>scope</h2>
@@ -154,7 +156,7 @@ Public Attributes</h2></td></tr>
 
 <p>The scope. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02135">2135</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02213">2213</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -172,7 +174,7 @@ Public Attributes</h2></td></tr>
 
 <p>The names bound here. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02137">2137</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02215">2215</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -190,7 +192,25 @@ Public Attributes</h2></td></tr>
 
 <p>The innermost boundary. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02139">2139</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02217">2217</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa28d8c880b8c738eb0d1891e3d1c7419" name="aa28d8c880b8c738eb0d1891e3d1c7419"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa28d8c880b8c738eb0d1891e3d1c7419">&#9670;&#160;</a></span>listGap</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int morph::ui::detail::LowerCtx::listGap = 0</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The spacing step of the vertical list whose node is being lowered; 0 where the node sits in no such list. Only a <span class="tt">switch</span> reads it, so its cases space their nodes as the list around the switch does. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02220">2220</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

@@ -136,11 +136,15 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a3eab8abc8c25c695ff02965efb48cec5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Space between rows: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>.  <br /></td></tr>
 <tr class="memitem:a9e0fbde214e67843552043eee9198837" id="r_a9e0fbde214e67843552043eee9198837"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#a9e0fbde214e67843552043eee9198837">common</a> {}</td></tr>
 <tr class="memdesc:a9e0fbde214e67843552043eee9198837"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visibility, enablement, layout, drag-and-drop of the row container.  <br /></td></tr>
+<tr class="memitem:a3a7eec83c72b7f76e4eec3dbb3b7ab1c" id="r_a3a7eec83c72b7f76e4eec3dbb3b7ab1c"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a3a7eec83c72b7f76e4eec3dbb3b7ab1c">wrap</a> = false</td></tr>
+<tr class="memdesc:a3a7eec83c72b7f76e4eec3dbb3b7ab1c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether rows that do not fit on one line continue on the next; set once. Only a horizontal <span class="tt"><a class="el" href="#a1ce4022883b1b3e4b82a6958e0c3dc43" title="The direction rows are stacked in; set once.">axis</a></span> wraps: the mount ignores it on a vertical one.  <br /></td></tr>
+<tr class="memitem:a53fed3011890bbdab60dfe3ae6aafe58" id="r_a53fed3011890bbdab60dfe3ae6aafe58"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a53fed3011890bbdab60dfe3ae6aafe58">divided</a> = false</td></tr>
+<tr class="memdesc:a53fed3011890bbdab60dfe3ae6aafe58"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a rule is drawn between each two shown rows, as a <a class="el" href="../../d1/d05/structmorph_1_1ui_1_1Column.html" title="Children stacked top to bottom.">Column</a>'s <span class="tt"><a class="el" href="#a53fed3011890bbdab60dfe3ae6aafe58" title="Whether a rule is drawn between each two shown rows, as a Column&#39;s divided; set once....">divided</a></span>; set once. Only a vertical <span class="tt"><a class="el" href="#a1ce4022883b1b3e4b82a6958e0c3dc43" title="The direction rows are stacked in; set once.">axis</a></span> divides: the mount ignores it on a horizontal one.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One widget per row of a keyed collection, updated in place when a row with the same key changes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00864">864</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01167">1167</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a03b46a1f9c22d6bf39a2bbeb376fb167" name="a03b46a1f9c22d6bf39a2bbeb376fb167"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a03b46a1f9c22d6bf39a2bbeb376fb167">&#9670;&#160;</a></span>model</h2>
@@ -156,7 +160,7 @@ Public Attributes</h2></td></tr>
 
 <p>The rows, the key function and the row view, type-erased; null shows no rows. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00866">866</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01169">1169</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -174,7 +178,7 @@ Public Attributes</h2></td></tr>
 
 <p>The direction rows are stacked in; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00868">868</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01171">1171</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +196,7 @@ Public Attributes</h2></td></tr>
 
 <p>Space between rows: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00870">870</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01173">1173</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +214,43 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop of the row container. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00872">872</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01175">1175</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3a7eec83c72b7f76e4eec3dbb3b7ab1c" name="a3a7eec83c72b7f76e4eec3dbb3b7ab1c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3a7eec83c72b7f76e4eec3dbb3b7ab1c">&#9670;&#160;</a></span>wrap</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::ForEach::wrap = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether rows that do not fit on one line continue on the next; set once. Only a horizontal <span class="tt"><a class="el" href="#a1ce4022883b1b3e4b82a6958e0c3dc43" title="The direction rows are stacked in; set once.">axis</a></span> wraps: the mount ignores it on a vertical one. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01178">1178</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a53fed3011890bbdab60dfe3ae6aafe58" name="a53fed3011890bbdab60dfe3ae6aafe58"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a53fed3011890bbdab60dfe3ae6aafe58">&#9670;&#160;</a></span>divided</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::ForEach::divided = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a rule is drawn between each two shown rows, as a <a class="el" href="../../d1/d05/structmorph_1_1ui_1_1Column.html" title="Children stacked top to bottom.">Column</a>'s <span class="tt"><a class="el" href="#a53fed3011890bbdab60dfe3ae6aafe58" title="Whether a rule is drawn between each two shown rows, as a Column&#39;s divided; set once....">divided</a></span>; set once. Only a vertical <span class="tt"><a class="el" href="#a1ce4022883b1b3e4b82a6958e0c3dc43" title="The direction rows are stacked in; set once.">axis</a></span> divides: the mount ignores it on a horizontal one. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01181">1181</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

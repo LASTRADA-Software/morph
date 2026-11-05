@@ -6,5 +6,7 @@ var structmorph_1_1ui_1_1MenuEntry =
     [ "keys", "d6/d3f/structmorph_1_1ui_1_1MenuEntry.html#a72ca954ac5d9a0a5382feb50e7d06555", null ],
     [ "checked", "d6/d3f/structmorph_1_1ui_1_1MenuEntry.html#a3484786ffcebf8025b0f79fcbbc0d75f", null ],
     [ "enabled", "d6/d3f/structmorph_1_1ui_1_1MenuEntry.html#af587beb316928aee86ad09aa6cd56ae9", null ],
-    [ "items", "d6/d3f/structmorph_1_1ui_1_1MenuEntry.html#a7846e1d06f96fdad2f34c906bfe1790c", null ]
+    [ "items", "d6/d3f/structmorph_1_1ui_1_1MenuEntry.html#a7846e1d06f96fdad2f34c906bfe1790c", null ],
+    [ "separator", "d6/d3f/structmorph_1_1ui_1_1MenuEntry.html#aa9ac620b4f52b9de37db1ba0a3951090", null ],
+    [ "description", "d6/d3f/structmorph_1_1ui_1_1MenuEntry.html#a7c5e41c23fe83f346ffa6f2b3174ab3c", null ]
 ];

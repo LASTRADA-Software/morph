@@ -6,5 +6,10 @@ var structmorph_1_1ui_1_1Button =
     [ "common", "d2/d47/structmorph_1_1ui_1_1Button.html#acebd6ff114ac56a72c449e60e6f981c6", null ],
     [ "icon", "d2/d47/structmorph_1_1ui_1_1Button.html#a1c442f883ed74cbb3ef8596455722c28", null ],
     [ "style", "d2/d47/structmorph_1_1ui_1_1Button.html#ad9b5ead2e2a4e871697d2751e1203677", null ],
-    [ "selected", "d2/d47/structmorph_1_1ui_1_1Button.html#a026273fcbb6f8b06e7430490bc2eb275", null ]
+    [ "child", "d2/d47/structmorph_1_1ui_1_1Button.html#acc212600bc64d68bf472e11410393439", null ],
+    [ "selected", "d2/d47/structmorph_1_1ui_1_1Button.html#a026273fcbb6f8b06e7430490bc2eb275", null ],
+    [ "shape", "d2/d47/structmorph_1_1ui_1_1Button.html#ac74e29f8ddd4941ca379f31514d0f25a", null ],
+    [ "size", "d2/d47/structmorph_1_1ui_1_1Button.html#a9ea8d1d03190a7fc42f2ae4c175ec873", null ],
+    [ "mono", "d2/d47/structmorph_1_1ui_1_1Button.html#a70e1264a56284ab6e395ef0fe56c0361", null ],
+    [ "weight", "d2/d47/structmorph_1_1ui_1_1Button.html#ab6fcf5e864b9b4f8ae4833349a531b90", null ]
 ];

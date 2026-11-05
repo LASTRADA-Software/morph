@@ -1,8 +1,10 @@
 var structmorph_1_1ui_1_1Grid =
 [
     [ "columns", "de/d85/structmorph_1_1ui_1_1Grid.html#af28559f0732d9f29f1eeed0d95ff1f81", null ],
+    [ "tracks", "de/d85/structmorph_1_1ui_1_1Grid.html#a9bb2834fe0b9a0906d74722fb168cc11", null ],
     [ "cells", "de/d85/structmorph_1_1ui_1_1Grid.html#a602c5b97741e477cba1889200bbf38b0", null ],
     [ "gap", "de/d85/structmorph_1_1ui_1_1Grid.html#adbd54d46363cd90a8d1dc0b59a1b2f11", null ],
     [ "common", "de/d85/structmorph_1_1ui_1_1Grid.html#ab0bae6331ef08a6def0bbc840d35b0c9", null ],
-    [ "align", "de/d85/structmorph_1_1ui_1_1Grid.html#a2d0ea87670d01e45b9974f5da6800214", null ]
+    [ "align", "de/d85/structmorph_1_1ui_1_1Grid.html#a2d0ea87670d01e45b9974f5da6800214", null ],
+    [ "minColumnWidth", "de/d85/structmorph_1_1ui_1_1Grid.html#a749e1f71d23077dafb662e44260fde5e", null ]
 ];

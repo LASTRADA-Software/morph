@@ -6,5 +6,8 @@ var structmorph_1_1ui_1_1MenuItem =
     [ "keys", "d4/dac/structmorph_1_1ui_1_1MenuItem.html#a1cca0616f110af74234b0279fd1f5cbc", null ],
     [ "checked", "d4/dac/structmorph_1_1ui_1_1MenuItem.html#a0c60d239b6412692a861d8ddfacd09b4", null ],
     [ "enabled", "d4/dac/structmorph_1_1ui_1_1MenuItem.html#aefeec3a2ad09279110b7bdf15148dfbe", null ],
-    [ "items", "d4/dac/structmorph_1_1ui_1_1MenuItem.html#a7c52df5b1b6cdb87dc72740486c0de68", null ]
+    [ "items", "d4/dac/structmorph_1_1ui_1_1MenuItem.html#a7c52df5b1b6cdb87dc72740486c0de68", null ],
+    [ "separator", "d4/dac/structmorph_1_1ui_1_1MenuItem.html#a22197f97e72c9a0339a03395f646ff5f", null ],
+    [ "description", "d4/dac/structmorph_1_1ui_1_1MenuItem.html#a3678679feaaca9d313ed286dfd42f562", null ],
+    [ "visible", "d4/dac/structmorph_1_1ui_1_1MenuItem.html#a0b4e0d93e05fc34e427b285ddd228702", null ]
 ];

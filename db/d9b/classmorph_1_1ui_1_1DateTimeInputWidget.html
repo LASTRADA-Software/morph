@@ -135,7 +135,7 @@ Inheritance diagram for morph::ui::DateTimeInputWidget:</div>
 <area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,344,24"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; DateTimeInputWidget &gt;" shape="rect" coords="0,168,344,192"/>
 <area href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html" alt="morph::ui::testing::detail::FakeField&lt; DateTimeInputWidget &gt;" shape="rect" coords="0,224,344,248"/>
-<area href="../../d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html" title="A fake DateTimeInputWidget: properties mode, offset, value, caption, captionShown." alt="morph::ui::testing::detail::FakeDateTimeInput" shape="rect" coords="0,280,344,304"/>
+<area href="../../d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html" title="A fake DateTimeInputWidget: properties mode, offset, value, pattern, caption, captionShown." alt="morph::ui::testing::detail::FakeDateTimeInput" shape="rect" coords="0,280,344,304"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -145,6 +145,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a7171669f3163f62f75206b71b6f6c16c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows an instant. Never calls the <span class="tt">onChange</span> handler.  <br /></td></tr>
 <tr class="memitem:a152ce8979db7ac496374e3c842e5343e" id="r_a152ce8979db7ac496374e3c842e5343e"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a152ce8979db7ac496374e3c842e5343e">setOnChange</a> (std::function&lt; void(std::optional&lt; <a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html">morph::time::Timestamp</a> &gt;)&gt; onChange)=0</td></tr>
 <tr class="memdesc:a152ce8979db7ac496374e3c842e5343e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a user edit calls, with the instant entered or <span class="tt">nullopt</span> for a cleared field.  <br /></td></tr>
+<tr class="memitem:ad504e51fdf2ec7c3126cf2bc74306d2f" id="r_ad504e51fdf2ec7c3126cf2bc74306d2f"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ad504e51fdf2ec7c3126cf2bc74306d2f">setPattern</a> (std::string_view pattern)=0</td></tr>
+<tr class="memdesc:ad504e51fdf2ec7c3126cf2bc74306d2f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the pattern the field shows its value in and reads typed text in (<span class="tt"><a class="el" href="../../d3/d89/date__pattern_8hpp.html#ab82034f230a13157c9e260a7db1f6aac" title="Writes an instant in a pattern.">formatDate</a></span>, <span class="tt"><a class="el" href="../../d3/d89/date__pattern_8hpp.html#ac0aea9c5e9cc796b7d6fd4ff7c72ff4c" title="Reads the instant a text names: in the pattern, then as ISO 8601 (yyyy-MM-dd, yyyy-MM-dd HH:mm or yyy...">parseDate</a></span>), ISO being always read too. The mount calls it once, before the value, and only for a pattern that is not empty; a new field shows ISO.  <br /></td></tr>
 <tr class="memitem:aa9bde28280602950f477a91deae19f94" id="r_aa9bde28280602950f477a91deae19f94"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#aa9bde28280602950f477a91deae19f94">setCaption</a> (std::string_view label, bool shown)=0</td></tr>
 <tr class="memdesc:aa9bde28280602950f477a91deae19f94"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the field's label, and whether the input draws it as a visible caption above its control. Without <span class="tt">shown</span>, the caption is drawn elsewhere (a form's cell), or not at all.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1FieldWidget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html">morph::ui::FieldWidget</a></td></tr>
@@ -156,6 +158,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a521054947792141fe5e3c6b6bcafae80 pub_methods_classmorph_1_1ui_1_1FieldWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the messages shown with the field.  <br /></td></tr>
 <tr class="memitem:addb6e0b337d13389364cbcf684079afb pub_methods_classmorph_1_1ui_1_1FieldWidget" id="r_addb6e0b337d13389364cbcf684079afb"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html#addb6e0b337d13389364cbcf684079afb">setStale</a> (bool stale)=0</td></tr>
 <tr class="memdesc:addb6e0b337d13389364cbcf684079afb pub_methods_classmorph_1_1ui_1_1FieldWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows or clears the mark of a value that is being recomputed.  <br /></td></tr>
+<tr class="memitem:a65b3747a204aaabdaa503d888477c0ab pub_methods_classmorph_1_1ui_1_1FieldWidget" id="r_a65b3747a204aaabdaa503d888477c0ab"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html#a65b3747a204aaabdaa503d888477c0ab">setDescription</a> (std::string_view description)=0</td></tr>
+<tr class="memdesc:a65b3747a204aaabdaa503d888477c0ab pub_methods_classmorph_1_1ui_1_1FieldWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a line that describes the field under its control, after its messages, and makes it the control's accessible description, after the messages. A text takes none: the mount never calls it on one, and a backend refuses it there.  <br /></td></tr>
+<tr class="memitem:ae062c9fe6c3eb50485904191320bbeb9 pub_methods_classmorph_1_1ui_1_1FieldWidget" id="r_ae062c9fe6c3eb50485904191320bbeb9"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html#ae062c9fe6c3eb50485904191320bbeb9">setCaptionHint</a> (std::string_view hint)=0</td></tr>
+<tr class="memdesc:ae062c9fe6c3eb50485904191320bbeb9 pub_methods_classmorph_1_1ui_1_1FieldWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a hint after the field's caption and its required mark, such as the range a value must lie in ("Temperature on arrival * · 2-8 degrees"). It is drawn only while the input shows a caption. A text takes none: the mount never calls it on one, and a backend refuses it there.  <br /></td></tr>
+<tr class="memitem:a4825ab9beef8ea35b62498309952144c pub_methods_classmorph_1_1ui_1_1FieldWidget" id="r_a4825ab9beef8ea35b62498309952144c"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dbb/classmorph_1_1ui_1_1FieldWidget.html#a4825ab9beef8ea35b62498309952144c">setTone</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> tone)=0</td></tr>
+<tr class="memdesc:a4825ab9beef8ea35b62498309952144c pub_methods_classmorph_1_1ui_1_1FieldWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates the value without making it invalid: outlines the control in the tone and draws the description in the tone's colour. A field with errors is drawn as <span class="tt">Err</span> whatever its tone. A text takes it as its colour, whatever its role.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1Widget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">morph::ui::Widget</a></td></tr>
 <tr class="memitem:abbc2ba04f9c9e2e29b8b9c6993e9b46b pub_methods_classmorph_1_1ui_1_1Widget" id="r_abbc2ba04f9c9e2e29b8b9c6993e9b46b"><td class="memItemLeft">
 &#160;</td><td class="memItemRight"><b>Widget</b> (Widget const &amp;)=delete</td></tr>
@@ -184,7 +192,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <tr class="memitem:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget" id="r_aa92d96c22b5e09e0aecb8866b4481f57"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#aa92d96c22b5e09e0aecb8866b4481f57">setTooltip</a> (std::string_view text)=0</td></tr>
 <tr class="memdesc:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text shown while the pointer rests on the widget.  <br /></td></tr>
 <tr class="memitem:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7ceca74805a45b142f00838ee17dd747"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7ceca74805a45b142f00838ee17dd747">setSurface</a> (std::string_view surface)=0</td></tr>
-<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme.  <br /></td></tr>
+<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme. May be called again: each call restyles the widget and everything inside it.  <br /></td></tr>
 <tr class="memitem:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget" id="r_a96f94ca0cf2c093d8f8463091d91bbfb"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a96f94ca0cf2c093d8f8463091d91bbfb">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord)=0</td></tr>
 <tr class="memdesc:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Declares the keyboard chords the widget handles while focus is inside it.  <br /></td></tr>
 <tr class="memitem:a7eeebc91608f97e34f70fced77b40173 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7eeebc91608f97e34f70fced77b40173"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7eeebc91608f97e34f70fced77b40173">focus</a> ()=0</td></tr>
@@ -195,7 +203,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A date or date-and-time field, in the mode and display zone fixed at creation. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00533">533</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00839">839</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a7171669f3163f62f75206b71b6f6c16c" name="a7171669f3163f62f75206b71b6f6c16c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7171669f3163f62f75206b71b6f6c16c">&#9670;&#160;</a></span>setValue()</h2>
@@ -264,6 +272,41 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html#a17568efda076444358cc8c920d8c00cc">morph::ui::testing::detail::FakeDateTimeInput</a>.</p>
+
+</div>
+</div>
+<a id="ad504e51fdf2ec7c3126cf2bc74306d2f" name="ad504e51fdf2ec7c3126cf2bc74306d2f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad504e51fdf2ec7c3126cf2bc74306d2f">&#9670;&#160;</a></span>setPattern()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::DateTimeInputWidget::setPattern </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>pattern</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the pattern the field shows its value in and reads typed text in (<span class="tt"><a class="el" href="../../d3/d89/date__pattern_8hpp.html#ab82034f230a13157c9e260a7db1f6aac" title="Writes an instant in a pattern.">formatDate</a></span>, <span class="tt"><a class="el" href="../../d3/d89/date__pattern_8hpp.html#ac0aea9c5e9cc796b7d6fd4ff7c72ff4c" title="Reads the instant a text names: in the pattern, then as ISO 8601 (yyyy-MM-dd, yyyy-MM-dd HH:mm or yyy...">parseDate</a></span>), ISO being always read too. The mount calls it once, before the value, and only for a pattern that is not empty; a new field shows ISO. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">pattern</td><td>The pattern, such as <span class="tt">dd-MMM-yyyy HH:mm</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html#af43481fa1b7bc3e1f648113ea4bbad8e">morph::ui::testing::detail::FakeDateTimeInput</a>.</p>
 
 </div>
 </div>

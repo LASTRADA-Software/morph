@@ -9,6 +9,8 @@ var classmorph_1_1ui_1_1detail_1_1RtScope =
     [ "core", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a27afd48f7c5ebc95060e9bcac804574e", null ],
     [ "parent", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#aef597b0ad4517f5b83fe2c23512339dc", null ],
     [ "row", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a14c53f01c13f6d3477608668852e223c", null ],
+    [ "rowKey", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a04eec58bcb467ca2a16df9b4b874be03", null ],
+    [ "usePrefix", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#ae12b01d6b5dcc3185fae64fee56f055c", null ],
     [ "owner", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a7c13b661af26d49c485c4bc183465687", null ],
     [ "showErrors", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a98a245edb7f430252b9354fe455da14f", null ],
     [ "submitted", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a674fc6c9aaa35a89df79b2ad2c840306", null ],

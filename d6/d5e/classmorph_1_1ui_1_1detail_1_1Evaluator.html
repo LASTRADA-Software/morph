@@ -132,11 +132,17 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:af21122b27b0d1a33cbd5ce3e3f8bfa49"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates against <code class="param">env</code>.  <br /></td></tr>
 <tr class="memitem:a44a924bd8725d4ae722d9e494ac57656" id="r_a44a924bd8725d4ae722d9e494ac57656"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a44a924bd8725d4ae722d9e494ac57656">eval</a> (<a class="el" href="../../d0/df6/structmorph_1_1ui_1_1Expr.html">Expr</a> const &amp;expr)</td></tr>
 <tr class="memdesc:a44a924bd8725d4ae722d9e494ac57656"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates one node.  <br /></td></tr>
+<tr class="memitem:a8f291609fa8b321aa9f3973bcb78aff9" id="r_a8f291609fa8b321aa9f3973bcb78aff9"><td class="memItemLeft">std::optional&lt; std::strong_ordering &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8f291609fa8b321aa9f3973bcb78aff9">sortOrder</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;lhs, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;rhs)</td></tr>
+<tr class="memdesc:a8f291609fa8b321aa9f3973bcb78aff9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Orders two values as sorting does: as <span class="tt">lt</span> orders them, except that strings compare case-folded as the table engine's default collator folds them, and by their own bytes when they fold the same, so the order never depends on the source order.  <br /></td></tr>
+<tr class="memitem:aefe4c20cbb0dcc1aaa9a64ee22e71343" id="r_aefe4c20cbb0dcc1aaa9a64ee22e71343"><td class="memItemLeft">std::optional&lt; std::vector&lt; std::size_t &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aefe4c20cbb0dcc1aaa9a64ee22e71343">sortRows</a> (std::vector&lt; std::vector&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> &gt; &gt; const &amp;keys, std::vector&lt; bool &gt; const &amp;descending)</td></tr>
+<tr class="memdesc:aefe4c20cbb0dcc1aaa9a64ee22e71343"><td class="mdescLeft">&#160;</td><td class="mdescRight">A stable order of rows by their sort keys: by each key in turn, <span class="tt">null</span> last in either direction, and a descending key reversing the comparison, not the rows, so rows with equal keys keep their order.  <br /></td></tr>
+<tr class="memitem:a6c2b0cfaeacaf7614a4d05aa7fb46444" id="r_a6c2b0cfaeacaf7614a4d05aa7fb46444"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a6c2b0cfaeacaf7614a4d05aa7fb46444">sameRun</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;lhs, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;rhs)</td></tr>
+<tr class="memdesc:a6c2b0cfaeacaf7614a4d05aa7fb46444"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether two <span class="tt">by</span> values put their elements in one run: <span class="tt">eq</span>'s comparison, except that <span class="tt">null</span> equals <span class="tt">null</span>, so the elements without the value make one run.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Evaluates expressions against an environment, with the comprehension variables in scope. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01262">1262</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01713">1713</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="af21122b27b0d1a33cbd5ce3e3f8bfa49" name="af21122b27b0d1a33cbd5ce3e3f8bfa49"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af21122b27b0d1a33cbd5ce3e3f8bfa49">&#9670;&#160;</a></span>Evaluator()</h2>
@@ -169,7 +175,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01266">1266</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01717">1717</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -206,7 +212,130 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its value; <span class="tt">null</span> on a runtime error, which is reported. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01271">1271</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01722">1722</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8f291609fa8b321aa9f3973bcb78aff9" name="a8f291609fa8b321aa9f3973bcb78aff9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8f291609fa8b321aa9f3973bcb78aff9">&#9670;&#160;</a></span>sortOrder()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::strong_ordering &gt; morph::ui::detail::Evaluator::sortOrder </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>lhs</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>rhs</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Orders two values as sorting does: as <span class="tt">lt</span> orders them, except that strings compare case-folded as the table engine's default collator folds them, and by their own bytes when they fold the same, so the order never depends on the source order. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">lhs</td><td>A value, not <span class="tt">null</span>. </td></tr>
+    <tr><td class="paramname">rhs</td><td>A value, not <span class="tt">null</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The ordering; <span class="tt">nullopt</span> when the two are not of one comparable kind. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01786">1786</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aefe4c20cbb0dcc1aaa9a64ee22e71343" name="aefe4c20cbb0dcc1aaa9a64ee22e71343"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aefe4c20cbb0dcc1aaa9a64ee22e71343">&#9670;&#160;</a></span>sortRows()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; std::vector&lt; std::size_t &gt; &gt; morph::ui::detail::Evaluator::sortRows </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; std::vector&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> &gt; &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>keys</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::vector&lt; bool &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>descending</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A stable order of rows by their sort keys: by each key in turn, <span class="tt">null</span> last in either direction, and a descending key reversing the comparison, not the rows, so rows with equal keys keep their order. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">keys</td><td>Each row's keys, most significant first; every row has one per entry of <code class="param">descending</code>. </td></tr>
+    <tr><td class="paramname">descending</td><td>Whether each key sorts descending. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The rows' indices in sorted order; <span class="tt">nullopt</span> when a key's values are not of one comparable kind. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01802">1802</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6c2b0cfaeacaf7614a4d05aa7fb46444" name="a6c2b0cfaeacaf7614a4d05aa7fb46444"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6c2b0cfaeacaf7614a4d05aa7fb46444">&#9670;&#160;</a></span>sameRun()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::detail::Evaluator::sameRun </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>lhs</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>rhs</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether two <span class="tt">by</span> values put their elements in one run: <span class="tt">eq</span>'s comparison, except that <span class="tt">null</span> equals <span class="tt">null</span>, so the elements without the value make one run. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">lhs</td><td>A value. </td></tr>
+    <tr><td class="paramname">rhs</td><td>A value. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether they are the same run's. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01832">1832</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>

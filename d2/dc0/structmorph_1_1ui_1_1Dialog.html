@@ -132,17 +132,25 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:ab0af8265f9c5578a803f70bf4d8b7b03"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether it is shown.  <br /></td></tr>
 <tr class="memitem:ae697662e9219ceaff1c9c9eddb09cd58" id="r_ae697662e9219ceaff1c9c9eddb09cd58"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae697662e9219ceaff1c9c9eddb09cd58">title</a></td></tr>
 <tr class="memdesc:ae697662e9219ceaff1c9c9eddb09cd58"><td class="mdescLeft">&#160;</td><td class="mdescRight">The title.  <br /></td></tr>
+<tr class="memitem:a1e9a48cad6e318f8c03409c5a7b43b50" id="r_a1e9a48cad6e318f8c03409c5a7b43b50"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1e9a48cad6e318f8c03409c5a7b43b50">description</a></td></tr>
+<tr class="memdesc:a1e9a48cad6e318f8c03409c5a7b43b50"><td class="mdescLeft">&#160;</td><td class="mdescRight">A line under the title, in the head, that describes the dialog and is its accessible description; empty shows none. Applied only when bound or not empty.  <br /></td></tr>
 <tr class="memitem:a44c363b9282c0addcb4cd40635e8d3df" id="r_a44c363b9282c0addcb4cd40635e8d3df"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a44c363b9282c0addcb4cd40635e8d3df">child</a></td></tr>
 <tr class="memdesc:a44c363b9282c0addcb4cd40635e8d3df"><td class="mdescLeft">&#160;</td><td class="mdescRight">The content; may be null.  <br /></td></tr>
 <tr class="memitem:a3758ea02eef38c374b1cb5f37c730037" id="r_a3758ea02eef38c374b1cb5f37c730037"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a>&#160;</td><td class="memItemRight"><a class="el" href="#a3758ea02eef38c374b1cb5f37c730037">onDismiss</a></td></tr>
 <tr class="memdesc:a3758ea02eef38c374b1cb5f37c730037"><td class="mdescLeft">&#160;</td><td class="mdescRight">Called when the user dismisses it (Esc on the TUI).  <br /></td></tr>
 <tr class="memitem:a219f13d0e54b4c061108df03747a9724" id="r_a219f13d0e54b4c061108df03747a9724"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#a219f13d0e54b4c061108df03747a9724">common</a> {}</td></tr>
 <tr class="memdesc:a219f13d0e54b4c061108df03747a9724"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visibility, enablement, layout, drag-and-drop.  <br /></td></tr>
+<tr class="memitem:a60fe2eaccab23a760d47996f39d4da79" id="r_a60fe2eaccab23a760d47996f39d4da79"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a60fe2eaccab23a760d47996f39d4da79">sheet</a> = false</td></tr>
+<tr class="memdesc:a60fe2eaccab23a760d47996f39d4da79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether it is drawn as a sheet that fills the window, with a head holding a dismiss control and the title. Changing it while open keeps the content and its state.  <br /></td></tr>
+<tr class="memitem:aed08238e04671670bd52d1ef4f873f00" id="r_aed08238e04671670bd52d1ef4f873f00"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aed08238e04671670bd52d1ef4f873f00">dismissLabel</a> = std::string{&quot;Close&quot;}</td></tr>
+<tr class="memdesc:aed08238e04671670bd52d1ef4f873f00"><td class="mdescLeft">&#160;</td><td class="mdescRight">The label of a sheet's dismiss control, which dismisses as Escape does.  <br /></td></tr>
+<tr class="memitem:a2e89c627ddbc39e88e3ea23e9b4e8030" id="r_a2e89c627ddbc39e88e3ea23e9b4e8030"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2e89c627ddbc39e88e3ea23e9b4e8030">descriptionSpans</a></td></tr>
+<tr class="memdesc:a2e89c627ddbc39e88e3ea23e9b4e8030"><td class="mdescLeft">&#160;</td><td class="mdescRight">The description as runs; while bound or not empty, shown in place of <span class="tt"><a class="el" href="#a1e9a48cad6e318f8c03409c5a7b43b50" title="A line under the title, in the head, that describes the dialog and is its accessible description; emp...">description</a></span>, which an older client draws.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A modal overlay; its content is mounted only while it is open. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00694">694</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00986">986</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ab0af8265f9c5578a803f70bf4d8b7b03" name="ab0af8265f9c5578a803f70bf4d8b7b03"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ab0af8265f9c5578a803f70bf4d8b7b03">&#9670;&#160;</a></span>open</h2>
@@ -158,7 +166,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether it is shown. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00696">696</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00988">988</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,7 +184,25 @@ Public Attributes</h2></td></tr>
 
 <p>The title. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00698">698</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00990">990</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1e9a48cad6e318f8c03409c5a7b43b50" name="a1e9a48cad6e318f8c03409c5a7b43b50"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1e9a48cad6e318f8c03409c5a7b43b50">&#9670;&#160;</a></span>description</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::Dialog::description</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A line under the title, in the head, that describes the dialog and is its accessible description; empty shows none. Applied only when bound or not empty. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00993">993</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -194,7 +220,7 @@ Public Attributes</h2></td></tr>
 
 <p>The content; may be null. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00700">700</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00995">995</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -212,7 +238,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called when the user dismisses it (Esc on the TUI). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00702">702</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00997">997</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +256,61 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00704">704</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00999">999</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a60fe2eaccab23a760d47996f39d4da79" name="a60fe2eaccab23a760d47996f39d4da79"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a60fe2eaccab23a760d47996f39d4da79">&#9670;&#160;</a></span>sheet</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;bool&gt; morph::ui::Dialog::sheet = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether it is drawn as a sheet that fills the window, with a head holding a dismiss control and the title. Changing it while open keeps the content and its state. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01002">1002</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aed08238e04671670bd52d1ef4f873f00" name="aed08238e04671670bd52d1ef4f873f00"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aed08238e04671670bd52d1ef4f873f00">&#9670;&#160;</a></span>dismissLabel</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::Dialog::dismissLabel = std::string{&quot;Close&quot;}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The label of a sheet's dismiss control, which dismisses as Escape does. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01004">1004</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2e89c627ddbc39e88e3ea23e9b4e8030" name="a2e89c627ddbc39e88e3ea23e9b4e8030"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2e89c627ddbc39e88e3ea23e9b4e8030">&#9670;&#160;</a></span>descriptionSpans</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::vector&lt;<a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a>&gt; &gt; morph::ui::Dialog::descriptionSpans</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The description as runs; while bound or not empty, shown in place of <span class="tt"><a class="el" href="#a1e9a48cad6e318f8c03409c5a7b43b50" title="A line under the title, in the head, that describes the dialog and is its accessible description; emp...">description</a></span>, which an older client draws. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01007">1007</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

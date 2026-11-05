@@ -138,11 +138,19 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a9d64416ed631166167e2d94b4c32769e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the children sit across the column (horizontally); set once.  <br /></td></tr>
 <tr class="memitem:abed9ca87522026d8aace7862496f7757" id="r_abed9ca87522026d8aace7862496f7757"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a>&#160;</td><td class="memItemRight"><a class="el" href="#abed9ca87522026d8aace7862496f7757">justify</a> = <a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4aa6122a65eaa676f700ae68d393054a37">Justify::Start</a></td></tr>
 <tr class="memdesc:abed9ca87522026d8aace7862496f7757"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the spare height goes while no shown child stretches; set once.  <br /></td></tr>
+<tr class="memitem:a0cecf941f87e49e2ac16b541a7598196" id="r_a0cecf941f87e49e2ac16b541a7598196"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a0cecf941f87e49e2ac16b541a7598196">divided</a> = false</td></tr>
+<tr class="memdesc:a0cecf941f87e49e2ac16b541a7598196"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a 1 px rule in the theme's divider colour is drawn between each two shown children, centred in the gap; set once. The terminal draws none.  <br /></td></tr>
+<tr class="memitem:ab81d86de16085a0270351c4fd302b580" id="r_ab81d86de16085a0270351c4fd302b580"><td class="memItemLeft"><a class="el" href="../../d7/d65/structmorph_1_1ui_1_1Padding.html">Padding</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab81d86de16085a0270351c4fd302b580">padding</a></td></tr>
+<tr class="memdesc:ab81d86de16085a0270351c4fd302b580"><td class="mdescLeft">&#160;</td><td class="mdescRight">The inset of the children: a spacing step on every side, or one step above and below and one at the sides; set once.  <br /></td></tr>
+<tr class="memitem:ad605940b2055dbcc9d2b29e3f756d64d" id="r_ad605940b2055dbcc9d2b29e3f756d64d"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; bool &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad605940b2055dbcc9d2b29e3f756d64d">selected</a></td></tr>
+<tr class="memdesc:ad605940b2055dbcc9d2b29e3f756d64d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the stack is the chosen entry of a list: while true it draws the accent's 3 px bar at its leading edge, over its surface and under its children, and takes the <span class="tt">Grouping</span> accessibility role. Disengaged when none was given. The mount refuses it on a table's row view.  <br /></td></tr>
+<tr class="memitem:a09b327136fd3a8224ac18149ad834ab4" id="r_a09b327136fd3a8224ac18149ad834ab4"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a09b327136fd3a8224ac18149ad834ab4">holder</a> = false</td></tr>
+<tr class="memdesc:a09b327136fd3a8224ac18149ad834ab4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the column is the holder the interpreter makes for a list of nodes (a panel's, a tab page's, a scroll's children). A holder is transparent to <span class="tt">bleed</span>: its children reach past the padding of the container the document names, not past the holder's own. The mount calls <span class="tt">StackWidget::setPassesBleed(true)</span> for a holder, before its first child; set once.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Children stacked top to bottom. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00564">564</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00792">792</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ac4df82e7cbade99214c30c94d8dc5bad" name="ac4df82e7cbade99214c30c94d8dc5bad"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac4df82e7cbade99214c30c94d8dc5bad">&#9670;&#160;</a></span>children</h2>
@@ -158,7 +166,7 @@ Public Attributes</h2></td></tr>
 
 <p>The children, in order; a null child is skipped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00566">566</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00794">794</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,7 +184,7 @@ Public Attributes</h2></td></tr>
 
 <p>Space between children: a spacing step, 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00568">568</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00796">796</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -194,7 +202,7 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00570">570</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00798">798</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -212,7 +220,7 @@ Public Attributes</h2></td></tr>
 
 <p>Where the children sit across the column (horizontally); set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00572">572</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00800">800</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +238,79 @@ Public Attributes</h2></td></tr>
 
 <p>Where the spare height goes while no shown child stretches; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00574">574</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00802">802</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0cecf941f87e49e2ac16b541a7598196" name="a0cecf941f87e49e2ac16b541a7598196"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0cecf941f87e49e2ac16b541a7598196">&#9670;&#160;</a></span>divided</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Column::divided = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a 1 px rule in the theme's divider colour is drawn between each two shown children, centred in the gap; set once. The terminal draws none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00805">805</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab81d86de16085a0270351c4fd302b580" name="ab81d86de16085a0270351c4fd302b580"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab81d86de16085a0270351c4fd302b580">&#9670;&#160;</a></span>padding</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d7/d65/structmorph_1_1ui_1_1Padding.html">Padding</a> morph::ui::Column::padding</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The inset of the children: a spacing step on every side, or one step above and below and one at the sides; set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00808">808</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad605940b2055dbcc9d2b29e3f756d64d" name="ad605940b2055dbcc9d2b29e3f756d64d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad605940b2055dbcc9d2b29e3f756d64d">&#9670;&#160;</a></span>selected</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;bool&gt; &gt; morph::ui::Column::selected</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the stack is the chosen entry of a list: while true it draws the accent's 3 px bar at its leading edge, over its surface and under its children, and takes the <span class="tt">Grouping</span> accessibility role. Disengaged when none was given. The mount refuses it on a table's row view. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00812">812</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a09b327136fd3a8224ac18149ad834ab4" name="a09b327136fd3a8224ac18149ad834ab4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a09b327136fd3a8224ac18149ad834ab4">&#9670;&#160;</a></span>holder</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Column::holder = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the column is the holder the interpreter makes for a list of nodes (a panel's, a tab page's, a scroll's children). A holder is transparent to <span class="tt">bleed</span>: its children reach past the padding of the container the document names, not past the holder's own. The mount calls <span class="tt">StackWidget::setPassesBleed(true)</span> for a holder, before its first child; set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00817">817</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

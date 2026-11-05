@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/de1/workspa
 </div><!--header-->
 <div class="contents">
 
-<p>The workspace shell (spec 6 §7, §15): tabs over screens, mounted through a <span class="tt">DocumentScreenHost</span>.  
+<p>The workspace shell (spec 6 §7, §15): tabs over screens, and overlays over the tabs, mounted through a <span class="tt">DocumentScreenHost</span>.  
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;algorithm&gt;</code><br />
 <code>#include &lt;chrono&gt;</code><br />
@@ -143,6 +143,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/de1/workspa
 <code>#include &quot;<a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d4/d2f/route_8hpp_source.html">route.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">value.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>&quot;</code><br />
@@ -153,6 +154,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/de1/workspa
 Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AWorkspaceTab" id="r_morph_3A_3Aui_3A_3AWorkspaceTab"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html">morph::ui::WorkspaceTab</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One open tab, as an application's tab menu or a test reads it.  <a href="../../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AHeadParts" id="r_morph_3A_3Aui_3A_3AHeadParts"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d5/d48/structmorph_1_1ui_1_1HeadParts.html">morph::ui::HeadParts</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The parts of the active screen's head, for a host that lays them out itself.  <a href="../../d5/d48/structmorph_1_1ui_1_1HeadParts.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AWorkspace" id="r_morph_3A_3Aui_3A_3AWorkspace"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html">morph::ui::Workspace</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: a tab bar over a <span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html" title="The workspace&#39;s tabs with no widgets: which screens are open, in which order, which is active,...">WorkspaceModel</a></span>, one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>, with the screen's head row above it or, when the placement is <span class="tt">External</span>, mounted by the host instead.  <a href="../../d6/d77/classmorph_1_1ui_1_1Workspace.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
@@ -162,9 +165,14 @@ Enumerations</h2></td></tr>
 , <a class="el" href="#ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779">External</a>
  }</td></tr>
 <tr class="memdesc:ac588613cfacc29776a836250b58694ec"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a workspace draws the active screen's head row.  <a href="#ac588613cfacc29776a836250b58694ec">More...</a><br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
+Variables</h2></td></tr>
+<tr class="memitem:a3864b39752d955cda4e7205796d1a5cf" id="r_a3864b39752d955cda4e7205796d1a5cf"><td class="memItemLeft">constexpr int&#160;</td><td class="memItemRight"><a class="el" href="#a3864b39752d955cda4e7205796d1a5cf">morph::ui::kHeadLeadMinimum</a> = 32</td></tr>
+<tr class="memdesc:a3864b39752d955cda4e7205796d1a5cf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The narrowest a head's lead is given before the trail wraps to a line of its own, in units.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>The workspace shell (spec 6 §7, §15): tabs over screens, mounted through a <span class="tt">DocumentScreenHost</span>. </p>
+<div class="textblock"><p>The workspace shell (spec 6 §7, §15): tabs over screens, and overlays over the tabs, mounted through a <span class="tt">DocumentScreenHost</span>. </p>
 <p>Specified in <span class="tt">docs/spec/ui/workspace.md</span>. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
@@ -193,11 +201,38 @@ Enumerations</h2></td></tr>
 <table class="fieldtable">
 <tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50" name="ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50"></a>InPage&#160;</td><td class="fielddoc"><p>Above each page, inside the workspace. </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779" name="ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779"></a>External&#160;</td><td class="fielddoc"><p>Nowhere: the host mounts <span class="tt">headRowForActive()</span> where it chooses, and a page holds only its screen. </p>
+<tr><td class="fieldname"><a id="ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779" name="ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779"></a>External&#160;</td><td class="fielddoc"><p>Nowhere: the host mounts <span class="tt">headPartsForActive()</span> where it chooses, and a page holds only its screen. </p>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
+<a id="a3864b39752d955cda4e7205796d1a5cf" name="a3864b39752d955cda4e7205796d1a5cf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3864b39752d955cda4e7205796d1a5cf">&#9670;&#160;</a></span>kHeadLeadMinimum</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">int morph::ui::kHeadLeadMinimum = 32</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The narrowest a head's lead is given before the trail wraps to a line of its own, in units. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>

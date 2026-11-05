@@ -146,12 +146,36 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a58721df888b8f90c421a16de0a90bc9e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen's identity: two screens with equal identities are one.  <br /></td></tr>
 <tr class="memitem:ab7b631fb0652ccb70b040bfc7d94e0e2" id="r_ab7b631fb0652ccb70b040bfc7d94e0e2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ab7b631fb0652ccb70b040bfc7d94e0e2">dirty</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;dirty)</td></tr>
 <tr class="memdesc:ab7b631fb0652ccb70b040bfc7d94e0e2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the screen has unsaved changes.  <br /></td></tr>
+<tr class="memitem:ab3397406d802855f3af2f556f2e8496f" id="r_ab3397406d802855f3af2f556f2e8496f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ab3397406d802855f3af2f556f2e8496f">titleSpans</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;runs)</td></tr>
+<tr class="memdesc:ab3397406d802855f3af2f556f2e8496f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The title as runs (<span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#ae3629ac37c22704183a707c83f3614c5" title="A span list: the runs of a text, a banner, a key-value item, a dialog&#39;s or drawer&#39;s description or a ...">spans</a></span>), which a shell that knows them draws in its top bar in place of <span class="tt"><a class="el" href="#a1ad1b2cb7f7317b283364fe04042dea5" title="The screen&#39;s title.">title</a></span>: an identifier in the monospace face beside plain words. <span class="tt"><a class="el" href="#a1ad1b2cb7f7317b283364fe04042dea5" title="The screen&#39;s title.">title</a></span> stays the tab's caption.  <br /></td></tr>
+<tr class="memitem:aad343361c9e634ae30139211293a8702" id="r_aad343361c9e634ae30139211293a8702"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aad343361c9e634ae30139211293a8702">eyebrow</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;eyebrow)</td></tr>
+<tr class="memdesc:aad343361c9e634ae30139211293a8702"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's line above the title.  <br /></td></tr>
+<tr class="memitem:abbedb5604cf83e09bf80d3a3c30266c8" id="r_abbedb5604cf83e09bf80d3a3c30266c8"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#abbedb5604cf83e09bf80d3a3c30266c8">eyebrowSpans</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;runs)</td></tr>
+<tr class="memdesc:abbedb5604cf83e09bf80d3a3c30266c8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's line above the title as runs (<span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#ae3629ac37c22704183a707c83f3614c5" title="A span list: the runs of a text, a banner, a key-value item, a dialog&#39;s or drawer&#39;s description or a ...">spans</a></span>), which a shell that knows them draws in place of the <span class="tt"><a class="el" href="#aad343361c9e634ae30139211293a8702" title="The head&#39;s line above the title.">eyebrow</a></span> beside it.  <br /></td></tr>
 <tr class="memitem:aa78b3b1a7162c37b4ca7e28a9f180837" id="r_aa78b3b1a7162c37b4ca7e28a9f180837"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa78b3b1a7162c37b4ca7e28a9f180837">subtitle</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;subtitle)</td></tr>
 <tr class="memdesc:aa78b3b1a7162c37b4ca7e28a9f180837"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's line under the title.  <br /></td></tr>
+<tr class="memitem:aa9951fa00fd52f8081acfa48e7fefcc8" id="r_aa9951fa00fd52f8081acfa48e7fefcc8"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa9951fa00fd52f8081acfa48e7fefcc8">subtitleSpans</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;runs)</td></tr>
+<tr class="memdesc:aa9951fa00fd52f8081acfa48e7fefcc8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's line under the title as runs (<span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#ae3629ac37c22704183a707c83f3614c5" title="A span list: the runs of a text, a banner, a key-value item, a dialog&#39;s or drawer&#39;s description or a ...">spans</a></span>), which a shell that knows them draws in place of the <span class="tt"><a class="el" href="#aa78b3b1a7162c37b4ca7e28a9f180837" title="The head&#39;s line under the title.">subtitle</a></span> beside it: an identifier in the monospace face, a bold word.  <br /></td></tr>
+<tr class="memitem:a1cd989361a7934507ffb23c7c023aa75" id="r_a1cd989361a7934507ffb23c7c023aa75"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1cd989361a7934507ffb23c7c023aa75">leadPlacement</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;placement)</td></tr>
+<tr class="memdesc:a1cd989361a7934507ffb23c7c023aa75"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the head's lead (the subtitle and the badges) sits: an expression of <span class="tt">"below"</span> (the default, under the title), <span class="tt">"inline"</span> (on the title's line, after it) or <span class="tt">"end"</span> (at the trailing edge of the head's first line, after the tools and before the actions). A literal is checked at load.  <br /></td></tr>
+<tr class="memitem:a8fd648352cf20fc9ba273ad04ec34d2a" id="r_a8fd648352cf20fc9ba273ad04ec34d2a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a8fd648352cf20fc9ba273ad04ec34d2a">titleRole</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;role)</td></tr>
+<tr class="memdesc:a8fd648352cf20fc9ba273ad04ec34d2a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text role of the head's title: an expression of <span class="tt">"heading"</span> (the default) or <span class="tt">"headline"</span>, a record's identity set a step larger. A literal is checked at load.  <br /></td></tr>
+<tr class="memitem:a0b704da2064c2f6b6167427c187a1b61" id="r_a0b704da2064c2f6b6167427c187a1b61"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a0b704da2064c2f6b6167427c187a1b61">headSurface</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;surface)</td></tr>
+<tr class="memdesc:a0b704da2064c2f6b6167427c187a1b61"><td class="mdescLeft">&#160;</td><td class="mdescRight">The surface the shell draws its top bar on while the screen is shown: an expression of a surface's name, <span class="tt">null</span> for none.  <br /></td></tr>
+<tr class="memitem:a38b0e0c9ada1552735d4a67a5b31ccff" id="r_a38b0e0c9ada1552735d4a67a5b31ccff"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a38b0e0c9ada1552735d4a67a5b31ccff">pageSurface</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;surface)</td></tr>
+<tr class="memdesc:a38b0e0c9ada1552735d4a67a5b31ccff"><td class="mdescLeft">&#160;</td><td class="mdescRight">The surface the shell draws the page area on while the screen is shown: an expression of a surface's name, <span class="tt">null</span> for the built-in <span class="tt">page</span> surface.  <br /></td></tr>
 <tr class="memitem:a453aba2b54141ec72be866e0842f9fa2" id="r_a453aba2b54141ec72be866e0842f9fa2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a453aba2b54141ec72be866e0842f9fa2">status</a> (<a class="el" href="../../d1/d61/structmorph_1_1ui_1_1author_1_1HeadBadgeOptions.html">HeadBadgeOptions</a> const &amp;badge)</td></tr>
 <tr class="memdesc:a453aba2b54141ec72be866e0842f9fa2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends a status badge to the head.  <br /></td></tr>
 <tr class="memitem:a539d81a38501516765111c1c73d70581" id="r_a539d81a38501516765111c1c73d70581"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a539d81a38501516765111c1c73d70581">action</a> (<a class="el" href="../../d2/d65/structmorph_1_1ui_1_1author_1_1ActionButtonOptions.html">ActionButtonOptions</a> const &amp;action)</td></tr>
 <tr class="memdesc:a539d81a38501516765111c1c73d70581"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends an action to the head, run in the screen scope.  <br /></td></tr>
+<tr class="memitem:a05cee86659a2a0a357889b7b8fd3e74e" id="r_a05cee86659a2a0a357889b7b8fd3e74e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a05cee86659a2a0a357889b7b8fd3e74e">tool</a> (<a class="el" href="../../d6/d39/structmorph_1_1ui_1_1author_1_1HeadSearchOptions.html">HeadSearchOptions</a> const &amp;search)</td></tr>
+<tr class="memdesc:a05cee86659a2a0a357889b7b8fd3e74e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends a search field to the head's tools, run in the screen scope.  <br /></td></tr>
+<tr class="memitem:ac46e899802f0072111d88d72bb1611eb" id="r_ac46e899802f0072111d88d72bb1611eb"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ac46e899802f0072111d88d72bb1611eb">tool</a> (<a class="el" href="../../dd/d42/structmorph_1_1ui_1_1author_1_1HeadSelectOptions.html">HeadSelectOptions</a> const &amp;select)</td></tr>
+<tr class="memdesc:ac46e899802f0072111d88d72bb1611eb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends a select to the head's tools, run in the screen scope.  <br /></td></tr>
+<tr class="memitem:a849fe132e06de12001d0d86a7ff7badb" id="r_a849fe132e06de12001d0d86a7ff7badb"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a849fe132e06de12001d0d86a7ff7badb">menu</a> (<a class="el" href="../../d5/d1b/structmorph_1_1ui_1_1author_1_1MenuItem.html">MenuItem</a> const &amp;item)</td></tr>
+<tr class="memdesc:a849fe132e06de12001d0d86a7ff7badb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends an entry to the head's own menu, drawn behind one icon button after the actions and run in the screen scope.  <br /></td></tr>
+<tr class="memitem:a7d7b6abf4990f3f3a176706eb60f85e6" id="r_a7d7b6abf4990f3f3a176706eb60f85e6"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a7d7b6abf4990f3f3a176706eb60f85e6">menuLabel</a> (<a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;label)</td></tr>
+<tr class="memdesc:a7d7b6abf4990f3f3a176706eb60f85e6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The accessible name of the head menu's trigger; absent is "More actions".  <br /></td></tr>
 <tr class="memitem:a2b911c5d070cd7b8944718bfc33b2626" id="r_a2b911c5d070cd7b8944718bfc33b2626"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2b911c5d070cd7b8944718bfc33b2626">onMount</a> (<a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html">Commands</a> const &amp;commands)</td></tr>
 <tr class="memdesc:a2b911c5d070cd7b8944718bfc33b2626"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html" title="A command list, run as one batch.">Commands</a> run when the screen mounts.  <br /></td></tr>
 <tr class="memitem:a1bd4f0bb5e8882d4736df72406fefc7e" id="r_a1bd4f0bb5e8882d4736df72406fefc7e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1bd4f0bb5e8882d4736df72406fefc7e">onUnmount</a> (<a class="el" href="../../dd/de0/classmorph_1_1ui_1_1author_1_1Commands.html">Commands</a> const &amp;commands)</td></tr>
@@ -235,7 +259,7 @@ Additional Inherited Members</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The screen's own scope: its declarations, params, lifecycle keys, components and customization points. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02494">2494</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02846">2846</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a32d3de83437ffba0967c7e86e6c00010" name="a32d3de83437ffba0967c7e86e6c00010"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a32d3de83437ffba0967c7e86e6c00010">&#9670;&#160;</a></span>param()</h2>
@@ -277,7 +301,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The read of the param. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02501">2501</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02853">2853</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -312,7 +336,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02508">2508</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02860">2860</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -347,7 +371,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02512">2512</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02864">2864</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -382,7 +406,112 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02516">2516</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02868">2868</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab3397406d802855f3af2f556f2e8496f" name="ab3397406d802855f3af2f556f2e8496f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab3397406d802855f3af2f556f2e8496f">&#9670;&#160;</a></span>titleSpans()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::titleSpans </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>runs</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The title as runs (<span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#ae3629ac37c22704183a707c83f3614c5" title="A span list: the runs of a text, a banner, a key-value item, a dialog&#39;s or drawer&#39;s description or a ...">spans</a></span>), which a shell that knows them draws in its top bar in place of <span class="tt"><a class="el" href="#a1ad1b2cb7f7317b283364fe04042dea5" title="The screen&#39;s title.">title</a></span>: an identifier in the monospace face beside plain words. <span class="tt"><a class="el" href="#a1ad1b2cb7f7317b283364fe04042dea5" title="The screen&#39;s title.">title</a></span> stays the tab's caption. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">runs</td><td>The runs. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02873">2873</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aad343361c9e634ae30139211293a8702" name="aad343361c9e634ae30139211293a8702"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aad343361c9e634ae30139211293a8702">&#9670;&#160;</a></span>eyebrow()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::eyebrow </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>eyebrow</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The head's line above the title. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">eyebrow</td><td>The expression. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02877">2877</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abbedb5604cf83e09bf80d3a3c30266c8" name="abbedb5604cf83e09bf80d3a3c30266c8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abbedb5604cf83e09bf80d3a3c30266c8">&#9670;&#160;</a></span>eyebrowSpans()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::eyebrowSpans </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>runs</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The head's line above the title as runs (<span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#ae3629ac37c22704183a707c83f3614c5" title="A span list: the runs of a text, a banner, a key-value item, a dialog&#39;s or drawer&#39;s description or a ...">spans</a></span>), which a shell that knows them draws in place of the <span class="tt"><a class="el" href="#aad343361c9e634ae30139211293a8702" title="The head&#39;s line above the title.">eyebrow</a></span> beside it. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">runs</td><td>The runs. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02882">2882</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -417,7 +546,182 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02520">2520</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02886">2886</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa9951fa00fd52f8081acfa48e7fefcc8" name="aa9951fa00fd52f8081acfa48e7fefcc8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa9951fa00fd52f8081acfa48e7fefcc8">&#9670;&#160;</a></span>subtitleSpans()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::subtitleSpans </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>runs</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The head's line under the title as runs (<span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#ae3629ac37c22704183a707c83f3614c5" title="A span list: the runs of a text, a banner, a key-value item, a dialog&#39;s or drawer&#39;s description or a ...">spans</a></span>), which a shell that knows them draws in place of the <span class="tt"><a class="el" href="#aa78b3b1a7162c37b4ca7e28a9f180837" title="The head&#39;s line under the title.">subtitle</a></span> beside it: an identifier in the monospace face, a bold word. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">runs</td><td>The runs. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02891">2891</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1cd989361a7934507ffb23c7c023aa75" name="a1cd989361a7934507ffb23c7c023aa75"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1cd989361a7934507ffb23c7c023aa75">&#9670;&#160;</a></span>leadPlacement()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::leadPlacement </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>placement</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Where the head's lead (the subtitle and the badges) sits: an expression of <span class="tt">"below"</span> (the default, under the title), <span class="tt">"inline"</span> (on the title's line, after it) or <span class="tt">"end"</span> (at the trailing edge of the head's first line, after the tools and before the actions). A literal is checked at load. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">placement</td><td>The expression. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02897">2897</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8fd648352cf20fc9ba273ad04ec34d2a" name="a8fd648352cf20fc9ba273ad04ec34d2a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8fd648352cf20fc9ba273ad04ec34d2a">&#9670;&#160;</a></span>titleRole()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::titleRole </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>role</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The text role of the head's title: an expression of <span class="tt">"heading"</span> (the default) or <span class="tt">"headline"</span>, a record's identity set a step larger. A literal is checked at load. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">role</td><td>The expression. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02903">2903</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0b704da2064c2f6b6167427c187a1b61" name="a0b704da2064c2f6b6167427c187a1b61"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0b704da2064c2f6b6167427c187a1b61">&#9670;&#160;</a></span>headSurface()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::headSurface </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>surface</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The surface the shell draws its top bar on while the screen is shown: an expression of a surface's name, <span class="tt">null</span> for none. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">surface</td><td>The expression. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02908">2908</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a38b0e0c9ada1552735d4a67a5b31ccff" name="a38b0e0c9ada1552735d4a67a5b31ccff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a38b0e0c9ada1552735d4a67a5b31ccff">&#9670;&#160;</a></span>pageSurface()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::pageSurface </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>surface</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The surface the shell draws the page area on while the screen is shown: an expression of a surface's name, <span class="tt">null</span> for the built-in <span class="tt">page</span> surface. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">surface</td><td>The expression. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02913">2913</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -452,7 +756,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02524">2524</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02917">2917</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -487,7 +791,147 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02528">2528</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02921">2921</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a05cee86659a2a0a357889b7b8fd3e74e" name="a05cee86659a2a0a357889b7b8fd3e74e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a05cee86659a2a0a357889b7b8fd3e74e">&#9670;&#160;</a></span>tool() <span class="overload">[1/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::tool </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/d39/structmorph_1_1ui_1_1author_1_1HeadSearchOptions.html">HeadSearchOptions</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>search</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Appends a search field to the head's tools, run in the screen scope. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">search</td><td>The field; its id is unique among the head's tools. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02925">2925</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac46e899802f0072111d88d72bb1611eb" name="ac46e899802f0072111d88d72bb1611eb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac46e899802f0072111d88d72bb1611eb">&#9670;&#160;</a></span>tool() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::tool </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dd/d42/structmorph_1_1ui_1_1author_1_1HeadSelectOptions.html">HeadSelectOptions</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>select</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Appends a select to the head's tools, run in the screen scope. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">select</td><td>The select; its id is unique among the head's tools. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02940">2940</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a849fe132e06de12001d0d86a7ff7badb" name="a849fe132e06de12001d0d86a7ff7badb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a849fe132e06de12001d0d86a7ff7badb">&#9670;&#160;</a></span>menu()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::menu </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d5/d1b/structmorph_1_1ui_1_1author_1_1MenuItem.html">MenuItem</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>item</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Appends an entry to the head's own menu, drawn behind one icon button after the actions and run in the screen scope. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">item</td><td>The entry: one that is chosen has an id, unique across the head's menu; a separator or a submenu has none. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02954">2954</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7d7b6abf4990f3f3a176706eb60f85e6" name="a7d7b6abf4990f3f3a176706eb60f85e6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7d7b6abf4990f3f3a176706eb60f85e6">&#9670;&#160;</a></span>menuLabel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::author::Scope::menuLabel </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>label</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The accessible name of the head menu's trigger; absent is "More actions". </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">label</td><td>The expression. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02958">2958</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -522,7 +966,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02532">2532</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02962">2962</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -557,7 +1001,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02536">2536</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02966">2966</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -592,7 +1036,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02540">2540</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02970">2970</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -627,7 +1071,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02544">2544</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02974">2974</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -662,7 +1106,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02548">2548</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02978">2978</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -702,7 +1146,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02553">2553</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02983">2983</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -737,7 +1181,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02557">2557</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02987">2987</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -772,7 +1216,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02561">2561</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02991">2991</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -813,7 +1257,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reference <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#ac93e3947a3cefa2b9125d623d0f1293a" title="A custom node: a declared component with its props and events.">custom</a></span> nodes name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02567">2567</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02997">2997</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -854,7 +1298,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The point. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02601">2601</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03031">3031</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -895,7 +1339,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The point. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02613">2613</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03043">3043</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -942,7 +1386,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The point. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02625">2625</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03055">3055</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -991,7 +1435,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The point. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02642">2642</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03072">3072</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1032,7 +1476,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The point. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02654">2654</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03084">3084</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -1073,7 +1517,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The document. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l02664">2664</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03094">3094</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

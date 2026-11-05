@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/dda/structm
 </div><!--header-->
 <div class="contents">
 
-<p>A row of buttons in the footer of the dialog or drawer whose content holds it: what a document's overlay <span class="tt">actions</span> lower to. The mount refuses one anywhere else.  
+<p>A row of buttons: the actions of what holds it. Inside the content of a dialog or drawer, at any depth, it is the overlay's footer, as a document's overlay <span class="tt">actions</span> lower to; anywhere else it is a row in the place it is written. Either way the buttons are the theme's <span class="tt">actions.gap</span> apart, and so are the rows of a horizontal <span class="tt"><a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a></span> that is a direct child: they are part of the row, whatever <span class="tt"><a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html#a3eab8abc8c25c695ff02965efb48cec5" title="Space between rows: a spacing step, 0 to kMaxSpacingStep.">ForEach::gap</a></span> says.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>&gt;</code></p>
@@ -130,13 +130,19 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/dda/structm
 Public Attributes</h2></td></tr>
 <tr class="memitem:a7144d9ec8f17b697628a68b8172bec93" id="r_a7144d9ec8f17b697628a68b8172bec93"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7144d9ec8f17b697628a68b8172bec93">children</a></td></tr>
 <tr class="memdesc:a7144d9ec8f17b697628a68b8172bec93"><td class="mdescLeft">&#160;</td><td class="mdescRight">The buttons, in order; a null child is skipped.  <br /></td></tr>
+<tr class="memitem:a0c9de621ba7298eec2b9609a3e1db411" id="r_a0c9de621ba7298eec2b9609a3e1db411"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&#160;</td><td class="memItemRight"><a class="el" href="#a0c9de621ba7298eec2b9609a3e1db411">align</a> = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aafbb09a82eafab60150d0996e8fe46560">Align::Stretch</a></td></tr>
+<tr class="memdesc:a0c9de621ba7298eec2b9609a3e1db411"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the buttons sit across the row; <span class="tt">Stretch</span> fills the row's height.  <br /></td></tr>
+<tr class="memitem:a65c519be52b48db25fc5421c7d306d84" id="r_a65c519be52b48db25fc5421c7d306d84"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a>&#160;</td><td class="memItemRight"><a class="el" href="#a65c519be52b48db25fc5421c7d306d84">justify</a> = <a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4aa6122a65eaa676f700ae68d393054a37">Justify::Start</a></td></tr>
+<tr class="memdesc:a65c519be52b48db25fc5421c7d306d84"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the spare width goes while no shown button stretches.  <br /></td></tr>
+<tr class="memitem:a0557566419c017d04c1b0a781bd03eb8" id="r_a0557566419c017d04c1b0a781bd03eb8"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a0557566419c017d04c1b0a781bd03eb8">wrap</a> = false</td></tr>
+<tr class="memdesc:a0557566419c017d04c1b0a781bd03eb8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether buttons that do not fit on one line continue on the next, as a <a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a>'s <span class="tt"><a class="el" href="#a0557566419c017d04c1b0a781bd03eb8" title="Whether buttons that do not fit on one line continue on the next, as a Row&#39;s wrap; set once....">wrap</a></span>; set once. A part with no width takes no gap. Refused at mount in an overlay's footer: the footer sizes the row to its one-line width, so it would never wrap there.  <br /></td></tr>
 <tr class="memitem:a5f365332c6603fa47c0bb777e577e0be" id="r_a5f365332c6603fa47c0bb777e577e0be"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#a5f365332c6603fa47c0bb777e577e0be">common</a> {}</td></tr>
 <tr class="memdesc:a5f365332c6603fa47c0bb777e577e0be"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visibility, enablement, layout, drag-and-drop of the row.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A row of buttons in the footer of the dialog or drawer whose content holds it: what a document's overlay <span class="tt">actions</span> lower to. The mount refuses one anywhere else. </p>
+<div class="textblock"><p>A row of buttons: the actions of what holds it. Inside the content of a dialog or drawer, at any depth, it is the overlay's footer, as a document's overlay <span class="tt">actions</span> lower to; anywhere else it is a row in the place it is written. Either way the buttons are the theme's <span class="tt">actions.gap</span> apart, and so are the rows of a horizontal <span class="tt"><a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a></span> that is a direct child: they are part of the row, whatever <span class="tt"><a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html#a3eab8abc8c25c695ff02965efb48cec5" title="Space between rows: a spacing step, 0 to kMaxSpacingStep.">ForEach::gap</a></span> says. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01089">1089</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01583">1583</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a7144d9ec8f17b697628a68b8172bec93" name="a7144d9ec8f17b697628a68b8172bec93"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7144d9ec8f17b697628a68b8172bec93">&#9670;&#160;</a></span>children</h2>
@@ -152,7 +158,61 @@ Public Attributes</h2></td></tr>
 
 <p>The buttons, in order; a null child is skipped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01091">1091</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01585">1585</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0c9de621ba7298eec2b9609a3e1db411" name="a0c9de621ba7298eec2b9609a3e1db411"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0c9de621ba7298eec2b9609a3e1db411">&#9670;&#160;</a></span>align</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> morph::ui::ActionBar::align = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aafbb09a82eafab60150d0996e8fe46560">Align::Stretch</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where the buttons sit across the row; <span class="tt">Stretch</span> fills the row's height. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01587">1587</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a65c519be52b48db25fc5421c7d306d84" name="a65c519be52b48db25fc5421c7d306d84"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a65c519be52b48db25fc5421c7d306d84">&#9670;&#160;</a></span>justify</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a> morph::ui::ActionBar::justify = <a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4aa6122a65eaa676f700ae68d393054a37">Justify::Start</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where the spare width goes while no shown button stretches. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01589">1589</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0557566419c017d04c1b0a781bd03eb8" name="a0557566419c017d04c1b0a781bd03eb8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0557566419c017d04c1b0a781bd03eb8">&#9670;&#160;</a></span>wrap</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::ActionBar::wrap = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether buttons that do not fit on one line continue on the next, as a <a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a>'s <span class="tt"><a class="el" href="#a0557566419c017d04c1b0a781bd03eb8" title="Whether buttons that do not fit on one line continue on the next, as a Row&#39;s wrap; set once....">wrap</a></span>; set once. A part with no width takes no gap. Refused at mount in an overlay's footer: the footer sizes the row to its one-line width, so it would never wrap there. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01593">1593</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -170,7 +230,7 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop of the row. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01093">1093</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01595">1595</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

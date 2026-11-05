@@ -154,11 +154,19 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a14dd07a488938ad090de13f03bce82ac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read-only, required, errors and stale.  <br /></td></tr>
 <tr class="memitem:a88c0581a7c3dd2bc791f4d6bcb73a0e3" id="r_a88c0581a7c3dd2bc791f4d6bcb73a0e3"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#a88c0581a7c3dd2bc791f4d6bcb73a0e3">common</a> {}</td></tr>
 <tr class="memdesc:a88c0581a7c3dd2bc791f4d6bcb73a0e3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visibility, enablement, layout, drag-and-drop.  <br /></td></tr>
+<tr class="memitem:a03d284bdb5550cea54ef046ca02227d8" id="r_a03d284bdb5550cea54ef046ca02227d8"><td class="memItemLeft"><a class="el" href="../../dd/d2f/input__emphasis_8hpp.html#a0013e8ab0619ac4e61147cfd117f6852">InputEmphasis</a>&#160;</td><td class="memItemRight"><a class="el" href="#a03d284bdb5550cea54ef046ca02227d8">emphasis</a> = <a class="el" href="../../dd/d2f/input__emphasis_8hpp.html#a0013e8ab0619ac4e61147cfd117f6852a960b44c579bc2f6818d2daaf9e4c16f0">InputEmphasis::Normal</a></td></tr>
+<tr class="memdesc:a03d284bdb5550cea54ef046ca02227d8"><td class="mdescLeft">&#160;</td><td class="mdescRight">How much it stands out; set once, and never on a multiline input. The mount tells the widget only <span class="tt">Prominent</span>.  <br /></td></tr>
+<tr class="memitem:ad96dd02dba5d1598431b6ca791cc6a12" id="r_ad96dd02dba5d1598431b6ca791cc6a12"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ad96dd02dba5d1598431b6ca791cc6a12">mono</a> = false</td></tr>
+<tr class="memdesc:ad96dd02dba5d1598431b6ca791cc6a12"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the text and the placeholder are drawn in the <span class="tt"><a class="el" href="#ad96dd02dba5d1598431b6ca791cc6a12" title="Whether the text and the placeholder are drawn in the mono text role&#39;s face; set once.">mono</a></span> text role's face; set once.  <br /></td></tr>
+<tr class="memitem:a5d06f17a44a5e0e0371d7eca58bb93d6" id="r_a5d06f17a44a5e0e0371d7eca58bb93d6"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&#160;</td><td class="memItemRight"><a class="el" href="#a5d06f17a44a5e0e0371d7eca58bb93d6">align</a> = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aaa6122a65eaa676f700ae68d393054a37">Align::Start</a></td></tr>
+<tr class="memdesc:a5d06f17a44a5e0e0371d7eca58bb93d6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the text sits in the field: <span class="tt">Start</span>, <span class="tt">Center</span> or <span class="tt">End</span>; set once. Never on a multiline input, and the mount tells the widget only a value other than <span class="tt">Start</span>.  <br /></td></tr>
+<tr class="memitem:a862e38eedb24eb8f363efed4534611be" id="r_a862e38eedb24eb8f363efed4534611be"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a862e38eedb24eb8f363efed4534611be">prefix</a></td></tr>
+<tr class="memdesc:a862e38eedb24eb8f363efed4534611be"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a> drawn muted at the field's leading edge, inside it, such as <span class="tt">±</span>; empty shows none. Only a single-line or password input shows one: the mount refuses a multiline input with a prefix.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>An editable text field. The backend never reports its own <span class="tt">setText</span> back through <span class="tt"><a class="el" href="#ac0bbdad7c15243cf6a4683b01aa4a26c" title="Called with the new text after every user edit.">onChange</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00437">437</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00607">607</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ac8c71bf231f015c7dd956b2f6fae417e" name="ac8c71bf231f015c7dd956b2f6fae417e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac8c71bf231f015c7dd956b2f6fae417e">&#9670;&#160;</a></span>value</h2>
@@ -174,7 +182,7 @@ Public Attributes</h2></td></tr>
 
 <p>The text the field shows. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00439">439</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00609">609</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +200,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with the new text after every user edit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00441">441</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00611">611</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +218,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with the text when the user submits (Enter in single-line mode). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00443">443</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00613">613</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -228,7 +236,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with the text when the user commits it: Enter in single-line mode, or focus leaving the field after an edit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00446">446</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00616">616</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -246,7 +254,7 @@ Public Attributes</h2></td></tr>
 
 <p>Shown while the field is empty. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00448">448</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00618">618</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -264,7 +272,7 @@ Public Attributes</h2></td></tr>
 
 <p>Single-line, multiline or password; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00450">450</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00620">620</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -282,7 +290,7 @@ Public Attributes</h2></td></tr>
 
 <p>The unit the input shows beside its text, such as <span class="tt">kg</span>; empty shows none. Only a single-line or password input shows one: the mount refuses a multiline input with a unit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00453">453</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00623">623</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -300,7 +308,7 @@ Public Attributes</h2></td></tr>
 
 <p>The name of an icon in the theme's icon set, drawn at the field's leading edge; empty shows none. Only a single-line or password input shows one: the mount refuses a multiline input with an icon. Set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00456">456</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00626">626</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -318,7 +326,7 @@ Public Attributes</h2></td></tr>
 
 <p>The fraction digits a number is entered with, for a backend or a kit to read; -1 when the input does not hold a number. Set once; the mount refuses places on a multiline input. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00629">629</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -336,7 +344,7 @@ Public Attributes</h2></td></tr>
 
 <p>The field's label: its visible caption while <span class="tt"><a class="el" href="#a139b180f6de1e1078b5af23e919f73e7" title="Whether the input draws label as a visible caption itself; set once. A form leaves it false,...">showLabel</a></span>; a form's cell draws it otherwise, beside the input. Empty: none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00462">462</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00632">632</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -354,7 +362,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the input draws <span class="tt"><a class="el" href="#af817fd28094dab34c0b68cbcf7add128" title="The field&#39;s label: its visible caption while showLabel; a form&#39;s cell draws it otherwise,...">label</a></span> as a visible caption itself; set once. A form leaves it false, since its cell draws the caption. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00465">465</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00635">635</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -372,7 +380,7 @@ Public Attributes</h2></td></tr>
 
 <p>Read-only, required, errors and stale. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00467">467</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00637">637</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -390,7 +398,79 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00469">469</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00639">639</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a03d284bdb5550cea54ef046ca02227d8" name="a03d284bdb5550cea54ef046ca02227d8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a03d284bdb5550cea54ef046ca02227d8">&#9670;&#160;</a></span>emphasis</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/d2f/input__emphasis_8hpp.html#a0013e8ab0619ac4e61147cfd117f6852">InputEmphasis</a> morph::ui::TextInput::emphasis = <a class="el" href="../../dd/d2f/input__emphasis_8hpp.html#a0013e8ab0619ac4e61147cfd117f6852a960b44c579bc2f6818d2daaf9e4c16f0">InputEmphasis::Normal</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>How much it stands out; set once, and never on a multiline input. The mount tells the widget only <span class="tt">Prominent</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00642">642</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad96dd02dba5d1598431b6ca791cc6a12" name="ad96dd02dba5d1598431b6ca791cc6a12"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad96dd02dba5d1598431b6ca791cc6a12">&#9670;&#160;</a></span>mono</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::TextInput::mono = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the text and the placeholder are drawn in the <span class="tt"><a class="el" href="#ad96dd02dba5d1598431b6ca791cc6a12" title="Whether the text and the placeholder are drawn in the mono text role&#39;s face; set once.">mono</a></span> text role's face; set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00644">644</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5d06f17a44a5e0e0371d7eca58bb93d6" name="a5d06f17a44a5e0e0371d7eca58bb93d6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5d06f17a44a5e0e0371d7eca58bb93d6">&#9670;&#160;</a></span>align</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> morph::ui::TextInput::align = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aaa6122a65eaa676f700ae68d393054a37">Align::Start</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where the text sits in the field: <span class="tt">Start</span>, <span class="tt">Center</span> or <span class="tt">End</span>; set once. Never on a multiline input, and the mount tells the widget only a value other than <span class="tt">Start</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00647">647</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a862e38eedb24eb8f363efed4534611be" name="a862e38eedb24eb8f363efed4534611be"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a862e38eedb24eb8f363efed4534611be">&#9670;&#160;</a></span>prefix</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::TextInput::prefix</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a> drawn muted at the field's leading edge, inside it, such as <span class="tt">±</span>; empty shows none. Only a single-line or password input shows one: the mount refuses a multiline input with a prefix. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00650">650</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

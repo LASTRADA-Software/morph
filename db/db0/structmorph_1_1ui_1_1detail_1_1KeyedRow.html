@@ -147,7 +147,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>One mounted row of a <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a> or <a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a>. </p>
 <p>A row's state (its slot, and the signal it reads) and its widget are owned by two separate scopes so a virtualized table can release a row's widget &ndash; the expensive part of mounting a row &ndash; while its key is still in the data, without losing the row's place: <span class="tt"><a class="el" href="#a85dbcfc460c71df56014e21fbe0a14e2" title="Owns the row&#39;s slot; made once, for as long as the key is in the data.">stateScope</a></span> is made once, when the key first appears, and lives until the key is gone; <span class="tt"><a class="el" href="#a40ef9687b13b0f149aa54a8e530b1f68" title="Owns the row&#39;s widget and its bindings; null while the row is dewindowed or has no view.">widgetScope</a></span> comes and goes with whether the row is realized. A non-virtualized <span class="tt"><a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a></span>/<span class="tt"><a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a></span> (below its <span class="tt"><a class="el" href="../../db/ddd/structmorph_1_1ui_1_1Virtualization.html#ae4a626d58a451b0ccaf116350449c5cc" title="Below this many rows, every row&#39;s widget is realized regardless of scroll position,...">Virtualization::threshold</a></span>, or on a backend that never dewindows a row) always has <span class="tt"><a class="el" href="#a40ef9687b13b0f149aa54a8e530b1f68" title="Owns the row&#39;s widget and its bindings; null while the row is dewindowed or has no view.">widgetScope</a></span> set alongside <span class="tt"><a class="el" href="#a85dbcfc460c71df56014e21fbe0a14e2" title="Owns the row&#39;s slot; made once, for as long as the key is in the data.">stateScope</a></span>, so this costs nothing when windowing never applies. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ad2a406241f29cdb56fce4bbfa9a75331" name="ad2a406241f29cdb56fce4bbfa9a75331"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad2a406241f29cdb56fce4bbfa9a75331">&#9670;&#160;</a></span>key</h2>
@@ -163,7 +163,7 @@ Public Attributes</h2></td></tr>
 
 <p>The row's key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -181,7 +181,7 @@ Public Attributes</h2></td></tr>
 
 <p>Owns the row's slot; made once, for as long as the key is in the data. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -199,7 +199,7 @@ Public Attributes</h2></td></tr>
 
 <p>The row's slot, owned by <span class="tt"><a class="el" href="#a85dbcfc460c71df56014e21fbe0a14e2" title="Owns the row&#39;s slot; made once, for as long as the key is in the data.">stateScope</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -217,7 +217,7 @@ Public Attributes</h2></td></tr>
 
 <p>Owns the row's widget and its bindings; null while the row is dewindowed or has no view. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +235,7 @@ Public Attributes</h2></td></tr>
 
 <p>The row's widget, owned by <span class="tt"><a class="el" href="#a40ef9687b13b0f149aa54a8e530b1f68" title="Owns the row&#39;s widget and its bindings; null while the row is dewindowed or has no view.">widgetScope</a></span>; null exactly when <span class="tt"><a class="el" href="#a40ef9687b13b0f149aa54a8e530b1f68" title="Owns the row&#39;s widget and its bindings; null while the row is dewindowed or has no view.">widgetScope</a></span> is null. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -253,7 +253,7 @@ Public Attributes</h2></td></tr>
 
 <p>Which of the three states above <span class="tt"><a class="el" href="#abf95450de76b5a85032dffb0e893f4e4" title="The row&#39;s widget, owned by widgetScope; null exactly when widgetScope is null.">widget</a></span> is in. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +271,7 @@ Public Attributes</h2></td></tr>
 
 <p>This row's position in view order, as of the most recent <span class="tt">reconcile</span> pass &ndash; not its position in <span class="tt"><a class="el" href="../../db/d17/structmorph_1_1ui_1_1detail_1_1KeyedRows.html#a4340580891ec268b0b684d0f7c23aab5" title="The rows; those with a widget are in the container&#39;s order.">KeyedRows::list</a></span>, which <span class="tt">reorder</span> groups realized rows ahead of dewindowed ones within (so the container only ever holds the widgets that exist), and so no longer matches view order once any row is dewindowed. <span class="tt">applyWindow</span> compares this against the visible range; <span class="tt">reconcile</span> is the only writer. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>

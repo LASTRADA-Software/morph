@@ -5,7 +5,9 @@ var searchData=
   ['greaterorequal_2',['GreaterOrEqual',['../d1/df3/structmorph_1_1forms_1_1GreaterOrEqual.html',1,'morph::forms']]],
   ['grid_3',['Grid',['../de/d85/structmorph_1_1ui_1_1Grid.html',1,'morph::ui']]],
   ['gridcell_4',['GridCell',['../df/d66/structmorph_1_1ui_1_1GridCell.html',1,'morph::ui']]],
-  ['gridwidget_5',['GridWidget',['../d1/d51/classmorph_1_1ui_1_1GridWidget.html',1,'morph::ui']]],
-  ['group_6',['Group',['../dd/d3c/structmorph_1_1table_1_1CompiledFilter_1_1Group.html',1,'morph::table::CompiledFilter']]],
-  ['groupfilter_7',['GroupFilter',['../d0/d05/structmorph_1_1table_1_1GroupFilter.html',1,'morph::table']]]
+  ['gridtrack_5',['GridTrack',['../de/d35/structmorph_1_1ui_1_1author_1_1GridTrack.html',1,'morph::ui::author::GridTrack'],['../df/dd6/structmorph_1_1ui_1_1GridTrack.html',1,'morph::ui::GridTrack']]],
+  ['gridwidget_6',['GridWidget',['../d1/d51/classmorph_1_1ui_1_1GridWidget.html',1,'morph::ui']]],
+  ['group_7',['Group',['../dd/d3c/structmorph_1_1table_1_1CompiledFilter_1_1Group.html',1,'morph::table::CompiledFilter']]],
+  ['groupfilter_8',['GroupFilter',['../d0/d05/structmorph_1_1table_1_1GroupFilter.html',1,'morph::table']]],
+  ['groupoptions_9',['GroupOptions',['../d7/d69/structmorph_1_1ui_1_1author_1_1GroupOptions.html',1,'morph::ui::author']]]
 ];

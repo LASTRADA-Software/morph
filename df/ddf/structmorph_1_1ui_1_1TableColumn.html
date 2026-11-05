@@ -131,14 +131,24 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:afd7bafec89b9272f1039d703befc6aab" id="r_afd7bafec89b9272f1039d703befc6aab"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#afd7bafec89b9272f1039d703befc6aab">label</a></td></tr>
 <tr class="memdesc:afd7bafec89b9272f1039d703befc6aab"><td class="mdescLeft">&#160;</td><td class="mdescRight">The header caption.  <br /></td></tr>
 <tr class="memitem:adf416b8754863bf65542f447b61ce8d3" id="r_adf416b8754863bf65542f447b61ce8d3"><td class="memItemLeft"><a class="el" href="../../d1/d89/structmorph_1_1ui_1_1Sizing.html">Sizing</a>&#160;</td><td class="memItemRight"><a class="el" href="#adf416b8754863bf65542f447b61ce8d3">width</a> = <a class="el" href="../../d1/d89/structmorph_1_1ui_1_1Sizing.html#a21a5fdddd235de4d94424abc4a1339e9">Sizing::content</a>()</td></tr>
-<tr class="memdesc:adf416b8754863bf65542f447b61ce8d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">The column's width request.  <br /></td></tr>
+<tr class="memdesc:adf416b8754863bf65542f447b61ce8d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">The column's width request. A <span class="tt">Stretch</span> column starts from its content (the larger of its header and its widest shown cell) and its weight shares only the width the content leaves; a table too narrow for the content narrows its wrapping columns, then its <span class="tt"><a class="el" href="#a8ea0e7232cb8d0db3fcd92e41631dc32" title="Whether a Stretch column may be narrower than its header when the table is narrower than its columns ...">shrink</a></span> columns, last first, then the other stretch columns. A hidden cell widens no column.  <br /></td></tr>
 <tr class="memitem:ae4e77dbee619dc9e481146da5ebcd2b9" id="r_ae4e77dbee619dc9e481146da5ebcd2b9"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5">TextRole</a>&#160;</td><td class="memItemRight"><a class="el" href="#ae4e77dbee619dc9e481146da5ebcd2b9">role</a> = <a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a960b44c579bc2f6818d2daaf9e4c16f0">TextRole::Normal</a></td></tr>
-<tr class="memdesc:ae4e77dbee619dc9e481146da5ebcd2b9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text style of this column's default cell; <span class="tt">Normal</span> renders unchanged. Has no effect on a column with its own <span class="tt">.cell</span>, or on a <span class="tt"><a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a></span> constructed directly without going through the interpreter.  <br /></td></tr>
+<tr class="memdesc:ae4e77dbee619dc9e481146da5ebcd2b9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text style of this column's default cell; <span class="tt">Normal</span> renders unchanged. Has no effect on the style of a column's own <span class="tt">.cell</span>, or on a <span class="tt"><a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a></span> constructed directly without going through the interpreter. A <span class="tt">Mono</span> role also sets the column's width unit: a fixed width counts monospace characters.  <br /></td></tr>
+<tr class="memitem:a83e534a9632a249dd8510cbd0e625d3f" id="r_a83e534a9632a249dd8510cbd0e625d3f"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&#160;</td><td class="memItemRight"><a class="el" href="#a83e534a9632a249dd8510cbd0e625d3f">align</a> = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aaa6122a65eaa676f700ae68d393054a37">Align::Start</a></td></tr>
+<tr class="memdesc:a83e534a9632a249dd8510cbd0e625d3f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a cell sits across the column: the text of a text cell or a text input cell, and a label-width cell (a badge, a check box, a push button) at its natural width, at the start, centre or end; the header label follows it. A container cell fills the column whatever this says. <span class="tt">Stretch</span> reads as <span class="tt">Start</span>.  <br /></td></tr>
+<tr class="memitem:a623c31408823b76a62e015cf1932dd04" id="r_a623c31408823b76a62e015cf1932dd04"><td class="memItemLeft"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&#160;</td><td class="memItemRight"><a class="el" href="#a623c31408823b76a62e015cf1932dd04">valign</a> = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aa4f1f6016fc9f3f2353c0cc7c67b292bd">Align::Center</a></td></tr>
+<tr class="memdesc:a623c31408823b76a62e015cf1932dd04"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a cell sits down its row when the row is taller than the cell: <span class="tt">Start</span> at the top, <span class="tt">Center</span>, or <span class="tt">End</span> at the bottom. <span class="tt">Stretch</span> fills the row's height.  <br /></td></tr>
+<tr class="memitem:aa7eb2dffe5d5b5120bc77aae50a4aef9" id="r_aa7eb2dffe5d5b5120bc77aae50a4aef9"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aa7eb2dffe5d5b5120bc77aae50a4aef9">sortable</a> = false</td></tr>
+<tr class="memdesc:aa7eb2dffe5d5b5120bc77aae50a4aef9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a click on the column's header asks to sort by it (<span class="tt"><a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html#a65dcfec62d593468182597ad2e5c04c2" title="Called with a sortable column&#39;s index when the user asks to sort by it (a click on its header).">Table::onSort</a></span>).  <br /></td></tr>
+<tr class="memitem:a1bbf7321a008c3354c5053c977a7e4ba" id="r_a1bbf7321a008c3354c5053c977a7e4ba"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a1bbf7321a008c3354c5053c977a7e4ba">wrap</a> = true</td></tr>
+<tr class="memdesc:a1bbf7321a008c3354c5053c977a7e4ba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the column's text cells may break across lines. With <span class="tt">false</span> each is drawn on one line and cut at the column's width with an ellipsis, such as a value with its unit in a narrow column.  <br /></td></tr>
+<tr class="memitem:a8ea0e7232cb8d0db3fcd92e41631dc32" id="r_a8ea0e7232cb8d0db3fcd92e41631dc32"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a8ea0e7232cb8d0db3fcd92e41631dc32">shrink</a> = false</td></tr>
+<tr class="memdesc:a8ea0e7232cb8d0db3fcd92e41631dc32"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a <span class="tt">Stretch</span> column may be narrower than its header when the table is narrower than its columns need: it then gives up width down to a small floor and cuts its header and cells at its edge (an ellipsis where the backend draws one), where otherwise no column is narrower than its header and the table scrolls sideways instead. A <span class="tt"><a class="el" href="#a8ea0e7232cb8d0db3fcd92e41631dc32" title="Whether a Stretch column may be narrower than its header when the table is narrower than its columns ...">shrink</a></span> column also gives up its width before the other stretch columns do. It reads as <span class="tt">false</span> on a column that does not stretch.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One column of a <span class="tt"><a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00876">876</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01185">1185</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="afd7bafec89b9272f1039d703befc6aab" name="afd7bafec89b9272f1039d703befc6aab"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#afd7bafec89b9272f1039d703befc6aab">&#9670;&#160;</a></span>label</h2>
@@ -154,7 +164,7 @@ Public Attributes</h2></td></tr>
 
 <p>The header caption. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00878">878</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01187">1187</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -170,9 +180,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The column's width request. </p>
+<p>The column's width request. A <span class="tt">Stretch</span> column starts from its content (the larger of its header and its widest shown cell) and its weight shares only the width the content leaves; a table too narrow for the content narrows its wrapping columns, then its <span class="tt"><a class="el" href="#a8ea0e7232cb8d0db3fcd92e41631dc32" title="Whether a Stretch column may be narrower than its header when the table is narrower than its columns ...">shrink</a></span> columns, last first, then the other stretch columns. A hidden cell widens no column. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00880">880</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01192">1192</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -188,9 +198,99 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The text style of this column's default cell; <span class="tt">Normal</span> renders unchanged. Has no effect on a column with its own <span class="tt">.cell</span>, or on a <span class="tt"><a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a></span> constructed directly without going through the interpreter. </p>
+<p>The text style of this column's default cell; <span class="tt">Normal</span> renders unchanged. Has no effect on the style of a column's own <span class="tt">.cell</span>, or on a <span class="tt"><a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a></span> constructed directly without going through the interpreter. A <span class="tt">Mono</span> role also sets the column's width unit: a fixed width counts monospace characters. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00883">883</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01196">1196</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a83e534a9632a249dd8510cbd0e625d3f" name="a83e534a9632a249dd8510cbd0e625d3f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a83e534a9632a249dd8510cbd0e625d3f">&#9670;&#160;</a></span>align</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> morph::ui::TableColumn::align = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aaa6122a65eaa676f700ae68d393054a37">Align::Start</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where a cell sits across the column: the text of a text cell or a text input cell, and a label-width cell (a badge, a check box, a push button) at its natural width, at the start, centre or end; the header label follows it. A container cell fills the column whatever this says. <span class="tt">Stretch</span> reads as <span class="tt">Start</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01201">1201</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a623c31408823b76a62e015cf1932dd04" name="a623c31408823b76a62e015cf1932dd04"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a623c31408823b76a62e015cf1932dd04">&#9670;&#160;</a></span>valign</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> morph::ui::TableColumn::valign = <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aa4f1f6016fc9f3f2353c0cc7c67b292bd">Align::Center</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where a cell sits down its row when the row is taller than the cell: <span class="tt">Start</span> at the top, <span class="tt">Center</span>, or <span class="tt">End</span> at the bottom. <span class="tt">Stretch</span> fills the row's height. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01204">1204</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa7eb2dffe5d5b5120bc77aae50a4aef9" name="aa7eb2dffe5d5b5120bc77aae50a4aef9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa7eb2dffe5d5b5120bc77aae50a4aef9">&#9670;&#160;</a></span>sortable</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::TableColumn::sortable = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a click on the column's header asks to sort by it (<span class="tt"><a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html#a65dcfec62d593468182597ad2e5c04c2" title="Called with a sortable column&#39;s index when the user asks to sort by it (a click on its header).">Table::onSort</a></span>). </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01206">1206</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1bbf7321a008c3354c5053c977a7e4ba" name="a1bbf7321a008c3354c5053c977a7e4ba"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1bbf7321a008c3354c5053c977a7e4ba">&#9670;&#160;</a></span>wrap</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::TableColumn::wrap = true</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the column's text cells may break across lines. With <span class="tt">false</span> each is drawn on one line and cut at the column's width with an ellipsis, such as a value with its unit in a narrow column. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01209">1209</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8ea0e7232cb8d0db3fcd92e41631dc32" name="a8ea0e7232cb8d0db3fcd92e41631dc32"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8ea0e7232cb8d0db3fcd92e41631dc32">&#9670;&#160;</a></span>shrink</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::TableColumn::shrink = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a <span class="tt">Stretch</span> column may be narrower than its header when the table is narrower than its columns need: it then gives up width down to a small floor and cuts its header and cells at its edge (an ellipsis where the backend draws one), where otherwise no column is narrower than its header and the table scrolls sideways instead. A <span class="tt"><a class="el" href="#a8ea0e7232cb8d0db3fcd92e41631dc32" title="Whether a Stretch column may be narrower than its header when the table is narrower than its columns ...">shrink</a></span> column also gives up its width before the other stretch columns do. It reads as <span class="tt">false</span> on a column that does not stretch. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01215">1215</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

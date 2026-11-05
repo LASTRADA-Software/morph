@@ -132,11 +132,15 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a5e452ad3042e1b2d3be14ed879e09b2d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The cells, one non-null node per column.  <br /></td></tr>
 <tr class="memitem:a3852cf2d0d2ee4dbfa7e86501b75cd84" id="r_a3852cf2d0d2ee4dbfa7e86501b75cd84"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::optional&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> &gt; &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3852cf2d0d2ee4dbfa7e86501b75cd84">tone</a></td></tr>
 <tr class="memdesc:a3852cf2d0d2ee4dbfa7e86501b75cd84"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row's tone, bound in the row's own scope; disengaged for none.  <br /></td></tr>
+<tr class="memitem:aa51a717c35f445ac03cd693ed9ec85ae" id="r_aa51a717c35f445ac03cd693ed9ec85ae"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa51a717c35f445ac03cd693ed9ec85ae">label</a> = std::nullopt</td></tr>
+<tr class="memdesc:aa51a717c35f445ac03cd693ed9ec85ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row's accessible name, and its select box's, bound in the row's own scope; disengaged names the row by its key.  <br /></td></tr>
+<tr class="memitem:aefdf3c6021f034a2f2d1edd6e711b49c" id="r_aefdf3c6021f034a2f2d1edd6e711b49c"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aefdf3c6021f034a2f2d1edd6e711b49c">heading</a> = false</td></tr>
+<tr class="memdesc:aefdf3c6021f034a2f2d1edd6e711b49c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the row is a heading: exactly one cell, spanning every column, never selected or activated.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a table's row view builds for one row: its cells, one per column, and its tone. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01442">1442</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01967">1967</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a5e452ad3042e1b2d3be14ed879e09b2d" name="a5e452ad3042e1b2d3be14ed879e09b2d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a5e452ad3042e1b2d3be14ed879e09b2d">&#9670;&#160;</a></span>cells</h2>
@@ -152,7 +156,7 @@ Public Attributes</h2></td></tr>
 
 <p>The cells, one non-null node per column. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01444">1444</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01969">1969</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -170,7 +174,43 @@ Public Attributes</h2></td></tr>
 
 <p>The row's tone, bound in the row's own scope; disengaged for none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01446">1446</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01971">1971</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa51a717c35f445ac03cd693ed9ec85ae" name="aa51a717c35f445ac03cd693ed9ec85ae"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa51a717c35f445ac03cd693ed9ec85ae">&#9670;&#160;</a></span>label</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; &gt; morph::ui::TableRowView::label = std::nullopt</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The row's accessible name, and its select box's, bound in the row's own scope; disengaged names the row by its key. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01974">1974</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aefdf3c6021f034a2f2d1edd6e711b49c" name="aefdf3c6021f034a2f2d1edd6e711b49c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aefdf3c6021f034a2f2d1edd6e711b49c">&#9670;&#160;</a></span>heading</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::TableRowView::heading = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the row is a heading: exactly one cell, spanning every column, never selected or activated. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01976">1976</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

@@ -129,9 +129,13 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/dfe/structm
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:afe9ae0ec7832a4d5679b5d27b91bb25c" id="r_afe9ae0ec7832a4d5679b5d27b91bb25c"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afe9ae0ec7832a4d5679b5d27b91bb25c">text</a></td></tr>
-<tr class="memdesc:afe9ae0ec7832a4d5679b5d27b91bb25c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text, UTF-8.  <br /></td></tr>
+<tr class="memdesc:afe9ae0ec7832a4d5679b5d27b91bb25c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text, UTF-8; not applied while the text has spans.  <br /></td></tr>
+<tr class="memitem:a0571d68c29b16e6c1c5ded17a411cc12" id="r_a0571d68c29b16e6c1c5ded17a411cc12"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0571d68c29b16e6c1c5ded17a411cc12">spans</a></td></tr>
+<tr class="memdesc:a0571d68c29b16e6c1c5ded17a411cc12"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text as runs, each plain, strong or monospace; while bound or not empty, it is shown in place of <span class="tt"><a class="el" href="#afe9ae0ec7832a4d5679b5d27b91bb25c" title="The text, UTF-8; not applied while the text has spans.">text</a></span>.  <br /></td></tr>
 <tr class="memitem:a9707c2400df810eb792d365dbc82ac98" id="r_a9707c2400df810eb792d365dbc82ac98"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; <a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5">TextRole</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9707c2400df810eb792d365dbc82ac98">role</a> = <a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a960b44c579bc2f6818d2daaf9e4c16f0">TextRole::Normal</a></td></tr>
 <tr class="memdesc:a9707c2400df810eb792d365dbc82ac98"><td class="mdescLeft">&#160;</td><td class="mdescRight">The style.  <br /></td></tr>
+<tr class="memitem:aa0c677a079c88a978e48b52f4c1e7f33" id="r_aa0c677a079c88a978e48b52f4c1e7f33"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d1/d86/text__align_8hpp.html#ad7eac90b50f94b262c7675fb2b3f0dd5">TextAlign</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa0c677a079c88a978e48b52f4c1e7f33">align</a></td></tr>
+<tr class="memdesc:aa0c677a079c88a978e48b52f4c1e7f33"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where each line sits within the text's width; set once. Unset leaves a text in a table to its column's alignment; set, even to <span class="tt">Start</span>, it keeps its own. It shows nothing on a text as wide as its content.  <br /></td></tr>
 <tr class="memitem:af03f9322281ae08548d3fe5f4a36b370" id="r_af03f9322281ae08548d3fe5f4a36b370"><td class="memItemLeft"><a class="el" href="../../d1/d36/structmorph_1_1ui_1_1FieldState.html">FieldState</a>&#160;</td><td class="memItemRight"><a class="el" href="#af03f9322281ae08548d3fe5f4a36b370">field</a> {}</td></tr>
 <tr class="memdesc:af03f9322281ae08548d3fe5f4a36b370"><td class="mdescLeft">&#160;</td><td class="mdescRight">Read-only, required, errors and stale.  <br /></td></tr>
 <tr class="memitem:a02305d91c63f1c02e5775bb61f1f130a" id="r_a02305d91c63f1c02e5775bb61f1f130a"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#a02305d91c63f1c02e5775bb61f1f130a">common</a> {}</td></tr>
@@ -140,7 +144,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Static or bound text. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00560">560</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="afe9ae0ec7832a4d5679b5d27b91bb25c" name="afe9ae0ec7832a4d5679b5d27b91bb25c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#afe9ae0ec7832a4d5679b5d27b91bb25c">&#9670;&#160;</a></span>text</h2>
@@ -154,9 +158,27 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The text, UTF-8. </p>
+<p>The text, UTF-8; not applied while the text has spans. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00408">408</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00562">562</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0571d68c29b16e6c1c5ded17a411cc12" name="a0571d68c29b16e6c1c5ded17a411cc12"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0571d68c29b16e6c1c5ded17a411cc12">&#9670;&#160;</a></span>spans</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::vector&lt;<a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a>&gt; &gt; morph::ui::Text::spans</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The text as runs, each plain, strong or monospace; while bound or not empty, it is shown in place of <span class="tt"><a class="el" href="#afe9ae0ec7832a4d5679b5d27b91bb25c" title="The text, UTF-8; not applied while the text has spans.">text</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00565">565</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -174,7 +196,25 @@ Public Attributes</h2></td></tr>
 
 <p>The style. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00410">410</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00567">567</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa0c677a079c88a978e48b52f4c1e7f33" name="aa0c677a079c88a978e48b52f4c1e7f33"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa0c677a079c88a978e48b52f4c1e7f33">&#9670;&#160;</a></span>align</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d1/d86/text__align_8hpp.html#ad7eac90b50f94b262c7675fb2b3f0dd5">TextAlign</a>&gt; morph::ui::Text::align</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where each line sits within the text's width; set once. Unset leaves a text in a table to its column's alignment; set, even to <span class="tt">Start</span>, it keeps its own. It shows nothing on a text as wide as its content. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00570">570</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +232,7 @@ Public Attributes</h2></td></tr>
 
 <p>Read-only, required, errors and stale. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00412">412</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00572">572</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +250,7 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00414">414</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00574">574</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

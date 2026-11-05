@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/df9/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>Captions beside their values.  
+<p>Captions beside, or above, their values. A toned value is drawn in the tone's colour and the strong weight; a value with spans draws them as a text does.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>&gt;</code></p>
@@ -133,7 +133,7 @@ Inheritance diagram for morph::ui::KeyValueWidget:</div>
   <map id="morph_3A_3Aui_3A_3AKeyValueWidget_map" name="morph_3A_3Aui_3A_3AKeyValueWidget_map">
 <area href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html" title="A retained widget. A new widget is visible, enabled, content-sized, not draggable and not a drop targ..." alt="morph::ui::Widget" shape="rect" coords="0,0,317,24"/>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; KeyValueWidget &gt;" shape="rect" coords="0,112,317,136"/>
-<area href="../../da/d53/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeKeyValue.html" title="A fake KeyValueWidget: property items ([label:value,…])." alt="morph::ui::testing::detail::FakeKeyValue" shape="rect" coords="0,168,317,192"/>
+<area href="../../da/d53/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeKeyValue.html" title="A fake KeyValueWidget: properties items ([label:value,…], a value with spans as its runs in brackets,..." alt="morph::ui::testing::detail::FakeKeyValue" shape="rect" coords="0,168,317,192"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -141,6 +141,10 @@ Inheritance diagram for morph::ui::KeyValueWidget:</div>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a9b55c3868969d78d1d87f98456783903" id="r_a9b55c3868969d78d1d87f98456783903"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a9b55c3868969d78d1d87f98456783903">setItems</a> (std::vector&lt; <a class="el" href="../../d4/d73/structmorph_1_1ui_1_1KeyValueItem.html">KeyValueItem</a> &gt; const &amp;items)=0</td></tr>
 <tr class="memdesc:a9b55c3868969d78d1d87f98456783903"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the pairs.  <br /></td></tr>
+<tr class="memitem:a07b746abf748379a0c121684f73d0025" id="r_a07b746abf748379a0c121684f73d0025"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a07b746abf748379a0c121684f73d0025">setCaptionPlacement</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a4895b959624a0e401159d80a03c07cd7">CaptionPlacement</a> placement)=0</td></tr>
+<tr class="memdesc:a07b746abf748379a0c121684f73d0025"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets where each caption sits. A new list draws them beside their values; the mount calls it once, only for <span class="tt">Above</span>.  <br /></td></tr>
+<tr class="memitem:a4d8af838f24b85db1bf151250ed56fa2" id="r_a4d8af838f24b85db1bf151250ed56fa2"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a4d8af838f24b85db1bf151250ed56fa2">setCaptionWidth</a> (int units)=0</td></tr>
+<tr class="memdesc:a4d8af838f24b85db1bf151250ed56fa2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the width of the caption column, in units, while the captions sit beside their values; the mount calls it once, only when the node gives a width. Without it the column is as wide as the widest caption. A caption longer than the column wraps where the backend can and is cut with an ellipsis where it cannot.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1Widget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">morph::ui::Widget</a></td></tr>
 <tr class="memitem:abbc2ba04f9c9e2e29b8b9c6993e9b46b pub_methods_classmorph_1_1ui_1_1Widget" id="r_abbc2ba04f9c9e2e29b8b9c6993e9b46b"><td class="memItemLeft">
 &#160;</td><td class="memItemRight"><b>Widget</b> (Widget const &amp;)=delete</td></tr>
@@ -169,7 +173,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <tr class="memitem:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget" id="r_aa92d96c22b5e09e0aecb8866b4481f57"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#aa92d96c22b5e09e0aecb8866b4481f57">setTooltip</a> (std::string_view text)=0</td></tr>
 <tr class="memdesc:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text shown while the pointer rests on the widget.  <br /></td></tr>
 <tr class="memitem:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7ceca74805a45b142f00838ee17dd747"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7ceca74805a45b142f00838ee17dd747">setSurface</a> (std::string_view surface)=0</td></tr>
-<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme.  <br /></td></tr>
+<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme. May be called again: each call restyles the widget and everything inside it.  <br /></td></tr>
 <tr class="memitem:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget" id="r_a96f94ca0cf2c093d8f8463091d91bbfb"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a96f94ca0cf2c093d8f8463091d91bbfb">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord)=0</td></tr>
 <tr class="memdesc:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Declares the keyboard chords the widget handles while focus is inside it.  <br /></td></tr>
 <tr class="memitem:a7eeebc91608f97e34f70fced77b40173 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7eeebc91608f97e34f70fced77b40173"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7eeebc91608f97e34f70fced77b40173">focus</a> ()=0</td></tr>
@@ -178,9 +182,9 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <tr class="memdesc:ae7647f2e8d57d47de8d1297a4c5669a9 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Calls <code class="param">onHover</code> each time the pointer comes to rest over the widget. A backend without a pointer, or one that does not report hovering, keeps the default, which never calls it: hovering is a hint, such as a prefetch, never something a widget relies on.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Captions beside their values. </p>
+<div class="textblock"><p>Captions beside, or above, their values. A toned value is drawn in the tone's colour and the strong weight; a value with spans draws them as a text does. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00666">666</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01022">1022</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a9b55c3868969d78d1d87f98456783903" name="a9b55c3868969d78d1d87f98456783903"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a9b55c3868969d78d1d87f98456783903">&#9670;&#160;</a></span>setItems()</h2>
@@ -214,6 +218,76 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../da/d53/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeKeyValue.html#a5bae7fb7e9597015a364a41e4d7f7d21">morph::ui::testing::detail::FakeKeyValue</a>.</p>
+
+</div>
+</div>
+<a id="a07b746abf748379a0c121684f73d0025" name="a07b746abf748379a0c121684f73d0025"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a07b746abf748379a0c121684f73d0025">&#9670;&#160;</a></span>setCaptionPlacement()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::KeyValueWidget::setCaptionPlacement </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/d11/view_8hpp.html#a4895b959624a0e401159d80a03c07cd7">CaptionPlacement</a></td>          <td class="paramname"><span class="paramname"><em>placement</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets where each caption sits. A new list draws them beside their values; the mount calls it once, only for <span class="tt">Above</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">placement</td><td>Where the captions sit. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../da/d53/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeKeyValue.html#a3eeeb47ff34587e0ce778b5589f56096">morph::ui::testing::detail::FakeKeyValue</a>.</p>
+
+</div>
+</div>
+<a id="a4d8af838f24b85db1bf151250ed56fa2" name="a4d8af838f24b85db1bf151250ed56fa2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4d8af838f24b85db1bf151250ed56fa2">&#9670;&#160;</a></span>setCaptionWidth()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::KeyValueWidget::setCaptionWidth </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>units</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the width of the caption column, in units, while the captions sit beside their values; the mount calls it once, only when the node gives a width. Without it the column is as wide as the widest caption. A caption longer than the column wraps where the backend can and is cut with an ellipsis where it cannot. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">units</td><td>The column's width in units, at least 1. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../da/d53/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeKeyValue.html#a736e1ee1423bd5afbe173afc80e2d6ba">morph::ui::testing::detail::FakeKeyValue</a>.</p>
 
 </div>
 </div>

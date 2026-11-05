@@ -7,5 +7,10 @@ var classmorph_1_1ui_1_1Navigator =
     [ "unpin", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a41736c4a25579c00bb3f5765dd1b9ae4", null ],
     [ "pins", "d6/d15/classmorph_1_1ui_1_1Navigator.html#ab7cbc1f5c698ddfa432640eff4f360a4", null ],
     [ "setCurrent", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a2d2fb15be3c99237e303dce809fa0ee3", null ],
-    [ "current", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a8479f52efc86082887fc1a067b967215", null ]
+    [ "current", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a8479f52efc86082887fc1a067b967215", null ],
+    [ "setBadge", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a128fb255224f378a5c13f7c4c18552a4", null ],
+    [ "badgeOf", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a2d2bdf9b02844461e7c9249a573f8248", null ],
+    [ "menuEntries", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a10e07a0ec8d68e3dcc6dfd400975c2c3", null ],
+    [ "choose", "d6/d15/classmorph_1_1ui_1_1Navigator.html#ab6b02149881971f8242e6047047a61f7", null ],
+    [ "setOnChanged", "d6/d15/classmorph_1_1ui_1_1Navigator.html#a1ab624270185a6d823007de657e9e88d", null ]
 ];

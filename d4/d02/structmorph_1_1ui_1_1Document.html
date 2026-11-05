@@ -138,12 +138,38 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:af1dd10e2df0670ac6f2a825809999138"><td class="mdescLeft">&#160;</td><td class="mdescRight">The identity expression: equal identities are one screen.  <br /></td></tr>
 <tr class="memitem:a4c0c083adaa2b02c8aecef9fc9fc6602" id="r_a4c0c083adaa2b02c8aecef9fc9fc6602"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#a4c0c083adaa2b02c8aecef9fc9fc6602">dirty</a></td></tr>
 <tr class="memdesc:a4c0c083adaa2b02c8aecef9fc9fc6602"><td class="mdescLeft">&#160;</td><td class="mdescRight">The unsaved-changes expression.  <br /></td></tr>
+<tr class="memitem:a936412ed74d43a3924070bb9284ad91b" id="r_a936412ed74d43a3924070bb9284ad91b"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#a936412ed74d43a3924070bb9284ad91b">titleSpans</a></td></tr>
+<tr class="memdesc:a936412ed74d43a3924070bb9284ad91b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The title as runs, drawn in place of <span class="tt"><a class="el" href="#ab836b3bb18a7f2424f44d65b77abfcc8" title="The title expression.">title</a></span> in a shell's top bar by a client that knows it; <span class="tt">nullptr</span> when none is declared.  <br /></td></tr>
+<tr class="memitem:a4432684ee062e5a740d9bddbe99c1691" id="r_a4432684ee062e5a740d9bddbe99c1691"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#a4432684ee062e5a740d9bddbe99c1691">eyebrow</a></td></tr>
+<tr class="memdesc:a4432684ee062e5a740d9bddbe99c1691"><td class="mdescLeft">&#160;</td><td class="mdescRight">The eyebrow expression of the screen's head, the line above the title; <span class="tt">nullptr</span> when none is declared.  <br /></td></tr>
+<tr class="memitem:a4b63a5df8afc0aea3ce60b13ca9e8f41" id="r_a4b63a5df8afc0aea3ce60b13ca9e8f41"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#a4b63a5df8afc0aea3ce60b13ca9e8f41">eyebrowSpans</a></td></tr>
+<tr class="memdesc:a4b63a5df8afc0aea3ce60b13ca9e8f41"><td class="mdescLeft">&#160;</td><td class="mdescRight">The eyebrow as runs, drawn in place of <span class="tt"><a class="el" href="#a4432684ee062e5a740d9bddbe99c1691" title="The eyebrow expression of the screen&#39;s head, the line above the title; nullptr when none is declared.">eyebrow</a></span> by a client that knows it; <span class="tt">nullptr</span> when none is declared.  <br /></td></tr>
 <tr class="memitem:a814c3ece813cc1a7f386ba214472ecd2" id="r_a814c3ece813cc1a7f386ba214472ecd2"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#a814c3ece813cc1a7f386ba214472ecd2">subtitle</a></td></tr>
 <tr class="memdesc:a814c3ece813cc1a7f386ba214472ecd2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The subtitle expression of the screen's head; <span class="tt">nullptr</span> when none is declared.  <br /></td></tr>
+<tr class="memitem:ac58905c7b12ba3bb0ab2c6ba0b922e2b" id="r_ac58905c7b12ba3bb0ab2c6ba0b922e2b"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#ac58905c7b12ba3bb0ab2c6ba0b922e2b">subtitleSpans</a></td></tr>
+<tr class="memdesc:ac58905c7b12ba3bb0ab2c6ba0b922e2b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The subtitle as runs, drawn in place of <span class="tt"><a class="el" href="#a814c3ece813cc1a7f386ba214472ecd2" title="The subtitle expression of the screen&#39;s head; nullptr when none is declared.">subtitle</a></span> by a client that knows it; <span class="tt">nullptr</span> when none is declared.  <br /></td></tr>
+<tr class="memitem:a50e97caba6f4f95191a918231fa2f4bf" id="r_a50e97caba6f4f95191a918231fa2f4bf"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#a50e97caba6f4f95191a918231fa2f4bf">leadPlacement</a></td></tr>
+<tr class="memdesc:a50e97caba6f4f95191a918231fa2f4bf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the head's lead (subtitle and badges) sits: an expression of <span class="tt">below</span>, <span class="tt">inline</span> or <span class="tt">end</span>; <span class="tt">nullptr</span> when none is declared, which is <span class="tt">below</span>.  <br /></td></tr>
+<tr class="memitem:adc6e62402ec33018e1efccfaa2195355" id="r_adc6e62402ec33018e1efccfaa2195355"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#adc6e62402ec33018e1efccfaa2195355">titleRole</a></td></tr>
+<tr class="memdesc:adc6e62402ec33018e1efccfaa2195355"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text role of the head's title: an expression of <span class="tt">heading</span> or <span class="tt">headline</span>; <span class="tt">nullptr</span> when none is declared, which is <span class="tt">heading</span>.  <br /></td></tr>
+<tr class="memitem:a11adb75f364f6c08311e642e59084f00" id="r_a11adb75f364f6c08311e642e59084f00"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#a11adb75f364f6c08311e642e59084f00">headSurface</a></td></tr>
+<tr class="memdesc:a11adb75f364f6c08311e642e59084f00"><td class="mdescLeft">&#160;</td><td class="mdescRight">The surface the shell draws the top bar on while the screen is shown: an expression of a surface's name; <span class="tt">nullptr</span> when none is declared.  <br /></td></tr>
+<tr class="memitem:af3a974fca6a9684b5ea932833cee34ed" id="r_af3a974fca6a9684b5ea932833cee34ed"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#af3a974fca6a9684b5ea932833cee34ed">pageSurface</a></td></tr>
+<tr class="memdesc:af3a974fca6a9684b5ea932833cee34ed"><td class="mdescLeft">&#160;</td><td class="mdescRight">The surface the shell draws the page area on while the screen is shown: an expression of a surface's name; <span class="tt">nullptr</span> when none is declared, which is the built-in <span class="tt">page</span> surface.  <br /></td></tr>
+<tr class="memitem:a75f57f576f35e1af3ab0e089aa01c25f" id="r_a75f57f576f35e1af3ab0e089aa01c25f"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a75f57f576f35e1af3ab0e089aa01c25f">principalPlacement</a></td></tr>
+<tr class="memdesc:a75f57f576f35e1af3ab0e089aa01c25f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The app document's principal placement, <span class="tt">sidebar</span> or <span class="tt">head</span>; empty for the default, <span class="tt">sidebar</span>.  <br /></td></tr>
 <tr class="memitem:a9b2e3fc38418a13b29d82aa628f834f5" id="r_a9b2e3fc38418a13b29d82aa628f834f5"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9b2e3fc38418a13b29d82aa628f834f5">status</a></td></tr>
 <tr class="memdesc:a9b2e3fc38418a13b29d82aa628f834f5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's status badges: <span class="tt">headBadge</span> parts, in order.  <br /></td></tr>
 <tr class="memitem:ad9046a172aa70ec1c9ad16265f55e3b9" id="r_ad9046a172aa70ec1c9ad16265f55e3b9"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad9046a172aa70ec1c9ad16265f55e3b9">actions</a></td></tr>
 <tr class="memdesc:ad9046a172aa70ec1c9ad16265f55e3b9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's actions: <span class="tt">actionButton</span> parts, in order.  <br /></td></tr>
+<tr class="memitem:aab86c0821d171f287884b1361f9cf3e5" id="r_aab86c0821d171f287884b1361f9cf3e5"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aab86c0821d171f287884b1361f9cf3e5">menu</a></td></tr>
+<tr class="memdesc:aab86c0821d171f287884b1361f9cf3e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's own menu: <span class="tt">headMenuItem</span> parts, in order.  <br /></td></tr>
+<tr class="memitem:aea7de60aa6f0be7b4de0847b596e78e6" id="r_aea7de60aa6f0be7b4de0847b596e78e6"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>&#160;</td><td class="memItemRight"><a class="el" href="#aea7de60aa6f0be7b4de0847b596e78e6">menuLabel</a></td></tr>
+<tr class="memdesc:aea7de60aa6f0be7b4de0847b596e78e6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The accessible name of the head menu's trigger; <span class="tt">nullptr</span> for the default, "More actions".  <br /></td></tr>
+<tr class="memitem:a225cd5cd3500c0e03da2bf92f75c4b2b" id="r_a225cd5cd3500c0e03da2bf92f75c4b2b"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a225cd5cd3500c0e03da2bf92f75c4b2b">tools</a></td></tr>
+<tr class="memdesc:a225cd5cd3500c0e03da2bf92f75c4b2b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The head's tools: <span class="tt">headTool</span> parts, a search field or a select each, in order.  <br /></td></tr>
+<tr class="memitem:a5f096d1ed6702556f69e0d069d5ffe8c" id="r_a5f096d1ed6702556f69e0d069d5ffe8c"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5f096d1ed6702556f69e0d069d5ffe8c">navigation</a></td></tr>
+<tr class="memdesc:a5f096d1ed6702556f69e0d069d5ffe8c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The app document's counts on the navigator's entries: <span class="tt">navigationBadge</span> parts, in order; empty for a screen, which declares none.  <br /></td></tr>
 <tr class="memitem:aca7c64f365769f307753d894ed71ae62" id="r_aca7c64f365769f307753d894ed71ae62"><td class="memItemLeft">std::vector&lt; std::pair&lt; std::string, <a class="el" href="../../df/d58/structmorph_1_1ui_1_1Type.html">Type</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aca7c64f365769f307753d894ed71ae62">params</a></td></tr>
 <tr class="memdesc:aca7c64f365769f307753d894ed71ae62"><td class="mdescLeft">&#160;</td><td class="mdescRight">The typed params, in declaration order.  <br /></td></tr>
 <tr class="memitem:a79dcd16d9c0eda06bcaf3dfe5e1ef986" id="r_a79dcd16d9c0eda06bcaf3dfe5e1ef986"><td class="memItemLeft"><a class="el" href="../../d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html">ScopeDecl</a>&#160;</td><td class="memItemRight"><a class="el" href="#a79dcd16d9c0eda06bcaf3dfe5e1ef986">scope</a></td></tr>
@@ -154,6 +180,10 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a2cb32eb18c328716bb1201bafb20dedb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen's key bindings.  <br /></td></tr>
 <tr class="memitem:aabb2cadb0b8db46d89380a9651645731" id="r_aabb2cadb0b8db46d89380a9651645731"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aabb2cadb0b8db46d89380a9651645731">showErrors</a></td></tr>
 <tr class="memdesc:aabb2cadb0b8db46d89380a9651645731"><td class="mdescLeft">&#160;</td><td class="mdescRight">When errors show: <span class="tt">touched</span>, <span class="tt">submit</span> or <span class="tt">always</span>; empty for the default.  <br /></td></tr>
+<tr class="memitem:aac02a472c430209eff70567e99b71876" id="r_aac02a472c430209eff70567e99b71876"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aac02a472c430209eff70567e99b71876">datePattern</a></td></tr>
+<tr class="memdesc:aac02a472c430209eff70567e99b71876"><td class="mdescLeft">&#160;</td><td class="mdescRight">The app document's date pattern (<span class="tt">formatting.date</span>), which <span class="tt">mountApp</span> gives the session; empty keeps ISO, and a screen has none.  <br /></td></tr>
+<tr class="memitem:a1849b0db8b1f242c93d17bacfb38affa" id="r_a1849b0db8b1f242c93d17bacfb38affa"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a1849b0db8b1f242c93d17bacfb38affa">dateTimePattern</a></td></tr>
+<tr class="memdesc:a1849b0db8b1f242c93d17bacfb38affa"><td class="mdescLeft">&#160;</td><td class="mdescRight">The app document's date-and-time pattern (<span class="tt">formatting.dateTime</span>), as <span class="tt"><a class="el" href="#aac02a472c430209eff70567e99b71876" title="The app document&#39;s date pattern (formatting.date), which mountApp gives the session; empty keeps ISO,...">datePattern</a></span>.  <br /></td></tr>
 <tr class="memitem:aa60636a1456374380492f15057cb393b" id="r_aa60636a1456374380492f15057cb393b"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa60636a1456374380492f15057cb393b">prefetch</a></td></tr>
 <tr class="memdesc:aa60636a1456374380492f15057cb393b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Queries started before the screen mounts.  <br /></td></tr>
 <tr class="memitem:a3adc5e6abc4843c5fb4e18234ef2a0bc" id="r_a3adc5e6abc4843c5fb4e18234ef2a0bc"><td class="memItemLeft">std::map&lt; std::string, <a class="el" href="../../d1/d28/structmorph_1_1ui_1_1Component.html">Component</a>, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3adc5e6abc4843c5fb4e18234ef2a0bc">components</a></td></tr>
@@ -164,13 +194,15 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a51cec9276e5d0bdc65c3844fdb291299"><td class="mdescLeft">&#160;</td><td class="mdescRight">The view; <span class="tt">nullptr</span> for the app document.  <br /></td></tr>
 <tr class="memitem:a41f152c66a05c744486f13ef4d99dadf" id="r_a41f152c66a05c744486f13ef4d99dadf"><td class="memItemLeft">std::map&lt; <a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const  *, <a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349">TypeKind</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a41f152c66a05c744486f13ef4d99dadf">dateValueKinds</a></td></tr>
 <tr class="memdesc:a41f152c66a05c744486f13ef4d99dadf"><td class="mdescLeft">&#160;</td><td class="mdescRight">The static type of each <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a3833826c9c7de9c8be32215cff26333f" title="A date or date-and-time field.">dateTimeInput</a></span>'s <span class="tt">value</span> that the loader could decide: <span class="tt">String</span> or <span class="tt">Timestamp</span>, keyed by the node. A node whose value type is <span class="tt">any</span> or <span class="tt">key</span> has no entry.  <br /></td></tr>
+<tr class="memitem:a665fee0bffc7a7a0b914a0023e8a9329" id="r_a665fee0bffc7a7a0b914a0023e8a9329"><td class="memItemLeft">std::map&lt; std::string, <a class="el" href="../../dc/d1c/structmorph_1_1ui_1_1FocusTarget.html">FocusTarget</a>, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a665fee0bffc7a7a0b914a0023e8a9329">focusTargets</a></td></tr>
+<tr class="memdesc:a665fee0bffc7a7a0b914a0023e8a9329"><td class="mdescLeft">&#160;</td><td class="mdescRight">Each <span class="tt">focus</span> command's resolved target, keyed by the command's JSON Pointer.  <br /></td></tr>
 <tr class="memitem:a65b8b97b29914c1a60ad5e4c39360034" id="r_a65b8b97b29914c1a60ad5e4c39360034"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d7/d8c/structmorph_1_1ui_1_1LoadWarning.html">LoadWarning</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a65b8b97b29914c1a60ad5e4c39360034">warnings</a></td></tr>
 <tr class="memdesc:a65b8b97b29914c1a60ad5e4c39360034"><td class="mdescLeft">&#160;</td><td class="mdescRight">What load-time validation found that does not refuse the document, in the order found. Empty when the catalog answers no actions.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A loaded and validated UI document: a screen, or the app document (id <span class="tt">app</span>, spec 6 §5). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00536">536</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00564">564</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a4b3839578f92208a5b9cc2b415e7813d" name="a4b3839578f92208a5b9cc2b415e7813d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4b3839578f92208a5b9cc2b415e7813d">&#9670;&#160;</a></span>vocab</h2>
@@ -186,7 +218,7 @@ Public Attributes</h2></td></tr>
 
 <p>The vocabulary, <span class="tt">ui/1</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00538">538</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00566">566</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -204,7 +236,7 @@ Public Attributes</h2></td></tr>
 
 <p>The document id, such as <span class="tt">lims.results</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00540">540</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00568">568</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -222,7 +254,7 @@ Public Attributes</h2></td></tr>
 
 <p>The title expression. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00542">542</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00570">570</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -240,7 +272,7 @@ Public Attributes</h2></td></tr>
 
 <p>The identity expression: equal identities are one screen. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00544">544</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00572">572</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -258,7 +290,61 @@ Public Attributes</h2></td></tr>
 
 <p>The unsaved-changes expression. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00574">574</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a936412ed74d43a3924070bb9284ad91b" name="a936412ed74d43a3924070bb9284ad91b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a936412ed74d43a3924070bb9284ad91b">&#9670;&#160;</a></span>titleSpans</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> morph::ui::Document::titleSpans</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The title as runs, drawn in place of <span class="tt"><a class="el" href="#ab836b3bb18a7f2424f44d65b77abfcc8" title="The title expression.">title</a></span> in a shell's top bar by a client that knows it; <span class="tt">nullptr</span> when none is declared. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00577">577</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4432684ee062e5a740d9bddbe99c1691" name="a4432684ee062e5a740d9bddbe99c1691"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4432684ee062e5a740d9bddbe99c1691">&#9670;&#160;</a></span>eyebrow</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> morph::ui::Document::eyebrow</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The eyebrow expression of the screen's head, the line above the title; <span class="tt">nullptr</span> when none is declared. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00579">579</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4b63a5df8afc0aea3ce60b13ca9e8f41" name="a4b63a5df8afc0aea3ce60b13ca9e8f41"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4b63a5df8afc0aea3ce60b13ca9e8f41">&#9670;&#160;</a></span>eyebrowSpans</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> morph::ui::Document::eyebrowSpans</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The eyebrow as runs, drawn in place of <span class="tt"><a class="el" href="#a4432684ee062e5a740d9bddbe99c1691" title="The eyebrow expression of the screen&#39;s head, the line above the title; nullptr when none is declared.">eyebrow</a></span> by a client that knows it; <span class="tt">nullptr</span> when none is declared. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00582">582</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -276,7 +362,115 @@ Public Attributes</h2></td></tr>
 
 <p>The subtitle expression of the screen's head; <span class="tt">nullptr</span> when none is declared. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00548">548</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00584">584</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac58905c7b12ba3bb0ab2c6ba0b922e2b" name="ac58905c7b12ba3bb0ab2c6ba0b922e2b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac58905c7b12ba3bb0ab2c6ba0b922e2b">&#9670;&#160;</a></span>subtitleSpans</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> morph::ui::Document::subtitleSpans</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The subtitle as runs, drawn in place of <span class="tt"><a class="el" href="#a814c3ece813cc1a7f386ba214472ecd2" title="The subtitle expression of the screen&#39;s head; nullptr when none is declared.">subtitle</a></span> by a client that knows it; <span class="tt">nullptr</span> when none is declared. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00587">587</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a50e97caba6f4f95191a918231fa2f4bf" name="a50e97caba6f4f95191a918231fa2f4bf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a50e97caba6f4f95191a918231fa2f4bf">&#9670;&#160;</a></span>leadPlacement</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> morph::ui::Document::leadPlacement</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where the head's lead (subtitle and badges) sits: an expression of <span class="tt">below</span>, <span class="tt">inline</span> or <span class="tt">end</span>; <span class="tt">nullptr</span> when none is declared, which is <span class="tt">below</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00590">590</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adc6e62402ec33018e1efccfaa2195355" name="adc6e62402ec33018e1efccfaa2195355"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adc6e62402ec33018e1efccfaa2195355">&#9670;&#160;</a></span>titleRole</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> morph::ui::Document::titleRole</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The text role of the head's title: an expression of <span class="tt">heading</span> or <span class="tt">headline</span>; <span class="tt">nullptr</span> when none is declared, which is <span class="tt">heading</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00593">593</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a11adb75f364f6c08311e642e59084f00" name="a11adb75f364f6c08311e642e59084f00"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a11adb75f364f6c08311e642e59084f00">&#9670;&#160;</a></span>headSurface</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> morph::ui::Document::headSurface</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The surface the shell draws the top bar on while the screen is shown: an expression of a surface's name; <span class="tt">nullptr</span> when none is declared. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00596">596</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af3a974fca6a9684b5ea932833cee34ed" name="af3a974fca6a9684b5ea932833cee34ed"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af3a974fca6a9684b5ea932833cee34ed">&#9670;&#160;</a></span>pageSurface</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> morph::ui::Document::pageSurface</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The surface the shell draws the page area on while the screen is shown: an expression of a surface's name; <span class="tt">nullptr</span> when none is declared, which is the built-in <span class="tt">page</span> surface. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00599">599</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a75f57f576f35e1af3ab0e089aa01c25f" name="a75f57f576f35e1af3ab0e089aa01c25f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a75f57f576f35e1af3ab0e089aa01c25f">&#9670;&#160;</a></span>principalPlacement</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::Document::principalPlacement</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The app document's principal placement, <span class="tt">sidebar</span> or <span class="tt">head</span>; empty for the default, <span class="tt">sidebar</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00601">601</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -294,7 +488,7 @@ Public Attributes</h2></td></tr>
 
 <p>The head's status badges: <span class="tt">headBadge</span> parts, in order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00550">550</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00603">603</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -312,7 +506,79 @@ Public Attributes</h2></td></tr>
 
 <p>The head's actions: <span class="tt">actionButton</span> parts, in order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00552">552</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00605">605</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aab86c0821d171f287884b1361f9cf3e5" name="aab86c0821d171f287884b1361f9cf3e5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aab86c0821d171f287884b1361f9cf3e5">&#9670;&#160;</a></span>menu</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a>&gt; morph::ui::Document::menu</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The head's own menu: <span class="tt">headMenuItem</span> parts, in order. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00607">607</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aea7de60aa6f0be7b4de0847b596e78e6" name="aea7de60aa6f0be7b4de0847b596e78e6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aea7de60aa6f0be7b4de0847b596e78e6">&#9670;&#160;</a></span>menuLabel</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d0e/expression_8hpp.html#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a> morph::ui::Document::menuLabel</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The accessible name of the head menu's trigger; <span class="tt">nullptr</span> for the default, "More actions". </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00609">609</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a225cd5cd3500c0e03da2bf92f75c4b2b" name="a225cd5cd3500c0e03da2bf92f75c4b2b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a225cd5cd3500c0e03da2bf92f75c4b2b">&#9670;&#160;</a></span>tools</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a>&gt; morph::ui::Document::tools</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The head's tools: <span class="tt">headTool</span> parts, a search field or a select each, in order. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00611">611</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5f096d1ed6702556f69e0d069d5ffe8c" name="a5f096d1ed6702556f69e0d069d5ffe8c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5f096d1ed6702556f69e0d069d5ffe8c">&#9670;&#160;</a></span>navigation</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../dd/d39/document_8hpp.html#aae70bb9b0fa8cc016d2afb907d76bb7e">DocNodePtr</a>&gt; morph::ui::Document::navigation</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The app document's counts on the navigator's entries: <span class="tt">navigationBadge</span> parts, in order; empty for a screen, which declares none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00614">614</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -330,7 +596,7 @@ Public Attributes</h2></td></tr>
 
 <p>The typed params, in declaration order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00554">554</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00616">616</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -348,7 +614,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen scope's declarations. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00556">556</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00618">618</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -366,7 +632,7 @@ Public Attributes</h2></td></tr>
 
 <p>The lifecycle command lists by key: <span class="tt">onMount</span>, <span class="tt">onUnmount</span>, <span class="tt">onClose</span>, <span class="tt">onSave</span>, <span class="tt">onBackendChange</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00558">558</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00620">620</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -384,7 +650,7 @@ Public Attributes</h2></td></tr>
 
 <p>The screen's key bindings. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00560">560</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00622">622</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -402,7 +668,43 @@ Public Attributes</h2></td></tr>
 
 <p>When errors show: <span class="tt">touched</span>, <span class="tt">submit</span> or <span class="tt">always</span>; empty for the default. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00562">562</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00624">624</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aac02a472c430209eff70567e99b71876" name="aac02a472c430209eff70567e99b71876"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aac02a472c430209eff70567e99b71876">&#9670;&#160;</a></span>datePattern</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::Document::datePattern</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The app document's date pattern (<span class="tt">formatting.date</span>), which <span class="tt">mountApp</span> gives the session; empty keeps ISO, and a screen has none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00627">627</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1849b0db8b1f242c93d17bacfb38affa" name="a1849b0db8b1f242c93d17bacfb38affa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1849b0db8b1f242c93d17bacfb38affa">&#9670;&#160;</a></span>dateTimePattern</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::Document::dateTimePattern</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The app document's date-and-time pattern (<span class="tt">formatting.dateTime</span>), as <span class="tt"><a class="el" href="#aac02a472c430209eff70567e99b71876" title="The app document&#39;s date pattern (formatting.date), which mountApp gives the session; empty keeps ISO,...">datePattern</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00629">629</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -420,7 +722,7 @@ Public Attributes</h2></td></tr>
 
 <p>Queries started before the screen mounts. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00564">564</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00631">631</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -438,7 +740,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../db/d27/structmorph_1_1ui_1_1Custom.html" title="A component the backend may load (spec 5 §10), with the built-in nodes shown when it does not.">Custom</a> components, by name. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00566">566</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00633">633</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -456,7 +758,7 @@ Public Attributes</h2></td></tr>
 
 <p>Customization points, by name. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00568">568</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00635">635</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -474,7 +776,7 @@ Public Attributes</h2></td></tr>
 
 <p>The view; <span class="tt">nullptr</span> for the app document. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00570">570</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00637">637</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -492,7 +794,25 @@ Public Attributes</h2></td></tr>
 
 <p>The static type of each <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a3833826c9c7de9c8be32215cff26333f" title="A date or date-and-time field.">dateTimeInput</a></span>'s <span class="tt">value</span> that the loader could decide: <span class="tt">String</span> or <span class="tt">Timestamp</span>, keyed by the node. A node whose value type is <span class="tt">any</span> or <span class="tt">key</span> has no entry. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00573">573</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00640">640</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a665fee0bffc7a7a0b914a0023e8a9329" name="a665fee0bffc7a7a0b914a0023e8a9329"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a665fee0bffc7a7a0b914a0023e8a9329">&#9670;&#160;</a></span>focusTargets</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::map&lt;std::string, <a class="el" href="../../dc/d1c/structmorph_1_1ui_1_1FocusTarget.html">FocusTarget</a>, std::less&lt;&gt; &gt; morph::ui::Document::focusTargets</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Each <span class="tt">focus</span> command's resolved target, keyed by the command's JSON Pointer. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00642">642</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>
@@ -510,7 +830,7 @@ Public Attributes</h2></td></tr>
 
 <p>What load-time validation found that does not refuse the document, in the order found. Empty when the catalog answers no actions. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00576">576</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d39/document_8hpp_source.html#l00645">645</a> of file <a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>.</p>
 
 </div>
 </div>

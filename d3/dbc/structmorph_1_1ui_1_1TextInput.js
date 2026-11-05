@@ -12,5 +12,9 @@ var structmorph_1_1ui_1_1TextInput =
     [ "label", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#af817fd28094dab34c0b68cbcf7add128", null ],
     [ "showLabel", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a139b180f6de1e1078b5af23e919f73e7", null ],
     [ "field", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a14dd07a488938ad090de13f03bce82ac", null ],
-    [ "common", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a88c0581a7c3dd2bc791f4d6bcb73a0e3", null ]
+    [ "common", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a88c0581a7c3dd2bc791f4d6bcb73a0e3", null ],
+    [ "emphasis", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a03d284bdb5550cea54ef046ca02227d8", null ],
+    [ "mono", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#ad96dd02dba5d1598431b6ca791cc6a12", null ],
+    [ "align", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a5d06f17a44a5e0e0371d7eca58bb93d6", null ],
+    [ "prefix", "d3/dbc/structmorph_1_1ui_1_1TextInput.html#a862e38eedb24eb8f363efed4534611be", null ]
 ];

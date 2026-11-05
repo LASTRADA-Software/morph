@@ -128,8 +128,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/d0d/classmo
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:aadcae6ea68b15ff7d3999af35885c5b8" id="r_aadcae6ea68b15ff7d3999af35885c5b8"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#aadcae6ea68b15ff7d3999af35885c5b8">create</a> (std::string kind, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> const *parent, <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;widget, <a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261">PropList</a> initial)</td></tr>
-<tr class="memdesc:aadcae6ea68b15ff7d3999af35885c5b8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records a new widget appended to <code class="param">parent</code> and logs its creation.  <br /></td></tr>
+<tr class="memitem:a4be93cb97f3bace54976fe0868a29d41" id="r_a4be93cb97f3bace54976fe0868a29d41"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#a4be93cb97f3bace54976fe0868a29d41">create</a> (std::string kind, <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const *parent, <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;widget, <a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261">PropList</a> initial)</td></tr>
+<tr class="memdesc:a4be93cb97f3bace54976fe0868a29d41"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records a new widget appended to <code class="param">parent</code> and logs its creation.  <br /></td></tr>
 <tr class="memitem:ad95880674fa05e69390c9421db2ef6a0" id="r_ad95880674fa05e69390c9421db2ef6a0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ad95880674fa05e69390c9421db2ef6a0">set</a> (int widgetId, std::string_view name, std::string value)</td></tr>
 <tr class="memdesc:ad95880674fa05e69390c9421db2ef6a0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets a property through a widget setter, and logs it.  <br /></td></tr>
 <tr class="memitem:a2f0196cab77f42edc67613a381683b51" id="r_a2f0196cab77f42edc67613a381683b51"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2f0196cab77f42edc67613a381683b51">setByUser</a> (int widgetId, std::string_view name, std::string value)</td></tr>
@@ -161,10 +161,10 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>The records, the roots and the operation log that every fake widget of one backend writes to. </p>
 <p>Held by <span class="tt">shared_ptr</span> from the backend and from every fake, so a fake that outlives its backend still has somewhere to record its destruction. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00519">519</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00624">624</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
-<a id="aadcae6ea68b15ff7d3999af35885c5b8" name="aadcae6ea68b15ff7d3999af35885c5b8"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aadcae6ea68b15ff7d3999af35885c5b8">&#9670;&#160;</a></span>create()</h2>
+<a id="a4be93cb97f3bace54976fe0868a29d41" name="a4be93cb97f3bace54976fe0868a29d41"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4be93cb97f3bace54976fe0868a29d41">&#9670;&#160;</a></span>create()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -180,7 +180,7 @@ Public Member Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> const *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span>, </td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const *</td>          <td class="paramname"><span class="paramname"><em>parent</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
@@ -212,7 +212,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The new widget's id. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00527">527</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00632">632</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -258,7 +258,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00651">651</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -304,7 +304,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00556">556</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00661">661</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -344,7 +344,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00565">565</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00670">670</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -379,7 +379,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00576">576</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00681">681</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -421,7 +421,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00607">607</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -463,7 +463,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00619">619</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00724">724</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -505,7 +505,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00631">631</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00736">736</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -535,7 +535,7 @@ Public Member Functions</h2></td></tr>
 <p>Every live widget's record. </p>
 <dl class="section return"><dt>Returns</dt><dd>The records, by id. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00641">641</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00746">746</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -565,7 +565,7 @@ Public Member Functions</h2></td></tr>
 <p>The operation log. </p>
 <dl class="section return"><dt>Returns</dt><dd>One line per operation, oldest first. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00645">645</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00750">750</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -594,7 +594,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Empties the operation log. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00648">648</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00753">753</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -635,7 +635,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00653">653</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00758">758</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -665,7 +665,7 @@ Public Member Functions</h2></td></tr>
 <p>The widget that last took focus. </p>
 <dl class="section return"><dt>Returns</dt><dd>Its id, or 0 when none has, or it has since been destroyed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00660">660</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00765">765</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -695,7 +695,7 @@ Public Member Functions</h2></td></tr>
 <p>The golden tree. </p>
 <dl class="section return"><dt>Returns</dt><dd>One line per live widget, children indented two spaces per depth. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00664">664</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00769">769</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

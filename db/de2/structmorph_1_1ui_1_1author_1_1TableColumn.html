@@ -133,16 +133,28 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a1ba73badce97f8000557a2de27178db2" id="r_a1ba73badce97f8000557a2de27178db2"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a1ba73badce97f8000557a2de27178db2">label</a></td></tr>
 <tr class="memdesc:a1ba73badce97f8000557a2de27178db2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The header label.  <br /></td></tr>
 <tr class="memitem:af8fb8ca7642ea3bc9cbec508377e112c" id="r_af8fb8ca7642ea3bc9cbec508377e112c"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#af8fb8ca7642ea3bc9cbec508377e112c">width</a></td></tr>
-<tr class="memdesc:af8fb8ca7642ea3bc9cbec508377e112c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The width.  <br /></td></tr>
+<tr class="memdesc:af8fb8ca7642ea3bc9cbec508377e112c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The width. A stretch column starts from its content, and its weight shares only the width the content leaves.  <br /></td></tr>
 <tr class="memitem:a3db80487783e02a9b413c5f5ddaf7cdb" id="r_a3db80487783e02a9b413c5f5ddaf7cdb"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a3db80487783e02a9b413c5f5ddaf7cdb">role</a></td></tr>
-<tr class="memdesc:a3db80487783e02a9b413c5f5ddaf7cdb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The column's text role; absent writes no key, <span class="tt">Normal</span>.  <br /></td></tr>
+<tr class="memdesc:a3db80487783e02a9b413c5f5ddaf7cdb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The column's text role; absent writes no key, <span class="tt">Normal</span>. A <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a69ee7d504a6cc242a1eb168ceffa13c8" title="A run of text in the theme&#39;s monospace face, such as an identifier inside a sentence,...">mono</a></span> role also makes a <span class="tt">fixed(n)</span> width count n monospace characters, plus the cell padding, even when the column has its own <span class="tt"><a class="el" href="#aeab75da94c1bd8a11bcadedf54fed3ea" title="The cell, read in the row scope.">cell</a></span>.  <br /></td></tr>
+<tr class="memitem:ae6f8490e54d52556e424bcab239ed586" id="r_ae6f8490e54d52556e424bcab239ed586"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae6f8490e54d52556e424bcab239ed586">align</a></td></tr>
+<tr class="memdesc:ae6f8490e54d52556e424bcab239ed586"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a cell's text, or a label-width cell, sits across the column, and the header label with it: <span class="tt">Start</span>, <span class="tt">Center</span> or <span class="tt">End</span>; absent writes no key, the start. <span class="tt">Stretch</span> writes <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch</a></span>, which the loader refuses.  <br /></td></tr>
+<tr class="memitem:abc30439af066bd5116b35b7f3b826388" id="r_abc30439af066bd5116b35b7f3b826388"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#abc30439af066bd5116b35b7f3b826388">valign</a></td></tr>
+<tr class="memdesc:abc30439af066bd5116b35b7f3b826388"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a cell sits down its row: <span class="tt">Start</span>, <span class="tt">Center</span> or <span class="tt">End</span>; absent writes no key and takes the table's <span class="tt"><a class="el" href="#abc30439af066bd5116b35b7f3b826388" title="Where a cell sits down its row: Start, Center or End; absent writes no key and takes the table&#39;s vali...">valign</a></span>, else the centre.  <br /></td></tr>
 <tr class="memitem:aeab75da94c1bd8a11bcadedf54fed3ea" id="r_aeab75da94c1bd8a11bcadedf54fed3ea"><td class="memItemLeft"><a class="el" href="../../dd/db3/classmorph_1_1ui_1_1author_1_1Nodes.html">Nodes</a>&#160;</td><td class="memItemRight"><a class="el" href="#aeab75da94c1bd8a11bcadedf54fed3ea">cell</a></td></tr>
 <tr class="memdesc:aeab75da94c1bd8a11bcadedf54fed3ea"><td class="mdescLeft">&#160;</td><td class="mdescRight">The cell, read in the row scope.  <br /></td></tr>
+<tr class="memitem:a2996c9227088e9a96be532f243cdd574" id="r_a2996c9227088e9a96be532f243cdd574"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a2996c9227088e9a96be532f243cdd574">sortable</a> = false</td></tr>
+<tr class="memdesc:a2996c9227088e9a96be532f243cdd574"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a click on the header sorts the table by the column; the column needs a <span class="tt"><a class="el" href="#a4e87e6ab5b6fe6f1cc20adce51ef6ff3" title="The column&#39;s id, which a columns customization point names.">name</a></span>.  <br /></td></tr>
+<tr class="memitem:a45ee7a238efa8726083a705c9674daec" id="r_a45ee7a238efa8726083a705c9674daec"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a45ee7a238efa8726083a705c9674daec">sortBy</a></td></tr>
+<tr class="memdesc:a45ee7a238efa8726083a705c9674daec"><td class="mdescLeft">&#160;</td><td class="mdescRight">The value a sortable column orders the rows by, read per row as <span class="tt">key</span> is; absent: the row's field named by the column's <span class="tt"><a class="el" href="#a4e87e6ab5b6fe6f1cc20adce51ef6ff3" title="The column&#39;s id, which a columns customization point names.">name</a></span>.  <br /></td></tr>
+<tr class="memitem:a991809514438d9558edd8d82cba5ecae" id="r_a991809514438d9558edd8d82cba5ecae"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a991809514438d9558edd8d82cba5ecae">wrap</a> = true</td></tr>
+<tr class="memdesc:a991809514438d9558edd8d82cba5ecae"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the column's text cells may break across lines; <span class="tt">false</span> draws each on one line, cut at the column's width with an ellipsis, and writes <span class="tt"><a class="el" href="#a991809514438d9558edd8d82cba5ecae" title="Whether the column&#39;s text cells may break across lines; false draws each on one line,...">wrap</a>: false</span>.  <br /></td></tr>
+<tr class="memitem:a4a0756cb1948ecfdd704956df81384d1" id="r_a4a0756cb1948ecfdd704956df81384d1"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a4a0756cb1948ecfdd704956df81384d1">shrink</a> = false</td></tr>
+<tr class="memdesc:a4a0756cb1948ecfdd704956df81384d1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a stretch column may be narrower than its header, cutting header and cells with an ellipsis, instead of the table scrolling sideways, and gives up its width before the other stretch columns; writes <span class="tt"><a class="el" href="#a4a0756cb1948ecfdd704956df81384d1" title="Whether a stretch column may be narrower than its header, cutting header and cells with an ellipsis,...">shrink</a>: true</span>. It needs a stretch <span class="tt"><a class="el" href="#af8fb8ca7642ea3bc9cbec508377e112c" title="The width. A stretch column starts from its content, and its weight shares only the width the content...">width</a></span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A column of a <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#ae3b07017b9e4d5d626354f8dd8f9d281" title="A table over a list, with the columns in its options.">table</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03670">3670</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04496">4496</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a4e87e6ab5b6fe6f1cc20adce51ef6ff3" name="a4e87e6ab5b6fe6f1cc20adce51ef6ff3"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4e87e6ab5b6fe6f1cc20adce51ef6ff3">&#9670;&#160;</a></span>name</h2>
@@ -158,7 +170,7 @@ Public Attributes</h2></td></tr>
 
 <p>The column's id, which a <span class="tt">columns</span> customization point names. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03672">3672</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04498">4498</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,7 +188,7 @@ Public Attributes</h2></td></tr>
 
 <p>The header label. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03674">3674</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04500">4500</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,9 +204,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The width. </p>
+<p>The width. A stretch column starts from its content, and its weight shares only the width the content leaves. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03676">3676</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04503">4503</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,9 +222,45 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The column's text role; absent writes no key, <span class="tt">Normal</span>. </p>
+<p>The column's text role; absent writes no key, <span class="tt">Normal</span>. A <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a69ee7d504a6cc242a1eb168ceffa13c8" title="A run of text in the theme&#39;s monospace face, such as an identifier inside a sentence,...">mono</a></span> role also makes a <span class="tt">fixed(n)</span> width count n monospace characters, plus the cell padding, even when the column has its own <span class="tt"><a class="el" href="#aeab75da94c1bd8a11bcadedf54fed3ea" title="The cell, read in the row scope.">cell</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03678">3678</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04506">4506</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae6f8490e54d52556e424bcab239ed586" name="ae6f8490e54d52556e424bcab239ed586"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae6f8490e54d52556e424bcab239ed586">&#9670;&#160;</a></span>align</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&gt; morph::ui::author::TableColumn::align</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where a cell's text, or a label-width cell, sits across the column, and the header label with it: <span class="tt">Start</span>, <span class="tt">Center</span> or <span class="tt">End</span>; absent writes no key, the start. <span class="tt">Stretch</span> writes <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#abdf723a44b0443754d84d8f3ec04eec4" title="A stretch sizing, {&quot;lit&quot;: {&quot;stretch&quot;: weight}}: a share of the leftover space.">stretch</a></span>, which the loader refuses. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04510">4510</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abc30439af066bd5116b35b7f3b826388" name="abc30439af066bd5116b35b7f3b826388"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abc30439af066bd5116b35b7f3b826388">&#9670;&#160;</a></span>valign</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065a">Align</a>&gt; morph::ui::author::TableColumn::valign</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where a cell sits down its row: <span class="tt">Start</span>, <span class="tt">Center</span> or <span class="tt">End</span>; absent writes no key and takes the table's <span class="tt"><a class="el" href="#abc30439af066bd5116b35b7f3b826388" title="Where a cell sits down its row: Start, Center or End; absent writes no key and takes the table&#39;s vali...">valign</a></span>, else the centre. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04513">4513</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +278,79 @@ Public Attributes</h2></td></tr>
 
 <p>The cell, read in the row scope. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l03680">3680</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04515">4515</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2996c9227088e9a96be532f243cdd574" name="a2996c9227088e9a96be532f243cdd574"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2996c9227088e9a96be532f243cdd574">&#9670;&#160;</a></span>sortable</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::author::TableColumn::sortable = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a click on the header sorts the table by the column; the column needs a <span class="tt"><a class="el" href="#a4e87e6ab5b6fe6f1cc20adce51ef6ff3" title="The column&#39;s id, which a columns customization point names.">name</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04517">4517</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a45ee7a238efa8726083a705c9674daec" name="a45ee7a238efa8726083a705c9674daec"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a45ee7a238efa8726083a705c9674daec">&#9670;&#160;</a></span>sortBy</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> morph::ui::author::TableColumn::sortBy</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The value a sortable column orders the rows by, read per row as <span class="tt">key</span> is; absent: the row's field named by the column's <span class="tt"><a class="el" href="#a4e87e6ab5b6fe6f1cc20adce51ef6ff3" title="The column&#39;s id, which a columns customization point names.">name</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04520">4520</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a991809514438d9558edd8d82cba5ecae" name="a991809514438d9558edd8d82cba5ecae"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a991809514438d9558edd8d82cba5ecae">&#9670;&#160;</a></span>wrap</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::author::TableColumn::wrap = true</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the column's text cells may break across lines; <span class="tt">false</span> draws each on one line, cut at the column's width with an ellipsis, and writes <span class="tt"><a class="el" href="#a991809514438d9558edd8d82cba5ecae" title="Whether the column&#39;s text cells may break across lines; false draws each on one line,...">wrap</a>: false</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04523">4523</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4a0756cb1948ecfdd704956df81384d1" name="a4a0756cb1948ecfdd704956df81384d1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4a0756cb1948ecfdd704956df81384d1">&#9670;&#160;</a></span>shrink</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::author::TableColumn::shrink = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a stretch column may be narrower than its header, cutting header and cells with an ellipsis, instead of the table scrolling sideways, and gives up its width before the other stretch columns; writes <span class="tt"><a class="el" href="#a4a0756cb1948ecfdd704956df81384d1" title="Whether a stretch column may be narrower than its header, cutting header and cells with an ellipsis,...">shrink</a>: true</span>. It needs a stretch <span class="tt"><a class="el" href="#af8fb8ca7642ea3bc9cbec508377e112c" title="The width. A stretch column starts from its content, and its weight shares only the width the content...">width</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04527">4527</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

@@ -140,8 +140,13 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d11/view_8h
 <code>#include &quot;<a class="el" href="../../dd/d5f/signal_8hpp_source.html">../reactive/signal.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d7/d4a/datetime_8hpp_source.html">../util/datetime.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d9/dd9/alignment_8hpp_source.html">alignment.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d4/d51/badge__style_8hpp_source.html">badge_style.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../df/dcb/banner__action__style_8hpp_source.html">banner_action_style.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html">button_emphasis.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/d96/button__style_8hpp_source.html">button_style.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d9/d6d/control__shape_8hpp_source.html">control_shape.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../dd/d2f/input__emphasis_8hpp_source.html">input_emphasis.hpp</a>&quot;</code><br />
+<code>#include &quot;<a class="el" href="../../d1/d86/text__align_8hpp_source.html">text_align.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d8/d11/view_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -155,6 +160,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="../../d7/d69/structmorph_1_1ui_1_1SlotBinding.html" title="A slot&#39;s read together with its id, as ui::slot makes it; a Prop made from it is a slot with that id.">SlotBinding</a></span> is one.  <a href="../../d2/df5/structmorph_1_1ui_1_1detail_1_1IsSlotBinding_3_01SlotBinding_3_01F_01_4_01_4.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AProp_3C_20T_20_3E" id="r_morph_3A_3Aui_3A_3AProp_3C_20T_20_3E"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">morph::ui::Prop&lt; T &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A node property: a constant, or a slot — a reactive read, with a stable id when it was given one.  <a href="../../db/d73/classmorph_1_1ui_1_1Prop.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3ATableSort" id="r_morph_3A_3Aui_3A_3ATableSort"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/dab/structmorph_1_1ui_1_1TableSort.html">morph::ui::TableSort</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The column a table's header marks as sorting the rows, and its direction.  <a href="../../d6/dab/structmorph_1_1ui_1_1TableSort.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ASizing" id="r_morph_3A_3Aui_3A_3ASizing"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d89/structmorph_1_1ui_1_1Sizing.html">morph::ui::Sizing</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How much space a widget asks for along one dimension, in backend units (a character cell on the TUI).  <a href="../../d1/d89/structmorph_1_1ui_1_1Sizing.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ALayoutHints" id="r_morph_3A_3Aui_3A_3ALayoutHints"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dc/d30/structmorph_1_1ui_1_1LayoutHints.html">morph::ui::LayoutHints</a></td></tr>
@@ -167,6 +174,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The part every node carries: visibility, enablement, layout, drag-and-drop, accessibility, test identity, tooltip, surface, keyboard chords and autofocus.  <a href="../../d1/d68/structmorph_1_1ui_1_1Common.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AFieldState" id="r_morph_3A_3Aui_3A_3AFieldState"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d36/structmorph_1_1ui_1_1FieldState.html">morph::ui::FieldState</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The state of a value a user edits or reads: whether it may be changed, must be given, is wrong, or is being recomputed.  <a href="../../d1/d36/structmorph_1_1ui_1_1FieldState.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3ATextSpan" id="r_morph_3A_3Aui_3A_3ATextSpan"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">morph::ui::TextSpan</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A run of text inside a sentence, drawn in the node's role with its own weight, face and colour.  <a href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AText" id="r_morph_3A_3Aui_3A_3AText"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html">morph::ui::Text</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Static or bound text.  <a href="../../dd/dfe/structmorph_1_1ui_1_1Text.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AButton" id="r_morph_3A_3Aui_3A_3AButton"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d2/d47/structmorph_1_1ui_1_1Button.html">morph::ui::Button</a></td></tr>
@@ -180,15 +189,19 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ASelect" id="r_morph_3A_3Aui_3A_3ASelect"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d7b/structmorph_1_1ui_1_1Select.html">morph::ui::Select</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A choice of one option.  <a href="../../d7/d7b/structmorph_1_1ui_1_1Select.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AMenuItem" id="r_morph_3A_3Aui_3A_3AMenuItem"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d4/dac/structmorph_1_1ui_1_1MenuItem.html">morph::ui::MenuItem</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One entry of a <span class="tt"><a class="el" href="../../de/dce/structmorph_1_1ui_1_1Menu.html" title="A vertical list of commands.">Menu</a></span>: its label and its handler in one place, so there are no parallel lists.  <a href="../../d4/dac/structmorph_1_1ui_1_1MenuItem.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One entry of a <span class="tt"><a class="el" href="../../de/dce/structmorph_1_1ui_1_1Menu.html" title="A menu of commands: a bar of top-level entries, or one button that opens them.">Menu</a></span>: its label and its handler in one place, so there are no parallel lists.  <a href="../../d4/dac/structmorph_1_1ui_1_1MenuItem.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AMenu" id="r_morph_3A_3Aui_3A_3AMenu"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/dce/structmorph_1_1ui_1_1Menu.html">morph::ui::Menu</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A vertical list of commands.  <a href="../../de/dce/structmorph_1_1ui_1_1Menu.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A menu of commands: a bar of top-level entries, or one button that opens them.  <a href="../../de/dce/structmorph_1_1ui_1_1Menu.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3APadding" id="r_morph_3A_3Aui_3A_3APadding"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d65/structmorph_1_1ui_1_1Padding.html">morph::ui::Padding</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The inset of a stack's children: one spacing step above and below, one at the sides.  <a href="../../d7/d65/structmorph_1_1ui_1_1Padding.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AColumn" id="r_morph_3A_3Aui_3A_3AColumn"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d05/structmorph_1_1ui_1_1Column.html">morph::ui::Column</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Children stacked top to bottom.  <a href="../../d1/d05/structmorph_1_1ui_1_1Column.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ARow" id="r_morph_3A_3Aui_3A_3ARow"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html">morph::ui::Row</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Children laid out left to right.  <a href="../../d7/da8/structmorph_1_1ui_1_1Row.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AGridCell" id="r_morph_3A_3Aui_3A_3AGridCell"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../df/d66/structmorph_1_1ui_1_1GridCell.html">morph::ui::GridCell</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One cell of a <span class="tt"><a class="el" href="../../de/d85/structmorph_1_1ui_1_1Grid.html" title="Cells laid out row-major in a fixed number of columns.">Grid</a></span>.  <a href="../../df/d66/structmorph_1_1ui_1_1GridCell.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AGridTrack" id="r_morph_3A_3Aui_3A_3AGridTrack"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../df/dd6/structmorph_1_1ui_1_1GridTrack.html">morph::ui::GridTrack</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One column track of a grid: how wide its column is and where each cell sits across it.  <a href="../../df/dd6/structmorph_1_1ui_1_1GridTrack.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AGrid" id="r_morph_3A_3Aui_3A_3AGrid"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/d85/structmorph_1_1ui_1_1Grid.html">morph::ui::Grid</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Cells laid out row-major in a fixed number of columns.  <a href="../../de/d85/structmorph_1_1ui_1_1Grid.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ASpacer" id="r_morph_3A_3Aui_3A_3ASpacer"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d8f/structmorph_1_1ui_1_1Spacer.html">morph::ui::Spacer</a></td></tr>
@@ -216,7 +229,7 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AForEachModel" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AForEachModel"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../db/dba/classmorph_1_1ui_1_1detail_1_1ForEachModel.html">morph::ui::detail::ForEachModel</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a>'s row source, key function and row view, with the row type erased.  <a href="../../db/dba/classmorph_1_1ui_1_1detail_1_1ForEachModel.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3ATypedForEach_3C_20RowT_20_3E" id="r_morph_3A_3Aui_3A_3Adetail_3A_3ATypedForEach_3C_20RowT_20_3E"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html">morph::ui::detail::TypedForEach&lt; RowT &gt;</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The typed model behind <span class="tt"><a class="el" href="#a1b59c075aa853e77789dbb8d74ef85d1" title="One widget per row of a keyed collection read through a binding (a Query&#39;s value() included).">forEach</a>&lt;RowT&gt;</span> and <span class="tt"><a class="el" href="#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a>&lt;RowT&gt;</span>.  <a href="../../df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The typed model behind <span class="tt"><a class="el" href="#a85c5613ad529665babdb9bf7026d81bc" title="One widget per row of a keyed collection read through a binding (a Query&#39;s value() included).">forEach</a>&lt;RowT&gt;</span> and <span class="tt"><a class="el" href="#acf831cc5b89c22045d627630e96bf21b" title="A table of keyed rows: one Row of cells per row, under the column headers.">table</a>&lt;RowT&gt;</span>.  <a href="../../df/d32/classmorph_1_1ui_1_1detail_1_1TypedForEach.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AVirtualization" id="r_morph_3A_3Aui_3A_3AVirtualization"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/ddd/structmorph_1_1ui_1_1Virtualization.html">morph::ui::Virtualization</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">When a keyed row list realizes a widget only for the rows in or near the visible range, instead of for every row regardless of scroll position. A row's own reactive state (its signal, rebuilt from the session on every change) is unaffected either way and is never released while its key exists; this setting only decides whether a row's mounted widget is also kept alive off-screen.  <a href="../../db/ddd/structmorph_1_1ui_1_1Virtualization.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AForEach" id="r_morph_3A_3Aui_3A_3AForEach"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html">morph::ui::ForEach</a></td></tr>
@@ -244,15 +257,27 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ASteps" id="r_morph_3A_3Aui_3A_3ASteps"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d8/d3b/structmorph_1_1ui_1_1Steps.html">morph::ui::Steps</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The steps of a process in order, each with its state.  <a href="../../d8/d3b/structmorph_1_1ui_1_1Steps.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AKeyValueItem" id="r_morph_3A_3Aui_3A_3AKeyValueItem"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d4/d73/structmorph_1_1ui_1_1KeyValueItem.html">morph::ui::KeyValueItem</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One row of a <span class="tt"><a class="el" href="../../dc/df0/structmorph_1_1ui_1_1KeyValue.html" title="Captions beside their values, one pair per row.">KeyValue</a></span> list.  <a href="../../d4/d73/structmorph_1_1ui_1_1KeyValueItem.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One row of a <span class="tt"><a class="el" href="../../dc/df0/structmorph_1_1ui_1_1KeyValue.html" title="Captions beside, or above, their values.">KeyValue</a></span> list.  <a href="../../d4/d73/structmorph_1_1ui_1_1KeyValueItem.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AChartPoint" id="r_morph_3A_3Aui_3A_3AChartPoint"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d29/structmorph_1_1ui_1_1ChartPoint.html">morph::ui::ChartPoint</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One point of a chart's series.  <a href="../../d6/d29/structmorph_1_1ui_1_1ChartPoint.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AChartSeries" id="r_morph_3A_3Aui_3A_3AChartSeries"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/dfd/structmorph_1_1ui_1_1ChartSeries.html">morph::ui::ChartSeries</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One series of a chart: its points in order.  <a href="../../d9/dfd/structmorph_1_1ui_1_1ChartSeries.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AChartLine" id="r_morph_3A_3Aui_3A_3AChartLine"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/d88/structmorph_1_1ui_1_1ChartLine.html">morph::ui::ChartLine</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A horizontal reference line of a chart, such as a control or a specification limit.  <a href="../../de/d88/structmorph_1_1ui_1_1ChartLine.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AChartTick" id="r_morph_3A_3Aui_3A_3AChartTick"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d5/dfb/structmorph_1_1ui_1_1ChartTick.html">morph::ui::ChartTick</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One labelled tick of a chart's value axis.  <a href="../../d5/dfb/structmorph_1_1ui_1_1ChartTick.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AChartData" id="r_morph_3A_3Aui_3A_3AChartData"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dd/dcc/structmorph_1_1ui_1_1ChartData.html">morph::ui::ChartData</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Everything a chart draws, computed from exact values by the lowering: positions as doubles, and every text already formatted.  <a href="../../dd/dcc/structmorph_1_1ui_1_1ChartData.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AChart" id="r_morph_3A_3Aui_3A_3AChart"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d5/dee/structmorph_1_1ui_1_1Chart.html">morph::ui::Chart</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Points against a numeric axis, optionally joined, with horizontal reference lines. Takes no focus and calls no handler.  <a href="../../d5/dee/structmorph_1_1ui_1_1Chart.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AKeyValue" id="r_morph_3A_3Aui_3A_3AKeyValue"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dc/df0/structmorph_1_1ui_1_1KeyValue.html">morph::ui::KeyValue</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Captions beside their values, one pair per row.  <a href="../../dc/df0/structmorph_1_1ui_1_1KeyValue.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Captions beside, or above, their values.  <a href="../../dc/df0/structmorph_1_1ui_1_1KeyValue.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AEmptyState" id="r_morph_3A_3Aui_3A_3AEmptyState"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d8/d99/structmorph_1_1ui_1_1EmptyState.html">morph::ui::EmptyState</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a region shows when it has nothing to show: a title, an explanation and an optional action.  <a href="../../d8/d99/structmorph_1_1ui_1_1EmptyState.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ADrawer" id="r_morph_3A_3Aui_3A_3ADrawer"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/df7/structmorph_1_1ui_1_1Drawer.html">morph::ui::Drawer</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A panel that slides in from one edge over the content: a <span class="tt"><a class="el" href="../../d2/dc0/structmorph_1_1ui_1_1Dialog.html" title="A modal overlay; its content is mounted only while it is open.">Dialog</a></span> with a side, and the same rules.  <a href="../../d3/df7/structmorph_1_1ui_1_1Drawer.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AActionBar" id="r_morph_3A_3Aui_3A_3AActionBar"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/dda/structmorph_1_1ui_1_1ActionBar.html">morph::ui::ActionBar</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A row of buttons in the footer of the dialog or drawer whose content holds it: what a document's overlay <span class="tt">actions</span> lower to. The mount refuses one anywhere else.  <a href="../../d6/dda/structmorph_1_1ui_1_1ActionBar.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A row of buttons: the actions of what holds it. Inside the content of a dialog or drawer, at any depth, it is the overlay's footer, as a document's overlay <span class="tt">actions</span> lower to; anywhere else it is a row in the place it is written. Either way the buttons are the theme's <span class="tt">actions.gap</span> apart, and so are the rows of a horizontal <span class="tt"><a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a></span> that is a direct child: they are part of the row, whatever <span class="tt"><a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html#a3eab8abc8c25c695ff02965efb48cec5" title="Space between rows: a spacing step, 0 to kMaxSpacingStep.">ForEach::gap</a></span> says.  <a href="../../d6/dda/structmorph_1_1ui_1_1ActionBar.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ASplitter" id="r_morph_3A_3Aui_3A_3ASplitter"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d07/structmorph_1_1ui_1_1Splitter.html">morph::ui::Splitter</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Panes side by side, or stacked, with handles the user drags to share the space between them.  <a href="../../d7/d07/structmorph_1_1ui_1_1Splitter.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACollapsible" id="r_morph_3A_3Aui_3A_3ACollapsible"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d0/db5/structmorph_1_1ui_1_1Collapsible.html">morph::ui::Collapsible</a></td></tr>
@@ -296,6 +321,15 @@ Enumerations</h2></td></tr>
 , <br />
 &#160;&#160;<a class="el" href="#a14948061dae38a78ef544a3b4d9873e5a505a83f220c02df2f85c3810cd9ceb38">Success</a>
 , <a class="el" href="#a14948061dae38a78ef544a3b4d9873e5ad2c24d59e0baff4d0155fbdf62590867">Section</a>
+, <a class="el" href="#a14948061dae38a78ef544a3b4d9873e5a5d9b47bd3b65072e0d5daf55f01da086">Mono</a>
+, <a class="el" href="#a14948061dae38a78ef544a3b4d9873e5ab9987a246a537f4fe86f1f2e3d10dbdb">Display</a>
+, <br />
+&#160;&#160;<a class="el" href="#a14948061dae38a78ef544a3b4d9873e5a2660064e68655415da2628c2ae2f7592">Small</a>
+, <a class="el" href="#a14948061dae38a78ef544a3b4d9873e5aa7d7d34d28ecacfa945c78f1ae7ec675">Overline</a>
+, <a class="el" href="#a14948061dae38a78ef544a3b4d9873e5a272ba7d164aa836995be6319a698be84">Caption</a>
+, <a class="el" href="#a14948061dae38a78ef544a3b4d9873e5ab021df6aac4654c454f46c77646e745f">Label</a>
+, <br />
+&#160;&#160;<a class="el" href="#a14948061dae38a78ef544a3b4d9873e5ac6568e77f61109390e82d035aaacaef0">Headline</a>
 <br />
  }</td></tr>
 <tr class="memdesc:a14948061dae38a78ef544a3b4d9873e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a <span class="tt"><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a></span> is styled; each backend maps a role to its theme.  <a href="#a14948061dae38a78ef544a3b4d9873e5">More...</a><br /></td></tr>
@@ -306,8 +340,13 @@ Enumerations</h2></td></tr>
 <tr class="memdesc:a0ef02872a2a71ca2d785c60b53ecfd37"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a <span class="tt"><a class="el" href="../../d3/dbc/structmorph_1_1ui_1_1TextInput.html" title="An editable text field. The backend never reports its own setText back through onChange.">TextInput</a></span> edits.  <a href="#a0ef02872a2a71ca2d785c60b53ecfd37">More...</a><br /></td></tr>
 <tr class="memitem:aafdccb4a0445b437dc40b2b5dfb0bce1" id="r_aafdccb4a0445b437dc40b2b5dfb0bce1"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#aafdccb4a0445b437dc40b2b5dfb0bce1">morph::ui::SelectStyle</a> : std::uint8_t { <a class="el" href="#aafdccb4a0445b437dc40b2b5dfb0bce1a7498c445a737312f3678aa1494e01a38">Dropdown</a>
 , <a class="el" href="#aafdccb4a0445b437dc40b2b5dfb0bce1a1f32d2c1b49b9b0c9d99bd10da107e41">Radio</a>
+, <a class="el" href="#aafdccb4a0445b437dc40b2b5dfb0bce1a8484a13cbb8a8a53d6c4285938d21f60">Segmented</a>
  }</td></tr>
 <tr class="memdesc:aafdccb4a0445b437dc40b2b5dfb0bce1"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a <span class="tt"><a class="el" href="../../d7/d7b/structmorph_1_1ui_1_1Select.html" title="A choice of one option.">Select</a></span> presents its options.  <a href="#aafdccb4a0445b437dc40b2b5dfb0bce1">More...</a><br /></td></tr>
+<tr class="memitem:adfcbb5fc840884ba644f7e6d34963879" id="r_adfcbb5fc840884ba644f7e6d34963879"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#adfcbb5fc840884ba644f7e6d34963879">morph::ui::MenuStyle</a> : std::uint8_t { <a class="el" href="#adfcbb5fc840884ba644f7e6d34963879addc35f88fa71b6ef142ae61f35364653">Bar</a>
+, <a class="el" href="#adfcbb5fc840884ba644f7e6d34963879a87b7760f14fbff78d8819291f36ab9a0">Button</a>
+ }</td></tr>
+<tr class="memdesc:adfcbb5fc840884ba644f7e6d34963879"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a <span class="tt"><a class="el" href="../../de/dce/structmorph_1_1ui_1_1Menu.html" title="A menu of commands: a bar of top-level entries, or one button that opens them.">Menu</a></span> presents its entries.  <a href="#adfcbb5fc840884ba644f7e6d34963879">More...</a><br /></td></tr>
 <tr class="memitem:ae4ee7d904483365c5e7cee041ab772d5" id="r_ae4ee7d904483365c5e7cee041ab772d5"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#ae4ee7d904483365c5e7cee041ab772d5">morph::ui::Axis</a> : std::uint8_t { <a class="el" href="#ae4ee7d904483365c5e7cee041ab772d5a06ce2a25e5d12c166a36f654dbea6012">Vertical</a>
 , <a class="el" href="#ae4ee7d904483365c5e7cee041ab772d5ac1b5fa03ecdb95d4a45dd1c40b02527f">Horizontal</a>
  }</td></tr>
@@ -340,19 +379,45 @@ Enumerations</h2></td></tr>
 , <a class="el" href="#af1e741ceb88969a1b66bd60701528da0ad7c8c85bf79bbe1b7188497c32c3b0ca">Failed</a>
  }</td></tr>
 <tr class="memdesc:af1e741ceb88969a1b66bd60701528da0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where one step of a <span class="tt"><a class="el" href="../../d8/d3b/structmorph_1_1ui_1_1Steps.html" title="The steps of a process in order, each with its state.">Steps</a></span> indicator stands.  <a href="#af1e741ceb88969a1b66bd60701528da0">More...</a><br /></td></tr>
+<tr class="memitem:a02814acd0e2a2848c51eb47102c27aab" id="r_a02814acd0e2a2848c51eb47102c27aab"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a02814acd0e2a2848c51eb47102c27aab">morph::ui::ChartLineStyle</a> : std::uint8_t { <a class="el" href="#a02814acd0e2a2848c51eb47102c27aabae41480b6bbfbf7407974a88d3d34f4fa">Solid</a>
+, <a class="el" href="#a02814acd0e2a2848c51eb47102c27aabaeb656e41b6da91494775ecf47a51da91">Dashed</a>
+, <a class="el" href="#a02814acd0e2a2848c51eb47102c27aaba90c09393a4c0970bc9a6703ad527781c">Dotted</a>
+ }</td></tr>
+<tr class="memdesc:a02814acd0e2a2848c51eb47102c27aab"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a chart's reference line is stroked.  <a href="#a02814acd0e2a2848c51eb47102c27aab">More...</a><br /></td></tr>
+<tr class="memitem:aaa7b60d10a6bfedc9e6fc4b9111b36c9" id="r_aaa7b60d10a6bfedc9e6fc4b9111b36c9"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#aaa7b60d10a6bfedc9e6fc4b9111b36c9">morph::ui::ChartClip</a> : std::uint8_t { <a class="el" href="#aaa7b60d10a6bfedc9e6fc4b9111b36c9a6adf97f83acf6453d4a6a4b1070f3754">None</a>
+, <a class="el" href="#aaa7b60d10a6bfedc9e6fc4b9111b36c9ae59dd8d25c0b6bb6697eac0617ccd412">Below</a>
+, <a class="el" href="#aaa7b60d10a6bfedc9e6fc4b9111b36c9a5b469fd01889ec12f1e84c6e66829fc1">Above</a>
+ }</td></tr>
+<tr class="memdesc:aaa7b60d10a6bfedc9e6fc4b9111b36c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a chart's point lies outside the value axis the document fixed, and on which side.  <a href="#aaa7b60d10a6bfedc9e6fc4b9111b36c9">More...</a><br /></td></tr>
 <tr class="memitem:a73cb62db4fd6e0c04890e488668abab7" id="r_a73cb62db4fd6e0c04890e488668abab7"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a73cb62db4fd6e0c04890e488668abab7">morph::ui::SelectionMode</a> : std::uint8_t { <a class="el" href="#a73cb62db4fd6e0c04890e488668abab7a6adf97f83acf6453d4a6a4b1070f3754">None</a>
 , <a class="el" href="#a73cb62db4fd6e0c04890e488668abab7a66ba162102bbf6ae31b522aec561735e">Single</a>
 , <a class="el" href="#a73cb62db4fd6e0c04890e488668abab7aa0bf169f2539e893e00d7b1296bc4d8e">Multiple</a>
  }</td></tr>
 <tr class="memdesc:a73cb62db4fd6e0c04890e488668abab7"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many rows of a <span class="tt"><a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a></span> the user can select.  <a href="#a73cb62db4fd6e0c04890e488668abab7">More...</a><br /></td></tr>
+<tr class="memitem:a79cb82b263e10ec8a972604eb7085106" id="r_a79cb82b263e10ec8a972604eb7085106"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a79cb82b263e10ec8a972604eb7085106">morph::ui::SelectionChange</a> : std::uint8_t { <a class="el" href="#a79cb82b263e10ec8a972604eb7085106a0ebe6df8a3ac338e0512acc741823fdb">Replace</a>
+, <a class="el" href="#a79cb82b263e10ec8a972604eb7085106a3bc026b815790a05493fa56fc4b8d8bd">Extend</a>
+ }</td></tr>
+<tr class="memdesc:a79cb82b263e10ec8a972604eb7085106"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a user's change of a table's selection did, which travels with every report: a backend that holds only some of the rows (one page) cannot report the keys it does not hold, so only the kind tells whether those stay selected.  <a href="#a79cb82b263e10ec8a972604eb7085106">More...</a><br /></td></tr>
+<tr class="memitem:a47d65c67ab9868b92ac5a9147779ba9f" id="r_a47d65c67ab9868b92ac5a9147779ba9f"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a47d65c67ab9868b92ac5a9147779ba9f">morph::ui::SortDirection</a> : std::uint8_t { <a class="el" href="#a47d65c67ab9868b92ac5a9147779ba9facf3fb1ff52ea1eed3347ac5401ee7f0c">Ascending</a>
+, <a class="el" href="#a47d65c67ab9868b92ac5a9147779ba9fae3cf5ac19407b1a62c6fccaff675a53b">Descending</a>
+ }</td></tr>
+<tr class="memdesc:a47d65c67ab9868b92ac5a9147779ba9f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Which way a table is sorted by a column.  <a href="#a47d65c67ab9868b92ac5a9147779ba9f">More...</a><br /></td></tr>
+<tr class="memitem:a4895b959624a0e401159d80a03c07cd7" id="r_a4895b959624a0e401159d80a03c07cd7"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a4895b959624a0e401159d80a03c07cd7">morph::ui::CaptionPlacement</a> : std::uint8_t { <a class="el" href="#a4895b959624a0e401159d80a03c07cd7a4457981bf51ac9aea27bc33c2455b74a">Beside</a>
+, <a class="el" href="#a4895b959624a0e401159d80a03c07cd7a5b469fd01889ec12f1e84c6e66829fc1">Above</a>
+ }</td></tr>
+<tr class="memdesc:a4895b959624a0e401159d80a03c07cd7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a key-value list draws each caption relative to its value.  <a href="#a4895b959624a0e401159d80a03c07cd7">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
 <tr class="memitem:afe853c762b44f650b9af349a90268916" id="r_afe853c762b44f650b9af349a90268916"><td class="memTemplParams" colspan="2">template&lt;typename F&gt; </td></tr>
 <tr class="memitem:afe853c762b44f650b9af349a90268916 template"><td class="memItemLeft"><a class="el" href="../../d7/d69/structmorph_1_1ui_1_1SlotBinding.html">SlotBinding</a>&lt; std::decay_t&lt; F &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afe853c762b44f650b9af349a90268916">morph::ui::slot</a> (<a class="el" href="#aed6afd4774d6752d919d24c3e08d4065">SlotId</a> slotId, F &amp;&amp;read)</td></tr>
 <tr class="memdesc:afe853c762b44f650b9af349a90268916"><td class="mdescLeft">&#160;</td><td class="mdescRight">A slot with an id.  <br /></td></tr>
+<tr class="memitem:afc8c00853770fef86dfc343e8bbc9472" id="r_afc8c00853770fef86dfc343e8bbc9472"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#afc8c00853770fef86dfc343e8bbc9472">morph::ui::spansText</a> (std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; const &amp;spans)</td></tr>
+<tr class="memdesc:afc8c00853770fef86dfc343e8bbc9472"><td class="mdescLeft">&#160;</td><td class="mdescRight">The characters a list of runs shows, joined in order: what assistive technology and a probe read.  <br /></td></tr>
 <tr class="memitem:ab2af508a04a46458578e47351c7010f5" id="r_ab2af508a04a46458578e47351c7010f5"><td class="memItemLeft">constexpr int&#160;</td><td class="memItemRight"><a class="el" href="#ab2af508a04a46458578e47351c7010f5">morph::ui::spacingStep</a> (int value) noexcept</td></tr>
 <tr class="memdesc:ab2af508a04a46458578e47351c7010f5"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">gap</span> or <span class="tt">padding</span> as the spacing step a backend receives.  <br /></td></tr>
+<tr class="memitem:a9482c177840bbed564a5e9c0061dcd7e" id="r_a9482c177840bbed564a5e9c0061dcd7e"><td class="memItemLeft">constexpr <a class="el" href="../../d7/d65/structmorph_1_1ui_1_1Padding.html">Padding</a>&#160;</td><td class="memItemRight"><a class="el" href="#a9482c177840bbed564a5e9c0061dcd7e">morph::ui::clampedPadding</a> (<a class="el" href="../../d7/d65/structmorph_1_1ui_1_1Padding.html">Padding</a> padding) noexcept</td></tr>
+<tr class="memdesc:a9482c177840bbed564a5e9c0061dcd7e"><td class="mdescLeft">&#160;</td><td class="mdescRight">A padding with each step clamped as <span class="tt"><a class="el" href="#ab2af508a04a46458578e47351c7010f5" title="A gap or padding as the spacing step a backend receives.">spacingStep</a></span> clamps one.  <br /></td></tr>
 <tr class="memitem:af3ac51f2206acd9b65bd704485a54838" id="r_af3ac51f2206acd9b65bd704485a54838"><td class="memTemplParams" colspan="2">template&lt;typename Kind&gt; </td></tr>
 <tr class="memitem:af3ac51f2206acd9b65bd704485a54838 template"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#af3ac51f2206acd9b65bd704485a54838">morph::ui::detail::makeNode</a> (Kind spec)</td></tr>
 <tr class="memdesc:af3ac51f2206acd9b65bd704485a54838"><td class="mdescLeft">&#160;</td><td class="mdescRight">Wraps one node aggregate into a shared node.  <br /></td></tr>
@@ -402,6 +467,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:ab3fea168c0c7e0b7311d45fe1a455173"><td class="mdescLeft">&#160;</td><td class="mdescRight">A progress bar.  <br /></td></tr>
 <tr class="memitem:ad2ebc0ff469e3b19c0d64859ef77922b" id="r_ad2ebc0ff469e3b19c0d64859ef77922b"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad2ebc0ff469e3b19c0d64859ef77922b">morph::ui::steps</a> (<a class="el" href="../../d8/d3b/structmorph_1_1ui_1_1Steps.html">Steps</a> spec)</td></tr>
 <tr class="memdesc:ad2ebc0ff469e3b19c0d64859ef77922b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The steps of a process.  <br /></td></tr>
+<tr class="memitem:a918662854ac11bf0a5c6b46398b6539c" id="r_a918662854ac11bf0a5c6b46398b6539c"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a918662854ac11bf0a5c6b46398b6539c">morph::ui::chart</a> (<a class="el" href="../../d5/dee/structmorph_1_1ui_1_1Chart.html">Chart</a> spec)</td></tr>
+<tr class="memdesc:a918662854ac11bf0a5c6b46398b6539c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Points against a numeric axis, with reference lines.  <br /></td></tr>
 <tr class="memitem:a11e6866463705be091166f191ed9f49b" id="r_a11e6866463705be091166f191ed9f49b"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a11e6866463705be091166f191ed9f49b">morph::ui::keyValue</a> (<a class="el" href="../../dc/df0/structmorph_1_1ui_1_1KeyValue.html">KeyValue</a> spec)</td></tr>
 <tr class="memdesc:a11e6866463705be091166f191ed9f49b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Captions beside their values.  <br /></td></tr>
 <tr class="memitem:a88949d610151cdd7a5993211f6b0f07c" id="r_a88949d610151cdd7a5993211f6b0f07c"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a88949d610151cdd7a5993211f6b0f07c">morph::ui::emptyState</a> (<a class="el" href="../../d8/d99/structmorph_1_1ui_1_1EmptyState.html">EmptyState</a> spec)</td></tr>
@@ -422,12 +489,12 @@ Functions</h2></td></tr>
 requires std::is_enum_v&lt;E&gt;</td></tr>
 <tr class="memitem:a7949af8ff7a09a3af427801e57e55e61 template"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7949af8ff7a09a3af427801e57e55e61">morph::ui::switchOn</a> (std::function&lt; E()&gt; selector, std::vector&lt; std::pair&lt; E, <a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a> &gt; &gt; cases, <a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a> fallback={})</td></tr>
 <tr class="memdesc:a7949af8ff7a09a3af427801e57e55e61"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <a class="el" href="../../d9/d60/structmorph_1_1ui_1_1Switch.html" title="Shows the case whose key the selector yields; remounts only when that key changes.">Switch</a> over an enumeration: each enumerator becomes the <span class="tt">int64</span> key of its case.  <br /></td></tr>
-<tr class="memitem:a1b59c075aa853e77789dbb8d74ef85d1" id="r_a1b59c075aa853e77789dbb8d74ef85d1"><td class="memTemplParams" colspan="2">template&lt;typename RowT&gt; </td></tr>
-<tr class="memitem:a1b59c075aa853e77789dbb8d74ef85d1 template"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a1b59c075aa853e77789dbb8d74ef85d1">morph::ui::forEach</a> (std::function&lt; std::vector&lt; RowT &gt;()&gt; rows, std::function&lt; <a class="el" href="#aced394ae55a9af2d993a520a69c2fde2">Key</a>(RowT const &amp;)&gt; keyOf, std::function&lt; <a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>(<a class="el" href="../../dc/d97/classmorph_1_1reactive_1_1Signal.html">reactive::Signal</a>&lt; RowT &gt; const &amp;)&gt; rowView, <a class="el" href="#ae4ee7d904483365c5e7cee041ab772d5">Axis</a> axis=<a class="el" href="#ae4ee7d904483365c5e7cee041ab772d5a06ce2a25e5d12c166a36f654dbea6012">Axis::Vertical</a>, int gap=0)</td></tr>
-<tr class="memdesc:a1b59c075aa853e77789dbb8d74ef85d1"><td class="mdescLeft">&#160;</td><td class="mdescRight">One widget per row of a keyed collection read through a binding (a <span class="tt">Query</span>'s <span class="tt">value()</span> included).  <br /></td></tr>
-<tr class="memitem:a5c27cc72f0c576e4f003315f12ac4f80" id="r_a5c27cc72f0c576e4f003315f12ac4f80"><td class="memTemplParams" colspan="2">template&lt;typename RowT&gt; </td></tr>
-<tr class="memitem:a5c27cc72f0c576e4f003315f12ac4f80 template"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a5c27cc72f0c576e4f003315f12ac4f80">morph::ui::forEach</a> (<a class="el" href="../../dc/d97/classmorph_1_1reactive_1_1Signal.html">reactive::Signal</a>&lt; std::vector&lt; RowT &gt; &gt; const &amp;rows, std::function&lt; <a class="el" href="#aced394ae55a9af2d993a520a69c2fde2">Key</a>(RowT const &amp;)&gt; keyOf, std::function&lt; <a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>(<a class="el" href="../../dc/d97/classmorph_1_1reactive_1_1Signal.html">reactive::Signal</a>&lt; RowT &gt; const &amp;)&gt; rowView, <a class="el" href="#ae4ee7d904483365c5e7cee041ab772d5">Axis</a> axis=<a class="el" href="#ae4ee7d904483365c5e7cee041ab772d5a06ce2a25e5d12c166a36f654dbea6012">Axis::Vertical</a>, int gap=0)</td></tr>
-<tr class="memdesc:a5c27cc72f0c576e4f003315f12ac4f80"><td class="mdescLeft">&#160;</td><td class="mdescRight">One widget per row of a keyed collection held in a signal.  <br /></td></tr>
+<tr class="memitem:a85c5613ad529665babdb9bf7026d81bc" id="r_a85c5613ad529665babdb9bf7026d81bc"><td class="memTemplParams" colspan="2">template&lt;typename RowT&gt; </td></tr>
+<tr class="memitem:a85c5613ad529665babdb9bf7026d81bc template"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#a85c5613ad529665babdb9bf7026d81bc">morph::ui::forEach</a> (std::function&lt; std::vector&lt; RowT &gt;()&gt; rows, std::function&lt; <a class="el" href="#aced394ae55a9af2d993a520a69c2fde2">Key</a>(RowT const &amp;)&gt; keyOf, std::function&lt; <a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>(<a class="el" href="../../dc/d97/classmorph_1_1reactive_1_1Signal.html">reactive::Signal</a>&lt; RowT &gt; const &amp;)&gt; rowView, <a class="el" href="#ae4ee7d904483365c5e7cee041ab772d5">Axis</a> axis=<a class="el" href="#ae4ee7d904483365c5e7cee041ab772d5a06ce2a25e5d12c166a36f654dbea6012">Axis::Vertical</a>, int gap=0, <a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a> const &amp;common={}, bool wrap=false, bool divided=false)</td></tr>
+<tr class="memdesc:a85c5613ad529665babdb9bf7026d81bc"><td class="mdescLeft">&#160;</td><td class="mdescRight">One widget per row of a keyed collection read through a binding (a <span class="tt">Query</span>'s <span class="tt">value()</span> included).  <br /></td></tr>
+<tr class="memitem:ad1e8c2e48ff3fac9f758112ebfbcba53" id="r_ad1e8c2e48ff3fac9f758112ebfbcba53"><td class="memTemplParams" colspan="2">template&lt;typename RowT&gt; </td></tr>
+<tr class="memitem:ad1e8c2e48ff3fac9f758112ebfbcba53 template"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad1e8c2e48ff3fac9f758112ebfbcba53">morph::ui::forEach</a> (<a class="el" href="../../dc/d97/classmorph_1_1reactive_1_1Signal.html">reactive::Signal</a>&lt; std::vector&lt; RowT &gt; &gt; const &amp;rows, std::function&lt; <a class="el" href="#aced394ae55a9af2d993a520a69c2fde2">Key</a>(RowT const &amp;)&gt; keyOf, std::function&lt; <a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>(<a class="el" href="../../dc/d97/classmorph_1_1reactive_1_1Signal.html">reactive::Signal</a>&lt; RowT &gt; const &amp;)&gt; rowView, <a class="el" href="#ae4ee7d904483365c5e7cee041ab772d5">Axis</a> axis=<a class="el" href="#ae4ee7d904483365c5e7cee041ab772d5a06ce2a25e5d12c166a36f654dbea6012">Axis::Vertical</a>, int gap=0, <a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a> const &amp;common={}, bool wrap=false, bool divided=false)</td></tr>
+<tr class="memdesc:ad1e8c2e48ff3fac9f758112ebfbcba53"><td class="mdescLeft">&#160;</td><td class="mdescRight">One widget per row of a keyed collection held in a signal.  <br /></td></tr>
 <tr class="memitem:acf831cc5b89c22045d627630e96bf21b" id="r_acf831cc5b89c22045d627630e96bf21b"><td class="memTemplParams" colspan="2">template&lt;typename RowT&gt; </td></tr>
 <tr class="memitem:acf831cc5b89c22045d627630e96bf21b template"><td class="memItemLeft"><a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#acf831cc5b89c22045d627630e96bf21b">morph::ui::table</a> (std::vector&lt; <a class="el" href="../../df/ddf/structmorph_1_1ui_1_1TableColumn.html">TableColumn</a> &gt; columns, std::function&lt; std::vector&lt; RowT &gt;()&gt; rows, std::function&lt; <a class="el" href="#aced394ae55a9af2d993a520a69c2fde2">Key</a>(RowT const &amp;)&gt; keyOf, std::function&lt; std::vector&lt; <a class="el" href="#abe522dc03ec89569730174a647f1da39">Node</a> &gt;(<a class="el" href="../../dc/d97/classmorph_1_1reactive_1_1Signal.html">reactive::Signal</a>&lt; RowT &gt; const &amp;)&gt; cells, <a class="el" href="../../d7/d25/structmorph_1_1ui_1_1TableOptions.html">TableOptions</a> options={})</td></tr>
 <tr class="memdesc:acf831cc5b89c22045d627630e96bf21b"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table of keyed rows: one <span class="tt"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a></span> of cells per row, under the column headers.  <br /></td></tr>
@@ -460,7 +527,7 @@ Variables</h2></td></tr>
 
 <p>A widget event handler taking no arguments. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -479,7 +546,7 @@ Variables</h2></td></tr>
 <p>The identity of a Switch case, a Select option, a ForEach or Table row and a drag payload. </p>
 <p>Never a floating-point number: morph ids can exceed 2^53. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -498,7 +565,7 @@ Variables</h2></td></tr>
 <p>The stable identity of a slot: a bound property a renderer can refer to by number. </p>
 <p>Whoever builds the tree assigns slot ids; the interpreter numbers every bound property of a document, and a code-generating renderer names the value it reads after it (<span class="tt">v.s17</span>). <span class="tt">Mounted</span> does not use them. A slot made from a bare callable has no id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -516,7 +583,7 @@ Variables</h2></td></tr>
 
 <p>A view-tree node: immutable, shared data. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00403">403</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00557">557</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -555,9 +622,23 @@ Variables</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="a14948061dae38a78ef544a3b4d9873e5ad2c24d59e0baff4d0155fbdf62590867" name="a14948061dae38a78ef544a3b4d9873e5ad2c24d59e0baff4d0155fbdf62590867"></a>Section&#160;</td><td class="fielddoc"><p>The heading of a group within a list: body size, bold and muted, below a <span class="tt">Heading</span>. </p>
 </td></tr>
+<tr><td class="fieldname"><a id="a14948061dae38a78ef544a3b4d9873e5a5d9b47bd3b65072e0d5daf55f01da086" name="a14948061dae38a78ef544a3b4d9873e5a5d9b47bd3b65072e0d5daf55f01da086"></a>Mono&#160;</td><td class="fielddoc"><p>An identifier: the theme's fixed-pitch family (<span class="tt">font.mono</span>) at <span class="tt">font.size.mono</span>, the text colour. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a14948061dae38a78ef544a3b4d9873e5ab9987a246a537f4fe86f1f2e3d10dbdb" name="a14948061dae38a78ef544a3b4d9873e5ab9987a246a537f4fe86f1f2e3d10dbdb"></a>Display&#160;</td><td class="fielddoc"><p>A figure that stands out, such as a KPI's number: <span class="tt">font.size.display</span>, strong, the text colour. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a14948061dae38a78ef544a3b4d9873e5a2660064e68655415da2628c2ae2f7592" name="a14948061dae38a78ef544a3b4d9873e5a2660064e68655415da2628c2ae2f7592"></a>Small&#160;</td><td class="fielddoc"><p>A footnote or a timestamp: <span class="tt">font.size.small</span>, regular, the text colour. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a14948061dae38a78ef544a3b4d9873e5aa7d7d34d28ecacfa945c78f1ae7ec675" name="a14948061dae38a78ef544a3b4d9873e5aa7d7d34d28ecacfa945c78f1ae7ec675"></a>Overline&#160;</td><td class="fielddoc"><p>A short label over a group: as <span class="tt">Section</span> unless the theme's <span class="tt">font.overline.case</span> is <span class="tt">uppercase</span>, which draws it at <span class="tt">font.size.small</span>, strong, muted, in letter-spaced capitals. Written as it reads; the terminal draws it as <span class="tt">Section</span>, whatever the theme. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a14948061dae38a78ef544a3b4d9873e5a272ba7d164aa836995be6319a698be84" name="a14948061dae38a78ef544a3b4d9873e5a272ba7d164aa836995be6319a698be84"></a>Caption&#160;</td><td class="fielddoc"><p>A note under a control or a figure: <span class="tt">font.size.caption</span>, regular, muted. The terminal draws it as <span class="tt">Muted</span>. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a14948061dae38a78ef544a3b4d9873e5ab021df6aac4654c454f46c77646e745f" name="a14948061dae38a78ef544a3b4d9873e5ab021df6aac4654c454f46c77646e745f"></a>Label&#160;</td><td class="fielddoc"><p>A field's or a group's caption: <span class="tt">font.size.caption</span>, regular, the text colour. The terminal draws it as <span class="tt">Normal</span>. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a14948061dae38a78ef544a3b4d9873e5ac6568e77f61109390e82d035aaacaef0" name="a14948061dae38a78ef544a3b4d9873e5ac6568e77f61109390e82d035aaacaef0"></a>Headline&#160;</td><td class="fielddoc"><p>A record's identity: <span class="tt">font.size.headline</span>, strong, the text colour. It sits between <span class="tt">Heading</span> and <span class="tt">Display</span>; the terminal draws it as <span class="tt">Heading</span>. </p>
+</td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -591,7 +672,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -621,9 +702,43 @@ Variables</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="aafdccb4a0445b437dc40b2b5dfb0bce1a1f32d2c1b49b9b0c9d99bd10da107e41" name="aafdccb4a0445b437dc40b2b5dfb0bce1a1f32d2c1b49b9b0c9d99bd10da107e41"></a>Radio&#160;</td><td class="fielddoc"><p>Every option visible, one marked. </p>
 </td></tr>
+<tr><td class="fieldname"><a id="aafdccb4a0445b437dc40b2b5dfb0bce1a8484a13cbb8a8a53d6c4285938d21f60" name="aafdccb4a0445b437dc40b2b5dfb0bce1a8484a13cbb8a8a53d6c4285938d21f60"></a>Segmented&#160;</td><td class="fielddoc"><p>Every option visible as one row of joined segments, one marked. </p>
+</td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00216">216</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00268">268</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adfcbb5fc840884ba644f7e6d34963879" name="adfcbb5fc840884ba644f7e6d34963879"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adfcbb5fc840884ba644f7e6d34963879">&#9670;&#160;</a></span>MenuStyle</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#adfcbb5fc840884ba644f7e6d34963879">morph::ui::MenuStyle</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How a <span class="tt">Menu</span> presents its entries. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="adfcbb5fc840884ba644f7e6d34963879addc35f88fa71b6ef142ae61f35364653" name="adfcbb5fc840884ba644f7e6d34963879addc35f88fa71b6ef142ae61f35364653"></a>Bar&#160;</td><td class="fielddoc"><p>One control per top-level entry. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="adfcbb5fc840884ba644f7e6d34963879a87b7760f14fbff78d8819291f36ab9a0" name="adfcbb5fc840884ba644f7e6d34963879a87b7760f14fbff78d8819291f36ab9a0"></a>Button&#160;</td><td class="fielddoc"><p>One button that opens the entries as a popup. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -655,7 +770,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00281">281</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -687,7 +802,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00228">228</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -719,7 +834,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00234">234</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -757,7 +872,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00299">299</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -789,7 +904,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00308">308</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -825,7 +940,75 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00255">255</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00314">314</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a02814acd0e2a2848c51eb47102c27aab" name="a02814acd0e2a2848c51eb47102c27aab"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a02814acd0e2a2848c51eb47102c27aab">&#9670;&#160;</a></span>ChartLineStyle</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#a02814acd0e2a2848c51eb47102c27aab">morph::ui::ChartLineStyle</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How a chart's reference line is stroked. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="a02814acd0e2a2848c51eb47102c27aabae41480b6bbfbf7407974a88d3d34f4fa" name="a02814acd0e2a2848c51eb47102c27aabae41480b6bbfbf7407974a88d3d34f4fa"></a>Solid&#160;</td><td class="fielddoc"><p>An unbroken line. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a02814acd0e2a2848c51eb47102c27aabaeb656e41b6da91494775ecf47a51da91" name="a02814acd0e2a2848c51eb47102c27aabaeb656e41b6da91494775ecf47a51da91"></a>Dashed&#160;</td><td class="fielddoc"><p>Dashes. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a02814acd0e2a2848c51eb47102c27aaba90c09393a4c0970bc9a6703ad527781c" name="a02814acd0e2a2848c51eb47102c27aaba90c09393a4c0970bc9a6703ad527781c"></a>Dotted&#160;</td><td class="fielddoc"><p>Dots. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aaa7b60d10a6bfedc9e6fc4b9111b36c9" name="aaa7b60d10a6bfedc9e6fc4b9111b36c9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaa7b60d10a6bfedc9e6fc4b9111b36c9">&#9670;&#160;</a></span>ChartClip</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#aaa7b60d10a6bfedc9e6fc4b9111b36c9">morph::ui::ChartClip</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether a chart's point lies outside the value axis the document fixed, and on which side. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="aaa7b60d10a6bfedc9e6fc4b9111b36c9a6adf97f83acf6453d4a6a4b1070f3754" name="aaa7b60d10a6bfedc9e6fc4b9111b36c9a6adf97f83acf6453d4a6a4b1070f3754"></a>None&#160;</td><td class="fielddoc"><p>Inside the axis. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="aaa7b60d10a6bfedc9e6fc4b9111b36c9ae59dd8d25c0b6bb6697eac0617ccd412" name="aaa7b60d10a6bfedc9e6fc4b9111b36c9ae59dd8d25c0b6bb6697eac0617ccd412"></a>Below&#160;</td><td class="fielddoc"><p>Below its lower end; drawn at that end, pointing down. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="aaa7b60d10a6bfedc9e6fc4b9111b36c9a5b469fd01889ec12f1e84c6e66829fc1" name="aaa7b60d10a6bfedc9e6fc4b9111b36c9a5b469fd01889ec12f1e84c6e66829fc1"></a>Above&#160;</td><td class="fielddoc"><p>Above its upper end; drawn at that end, pointing up. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00329">329</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -859,7 +1042,103 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00336">336</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a79cb82b263e10ec8a972604eb7085106" name="a79cb82b263e10ec8a972604eb7085106"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a79cb82b263e10ec8a972604eb7085106">&#9670;&#160;</a></span>SelectionChange</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#a79cb82b263e10ec8a972604eb7085106">morph::ui::SelectionChange</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What a user's change of a table's selection did, which travels with every report: a backend that holds only some of the rows (one page) cannot report the keys it does not hold, so only the kind tells whether those stay selected. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="a79cb82b263e10ec8a972604eb7085106a0ebe6df8a3ac338e0512acc741823fdb" name="a79cb82b263e10ec8a972604eb7085106a0ebe6df8a3ac338e0512acc741823fdb"></a>Replace&#160;</td><td class="fielddoc"><p>The reported keys are the whole selection: a click, a Shift-click or Shift+arrow, any <span class="tt">Single</span> change. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a79cb82b263e10ec8a972604eb7085106a3bc026b815790a05493fa56fc4b8d8bd" name="a79cb82b263e10ec8a972604eb7085106a3bc026b815790a05493fa56fc4b8d8bd"></a>Extend&#160;</td><td class="fielddoc"><p>The reported keys replace those the backend holds and keep the rest: a Ctrl-click, Space, Ctrl+A. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00345">345</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a47d65c67ab9868b92ac5a9147779ba9f" name="a47d65c67ab9868b92ac5a9147779ba9f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a47d65c67ab9868b92ac5a9147779ba9f">&#9670;&#160;</a></span>SortDirection</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#a47d65c67ab9868b92ac5a9147779ba9f">morph::ui::SortDirection</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Which way a table is sorted by a column. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="a47d65c67ab9868b92ac5a9147779ba9facf3fb1ff52ea1eed3347ac5401ee7f0c" name="a47d65c67ab9868b92ac5a9147779ba9facf3fb1ff52ea1eed3347ac5401ee7f0c"></a>Ascending&#160;</td><td class="fielddoc"><p>Smallest first. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a47d65c67ab9868b92ac5a9147779ba9fae3cf5ac19407b1a62c6fccaff675a53b" name="a47d65c67ab9868b92ac5a9147779ba9fae3cf5ac19407b1a62c6fccaff675a53b"></a>Descending&#160;</td><td class="fielddoc"><p>Largest first. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00352">352</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4895b959624a0e401159d80a03c07cd7" name="a4895b959624a0e401159d80a03c07cd7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4895b959624a0e401159d80a03c07cd7">&#9670;&#160;</a></span>CaptionPlacement</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#a4895b959624a0e401159d80a03c07cd7">morph::ui::CaptionPlacement</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Where a key-value list draws each caption relative to its value. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="a4895b959624a0e401159d80a03c07cd7a4457981bf51ac9aea27bc33c2455b74a" name="a4895b959624a0e401159d80a03c07cd7a4457981bf51ac9aea27bc33c2455b74a"></a>Beside&#160;</td><td class="fielddoc"><p>Each caption beside its value, one pair per row. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a4895b959624a0e401159d80a03c07cd7a5b469fd01889ec12f1e84c6e66829fc1" name="a4895b959624a0e401159d80a03c07cd7a5b469fd01889ec12f1e84c6e66829fc1"></a>Above&#160;</td><td class="fielddoc"><p>Each caption above its value, the pairs one under another. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01525">1525</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -909,7 +1188,43 @@ template&lt;typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>What a <span class="tt">Prop</span> takes as a slot with <code class="param">slotId</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="afc8c00853770fef86dfc343e8bbc9472" name="afc8c00853770fef86dfc343e8bbc9472"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afc8c00853770fef86dfc343e8bbc9472">&#9670;&#160;</a></span>spansText()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::spansText </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>spans</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The characters a list of runs shows, joined in order: what assistive technology and a probe read. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">spans</td><td>The runs. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Their text, joined. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -945,7 +1260,43 @@ template&lt;typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><code class="param">value</code> clamped to <span class="tt">[0, kMaxSpacingStep]</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00561">561</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00758">758</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9482c177840bbed564a5e9c0061dcd7e" name="a9482c177840bbed564a5e9c0061dcd7e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9482c177840bbed564a5e9c0061dcd7e">&#9670;&#160;</a></span>clampedPadding()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Padding morph::ui::clampedPadding </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d7/d65/structmorph_1_1ui_1_1Padding.html">Padding</a></td>          <td class="paramname"><span class="paramname"><em>padding</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A padding with each step clamped as <span class="tt">spacingStep</span> clamps one. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">padding</td><td>The padding as written. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>It, with both steps in <span class="tt">[0, kMaxSpacingStep]</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00787">787</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -989,7 +1340,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The shared node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01185">1185</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01687">1687</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1025,7 +1376,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01194">1194</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01696">1696</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1061,7 +1412,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01199">1199</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01701">1701</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1097,7 +1448,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01204">1204</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01706">1706</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1133,7 +1484,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01209">1209</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01711">1711</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1169,7 +1520,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01214">1214</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01716">1716</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1205,7 +1556,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01219">1219</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01721">1721</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1241,7 +1592,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01224">1224</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01726">1726</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1277,7 +1628,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01229">1229</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01731">1731</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1313,7 +1664,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01234">1234</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01736">1736</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1349,7 +1700,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01239">1239</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01741">1741</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1385,7 +1736,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01244">1244</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01746">1746</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1421,7 +1772,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01249">1249</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01751">1751</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1457,7 +1808,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01254">1254</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01756">1756</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1493,7 +1844,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01259">1259</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01761">1761</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1529,7 +1880,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01264">1264</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01766">1766</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1565,7 +1916,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01269">1269</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01771">1771</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1601,7 +1952,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01274">1274</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01776">1776</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1637,7 +1988,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01279">1279</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01781">1781</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1673,7 +2024,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01284">1284</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01786">1786</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1709,7 +2060,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01289">1289</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01791">1791</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1745,7 +2096,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01294">1294</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01796">1796</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1781,7 +2132,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01299">1299</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01801">1801</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1817,7 +2168,43 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01304">1304</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01806">1806</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a918662854ac11bf0a5c6b46398b6539c" name="a918662854ac11bf0a5c6b46398b6539c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a918662854ac11bf0a5c6b46398b6539c">&#9670;&#160;</a></span>chart()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Node morph::ui::chart </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d5/dee/structmorph_1_1ui_1_1Chart.html">Chart</a></td>          <td class="paramname"><span class="paramname"><em>spec</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Points against a numeric axis, with reference lines. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">spec</td><td>The node. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01811">1811</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1853,7 +2240,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01309">1309</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01816">1816</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1889,7 +2276,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01314">1314</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01821">1821</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1925,7 +2312,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01319">1319</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01826">1826</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1961,7 +2348,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01324">1324</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01831">1831</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -1997,7 +2384,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01329">1329</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01836">1836</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2033,7 +2420,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01334">1334</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01841">1841</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2069,7 +2456,7 @@ template&lt;typename Kind&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The node. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01339">1339</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01846">1846</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2111,7 +2498,7 @@ template&lt;typename Kind&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01346">1346</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01853">1853</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2173,12 +2560,12 @@ requires std::is_enum_v&lt;E&gt;</div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01365">1365</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01872">1872</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a1b59c075aa853e77789dbb8d74ef85d1" name="a1b59c075aa853e77789dbb8d74ef85d1"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1b59c075aa853e77789dbb8d74ef85d1">&#9670;&#160;</a></span>forEach() <span class="overload">[1/2]</span></h2>
+<a id="a85c5613ad529665babdb9bf7026d81bc" name="a85c5613ad529665babdb9bf7026d81bc"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a85c5613ad529665babdb9bf7026d81bc">&#9670;&#160;</a></span>forEach() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2211,7 +2598,22 @@ template&lt;typename RowT&gt; </div>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>gap</em></span><span class="paramdefsep"> = </span><span class="paramdefval">0</span>&#160;)</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>gap</em></span><span class="paramdefsep"> = </span><span class="paramdefval">0</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>common</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>wrap</em></span><span class="paramdefsep"> = </span><span class="paramdefval">false</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>divided</em></span><span class="paramdefsep"> = </span><span class="paramdefval">false</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -2235,6 +2637,9 @@ template&lt;typename RowT&gt; </div>
     <tr><td class="paramname">rowView</td><td>Builds a row's view once, from a signal the mount keeps equal to the row. Read the signal inside bindings: what the view reads directly while it is built is read once and never again. </td></tr>
     <tr><td class="paramname">axis</td><td>The stacking direction. </td></tr>
     <tr><td class="paramname">gap</td><td>Space between rows. </td></tr>
+    <tr><td class="paramname">common</td><td>Visibility, enablement, layout and the rest of the row container's common properties. </td></tr>
+    <tr><td class="paramname">wrap</td><td>Whether rows continue on the next line when they do not fit; only a horizontal <code class="param">axis</code> wraps. </td></tr>
+    <tr><td class="paramname">divided</td><td>Whether a rule is drawn between each two shown rows; only a vertical <code class="param">axis</code> divides. </td></tr>
   </table>
   </dd>
 </dl>
@@ -2246,12 +2651,12 @@ template&lt;typename RowT&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01396">1396</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01906">1906</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a5c27cc72f0c576e4f003315f12ac4f80" name="a5c27cc72f0c576e4f003315f12ac4f80"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5c27cc72f0c576e4f003315f12ac4f80">&#9670;&#160;</a></span>forEach() <span class="overload">[2/2]</span></h2>
+<a id="ad1e8c2e48ff3fac9f758112ebfbcba53" name="ad1e8c2e48ff3fac9f758112ebfbcba53"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad1e8c2e48ff3fac9f758112ebfbcba53">&#9670;&#160;</a></span>forEach() <span class="overload">[2/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2284,7 +2689,22 @@ template&lt;typename RowT&gt; </div>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>gap</em></span><span class="paramdefsep"> = </span><span class="paramdefval">0</span>&#160;)</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>gap</em></span><span class="paramdefsep"> = </span><span class="paramdefval">0</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>common</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>wrap</em></span><span class="paramdefsep"> = </span><span class="paramdefval">false</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>divided</em></span><span class="paramdefsep"> = </span><span class="paramdefval">false</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -2308,6 +2728,9 @@ template&lt;typename RowT&gt; </div>
     <tr><td class="paramname">rowView</td><td>Builds a row's view once, from a signal the mount keeps equal to the row. </td></tr>
     <tr><td class="paramname">axis</td><td>The stacking direction. </td></tr>
     <tr><td class="paramname">gap</td><td>Space between rows. </td></tr>
+    <tr><td class="paramname">common</td><td>Visibility, enablement, layout and the rest of the row container's common properties. </td></tr>
+    <tr><td class="paramname">wrap</td><td>Whether rows continue on the next line when they do not fit; only a horizontal <code class="param">axis</code> wraps. </td></tr>
+    <tr><td class="paramname">divided</td><td>Whether a rule is drawn between each two shown rows; only a vertical <code class="param">axis</code> divides. </td></tr>
   </table>
   </dd>
 </dl>
@@ -2319,7 +2742,7 @@ template&lt;typename RowT&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01417">1417</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01933">1933</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2392,7 +2815,7 @@ template&lt;typename RowT&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01464">1464</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01994">1994</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2465,7 +2888,7 @@ template&lt;typename RowT&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01492">1492</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l02022">2022</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -2492,7 +2915,7 @@ template&lt;typename RowT&gt; </div>
 
 <p>The largest spacing step: a <span class="tt">gap</span> or <span class="tt">padding</span> names a step from 0 (none) to this, which each backend maps to its own distance (the theme's <span class="tt">space.&lt;step&gt;</span> on Qt Quick, cells on the terminal). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00556">556</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00753">753</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

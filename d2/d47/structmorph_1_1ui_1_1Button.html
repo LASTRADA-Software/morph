@@ -140,13 +140,23 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a1c442f883ed74cbb3ef8596455722c28"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name of an icon in the theme's icon set, drawn beside the caption; empty shows none. Set once.  <br /></td></tr>
 <tr class="memitem:ad9b5ead2e2a4e871697d2751e1203677" id="r_ad9b5ead2e2a4e871697d2751e1203677"><td class="memItemLeft"><a class="el" href="../../dd/d96/button__style_8hpp.html#a611665881c188e8252014fdf9c91d2e5">ButtonStyle</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad9b5ead2e2a4e871697d2751e1203677">style</a> = <a class="el" href="../../dd/d96/button__style_8hpp.html#a611665881c188e8252014fdf9c91d2e5a9c6a9d9f033001a9b3104984d319563b">ButtonStyle::Push</a></td></tr>
 <tr class="memdesc:ad9b5ead2e2a4e871697d2751e1203677"><td class="mdescLeft">&#160;</td><td class="mdescRight">A push button or a list entry; set once.  <br /></td></tr>
+<tr class="memitem:acc212600bc64d68bf472e11410393439" id="r_acc212600bc64d68bf472e11410393439"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a>&#160;</td><td class="memItemRight"><a class="el" href="#acc212600bc64d68bf472e11410393439">child</a></td></tr>
+<tr class="memdesc:acc212600bc64d68bf472e11410393439"><td class="mdescLeft">&#160;</td><td class="mdescRight">An entry's content, drawn in place of its label, which then names it; only on an <span class="tt">Item</span>. May be null.  <br /></td></tr>
 <tr class="memitem:a026273fcbb6f8b06e7430490bc2eb275" id="r_a026273fcbb6f8b06e7430490bc2eb275"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a026273fcbb6f8b06e7430490bc2eb275">selected</a> = false</td></tr>
-<tr class="memdesc:a026273fcbb6f8b06e7430490bc2eb275"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a list entry is the current one. Only an <span class="tt">Item</span> takes it: the mount refuses a bound or <span class="tt">true</span> value on a push button.  <br /></td></tr>
+<tr class="memdesc:a026273fcbb6f8b06e7430490bc2eb275"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the button is selected: a list entry is the current one, a push button is pressed in.  <br /></td></tr>
+<tr class="memitem:ac74e29f8ddd4941ca379f31514d0f25a" id="r_ac74e29f8ddd4941ca379f31514d0f25a"><td class="memItemLeft"><a class="el" href="../../d9/d6d/control__shape_8hpp.html#acb63d4890b58b811a6eab08f80b4c212">ControlShape</a>&#160;</td><td class="memItemRight"><a class="el" href="#ac74e29f8ddd4941ca379f31514d0f25a">shape</a> = <a class="el" href="../../d9/d6d/control__shape_8hpp.html#acb63d4890b58b811a6eab08f80b4c212a7a1920d61156abc05a60135aefe8bc67">ControlShape::Default</a></td></tr>
+<tr class="memdesc:ac74e29f8ddd4941ca379f31514d0f25a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Its outline: the theme's corners, or round; set once.  <br /></td></tr>
+<tr class="memitem:a9ea8d1d03190a7fc42f2ae4c175ec873" id="r_a9ea8d1d03190a7fc42f2ae4c175ec873"><td class="memItemLeft"><a class="el" href="../../d9/d6d/control__shape_8hpp.html#acb38e066aeeae7e445dfd1b1b9fdac96">ButtonSize</a>&#160;</td><td class="memItemRight"><a class="el" href="#a9ea8d1d03190a7fc42f2ae4c175ec873">size</a> = <a class="el" href="../../d9/d6d/control__shape_8hpp.html#acb38e066aeeae7e445dfd1b1b9fdac96a960b44c579bc2f6818d2daaf9e4c16f0">ButtonSize::Normal</a></td></tr>
+<tr class="memdesc:a9ea8d1d03190a7fc42f2ae4c175ec873"><td class="mdescLeft">&#160;</td><td class="mdescRight">Its density: normal, or small, with the least side padding and the small type step; set once.  <br /></td></tr>
+<tr class="memitem:a70e1264a56284ab6e395ef0fe56c0361" id="r_a70e1264a56284ab6e395ef0fe56c0361"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a70e1264a56284ab6e395ef0fe56c0361">mono</a> = false</td></tr>
+<tr class="memdesc:a70e1264a56284ab6e395ef0fe56c0361"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the caption is drawn in the <span class="tt"><a class="el" href="#a70e1264a56284ab6e395ef0fe56c0361" title="Whether the caption is drawn in the mono text role&#39;s face; set once.">mono</a></span> text role's face; set once.  <br /></td></tr>
+<tr class="memitem:ab6fcf5e864b9b4f8ae4833349a531b90" id="r_ab6fcf5e864b9b4f8ae4833349a531b90"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#ab6fcf5e864b9b4f8ae4833349a531b90">weight</a> = 0</td></tr>
+<tr class="memdesc:ab6fcf5e864b9b4f8ae4833349a531b90"><td class="mdescLeft">&#160;</td><td class="mdescRight">The weight of the caption, 1 to 1000; 0 keeps the theme's (<span class="tt">font.weight.button</span> for a strong caption, normal for the rest). Set once.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A push button. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00418">418</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00578">578</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a611569ffa0415b72497fe3e2c77401fe" name="a611569ffa0415b72497fe3e2c77401fe"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a611569ffa0415b72497fe3e2c77401fe">&#9670;&#160;</a></span>label</h2>
@@ -162,7 +172,7 @@ Public Attributes</h2></td></tr>
 
 <p>The caption. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00420">420</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00580">580</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -180,7 +190,7 @@ Public Attributes</h2></td></tr>
 
 <p>How much it stands out; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00422">422</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00582">582</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -198,7 +208,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called on activation. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00424">424</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00584">584</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -216,7 +226,7 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00426">426</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00586">586</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -234,7 +244,7 @@ Public Attributes</h2></td></tr>
 
 <p>The name of an icon in the theme's icon set, drawn beside the caption; empty shows none. Set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00428">428</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00588">588</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -252,7 +262,25 @@ Public Attributes</h2></td></tr>
 
 <p>A push button or a list entry; set once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00430">430</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00590">590</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="acc212600bc64d68bf472e11410393439" name="acc212600bc64d68bf472e11410393439"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acc212600bc64d68bf472e11410393439">&#9670;&#160;</a></span>child</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39">Node</a> morph::ui::Button::child</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>An entry's content, drawn in place of its label, which then names it; only on an <span class="tt">Item</span>. May be null. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00592">592</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -268,9 +296,81 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Whether a list entry is the current one. Only an <span class="tt">Item</span> takes it: the mount refuses a bound or <span class="tt">true</span> value on a push button. </p>
+<p>Whether the button is selected: a list entry is the current one, a push button is pressed in. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00433">433</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00594">594</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac74e29f8ddd4941ca379f31514d0f25a" name="ac74e29f8ddd4941ca379f31514d0f25a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac74e29f8ddd4941ca379f31514d0f25a">&#9670;&#160;</a></span>shape</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d9/d6d/control__shape_8hpp.html#acb63d4890b58b811a6eab08f80b4c212">ControlShape</a> morph::ui::Button::shape = <a class="el" href="../../d9/d6d/control__shape_8hpp.html#acb63d4890b58b811a6eab08f80b4c212a7a1920d61156abc05a60135aefe8bc67">ControlShape::Default</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Its outline: the theme's corners, or round; set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00596">596</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9ea8d1d03190a7fc42f2ae4c175ec873" name="a9ea8d1d03190a7fc42f2ae4c175ec873"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9ea8d1d03190a7fc42f2ae4c175ec873">&#9670;&#160;</a></span>size</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d9/d6d/control__shape_8hpp.html#acb38e066aeeae7e445dfd1b1b9fdac96">ButtonSize</a> morph::ui::Button::size = <a class="el" href="../../d9/d6d/control__shape_8hpp.html#acb38e066aeeae7e445dfd1b1b9fdac96a960b44c579bc2f6818d2daaf9e4c16f0">ButtonSize::Normal</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Its density: normal, or small, with the least side padding and the small type step; set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00598">598</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a70e1264a56284ab6e395ef0fe56c0361" name="a70e1264a56284ab6e395ef0fe56c0361"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a70e1264a56284ab6e395ef0fe56c0361">&#9670;&#160;</a></span>mono</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Button::mono = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the caption is drawn in the <span class="tt"><a class="el" href="#a70e1264a56284ab6e395ef0fe56c0361" title="Whether the caption is drawn in the mono text role&#39;s face; set once.">mono</a></span> text role's face; set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00600">600</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab6fcf5e864b9b4f8ae4833349a531b90" name="ab6fcf5e864b9b4f8ae4833349a531b90"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab6fcf5e864b9b4f8ae4833349a531b90">&#9670;&#160;</a></span>weight</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int morph::ui::Button::weight = 0</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The weight of the caption, 1 to 1000; 0 keeps the theme's (<span class="tt">font.weight.button</span> for a strong caption, normal for the rest). Set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00603">603</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

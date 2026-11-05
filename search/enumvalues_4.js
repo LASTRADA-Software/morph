@@ -2,7 +2,7 @@ var searchData=
 [
   ['element_0',['Element',['../dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095a231afe47f3f37d3808096b36c28b4ded',1,'morph::ui::detail']]],
   ['empty_1',['Empty',['../df/d0b/blank__as_8hpp.html#a08a85983649d14d984e6686cf52fa2a4ace2c8aed9c2fa0cfbed56cbda4d8bf07',1,'Emptymorph::forms'],['../d4/d54/sort_8hpp.html#a7f7c266c46ef0da5b1bd6cdc4da6d9e0ace2c8aed9c2fa0cfbed56cbda4d8bf07',1,'Emptymorph::table']]],
-  ['end_2',['End',['../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aa87557f11575c0ad78e4e28abedc13b6e',1,'Endmorph::ui'],['../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4a87557f11575c0ad78e4e28abedc13b6e',1,'Endmorph::ui'],['../d8/d11/view_8hpp.html#a8daf47ed0a8077e7aadb93f026ade76fa87557f11575c0ad78e4e28abedc13b6e',1,'Endmorph::ui']]],
+  ['end_2',['End',['../d9/dd9/alignment_8hpp.html#af998a2ea944ede576a21f85c17bd065aa87557f11575c0ad78e4e28abedc13b6e',1,'Endmorph::ui'],['../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4a87557f11575c0ad78e4e28abedc13b6e',1,'Endmorph::ui'],['../db/d42/interpreter_8hpp.html#a515941428b52ba7a96f0bbb068517186a87557f11575c0ad78e4e28abedc13b6e',1,'Endmorph::ui'],['../d1/d86/text__align_8hpp.html#ad7eac90b50f94b262c7675fb2b3f0dd5a87557f11575c0ad78e4e28abedc13b6e',1,'Endmorph::ui'],['../d8/d11/view_8hpp.html#a8daf47ed0a8077e7aadb93f026ade76fa87557f11575c0ad78e4e28abedc13b6e',1,'Endmorph::ui']]],
   ['engaged_3',['Engaged',['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79acc8ff50881a92c6da502af83e5736dfa',1,'morph::forms::RuleExpr']]],
   ['enter_4',['Enter',['../d1/dc0/author_8hpp.html#af481855c6c30bd6eee085818733d43dfaf1851d5600eae616ee802a31ac74701b',1,'morph::ui::author']]],
   ['enum_5',['Enum',['../d5/dc9/field__model_8hpp.html#a0ab75baf4b2fd216b784dc38dc98eaedacf20423ed48998082c20099488a0917c',1,'morph::forms']]],
@@ -20,5 +20,6 @@ var searchData=
   ['explicit_17',['Explicit',['../d5/dc9/field__model_8hpp.html#ad7bd075645a4f59f7cf110b0b4fc3510a9d71760e2dd451db2df354d0fd29cd7f',1,'morph::forms']]],
   ['expr_18',['Expr',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a6d952cd5600ef0b8ed1c5ecf4b4936ff',1,'morph::ui::detail']]],
   ['exprrecord_19',['ExprRecord',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1ac42f2bbf64f720d182fbc5339a743281',1,'morph::ui::detail']]],
-  ['external_20',['External',['../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779',1,'morph::ui']]]
+  ['extend_20',['Extend',['../d8/d11/view_8hpp.html#a79cb82b263e10ec8a972604eb7085106a3bc026b815790a05493fa56fc4b8d8bd',1,'morph::ui']]],
+  ['external_21',['External',['../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecab206a1b4ea1097761f78e8876f6da779',1,'morph::ui']]]
 ];

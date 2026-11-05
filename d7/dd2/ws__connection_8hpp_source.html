@@ -278,7 +278,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/dd2/ws__con
 <div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span>        OutboundFrame <span class="keyword">const</span> next = std::move(conn-&gt;outbox.front());</div>
 <div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span>        conn-&gt;outbox.pop_front();</div>
 <div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span>        std::string <span class="keyword">const</span>&amp; frame = next.bytes;</div>
-<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>        std::size_t offset = 0;</div>
+<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>        std::size_t <a class="code hl_function" href="../../d3/d89/date__pattern_8hpp.html#a9724ae9077017cb7edc025ed9c946ac3">offset</a> = 0;</div>
 <div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span>        <span class="keywordflow">while</span> (offset &lt; frame.size() &amp;&amp; !conn-&gt;closed) {</div>
 <div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span>            std::size_t <span class="keyword">const</span> length = std::min(kWriteChunk, frame.size() - offset);</div>
 <div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span>            ::core::net::TimerId timer{};</div>
@@ -293,7 +293,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/dd2/ws__con
 <div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>                closeConnection(*conn);</div>
 <div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>                <span class="keywordflow">break</span>;</div>
 <div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>            }</div>
-<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>            offset += *written;</div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>            <a class="code hl_function" href="../../d3/d89/date__pattern_8hpp.html#a9724ae9077017cb7edc025ed9c946ac3">offset</a> += *written;</div>
 <div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span>        }</div>
 <div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>        releaseBacklog(*conn, next.counted);</div>
 <div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span>    }</div>
@@ -378,6 +378,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/dd2/ws__con
 <div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span> </div>
 <div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span>}  <span class="comment">// namespace morph::net::detail</span></div>
 <div class="ttc" id="aconnection__writer_8hpp_html"><div class="ttname"><a href="../../d6/d12/connection__writer_8hpp.html">connection_writer.hpp</a></div><div class="ttdoc">What a transport hands RemoteServer to write to one connection, and the backlog bounds both sides app...</div></div>
+<div class="ttc" id="adate__pattern_8hpp_html_a9724ae9077017cb7edc025ed9c946ac3"><div class="ttname"><a href="../../d3/d89/date__pattern_8hpp.html#a9724ae9077017cb7edc025ed9c946ac3">morph::ui::detail::dates::offset</a></div><div class="ttdeci">std::optional&lt; int &gt; offset(std::string_view text, std::size_t &amp;cursor)</div><div class="ttdoc">Reads xxx out of text cursor cursor: a sign, two hour digits, : and two minute digits.</div><div class="ttdef"><b>Definition</b> <a href="../../d3/d89/date__pattern_8hpp_source.html#l00175">date_pattern.hpp:175</a></div></div>
 <div class="ttc" id="aprofiler_8hpp_html"><div class="ttname"><a href="../../dc/ddc/profiler_8hpp.html">profiler.hpp</a></div><div class="ttdoc">Compile-time profiler instrumentation: Tracy zones, plots, messages and thread names,...</div></div>
 <div class="ttc" id="aprofiler_8hpp_html_a93ffe544de2fbcdfd94eda78aabfcb71"><div class="ttname"><a href="../../dc/ddc/profiler_8hpp.html#a93ffe544de2fbcdfd94eda78aabfcb71">MORPH_ZONE</a></div><div class="ttdeci">#define MORPH_ZONE(name)</div><div class="ttdoc">Opens a profiler zone named name that ends with the enclosing scope. At most one per scope.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/ddc/profiler_8hpp_source.html#l00118">profiler.hpp:118</a></div></div>
 </div><!-- fragment --></div><!-- contents -->

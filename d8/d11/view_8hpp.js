@@ -4,12 +4,14 @@ var view_8hpp =
     [ "morph::ui::detail::IsSlotBinding&lt; T &gt;", "d7/d03/structmorph_1_1ui_1_1detail_1_1IsSlotBinding.html", null ],
     [ "morph::ui::detail::IsSlotBinding&lt; SlotBinding&lt; F &gt; &gt;", "d2/df5/structmorph_1_1ui_1_1detail_1_1IsSlotBinding_3_01SlotBinding_3_01F_01_4_01_4.html", null ],
     [ "morph::ui::Prop&lt; T &gt;", "db/d73/classmorph_1_1ui_1_1Prop.html", "db/d73/classmorph_1_1ui_1_1Prop" ],
+    [ "morph::ui::TableSort", "d6/dab/structmorph_1_1ui_1_1TableSort.html", "d6/dab/structmorph_1_1ui_1_1TableSort" ],
     [ "morph::ui::Sizing", "d1/d89/structmorph_1_1ui_1_1Sizing.html", "d1/d89/structmorph_1_1ui_1_1Sizing" ],
     [ "morph::ui::LayoutHints", "dc/d30/structmorph_1_1ui_1_1LayoutHints.html", "dc/d30/structmorph_1_1ui_1_1LayoutHints" ],
     [ "morph::ui::Accessibility", "d9/d03/structmorph_1_1ui_1_1Accessibility.html", "d9/d03/structmorph_1_1ui_1_1Accessibility" ],
     [ "morph::ui::KeyBinding", "d3/d7b/structmorph_1_1ui_1_1KeyBinding.html", "d3/d7b/structmorph_1_1ui_1_1KeyBinding" ],
     [ "morph::ui::Common", "d1/d68/structmorph_1_1ui_1_1Common.html", "d1/d68/structmorph_1_1ui_1_1Common" ],
     [ "morph::ui::FieldState", "d1/d36/structmorph_1_1ui_1_1FieldState.html", "d1/d36/structmorph_1_1ui_1_1FieldState" ],
+    [ "morph::ui::TextSpan", "d7/d59/structmorph_1_1ui_1_1TextSpan.html", "d7/d59/structmorph_1_1ui_1_1TextSpan" ],
     [ "morph::ui::Text", "dd/dfe/structmorph_1_1ui_1_1Text.html", "dd/dfe/structmorph_1_1ui_1_1Text" ],
     [ "morph::ui::Button", "d2/d47/structmorph_1_1ui_1_1Button.html", "d2/d47/structmorph_1_1ui_1_1Button" ],
     [ "morph::ui::TextInput", "d3/dbc/structmorph_1_1ui_1_1TextInput.html", "d3/dbc/structmorph_1_1ui_1_1TextInput" ],
@@ -18,9 +20,11 @@ var view_8hpp =
     [ "morph::ui::Select", "d7/d7b/structmorph_1_1ui_1_1Select.html", "d7/d7b/structmorph_1_1ui_1_1Select" ],
     [ "morph::ui::MenuItem", "d4/dac/structmorph_1_1ui_1_1MenuItem.html", "d4/dac/structmorph_1_1ui_1_1MenuItem" ],
     [ "morph::ui::Menu", "de/dce/structmorph_1_1ui_1_1Menu.html", "de/dce/structmorph_1_1ui_1_1Menu" ],
+    [ "morph::ui::Padding", "d7/d65/structmorph_1_1ui_1_1Padding.html", "d7/d65/structmorph_1_1ui_1_1Padding" ],
     [ "morph::ui::Column", "d1/d05/structmorph_1_1ui_1_1Column.html", "d1/d05/structmorph_1_1ui_1_1Column" ],
     [ "morph::ui::Row", "d7/da8/structmorph_1_1ui_1_1Row.html", "d7/da8/structmorph_1_1ui_1_1Row" ],
     [ "morph::ui::GridCell", "df/d66/structmorph_1_1ui_1_1GridCell.html", "df/d66/structmorph_1_1ui_1_1GridCell" ],
+    [ "morph::ui::GridTrack", "df/dd6/structmorph_1_1ui_1_1GridTrack.html", "df/dd6/structmorph_1_1ui_1_1GridTrack" ],
     [ "morph::ui::Grid", "de/d85/structmorph_1_1ui_1_1Grid.html", "de/d85/structmorph_1_1ui_1_1Grid" ],
     [ "morph::ui::Spacer", "d9/d8f/structmorph_1_1ui_1_1Spacer.html", "d9/d8f/structmorph_1_1ui_1_1Spacer" ],
     [ "morph::ui::Panel", "d4/d64/structmorph_1_1ui_1_1Panel.html", "d4/d64/structmorph_1_1ui_1_1Panel" ],
@@ -49,6 +53,12 @@ var view_8hpp =
     [ "morph::ui::Step", "dd/da6/structmorph_1_1ui_1_1Step.html", "dd/da6/structmorph_1_1ui_1_1Step" ],
     [ "morph::ui::Steps", "d8/d3b/structmorph_1_1ui_1_1Steps.html", "d8/d3b/structmorph_1_1ui_1_1Steps" ],
     [ "morph::ui::KeyValueItem", "d4/d73/structmorph_1_1ui_1_1KeyValueItem.html", "d4/d73/structmorph_1_1ui_1_1KeyValueItem" ],
+    [ "morph::ui::ChartPoint", "d6/d29/structmorph_1_1ui_1_1ChartPoint.html", "d6/d29/structmorph_1_1ui_1_1ChartPoint" ],
+    [ "morph::ui::ChartSeries", "d9/dfd/structmorph_1_1ui_1_1ChartSeries.html", "d9/dfd/structmorph_1_1ui_1_1ChartSeries" ],
+    [ "morph::ui::ChartLine", "de/d88/structmorph_1_1ui_1_1ChartLine.html", "de/d88/structmorph_1_1ui_1_1ChartLine" ],
+    [ "morph::ui::ChartTick", "d5/dfb/structmorph_1_1ui_1_1ChartTick.html", "d5/dfb/structmorph_1_1ui_1_1ChartTick" ],
+    [ "morph::ui::ChartData", "dd/dcc/structmorph_1_1ui_1_1ChartData.html", "dd/dcc/structmorph_1_1ui_1_1ChartData" ],
+    [ "morph::ui::Chart", "d5/dee/structmorph_1_1ui_1_1Chart.html", "d5/dee/structmorph_1_1ui_1_1Chart" ],
     [ "morph::ui::KeyValue", "dc/df0/structmorph_1_1ui_1_1KeyValue.html", "dc/df0/structmorph_1_1ui_1_1KeyValue" ],
     [ "morph::ui::EmptyState", "d8/d99/structmorph_1_1ui_1_1EmptyState.html", "d8/d99/structmorph_1_1ui_1_1EmptyState" ],
     [ "morph::ui::Drawer", "d3/df7/structmorph_1_1ui_1_1Drawer.html", "d3/df7/structmorph_1_1ui_1_1Drawer" ],
@@ -72,7 +82,14 @@ var view_8hpp =
       [ "Heading", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a0101316665d4f82adaa26d86fbbb2d6e", null ],
       [ "Error", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a902b0d55fddef6f8d651fe1035b7d4bd", null ],
       [ "Success", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a505a83f220c02df2f85c3810cd9ceb38", null ],
-      [ "Section", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5ad2c24d59e0baff4d0155fbdf62590867", null ]
+      [ "Section", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5ad2c24d59e0baff4d0155fbdf62590867", null ],
+      [ "Mono", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a5d9b47bd3b65072e0d5daf55f01da086", null ],
+      [ "Display", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5ab9987a246a537f4fe86f1f2e3d10dbdb", null ],
+      [ "Small", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a2660064e68655415da2628c2ae2f7592", null ],
+      [ "Overline", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5aa7d7d34d28ecacfa945c78f1ae7ec675", null ],
+      [ "Caption", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5a272ba7d164aa836995be6319a698be84", null ],
+      [ "Label", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5ab021df6aac4654c454f46c77646e745f", null ],
+      [ "Headline", "d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5ac6568e77f61109390e82d035aaacaef0", null ]
     ] ],
     [ "morph::ui::TextInputMode", "d8/d11/view_8hpp.html#a0ef02872a2a71ca2d785c60b53ecfd37", [
       [ "SingleLine", "d8/d11/view_8hpp.html#a0ef02872a2a71ca2d785c60b53ecfd37a3e5c1fb76b6543ac61af54b185f02af9", null ],
@@ -81,7 +98,12 @@ var view_8hpp =
     ] ],
     [ "morph::ui::SelectStyle", "d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1", [
       [ "Dropdown", "d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1a7498c445a737312f3678aa1494e01a38", null ],
-      [ "Radio", "d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1a1f32d2c1b49b9b0c9d99bd10da107e41", null ]
+      [ "Radio", "d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1a1f32d2c1b49b9b0c9d99bd10da107e41", null ],
+      [ "Segmented", "d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1a8484a13cbb8a8a53d6c4285938d21f60", null ]
+    ] ],
+    [ "morph::ui::MenuStyle", "d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879", [
+      [ "Bar", "d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879addc35f88fa71b6ef142ae61f35364653", null ],
+      [ "Button", "d8/d11/view_8hpp.html#adfcbb5fc840884ba644f7e6d34963879a87b7760f14fbff78d8819291f36ab9a0", null ]
     ] ],
     [ "morph::ui::Axis", "d8/d11/view_8hpp.html#ae4ee7d904483365c5e7cee041ab772d5", [
       [ "Vertical", "d8/d11/view_8hpp.html#ae4ee7d904483365c5e7cee041ab772d5a06ce2a25e5d12c166a36f654dbea6012", null ],
@@ -112,13 +134,37 @@ var view_8hpp =
       [ "Done", "d8/d11/view_8hpp.html#af1e741ceb88969a1b66bd60701528da0af92965e2c8a7afb3c1b9a5c09a263636", null ],
       [ "Failed", "d8/d11/view_8hpp.html#af1e741ceb88969a1b66bd60701528da0ad7c8c85bf79bbe1b7188497c32c3b0ca", null ]
     ] ],
+    [ "morph::ui::ChartLineStyle", "d8/d11/view_8hpp.html#a02814acd0e2a2848c51eb47102c27aab", [
+      [ "Solid", "d8/d11/view_8hpp.html#a02814acd0e2a2848c51eb47102c27aabae41480b6bbfbf7407974a88d3d34f4fa", null ],
+      [ "Dashed", "d8/d11/view_8hpp.html#a02814acd0e2a2848c51eb47102c27aabaeb656e41b6da91494775ecf47a51da91", null ],
+      [ "Dotted", "d8/d11/view_8hpp.html#a02814acd0e2a2848c51eb47102c27aaba90c09393a4c0970bc9a6703ad527781c", null ]
+    ] ],
+    [ "morph::ui::ChartClip", "d8/d11/view_8hpp.html#aaa7b60d10a6bfedc9e6fc4b9111b36c9", [
+      [ "None", "d8/d11/view_8hpp.html#aaa7b60d10a6bfedc9e6fc4b9111b36c9a6adf97f83acf6453d4a6a4b1070f3754", null ],
+      [ "Below", "d8/d11/view_8hpp.html#aaa7b60d10a6bfedc9e6fc4b9111b36c9ae59dd8d25c0b6bb6697eac0617ccd412", null ],
+      [ "Above", "d8/d11/view_8hpp.html#aaa7b60d10a6bfedc9e6fc4b9111b36c9a5b469fd01889ec12f1e84c6e66829fc1", null ]
+    ] ],
     [ "morph::ui::SelectionMode", "d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7", [
       [ "None", "d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7a6adf97f83acf6453d4a6a4b1070f3754", null ],
       [ "Single", "d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7a66ba162102bbf6ae31b522aec561735e", null ],
       [ "Multiple", "d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7aa0bf169f2539e893e00d7b1296bc4d8e", null ]
     ] ],
+    [ "morph::ui::SelectionChange", "d8/d11/view_8hpp.html#a79cb82b263e10ec8a972604eb7085106", [
+      [ "Replace", "d8/d11/view_8hpp.html#a79cb82b263e10ec8a972604eb7085106a0ebe6df8a3ac338e0512acc741823fdb", null ],
+      [ "Extend", "d8/d11/view_8hpp.html#a79cb82b263e10ec8a972604eb7085106a3bc026b815790a05493fa56fc4b8d8bd", null ]
+    ] ],
+    [ "morph::ui::SortDirection", "d8/d11/view_8hpp.html#a47d65c67ab9868b92ac5a9147779ba9f", [
+      [ "Ascending", "d8/d11/view_8hpp.html#a47d65c67ab9868b92ac5a9147779ba9facf3fb1ff52ea1eed3347ac5401ee7f0c", null ],
+      [ "Descending", "d8/d11/view_8hpp.html#a47d65c67ab9868b92ac5a9147779ba9fae3cf5ac19407b1a62c6fccaff675a53b", null ]
+    ] ],
+    [ "morph::ui::CaptionPlacement", "d8/d11/view_8hpp.html#a4895b959624a0e401159d80a03c07cd7", [
+      [ "Beside", "d8/d11/view_8hpp.html#a4895b959624a0e401159d80a03c07cd7a4457981bf51ac9aea27bc33c2455b74a", null ],
+      [ "Above", "d8/d11/view_8hpp.html#a4895b959624a0e401159d80a03c07cd7a5b469fd01889ec12f1e84c6e66829fc1", null ]
+    ] ],
     [ "morph::ui::slot", "d8/d11/view_8hpp.html#afe853c762b44f650b9af349a90268916", null ],
+    [ "morph::ui::spansText", "d8/d11/view_8hpp.html#afc8c00853770fef86dfc343e8bbc9472", null ],
     [ "morph::ui::spacingStep", "d8/d11/view_8hpp.html#ab2af508a04a46458578e47351c7010f5", null ],
+    [ "morph::ui::clampedPadding", "d8/d11/view_8hpp.html#a9482c177840bbed564a5e9c0061dcd7e", null ],
     [ "morph::ui::detail::makeNode", "d8/d11/view_8hpp.html#af3ac51f2206acd9b65bd704485a54838", null ],
     [ "morph::ui::text", "d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888", null ],
     [ "morph::ui::button", "d8/d11/view_8hpp.html#afd941e96ab56172a812420bc0b3c8183", null ],
@@ -143,6 +189,7 @@ var view_8hpp =
     [ "morph::ui::badge", "d8/d11/view_8hpp.html#a22956b2dabf60d44db940378bc46d1f7", null ],
     [ "morph::ui::progress", "d8/d11/view_8hpp.html#ab3fea168c0c7e0b7311d45fe1a455173", null ],
     [ "morph::ui::steps", "d8/d11/view_8hpp.html#ad2ebc0ff469e3b19c0d64859ef77922b", null ],
+    [ "morph::ui::chart", "d8/d11/view_8hpp.html#a918662854ac11bf0a5c6b46398b6539c", null ],
     [ "morph::ui::keyValue", "d8/d11/view_8hpp.html#a11e6866463705be091166f191ed9f49b", null ],
     [ "morph::ui::emptyState", "d8/d11/view_8hpp.html#a88949d610151cdd7a5993211f6b0f07c", null ],
     [ "morph::ui::drawer", "d8/d11/view_8hpp.html#ac32bc9fa7f17605e28fdaf77a96f3870", null ],
@@ -152,8 +199,8 @@ var view_8hpp =
     [ "morph::ui::dropZone", "d8/d11/view_8hpp.html#a695bba553e54a28202c0b765fe10a0da", null ],
     [ "morph::ui::custom", "d8/d11/view_8hpp.html#a38e1fcd2ff70b109ff5556ac786c3df7", null ],
     [ "morph::ui::switchOn", "d8/d11/view_8hpp.html#a7949af8ff7a09a3af427801e57e55e61", null ],
-    [ "morph::ui::forEach", "d8/d11/view_8hpp.html#a1b59c075aa853e77789dbb8d74ef85d1", null ],
-    [ "morph::ui::forEach", "d8/d11/view_8hpp.html#a5c27cc72f0c576e4f003315f12ac4f80", null ],
+    [ "morph::ui::forEach", "d8/d11/view_8hpp.html#a85c5613ad529665babdb9bf7026d81bc", null ],
+    [ "morph::ui::forEach", "d8/d11/view_8hpp.html#ad1e8c2e48ff3fac9f758112ebfbcba53", null ],
     [ "morph::ui::table", "d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b", null ],
     [ "morph::ui::table", "d8/d11/view_8hpp.html#a4400bff106cad6dffe2a86cacdfe12dc", null ],
     [ "morph::ui::kMaxSpacingStep", "d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f", null ]

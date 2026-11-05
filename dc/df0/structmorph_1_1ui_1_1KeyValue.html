@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/df0/structm
 </div><!--header-->
 <div class="contents">
 
-<p>Captions beside their values, one pair per row.  
+<p>Captions beside, or above, their values.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>&gt;</code></p>
@@ -130,13 +130,17 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/df0/structm
 Public Attributes</h2></td></tr>
 <tr class="memitem:affb47bf3744c0487e30db6e088e5344a" id="r_affb47bf3744c0487e30db6e088e5344a"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::vector&lt; <a class="el" href="../../d4/d73/structmorph_1_1ui_1_1KeyValueItem.html">KeyValueItem</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#affb47bf3744c0487e30db6e088e5344a">items</a></td></tr>
 <tr class="memdesc:affb47bf3744c0487e30db6e088e5344a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The pairs, in order.  <br /></td></tr>
+<tr class="memitem:a46144133e81786d1e170272d585b5fb4" id="r_a46144133e81786d1e170272d585b5fb4"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#a4895b959624a0e401159d80a03c07cd7">CaptionPlacement</a>&#160;</td><td class="memItemRight"><a class="el" href="#a46144133e81786d1e170272d585b5fb4">captions</a> = <a class="el" href="../../d8/d11/view_8hpp.html#a4895b959624a0e401159d80a03c07cd7a4457981bf51ac9aea27bc33c2455b74a">CaptionPlacement::Beside</a></td></tr>
+<tr class="memdesc:a46144133e81786d1e170272d585b5fb4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where the captions sit; set once.  <br /></td></tr>
+<tr class="memitem:aab1d09765c22738c95447ae1e1ac7b1d" id="r_aab1d09765c22738c95447ae1e1ac7b1d"><td class="memItemLeft">std::optional&lt; int &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aab1d09765c22738c95447ae1e1ac7b1d">captionWidth</a></td></tr>
+<tr class="memdesc:aab1d09765c22738c95447ae1e1ac7b1d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The width of the caption column in units, 1 to 64, while the captions sit beside their values; absent sizes it to the widest caption. A caption longer than the column wraps on Qt Quick and is cut with an ellipsis in the terminal. Set once; the mount refuses a value below 1 and a value given with <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a4895b959624a0e401159d80a03c07cd7a5b469fd01889ec12f1e84c6e66829fc1" title="Each caption above its value, the pairs one under another.">CaptionPlacement::Above</a></span>, which has no caption column.  <br /></td></tr>
 <tr class="memitem:a339c78a70e4cd07c1bcccf985e56c506" id="r_a339c78a70e4cd07c1bcccf985e56c506"><td class="memItemLeft"><a class="el" href="../../d1/d68/structmorph_1_1ui_1_1Common.html">Common</a>&#160;</td><td class="memItemRight"><a class="el" href="#a339c78a70e4cd07c1bcccf985e56c506">common</a> {}</td></tr>
 <tr class="memdesc:a339c78a70e4cd07c1bcccf985e56c506"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visibility, enablement, layout, drag-and-drop.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Captions beside their values, one pair per row. </p>
+<div class="textblock"><p>Captions beside, or above, their values. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01050">1050</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01531">1531</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="affb47bf3744c0487e30db6e088e5344a" name="affb47bf3744c0487e30db6e088e5344a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#affb47bf3744c0487e30db6e088e5344a">&#9670;&#160;</a></span>items</h2>
@@ -152,7 +156,43 @@ Public Attributes</h2></td></tr>
 
 <p>The pairs, in order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01052">1052</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01533">1533</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a46144133e81786d1e170272d585b5fb4" name="a46144133e81786d1e170272d585b5fb4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a46144133e81786d1e170272d585b5fb4">&#9670;&#160;</a></span>captions</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d11/view_8hpp.html#a4895b959624a0e401159d80a03c07cd7">CaptionPlacement</a> morph::ui::KeyValue::captions = <a class="el" href="../../d8/d11/view_8hpp.html#a4895b959624a0e401159d80a03c07cd7a4457981bf51ac9aea27bc33c2455b74a">CaptionPlacement::Beside</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Where the captions sit; set once. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01535">1535</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aab1d09765c22738c95447ae1e1ac7b1d" name="aab1d09765c22738c95447ae1e1ac7b1d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aab1d09765c22738c95447ae1e1ac7b1d">&#9670;&#160;</a></span>captionWidth</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;int&gt; morph::ui::KeyValue::captionWidth</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The width of the caption column in units, 1 to 64, while the captions sit beside their values; absent sizes it to the widest caption. A caption longer than the column wraps on Qt Quick and is cut with an ellipsis in the terminal. Set once; the mount refuses a value below 1 and a value given with <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a4895b959624a0e401159d80a03c07cd7a5b469fd01889ec12f1e84c6e66829fc1" title="Each caption above its value, the pairs one under another.">CaptionPlacement::Above</a></span>, which has no caption column. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01540">1540</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -170,7 +210,7 @@ Public Attributes</h2></td></tr>
 
 <p>Visibility, enablement, layout, drag-and-drop. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01054">1054</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01542">1542</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

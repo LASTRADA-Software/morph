@@ -154,12 +154,12 @@ Inheritance diagram for morph::ui::FieldWidget:</div>
 <area href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html" alt="morph::ui::testing::detail::FakeField&lt; TextInputWidget &gt;" shape="rect" coords="1770,224,2114,248"/>
 <area href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html" alt="morph::ui::testing::detail::FakeField&lt; TextWidget &gt;" shape="rect" coords="2124,224,2468,248"/>
 <area href="../../de/d3d/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCheckbox.html" title="A fake CheckboxWidget: properties label, checked." alt="morph::ui::testing::detail::FakeCheckbox" shape="rect" coords="0,280,344,304"/>
-<area href="../../d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html" title="A fake DateTimeInputWidget: properties mode, offset, value, caption, captionShown." alt="morph::ui::testing::detail::FakeDateTimeInput" shape="rect" coords="354,280,698,304"/>
+<area href="../../d1/de5/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDateTimeInput.html" title="A fake DateTimeInputWidget: properties mode, offset, value, pattern, caption, captionShown." alt="morph::ui::testing::detail::FakeDateTimeInput" shape="rect" coords="354,280,698,304"/>
 <area href="../../dc/dd7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeFilePicker.html" title="A fake FilePickerWidget: properties mode, path." alt="morph::ui::testing::detail::FakeFilePicker" shape="rect" coords="708,280,1052,304"/>
 <area href="../../d4/d04/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSelect.html" title="A fake SelectWidget: properties style, options, selected, caption, captionShown." alt="morph::ui::testing::detail::FakeSelect" shape="rect" coords="1062,280,1406,304"/>
 <area href="../../d4/d56/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSlider.html" title="A fake SliderWidget: properties range (minimum..maximum/step), value." alt="morph::ui::testing::detail::FakeSlider" shape="rect" coords="1416,280,1760,304"/>
-<area href="../../db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html" title="A fake TextInputWidget: properties mode, text, placeholder, unit, decimals, icon, caption,..." alt="morph::ui::testing::detail::FakeTextInput" shape="rect" coords="1770,280,2114,304"/>
-<area href="../../d6/d74/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeText.html" title="A fake TextWidget: properties text, role." alt="morph::ui::testing::detail::FakeText" shape="rect" coords="2124,280,2468,304"/>
+<area href="../../db/d64/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTextInput.html" title="A fake TextInputWidget: properties mode, text, placeholder, unit, prefix, decimals,..." alt="morph::ui::testing::detail::FakeTextInput" shape="rect" coords="1770,280,2114,304"/>
+<area href="../../d6/d74/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeText.html" title="A fake TextWidget: properties text, spans (as formatSpans gives them), role, align,..." alt="morph::ui::testing::detail::FakeText" shape="rect" coords="2124,280,2468,304"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -173,6 +173,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a521054947792141fe5e3c6b6bcafae80"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces the messages shown with the field.  <br /></td></tr>
 <tr class="memitem:addb6e0b337d13389364cbcf684079afb" id="r_addb6e0b337d13389364cbcf684079afb"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#addb6e0b337d13389364cbcf684079afb">setStale</a> (bool stale)=0</td></tr>
 <tr class="memdesc:addb6e0b337d13389364cbcf684079afb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows or clears the mark of a value that is being recomputed.  <br /></td></tr>
+<tr class="memitem:a65b3747a204aaabdaa503d888477c0ab" id="r_a65b3747a204aaabdaa503d888477c0ab"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a65b3747a204aaabdaa503d888477c0ab">setDescription</a> (std::string_view description)=0</td></tr>
+<tr class="memdesc:a65b3747a204aaabdaa503d888477c0ab"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a line that describes the field under its control, after its messages, and makes it the control's accessible description, after the messages. A text takes none: the mount never calls it on one, and a backend refuses it there.  <br /></td></tr>
+<tr class="memitem:ae062c9fe6c3eb50485904191320bbeb9" id="r_ae062c9fe6c3eb50485904191320bbeb9"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ae062c9fe6c3eb50485904191320bbeb9">setCaptionHint</a> (std::string_view hint)=0</td></tr>
+<tr class="memdesc:ae062c9fe6c3eb50485904191320bbeb9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a hint after the field's caption and its required mark, such as the range a value must lie in ("Temperature on arrival * · 2-8 degrees"). It is drawn only while the input shows a caption. A text takes none: the mount never calls it on one, and a backend refuses it there.  <br /></td></tr>
+<tr class="memitem:a4825ab9beef8ea35b62498309952144c" id="r_a4825ab9beef8ea35b62498309952144c"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a4825ab9beef8ea35b62498309952144c">setTone</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> tone)=0</td></tr>
+<tr class="memdesc:a4825ab9beef8ea35b62498309952144c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates the value without making it invalid: outlines the control in the tone and draws the description in the tone's colour. A field with errors is drawn as <span class="tt">Err</span> whatever its tone. A text takes it as its colour, whatever its role.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1Widget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">morph::ui::Widget</a></td></tr>
 <tr class="memitem:abbc2ba04f9c9e2e29b8b9c6993e9b46b pub_methods_classmorph_1_1ui_1_1Widget" id="r_abbc2ba04f9c9e2e29b8b9c6993e9b46b"><td class="memItemLeft">
 &#160;</td><td class="memItemRight"><b>Widget</b> (Widget const &amp;)=delete</td></tr>
@@ -201,7 +207,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <tr class="memitem:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget" id="r_aa92d96c22b5e09e0aecb8866b4481f57"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#aa92d96c22b5e09e0aecb8866b4481f57">setTooltip</a> (std::string_view text)=0</td></tr>
 <tr class="memdesc:aa92d96c22b5e09e0aecb8866b4481f57 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the text shown while the pointer rests on the widget.  <br /></td></tr>
 <tr class="memitem:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7ceca74805a45b142f00838ee17dd747"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7ceca74805a45b142f00838ee17dd747">setSurface</a> (std::string_view surface)=0</td></tr>
-<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme.  <br /></td></tr>
+<tr class="memdesc:a7ceca74805a45b142f00838ee17dd747 pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Styles the widget and everything inside it with a named token set of the theme. May be called again: each call restyles the widget and everything inside it.  <br /></td></tr>
 <tr class="memitem:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget" id="r_a96f94ca0cf2c093d8f8463091d91bbfb"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a96f94ca0cf2c093d8f8463091d91bbfb">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord)=0</td></tr>
 <tr class="memdesc:a96f94ca0cf2c093d8f8463091d91bbfb pub_methods_classmorph_1_1ui_1_1Widget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Declares the keyboard chords the widget handles while focus is inside it.  <br /></td></tr>
 <tr class="memitem:a7eeebc91608f97e34f70fced77b40173 pub_methods_classmorph_1_1ui_1_1Widget" id="r_a7eeebc91608f97e34f70fced77b40173"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html#a7eeebc91608f97e34f70fced77b40173">focus</a> ()=0</td></tr>
@@ -212,7 +218,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A widget that shows a value: text, or an input. A new field is editable, not required, without errors and not stale. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a2191979f8dc3a207166ad1c5c58d7080" name="a2191979f8dc3a207166ad1c5c58d7080"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2191979f8dc3a207166ad1c5c58d7080">&#9670;&#160;</a></span>setReadOnly()</h2>
@@ -351,6 +357,111 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a194266ed2d9a38f9a56838529e5285f7">morph::ui::testing::detail::FakeField&lt; CheckboxWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a194266ed2d9a38f9a56838529e5285f7">morph::ui::testing::detail::FakeField&lt; DateTimeInputWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a194266ed2d9a38f9a56838529e5285f7">morph::ui::testing::detail::FakeField&lt; FilePickerWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a194266ed2d9a38f9a56838529e5285f7">morph::ui::testing::detail::FakeField&lt; SelectWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a194266ed2d9a38f9a56838529e5285f7">morph::ui::testing::detail::FakeField&lt; SliderWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a194266ed2d9a38f9a56838529e5285f7">morph::ui::testing::detail::FakeField&lt; TextInputWidget &gt;</a>, and <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a194266ed2d9a38f9a56838529e5285f7">morph::ui::testing::detail::FakeField&lt; TextWidget &gt;</a>.</p>
+
+</div>
+</div>
+<a id="a65b3747a204aaabdaa503d888477c0ab" name="a65b3747a204aaabdaa503d888477c0ab"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a65b3747a204aaabdaa503d888477c0ab">&#9670;&#160;</a></span>setDescription()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::FieldWidget::setDescription </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>description</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows a line that describes the field under its control, after its messages, and makes it the control's accessible description, after the messages. A text takes none: the mount never calls it on one, and a backend refuses it there. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">description</td><td>The line, UTF-8; empty shows none. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#afe2da6b51724cf2a077364b1fb5fbb06">morph::ui::testing::detail::FakeField&lt; CheckboxWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#afe2da6b51724cf2a077364b1fb5fbb06">morph::ui::testing::detail::FakeField&lt; DateTimeInputWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#afe2da6b51724cf2a077364b1fb5fbb06">morph::ui::testing::detail::FakeField&lt; FilePickerWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#afe2da6b51724cf2a077364b1fb5fbb06">morph::ui::testing::detail::FakeField&lt; SelectWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#afe2da6b51724cf2a077364b1fb5fbb06">morph::ui::testing::detail::FakeField&lt; SliderWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#afe2da6b51724cf2a077364b1fb5fbb06">morph::ui::testing::detail::FakeField&lt; TextInputWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#afe2da6b51724cf2a077364b1fb5fbb06">morph::ui::testing::detail::FakeField&lt; TextWidget &gt;</a>, and <a class="el" href="../../d6/d74/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeText.html#aced28e2f45897071cd0255fa8af70de9">morph::ui::testing::detail::FakeText</a>.</p>
+
+</div>
+</div>
+<a id="ae062c9fe6c3eb50485904191320bbeb9" name="ae062c9fe6c3eb50485904191320bbeb9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae062c9fe6c3eb50485904191320bbeb9">&#9670;&#160;</a></span>setCaptionHint()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::FieldWidget::setCaptionHint </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>hint</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows a hint after the field's caption and its required mark, such as the range a value must lie in ("Temperature on arrival * · 2-8 degrees"). It is drawn only while the input shows a caption. A text takes none: the mount never calls it on one, and a backend refuses it there. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">hint</td><td>The hint, UTF-8; empty shows none. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a99a55ddacc9c1eb1cdc253447132794a">morph::ui::testing::detail::FakeField&lt; CheckboxWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a99a55ddacc9c1eb1cdc253447132794a">morph::ui::testing::detail::FakeField&lt; DateTimeInputWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a99a55ddacc9c1eb1cdc253447132794a">morph::ui::testing::detail::FakeField&lt; FilePickerWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a99a55ddacc9c1eb1cdc253447132794a">morph::ui::testing::detail::FakeField&lt; SelectWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a99a55ddacc9c1eb1cdc253447132794a">morph::ui::testing::detail::FakeField&lt; SliderWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a99a55ddacc9c1eb1cdc253447132794a">morph::ui::testing::detail::FakeField&lt; TextInputWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a99a55ddacc9c1eb1cdc253447132794a">morph::ui::testing::detail::FakeField&lt; TextWidget &gt;</a>, and <a class="el" href="../../d6/d74/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeText.html#a4357606b43520b13ea8307e5de9838cd">morph::ui::testing::detail::FakeText</a>.</p>
+
+</div>
+</div>
+<a id="a4825ab9beef8ea35b62498309952144c" name="a4825ab9beef8ea35b62498309952144c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4825ab9beef8ea35b62498309952144c">&#9670;&#160;</a></span>setTone()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::FieldWidget::setTone </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a></td>          <td class="paramname"><span class="paramname"><em>tone</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Evaluates the value without making it invalid: outlines the control in the tone and draws the description in the tone's colour. A field with errors is drawn as <span class="tt">Err</span> whatever its tone. A text takes it as its colour, whatever its role. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">tone</td><td>The tone; <span class="tt">Neutral</span> is none. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a5a86769e017bd1305b24fc34d364f8fa">morph::ui::testing::detail::FakeField&lt; CheckboxWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a5a86769e017bd1305b24fc34d364f8fa">morph::ui::testing::detail::FakeField&lt; DateTimeInputWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a5a86769e017bd1305b24fc34d364f8fa">morph::ui::testing::detail::FakeField&lt; FilePickerWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a5a86769e017bd1305b24fc34d364f8fa">morph::ui::testing::detail::FakeField&lt; SelectWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a5a86769e017bd1305b24fc34d364f8fa">morph::ui::testing::detail::FakeField&lt; SliderWidget &gt;</a>, <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a5a86769e017bd1305b24fc34d364f8fa">morph::ui::testing::detail::FakeField&lt; TextInputWidget &gt;</a>, and <a class="el" href="../../de/de7/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeField.html#a5a86769e017bd1305b24fc34d364f8fa">morph::ui::testing::detail::FakeField&lt; TextWidget &gt;</a>.</p>
 
 </div>
 </div>

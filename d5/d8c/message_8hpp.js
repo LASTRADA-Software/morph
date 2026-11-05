@@ -22,7 +22,7 @@ var message_8hpp =
       [ "String", "d5/d8c/message_8hpp.html#a8c033a22e5d475365dcf7c830826337ea27118326006d3829667a400ad23d5d98", null ]
     ] ],
     [ "morph::ui::categoryName", "d5/d8c/message_8hpp.html#a239fc4da1acc6894a6bda8c803a283a4", null ],
-    [ "morph::ui::detail::decimalText", "d5/d8c/message_8hpp.html#ad61b936e9681cdc20ce4cf0a5ef23878", null ],
+    [ "morph::ui::detail::decimalText", "d5/d8c/message_8hpp.html#a3250c258e5cc8c8d2a46503331fa9ae7", null ],
     [ "morph::ui::detail::numberOf", "d5/d8c/message_8hpp.html#a50829ec74af84f684ae23c6e64f51c49", null ],
     [ "morph::ui::formatNumber", "d5/d8c/message_8hpp.html#a3036024ec734f09c4b7a5a1db76466c6", null ],
     [ "morph::ui::detail::between", "d5/d8c/message_8hpp.html#a80bd07a4e729108b0953069fae80383e", null ],
@@ -35,7 +35,7 @@ var message_8hpp =
     [ "morph::ui::detail::eastSlavicPlural", "d5/d8c/message_8hpp.html#a0a284e170a6500f0604d07bc4f56709c", null ],
     [ "morph::ui::detail::czechPlural", "d5/d8c/message_8hpp.html#ad11871f10a589aa1d164aaee1fd3a2ff", null ],
     [ "morph::ui::detail::arabicPlural", "d5/d8c/message_8hpp.html#a54afc173b192369d2523741563a7b49b", null ],
-    [ "morph::ui::pluralCategory", "d5/d8c/message_8hpp.html#a880182bd7990fa899e27e70d0412027a", null ],
+    [ "morph::ui::pluralCategory", "d5/d8c/message_8hpp.html#ada15a6679c6d50642d127e7a3efd5392", null ],
     [ "morph::ui::parseMessage", "d5/d8c/message_8hpp.html#ad48926b7b24cb00ef8e747852d864a95", null ],
     [ "morph::ui::detail::parseExactKey", "d5/d8c/message_8hpp.html#a252067d451664fd5803a13544ffccb48", null ],
     [ "morph::ui::detail::matchKey", "d5/d8c/message_8hpp.html#a9e39fbca55f7b21c0c3404c3067a3922", null ],

@@ -123,11 +123,14 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/d4f/shell__
 
 <p><span class="tt"><a class="el" href="../../dc/df1/classmorph_1_1ui_1_1ShellFrame.html" title="The frame around a client&#39;s screens.">morph::ui::ShellFrame</a></span>: the frame a client shows its screens in — a sidebar with the navigator, a top bar, and the page the workspace's tabs sit on. Built from backend widgets, so every frontend shows it.  
 <a href="#details">More...</a></p>
-<div class="textblock"><code>#include &lt;functional&gt;</code><br />
+<div class="textblock"><code>#include &lt;cstddef&gt;</code><br />
+<code>#include &lt;cstdint&gt;</code><br />
+<code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
+<code>#include &lt;vector&gt;</code><br />
 <code>#include &quot;../attributes.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>&quot;</code><br />
@@ -141,17 +144,62 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AShellFrame" id="r_morph_3A_3Aui_3A_3AShellFrame"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../dc/df1/classmorph_1_1ui_1_1ShellFrame.html">morph::ui::ShellFrame</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The frame around a client's screens.  <a href="../../dc/df1/classmorph_1_1ui_1_1ShellFrame.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
+Enumerations</h2></td></tr>
+<tr class="memitem:aa1bb3f4b9e6e3e5569701df3b781ac79" id="r_aa1bb3f4b9e6e3e5569701df3b781ac79"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#aa1bb3f4b9e6e3e5569701df3b781ac79">morph::ui::HeadTrailEnd</a> : std::uint8_t { <a class="el" href="#aa1bb3f4b9e6e3e5569701df3b781ac79a6adf97f83acf6453d4a6a4b1070f3754">None</a>
+, <a class="el" href="#aa1bb3f4b9e6e3e5569701df3b781ac79a83f14e7c6d49f6bdb20203464d5a8f47">Unframed</a>
+, <a class="el" href="#aa1bb3f4b9e6e3e5569701df3b781ac79a6b73ad372508225645eb96a2e505a602">Framed</a>
+ }</td></tr>
+<tr class="memdesc:aa1bb3f4b9e6e3e5569701df3b781ac79"><td class="mdescLeft">&#160;</td><td class="mdescRight">What ends the line of a head's trail, which decides how far a compact top bar's trailing end stands from the window's edge: a button that draws no frame pads itself, so a frame leaves it to the button; anything else reaches the edge of its box.  <a href="#aa1bb3f4b9e6e3e5569701df3b781ac79">More...</a><br /></td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
 <tr class="memitem:af30fd407fc56d3ebb11309ba2e1c7cd5" id="r_af30fd407fc56d3ebb11309ba2e1c7cd5"><td class="memItemLeft">constexpr int&#160;</td><td class="memItemRight"><a class="el" href="#af30fd407fc56d3ebb11309ba2e1c7cd5">morph::ui::kShellSidebarWidth</a> = 28</td></tr>
 <tr class="memdesc:af30fd407fc56d3ebb11309ba2e1c7cd5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The frame's width for the sidebar, in units.  <br /></td></tr>
+<tr class="memitem:a35000947d720281d2f0dc83b0bc30c32" id="r_a35000947d720281d2f0dc83b0bc30c32"><td class="memItemLeft">constexpr int&#160;</td><td class="memItemRight"><a class="el" href="#a35000947d720281d2f0dc83b0bc30c32">morph::ui::kShellHeadLeadMinimum</a> = 32</td></tr>
+<tr class="memdesc:a35000947d720281d2f0dc83b0bc30c32"><td class="mdescLeft">&#160;</td><td class="mdescRight">The narrowest the top bar's title and head lead are given before the head's trail wraps to a line of its own, in units; the same bound as the in-page head's.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt"><a class="el" href="../../dc/df1/classmorph_1_1ui_1_1ShellFrame.html" title="The frame around a client&#39;s screens.">morph::ui::ShellFrame</a></span>: the frame a client shows its screens in — a sidebar with the navigator, a top bar, and the page the workspace's tabs sit on. Built from backend widgets, so every frontend shows it. </p>
 <p>Specified in <span class="tt">docs/spec/ui/shell_frame.md</span>. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-</div><a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
+</div><a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Enumeration Type Documentation</h2>
+<a id="aa1bb3f4b9e6e3e5569701df3b781ac79" name="aa1bb3f4b9e6e3e5569701df3b781ac79"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa1bb3f4b9e6e3e5569701df3b781ac79">&#9670;&#160;</a></span>HeadTrailEnd</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#aa1bb3f4b9e6e3e5569701df3b781ac79">morph::ui::HeadTrailEnd</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What ends the line of a head's trail, which decides how far a compact top bar's trailing end stands from the window's edge: a button that draws no frame pads itself, so a frame leaves it to the button; anything else reaches the edge of its box. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="aa1bb3f4b9e6e3e5569701df3b781ac79a6adf97f83acf6453d4a6a4b1070f3754" name="aa1bb3f4b9e6e3e5569701df3b781ac79a6adf97f83acf6453d4a6a4b1070f3754"></a>None&#160;</td><td class="fielddoc"><p>Nothing is in the trail: the lead's text or badges end the line. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="aa1bb3f4b9e6e3e5569701df3b781ac79a83f14e7c6d49f6bdb20203464d5a8f47" name="aa1bb3f4b9e6e3e5569701df3b781ac79a83f14e7c6d49f6bdb20203464d5a8f47"></a>Unframed&#160;</td><td class="fielddoc"><p>A ghost or icon-only action, or the head menu's trigger, which carries its own padding. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="aa1bb3f4b9e6e3e5569701df3b781ac79a6b73ad372508225645eb96a2e505a602" name="aa1bb3f4b9e6e3e5569701df3b781ac79a6b73ad372508225645eb96a2e505a602"></a>Framed&#160;</td><td class="fielddoc"><p>A framed action, or a head tool such as a select. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00037">37</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
 <a id="af30fd407fc56d3ebb11309ba2e1c7cd5" name="af30fd407fc56d3ebb11309ba2e1c7cd5"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af30fd407fc56d3ebb11309ba2e1c7cd5">&#9670;&#160;</a></span>kShellSidebarWidth</h2>
 
@@ -174,7 +222,33 @@ Variables</h2></td></tr>
 
 <p>The frame's width for the sidebar, in units. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00023">23</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00026">26</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a35000947d720281d2f0dc83b0bc30c32" name="a35000947d720281d2f0dc83b0bc30c32"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a35000947d720281d2f0dc83b0bc30c32">&#9670;&#160;</a></span>kShellHeadLeadMinimum</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">int morph::ui::kShellHeadLeadMinimum = 32</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The narrowest the top bar's title and head lead are given before the head's trail wraps to a line of its own, in units; the same bound as the in-page head's. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>

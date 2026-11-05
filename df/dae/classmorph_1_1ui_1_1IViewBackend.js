@@ -5,7 +5,7 @@ var classmorph_1_1ui_1_1IViewBackend =
     [ "createTextInput", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#aedf885ee29b5c6b7aec86608b0db1028", null ],
     [ "createCheckbox", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a04c823843651fea8c9dac80ab5ab72c8", null ],
     [ "createSelect", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a295d6e607bccd746b6ad061e578f1438", null ],
-    [ "createMenu", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#ac980f626137f8bc216f3959a86af909e", null ],
+    [ "createMenu", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#affad9f61a9557aaae36d7cb7215c0360", null ],
     [ "createStack", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a7d60e8ca9b01e140c41d14eb34080701", null ],
     [ "createGrid", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#ac15b728240fb0da4bfdc8974582d8522", null ],
     [ "createSpacer", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a8a5de1966ba222c9079f4e111e96bde5", null ],
@@ -25,10 +25,13 @@ var classmorph_1_1ui_1_1IViewBackend =
     [ "createProgress", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2f29af9562d158d8c8d74c61547114f6", null ],
     [ "createSteps", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a6d44e4ac49474fb4f8ed59c907096c69", null ],
     [ "createKeyValue", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae445beefd4cf40ede51fa368457674aa", null ],
+    [ "createChart", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a77125112d0be229dfa4993ae6aef4410", null ],
     [ "createEmptyState", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a55fd611d62ad8c732bd86f538c83d5e0", null ],
     [ "createDrawer", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2f0fd93a4538e13753d79c90d459da58", null ],
     [ "createSplitter", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2a6d526e4cfa5b49a188efa67830d3f9", null ],
     [ "createCollapsible", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2cf5fd3cde2b484942a83b0dd6f7379c", null ],
     [ "createDropZone", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#adb0d4528494cfbf9a2b53f49c295d93c", null ],
-    [ "createCustom", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a6528c7bb0bdc2531fe0d2349859a11b8", null ]
+    [ "createCustom", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a6528c7bb0bdc2531fe0d2349859a11b8", null ],
+    [ "widthClass", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a78d8a5bc452f99b64b0e44c27de571b0", null ],
+    [ "setOnWidthClass", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a82ed4d3c4bcc1d720cd6db5a7824e324", null ]
 ];

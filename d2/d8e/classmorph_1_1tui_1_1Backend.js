@@ -8,7 +8,7 @@ var classmorph_1_1tui_1_1Backend =
     [ "createTextInput", "d2/d8e/classmorph_1_1tui_1_1Backend.html#af012e9dab4c8d33ae387296728c94804", null ],
     [ "createCheckbox", "d2/d8e/classmorph_1_1tui_1_1Backend.html#afad7b16c45c5f813ee7f41f06f4fde97", null ],
     [ "createSelect", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a760f43b0fcc21c138f6c508e421c3e90", null ],
-    [ "createMenu", "d2/d8e/classmorph_1_1tui_1_1Backend.html#af2b89f36fd0084239ce2eb08288a6e14", null ],
+    [ "createMenu", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a926a5c772fbaaa260ff189af72191532", null ],
     [ "createStack", "d2/d8e/classmorph_1_1tui_1_1Backend.html#af8f07dcef85c58b84893e50225964ef8", null ],
     [ "createGrid", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a8f33900e217be60c42ec9438c08ebe21", null ],
     [ "createSpacer", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a10265262d1318100598e8259defe832b", null ],
@@ -29,6 +29,7 @@ var classmorph_1_1tui_1_1Backend =
     [ "createSteps", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a2f02904bbe402ec4f001d948cd70fa91", null ],
     [ "createKeyValue", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a9b71e7677718c0d873520da2414be1a2", null ],
     [ "createEmptyState", "d2/d8e/classmorph_1_1tui_1_1Backend.html#ab5754a4ac9bf92f95e2c502b83171820", null ],
+    [ "createChart", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a39664d1f6c78174055405ae2165e5720", null ],
     [ "createDrawer", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a1a3afb20e4ea89b51d375b089ac12fe9", null ],
     [ "createSplitter", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a50057a546c1896b7cff674647bc82f40", null ],
     [ "createCollapsible", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a8926efac72c54ced1efe310a11c4f7ea", null ],
@@ -38,6 +39,9 @@ var classmorph_1_1tui_1_1Backend =
     [ "focusPrev", "d2/d8e/classmorph_1_1tui_1_1Backend.html#ad05847428c6b0dd3118f972702160c03", null ],
     [ "focusFirst", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a7df9d2f1a5cb177a6ebb702bfe70c921", null ],
     [ "endDrag", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a49e26794b9c47ea986af10067b1f6ae4", null ],
+    [ "widthClass", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a45ab62a5c5a8ea3609922b94b26bef3f", null ],
+    [ "setOnWidthClass", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a25a3ddf0d196b5c586287dc50f122831", null ],
+    [ "refreshWidthClass", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a1bbb087b406d2c3f315fba3937840eed", null ],
     [ "animating", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a48f13de2825bead376f8888492e86964", null ],
     [ "advanceAnimation", "d2/d8e/classmorph_1_1tui_1_1Backend.html#a5189c9b04b64393f7b3e4b10782b025b", null ]
 ];

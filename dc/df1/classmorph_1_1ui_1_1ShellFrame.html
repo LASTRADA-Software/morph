@@ -142,22 +142,54 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a9b2a9f0ffca9203de6da44a84bb5fbe4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The container the client places the workspace in.  <br /></td></tr>
 <tr class="memitem:aa25b568734c86b7845d1d667691473ab" id="r_aa25b568734c86b7845d1d667691473ab"><td class="memItemLeft"><a class="el" href="../../d6/d15/classmorph_1_1ui_1_1Navigator.html">Navigator</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#aa25b568734c86b7845d1d667691473ab">navigator</a> () noexcept</td></tr>
 <tr class="memdesc:aa25b568734c86b7845d1d667691473ab"><td class="mdescLeft">&#160;</td><td class="mdescRight">The navigator in the sidebar.  <br /></td></tr>
+<tr class="memitem:a078a9f66d5aeb394ce6debbb48ab764d" id="r_a078a9f66d5aeb394ce6debbb48ab764d"><td class="memItemLeft"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a078a9f66d5aeb394ce6debbb48ab764d">headEyebrowSlot</a> () noexcept</td></tr>
+<tr class="memdesc:a078a9f66d5aeb394ce6debbb48ab764d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The container a client mounts the active head's eyebrow into: at the top of the lead block, above the title, shown only while <span class="tt">setHeadShown(true)</span>.  <br /></td></tr>
+<tr class="memitem:afd49db2af9fa1c45a343f2d25467cff7" id="r_afd49db2af9fa1c45a343f2d25467cff7"><td class="memItemLeft"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#afd49db2af9fa1c45a343f2d25467cff7">headLeadSlot</a> () noexcept</td></tr>
+<tr class="memdesc:afd49db2af9fa1c45a343f2d25467cff7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The container a client mounts the active head's lead into: under the title, in the top bar's first line, shown only while <span class="tt">setHeadShown(true)</span>.  <br /></td></tr>
+<tr class="memitem:a26c993a4284501df5247324fec9712f8" id="r_a26c993a4284501df5247324fec9712f8"><td class="memItemLeft"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a26c993a4284501df5247324fec9712f8">headInlineSlot</a> () noexcept</td></tr>
+<tr class="memdesc:a26c993a4284501df5247324fec9712f8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The container a client mounts the active head's inline lead into: on the title's line, right after the title, shown only while <span class="tt">setLeadInline(true)</span> and <span class="tt">setHeadShown(true)</span>.  <br /></td></tr>
 <tr class="memitem:a5d5e740523be40fffa4c22522cc2d04e" id="r_a5d5e740523be40fffa4c22522cc2d04e"><td class="memItemLeft"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a5d5e740523be40fffa4c22522cc2d04e">headSlot</a> () noexcept</td></tr>
-<tr class="memdesc:a5d5e740523be40fffa4c22522cc2d04e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The container in the top bar a client mounts the active screen's head row into, beside the title.  <br /></td></tr>
+<tr class="memdesc:a5d5e740523be40fffa4c22522cc2d04e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The container a client mounts the active head's trail into: at the trailing edge of the top bar's line, followed by the principal while it sits in the head, as one wrapping row that drops under the title where it does not fit beside it. Shown only while <span class="tt">setHeadShown(true)</span>.  <br /></td></tr>
+<tr class="memitem:a95d7094774bb787fc31d80916315a6ca" id="r_a95d7094774bb787fc31d80916315a6ca"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a95d7094774bb787fc31d80916315a6ca">setHeadShown</a> (bool shown)</td></tr>
+<tr class="memdesc:a95d7094774bb787fc31d80916315a6ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows or hides the three head slots. The frame cannot tell whether what is mounted there shows anything, so the client says; a new frame starts with them hidden.  <br /></td></tr>
+<tr class="memitem:a91dccab9e152351be0b6dd545dc4e75a" id="r_a91dccab9e152351be0b6dd545dc4e75a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a91dccab9e152351be0b6dd545dc4e75a">setTitleRole</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5">TextRole</a> role)</td></tr>
+<tr class="memdesc:a91dccab9e152351be0b6dd545dc4e75a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the role the top bar's title is drawn in: <span class="tt">Heading</span>, or <span class="tt">Headline</span> for a record's identity. A tab's caption, the window's title and an overlay's title keep their own.  <br /></td></tr>
+<tr class="memitem:a00f948b336e6ceaa8eb0d46e33111b49" id="r_a00f948b336e6ceaa8eb0d46e33111b49"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a00f948b336e6ceaa8eb0d46e33111b49">setLeadInline</a> (bool inlineLead)</td></tr>
+<tr class="memdesc:a00f948b336e6ceaa8eb0d46e33111b49"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows the head's lead on the title's line (<span class="tt"><a class="el" href="#a26c993a4284501df5247324fec9712f8" title="The container a client mounts the active head&#39;s inline lead into: on the title&#39;s line,...">headInlineSlot()</a></span>), or hides that slot. The slot is a content-sized item of a wrapping line inside the lead block, which always stretches from <span class="tt"><a class="el" href="../../db/d4f/shell__frame_8hpp.html#a35000947d720281d2f0dc83b0bc30c32" title="The narrowest the top bar&#39;s title and head lead are given before the head&#39;s trail wraps to a line of ...">kShellHeadLeadMinimum</a></span> units: the lead follows the title while both fit the block, and wraps to a line under the title when they do not, before the head's trail wraps. The spare width lies after the lead, before the trail.  <br /></td></tr>
+<tr class="memitem:a0cacf2499f705313b85096f3878eda52" id="r_a0cacf2499f705313b85096f3878eda52"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a0cacf2499f705313b85096f3878eda52">setHeadOneLine</a> (bool oneLine)</td></tr>
+<tr class="memdesc:a0cacf2499f705313b85096f3878eda52"><td class="mdescLeft">&#160;</td><td class="mdescRight">Aligns the top line's items across it while the head is a single line (no eyebrow, nothing under the title), so a title alone is level with the trail's buttons; a taller head aligns the items' tops, so the trail's top is the eyebrow's.  <br /></td></tr>
+<tr class="memitem:a55bdcab5c1861834116e1ebc3db76f79" id="r_a55bdcab5c1861834116e1ebc3db76f79"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a55bdcab5c1861834116e1ebc3db76f79">setHeadJoined</a> (bool joined)</td></tr>
+<tr class="memdesc:a55bdcab5c1861834116e1ebc3db76f79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tells the frame that the shown page continues the head's block, so the top bar is drawn on the <span class="tt">toolbarJoined</span> surface, whatever surface the screen asks for.  <br /></td></tr>
+<tr class="memitem:a297125db5fa2ac6946db964d6905f692" id="r_a297125db5fa2ac6946db964d6905f692"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a297125db5fa2ac6946db964d6905f692">setHeadSurface</a> (std::string_view surface)</td></tr>
+<tr class="memdesc:a297125db5fa2ac6946db964d6905f692"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the surface the shown screen asks the top bar to be drawn on.  <br /></td></tr>
+<tr class="memitem:a9059caf0248e9440b57014ef305bb9e1" id="r_a9059caf0248e9440b57014ef305bb9e1"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9059caf0248e9440b57014ef305bb9e1">setPageSurface</a> (std::string_view surface)</td></tr>
+<tr class="memdesc:a9059caf0248e9440b57014ef305bb9e1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the surface the shown screen asks the page area to be drawn on.  <br /></td></tr>
+<tr class="memitem:a47541cf1153aa1ab0418e19c42b6f656" id="r_a47541cf1153aa1ab0418e19c42b6f656"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a47541cf1153aa1ab0418e19c42b6f656">setPrincipalInHead</a> (bool inHead)</td></tr>
+<tr class="memdesc:a47541cf1153aa1ab0418e19c42b6f656"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves the principal from the sidebar's foot to the end of the head's trail, centred on its actions. Compact, the head draws none and the navigation menu's sign-out entry stays described by the principal.  <br /></td></tr>
 <tr class="memitem:aa1f13b96ae72bd2dbf8d51995d38ff64" id="r_aa1f13b96ae72bd2dbf8d51995d38ff64"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa1f13b96ae72bd2dbf8d51995d38ff64">setTitle</a> (std::string_view title)</td></tr>
 <tr class="memdesc:aa1f13b96ae72bd2dbf8d51995d38ff64"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows the shown screen's title in the top bar.  <br /></td></tr>
+<tr class="memitem:a28163e2cba0a37cd0229985e26d1f2c0" id="r_a28163e2cba0a37cd0229985e26d1f2c0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a28163e2cba0a37cd0229985e26d1f2c0">setPageInset</a> (bool inset)</td></tr>
+<tr class="memdesc:a28163e2cba0a37cd0229985e26d1f2c0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Insets the page's content by the page's step, or lets it fill the page to its edges. A hidden spacer takes no gap, so hiding the three inset spacers leaves the content at the page's own edges: for a screen that insets itself. A new frame insets.  <br /></td></tr>
+<tr class="memitem:a95fbefbcbe124a03f17529293d283ae7" id="r_a95fbefbcbe124a03f17529293d283ae7"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a95fbefbcbe124a03f17529293d283ae7">setTitleSpans</a> (std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; const &amp;spans)</td></tr>
+<tr class="memdesc:a95fbefbcbe124a03f17529293d283ae7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows the shown screen's title as runs in the top bar, in place of the plain title: an identifier in the monospace face beside plain words. The title's role gives every run its size and weight.  <br /></td></tr>
 <tr class="memitem:a8e9b26e548b154db33cdd2262809685c" id="r_a8e9b26e548b154db33cdd2262809685c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a8e9b26e548b154db33cdd2262809685c">setPrincipal</a> (std::string_view principal)</td></tr>
-<tr class="memdesc:a8e9b26e548b154db33cdd2262809685c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows who is signed in, in the top bar.  <br /></td></tr>
+<tr class="memdesc:a8e9b26e548b154db33cdd2262809685c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows who is signed in, at the sidebar's foot and as the compact menu's sign-out entry's description.  <br /></td></tr>
 <tr class="memitem:aa275361a61234fe80afea160268a99c0" id="r_aa275361a61234fe80afea160268a99c0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa275361a61234fe80afea160268a99c0">showSignedIn</a> (bool signedIn)</td></tr>
 <tr class="memdesc:aa275361a61234fe80afea160268a99c0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows or hides the sidebar and the top bar: signed out, the page is all there is.  <br /></td></tr>
+<tr class="memitem:ae28d0f478b89a683b1af07f33b1cd8ef" id="r_ae28d0f478b89a683b1af07f33b1cd8ef"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae28d0f478b89a683b1af07f33b1cd8ef">setCompact</a> (bool compact)</td></tr>
+<tr class="memdesc:ae28d0f478b89a683b1af07f33b1cd8ef"><td class="mdescLeft">&#160;</td><td class="mdescRight">Takes the frame's compact form, or its full one again. Compact, the sidebar, with the principal and the sign-out button at its foot, is hidden, and the top bar starts with the navigation menu (<span class="tt">shell_nav_menu</span>, the framework icon <span class="tt">nav.menu</span>, named "Navigation"), which lists the navigator's entries (<span class="tt"><a class="el" href="../../d6/d15/classmorph_1_1ui_1_1Navigator.html#a10e07a0ec8d68e3dcc6dfd400975c2c3" title="The navigator as the entries of a menu: the pins first, then a separator, then each group as a submen...">Navigator::menuEntries</a></span>) and opens the one chosen, as the navigator does; with a sign-out handler it ends with a separator and a "Sign out" entry described by the principal, which signs out. A new frame is not compact.  <br /></td></tr>
+<tr class="memitem:a6cef3347aaf5625ae6bc16958fa6de4c" id="r_a6cef3347aaf5625ae6bc16958fa6de4c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a6cef3347aaf5625ae6bc16958fa6de4c">setTrailEnd</a> (<a class="el" href="../../db/d4f/shell__frame_8hpp.html#aa1bb3f4b9e6e3e5569701df3b781ac79">HeadTrailEnd</a> end)</td></tr>
+<tr class="memdesc:a6cef3347aaf5625ae6bc16958fa6de4c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Tells the frame what ends the head's trail. Compact, the line's ends are padded by step 1, which is the whole inset a button that pads itself needs; anything else that ends the line (text, a badge, a select or a button that draws a frame) stands step 4 from the edge, the page's gutter, so the frame adds step 3 after the trail. A trail that ends in a framed button or a tool also takes the larger vertical padding of the bar. The expanded line's own end pad is that gutter already.  <br /></td></tr>
+<tr class="memitem:a7a095f30d08e3ce5c6bce1b1f71c05ab" id="r_a7a095f30d08e3ce5c6bce1b1f71c05ab"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a7a095f30d08e3ce5c6bce1b1f71c05ab">compact</a> () const noexcept</td></tr>
+<tr class="memdesc:a7a095f30d08e3ce5c6bce1b1f71c05ab"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the frame has its compact form.  <br /></td></tr>
 <tr class="memitem:a55cbb1a55d1a868699f768dbbe70153c" id="r_a55cbb1a55d1a868699f768dbbe70153c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a55cbb1a55d1a868699f768dbbe70153c">showToast</a> (std::string_view text, <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> tone)</td></tr>
 <tr class="memdesc:a55cbb1a55d1a868699f768dbbe70153c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a passive, transient message over the frame's main content area. Made the first time it is asked for; a later call replaces its text and tone and restarts its dismiss interval, whether or not it is still showing.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The frame around a client's screens. </p>
-<p>A row filling the window: the sidebar (surface <span class="tt">sidebar</span>, <span class="tt"><a class="el" href="../../db/d4f/shell__frame_8hpp.html#af30fd407fc56d3ebb11309ba2e1c7cd5" title="The frame&#39;s width for the sidebar, in units.">kShellSidebarWidth</a></span> units wide), holding the application's name and a <span class="tt"><a class="el" href="../../d6/d15/classmorph_1_1ui_1_1Navigator.html" title="The catalog as a list a person opens screens from, with a title search and pinned shortcuts.">Navigator</a></span>, and the main column holding the top bar (surface <span class="tt">toolbar</span>: the shown screen's title, a slot for its active tab's head row, the principal and a sign-out button) above the page (surface <span class="tt"><a class="el" href="#a9b2a9f0ffca9203de6da44a84bb5fbe4" title="The container the client places the workspace in.">page</a></span>), where the client places the workspace. Signed out, the sidebar and the top bar are hidden and the page is all there is. Neither copyable nor movable; owned by the owner thread of its backend. </p>
+<p>A row filling the window: the sidebar (surface <span class="tt">sidebar</span>, <span class="tt"><a class="el" href="../../db/d4f/shell__frame_8hpp.html#af30fd407fc56d3ebb11309ba2e1c7cd5" title="The frame&#39;s width for the sidebar, in units.">kShellSidebarWidth</a></span> units wide), holding the application's name and a <span class="tt"><a class="el" href="../../d6/d15/classmorph_1_1ui_1_1Navigator.html" title="The catalog as a list a person opens screens from, with a title search and pinned shortcuts.">Navigator</a></span>, and the main column holding the top bar (surface <span class="tt">toolbar</span>) above the page (surface <span class="tt"><a class="el" href="#a9b2a9f0ffca9203de6da44a84bb5fbe4" title="The container the client places the workspace in.">page</a></span>), where the client places the workspace. The top bar is one line that wraps only when it is out of room: the shown screen's title with the active head's lead (subtitle and badges) under it, and the head's trail (tools and actions, then the principal while it sits in the head) at the trailing edge, dropping to a line of its own where it does not fit. The principal and a sign-out button sit at the sidebar's foot. Signed out, the sidebar and the top bar are hidden and the page is all there is. Compact (<span class="tt">setCompact(true)</span>), the sidebar is hidden and the top bar starts with a navigation menu over the navigator's entries, ending with the principal's sign-out entry, so the page has nearly the whole window. Neither copyable nor movable; owned by the owner thread of its backend. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a8e5ef822f08f6b883b6c7007482e1bef" name="a8e5ef822f08f6b883b6c7007482e1bef"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8e5ef822f08f6b883b6c7007482e1bef">&#9670;&#160;</a></span>ShellFrame()</h2>
@@ -201,7 +233,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +264,7 @@ Public Member Functions</h2></td></tr>
 <p>The container the client places the workspace in. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00134">134</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -262,7 +294,97 @@ Public Member Functions</h2></td></tr>
 <p>The navigator in the sidebar. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a078a9f66d5aeb394ce6debbb48ab764d" name="a078a9f66d5aeb394ce6debbb48ab764d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a078a9f66d5aeb394ce6debbb48ab764d">&#9670;&#160;</a></span>headEyebrowSlot()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp; morph::ui::ShellFrame::headEyebrowSlot </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The container a client mounts the active head's eyebrow into: at the top of the lead block, above the title, shown only while <span class="tt">setHeadShown(true)</span>. </p>
+<dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00244">244</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="afd49db2af9fa1c45a343f2d25467cff7" name="afd49db2af9fa1c45a343f2d25467cff7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afd49db2af9fa1c45a343f2d25467cff7">&#9670;&#160;</a></span>headLeadSlot()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp; morph::ui::ShellFrame::headLeadSlot </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The container a client mounts the active head's lead into: under the title, in the top bar's first line, shown only while <span class="tt">setHeadShown(true)</span>. </p>
+<dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a26c993a4284501df5247324fec9712f8" name="a26c993a4284501df5247324fec9712f8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a26c993a4284501df5247324fec9712f8">&#9670;&#160;</a></span>headInlineSlot()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp; morph::ui::ShellFrame::headInlineSlot </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The container a client mounts the active head's inline lead into: on the title's line, right after the title, shown only while <span class="tt">setLeadInline(true)</span> and <span class="tt">setHeadShown(true)</span>. </p>
+<dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00254">254</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -289,10 +411,290 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>The container in the top bar a client mounts the active screen's head row into, beside the title. </p>
+<p>The container a client mounts the active head's trail into: at the trailing edge of the top bar's line, followed by the principal while it sits in the head, as one wrapping row that drops under the title where it does not fit beside it. Shown only while <span class="tt">setHeadShown(true)</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a95d7094774bb787fc31d80916315a6ca" name="a95d7094774bb787fc31d80916315a6ca"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a95d7094774bb787fc31d80916315a6ca">&#9670;&#160;</a></span>setHeadShown()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setHeadShown </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>shown</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows or hides the three head slots. The frame cannot tell whether what is mounted there shows anything, so the client says; a new frame starts with them hidden. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">shown</td><td>Whether the slots are shown. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00265">265</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a91dccab9e152351be0b6dd545dc4e75a" name="a91dccab9e152351be0b6dd545dc4e75a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a91dccab9e152351be0b6dd545dc4e75a">&#9670;&#160;</a></span>setTitleRole()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setTitleRole </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5">TextRole</a></td>          <td class="paramname"><span class="paramname"><em>role</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the role the top bar's title is drawn in: <span class="tt">Heading</span>, or <span class="tt">Headline</span> for a record's identity. A tab's caption, the window's title and an overlay's title keep their own. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">role</td><td>The role. A new frame draws <span class="tt">Heading</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00277">277</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a00f948b336e6ceaa8eb0d46e33111b49" name="a00f948b336e6ceaa8eb0d46e33111b49"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a00f948b336e6ceaa8eb0d46e33111b49">&#9670;&#160;</a></span>setLeadInline()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setLeadInline </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>inlineLead</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows the head's lead on the title's line (<span class="tt"><a class="el" href="#a26c993a4284501df5247324fec9712f8" title="The container a client mounts the active head&#39;s inline lead into: on the title&#39;s line,...">headInlineSlot()</a></span>), or hides that slot. The slot is a content-sized item of a wrapping line inside the lead block, which always stretches from <span class="tt"><a class="el" href="../../db/d4f/shell__frame_8hpp.html#a35000947d720281d2f0dc83b0bc30c32" title="The narrowest the top bar&#39;s title and head lead are given before the head&#39;s trail wraps to a line of ...">kShellHeadLeadMinimum</a></span> units: the lead follows the title while both fit the block, and wraps to a line under the title when they do not, before the head's trail wraps. The spare width lies after the lead, before the trail. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">inlineLead</td><td>Whether the lead sits inline. A new frame has it under the title. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0cacf2499f705313b85096f3878eda52" name="a0cacf2499f705313b85096f3878eda52"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0cacf2499f705313b85096f3878eda52">&#9670;&#160;</a></span>setHeadOneLine()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setHeadOneLine </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>oneLine</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Aligns the top line's items across it while the head is a single line (no eyebrow, nothing under the title), so a title alone is level with the trail's buttons; a taller head aligns the items' tops, so the trail's top is the eyebrow's. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">oneLine</td><td>Whether the head is one line. A new frame aligns tops. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a55bdcab5c1861834116e1ebc3db76f79" name="a55bdcab5c1861834116e1ebc3db76f79"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a55bdcab5c1861834116e1ebc3db76f79">&#9670;&#160;</a></span>setHeadJoined()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setHeadJoined </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>joined</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Tells the frame that the shown page continues the head's block, so the top bar is drawn on the <span class="tt">toolbarJoined</span> surface, whatever surface the screen asks for. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">joined</td><td>Whether the page continues the head. A new frame is not joined. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00304">304</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a297125db5fa2ac6946db964d6905f692" name="a297125db5fa2ac6946db964d6905f692"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a297125db5fa2ac6946db964d6905f692">&#9670;&#160;</a></span>setHeadSurface()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setHeadSurface </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>surface</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the surface the shown screen asks the top bar to be drawn on. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">surface</td><td>The surface's name; empty for none, which is <span class="tt">toolbar</span>. A name no surface answers to draws as none does. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9059caf0248e9440b57014ef305bb9e1" name="a9059caf0248e9440b57014ef305bb9e1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9059caf0248e9440b57014ef305bb9e1">&#9670;&#160;</a></span>setPageSurface()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setPageSurface </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>surface</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the surface the shown screen asks the page area to be drawn on. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">surface</td><td>The surface's name; empty for none, which is <span class="tt"><a class="el" href="#a9b2a9f0ffca9203de6da44a84bb5fbe4" title="The container the client places the workspace in.">page</a></span>. A name no surface answers to draws as <span class="tt"><a class="el" href="#a9b2a9f0ffca9203de6da44a84bb5fbe4" title="The container the client places the workspace in.">page</a></span> does. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00320">320</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a47541cf1153aa1ab0418e19c42b6f656" name="a47541cf1153aa1ab0418e19c42b6f656"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a47541cf1153aa1ab0418e19c42b6f656">&#9670;&#160;</a></span>setPrincipalInHead()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setPrincipalInHead </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>inHead</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Moves the principal from the sidebar's foot to the end of the head's trail, centred on its actions. Compact, the head draws none and the navigation menu's sign-out entry stays described by the principal. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">inHead</td><td>Whether the principal sits in the top bar. A new frame has it in the sidebar. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00326">326</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -327,7 +729,77 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00333">333</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a28163e2cba0a37cd0229985e26d1f2c0" name="a28163e2cba0a37cd0229985e26d1f2c0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a28163e2cba0a37cd0229985e26d1f2c0">&#9670;&#160;</a></span>setPageInset()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setPageInset </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>inset</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Insets the page's content by the page's step, or lets it fill the page to its edges. A hidden spacer takes no gap, so hiding the three inset spacers leaves the content at the page's own edges: for a screen that insets itself. A new frame insets. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">inset</td><td>Whether the content is inset. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a95fbefbcbe124a03f17529293d283ae7" name="a95fbefbcbe124a03f17529293d283ae7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a95fbefbcbe124a03f17529293d283ae7">&#9670;&#160;</a></span>setTitleSpans()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setTitleSpans </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>spans</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows the shown screen's title as runs in the top bar, in place of the plain title: an identifier in the monospace face beside plain words. The title's role gives every run its size and weight. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">spans</td><td>The runs; empty draws <span class="tt"><a class="el" href="#aa1f13b96ae72bd2dbf8d51995d38ff64" title="Shows the shown screen&#39;s title in the top bar.">setTitle</a></span>'s text. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00351">351</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -354,7 +826,7 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Shows who is signed in, in the top bar. </p>
+<p>Shows who is signed in, at the sidebar's foot and as the compact menu's sign-out entry's description. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">principal</td><td>The principal's name; empty shows none. </td></tr>
@@ -362,7 +834,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00358">358</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -397,7 +869,107 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00368">368</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae28d0f478b89a683b1af07f33b1cd8ef" name="ae28d0f478b89a683b1af07f33b1cd8ef"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae28d0f478b89a683b1af07f33b1cd8ef">&#9670;&#160;</a></span>setCompact()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setCompact </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>compact</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Takes the frame's compact form, or its full one again. Compact, the sidebar, with the principal and the sign-out button at its foot, is hidden, and the top bar starts with the navigation menu (<span class="tt">shell_nav_menu</span>, the framework icon <span class="tt">nav.menu</span>, named "Navigation"), which lists the navigator's entries (<span class="tt"><a class="el" href="../../d6/d15/classmorph_1_1ui_1_1Navigator.html#a10e07a0ec8d68e3dcc6dfd400975c2c3" title="The navigator as the entries of a menu: the pins first, then a separator, then each group as a submen...">Navigator::menuEntries</a></span>) and opens the one chosen, as the navigator does; with a sign-out handler it ends with a separator and a "Sign out" entry described by the principal, which signs out. A new frame is not compact. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">compact</td><td>Whether the frame is compact. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00380">380</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6cef3347aaf5625ae6bc16958fa6de4c" name="a6cef3347aaf5625ae6bc16958fa6de4c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6cef3347aaf5625ae6bc16958fa6de4c">&#9670;&#160;</a></span>setTrailEnd()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setTrailEnd </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../db/d4f/shell__frame_8hpp.html#aa1bb3f4b9e6e3e5569701df3b781ac79">HeadTrailEnd</a></td>          <td class="paramname"><span class="paramname"><em>end</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Tells the frame what ends the head's trail. Compact, the line's ends are padded by step 1, which is the whole inset a button that pads itself needs; anything else that ends the line (text, a badge, a select or a button that draws a frame) stands step 4 from the edge, the page's gutter, so the frame adds step 3 after the trail. A trail that ends in a framed button or a tool also takes the larger vertical padding of the bar. The expanded line's own end pad is that gutter already. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">end</td><td>What ends the trail. A new frame has <span class="tt">None</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00397">397</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7a095f30d08e3ce5c6bce1b1f71c05ab" name="a7a095f30d08e3ce5c6bce1b1f71c05ab"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7a095f30d08e3ce5c6bce1b1f71c05ab">&#9670;&#160;</a></span>compact()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::ShellFrame::compact </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether the frame has its compact form. </p>
+<dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00405">405</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -437,7 +1009,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00164">164</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00412">412</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>

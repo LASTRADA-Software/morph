@@ -5,5 +5,7 @@ var structmorph_1_1ui_1_1ThemeTokenSpec =
     [ "color", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html#af86407aa0f6bf4ddfc544f5358c5202e", null ],
     [ "number", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html#a0468b22684924ac61eb9ee42b02fd413", null ],
     [ "shadow", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html#a8befa5bcfb2e3d2525f84020f83777f8", null ],
-    [ "family", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html#adb495bd1b99280ee74980243aa6b6bfc", null ]
+    [ "family", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html#adb495bd1b99280ee74980243aa6b6bfc", null ],
+    [ "stroke", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html#ae04baa94efe021ed980ecdb64a5dd495", null ],
+    [ "keyword", "dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html#adefbfa4cf90f397daf276ec0c1ae73d5", null ]
 ];

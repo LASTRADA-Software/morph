@@ -132,13 +132,15 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ae07f945fe056de0bc616037ca89f528d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Over <code class="param">probe</code>.  <br /></td></tr>
 <tr class="memitem:ae136aea8d2ac7c920f2a32336a3d39b5" id="r_ae136aea8d2ac7c920f2a32336a3d39b5"><td class="memItemLeft"><a class="el" href="../../d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html">WidgetBounds</a>&#160;</td><td class="memItemRight"><a class="el" href="#ae136aea8d2ac7c920f2a32336a3d39b5">of</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const &amp;widget)</td></tr>
 <tr class="memdesc:ae136aea8d2ac7c920f2a32336a3d39b5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where <code class="param">widget</code> is drawn; zero, with the case failed, when the probe reads no geometry.  <br /></td></tr>
+<tr class="memitem:a786927a6a42242892356b5f93a92df08" id="r_a786927a6a42242892356b5f93a92df08"><td class="memItemLeft"><a class="el" href="../../d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html">WidgetBounds</a>&#160;</td><td class="memItemRight"><a class="el" href="#a786927a6a42242892356b5f93a92df08">textOf</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const &amp;text)</td></tr>
+<tr class="memdesc:a786927a6a42242892356b5f93a92df08"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where <code class="param">text</code> draws its lines; zero, with the case failed, when the probe reads none.  <br /></td></tr>
 <tr class="memitem:a7e01a2b727e2714ae708635ad24cac75" id="r_a7e01a2b727e2714ae708635ad24cac75"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a7e01a2b727e2714ae708635ad24cac75">near</a> (std::string_view what, double expected, double actual)</td></tr>
 <tr class="memdesc:a7e01a2b727e2714ae708635ad24cac75"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../d0/d7d/classmorph_1_1ui_1_1testing_1_1detail_1_1Checks.html" title="Collects a case&#39;s checks and keeps the first failure, so a case reads top to bottom.">Checks</a> that a length is what it should be, within one unit.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Reads where the layout cases' widgets are drawn, and fails a case whose probe reads no geometry. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01409">1409</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01762">1762</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ae07f945fe056de0bc616037ca89f528d" name="ae07f945fe056de0bc616037ca89f528d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae07f945fe056de0bc616037ca89f528d">&#9670;&#160;</a></span>Geometry()</h2>
@@ -176,7 +178,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01414">1414</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01767">1767</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -213,7 +215,43 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its bounds. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01419">1419</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01772">1772</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a786927a6a42242892356b5f93a92df08" name="a786927a6a42242892356b5f93a92df08"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a786927a6a42242892356b5f93a92df08">&#9670;&#160;</a></span>textOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d4/dd8/structmorph_1_1ui_1_1testing_1_1WidgetBounds.html">WidgetBounds</a> morph::ui::testing::detail::Geometry::textOf </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Where <code class="param">text</code> draws its lines; zero, with the case failed, when the probe reads none. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">text</td><td>The text. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The box around its lines. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01781">1781</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -259,7 +297,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01429">1429</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l01791">1791</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>

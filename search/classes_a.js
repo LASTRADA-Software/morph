@@ -12,6 +12,8 @@ var searchData=
   ['keyspec_9',['KeySpec',['../dc/d8d/structmorph_1_1ui_1_1detail_1_1KeySpec.html',1,'morph::ui::detail']]],
   ['keyvalue_10',['KeyValue',['../dc/df0/structmorph_1_1ui_1_1KeyValue.html',1,'morph::ui']]],
   ['keyvalueitem_11',['KeyValueItem',['../d4/d73/structmorph_1_1ui_1_1KeyValueItem.html',1,'morph::ui']]],
-  ['keyvaluewidget_12',['KeyValueWidget',['../dd/df9/classmorph_1_1ui_1_1KeyValueWidget.html',1,'morph::ui']]],
-  ['kindspec_13',['KindSpec',['../df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html',1,'morph::ui::detail']]]
+  ['keyvalueoptions_12',['KeyValueOptions',['../d5/daf/structmorph_1_1ui_1_1author_1_1KeyValueOptions.html',1,'morph::ui::author']]],
+  ['keyvaluewidget_13',['KeyValueWidget',['../dd/df9/classmorph_1_1ui_1_1KeyValueWidget.html',1,'morph::ui']]],
+  ['keywordspec_14',['KeywordSpec',['../de/dd1/structmorph_1_1ui_1_1detail_1_1KeywordSpec.html',1,'morph::ui::detail']]],
+  ['kindspec_15',['KindSpec',['../df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html',1,'morph::ui::detail']]]
 ];

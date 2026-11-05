@@ -33,5 +33,6 @@ var rational_8hpp =
     [ "morph::math::operator-", "d1/de8/rational_8hpp.html#a5bcdf7ec70b0c472e876ef9ab7f6a334", null ],
     [ "morph::math::operator*", "d1/de8/rational_8hpp.html#a4da38be67600a696c4fd73deabab3140", null ],
     [ "morph::math::operator/", "d1/de8/rational_8hpp.html#a73e66d23a71880d6b17630e675783be0", null ],
+    [ "morph::math::checkedRoundToDecimalPlaces", "d1/de8/rational_8hpp.html#ad182ca1d3d62209706cc74c1813dbd2a", null ],
     [ "morph::math::kMaxDecimalPlaces", "d1/de8/rational_8hpp.html#a9205dc1c167f522dc22f8422c5749a1d", null ]
 ];

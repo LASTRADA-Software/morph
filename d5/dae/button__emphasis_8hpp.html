@@ -123,18 +123,38 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/dae/button_
 
 <p><span class="tt"><a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314" title="How much a button stands out; each backend maps it to its theme.">morph::ui::ButtonEmphasis</a></span>: how much a button stands out. The view tree, the authoring API and the backends share it. Specified in <span class="tt">docs/spec/ui/backend_contract.md</span>.  
 <a href="#details">More...</a></p>
-<div class="textblock"><code>#include &lt;cstdint&gt;</code><br />
+<div class="textblock"><code>#include &lt;array&gt;</code><br />
+<code>#include &lt;cstdint&gt;</code><br />
+<code>#include &lt;optional&gt;</code><br />
+<code>#include &lt;string_view&gt;</code><br />
+<code>#include &lt;utility&gt;</code><br />
 </div>
 <p><a href="../../d5/dae/button__emphasis_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
 Enumerations</h2></td></tr>
-<tr class="memitem:a53f8810441ac7ca91cdf227b4bd5b314" id="r_a53f8810441ac7ca91cdf227b4bd5b314"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314">morph::ui::ButtonEmphasis</a> : std::uint8_t { <a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314a960b44c579bc2f6818d2daaf9e4c16f0">Normal</a>
+<tr class="memitem:a53f8810441ac7ca91cdf227b4bd5b314" id="r_a53f8810441ac7ca91cdf227b4bd5b314"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314">morph::ui::ButtonEmphasis</a> : std::uint8_t { <br />
+&#160;&#160;<a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314a960b44c579bc2f6818d2daaf9e4c16f0">Normal</a>
 , <a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314a074de7e7c226d5c60f8af14c20725352">Primary</a>
 , <a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314a990816b607ebf99b1415760965e4d564">Danger</a>
 , <a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314a401357e57c765967393ba391a338e89b">Ghost</a>
+, <br />
+&#160;&#160;<a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314aff9827949d1ae3695ceaceed2f947c5f">DangerOutline</a>
+<br />
  }</td></tr>
 <tr class="memdesc:a53f8810441ac7ca91cdf227b4bd5b314"><td class="mdescLeft">&#160;</td><td class="mdescRight">How much a button stands out; each backend maps it to its theme.  <a href="#a53f8810441ac7ca91cdf227b4bd5b314">More...</a><br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
+Functions</h2></td></tr>
+<tr class="memitem:a07d80bc2e35666f2e5e1937243e30ed5" id="r_a07d80bc2e35666f2e5e1937243e30ed5"><td class="memItemLeft">constexpr std::optional&lt; <a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314">ButtonEmphasis</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a07d80bc2e35666f2e5e1937243e30ed5">morph::ui::emphasisNamed</a> (std::string_view name) noexcept</td></tr>
+<tr class="memdesc:a07d80bc2e35666f2e5e1937243e30ed5"><td class="mdescLeft">&#160;</td><td class="mdescRight">An emphasis by its document name.  <br /></td></tr>
+<tr class="memitem:a83c87fe4750ad8be948b5b776cfca622" id="r_a83c87fe4750ad8be948b5b776cfca622"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a83c87fe4750ad8be948b5b776cfca622">morph::ui::emphasisName</a> (<a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314">ButtonEmphasis</a> emphasis) noexcept</td></tr>
+<tr class="memdesc:a83c87fe4750ad8be948b5b776cfca622"><td class="mdescLeft">&#160;</td><td class="mdescRight">An emphasis's document name.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
+Variables</h2></td></tr>
+<tr class="memitem:a9761daef4d5c6c09e2f3cd76b2d74e89" id="r_a9761daef4d5c6c09e2f3cd76b2d74e89"><td class="memItemLeft">constexpr std::array&lt; std::pair&lt; std::string_view, <a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314">ButtonEmphasis</a> &gt;, 5 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9761daef4d5c6c09e2f3cd76b2d74e89">morph::ui::kButtonEmphases</a></td></tr>
+<tr class="memdesc:a9761daef4d5c6c09e2f3cd76b2d74e89"><td class="mdescLeft">&#160;</td><td class="mdescRight">Every emphasis by its document name, <span class="tt">normal</span> first.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt"><a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314" title="How much a button stands out; each backend maps it to its theme.">morph::ui::ButtonEmphasis</a></span>: how much a button stands out. The view tree, the authoring API and the backends share it. Specified in <span class="tt">docs/spec/ui/backend_contract.md</span>. </p>
@@ -171,9 +191,120 @@ Enumerations</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="a53f8810441ac7ca91cdf227b4bd5b314a401357e57c765967393ba391a338e89b" name="a53f8810441ac7ca91cdf227b4bd5b314a401357e57c765967393ba391a338e89b"></a>Ghost&#160;</td><td class="fielddoc"><p>An action embedded in other content, with no chrome of its own. </p>
 </td></tr>
+<tr><td class="fieldname"><a id="a53f8810441ac7ca91cdf227b4bd5b314aff9827949d1ae3695ceaceed2f947c5f" name="a53f8810441ac7ca91cdf227b4bd5b314aff9827949d1ae3695ceaceed2f947c5f"></a>DangerOutline&#160;</td><td class="fielddoc"><p>A destructive action that is not the main one: outlined, its label in the error colour, so the screen's filled action stays the one that stands out. </p>
+</td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html#l00013">13</a> of file <a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html">button_emphasis.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html#l00017">17</a> of file <a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html">button_emphasis.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="a07d80bc2e35666f2e5e1937243e30ed5" name="a07d80bc2e35666f2e5e1937243e30ed5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a07d80bc2e35666f2e5e1937243e30ed5">&#9670;&#160;</a></span>emphasisNamed()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; ButtonEmphasis &gt; morph::ui::emphasisNamed </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An emphasis by its document name. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">name</td><td>The name, such as <span class="tt">dangerOutline</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The emphasis; <span class="tt">nullopt</span> for a name that is none. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html">button_emphasis.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a83c87fe4750ad8be948b5b776cfca622" name="a83c87fe4750ad8be948b5b776cfca622"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a83c87fe4750ad8be948b5b776cfca622">&#9670;&#160;</a></span>emphasisName()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string_view morph::ui::emphasisName </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="#a53f8810441ac7ca91cdf227b4bd5b314">ButtonEmphasis</a></td>          <td class="paramname"><span class="paramname"><em>emphasis</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>An emphasis's document name. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">emphasis</td><td>The emphasis. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Its name, such as <span class="tt">dangerOutline</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html">button_emphasis.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-var-members" id="doc-var-members"></a><h2 id="header-doc-var-members" class="groupheader">Variable Documentation</h2>
+<a id="a9761daef4d5c6c09e2f3cd76b2d74e89" name="a9761daef4d5c6c09e2f3cd76b2d74e89"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9761daef4d5c6c09e2f3cd76b2d74e89">&#9670;&#160;</a></span>kButtonEmphases</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::array&lt;std::pair&lt;std::string_view, ButtonEmphasis&gt;, 5&gt; morph::ui::kButtonEmphases</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+<b>Initial value:</b><div class="fragment"><div class="line">                                            = {{</div>
+<div class="line">    {<span class="stringliteral">&quot;normal&quot;</span>, <a class="code hl_enumvalue" href="#a53f8810441ac7ca91cdf227b4bd5b314a960b44c579bc2f6818d2daaf9e4c16f0">ButtonEmphasis::Normal</a>},</div>
+<div class="line">    {<span class="stringliteral">&quot;primary&quot;</span>, <a class="code hl_enumvalue" href="#a53f8810441ac7ca91cdf227b4bd5b314a074de7e7c226d5c60f8af14c20725352">ButtonEmphasis::Primary</a>},</div>
+<div class="line">    {<span class="stringliteral">&quot;danger&quot;</span>, ButtonEmphasis::Danger},</div>
+<div class="line">    {<span class="stringliteral">&quot;ghost&quot;</span>, ButtonEmphasis::Ghost},</div>
+<div class="line">    {<span class="stringliteral">&quot;dangerOutline&quot;</span>, ButtonEmphasis::DangerOutline},</div>
+<div class="line">}}</div>
+<div class="ttc" id="abutton__emphasis_8hpp_html_a53f8810441ac7ca91cdf227b4bd5b314a074de7e7c226d5c60f8af14c20725352"><div class="ttname"><a href="#a53f8810441ac7ca91cdf227b4bd5b314a074de7e7c226d5c60f8af14c20725352">morph::ui::ButtonEmphasis::Primary</a></div><div class="ttdeci">@ Primary</div><div class="ttdoc">The screen&#39;s main action.</div><div class="ttdef"><b>Definition</b> <a href="../../d5/dae/button__emphasis_8hpp_source.html#l00019">button_emphasis.hpp:19</a></div></div>
+<div class="ttc" id="abutton__emphasis_8hpp_html_a53f8810441ac7ca91cdf227b4bd5b314a960b44c579bc2f6818d2daaf9e4c16f0"><div class="ttname"><a href="#a53f8810441ac7ca91cdf227b4bd5b314a960b44c579bc2f6818d2daaf9e4c16f0">morph::ui::ButtonEmphasis::Normal</a></div><div class="ttdeci">@ Normal</div><div class="ttdoc">An ordinary action.</div><div class="ttdef"><b>Definition</b> <a href="../../d5/dae/button__emphasis_8hpp_source.html#l00018">button_emphasis.hpp:18</a></div></div>
+</div><!-- fragment -->
+<p>Every emphasis by its document name, <span class="tt">normal</span> first. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../d5/dae/button__emphasis_8hpp_source.html">button_emphasis.hpp</a>.</p>
 
 </div>
 </div>

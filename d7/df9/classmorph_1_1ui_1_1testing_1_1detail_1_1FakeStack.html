@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/df9/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>A fake <span class="tt"><a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html" title="Children stacked along one axis, fixed at creation.">StackWidget</a></span>, of kind <span class="tt"><a class="el" href="../../d1/d05/structmorph_1_1ui_1_1Column.html" title="Children stacked top to bottom.">Column</a></span> or <span class="tt"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a></span>: properties <span class="tt">gap</span>, <span class="tt">align</span>, <span class="tt">justify</span>.  
+<p>A fake <span class="tt"><a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html" title="Children stacked along one axis, fixed at creation.">StackWidget</a></span>, of kind <span class="tt"><a class="el" href="../../d1/d05/structmorph_1_1ui_1_1Column.html" title="Children stacked top to bottom.">Column</a></span> or <span class="tt"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a></span>: properties <span class="tt">gap</span>, <span class="tt">align</span>, <span class="tt">justify</span>, <span class="tt">wrap</span>, <span class="tt">divided</span>, <span class="tt">padding</span>.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>&gt;</code></p>
@@ -147,16 +147,30 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a786e2744e6ff09af0c657ef537748da3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Places the children across the axis. A new stack stretches them; a child's own <span class="tt">alignSelf</span> wins.  <br /></td></tr>
 <tr class="memitem:a74c96538a5cd2b7779dd1ba9c4233786" id="r_a74c96538a5cd2b7779dd1ba9c4233786"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a74c96538a5cd2b7779dd1ba9c4233786">setJustify</a> (<a class="el" href="../../d9/dd9/alignment_8hpp.html#a6ab0675190c3eca7470bbdb9c73654c4">Justify</a> justify) override</td></tr>
 <tr class="memdesc:a74c96538a5cd2b7779dd1ba9c4233786"><td class="mdescLeft">&#160;</td><td class="mdescRight">Places the spare length along the axis while no shown child stretches. A new stack packs at the start.  <br /></td></tr>
+<tr class="memitem:a1485d4bec4d6395c9b79c99ae157f73e" id="r_a1485d4bec4d6395c9b79c99ae157f73e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1485d4bec4d6395c9b79c99ae157f73e">setWrap</a> (bool wrap) override</td></tr>
+<tr class="memdesc:a1485d4bec4d6395c9b79c99ae157f73e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a horizontal stack wrap: its children fill lines in order, and a child that does not fit after the ones already on a line starts the next. The mount calls it once, before the stack's first child, and only for a stack that wraps.  <br /></td></tr>
+<tr class="memitem:a9185fce7ecac874f5d21efaba3a79eaf" id="r_a9185fce7ecac874f5d21efaba3a79eaf"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9185fce7ecac874f5d21efaba3a79eaf">setDivided</a> (bool divided) override</td></tr>
+<tr class="memdesc:a9185fce7ecac874f5d21efaba3a79eaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Draws a 1 px rule in the theme's divider colour between each two shown children of a stack that does not wrap, centred in the gap: horizontal in a vertical stack, vertical in a row. The rule takes 1 px of its own, so a gap of 0 still separates the children. The mount calls it once, before the stack's first child, and only for a stack that is divided. A backend that cannot spare a row for a rule draws none: the terminal's lines are already apart.  <br /></td></tr>
+<tr class="memitem:a8553b6fe0a542594d6606f4bc0aa66b5" id="r_a8553b6fe0a542594d6606f4bc0aa66b5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a8553b6fe0a542594d6606f4bc0aa66b5">setPadding</a> (<a class="el" href="../../d7/d65/structmorph_1_1ui_1_1Padding.html">Padding</a> padding) override</td></tr>
+<tr class="memdesc:a8553b6fe0a542594d6606f4bc0aa66b5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Insets the children from the stack's edges: the vertical step above and below, the horizontal step at the sides. The mount calls it once, before the stack's first child, and only for a stack that has padding. The stack's natural size includes the inset.  <br /></td></tr>
+<tr class="memitem:a02b8478c55ba619f523a41d34904fa2d" id="r_a02b8478c55ba619f523a41d34904fa2d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a02b8478c55ba619f523a41d34904fa2d">setSelected</a> (bool selected) override</td></tr>
+<tr class="memdesc:a02b8478c55ba619f523a41d34904fa2d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Marks the stack as the chosen entry of a list, or not: while selected it draws the accent's 3 px bar at its leading edge, down its whole height, over its surface and under its children, inside its leading padding. The mount calls it for a stack that gives the key, at mount (possibly with false) and on every change; that first call is what tells a backend the stack can be selected, so one that reserves room for the bar reserves it from then on whether or not the stack is selected.  <br /></td></tr>
+<tr class="memitem:a6fe3ac46746363afbde37b789165348f" id="r_a6fe3ac46746363afbde37b789165348f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a6fe3ac46746363afbde37b789165348f">setActionRow</a> () override</td></tr>
+<tr class="memdesc:a6fe3ac46746363afbde37b789165348f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">actionRow</span> as true.  <br /></td></tr>
+<tr class="memitem:ae99038cd7800b79dee501927f4b669e8" id="r_ae99038cd7800b79dee501927f4b669e8"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae99038cd7800b79dee501927f4b669e8">setPassesBleed</a> (bool passes) override</td></tr>
+<tr class="memdesc:ae99038cd7800b79dee501927f4b669e8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes the stack transparent to <span class="tt">bleed</span>: a child of it that bleeds reaches past the padding of the stack's own container (a panel's padding, a tab page's), not past the stack's, as if the child were that container's. The mount calls it once, before the stack's first child, and only with true, for the column the interpreter inserts around a list of nodes. A table's row view ignores it.  <br /></td></tr>
+<tr class="memitem:a567c387a0982d4be26f7010f0e3bc96a" id="r_a567c387a0982d4be26f7010f0e3bc96a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a567c387a0982d4be26f7010f0e3bc96a">setHeadBar</a> (bool headBar) override</td></tr>
+<tr class="memdesc:a567c387a0982d4be26f7010f0e3bc96a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">headBar</span>.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html">morph::ui::testing::detail::FakeContainer&lt; StackWidget &gt;</a></td></tr>
 <tr class="memitem:a96362e9a2facaf22cde143bce7b4a777 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer" id="r_a96362e9a2facaf22cde143bce7b4a777"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html#a96362e9a2facaf22cde143bce7b4a777">moveChild</a> (Widget &amp;child, std::size_t index) override</td></tr>
 <tr class="memdesc:a96362e9a2facaf22cde143bce7b4a777 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves a child among its siblings and logs it.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html">morph::ui::testing::detail::FakeLeaf&lt; StackWidget &gt;</a></td></tr>
-<tr class="memitem:a3315df8bc8818827aafd77198af851be pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a3315df8bc8818827aafd77198af851be"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> (std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; store, std::string kind, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> const *parent, <a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261">PropList</a> initial={})</td></tr>
-<tr class="memdesc:a3315df8bc8818827aafd77198af851be pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the new widget, appended to <code class="param">parent</code>, and logs its creation.  <br /></td></tr>
+<tr class="memitem:ae27ec5f87e24ebff660e66473bce4721 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_ae27ec5f87e24ebff660e66473bce4721"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> (std::shared_ptr&lt; <a class="el" href="../../d2/d0d/classmorph_1_1ui_1_1testing_1_1detail_1_1RecordStore.html">RecordStore</a> &gt; store, std::string kind, Widget const *parent, <a class="el" href="../../de/dd9/recording__backend_8hpp.html#a3dd8329b3b6cc583f8a24f7380ec8261">PropList</a> initial={})</td></tr>
+<tr class="memdesc:ae27ec5f87e24ebff660e66473bce4721 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the new widget, appended to <code class="param">parent</code>, and logs its creation.  <br /></td></tr>
 <tr class="memitem:aa5eff9c8cf23b14288cdf8d538c43961 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aa5eff9c8cf23b14288cdf8d538c43961"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aa5eff9c8cf23b14288cdf8d538c43961">~FakeLeaf</a> () override</td></tr>
 <tr class="memdesc:aa5eff9c8cf23b14288cdf8d538c43961 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Forgets the widget and logs its destruction; its remaining children become roots.  <br /></td></tr>
 <tr class="memitem:a976acf10acc43f63ba7ecd953cda7b43 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a976acf10acc43f63ba7ecd953cda7b43"><td class="memItemLeft">
-<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a3315df8bc8818827aafd77198af851be">FakeLeaf</a> const &amp;)=delete</td></tr>
+<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ae27ec5f87e24ebff660e66473bce4721">FakeLeaf</a> const &amp;)=delete</td></tr>
 <tr class="memitem:ac7b0a51f943e27762c21206eea802d08 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_ac7b0a51f943e27762c21206eea802d08"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#ac7b0a51f943e27762c21206eea802d08">setVisible</a> (bool visible) override</td></tr>
 <tr class="memdesc:ac7b0a51f943e27762c21206eea802d08 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">visible</span>.  <br /></td></tr>
 <tr class="memitem:aa2a186efea65691285d01736b53a37ba pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aa2a186efea65691285d01736b53a37ba"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aa2a186efea65691285d01736b53a37ba">setEnabled</a> (bool enabled) override</td></tr>
@@ -178,7 +192,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:af8aea5416b8dd99e6888f53bc87d00d0 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_af8aea5416b8dd99e6888f53bc87d00d0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#af8aea5416b8dd99e6888f53bc87d00d0">setSurface</a> (std::string_view surface) override</td></tr>
 <tr class="memdesc:af8aea5416b8dd99e6888f53bc87d00d0 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">surface</span>.  <br /></td></tr>
 <tr class="memitem:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_a872fcbbddffe07279c5594bc00feec57"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#a872fcbbddffe07279c5594bc00feec57">setKeys</a> (std::vector&lt; std::string &gt; const &amp;chords, std::function&lt; void(std::string)&gt; onChord) override</td></tr>
-<tr class="memdesc:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">keys</span>, the chords joined by commas, and keeps the chords and the handler for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c" title="Presses a keyboard chord with focus on a widget.">RecordingBackend::press</a></span>.  <br /></td></tr>
+<tr class="memdesc:a872fcbbddffe07279c5594bc00feec57 pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records property <span class="tt">keys</span>, the chords joined by commas, and keeps the chords and the handler for <span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a0e5202a23d6de2864bb721d6c7c1811c" title="Presses a keyboard chord with focus on a widget, in the key order every backend follows.">RecordingBackend::press</a></span>.  <br /></td></tr>
 <tr class="memitem:adca561be0edc99b3359b9cf29af4784f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_adca561be0edc99b3359b9cf29af4784f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adca561be0edc99b3359b9cf29af4784f">focus</a> () override</td></tr>
 <tr class="memdesc:adca561be0edc99b3359b9cf29af4784f pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves the backend's recorded focus here, and logs <span class="tt"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#adca561be0edc99b3359b9cf29af4784f">focus</a></span>.  <br /></td></tr>
 <tr class="memitem:aedc24008c529e4bd0b6b71468525b08e pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf" id="r_aedc24008c529e4bd0b6b71468525b08e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html#aedc24008c529e4bd0b6b71468525b08e">setOnHover</a> (std::function&lt; void()&gt; onHover) override</td></tr>
@@ -208,9 +222,9 @@ Additional Inherited Members</h2></td></tr>
 <tr class="memdesc:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's id.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html" title="Children stacked along one axis, fixed at creation.">StackWidget</a></span>, of kind <span class="tt"><a class="el" href="../../d1/d05/structmorph_1_1ui_1_1Column.html" title="Children stacked top to bottom.">Column</a></span> or <span class="tt"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a></span>: properties <span class="tt">gap</span>, <span class="tt">align</span>, <span class="tt">justify</span>. </p>
+<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html" title="Children stacked along one axis, fixed at creation.">StackWidget</a></span>, of kind <span class="tt"><a class="el" href="../../d1/d05/structmorph_1_1ui_1_1Column.html" title="Children stacked top to bottom.">Column</a></span> or <span class="tt"><a class="el" href="../../d7/da8/structmorph_1_1ui_1_1Row.html" title="Children laid out left to right.">Row</a></span>: properties <span class="tt">gap</span>, <span class="tt">align</span>, <span class="tt">justify</span>, <span class="tt">wrap</span>, <span class="tt">divided</span>, <span class="tt">padding</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01048">1048</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01257">1257</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a65aeddc7948972c33b643912684f3f5a" name="a65aeddc7948972c33b643912684f3f5a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a65aeddc7948972c33b643912684f3f5a">&#9670;&#160;</a></span>setGap()</h2>
@@ -245,7 +259,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html#adcfeff7a2042c634ddb1c929d77e5e12">morph::ui::StackWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01051">1051</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01260">1260</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -282,7 +296,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html#aaf8d93e99485a79df927a316123a494c">morph::ui::StackWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01052">1052</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01261">1261</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -319,7 +333,260 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html#a4181fe206ace369853214060b37285dc">morph::ui::StackWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01053">1053</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01262">1262</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1485d4bec4d6395c9b79c99ae157f73e" name="a1485d4bec4d6395c9b79c99ae157f73e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1485d4bec4d6395c9b79c99ae157f73e">&#9670;&#160;</a></span>setWrap()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeStack::setWrap </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>wrap</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Makes a horizontal stack wrap: its children fill lines in order, and a child that does not fit after the ones already on a line starts the next. The mount calls it once, before the stack's first child, and only for a stack that wraps. </p>
+<p>Each shown child has a basis along the row: a content child its natural width, a fixed child its amount, and a stretch child its minimum width, else its natural width; each clamped into the child's bounds and at most the row's width. A line always holds one child; a child whose basis is 0 takes no gap and never starts a line. On a line, the stretch children share the spare width by weight, each stopping at its maximum; a line with none places it by the stack's <span class="tt">justify</span>. A line is as tall as its tallest child, the stack's <span class="tt">align</span> places a child down its line, and lines are <span class="tt">gap</span> apart, the step children are apart along a line. A child wider than the stack sits alone on its line at the stack's width. The stack's natural width is its children's on one line, and its natural height the height of its lines at the width it is given. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">wrap</td><td>Always true: a stack that does not wrap is never told. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html#a07774c2903338bac4908255cc05c95d9">morph::ui::StackWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01263">1263</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9185fce7ecac874f5d21efaba3a79eaf" name="a9185fce7ecac874f5d21efaba3a79eaf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9185fce7ecac874f5d21efaba3a79eaf">&#9670;&#160;</a></span>setDivided()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeStack::setDivided </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>divided</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Draws a 1 px rule in the theme's divider colour between each two shown children of a stack that does not wrap, centred in the gap: horizontal in a vertical stack, vertical in a row. The rule takes 1 px of its own, so a gap of 0 still separates the children. The mount calls it once, before the stack's first child, and only for a stack that is divided. A backend that cannot spare a row for a rule draws none: the terminal's lines are already apart. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">divided</td><td>Always true: a stack that is not divided is never told. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html#a01f199afda509da588b662fb385d3a53">morph::ui::StackWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01264">1264</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8553b6fe0a542594d6606f4bc0aa66b5" name="a8553b6fe0a542594d6606f4bc0aa66b5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8553b6fe0a542594d6606f4bc0aa66b5">&#9670;&#160;</a></span>setPadding()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeStack::setPadding </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d7/d65/structmorph_1_1ui_1_1Padding.html">Padding</a></td>          <td class="paramname"><span class="paramname"><em>padding</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Insets the children from the stack's edges: the vertical step above and below, the horizontal step at the sides. The mount calls it once, before the stack's first child, and only for a stack that has padding. The stack's natural size includes the inset. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">padding</td><td>The steps, each 0 to <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#a73af4ee1334aa6fcc401bed2eb6fba3f" title="The largest spacing step: a gap or padding names a step from 0 (none) to this, which each backend map...">kMaxSpacingStep</a></span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html#a02c87fd802f15a5679e6e316b187e1da">morph::ui::StackWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01265">1265</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a02b8478c55ba619f523a41d34904fa2d" name="a02b8478c55ba619f523a41d34904fa2d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a02b8478c55ba619f523a41d34904fa2d">&#9670;&#160;</a></span>setSelected()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeStack::setSelected </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>selected</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Marks the stack as the chosen entry of a list, or not: while selected it draws the accent's 3 px bar at its leading edge, down its whole height, over its surface and under its children, inside its leading padding. The mount calls it for a stack that gives the key, at mount (possibly with false) and on every change; that first call is what tells a backend the stack can be selected, so one that reserves room for the bar reserves it from then on whether or not the stack is selected. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">selected</td><td>Whether the stack is the chosen entry. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html#ad90466322d76119cabb8eb77f0a538a2">morph::ui::StackWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01270">1270</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6fe3ac46746363afbde37b789165348f" name="a6fe3ac46746363afbde37b789165348f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6fe3ac46746363afbde37b789165348f">&#9670;&#160;</a></span>setActionRow()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeStack::setActionRow </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">actionRow</span> as true. </p>
+
+<p>Implements <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html#a0c85cd56ac2adcb97f7d4821e757267d">morph::ui::StackWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01272">1272</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae99038cd7800b79dee501927f4b669e8" name="ae99038cd7800b79dee501927f4b669e8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae99038cd7800b79dee501927f4b669e8">&#9670;&#160;</a></span>setPassesBleed()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeStack::setPassesBleed </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>passes</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Makes the stack transparent to <span class="tt">bleed</span>: a child of it that bleeds reaches past the padding of the stack's own container (a panel's padding, a tab page's), not past the stack's, as if the child were that container's. The mount calls it once, before the stack's first child, and only with true, for the column the interpreter inserts around a list of nodes. A table's row view ignores it. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">passes</td><td>Always true: a stack that is not a holder is never told. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html#a8c644569bf43081c1727d7d17c70d54d">morph::ui::StackWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01273">1273</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a567c387a0982d4be26f7010f0e3bc96a" name="a567c387a0982d4be26f7010f0e3bc96a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a567c387a0982d4be26f7010f0e3bc96a">&#9670;&#160;</a></span>setHeadBar()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeStack::setHeadBar </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>headBar</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Records property <span class="tt">headBar</span>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">headBar</td><td>Whether the stack is the expanded head bar. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../d4/d07/classmorph_1_1ui_1_1StackWidget.html#ab7b03201b46ff0bd0ecc72535f1ae1e0">morph::ui::StackWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01276">1276</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

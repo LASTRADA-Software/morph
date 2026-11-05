@@ -131,6 +131,7 @@ Public Types</h2></td></tr>
 <tr class="memitem:af1925b095bf46a1b60325c973d4031d4" id="r_af1925b095bf46a1b60325c973d4031d4"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#af1925b095bf46a1b60325c973d4031d4">Kind</a> : std::uint8_t { <a class="el" href="#af1925b095bf46a1b60325c973d4031d4af15c1cae7882448b3fb0404682e17e61">Content</a>
 , <a class="el" href="#af1925b095bf46a1b60325c973d4031d4a4457d440870ad6d42bab9082d9bf9b61">Fixed</a>
 , <a class="el" href="#af1925b095bf46a1b60325c973d4031d4afbb09a82eafab60150d0996e8fe46560">Stretch</a>
+, <a class="el" href="#af1925b095bf46a1b60325c973d4031d4aadaaee4b22041c27198d410c68d952c9">Percent</a>
  }</td></tr>
 <tr class="memdesc:af1925b095bf46a1b60325c973d4031d4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The sizing rule.  <a href="#af1925b095bf46a1b60325c973d4031d4">More...</a><br /></td></tr>
 </table><table class="memberdecls">
@@ -147,18 +148,20 @@ Static Public Member Functions</h2></td></tr>
 <tr class="memdesc:ab7dfc1c498e4926043f9e1358bcbb6af"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fixed size.  <br /></td></tr>
 <tr class="memitem:a7f2360b3d99583d9da6f9c07b93cac97" id="r_a7f2360b3d99583d9da6f9c07b93cac97"><td class="memItemLeft">static constexpr <a class="el" href="../../d1/d89/structmorph_1_1ui_1_1Sizing.html">Sizing</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7f2360b3d99583d9da6f9c07b93cac97">stretch</a> (int weight=1) noexcept</td></tr>
 <tr class="memdesc:a7f2360b3d99583d9da6f9c07b93cac97"><td class="mdescLeft">&#160;</td><td class="mdescRight">A share of the leftover space.  <br /></td></tr>
+<tr class="memitem:a04eda71d2124fa53fd5540a09086b2e5" id="r_a04eda71d2124fa53fd5540a09086b2e5"><td class="memItemLeft">static constexpr <a class="el" href="../../d1/d89/structmorph_1_1ui_1_1Sizing.html">Sizing</a>&#160;</td><td class="memItemRight"><a class="el" href="#a04eda71d2124fa53fd5540a09086b2e5">percent</a> (int percent) noexcept</td></tr>
+<tr class="memdesc:a04eda71d2124fa53fd5540a09086b2e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">A share of the container's width, which a node's bounds clamp as they do every sizing: a pane is usually a percent with a <span class="tt">maxWidth</span>. Only a width along a row that does not wrap and a horizontal splitter's pane take one; the mount refuses it anywhere else.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:acb6fba0b67c3ef410b2ddfa1d98796d1" id="r_acb6fba0b67c3ef410b2ddfa1d98796d1"><td class="memItemLeft"><a class="el" href="#af1925b095bf46a1b60325c973d4031d4">Kind</a>&#160;</td><td class="memItemRight"><a class="el" href="#acb6fba0b67c3ef410b2ddfa1d98796d1">kind</a> = <a class="el" href="#af1925b095bf46a1b60325c973d4031d4af15c1cae7882448b3fb0404682e17e61">Kind::Content</a></td></tr>
 <tr class="memdesc:acb6fba0b67c3ef410b2ddfa1d98796d1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The rule.  <br /></td></tr>
 <tr class="memitem:add52f643b46afc69e09b82bd0be6e810" id="r_add52f643b46afc69e09b82bd0be6e810"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#add52f643b46afc69e09b82bd0be6e810">amount</a> = 0</td></tr>
-<tr class="memdesc:add52f643b46afc69e09b82bd0be6e810"><td class="mdescLeft">&#160;</td><td class="mdescRight">Units for <span class="tt">Fixed</span>, weight for <span class="tt">Stretch</span>, unused for <span class="tt">Content</span>.  <br /></td></tr>
+<tr class="memdesc:add52f643b46afc69e09b82bd0be6e810"><td class="mdescLeft">&#160;</td><td class="mdescRight">Units for <span class="tt">Fixed</span>, weight for <span class="tt">Stretch</span>, a share from 1 to 100 for <span class="tt">Percent</span>, unused for <span class="tt">Content</span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>How much space a widget asks for along one dimension, in backend units (a character cell on the TUI). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00270">270</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00370">370</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Member Enumeration Documentation</h2>
 <a id="af1925b095bf46a1b60325c973d4031d4" name="af1925b095bf46a1b60325c973d4031d4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af1925b095bf46a1b60325c973d4031d4">&#9670;&#160;</a></span>Kind</h2>
@@ -184,13 +187,15 @@ Public Attributes</h2></td></tr>
 <table class="fieldtable">
 <tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="af1925b095bf46a1b60325c973d4031d4af15c1cae7882448b3fb0404682e17e61" name="af1925b095bf46a1b60325c973d4031d4af15c1cae7882448b3fb0404682e17e61"></a>Content&#160;</td><td class="fielddoc"><p>As much as the content needs. </p>
 </td></tr>
-<tr><td class="fieldname"><a id="af1925b095bf46a1b60325c973d4031d4a4457d440870ad6d42bab9082d9bf9b61" name="af1925b095bf46a1b60325c973d4031d4a4457d440870ad6d42bab9082d9bf9b61"></a>Fixed&#160;</td><td class="fielddoc"><p>Exactly <span class="tt"><a class="el" href="#add52f643b46afc69e09b82bd0be6e810" title="Units for Fixed, weight for Stretch, unused for Content.">amount</a></span> units. </p>
+<tr><td class="fieldname"><a id="af1925b095bf46a1b60325c973d4031d4a4457d440870ad6d42bab9082d9bf9b61" name="af1925b095bf46a1b60325c973d4031d4a4457d440870ad6d42bab9082d9bf9b61"></a>Fixed&#160;</td><td class="fielddoc"><p>Exactly <span class="tt"><a class="el" href="#add52f643b46afc69e09b82bd0be6e810" title="Units for Fixed, weight for Stretch, a share from 1 to 100 for Percent, unused for Content.">amount</a></span> units. </p>
 </td></tr>
-<tr><td class="fieldname"><a id="af1925b095bf46a1b60325c973d4031d4afbb09a82eafab60150d0996e8fe46560" name="af1925b095bf46a1b60325c973d4031d4afbb09a82eafab60150d0996e8fe46560"></a>Stretch&#160;</td><td class="fielddoc"><p>A share of the leftover space, weighted by <span class="tt"><a class="el" href="#add52f643b46afc69e09b82bd0be6e810" title="Units for Fixed, weight for Stretch, unused for Content.">amount</a></span>. </p>
+<tr><td class="fieldname"><a id="af1925b095bf46a1b60325c973d4031d4afbb09a82eafab60150d0996e8fe46560" name="af1925b095bf46a1b60325c973d4031d4afbb09a82eafab60150d0996e8fe46560"></a>Stretch&#160;</td><td class="fielddoc"><p>A share of the leftover space, weighted by <span class="tt"><a class="el" href="#add52f643b46afc69e09b82bd0be6e810" title="Units for Fixed, weight for Stretch, a share from 1 to 100 for Percent, unused for Content.">amount</a></span>. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="af1925b095bf46a1b60325c973d4031d4aadaaee4b22041c27198d410c68d952c9" name="af1925b095bf46a1b60325c973d4031d4aadaaee4b22041c27198d410c68d952c9"></a>Percent&#160;</td><td class="fielddoc"><p><span class="tt"><a class="el" href="#add52f643b46afc69e09b82bd0be6e810" title="Units for Fixed, weight for Stretch, a share from 1 to 100 for Percent, unused for Content.">amount</a></span> percent of the container's width inside its padding; a width along a row or for a horizontal splitter's pane only. Gaps and a splitter's handles are not taken off first. </p>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00272">272</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00372">372</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -221,7 +226,7 @@ Public Attributes</h2></td></tr>
 <p>Size to the content. </p>
 <dl class="section return"><dt>Returns</dt><dd>The sizing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00284">284</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00386">386</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -257,7 +262,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The sizing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00391">391</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -293,7 +298,43 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The sizing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00396">396</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a04eda71d2124fa53fd5540a09086b2e5" name="a04eda71d2124fa53fd5540a09086b2e5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a04eda71d2124fa53fd5540a09086b2e5">&#9670;&#160;</a></span>percent()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">constexpr <a class="el" href="../../d1/d89/structmorph_1_1ui_1_1Sizing.html">Sizing</a> morph::ui::Sizing::percent </td>
+          <td>(</td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>percent</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A share of the container's width, which a node's bounds clamp as they do every sizing: a pane is usually a percent with a <span class="tt">maxWidth</span>. Only a width along a row that does not wrap and a horizontal splitter's pane take one; the mount refuses it anywhere else. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">percent</td><td>The share, 1 to 100. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The sizing. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00405">405</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -340,7 +381,7 @@ Public Attributes</h2></td></tr>
 
 <p>The rule. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00380">380</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -356,9 +397,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Units for <span class="tt">Fixed</span>, weight for <span class="tt">Stretch</span>, unused for <span class="tt">Content</span>. </p>
+<p>Units for <span class="tt">Fixed</span>, weight for <span class="tt">Stretch</span>, a share from 1 to 100 for <span class="tt">Percent</span>, unused for <span class="tt">Content</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l00382">382</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
