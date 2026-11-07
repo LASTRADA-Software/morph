@@ -10,6 +10,7 @@ the push path every other change uses. The design is in
 - [Protocol](#protocol)
 - [Tools](#tools)
 - [Providers](#providers)
+- [The turn loop](#the-turn-loop)
 
 ## Protocol
 
@@ -51,3 +52,42 @@ was cancelled, possibly before `stream` returns.
 
 A model's output is untrusted input: a `ToolCall` may name no tool, and its arguments may not be an object. Nothing
 outside an implementation names a provider. `testing::FakeChatProvider` is a scripted one for tests.
+
+## The turn loop
+
+`service.hpp`. `ChatService` is an `IEnvelopeService`, built with a provider, a worker executor, the served bundle and
+`ChatLimits`. With no provider it serves no kind, so a client's probe finds no chat.
+
+`handle` runs on the server strand and must not block, and a model call takes seconds. So `ui-chat-turn` checks the gate
+and the limits, replies at once, and posts the work to the worker. Each turn then does one thing at a time:
+
+1. Read `ui-catalog` and each bound model type's `schemas`, under the turn's session. Permissions are read fresh each
+   turn, and a screen the principal may not open fails the turn.
+2. Build the tools, and call the provider with the system prompt and the screen's context.
+3. Run each tool call, and feed the results back, until a response has no calls, a limit is reached, or the turn stops.
+
+**A tool call is an unscoped execute.** It goes through `RemoteServer::executeWithOrigin` with the client's session and
+the instance id from the context.
+
+- `dispatchExecute` checks the session and the instance's owner rather than the connection, so every check applies.
+- Fan-out reaches the GUI through the instance's holding scopes and the matching principal.
+- The connection's principal baseline is left alone, so a GUI signing in again during a turn does not lose its watches.
+- The assistant's call ids cannot collide with the GUI's.
+- An unscoped execute is not cancellable, so cancelling a turn stops it between actions.
+
+**A gate of its own.** Every chat kind passes `authorize(session, "ui", "chat")`.
+
+**A model's output is untrusted.** A call naming no tool on this screen, or whose arguments are not a JSON object, comes
+back to the model as a tool error and counts against `maxToolCallsPerTurn`. Nothing a provider returns can fault the
+worker. Destructive actions are allowed, and a record's contents reach the model, so that cap is also what bounds the
+harm one steered turn can do.
+
+**Stopping.** `ui-chat-cancel`, `ui-chat-end`, the connection closing and the service's destruction each stop a turn and
+cancel its provider call. A callback arriving later finds the turn stopped and does nothing.
+
+**Journaling.** A tool call's entry carries the origin `assistant` and the turn's text. An action that changes data but
+registered `Loggable::No` is warned about at the first service dispatch, and its tool result says it was not journaled.
+It is not refused, because working-copy edits legitimately opt out and the later save is the journaled change.
+
+Finished turns are kept, a few per principal, so a client that lost the last event can read how one ended. A principal
+reading a turn that is not theirs gets the same empty answer as for one that does not exist.

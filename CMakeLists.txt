@@ -533,6 +533,7 @@ target_sources(morph
         include/morph/ui/chat/protocol.hpp
         include/morph/ui/chat/provider.hpp
         include/morph/ui/chat/screen_tools.hpp
+        include/morph/ui/chat/service.hpp
         include/morph/ui/preferences.hpp
         include/morph/ui/preference_sync.hpp
         include/morph/ui/host_vocabulary.hpp
