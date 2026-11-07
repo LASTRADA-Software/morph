@@ -356,7 +356,7 @@ struct Rig {
             .text = "",
             .calls = {chat::ToolCall{
                 .id = "1", .name = "notes__Chat_Add", .argumentsJson = R"({"text":")" + text + R"("})"}}});
-        fake->script(chat::Response{.text = "done", .calls = {}});
+        fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
     }
 };
 
@@ -386,7 +386,7 @@ TEST_CASE("the_provider_is_given_the_screens_tools_and_context", "[chat][service
     Rig rig;
     auto const cid = rig.gui();
     auto const id = rig.instance(cid);
-    rig.fake->script(chat::Response{.text = "hello", .calls = {}});
+    rig.fake->script(chat::Response{.text = "hello", .calls = {}, .opaque = {}});
     auto request = Rig::turnOn(id, "hi there");
     request.paramsJson = R"({"sampleId":42})";
     request.models.front().primary = "the-primary";
@@ -417,7 +417,7 @@ TEST_CASE("removing_the_effect_stops_the_gui_event", "[chat][service]") {
     rig.fake->script(chat::Response{
         .text = "",
         .calls = {chat::ToolCall{.id = "1", .name = "notes__Chat_Silent", .argumentsJson = R"({"text":"x"})"}}});
-    rig.fake->script(chat::Response{.text = "done", .calls = {}});
+    rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
     auto const state = rig.finished(rig.start(Rig::turnOn(id, "note it"), cid), cid);
     REQUIRE(state.status == chat::TurnStatus::Done);
     REQUIRE(state.steps.at(0).ok);
@@ -449,7 +449,7 @@ TEST_CASE("a_destructive_action_takes_effect", "[chat][service]") {
     }
     rig.fake->script(chat::Response{
         .text = "", .calls = {chat::ToolCall{.id = "1", .name = "notes__Chat_Wipe", .argumentsJson = "{}"}}});
-    rig.fake->script(chat::Response{.text = "wiped", .calls = {}});
+    rig.fake->script(chat::Response{.text = "wiped", .calls = {}, .opaque = {}});
     auto const state = rig.finished(rig.start(Rig::turnOn(id, "delete everything"), cid), cid);
     REQUIRE(state.status == chat::TurnStatus::Done);
     CHECK(noteCount() == 0);
@@ -467,7 +467,7 @@ TEST_CASE("a_refused_action_is_reported_and_changes_nothing", "[chat][service]")
     // `visitor` may not wipe, so the screen offers no such tool: a model that calls it anyway gets a tool error.
     rig.fake->script(chat::Response{
         .text = "", .calls = {chat::ToolCall{.id = "1", .name = "notes__Chat_Wipe", .argumentsJson = "{}"}}});
-    rig.fake->script(chat::Response{.text = "could not", .calls = {}});
+    rig.fake->script(chat::Response{.text = "could not", .calls = {}, .opaque = {}});
     {
         std::scoped_lock const lock{chat_service_test::store().mutex};
         chat_service_test::store().notes.push_back({.id = 1, .text = "old"});
@@ -525,7 +525,7 @@ TEST_CASE("another_principal_cannot_read_a_turn", "[chat][service]") {
     Rig rig;
     auto const cid = rig.gui();
     auto const id = rig.instance(cid);
-    rig.fake->script(chat::Response{.text = "private reply", .calls = {}});
+    rig.fake->script(chat::Response{.text = "private reply", .calls = {}, .opaque = {}});
     auto const turnId = rig.start(Rig::turnOn(id, "hi"), cid);
     static_cast<void>(rig.finished(turnId, cid));
     auto const other = rig.gui("bob");
@@ -558,7 +558,7 @@ TEST_CASE("a_malformed_tool_call_returns_as_a_tool_error_and_counts", "[chat][se
         .calls = {chat::ToolCall{.id = "1", .name = "notes__Chat_Add", .argumentsJson = "[1]"},
                   chat::ToolCall{.id = "2", .name = "notes__Chat_Add", .argumentsJson = "not json"},
                   chat::ToolCall{.id = "3", .name = "no_such_tool", .argumentsJson = "{}"}}});
-    rig.fake->script(chat::Response{.text = "sorry", .calls = {}});
+    rig.fake->script(chat::Response{.text = "sorry", .calls = {}, .opaque = {}});
     auto const state = rig.finished(rig.start(Rig::turnOn(id, "add"), cid), cid);
     CHECK(state.status == chat::TurnStatus::Done);
     REQUIRE(state.steps.size() == 3);
@@ -587,7 +587,7 @@ TEST_CASE("cancelling_a_turn_cancels_its_provider_call", "[chat][service]") {
     auto const cid = rig.gui();
     auto const id = rig.instance(cid);
     rig.fake->hold(true);
-    rig.fake->script(chat::Response{.text = "too late", .calls = {}});
+    rig.fake->script(chat::Response{.text = "too late", .calls = {}, .opaque = {}});
     auto const turnId = rig.start(Rig::turnOn(id, "go"), cid);
     REQUIRE(waitFor([&] { return rig.fake->calls() == 1; }));
     wire::Envelope cancel;
@@ -606,7 +606,7 @@ TEST_CASE("closing_the_connection_stops_its_turn", "[chat][service]") {
     auto const cid = rig.gui();
     auto const id = rig.instance(cid);
     rig.fake->hold(true);
-    rig.fake->script(chat::Response{.text = "too late", .calls = {}});
+    rig.fake->script(chat::Response{.text = "too late", .calls = {}, .opaque = {}});
     static_cast<void>(rig.start(Rig::turnOn(id, "go"), cid));
     REQUIRE(waitFor([&] { return rig.fake->calls() == 1; }));
     rig.server->closeConnection(cid);
@@ -656,7 +656,7 @@ TEST_CASE("text_over_the_limit_is_refused_and_odd_text_survives", "[chat][servic
     CHECK(rig.fake->calls() == 0);
 
     std::string const odd = "line\none \"quoted\" \x01 caf\xC3\xA9";
-    rig.fake->script(chat::Response{.text = "ok", .calls = {}});
+    rig.fake->script(chat::Response{.text = "ok", .calls = {}, .opaque = {}});
     static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, odd), cid), cid));
     CHECK(rig.fake->requests().at(0).messages.at(0).text == odd);
 }
@@ -682,7 +682,7 @@ TEST_CASE("a_dropped_final_event_is_recovered_by_reading_state", "[chat][service
     auto const cid = rig.gui();
     auto const id = rig.instance(cid);
     rig.wire_.backlog = morph::backend::kEventBacklogHigh + 1;
-    rig.fake->script(chat::Response{.text = "the answer", .calls = {}});
+    rig.fake->script(chat::Response{.text = "the answer", .calls = {}, .opaque = {}});
     auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
     CHECK(state.status == chat::TurnStatus::Done);
     CHECK(state.text == "the answer");
@@ -748,7 +748,7 @@ TEST_CASE("the_opt_out_warning_fires_and_the_tool_result_says_so", "[chat][servi
         rig.fake->script(chat::Response{
             .text = "",
             .calls = {chat::ToolCall{.id = "1", .name = "notes__Chat_Quiet", .argumentsJson = R"({"text":"x"})"}}});
-        rig.fake->script(chat::Response{.text = "done", .calls = {}});
+        rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
         auto const state = rig.finished(rig.start(Rig::turnOn(id, "note"), cid), cid);
         REQUIRE(state.steps.size() == 1);
         CHECK(state.steps.at(0).ok);
@@ -776,10 +776,10 @@ TEST_CASE("returning_to_a_record_continues_its_conversation", "[chat][conversati
     rig.scriptAdd("first");
     static_cast<void>(rig.finished(rig.start(onRecord("1", "add first"), cid), cid));
     std::size_t const asked = rig.fake->calls();
-    rig.fake->script(chat::Response{.text = "elsewhere", .calls = {}});
+    rig.fake->script(chat::Response{.text = "elsewhere", .calls = {}, .opaque = {}});
     static_cast<void>(rig.finished(rig.start(onRecord("2", "on another"), cid), cid));
     CHECK(rig.fake->requests().at(asked).messages.size() == 1);
-    rig.fake->script(chat::Response{.text = "again", .calls = {}});
+    rig.fake->script(chat::Response{.text = "again", .calls = {}, .opaque = {}});
     static_cast<void>(rig.finished(rig.start(onRecord("1", "and now"), cid), cid));
     // The first turn's words, its call and result, and its reply, then these words.
     auto const messages = rig.fake->requests().at(asked + 1).messages;
@@ -796,7 +796,7 @@ TEST_CASE("a_cancelled_turn_leaves_no_half_finished_round", "[chat][conversation
     auto const cid = rig.gui();
     auto const id = rig.instance(cid);
     rig.fake->hold(true);
-    rig.fake->script(chat::Response{.text = "late", .calls = {}});
+    rig.fake->script(chat::Response{.text = "late", .calls = {}, .opaque = {}});
     auto const turnId = rig.start(Rig::turnOn(id, "first"), cid);
     REQUIRE(waitFor([&] { return rig.fake->calls() == 1; }));
     wire::Envelope cancel;
@@ -804,7 +804,7 @@ TEST_CASE("a_cancelled_turn_leaves_no_half_finished_round", "[chat][conversation
     REQUIRE(rig.call(std::move(cancel), cid).kind == "ok");
     static_cast<void>(rig.finished(turnId, cid));
     rig.fake->release();
-    rig.fake->script(chat::Response{.text = "ok", .calls = {}});
+    rig.fake->script(chat::Response{.text = "ok", .calls = {}, .opaque = {}});
     static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "second"), cid), cid));
     auto const messages = rig.fake->requests().at(1).messages;
     REQUIRE(messages.size() == 2);
@@ -816,10 +816,10 @@ TEST_CASE("end_of_chat_stops_the_turn_and_ends_the_conversations", "[chat][conve
     Rig rig;
     auto const cid = rig.gui();
     auto const id = rig.instance(cid);
-    rig.fake->script(chat::Response{.text = "hello", .calls = {}});
+    rig.fake->script(chat::Response{.text = "hello", .calls = {}, .opaque = {}});
     static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "first"), cid), cid));
     rig.fake->hold(true);
-    rig.fake->script(chat::Response{.text = "late", .calls = {}});
+    rig.fake->script(chat::Response{.text = "late", .calls = {}, .opaque = {}});
     auto const running = rig.start(Rig::turnOn(id, "second"), cid);
     REQUIRE(waitFor([&] { return rig.fake->calls() == 2; }));
     wire::Envelope end;
@@ -828,7 +828,7 @@ TEST_CASE("end_of_chat_stops_the_turn_and_ends_the_conversations", "[chat][conve
     CHECK(rig.fake->cancelled() == 1);
     CHECK(rig.finished(running, cid).status == chat::TurnStatus::Cancelled);
     rig.fake->release();
-    rig.fake->script(chat::Response{.text = "fresh", .calls = {}});
+    rig.fake->script(chat::Response{.text = "fresh", .calls = {}, .opaque = {}});
     static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "third"), cid), cid));
     CHECK(rig.fake->requests().at(2).messages.size() == 1);
 }
@@ -839,7 +839,7 @@ TEST_CASE("end_of_chat_leaves_another_connections_turn_running", "[chat][convers
     auto const otherInstance = rig.instance(other);
     auto const cid = rig.gui();
     rig.fake->hold(true);
-    rig.fake->script(chat::Response{.text = "still here", .calls = {}});
+    rig.fake->script(chat::Response{.text = "still here", .calls = {}, .opaque = {}});
     auto const elsewhere = rig.start(Rig::turnOn(otherInstance, "go"), other);
     REQUIRE(waitFor([&] { return rig.fake->calls() == 1; }));
     wire::Envelope end;
@@ -862,7 +862,7 @@ TEST_CASE("the_turn_caps_hold", "[chat][conversation]") {
     auto const three = rig.gui();
     auto const threeInstance = rig.instance(three);
     rig.fake->hold(true);
-    rig.fake->repeat(chat::Response{.text = "held", .calls = {}});
+    rig.fake->repeat(chat::Response{.text = "held", .calls = {}, .opaque = {}});
     auto const first = rig.start(Rig::turnOn(oneInstance, "go"), one);
     CHECK(rig.startRaw(Rig::turnOn(oneInstance, "again"), one).kind == "err");
     auto const second = rig.start(Rig::turnOn(twoInstance, "go"), two);

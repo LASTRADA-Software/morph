@@ -17,21 +17,25 @@ namespace {
 using namespace std::chrono_literals;
 using Clock = std::chrono::steady_clock;
 
-chat::Message said(std::string text) { return {.role = "user", .text = std::move(text), .calls = {}, .results = {}}; }
+chat::Message said(std::string text) {
+    return {.role = "user", .text = std::move(text), .calls = {}, .results = {}, .opaque = {}};
+}
 chat::Message replied(std::string text) {
-    return {.role = "assistant", .text = std::move(text), .calls = {}, .results = {}};
+    return {.role = "assistant", .text = std::move(text), .calls = {}, .results = {}, .opaque = "signed"};
 }
 chat::Message calling() {
     return {.role = "assistant",
             .text = {},
             .calls = {chat::ToolCall{.id = "1", .name = "tool", .argumentsJson = "{}"}},
-            .results = {}};
+            .results = {},
+            .opaque = {}};
 }
 chat::Message results() {
     return {.role = "user",
             .text = {},
             .calls = {},
-            .results = {chat::ToolResult{.callId = "1", .text = "ok", .isError = false}}};
+            .results = {chat::ToolResult{.callId = "1", .text = "ok", .isError = false}},
+            .opaque = {}};
 }
 
 chat::ChatLimits limits() { return {}; }
@@ -134,4 +138,23 @@ TEST_CASE("the_per_principal_conversation_cap_evicts_the_oldest", "[chat][conver
     CHECK(store.history({.principal = "alice", .screenId = "s", .identity = "1"}, now + 4min).size() == 1);
     CHECK(store.history({.principal = "alice", .screenId = "s", .identity = "3"}, now + 4min).size() == 1);
     CHECK(store.history({.principal = "bob", .screenId = "s", .identity = "4"}, now + 4min).size() == 1);
+}
+
+// Mutation: keep a provider's opaque parts through a trim.
+TEST_CASE("trimming_clears_what_only_the_untouched_conversation_could_replay", "[chat][conversation]") {
+    auto configured = limits();
+    configured.maxMessagesPerConversation = 3;
+    chat::ConversationStore store{configured};
+    auto const now = Clock::now();
+    chat::ConversationKey const key{.principal = "alice", .screenId = "s", .identity = "1"};
+    store.append(key, said("one"), now);
+    store.append(key, replied("a"), now);
+    CHECK(store.history(key, now).back().opaque == "signed");
+    store.append(key, said("two"), now);
+    store.append(key, replied("b"), now);
+    auto const history = store.history(key, now);
+    REQUIRE_FALSE(history.empty());
+    for (chat::Message const& message : history) {
+        CHECK(message.opaque.empty());
+    }
 }

@@ -511,7 +511,7 @@ private:
             turn->tools = screenTools(*document, turn->request.models, permitted, schemas,
                                       catalog.actions ? &*catalog.actions : nullptr);
             turn->system = systemText(*self, turn->request);
-            Message said{.role = "user", .text = turn->request.text, .calls = {}, .results = {}};
+            Message said{.role = "user", .text = turn->request.text, .calls = {}, .results = {}, .opaque = {}};
             {
                 std::scoped_lock const lock{self->mutex};
                 turn->messages = self->conversations.history(keyOf(*turn), self->now());
@@ -596,7 +596,11 @@ private:
                 emit(*self, *turn, "text", outcome->text);
             }
             turn->messages.push_back(
-                Message{.role = "assistant", .text = outcome->text, .calls = outcome->calls, .results = {}});
+                Message{.role = "assistant",
+                        .text = outcome->text,
+                        .calls = outcome->calls,
+                        .results = {},
+                        .opaque = std::move(outcome->opaque)});
             if (outcome->calls.empty()) {
                 remember(*self, *turn, {turn->messages.back()});
                 finish(self, turn, TurnStatus::Done);
@@ -611,7 +615,7 @@ private:
             if (turn->pending.empty()) {
                 Message const asked = turn->messages.back();
                 turn->messages.push_back(
-                    Message{.role = "user", .text = {}, .calls = {}, .results = std::move(turn->results)});
+                    Message{.role = "user", .text = {}, .calls = {}, .results = std::move(turn->results), .opaque = {}});
                 turn->results.clear();
                 remember(*self, *turn, {asked, turn->messages.back()});
                 callProvider(self, turn);

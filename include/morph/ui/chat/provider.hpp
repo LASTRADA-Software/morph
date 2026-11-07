@@ -55,6 +55,9 @@ struct Message {
     std::vector<ToolCall> calls;
     /// @brief The results a user message reports.
     std::vector<ToolResult> results;
+    /// @brief What a provider said it must get back unchanged for an assistant message, from `Response::opaque`; empty
+    ///        once history around it has been edited, since it is valid only in the conversation that produced it.
+    std::string opaque;
 };
 
 /// @brief What one provider call is asked.
@@ -73,6 +76,9 @@ struct Response {
     std::string text;
     /// @brief The tools it wants called; none ends the turn.
     std::vector<ToolCall> calls;
+    /// @brief Whatever this provider needs replayed unchanged for this message, such as a model's reasoning signatures.
+    ///        Only the provider that wrote it reads it.
+    std::string opaque;
 };
 
 /// @brief An outstanding provider call.

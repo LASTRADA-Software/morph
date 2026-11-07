@@ -83,7 +83,7 @@ TEST_CASE("a_malformed_turn_body_is_refused_not_thrown", "[chat][protocol]") {
 
 TEST_CASE("the_fake_provider_plays_its_script_then_fails", "[chat][protocol]") {
     chat::testing::FakeChatProvider fake;
-    fake.script(chat::Response{.text = "first", .calls = {}});
+    fake.script(chat::Response{.text = "first", .calls = {}, .opaque = {}});
     fake.script(chat::Response{.text = "", .calls = {chat::ToolCall{.id = "1", .name = "a", .argumentsJson = "{}"}}});
 
     Delivered first;
@@ -109,7 +109,7 @@ TEST_CASE("the_fake_provider_plays_its_script_then_fails", "[chat][protocol]") {
 
 TEST_CASE("a_held_fake_call_reports_its_cancel", "[chat][protocol]") {
     chat::testing::FakeChatProvider fake;
-    fake.script(chat::Response{.text = "late", .calls = {}});
+    fake.script(chat::Response{.text = "late", .calls = {}, .opaque = {}});
     fake.hold(true);
 
     Delivered held;
@@ -122,7 +122,7 @@ TEST_CASE("a_held_fake_call_reports_its_cancel", "[chat][protocol]") {
 
     Delivered released;
     fake.hold(true);
-    fake.script(chat::Response{.text = "now", .calls = {}});
+    fake.script(chat::Response{.text = "now", .calls = {}, .opaque = {}});
     static_cast<void>(fake.stream(chat::Request{}, released.sink()));
     CHECK_FALSE(released.done.has_value());
     fake.release();

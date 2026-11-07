@@ -120,6 +120,10 @@ private:
         auto const start = std::ranges::find_if(
             messages, [](Message const& message) { return message.role == "user" && message.results.empty(); });
         messages.erase(messages.begin(), start);
+        // A provider's opaque parts are valid only in the conversation that produced them, and this edited it.
+        for (Message& message : messages) {
+            message.opaque.clear();
+        }
     }
 
     // Past the bound, the principal's least recently used conversation goes, but never the one in use.

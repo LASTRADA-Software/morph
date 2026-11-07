@@ -56,6 +56,20 @@ was cancelled, possibly before `stream` returns.
 A model's output is untrusted input: a `ToolCall` may name no tool, and its arguments may not be an object. Nothing
 outside an implementation names a provider. `testing::FakeChatProvider` is a scripted one for tests.
 
+`morph::qt::makeQtChatProvider(config, owner)` in `qt/qt_chat_provider.hpp` is the one place that names a provider. Its
+one name is `anthropic`, over `QNetworkAccessManager` on `owner`'s thread, and `stream` may be called from any thread.
+
+- `model` and `apiKey` have no default. Which model a deployment pays for is the deployer's choice, and the key appears in
+  no log and no chat message.
+- Requests stream, and ask for `fallbacks: "default"`, so a request a safety classifier declines is rerun on a model
+  suited to that category. A refusal that remains is reported as the turn's failure.
+- **What must be replayed goes back unchanged.** `Response::opaque` holds the assistant message as the provider gave it,
+  including the model's signed reasoning, and comes back through `Message::opaque`. Only the provider reads it, so nothing
+  else in the chat knows a provider's content format. It is valid only in the conversation that produced it, so
+  `ConversationStore` clears it when trimming edits the history, and the message then goes back as its text and calls.
+- A tool call cut off by the token limit is reported as a failure and not run, since it usually still parses as a partial
+  object.
+
 ## The turn loop
 
 `service.hpp`. `ChatService` is an `IEnvelopeService`, built with a provider, a worker executor, the served bundle and
