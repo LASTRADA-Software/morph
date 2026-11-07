@@ -189,7 +189,11 @@ it. A view mounted on it is destroyed first.
   engagement, and its members' and rows') as `prefill`, `reset` or `assign` last left it, and as it was built.
   `refill(bodyJson)` loads like `prefill`, except that a top-level field whose snapshot differs (the user changed
   it since) keeps what was entered. It is for a later value of the record already being edited; `prefill` is for
-  another record.
+  another record. A successful submission of an explicit form ends the edit of every field still holding what it
+  sent, so the record's later values reach those; a field changed while the submission was in flight, or one whose
+  submission failed, stays an edit. An automatic form's submission does not end an edit: it goes out while the person
+  may still be typing, and loading the record's form of a number (`1.000` for a typed `1`) would change the text
+  under their cursor.
 - **Choice options** are a `reactive::Query<std::string, std::string>` per Choice, keyed on the options request:
   `{}` for an independent Choice, `{"parent": <literal>, …}` once every parent encodes, idle while one does not.
   A parent change refetches, and a reply for a superseded request is dropped. A selection the answered options no

@@ -147,7 +147,11 @@ struct Rig {
             morph::client::ShellOptions{.startScreen = std::string{lims::screens::kIgnition},
                                         .onProblem = [this](std::string const& text) { problems.push_back(text); }});
         REQUIRE(pump([this] { return backend.find("Button", "testId", "ignition_add").has_value(); }));
-        REQUIRE(pump([this] { return backend.find("TextInput", "testId", "chat_input").has_value(); }));
+        // Enabled, not only present: the input opens once the screen behind it is the active one.
+        REQUIRE(pump([this] {
+            auto const input = backend.find("TextInput", "testId", "chat_input");
+            return input.has_value() && backend.prop(*input, "enabled") != "false";
+        }));
     }
 
     ~Rig() {
@@ -313,6 +317,21 @@ TEST_CASE("a_chat_update_reaches_the_fields_and_keeps_what_a_person_is_typing", 
     REQUIRE(
         rig.pump([&] { return rig.field("container").starts_with("100") && rig.field("before").starts_with("299"); }));
     CHECK(rig.field("after") == "7");
+}
+
+// Mutation: leave a saved field counted as an edit -> the chat's 200 reaches the result and not the field.
+TEST_CASE("a_chat_update_reaches_a_field_that_was_typed_and_saved", "[lims][ignition][chat]") {
+    Rig rig;
+    rig.add();
+    REQUIRE(rig.hasTest());
+    rig.backend.edit(*rig.backend.find("TextInput", "testId", "field_container"), "100");
+    rig.backend.edit(*rig.backend.find("TextInput", "testId", "field_before"), "299");
+    rig.backend.edit(*rig.backend.find("TextInput", "testId", "field_after"), "223");
+    REQUIRE(rig.saveForm());
+    REQUIRE(rig.pump([&] { return rig.showsText("Result: -0.1206"); }));
+    rig.scriptCall("ignition__RecordIgnitionValues", R"({"id":1,"after":{"num":200,"den":1,"dp":3}})", "Recorded.");
+    rig.say("change the after mass of test 1 to 200");
+    CHECK(rig.pump([&] { return rig.field("after").starts_with("200"); }));
 }
 
 // Mutation: send the screen a double, which the UI refuses: the row goes stale and the query reports an error.
