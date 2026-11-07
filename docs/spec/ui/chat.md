@@ -11,6 +11,7 @@ the push path every other change uses. The design is in
 - [Tools](#tools)
 - [Providers](#providers)
 - [The turn loop](#the-turn-loop)
+- [Conversations](#conversations)
 
 ## Protocol
 
@@ -91,3 +92,24 @@ It is not refused, because working-copy edits legitimately opt out and the later
 
 Finished turns are kept, a few per principal, so a client that lost the last event can read how one ended. A principal
 reading a turn that is not theirs gets the same empty answer as for one that does not exist.
+
+## Conversations
+
+`conversations.hpp`. One conversation per principal, screen and identity. A screen's identity value is already what "this
+record" means to a document, so a different record starts a fresh conversation and returning to one continues it. A
+screen with no record has one conversation per principal.
+
+`ChatLimits` bounds them. `idleRetention` ends a conversation left untouched, and reading one counts as touching it. The
+least recently used goes past `maxConversationsPerPrincipal`. Past `maxMessagesPerConversation` the oldest messages go,
+along with whatever would leave the history starting with anything but something a person said, since a provider refuses
+a history that opens with a reply or with a result whose call is gone. Nothing survives a restart, and the journal keeps
+what actually changed.
+
+A turn adds whole rounds only, a call together with its results, so one stopped part way leaves nothing a provider would
+refuse.
+
+**Ending a chat.** The server cannot see a client's sign-out, which happens only in the client, and it learns of a new
+principal only from the connection's next envelope. So a client signing out sends `ui-chat-end`, which stops the
+principal's turn on that connection and ends their conversations. A turn on another connection of theirs keeps running.
+The idle limit covers a client that never sent it. A token that stays valid after sign-out is not something a chat can
+revoke.

@@ -36,6 +36,7 @@ add_executable(morph_tests
     test_chat_protocol.cpp
     test_chat_screen_tools.cpp
     test_chat_service.cpp
+    test_chat_conversations.cpp
     test_push_documents.cpp
     test_push_refresh_keys.cpp
     push_records_late.cpp

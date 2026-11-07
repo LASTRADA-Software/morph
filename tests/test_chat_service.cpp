@@ -763,3 +763,116 @@ TEST_CASE("the_opt_out_warning_fires_and_the_tool_result_says_so", "[chat][servi
     CAPTURE(warnings);
     CHECK(warned);
 }
+
+TEST_CASE("returning_to_a_record_continues_its_conversation", "[chat][conversation]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    auto onRecord = [&](std::string identity, std::string text) {
+        auto request = Rig::turnOn(id, std::move(text));
+        request.identity = std::move(identity);
+        return request;
+    };
+    rig.scriptAdd("first");
+    static_cast<void>(rig.finished(rig.start(onRecord("1", "add first"), cid), cid));
+    std::size_t const asked = rig.fake->calls();
+    rig.fake->script(chat::Response{.text = "elsewhere", .calls = {}});
+    static_cast<void>(rig.finished(rig.start(onRecord("2", "on another"), cid), cid));
+    CHECK(rig.fake->requests().at(asked).messages.size() == 1);
+    rig.fake->script(chat::Response{.text = "again", .calls = {}});
+    static_cast<void>(rig.finished(rig.start(onRecord("1", "and now"), cid), cid));
+    // The first turn's words, its call and result, and its reply, then these words.
+    auto const messages = rig.fake->requests().at(asked + 1).messages;
+    REQUIRE(messages.size() == 5);
+    CHECK(messages.front().text == "add first");
+    CHECK(messages.at(1).calls.size() == 1);
+    CHECK(messages.at(2).results.size() == 1);
+    CHECK(messages.at(3).text == "done");
+    CHECK(messages.back().text == "and now");
+}
+
+TEST_CASE("a_cancelled_turn_leaves_no_half_finished_round", "[chat][conversation]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->hold(true);
+    rig.fake->script(chat::Response{.text = "late", .calls = {}});
+    auto const turnId = rig.start(Rig::turnOn(id, "first"), cid);
+    REQUIRE(waitFor([&] { return rig.fake->calls() == 1; }));
+    wire::Envelope cancel;
+    cancel.kind = std::string{chat::kCancelKind};
+    REQUIRE(rig.call(std::move(cancel), cid).kind == "ok");
+    static_cast<void>(rig.finished(turnId, cid));
+    rig.fake->release();
+    rig.fake->script(chat::Response{.text = "ok", .calls = {}});
+    static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "second"), cid), cid));
+    auto const messages = rig.fake->requests().at(1).messages;
+    REQUIRE(messages.size() == 2);
+    CHECK(messages.at(0).text == "first");
+    CHECK(messages.at(1).text == "second");
+}
+
+TEST_CASE("end_of_chat_stops_the_turn_and_ends_the_conversations", "[chat][conversation]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(chat::Response{.text = "hello", .calls = {}});
+    static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "first"), cid), cid));
+    rig.fake->hold(true);
+    rig.fake->script(chat::Response{.text = "late", .calls = {}});
+    auto const running = rig.start(Rig::turnOn(id, "second"), cid);
+    REQUIRE(waitFor([&] { return rig.fake->calls() == 2; }));
+    wire::Envelope end;
+    end.kind = std::string{chat::kEndKind};
+    REQUIRE(rig.call(std::move(end), cid).kind == "ok");
+    CHECK(rig.fake->cancelled() == 1);
+    CHECK(rig.finished(running, cid).status == chat::TurnStatus::Cancelled);
+    rig.fake->release();
+    rig.fake->script(chat::Response{.text = "fresh", .calls = {}});
+    static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "third"), cid), cid));
+    CHECK(rig.fake->requests().at(2).messages.size() == 1);
+}
+
+TEST_CASE("end_of_chat_leaves_another_connections_turn_running", "[chat][conversation]") {
+    Rig rig;
+    auto const other = rig.gui();
+    auto const otherInstance = rig.instance(other);
+    auto const cid = rig.gui();
+    rig.fake->hold(true);
+    rig.fake->script(chat::Response{.text = "still here", .calls = {}});
+    auto const elsewhere = rig.start(Rig::turnOn(otherInstance, "go"), other);
+    REQUIRE(waitFor([&] { return rig.fake->calls() == 1; }));
+    wire::Envelope end;
+    end.kind = std::string{chat::kEndKind};
+    REQUIRE(rig.call(std::move(end), cid).kind == "ok");
+    CHECK(rig.fake->cancelled() == 0);
+    rig.fake->release();
+    CHECK(rig.finished(elsewhere, other).status == chat::TurnStatus::Done);
+}
+
+TEST_CASE("the_turn_caps_hold", "[chat][conversation]") {
+    chat::ChatLimits limits;
+    limits.maxTurnsPerPrincipal = 2;
+    limits.maxTurnsPerConnection = 1;
+    Rig rig{limits};
+    auto const one = rig.gui();
+    auto const oneInstance = rig.instance(one);
+    auto const two = rig.gui();
+    auto const twoInstance = rig.instance(two);
+    auto const three = rig.gui();
+    auto const threeInstance = rig.instance(three);
+    rig.fake->hold(true);
+    rig.fake->repeat(chat::Response{.text = "held", .calls = {}});
+    auto const first = rig.start(Rig::turnOn(oneInstance, "go"), one);
+    CHECK(rig.startRaw(Rig::turnOn(oneInstance, "again"), one).kind == "err");
+    auto const second = rig.start(Rig::turnOn(twoInstance, "go"), two);
+    CHECK(rig.startRaw(Rig::turnOn(threeInstance, "go"), three).kind == "err");
+    // A cap counts running turns, so a finished one frees its place.
+    REQUIRE(waitFor([&] { return rig.fake->calls() == 2; }));
+    rig.fake->release();
+    static_cast<void>(rig.finished(first, one));
+    static_cast<void>(rig.finished(second, two));
+    auto const third = rig.start(Rig::turnOn(threeInstance, "go"), three);
+    // The worker must outlive every turn, so the rig is torn down only once this one is over.
+    CHECK(rig.finished(third, three).status == chat::TurnStatus::Done);
+}
