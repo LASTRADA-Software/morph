@@ -411,21 +411,29 @@ ui::Screen ignitionScreen() {
         auto const ignition = screen.model<IgnitionModel>("ignition", {.instance = ui::Instance::Private});
         auto const tests = screen.query<ListIgnitionTests>("tests", ignition);
         auto const add = screen.mutation<AddIgnitionTest>("add", ignition);
-        auto const record = screen.mutation<RecordIgnitionValues>("record", ignition);
-        static_cast<void>(record);
         auto const remove = screen.mutation<DeleteIgnitionTest>("remove", ignition);
         return ui::column(
             {ui::button({.label = "Add ignition test", .onClick = ui::run(add)}).testId("ignition_add"),
+             ui::text({.text = tests.error(), .role = std::string{"error"}}).testId("ignition_error"),
              ui::forEach(
                  tests.value().at(&ListIgnitionTestsResult::tests),
                  {.key = ui::row("id"), .axis = std::string{"vertical"}, .gap = std::int64_t{2}},
-                 [&remove](ui::RowScope& /*test*/) {
+                 [&ignition, &remove](ui::RowScope& /*test*/) {
+                     // Keyed by the test: an update from elsewhere refills the form, and a field a person is typing in
+                     // keeps what they entered.
                      return ui::column(
                                 {ui::text({.text = ui::format("Ignition test {0}", {ui::row("id")}),
                                            .role = std::string{"section"}}),
-                                 ui::text({.text = ui::format("Container: {0}", {ui::row("container")})}),
-                                 ui::text({.text = ui::format("Before: {0}", {ui::row("before")})}),
-                                 ui::text({.text = ui::format("After: {0}", {ui::row("after")})}),
+                                 ui::form<RecordIgnitionValues>(
+                                     ignition, {.prefill = ui::obj({{"id", ui::row("id")},
+                                                                    {"container", ui::row("container")},
+                                                                    {"before", ui::row("before")},
+                                                                    {"after", ui::row("after")}}),
+                                                .key = ui::row("id"),
+                                                .fields = {{&RecordIgnitionValues::id, {.hidden = true}}}}),
+                                 ui::text({.text = ui::format("Result: {0}",
+                                                              {ui::call("coalesce", {ui::row("result"), "not yet"})})})
+                                     .testId("ignition_result"),
                                  ui::button({.label = "Delete",
                                              .onClick = ui::run(remove, {{&DeleteIgnitionTest::id, ui::row("id")}})})})
                          .testId("ignition_test_row");

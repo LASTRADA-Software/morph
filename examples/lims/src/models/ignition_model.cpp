@@ -2,6 +2,7 @@
 #include "lims/models/ignition_model.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <morph/core/model.hpp>
@@ -19,11 +20,36 @@ namespace lims {
 
 namespace {
 
+// A value rounded to a fixed number of places, as the exact decimal the UI takes.
+[[nodiscard]] std::optional<::morph::math::Rational> exact(std::optional<double> value, std::int64_t scale,
+                                                           std::uint32_t places) {
+    if (!value) {
+        return std::nullopt;
+    }
+    return ::morph::math::Rational{::morph::math::Numerator{std::llround(*value * static_cast<double>(scale))},
+                                   ::morph::math::Denominator{scale}, ::morph::math::DecimalPlaces{places}};
+}
+
+// Worked out here and not on the screen, so a person, a chat and any other client all read the same number.
+[[nodiscard]] std::optional<double> resultOf(std::optional<double> container, std::optional<double> before,
+                                             std::optional<double> after) {
+    if (!container || !before || !after || *before == *container) {
+        return std::nullopt;
+    }
+    return ((*before - *after) - *container) / (*before - *container);
+}
+
 [[nodiscard]] IgnitionTestView viewOf(db::IgnitionTestRecord const& row) {
+    constexpr std::int64_t kMassScale = 1000;
+    constexpr std::uint32_t kMassPlaces = 3;
+    constexpr std::int64_t kResultScale = 10000;
+    constexpr std::uint32_t kResultPlaces = 4;
     return IgnitionTestView{.id = static_cast<std::int64_t>(row.id.Value()),
-                            .container = row.container.Value(),
-                            .before = row.before.Value(),
-                            .after = row.after.Value()};
+                            .container = exact(row.container.Value(), kMassScale, kMassPlaces),
+                            .before = exact(row.before.Value(), kMassScale, kMassPlaces),
+                            .after = exact(row.after.Value(), kMassScale, kMassPlaces),
+                            .result = exact(resultOf(row.container.Value(), row.before.Value(), row.after.Value()),
+                                            kResultScale, kResultPlaces)};
 }
 
 [[nodiscard]] db::IgnitionTestRecord find(Lightweight::DataMapper& mapper, std::int64_t testId) {
@@ -59,13 +85,13 @@ IgnitionTestView IgnitionModel::execute(const RecordIgnitionValues& action) {
     Lightweight::DataMapper mapper;
     db::IgnitionTestRecord row = find(mapper, action.id);
     if (action.container) {
-        row.container = action.container;
+        row.container = action.container->toDouble();
     }
     if (action.before) {
-        row.before = action.before;
+        row.before = action.before->toDouble();
     }
     if (action.after) {
-        row.after = action.after;
+        row.after = action.after->toDouble();
     }
     mapper.Update(row);
     return viewOf(row);

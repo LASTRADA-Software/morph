@@ -174,6 +174,27 @@ struct Rig {
 
     [[nodiscard]] bool showsText(std::string_view text) const { return backend.dump().contains(text); }
 
+    // What a mass's field shows, in the first test on the screen.
+    [[nodiscard]] std::string field(std::string const& name) const {
+        auto const input = backend.find("TextInput", "testId", "field_" + name);
+        return input ? backend.prop(*input, "text") : std::string{};
+    }
+
+    void add() { backend.click(*backend.find("Button", "testId", "ignition_add")); }
+
+    [[nodiscard]] bool hasTest() {
+        return pump([&] { return backend.find("Column", "testId", "ignition_test_row").has_value(); });
+    }
+
+    [[nodiscard]] bool saveForm() {
+        auto const button = backend.find("Button", "testId", "form_submit");
+        if (!button || !pump([&] { return backend.prop(*button, "enabled") != "false"; })) {
+            return false;
+        }
+        backend.click(*button);
+        return true;
+    }
+
     [[nodiscard]] std::vector<morph::journal::LogEntry> journal(std::size_t expected) {
         static_cast<void>(pump([&] { return shared.log->entries().size() >= logBefore + expected; }));
         auto const all = shared.log->entries();
@@ -191,7 +212,8 @@ struct Rig {
 
 }  // namespace
 
-// Checked by mutation: with RecordIgnitionValues declaring no effect, the screen keeps showing no values and this fails.
+// Checked by mutation: with RecordIgnitionValues declaring no effect, the screen keeps showing no values and this
+// fails.
 TEST_CASE("the_chat_utterances_appear_on_the_mounted_screen", "[lims][ignition][chat]") {
     Rig rig;
     CHECK_FALSE(rig.showsText("ignition_test_row"));
@@ -200,14 +222,18 @@ TEST_CASE("the_chat_utterances_appear_on_the_mounted_screen", "[lims][ignition][
     rig.say("add ignition test");
     REQUIRE(rig.pump([&] { return rig.backend.find("Column", "testId", "ignition_test_row").has_value(); }));
 
-    rig.scriptCall("ignition__RecordIgnitionValues", R"({"id":1,"container":100,"before":299,"after":223})",
-                   "Recorded.");
+    rig.scriptCall(
+        "ignition__RecordIgnitionValues",
+        R"({"id":1,"container":{"num":100,"den":1,"dp":3},"before":{"num":299,"den":1,"dp":3},"after":{"num":223,"den":1,"dp":3}})",
+        "Recorded.");
     REQUIRE(rig.pump([&] { return rig.showsText("Added."); }));
     rig.say("container 100, before 299, after 223");
-    // The screen's own lines: the numbers alone would also match what was typed in the chat.
+    // The form's own fields: the numbers alone would also match what was typed in the chat.
     REQUIRE(rig.pump([&] {
-        return rig.showsText("Container: 100") && rig.showsText("Before: 299") && rig.showsText("After: 223");
+        return rig.field("container").starts_with("100") && rig.field("before").starts_with("299") &&
+               rig.field("after").starts_with("223");
     }));
+    CHECK(rig.pump([&] { return rig.showsText("Result: -0.1206"); }));
     CHECK(rig.pump([&] { return rig.showsText("Recorded."); }));
     CHECK(rig.problems.empty());
 
@@ -254,4 +280,53 @@ TEST_CASE("a_turn_names_the_screens_own_instance", "[lims][ignition][chat]") {
         offered = offered || tool.name == "ignition__RecordIgnitionValues";
     }
     CHECK(offered);
+}
+
+// Mutation: leave the form off the screen, or its action off the model.
+TEST_CASE("a_person_can_add_a_test_and_type_its_values_with_no_chat", "[lims][ignition]") {
+    Rig rig;
+    rig.add();
+    REQUIRE(rig.hasTest());
+    rig.backend.edit(*rig.backend.find("TextInput", "testId", "field_container"), "100");
+    rig.backend.edit(*rig.backend.find("TextInput", "testId", "field_before"), "299");
+    rig.backend.edit(*rig.backend.find("TextInput", "testId", "field_after"), "223");
+    REQUIRE(rig.saveForm());
+    CHECK(rig.pump([&] { return rig.showsText("Result: -0.1206"); }));
+    CHECK(rig.fake->calls() == 0);
+    // Added and saved by hand: journaled, and with no mark.
+    auto const entries = rig.journal(2);
+    REQUIRE(entries.size() == 2);
+    CHECK(entries.at(1).actionType == "RecordIgnitionValues");
+    CHECK(entries.at(1).originKind.empty());
+}
+
+// Mutation: drop the form's key, so an update reloads it and throws away what is being typed.
+TEST_CASE("a_chat_update_reaches_the_fields_and_keeps_what_a_person_is_typing", "[lims][ignition][chat]") {
+    Rig rig;
+    rig.add();
+    REQUIRE(rig.hasTest());
+    rig.backend.edit(*rig.backend.find("TextInput", "testId", "field_after"), "7");
+    rig.scriptCall("ignition__RecordIgnitionValues",
+                   R"({"id":1,"container":{"num":100,"den":1,"dp":3},"before":{"num":299,"den":1,"dp":3}})",
+                   "Recorded.");
+    rig.say("container 100, before 299");
+    REQUIRE(
+        rig.pump([&] { return rig.field("container").starts_with("100") && rig.field("before").starts_with("299"); }));
+    CHECK(rig.field("after") == "7");
+}
+
+// Mutation: send the screen a double, which the UI refuses: the row goes stale and the query reports an error.
+TEST_CASE("a_mass_with_a_fraction_reaches_the_screen", "[lims][ignition]") {
+    Rig rig;
+    rig.add();
+    REQUIRE(rig.hasTest());
+    rig.backend.edit(*rig.backend.find("TextInput", "testId", "field_container"), "12.5");
+    rig.backend.edit(*rig.backend.find("TextInput", "testId", "field_before"), "99.25");
+    rig.backend.edit(*rig.backend.find("TextInput", "testId", "field_after"), "80.5");
+    REQUIRE(rig.saveForm());
+    // ((99.25 - 80.5) - 12.5) / (99.25 - 12.5) = 6.25 / 86.75
+    CHECK(rig.pump([&] { return rig.showsText("Result: 0.072"); }));
+    auto const failure = rig.backend.find("Text", "testId", "ignition_error");
+    REQUIRE(failure.has_value());
+    CHECK(rig.backend.prop(*failure, "text").empty());
 }

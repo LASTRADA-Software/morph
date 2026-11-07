@@ -32,6 +32,7 @@
 #include <morph/ui/chat/protocol.hpp>
 #include <morph/ui/chat/service.hpp>
 #include <morph/ui/service.hpp>
+#include <morph/util/rational.hpp>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -45,9 +46,9 @@ namespace chat_live {
 
 struct TestView {
     std::int64_t id = 0;
-    std::optional<double> container;
-    std::optional<double> before;
-    std::optional<double> after;
+    std::optional<morph::math::Rational> container;
+    std::optional<morph::math::Rational> before;
+    std::optional<morph::math::Rational> after;
 };
 struct ListTests {};
 struct ListTestsResult {
@@ -56,9 +57,9 @@ struct ListTestsResult {
 struct AddTest {};
 struct RecordValues {
     std::int64_t id = 0;
-    std::optional<double> container;
-    std::optional<double> before;
-    std::optional<double> after;
+    std::optional<morph::math::Rational> container;
+    std::optional<morph::math::Rational> before;
+    std::optional<morph::math::Rational> after;
 };
 
 struct Store {
@@ -258,7 +259,7 @@ TEST_CASE("a real model turns the two phrases into stored values", "[.live][qt][
     REQUIRE(second.status == chat::TurnStatus::Done);
     std::scoped_lock const lock{chat_live::store().mutex};
     REQUIRE(chat_live::store().tests.size() == 1);
-    CHECK(chat_live::store().tests.front().container == 100.0);
-    CHECK(chat_live::store().tests.front().before == 299.0);
-    CHECK(chat_live::store().tests.front().after == 223.0);
+    CHECK(chat_live::store().tests.front().container->toDouble() == 100.0);
+    CHECK(chat_live::store().tests.front().before->toDouble() == 299.0);
+    CHECK(chat_live::store().tests.front().after->toDouble() == 223.0);
 }
