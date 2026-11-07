@@ -33,7 +33,8 @@ namespace {
 namespace chat = ui::chat;
 using ui::Json;
 
-// A call makes no progress for this long before it is given up on. Reset by every byte, so a long answer is not cut off.
+// A call makes no progress for this long before it is given up on. Reset by every byte, so a long answer is not cut
+// off.
 constexpr int kTransferTimeoutMs = 300000;
 
 [[nodiscard]] Json const* member(Json const& value, std::string_view key) {
@@ -62,7 +63,8 @@ constexpr int kTransferTimeoutMs = 300000;
 // for a person's message, it is built from the text, the calls and the results.
 [[nodiscard]] Json contentOf(chat::Message const& message) {
     if (!message.opaque.empty()) {
-        if (auto parsed = ui::parseJson(message.opaque); parsed && std::holds_alternative<Json::array_t>(parsed->data)) {
+        if (auto parsed = ui::parseJson(message.opaque);
+            parsed && std::holds_alternative<Json::array_t>(parsed->data)) {
             return std::move(*parsed);
         }
     }
@@ -133,8 +135,7 @@ public:
             return;
         }
         _reply = network.post(request, body);
-        QObject::connect(_reply, &QNetworkReply::readyRead, _reply,
-                         [self = shared_from_this()] { self->consume(); });
+        QObject::connect(_reply, &QNetworkReply::readyRead, _reply, [self = shared_from_this()] { self->consume(); });
         QObject::connect(_reply, &QNetworkReply::finished, _reply, [self = shared_from_this()] { self->finished(); });
     }
 
@@ -230,7 +231,8 @@ private:
             stop();
         } else if (type == "error") {
             Json const* const error = member(data, "error");
-            fail("the model provider failed: " + (error == nullptr ? std::string{"no reason"} : textOf(*error, "message")));
+            fail("the model provider failed: " +
+                 (error == nullptr ? std::string{"no reason"} : textOf(*error, "message")));
         }
     }
 
@@ -298,12 +300,11 @@ private:
         for (auto& [index, block] : _blocks) {
             if (textOf(block, "type") == "tool_use") {
                 auto const partial = _partials.find(index);
-                std::string arguments = partial == _partials.end() || partial->second.empty() ? std::string{"{}"}
-                                                                                              : partial->second;
+                std::string arguments =
+                    partial == _partials.end() || partial->second.empty() ? std::string{"{}"} : partial->second;
                 std::get<Json::object_t>(block.data).insert_or_assign("input", objectOrEmpty(arguments));
-                response.calls.push_back(chat::ToolCall{.id = textOf(block, "id"),
-                                                        .name = textOf(block, "name"),
-                                                        .argumentsJson = std::move(arguments)});
+                response.calls.push_back(chat::ToolCall{
+                    .id = textOf(block, "id"), .name = textOf(block, "name"), .argumentsJson = std::move(arguments)});
             }
             content.push_back(block);
         }
@@ -371,7 +372,8 @@ public:
         }
     }
 
-    [[nodiscard]] std::shared_ptr<chat::IProviderCall> stream(chat::Request request, chat::ProviderSink sink) override {
+    [[nodiscard]] std::shared_ptr<chat::IProviderCall> stream(chat::Request request,
+                                                              chat::ProviderSink sink) override {
         auto call = std::make_shared<Call>(_owner, std::move(sink));
         QPointer<QObject> const owner = _owner;
         if (owner == nullptr) {

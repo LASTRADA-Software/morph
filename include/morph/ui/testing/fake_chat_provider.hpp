@@ -112,7 +112,8 @@ private:
 
     // Holds the state, so a call outlives the provider and a late cancel touches nothing freed.
     struct Pending final : IProviderCall {
-        Pending(std::shared_ptr<State> shared, ProviderSink given) : state{std::move(shared)}, sink{std::move(given)} {}
+        Pending(std::shared_ptr<State> shared, ProviderSink given)
+            : state{std::move(shared)}, sink{std::move(given)} {}
 
         void cancel() override {
             std::scoped_lock const lock{state->mutex};

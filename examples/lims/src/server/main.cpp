@@ -4,9 +4,10 @@
 // on the public login screen; the token it gets is what every later call carries, and the role-gated actions check
 // the roles `GrantRole` gave its principal.
 //
-// Environment: LIMS_TOKEN_SECRET (required, non-empty), LIMS_PORT (default 8771), LIMS_DB (default lims.db). LIMS_CHAT_PROVIDER
-// turns the screens' chat on, with LIMS_CHAT_API_KEY, LIMS_CHAT_MODEL and optionally LIMS_CHAT_BASE_URL; a configuration
-// that does not work stops the server, rather than leave it running with no chat and no word why.
+// Environment: LIMS_TOKEN_SECRET (required, non-empty), LIMS_PORT (default 8771), LIMS_DB (default lims.db).
+// LIMS_CHAT_PROVIDER turns the screens' chat on, with LIMS_CHAT_API_KEY, LIMS_CHAT_MODEL and optionally
+// LIMS_CHAT_BASE_URL; a configuration that does not work stops the server, rather than leave it running with no chat
+// and no word why.
 
 #include <QCoreApplication>
 #include <QObject>

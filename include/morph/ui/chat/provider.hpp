@@ -76,7 +76,8 @@ struct Response {
     std::string text;
     /// @brief The tools it wants called; none ends the turn.
     std::vector<ToolCall> calls;
-    /// @brief Whatever this provider needs replayed unchanged for this message, such as a model's reasoning signatures.
+    /// @brief Whatever this provider needs replayed unchanged for this message, such as a model's reasoning
+    /// signatures.
     ///        Only the provider that wrote it reads it.
     std::string opaque;
 };

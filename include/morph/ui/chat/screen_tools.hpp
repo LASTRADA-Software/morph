@@ -141,9 +141,8 @@ private:
             return;
         }
         ModelDecl const* const model = found->second.back();
-        auto const seen = std::ranges::find_if(_named, [&](NamedAction const& named) {
-            return named.model == model && named.action == action;
-        });
+        auto const seen = std::ranges::find_if(
+            _named, [&](NamedAction const& named) { return named.model == model && named.action == action; });
         if (seen != _named.end()) {
             seen->changes = seen->changes || changes;
             return;
@@ -186,8 +185,8 @@ private:
 ///
 /// A tool is named `<alias>__<action>`. A name a provider's tool format would refuse, or one a tool already took, gets
 /// a shortened stem and a hash of its scope, alias and action, so it stays valid and unique. The tools are sorted by
-/// name, and an action named more than once on one alias gives one tool, offered as changing data if any naming runs it
-/// as a mutation. A credential action gets no tool: a model should not be handed a password to pass along.
+/// name, and an action named more than once on one alias gives one tool, offered as changing data if any naming runs
+/// it as a mutation. A credential action gets no tool: a model should not be handed a password to pass along.
 /// @param document  The screen's document, loaded.
 /// @param models    The aliases the client says it holds. One counts only if its scope, alias and type all match the
 ///                  document's declaration, so a context cannot point a tool at a model the screen does not declare.
@@ -228,7 +227,8 @@ private:
                                        .named = &named,
                                        .model = &*bound});
     }
-    // Sorted by a stable identity first, so which of two colliding tools keeps the plain name does not depend on order.
+    // Sorted by a stable identity first, so which of two colliding tools keeps the plain name does not depend on
+    // order.
     std::ranges::sort(candidates, [](Candidate const& left, Candidate const& right) {
         return std::pair{left.stem, left.identity} < std::pair{right.stem, right.identity};
     });
@@ -243,10 +243,11 @@ private:
         taken.insert(name);
         Json schema = detail::toolSchema(schemas, candidate.named->action);
         std::string description = detail::toolDescription(*candidate.named, schema);
-        tools.push_back(BoundTool{
-            .spec = ToolSpec{.name = std::move(name), .description = std::move(description), .inputSchema = std::move(schema)},
-            .model = *candidate.model,
-            .action = candidate.named->action});
+        tools.push_back(BoundTool{.spec = ToolSpec{.name = std::move(name),
+                                                   .description = std::move(description),
+                                                   .inputSchema = std::move(schema)},
+                                  .model = *candidate.model,
+                                  .action = candidate.named->action});
     }
     std::ranges::sort(tools, {}, [](BoundTool const& tool) { return tool.spec.name; });
     return tools;

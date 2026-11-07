@@ -19,8 +19,8 @@ TEST_CASE("adding_and_recording_an_ignition_test_stores_it", "[lims][ignition]")
     lims::IgnitionModel model;
     auto const added = model.execute(lims::AddIgnitionTest{});
     CHECK_FALSE(added.container.has_value());
-    auto const recorded = model.execute(
-        lims::RecordIgnitionValues{.id = added.id, .container = 100.0, .before = 299.0, .after = 223.0});
+    auto const recorded =
+        model.execute(lims::RecordIgnitionValues{.id = added.id, .container = 100.0, .before = 299.0, .after = 223.0});
     CHECK(recorded.id == added.id);
     // A fresh instance reads it, so it is the store that holds it and not this one.
     lims::IgnitionModel fresh;

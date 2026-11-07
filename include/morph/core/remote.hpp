@@ -562,16 +562,15 @@ public:
     void executeWithOrigin(::morph::wire::Envelope env, ::morph::session::RunOrigin origin,
                            std::function<void(std::string)> reply) {
         env.kind = "execute";
-        _strand.postTask(
-            [self = shared_from_this(), env = std::move(env), origin = std::move(origin),
-             reply = std::move(reply)]() mutable {
-                auto const callId = env.callId;
-                try {
-                    self->dispatchExecute(std::move(env), reply, 0, std::move(origin));
-                } catch (const std::exception& exc) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), callId)));
-                }
-            });
+        _strand.postTask([self = shared_from_this(), env = std::move(env), origin = std::move(origin),
+                          reply = std::move(reply)]() mutable {
+            auto const callId = env.callId;
+            try {
+                self->dispatchExecute(std::move(env), reply, 0, std::move(origin));
+            } catch (const std::exception& exc) {
+                reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), callId)));
+            }
+        });
     }
 
     /// @brief Processes a control `Envelope` on the server strand and returns
@@ -2684,8 +2683,8 @@ private:
             ::morph::session::detail::ScopedContext const scoped{run->env.session};
             ::morph::session::detail::ScopedOrigin const originScope{run->origin ? &*run->origin : nullptr};
             auto const& strands = run->self->_strands;
-            executor = std::make_shared<::morph::exec::detail::TaskResumer>(strands, run->mid, run->env.session,
-                                                                            run->origin);
+            executor =
+                std::make_shared<::morph::exec::detail::TaskResumer>(strands, run->mid, run->env.session, run->origin);
             strands->enroll(run->mid, executor);
             auto token = run->stopSource ? run->stopSource->get_token() : ::core::async::StopToken{};
             run->self->_dispatcher.dispatchAsync(

@@ -81,8 +81,8 @@ protected:
         options.worker = _chatWorker.get();
         options.bundle = *bundle;
         config.services.push_back(std::make_shared<chat::ChatService>(std::move(options)));
-        _server =
-            std::make_shared<morph::backend::RemoteServer>(*_workers, std::make_shared<Authorizer>(), std::move(config));
+        _server = std::make_shared<morph::backend::RemoteServer>(*_workers, std::make_shared<Authorizer>(),
+                                                                 std::move(config));
         auto const cid = _server->openConnection();
         ui::Exchange exchange = [this, server = _server, cid](morph::wire::Envelope const& request,
                                                               std::function<void(ui::ExchangeReply)> const& done) {

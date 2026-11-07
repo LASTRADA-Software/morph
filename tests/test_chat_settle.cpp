@@ -142,8 +142,8 @@ bool waitFor(auto done) {
 
 struct Rig {
     morph::exec::ThreadPoolExecutor pool{2};
-    std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(
-        pool, std::make_shared<Authorizer>(), settleConfig());
+    std::shared_ptr<morph::backend::RemoteServer> server =
+        std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<Authorizer>(), settleConfig());
     EventWire wire;
 
     wire::Envelope call(wire::Envelope env, morph::backend::ConnectionId cid) {

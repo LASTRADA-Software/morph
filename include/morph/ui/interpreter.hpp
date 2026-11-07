@@ -3184,8 +3184,8 @@ public:
         ChannelFacts facts;
     };
 
-    /// @brief The aliases of the screen's own scope that hold an instance now. One still binding is left out, and so is
-    ///        one of a nested scope, which is mounted per row or per opening and so names no one instance.
+    /// @brief The aliases of the screen's own scope that hold an instance now. One still binding is left out, and so
+    ///        is one of a nested scope, which is mounted per row or per opening and so names no one instance.
     /// @return Them, in declaration order.
     [[nodiscard]] std::vector<BoundAlias> boundAliases() const {
         std::vector<BoundAlias> bound;

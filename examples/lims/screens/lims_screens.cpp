@@ -17,10 +17,10 @@
 
 #include "lims/dto/analysis_dto.hpp"
 #include "lims/dto/auth_dto.hpp"
+#include "lims/dto/ignition_dto.hpp"
 #include "lims/dto/offline_dto.hpp"
 #include "lims/dto/result_dto.hpp"
 #include "lims/dto/sample_dto.hpp"
-#include "lims/dto/ignition_dto.hpp"
 #include "lims/dto/sample_entry_dto.hpp"
 #include "lims/dto/verification_dto.hpp"
 #include "lims/models/analysis_catalog_model.hpp"
@@ -416,20 +416,20 @@ ui::Screen ignitionScreen() {
         auto const remove = screen.mutation<DeleteIgnitionTest>("remove", ignition);
         return ui::column(
             {ui::button({.label = "Add ignition test", .onClick = ui::run(add)}).testId("ignition_add"),
-             ui::forEach(tests.value().at(&ListIgnitionTestsResult::tests),
-                         {.key = ui::row("id"), .axis = std::string{"vertical"}, .gap = std::int64_t{2}},
-                         [&remove](ui::RowScope& /*test*/) {
-                             return ui::column(
-                                        {ui::text({.text = ui::format("Ignition test {0}", {ui::row("id")}),
-                                                   .role = std::string{"section"}}),
-                                         ui::text({.text = ui::format("Container: {0}", {ui::row("container")})}),
-                                         ui::text({.text = ui::format("Before: {0}", {ui::row("before")})}),
-                                         ui::text({.text = ui::format("After: {0}", {ui::row("after")})}),
-                                         ui::button({.label = "Delete",
-                                                     .onClick = ui::run(remove, {{&DeleteIgnitionTest::id,
-                                                                                  ui::row("id")}})})})
-                                 .testId("ignition_test_row");
-                         })});
+             ui::forEach(
+                 tests.value().at(&ListIgnitionTestsResult::tests),
+                 {.key = ui::row("id"), .axis = std::string{"vertical"}, .gap = std::int64_t{2}},
+                 [&remove](ui::RowScope& /*test*/) {
+                     return ui::column(
+                                {ui::text({.text = ui::format("Ignition test {0}", {ui::row("id")}),
+                                           .role = std::string{"section"}}),
+                                 ui::text({.text = ui::format("Container: {0}", {ui::row("container")})}),
+                                 ui::text({.text = ui::format("Before: {0}", {ui::row("before")})}),
+                                 ui::text({.text = ui::format("After: {0}", {ui::row("after")})}),
+                                 ui::button({.label = "Delete",
+                                             .onClick = ui::run(remove, {{&DeleteIgnitionTest::id, ui::row("id")}})})})
+                         .testId("ignition_test_row");
+                 })});
     });
 }
 

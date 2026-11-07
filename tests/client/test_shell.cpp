@@ -427,27 +427,27 @@ protected:
         REQUIRE(served.has_value());
         _service = std::make_shared<ui::UiService>(std::move(*served), morph::model::detail::defaultDispatcher());
         _workers = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
-        return Transport{.backend = std::make_unique<morph::backend::LocalBackend>(*_workers),
-                         .exchange = [this](morph::wire::Envelope const& request,
-                                            std::function<void(ui::ExchangeReply)> const& done) {
-                             kinds.push_back(request.kind);
-                             if (request.kind == ui::chat::kEndKind) {
-                                 if (failing) {
-                                     done(std::unexpected(std::string{"the connection is closed"}));
-                                 } else {
-                                     pendingEnd = done;
-                                 }
-                             } else if (request.kind == ui::chat::kStateKind) {
-                                 done(chatOffered ? morph::wire::makeOk(request.callId, "{}")
-                                                  : morph::wire::makeErr("unknown envelope kind", request.callId));
-                             } else if (request.kind == ui::chat::kTurnKind) {
-                                 turns.push_back(request);
-                                 done(morph::wire::makeOk(request.callId, R"({"turnId":1})"));
-                             } else {
-                                 done(morph::wire::decode(
-                                     _service->handle(request, *morph::session::allowAllAuthorizer())));
-                             }
-                         }};
+        return Transport{
+            .backend = std::make_unique<morph::backend::LocalBackend>(*_workers),
+            .exchange = [this](morph::wire::Envelope const& request,
+                               std::function<void(ui::ExchangeReply)> const& done) {
+                kinds.push_back(request.kind);
+                if (request.kind == ui::chat::kEndKind) {
+                    if (failing) {
+                        done(std::unexpected(std::string{"the connection is closed"}));
+                    } else {
+                        pendingEnd = done;
+                    }
+                } else if (request.kind == ui::chat::kStateKind) {
+                    done(chatOffered ? morph::wire::makeOk(request.callId, "{}")
+                                     : morph::wire::makeErr("unknown envelope kind", request.callId));
+                } else if (request.kind == ui::chat::kTurnKind) {
+                    turns.push_back(request);
+                    done(morph::wire::makeOk(request.callId, R"({"turnId":1})"));
+                } else {
+                    done(morph::wire::decode(_service->handle(request, *morph::session::allowAllAuthorizer())));
+                }
+            }};
     }
     void disconnect() override {
         _workers.reset();

@@ -90,7 +90,8 @@ public:
     }
 
     /// @brief Ends the chat: the server stops this connection's turn and drops the principal's conversations, and this
-    ///        client forgets what it was showing. Sent ahead of a sign-out, while the session still proves who is asking.
+    ///        client forgets what it was showing. Sent ahead of a sign-out, while the session still proves who is
+    ///        asking.
     /// @param done Called once the server answered or the exchange failed, so a sign-out never waits on a dead
     ///             connection.
     void end(std::function<void()> done) {

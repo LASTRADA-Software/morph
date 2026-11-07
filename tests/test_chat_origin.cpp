@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// A run's origin: what the server says started an execute, which only the server can set, and which reaches the journal
-// entry that execute writes.
+// A run's origin: what the server says started an execute, which only the server can set, and which reaches the
+// journal entry that execute writes.
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>

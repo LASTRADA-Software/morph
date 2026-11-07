@@ -800,9 +800,9 @@ TEST_CASE("remote_source_rehellos_then_rewatches_on_reconnect", "[client][source
         (*source.connectHook)();
         REQUIRE(pumpUntil(context.owner(), [&] { return source.kinds.size() >= 2; }));
         // The hello goes first, then the watch. A client's other services may follow them.
-    REQUIRE(source.kinds.size() >= 2);
-    CHECK(source.kinds.at(0) == "ui-hello");
-    CHECK(source.kinds.at(1) == "watch");
+        REQUIRE(source.kinds.size() >= 2);
+        CHECK(source.kinds.at(0) == "ui-hello");
+        CHECK(source.kinds.at(1) == "watch");
         CHECK(source.watchBodies.back() == R"({"records":[],"instances":[],"replace":true})");
 
         // A server event reaches the session: a resync answers with the whole watch set.

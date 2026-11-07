@@ -80,12 +80,11 @@ DeleteIgnitionTestResult IgnitionModel::execute(const DeleteIgnitionTest& action
 }
 
 void attachIgnitionLog(std::shared_ptr<::morph::journal::IActionLog> log) {
-    ::morph::model::detail::defaultRegistry().registerModel<IgnitionModel>(
-        "IgnitionModel", [log = std::move(log)] {
-            auto holder = std::make_unique<::morph::model::detail::ModelHolder<IgnitionModel>>();
-            holder->attachActionLog(log, {});
-            return holder;
-        });
+    ::morph::model::detail::defaultRegistry().registerModel<IgnitionModel>("IgnitionModel", [log = std::move(log)] {
+        auto holder = std::make_unique<::morph::model::detail::ModelHolder<IgnitionModel>>();
+        holder->attachActionLog(log, {});
+        return holder;
+    });
 }
 
 }  // namespace lims

@@ -88,7 +88,8 @@ std::vector<std::string> namesOf(std::vector<chat::BoundTool> const& tools) {
 }
 
 chat::BoundTool const& named(std::vector<chat::BoundTool> const& tools, std::string_view name) {
-    auto const found = std::ranges::find_if(tools, [&](chat::BoundTool const& tool) { return tool.spec.name == name; });
+    auto const found =
+        std::ranges::find_if(tools, [&](chat::BoundTool const& tool) { return tool.spec.name == name; });
     REQUIRE(found != tools.end());
     return *found;
 }
@@ -129,8 +130,7 @@ TEST_CASE("a_screens_queries_and_mutations_become_tools", "[chat][tools]") {
 TEST_CASE("an_unpermitted_action_gets_no_tool", "[chat][tools]") {
     auto const loaded = document(kScreen);
     auto const models = refs(loaded);
-    CHECK(namesOf(chat::screenTools(loaded, models, Permitted{"List"}, {})) ==
-          std::vector<std::string>{"lab__List"});
+    CHECK(namesOf(chat::screenTools(loaded, models, Permitted{"List"}, {})) == std::vector<std::string>{"lab__List"});
 }
 
 TEST_CASE("a_model_the_context_did_not_bind_gets_no_tool", "[chat][tools]") {

@@ -113,19 +113,23 @@ std::string const kTextStream =
     event("content_block_delta",
           R"({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"lo"}})") +
     event("content_block_stop", R"({"type":"content_block_stop","index":0})") +
-    event("message_delta", R"({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}})") +
+    event("message_delta",
+          R"({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}})") +
     event("message_stop", R"({"type":"message_stop"})");
 
 std::string const kToolStream =
-    event("content_block_start",
-          R"({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}})") +
+    event(
+        "content_block_start",
+        R"({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}})") +
     event("content_block_delta",
           R"({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-1"}})") +
     event("content_block_stop", R"({"type":"content_block_stop","index":0})") +
-    event("content_block_start",
-          R"({"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"call-1","name":"lab__Add","input":{}}})") +
-    event("content_block_delta",
-          R"({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"text\":"}})") +
+    event(
+        "content_block_start",
+        R"({"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"call-1","name":"lab__Add","input":{}}})") +
+    event(
+        "content_block_delta",
+        R"({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"text\":"}})") +
     event("content_block_delta",
           R"({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"hi\"}"}})") +
     event("content_block_stop", R"({"type":"content_block_stop","index":1})") +
@@ -155,11 +159,10 @@ struct Rig {
     }
 
     std::shared_ptr<chat::IProviderCall> call(chat::Request request = plainRequest()) {
-        return provider->stream(std::move(request),
-                                {.text = [this](std::string const& piece) { pieces.push_back(piece); },
-                                 .done = [this](std::expected<chat::Response, std::string> outcome) {
-                                     done = std::move(outcome);
-                                 }});
+        return provider->stream(
+            std::move(request),
+            {.text = [this](std::string const& piece) { pieces.push_back(piece); },
+             .done = [this](std::expected<chat::Response, std::string> outcome) { done = std::move(outcome); }});
     }
 
     static chat::Request plainRequest() {
@@ -169,7 +172,9 @@ struct Rig {
         return request;
     }
 
-    void finish() { REQUIRE(pumpUntil([this] { return done.has_value(); })); }
+    void finish() {
+        REQUIRE(pumpUntil([this] { return done.has_value(); }));
+    }
 };
 
 }  // namespace
@@ -217,17 +222,13 @@ TEST_CASE("a_response_keeps_what_must_be_replayed_unchanged", "[qt][chat_provide
 
     Rig next{streamOf(kTextStream)};
     chat::Request request = Rig::plainRequest();
-    request.messages.push_back({.role = "assistant",
-                                .text = {},
-                                .calls = (*rig.done)->calls,
-                                .results = {},
-                                .opaque = opaque});
     request.messages.push_back(
-        {.role = "user",
-         .text = {},
-         .calls = {},
-         .results = {chat::ToolResult{.callId = "call-1", .text = "added", .isError = false}},
-         .opaque = {}});
+        {.role = "assistant", .text = {}, .calls = (*rig.done)->calls, .results = {}, .opaque = opaque});
+    request.messages.push_back({.role = "user",
+                                .text = {},
+                                .calls = {},
+                                .results = {chat::ToolResult{.callId = "call-1", .text = "added", .isError = false}},
+                                .opaque = {}});
     static_cast<void>(next.call(std::move(request)));
     next.finish();
     CHECK(next.server->received.contains("sig-1"));
@@ -239,9 +240,8 @@ TEST_CASE("a_response_keeps_what_must_be_replayed_unchanged", "[qt][chat_provide
 TEST_CASE("a_request_carries_system_tools_key_and_model", "[qt][chat_provider]") {
     Rig rig{streamOf(kTextStream)};
     chat::Request request = Rig::plainRequest();
-    request.tools.push_back({.name = "lab__Add",
-                             .description = "Adds",
-                             .inputSchema = morph::ui::Json::object_t{{"type", "object"}}});
+    request.tools.push_back(
+        {.name = "lab__Add", .description = "Adds", .inputSchema = morph::ui::Json::object_t{{"type", "object"}}});
     static_cast<void>(rig.call(std::move(request)));
     rig.finish();
     std::string const& sent = rig.server->received;
@@ -327,10 +327,11 @@ TEST_CASE("a_call_cut_off_by_the_token_limit_is_a_done_error", "[qt][chat_provid
 
 // Mutation: leave the reply running after a cancel.
 TEST_CASE("cancel_aborts_the_request_and_sends_no_done", "[qt][chat_provider]") {
-    Rig rig{streamOf(event("content_block_start",
-                           R"({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}})") +
-                     event("content_block_delta",
-                           R"({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"first"}})"))};
+    Rig rig{
+        streamOf(event("content_block_start",
+                       R"({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}})") +
+                 event("content_block_delta",
+                       R"({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"first"}})"))};
     rig.server->holdOpen = true;
     auto const call = rig.call();
     REQUIRE(pumpUntil([&] { return !rig.pieces.empty(); }));

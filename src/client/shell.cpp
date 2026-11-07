@@ -16,6 +16,8 @@
 #include <morph/core/wire.hpp>
 #include <morph/reactive/scheduler.hpp>
 #include <morph/reactive/signal.hpp>
+#include <morph/ui/chat/client.hpp>
+#include <morph/ui/chat/panel.hpp>
 #include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/explorer.hpp>
@@ -28,8 +30,6 @@
 #include <morph/ui/service_client.hpp>
 #include <morph/ui/shell_frame.hpp>
 #include <morph/ui/view.hpp>
-#include <morph/ui/chat/client.hpp>
-#include <morph/ui/chat/panel.hpp>
 #include <morph/ui/workspace.hpp>
 #include <optional>
 #include <set>
@@ -480,7 +480,8 @@ private:
             _chat = std::make_unique<ui::chat::ChatClient>(
                 _source->exchange(), [this] { return _source->currentSession(); }, [this] { chatChanged(); });
         }
-        _chatPanel = std::make_unique<ui::chat::ChatPanel>(*_backend, _frame->chatSlot(), *_chat, [this] { return chatContext(); });
+        _chatPanel = std::make_unique<ui::chat::ChatPanel>(*_backend, _frame->chatSlot(), *_chat,
+                                                           [this] { return chatContext(); });
         _chat->probe();
         chatChanged();
     }

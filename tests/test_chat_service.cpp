@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// A chat turn on a real server: the screen's tools, called through the same checks as the GUI's own calls, reaching the
-// GUI by push and the journal with a mark.
+// A chat turn on a real server: the screen's tools, called through the same checks as the GUI's own calls, reaching
+// the GUI by push and the journal with a mark.
 
 // clang-format off
 #include <morph/ui/value.hpp>
@@ -303,8 +303,11 @@ struct Rig {
                                                   std::string screen = "notes") {
         chat::TurnRequest request;
         request.screenId = std::move(screen);
-        request.models.push_back(
-            {.path = "/models/notes", .alias = "notes", .modelType = "Chat_Notes", .instanceId = modelId, .primary = ""});
+        request.models.push_back({.path = "/models/notes",
+                                  .alias = "notes",
+                                  .modelType = "Chat_Notes",
+                                  .instanceId = modelId,
+                                  .primary = ""});
         request.text = std::move(text);
         return request;
     }
@@ -553,11 +556,11 @@ TEST_CASE("a_malformed_tool_call_returns_as_a_tool_error_and_counts", "[chat][se
     Rig rig;
     auto const cid = rig.gui();
     auto const id = rig.instance(cid);
-    rig.fake->script(chat::Response{
-        .text = "",
-        .calls = {chat::ToolCall{.id = "1", .name = "notes__Chat_Add", .argumentsJson = "[1]"},
-                  chat::ToolCall{.id = "2", .name = "notes__Chat_Add", .argumentsJson = "not json"},
-                  chat::ToolCall{.id = "3", .name = "no_such_tool", .argumentsJson = "{}"}}});
+    rig.fake->script(
+        chat::Response{.text = "",
+                       .calls = {chat::ToolCall{.id = "1", .name = "notes__Chat_Add", .argumentsJson = "[1]"},
+                                 chat::ToolCall{.id = "2", .name = "notes__Chat_Add", .argumentsJson = "not json"},
+                                 chat::ToolCall{.id = "3", .name = "no_such_tool", .argumentsJson = "{}"}}});
     rig.fake->script(chat::Response{.text = "sorry", .calls = {}, .opaque = {}});
     auto const state = rig.finished(rig.start(Rig::turnOn(id, "add"), cid), cid);
     CHECK(state.status == chat::TurnStatus::Done);
@@ -733,14 +736,13 @@ TEST_CASE("no_provider_serves_no_kind", "[chat][service]") {
 TEST_CASE("the_opt_out_warning_fires_and_the_tool_result_says_so", "[chat][service]") {
     std::mutex logged;
     std::vector<std::string> warnings;
-    morph::log::ScopedLoggerOverride const guard{
-        [&](morph::log::LogLevel level, std::string_view message) {
-            if (level == morph::log::LogLevel::warn) {
-                std::scoped_lock const lock{logged};
-                warnings.emplace_back(message);
-            }
-        },
-        morph::log::LogLevel::warn};
+    morph::log::ScopedLoggerOverride const guard{[&](morph::log::LogLevel level, std::string_view message) {
+                                                     if (level == morph::log::LogLevel::warn) {
+                                                         std::scoped_lock const lock{logged};
+                                                         warnings.emplace_back(message);
+                                                     }
+                                                 },
+                                                 morph::log::LogLevel::warn};
     {
         Rig rig;
         auto const cid = rig.gui();

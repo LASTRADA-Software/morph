@@ -109,8 +109,8 @@ private:
         std::chrono::steady_clock::time_point touched;
     };
 
-    // Past the bound the oldest go, then whatever would leave the history starting with anything but something a person
-    // said: a provider refuses a history that opens with a reply, or with a result whose call is gone.
+    // Past the bound the oldest go, then whatever would leave the history starting with anything but something a
+    // person said: a provider refuses a history that opens with a reply, or with a result whose call is gone.
     void trim(std::vector<Message>& messages) const {
         if (messages.size() <= _limits.maxMessagesPerConversation) {
             return;

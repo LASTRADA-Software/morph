@@ -150,8 +150,8 @@ template <typename T>
 /// @param text The body.
 /// @return The request, or why it was refused.
 [[nodiscard]] inline std::expected<StateRequest, std::string> readStateRequest(std::string_view text) {
-    return ui::detail::readMessage<StateRequest>(text.empty() ? std::string_view{"{}"} : text, "the chat state request",
-                                                 {}, {});
+    return ui::detail::readMessage<StateRequest>(text.empty() ? std::string_view{"{}"} : text,
+                                                 "the chat state request", {}, {});
 }
 
 /// @brief Reads a `TurnEvent`.
@@ -168,6 +168,6 @@ template <>
 struct glz::meta<morph::ui::chat::TurnStatus> {
     using enum morph::ui::chat::TurnStatus;
     /// @brief The names.
-    static constexpr auto value = glz::enumerate("running", Running, "done", Done, "failed", Failed, "cancelled",
-                                                 Cancelled);
+    static constexpr auto value =
+        glz::enumerate("running", Running, "done", Done, "failed", Failed, "cancelled", Cancelled);
 };
