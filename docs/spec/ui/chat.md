@@ -8,6 +8,7 @@ the push path every other change uses. The design is in
 ## Contents
 
 - [Protocol](#protocol)
+- [Tools](#tools)
 - [Providers](#providers)
 
 ## Protocol
@@ -28,6 +29,19 @@ A turn's progress goes out as `TurnEvent`s on the `chat` event topic, to that co
 server writes nothing to a connection that is behind, so a turn's last event can be lost with no error. `TurnState` is
 the record, and a client reads it when a turn starts, on `resync` and on reconnect. A client ignores event topics it does
 not know, so one with no chat is unaffected.
+
+## Tools
+
+`screen_tools.hpp`. `screenTools` offers the actions the open screen names, at any scope: its queries, its mutations and
+its model-bound nodes such as forms. Each is bound to the instance the client says that alias holds. So the assistant
+has a short list of what this screen can do, and not every action in the application.
+
+- **An alias counts only if its scope, name and type match the document's declaration.** A client's context cannot point
+  a tool at a model the screen does not declare.
+- **A tool's name is `<alias>__<action>`.** A name a provider's tool format would refuse (`^[a-zA-Z0-9_-]{1,64}$`), or one
+  already taken, gets a shortened stem and a hash of its scope, alias and action. Two instances of one model type on one
+  screen are told apart this way, which a list keyed by model type could not do.
+- **A credential action gets no tool.** A model should not be handed a password to pass along.
 
 ## Providers
 
