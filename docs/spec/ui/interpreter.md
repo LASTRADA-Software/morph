@@ -609,3 +609,12 @@ Reported when met, and shown as a muted text naming the kind:
   encode.
 - A `table` declared from a model's list action: the table engine (spec 7).
 - Prefetching on hover: the host starts a screen's `prefetch` queries through `Session::prefetch`.
+
+## Where a screen says what it holds
+
+A chat turn says which instances the open screen holds, so an assistant can call the same ones
+(see [chat.md](chat.md)). `ModelChannel::facts()` reports the instance a channel is bound to, as `ChannelFacts`, and
+`Screen::boundAliases()` lists the aliases of the screen's own scope that hold one. An alias still binding is left out,
+and so is one of a nested scope: it is mounted per row or per opening, so it names no one instance.
+`DocumentScreenHost::chatContext(handle)` builds a `chat::TurnRequest` from them, with the screen's id, its params and
+its identity's canonical text.

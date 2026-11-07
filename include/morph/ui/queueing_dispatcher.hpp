@@ -135,6 +135,8 @@ private:
         Channel(std::shared_ptr<ModelChannel> inner, std::shared_ptr<State> state)
             : _inner{std::move(inner)}, _state{std::move(state)} {}
 
+        [[nodiscard]] ChannelFacts facts() const override { return _inner->facts(); }
+
         [[nodiscard]] async::Completion<std::string> execute(std::string const& actionId, std::string const& bodyJson,
                                                              CallOptions options) override {
             if (!options.queueOffline || options.evaluate) {

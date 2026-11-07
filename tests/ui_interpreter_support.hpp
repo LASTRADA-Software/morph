@@ -70,6 +70,9 @@ public:
         return std::make_shared<Channel>(*this, typeId, sharing, instanceKey, binds.size());
     }
 
+    /// @brief Whether channels report an instance, or are still binding.
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): a test double.
+    bool factsBound = true;
     /// @brief Every call sent, oldest first.
     // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes): a test double.
     std::vector<Call> calls;
@@ -151,6 +154,10 @@ private:
                 _owner->reply(_owner->calls.size() - 1, found->second);
             }
             return std::move(completion);
+        }
+
+        [[nodiscard]] ChannelFacts facts() const override {
+            return _owner->factsBound ? ChannelFacts{.instanceId = 1000 + _number, .primary = _key} : ChannelFacts{};
         }
 
     private:

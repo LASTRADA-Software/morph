@@ -20,6 +20,7 @@
 #include "../core/executor.hpp"
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
+#include "chat/protocol.hpp"
 #include "document.hpp"
 #include "expression.hpp"
 #include "inspector.hpp"
@@ -617,6 +618,30 @@ public:
         return own->remount(_interpreter, std::move(document), *_options.backend);
     }
 
+    /// @brief What a chat turn says about a screen this host mounted: its id, its params and identity, and the aliases
+    ///        of its own scope that hold an instance. `TurnRequest::text` is left for the caller.
+    /// @param handle A handle this host mounted.
+    /// @return The context; nothing for a closed or foreign handle.
+    [[nodiscard]] static std::optional<chat::TurnRequest> chatContext(ScreenHandle& handle) {
+        auto const* const own = dynamic_cast<Handle const*>(&handle);
+        Screen const* const screen = own == nullptr ? nullptr : own->screen();
+        if (screen == nullptr) {
+            return std::nullopt;
+        }
+        chat::TurnRequest context;
+        context.screenId = screen->id();
+        context.identity = identityKey(handle.identity().peek()).value_or(std::string{});
+        context.paramsJson = glz::write_json(valueToJson(Value{own->params()})).value_or(std::string{"{}"});
+        for (Screen::BoundAlias const& alias : screen->boundAliases()) {
+            context.models.push_back(chat::ModelRef{.path = alias.decl->path,
+                                                    .alias = alias.decl->name,
+                                                    .modelType = alias.decl->type,
+                                                    .instanceId = alias.facts.instanceId,
+                                                    .primary = alias.facts.primary});
+        }
+        return context;
+    }
+
     /// @brief The development inspector over a screen this host mounted (spec 6 §21): what a shell's inspector window
     ///        reads. It hands out no access to the screen beyond the inspector's own read-only view and its
     ///        `refetch` command.
@@ -847,6 +872,9 @@ private:
 
         /// The screen while it is open; null once it closed.
         [[nodiscard]] Screen* screen() const { return _state->screen.get(); }
+
+        /// What the screen was mounted with.
+        [[nodiscard]] ParamMap const& params() const { return _state->params; }
 
         /// Records what the screen was mounted with, so a remount mounts the same instance in the same place.
         void placed(ParamMap params, ContainerWidget* parent) {
