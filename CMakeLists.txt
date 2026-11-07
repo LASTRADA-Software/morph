@@ -532,6 +532,7 @@ target_sources(morph
         include/morph/ui/agent.hpp
         include/morph/ui/chat/client.hpp
         include/morph/ui/chat/conversations.hpp
+        include/morph/ui/chat/panel.hpp
         include/morph/ui/chat/protocol.hpp
         include/morph/ui/chat/provider.hpp
         include/morph/ui/chat/screen_tools.hpp

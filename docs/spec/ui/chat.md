@@ -13,6 +13,7 @@ the push path every other change uses. The design is in
 - [The turn loop](#the-turn-loop)
 - [Conversations](#conversations)
 - [The client](#the-client)
+- [The panel](#the-panel)
 
 ## Protocol
 
@@ -130,3 +131,19 @@ session. It runs on the owner, and takes the source's exchange, the current sess
   turn on the server. What was shown stays, and the server's conversation continues from the next turn.
 - **`end` calls back whatever happens**, including when the exchange fails, so a sign-out never waits on a dead
   connection.
+
+## The panel
+
+`panel.hpp`. `ChatPanel` is built from backend widgets, so every shell frontend has it: a conversation's lines
+(`chat_entry_<n>` inside `chat_entries`), an input (`chat_input`), a send button (`chat_send`) and, while a turn runs, a
+stop button (`chat_cancel`). It reads where the person is at each send, so a message goes to the screen they are looking
+at when they send it. A screen with no document behind it, such as the explorer, disables the input.
+
+The client shell mounts it in `ShellFrame::chatSlot()`. It shows the slot only after a probe finds a chat, selects the
+active tab's conversation as tabs change, and forwards the source's events and reconnects to the `ChatClient`. A sign-out
+sends `ui-chat-end` first and continues when that is answered or fails. The panel is hidden in the frame's compact form,
+which has no width to spare beside the page.
+
+The panel shows on every screen with a document. A screen built around a working copy, whose edits are not stored until a
+separate save and whose flags are set by its own buttons, does not yet work with an assistant, whose calls change the
+working copy without those flags following.

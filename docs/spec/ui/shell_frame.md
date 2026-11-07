@@ -27,9 +27,11 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 | a text, muted, hidden unless the principal sits in the head | `shell_head_principal` | the principal, the trail's last item (`setPrincipalInHead`), centred on the actions on whichever line the trail is |
 | a row, gap 2, of two zero-width spacers, shown only compact and only while the trail ends framed | `shell_trail_end_inset` | the top line's item after the wrapping row: with the line's gap on either side it adds step 3 after the trail (`setTrailEndInset`) |
 | a column, surface `page` (or the one `setPageSurface` names), stretch × stretch | `shell_page` | the page: zero-sized spacers above and either side of the content, each a gap of step 4 away, so the content is padded by step 4; the spacers hide while `setPageInset(false)`, and a hidden spacer takes no gap, so the content then fills the page |
+| a row, surface `sidebar`, `fixed(kShellChatWidth)` (32) × stretch, gap 3, its content padded by spacers, after the main column | `shell_chat` | the chat's column: `chatSlot()` is where a client mounts a panel. Hidden unless `setChatShown(true)`, and always while signed out or compact, since a compact window has no width to spare beside the page |
 
 - `page()` is the content container, where the client places the workspace.
 - `navigator()` is the navigator, for its pins and search.
+- `chatSlot()` is the container a client mounts a chat panel into.
 - `headEyebrowSlot()`, `headLeadSlot()` and `headSlot()` are the containers a client mounts the active head's three
   parts into — `Workspace::headPartsForActive()` builds them: the eyebrow (a muted line above the title, hidden while
   the head has none), the lead (the subtitle and the badges on one wrapping line) under the

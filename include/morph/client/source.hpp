@@ -185,6 +185,14 @@ public:
     /// @return The watcher, or empty.
     [[nodiscard]] ui::Watcher watcher();
 
+    /// @brief The exchange the UI service is reached by, which a client's other services share.
+    /// @return It; empty before the source opened.
+    [[nodiscard]] ui::Exchange const& exchange() const noexcept { return _exchange; }
+
+    /// @brief The session every call carries now, which a sign-in replaces.
+    /// @return It.
+    [[nodiscard]] session::Context const& currentSession() const noexcept { return _session; }
+
     /// @brief The principal before any sign-in, which `signOut` returns to.
     /// @return It; empty for none.
     [[nodiscard]] virtual std::string signedOutPrincipal() const { return {}; }

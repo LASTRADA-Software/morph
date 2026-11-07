@@ -3,6 +3,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <expected>
 #include <functional>
 #include <map>
 #include <memory>
@@ -189,12 +191,17 @@ private:
         request.kind = std::move(kind);
         request.body = std::move(body);
         request.session = _session ? _session() : session::Context{};
-        _exchange(std::move(request),
-                  [alive = std::weak_ptr<bool>{_alive}, then = std::move(then)](ExchangeReply const& reply) {
-                      if (!alive.expired()) {
-                          then(reply);
-                      }
-                  });
+        auto answer = [alive = std::weak_ptr<bool>{_alive}, then = std::move(then)](ExchangeReply const& reply) {
+            if (!alive.expired()) {
+                then(reply);
+            }
+        };
+        // A transport that throws rather than answers is one more failed exchange: a sign-out waits on this answer.
+        try {
+            _exchange(std::move(request), answer);
+        } catch (std::exception const& error) {
+            answer(std::unexpected(std::string{error.what()}));
+        }
     }
 
     void accepted(ExchangeReply const& reply) {
