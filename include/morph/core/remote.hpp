@@ -217,7 +217,12 @@ struct ConnectionFacts {
     /// @brief Whether the connection negotiated server-sent events: its
     ///        `ui-hello` offered them and the UI service accepted.
     bool events = false;
+    /// @brief The connection the envelope arrived on; `0` for one with no connection. The server sets it before each
+    ///        call.
+    ConnectionId cid = 0;
 };
+
+class RemoteServer;
 
 /// @brief Envelope kinds a `RemoteServer` answers through an extension, such as
 ///        the UI service's `ui-*` kinds.
@@ -277,6 +282,20 @@ public:
         static_cast<void>(facts);
         return handle(request, authorizer);
     }
+
+    /// @brief Hands the service its server, once, before the first envelope reaches any service.
+    ///
+    /// At the first service dispatch and not at construction: services are built before the server, and consumed by
+    /// its constructor, where it cannot yet hand out a reference to itself. Weak, since the server owns its services.
+    /// Runs on the server strand, so it must not block.
+    /// @param server The server.
+    virtual void bound(std::weak_ptr<RemoteServer> server) { static_cast<void>(server); }
+
+    /// @brief Told that an open connection closed, once per connection.
+    ///
+    /// Runs on the server strand, so it must not block. A throw is logged and goes no further.
+    /// @param cid The connection.
+    virtual void connectionClosed(ConnectionId cid) { static_cast<void>(cid); }
 };
 
 /// @brief Everything about a `RemoteServer` that is configured rather than
@@ -970,6 +989,31 @@ private:
         return config;
     }
 
+    /// @brief Hands each service this server, the first time any of them is about to answer. On the server strand.
+    void bindServices() {
+        if (_servicesBound) {
+            return;
+        }
+        _servicesBound = true;
+        for (const auto& service : _config.services) {
+            service->bound(weak_from_this());
+        }
+    }
+
+    /// @brief Tells each service that @p cid closed. On the server strand.
+    /// @param cid The connection.
+    void notifyServicesClosed(ConnectionId cid) {
+        for (const auto& service : _config.services) {
+            try {
+                service->connectionClosed(cid);
+            } catch (const std::exception& exc) {
+                ::morph::log::logError("[service] a connection's close was not handled: {}", exc.what());
+            } catch (...) {
+                ::morph::log::logError("[service] a connection's close was not handled");
+            }
+        }
+    }
+
     /// @brief The service that answers @p kind, if any.
     /// @param kind The envelope's `kind`.
     /// @return The first configured service that serves it, or null.
@@ -1043,6 +1087,7 @@ private:
             }
         }
         _connectionScopes.erase(scopeIter);
+        notifyServicesClosed(cid);
     }
 
     /// @brief The facts a service records for connection @p cid. On the server
@@ -2326,7 +2371,10 @@ private:
                 // the service decides on the verified principal, never on the
                 // client's claim.
                 stampVerifiedPrincipal(env, cid);
-                reply(service->handle(env, *_authorizer, factsOf(cid)));
+                bindServices();
+                ConnectionFacts& facts = factsOf(cid);
+                facts.cid = cid;
+                reply(service->handle(env, *_authorizer, facts));
             } else {
                 reply(::morph::wire::encode(::morph::wire::makeErr("unknown envelope kind: " + env.kind, env.callId)));
             }
@@ -2813,6 +2861,8 @@ private:
     // filed by `fileCancellable` and withdrawn by `callFinished` or the cancel
     // that stops them.
     std::unordered_map<CancelKey, CancelTarget, CancelKeyHash> _cancellable;
+    /// Whether the services have been handed this server. On the server strand.
+    bool _servicesBound{false};
     std::uint64_t _nextId{0};
     detail::OpaqueIdGenerator _idGen;
     // Admitted executes whose reply has not been sent: incremented at
