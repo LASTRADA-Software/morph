@@ -47,7 +47,7 @@ constexpr std::string_view kPublicAddress = "https://api.anthropic.com";
     if (object == nullptr) {
         return nullptr;
     }
-    auto const found = object->find(key);
+    auto const* const found = object->find(key);
     return found == object->end() ? nullptr : &found->second;
 }
 
@@ -195,11 +195,11 @@ private:
 
     void handleEvent(std::string const& event) {
         std::string data;
-        std::string::size_type at = 0;
-        while (at < event.size()) {
-            auto next = event.find('\n', at);
+        std::string::size_type position = 0;
+        while (position < event.size()) {
+            auto next = event.find('\n', position);
             next = next == std::string::npos ? event.size() : next;
-            std::string_view line{event.data() + at, next - at};
+            std::string_view line = std::string_view{event}.substr(position, next - position);
             if (line.ends_with('\r')) {
                 line.remove_suffix(1);
             }
@@ -210,7 +210,7 @@ private:
                 }
                 data += line;
             }
-            at = next + 1;
+            position = next + 1;
         }
         if (data.empty()) {
             return;
@@ -277,8 +277,8 @@ private:
         auto& object = std::get<Json::object_t>(block->second.data);
         std::string const type = textOf(*change, "type");
         auto const append = [&](std::string const& key, std::string const& piece) {
-            auto const current = object.find(key);
-            std::string joined = current == object.end() ? std::string{} : textOf(block->second, key);
+            auto* const current = object.find(key);
+            std::string const joined = current == object.end() ? std::string{} : textOf(block->second, key);
             object.insert_or_assign(key, joined + piece);
         };
         if (type == "text_delta") {

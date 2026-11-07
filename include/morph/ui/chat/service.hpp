@@ -98,7 +98,13 @@ public:
 
     /// @brief Stops every running turn. A provider call answering later reaches nothing.
     ~ChatService() override {
-        Shared::stopWhere(_shared, [](Turn const&) { return true; });
+        // Stopping a turn builds the event that announces it, which can fail to allocate. A destructor must not throw,
+        // and that event is only a hint.
+        try {
+            Shared::stopWhere(_shared, [](Turn const&) { return true; });
+            // NOLINTNEXTLINE(bugprone-empty-catch)
+        } catch (...) {
+        }
     }
 
     ChatService(ChatService const&) = delete;
@@ -151,10 +157,10 @@ public:
 
     /// @brief Keeps a handle to the server, and warns about actions that would go unrecorded.
     /// @param server The server.
-    void bound(std::weak_ptr<backend::RemoteServer> server) override {
+    void bound(std::weak_ptr<backend::RemoteServer> const& server) override {
         {
             std::scoped_lock const lock{_shared->mutex};
-            _shared->server = std::move(server);
+            _shared->server = server;
         }
         if (_shared->options.provider != nullptr) {
             _shared->warnAboutOptOuts();
@@ -214,7 +220,7 @@ private:
         ConversationStore conversations;
         std::weak_ptr<backend::RemoteServer> server;
         std::map<std::uint64_t, TurnPtr> turns;
-        std::map<std::string, std::deque<std::uint64_t>, std::less<>> finished;
+        std::map<std::string, std::vector<std::uint64_t>, std::less<>> finished;
         std::atomic<std::uint64_t> nextTurn{1};
         std::atomic<std::uint64_t> nextCall{1};
 
@@ -323,8 +329,8 @@ private:
                 std::scoped_lock const lock{self->mutex};
                 std::size_t onConnection = 0;
                 std::size_t ofPrincipal = 0;
-                for (auto const& [id, held] : self->turns) {
-                    static_cast<void>(id);
+                for (auto const& [turnId, held] : self->turns) {
+                    static_cast<void>(turnId);
                     if (held->state.status == TurnStatus::Running) {
                         onConnection += held->cid == cid ? 1U : 0U;
                         ofPrincipal += held->session.principal == turn->session.principal ? 1U : 0U;
@@ -384,7 +390,7 @@ private:
                 kept.push_back(turn->id);
                 if (kept.size() > kFinishedTurnsKept) {
                     self->turns.erase(kept.front());
-                    kept.pop_front();
+                    kept.erase(kept.begin());
                 }
             }
             if (call != nullptr) {
@@ -400,8 +406,8 @@ private:
             std::vector<TurnPtr> matched;
             {
                 std::scoped_lock const lock{self->mutex};
-                for (auto const& [id, turn] : self->turns) {
-                    static_cast<void>(id);
+                for (auto const& [turnId, turn] : self->turns) {
+                    static_cast<void>(turnId);
                     if (turn->state.status == TurnStatus::Running && which(*turn)) {
                         matched.push_back(turn);
                     }
@@ -635,6 +641,7 @@ private:
             nextTool(self, turn);
         }
 
+        // NOLINTNEXTLINE(misc-no-recursion): each pass takes one pending call, and maxToolCallsPerTurn bounds them.
         static void nextTool(std::shared_ptr<Shared> const& self, TurnPtr const& turn) {
             if (turn->pending.empty()) {
                 Message const asked = turn->messages.back();
@@ -712,15 +719,17 @@ private:
         }
 
         // Records what a tool call came to, and moves on to the next one.
-        static void report(std::shared_ptr<Shared> const& self, TurnPtr const& turn, ToolCall const& call, bool ok,
-                           std::string text) {
+        // NOLINTNEXTLINE(misc-no-recursion): each pass takes one pending call, and maxToolCallsPerTurn bounds them.
+        static void report(std::shared_ptr<Shared> const& self, TurnPtr const& turn, ToolCall const& call,
+                           bool succeeded, std::string const& text) {
             {
                 std::scoped_lock const lock{self->mutex};
                 turn->state.steps.push_back(
-                    ToolStep{.name = call.name, .ok = ok, .message = bounded(text, kStepMessageBytes)});
+                    ToolStep{.name = call.name, .ok = succeeded, .message = bounded(text, kStepMessageBytes)});
             }
-            turn->results.push_back(ToolResult{
-                .callId = call.id, .text = bounded(text, self->options.limits.maxToolResultBytes), .isError = !ok});
+            turn->results.push_back(ToolResult{.callId = call.id,
+                                               .text = bounded(text, self->options.limits.maxToolResultBytes),
+                                               .isError = !succeeded});
             announce(*self, *turn, "tool", call.name);
             nextTool(self, turn);
         }

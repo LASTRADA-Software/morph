@@ -8,7 +8,6 @@
 #include <map>
 #include <morph/ui/chat/screen_tools.hpp>
 #include <morph/ui/document.hpp>
-#include <regex>
 #include <set>
 #include <string>
 #include <string_view>
@@ -81,6 +80,7 @@ void collectNested(ui::DocNode const& node, std::vector<chat::ModelRef>& models)
 
 std::vector<std::string> namesOf(std::vector<chat::BoundTool> const& tools) {
     std::vector<std::string> names;
+    names.reserve(tools.size());
     for (chat::BoundTool const& tool : tools) {
         names.push_back(tool.spec.name);
     }
@@ -95,8 +95,14 @@ chat::BoundTool const& named(std::vector<chat::BoundTool> const& tools, std::str
 }
 
 bool allValid(std::vector<std::string> const& names) {
-    static std::regex const pattern{"^[a-zA-Z0-9_-]{1,64}$"};
-    return std::ranges::all_of(names, [](std::string const& name) { return std::regex_match(name, pattern); });
+    // Spelled out and not a std::regex: libstdc++'s executor trips GCC's -Walloc-zero, and warnings are errors.
+    auto const allowed = [](char const letter) {
+        return (letter >= 'a' && letter <= 'z') || (letter >= 'A' && letter <= 'Z') ||
+               (letter >= '0' && letter <= '9') || letter == '_' || letter == '-';
+    };
+    return std::ranges::all_of(names, [&](std::string const& name) {
+        return !name.empty() && name.size() <= 64 && std::ranges::all_of(name, allowed);
+    });
 }
 
 bool unique(std::vector<std::string> names) {

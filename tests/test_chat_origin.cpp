@@ -56,7 +56,7 @@ inline morph::async::detail::TimeoutScheduler& scheduler() {
 }
 
 struct OriginModel {
-    std::string execute(Mark const& action) const { return action.text; }
+    [[nodiscard]] std::string execute(Mark const& action) const { return action.text; }
 
     core::async::Task<std::string> execute(SuspendAndMark action) const {
         co_await morph::async::delay(scheduler(), std::chrono::milliseconds{20});
@@ -138,6 +138,7 @@ struct Rig {
         return settle(answer);
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a test helper; the token is almost always left out.
     [[nodiscard]] wire::Envelope executeOf(std::string action, std::string const& token = "alice") const {
         wire::Envelope env;
         env.kind = "execute";
@@ -155,7 +156,8 @@ struct Rig {
         env.callId = nextCall.fetch_add(1);
         auto replied = std::make_shared<std::promise<std::string>>();
         auto answer = replied->get_future();
-        server->executeWithOrigin(std::move(env), morph::session::RunOrigin{"assistant", std::string{kTurnText}},
+        server->executeWithOrigin(std::move(env),
+                                  morph::session::RunOrigin{.kind = "assistant", .text = std::string{kTurnText}},
                                   [replied](std::string const& text) { replied->set_value(text); });
         return settle(answer);
     }

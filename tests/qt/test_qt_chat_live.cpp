@@ -72,16 +72,16 @@ inline Store& store() {
 }
 
 struct IgnitionModel {
-    ListTestsResult execute(ListTests const& /*action*/) const {
+    [[nodiscard]] ListTestsResult execute(ListTests const& /*action*/) const {
         std::scoped_lock const lock{store().mutex};
         return ListTestsResult{.tests = store().tests};
     }
-    TestView execute(AddTest const& /*action*/) const {
+    [[nodiscard]] TestView execute(AddTest const& /*action*/) const {
         std::scoped_lock const lock{store().mutex};
         store().tests.push_back(TestView{.id = static_cast<std::int64_t>(store().tests.size()) + 1});
         return store().tests.back();
     }
-    TestView execute(RecordValues const& action) const {
+    [[nodiscard]] TestView execute(RecordValues const& action) const {
         std::scoped_lock const lock{store().mutex};
         for (TestView& test : store().tests) {
             if (test.id == action.id) {
@@ -197,6 +197,7 @@ struct Rig {
         return wire::decode(**replied);
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a test helper with one caller's worth of arguments.
     chat::TurnState say(std::string text, std::uint64_t instance, morph::backend::ConnectionId cid) {
         chat::TurnRequest request;
         request.screenId = "live.ignition";

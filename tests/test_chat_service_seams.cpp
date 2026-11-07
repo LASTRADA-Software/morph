@@ -55,10 +55,10 @@ struct Recorder final : morph::backend::IEnvelopeService {
         }
         return handle(request, authorizer);
     }
-    void bound(std::weak_ptr<RemoteServer> server) override {
+    void bound(std::weak_ptr<RemoteServer> const& server) override {
         std::scoped_lock const lock{mutex};
         ++boundCount;
-        weak = std::move(server);
+        weak = server;
     }
     void connectionClosed(ConnectionId cid) override {
         std::scoped_lock const lock{mutex};

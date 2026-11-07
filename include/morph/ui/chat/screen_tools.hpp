@@ -144,6 +144,7 @@ private:
         }
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): both come straight from the document's own fields, at the one caller.
     void add(std::string_view alias, std::string_view action, bool changes) {
         auto const found = _aliases.find(alias);
         if (action.empty() || found == _aliases.end() || found->second.empty()) {
@@ -186,8 +187,8 @@ private:
 [[nodiscard]] inline std::string toolDescription(NamedAction const& named, Json const& schema) {
     std::string description = (named.changes ? "Changes data: runs " : "Reads data: runs ") + named.action + " on " +
                               named.model->name + ".";
-    Json::object_t const& object = std::get<Json::object_t>(schema.data);
-    if (auto const found = object.find("description"); found != object.end()) {
+    auto const& object = std::get<Json::object_t>(schema.data);
+    if (auto const* const found = object.find("description"); found != object.end()) {
         if (auto const* const text = std::get_if<std::string>(&found->second.data)) {
             description += ' ' + *text;
         }

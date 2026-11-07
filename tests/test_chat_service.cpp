@@ -70,23 +70,23 @@ inline Store& store() {
 }
 
 struct NotesModel {
-    std::vector<Note> execute(ListNotes const& /*action*/) const {
+    [[nodiscard]] std::vector<Note> execute(ListNotes const& /*action*/) const {
         std::scoped_lock const lock{store().mutex};
         return store().notes;
     }
-    Note execute(AddNote const& action) const {
+    [[nodiscard]] Note execute(AddNote const& action) const {
         std::scoped_lock const lock{store().mutex};
         store().notes.push_back(Note{.id = static_cast<std::int64_t>(store().notes.size()) + 1, .text = action.text});
         return store().notes.back();
     }
-    bool execute(WipeNotes const& /*action*/) const {
+    [[nodiscard]] bool execute(WipeNotes const& /*action*/) const {
         std::scoped_lock const lock{store().mutex};
         store().notes.clear();
         return true;
     }
-    Note execute(QuietNote const& action) const { return Note{.id = 1, .text = action.text}; }
-    Note execute(SilentNote const& action) const { return Note{.id = 1, .text = action.text}; }
-    bool execute(SecretRead const& /*action*/) const { return true; }
+    [[nodiscard]] Note execute(QuietNote const& action) const { return Note{.id = 1, .text = action.text}; }
+    [[nodiscard]] Note execute(SilentNote const& action) const { return Note{.id = 1, .text = action.text}; }
+    [[nodiscard]] bool execute(SecretRead const& /*action*/) const { return true; }
 };
 
 }  // namespace chat_service_test
@@ -187,12 +187,9 @@ struct EventWire {
     }
 
     [[nodiscard]] bool changed(std::string_view record) {
-        for (wire::EventBody const& event : events()) {
-            if (event.topic == wire::kChangesTopic && event.payload.str.contains(record)) {
-                return true;
-            }
-        }
-        return false;
+        return std::ranges::any_of(events(), [&](wire::EventBody const& event) {
+            return event.topic == wire::kChangesTopic && event.payload.str.contains(record);
+        });
     }
 };
 
@@ -229,7 +226,7 @@ struct Rig {
     chat::ChatLimits limits;
     std::shared_ptr<morph::backend::RemoteServer> server;
     std::shared_ptr<ui::ServedBundle const> bundle;
-    EventWire wire_;
+    EventWire eventWire;
     std::atomic<std::uint64_t> nextCall{1};
 
     explicit Rig(chat::ChatLimits given = {}, bool withProvider = true) : limits{given} {
@@ -281,15 +278,17 @@ struct Rig {
 
     ConnectionId gui(std::string const& token = "alice") {
         auto const cid = server->openConnection();
-        server->setConnectionWriter(cid, wire_.writer());
+        server->setConnectionWriter(cid, eventWire.writer());
         wire::Envelope hello;
         hello.kind = std::string{ui::kHelloKind};
         hello.body = R"({"vocabularies":["ui/1","expr/1"],"events":true})";
-        REQUIRE(call(std::move(hello), cid, token).kind == "ok");
+        auto const helloReply = call(std::move(hello), cid, token);
+        REQUIRE(helloReply.kind == "ok");
         wire::Envelope watch;
         watch.kind = std::string{wire::kWatchKind};
         watch.body = R"({"records":["Chat_Note"],"instances":[]})";
-        REQUIRE(call(std::move(watch), cid, token).kind == "ok");
+        auto const watchReply = call(std::move(watch), cid, token);
+        REQUIRE(watchReply.kind == "ok");
         return cid;
     }
 
@@ -327,6 +326,7 @@ struct Rig {
         return accepted->turnId;
     }
 
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a test helper; the token is almost always left out.
     chat::TurnState state(std::uint64_t turnId, ConnectionId cid, std::string const& token = "alice") {
         wire::Envelope env;
         env.kind = std::string{chat::kStateKind};
@@ -410,7 +410,7 @@ TEST_CASE("a_turns_change_reaches_the_watching_gui", "[chat][service]") {
     auto const id = rig.instance(cid);
     rig.scriptAdd("hi");
     static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "add hi"), cid), cid));
-    CHECK(waitFor([&] { return rig.wire_.changed("Chat_Note"); }));
+    CHECK(waitFor([&] { return rig.eventWire.changed("Chat_Note"); }));
 }
 
 TEST_CASE("removing_the_effect_stops_the_gui_event", "[chat][service]") {
@@ -425,7 +425,7 @@ TEST_CASE("removing_the_effect_stops_the_gui_event", "[chat][service]") {
     REQUIRE(state.status == chat::TurnStatus::Done);
     REQUIRE(state.steps.at(0).ok);
     morph::testing::storageOwner().runFor(200ms);
-    CHECK_FALSE(rig.wire_.changed("Chat_Note"));
+    CHECK_FALSE(rig.eventWire.changed("Chat_Note"));
 }
 
 TEST_CASE("a_turn_writes_one_marked_journal_entry", "[chat][service]") {
@@ -460,7 +460,7 @@ TEST_CASE("a_destructive_action_takes_effect", "[chat][service]") {
     REQUIRE(entries.size() == 1);
     CHECK(entries.back().actionType == "Chat_Wipe");
     CHECK(entries.back().originKind == "assistant");
-    CHECK(waitFor([&] { return rig.wire_.changed("Chat_Note"); }));
+    CHECK(waitFor([&] { return rig.eventWire.changed("Chat_Note"); }));
 }
 
 TEST_CASE("a_refused_action_is_reported_and_changes_nothing", "[chat][service]") {
@@ -491,7 +491,8 @@ TEST_CASE("the_chat_gate_refuses_an_unauthorised_principal", "[chat][service]") 
     CHECK(rig.fake->calls() == 0);
     wire::Envelope probe;
     probe.kind = std::string{chat::kStateKind};
-    CHECK(rig.call(std::move(probe), cid, "muted").kind == "err");
+    auto const probeReply = rig.call(std::move(probe), cid, "muted");
+    CHECK(probeReply.kind == "err");
 }
 
 TEST_CASE("a_screen_the_principal_may_not_fetch_gets_no_tools", "[chat][service]") {
@@ -599,7 +600,8 @@ TEST_CASE("cancelling_a_turn_cancels_its_provider_call", "[chat][service]") {
     REQUIRE(waitFor([&] { return rig.fake->calls() == 1; }));
     wire::Envelope cancel;
     cancel.kind = std::string{chat::kCancelKind};
-    REQUIRE(rig.call(std::move(cancel), cid).kind == "ok");
+    auto const cancelReply = rig.call(std::move(cancel), cid);
+    REQUIRE(cancelReply.kind == "ok");
     CHECK(rig.fake->cancelled() == 1);
     auto const state = rig.finished(turnId, cid);
     CHECK(state.status == chat::TurnStatus::Cancelled);
@@ -643,7 +645,8 @@ TEST_CASE("a_closed_tab_fails_the_tool_and_ends_the_turn", "[chat][service]") {
     wire::Envelope gone;
     gone.kind = "deregister";
     gone.modelId = id;
-    REQUIRE(rig.call(std::move(gone), cid).kind == "ok");
+    auto const goneReply = rig.call(std::move(gone), cid);
+    REQUIRE(goneReply.kind == "ok");
     rig.scriptAdd("hi");
     auto const state = rig.finished(rig.start(Rig::turnOn(id, "add"), cid), cid);
     REQUIRE(state.steps.size() == 1);
@@ -674,7 +677,8 @@ TEST_CASE("a_malformed_turn_body_is_refused", "[chat][service]") {
     wire::Envelope env;
     env.kind = std::string{chat::kTurnKind};
     env.body = "[1]";
-    CHECK(rig.call(std::move(env), cid).kind == "err");
+    auto const envReply = rig.call(std::move(env), cid);
+    CHECK(envReply.kind == "err");
 }
 
 TEST_CASE("a_turn_needs_a_connection", "[chat][service]") {
@@ -688,12 +692,12 @@ TEST_CASE("a_dropped_final_event_is_recovered_by_reading_state", "[chat][service
     Rig rig;
     auto const cid = rig.gui();
     auto const id = rig.instance(cid);
-    rig.wire_.backlog = morph::backend::kEventBacklogHigh + 1;
+    rig.eventWire.backlog = morph::backend::kEventBacklogHigh + 1;
     rig.fake->script(chat::Response{.text = "the answer", .calls = {}, .opaque = {}});
     auto const state = rig.finished(rig.start(Rig::turnOn(id, "go"), cid), cid);
     CHECK(state.status == chat::TurnStatus::Done);
     CHECK(state.text == "the answer");
-    for (wire::EventBody const& event : rig.wire_.events()) {
+    for (wire::EventBody const& event : rig.eventWire.events()) {
         CHECK(event.topic != chat::kChatTopic);
     }
 }
@@ -708,7 +712,7 @@ TEST_CASE("events_report_a_turns_progress_in_order", "[chat][service]") {
     std::vector<chat::TurnEvent> seen;
     REQUIRE(waitFor([&] {
         seen.clear();
-        for (wire::EventBody const& event : rig.wire_.events()) {
+        for (wire::EventBody const& event : rig.eventWire.events()) {
             if (event.topic == chat::kChatTopic) {
                 auto read = chat::readTurnEvent(event.payload.str);
                 REQUIRE(read.has_value());
@@ -734,7 +738,8 @@ TEST_CASE("no_provider_serves_no_kind", "[chat][service]") {
     auto const cid = rig.gui();
     wire::Envelope probe;
     probe.kind = std::string{chat::kStateKind};
-    CHECK(rig.call(std::move(probe), cid).kind == "err");
+    auto const probeReply = rig.call(std::move(probe), cid);
+    CHECK(probeReply.kind == "err");
 }
 
 TEST_CASE("the_opt_out_warning_fires_and_the_tool_result_says_so", "[chat][service]") {
@@ -807,7 +812,8 @@ TEST_CASE("a_cancelled_request_is_not_carried_into_the_next_turn", "[chat][conve
     REQUIRE(waitFor([&] { return rig.fake->calls() == 1; }));
     wire::Envelope cancel;
     cancel.kind = std::string{chat::kCancelKind};
-    REQUIRE(rig.call(std::move(cancel), cid).kind == "ok");
+    auto const cancelReply = rig.call(std::move(cancel), cid);
+    REQUIRE(cancelReply.kind == "ok");
     static_cast<void>(rig.finished(turnId, cid));
     rig.fake->release();
     rig.fake->script(chat::Response{.text = "ok", .calls = {}, .opaque = {}});
@@ -830,7 +836,8 @@ TEST_CASE("end_of_chat_stops_the_turn_and_ends_the_conversations", "[chat][conve
     REQUIRE(waitFor([&] { return rig.fake->calls() == 2; }));
     wire::Envelope end;
     end.kind = std::string{chat::kEndKind};
-    REQUIRE(rig.call(std::move(end), cid).kind == "ok");
+    auto const endReply = rig.call(std::move(end), cid);
+    REQUIRE(endReply.kind == "ok");
     CHECK(rig.fake->cancelled() == 1);
     CHECK(rig.finished(running, cid).status == chat::TurnStatus::Cancelled);
     rig.fake->release();
@@ -850,7 +857,8 @@ TEST_CASE("end_of_chat_leaves_another_connections_turn_running", "[chat][convers
     REQUIRE(waitFor([&] { return rig.fake->calls() == 1; }));
     wire::Envelope end;
     end.kind = std::string{chat::kEndKind};
-    REQUIRE(rig.call(std::move(end), cid).kind == "ok");
+    auto const endReply = rig.call(std::move(end), cid);
+    REQUIRE(endReply.kind == "ok");
     CHECK(rig.fake->cancelled() == 0);
     rig.fake->release();
     CHECK(rig.finished(elsewhere, other).status == chat::TurnStatus::Done);

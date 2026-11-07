@@ -915,9 +915,9 @@ struct ChatRig {
 
 // Mutation: show the slot whatever the probe said.
 TEST_CASE("the_shell_shows_the_panel_only_when_the_server_has_a_chat", "[client][chat]") {
-    ChatRig offered;
+    ChatRig const offered;
     CHECK(offered.panelShown());
-    ChatRig refused{false};
+    ChatRig const refused{false};
     CHECK_FALSE(refused.panelShown());
 }
 

@@ -131,7 +131,7 @@ struct ConfigFile {
         if (*file.provider.maxTokens <= 0) {
             return std::unexpected(std::string{"the chat configuration's `maxTokens` must be above 0"});
         }
-        config.provider.maxTokens = *file.provider.maxTokens;
+        config.provider.maxTokens = file.provider.maxTokens;
     }
     // A limit of 0 would refuse every turn, so it can only be a mistake.
     auto const apply = [](std::optional<std::size_t> const& given, std::size_t& into, std::string_view name,
@@ -173,7 +173,7 @@ struct ConfigFile {
 /// @return The configuration, or why not.
 [[nodiscard]] inline std::expected<ChatConfig, std::string> loadChatConfig(
     std::filesystem::path const& path, EnvironmentLookup const& environment = detail::processEnvironment) {
-    std::ifstream file{path};
+    std::ifstream const file{path};
     if (!file) {
         return std::unexpected("the chat configuration file `" + path.string() + "` cannot be opened");
     }

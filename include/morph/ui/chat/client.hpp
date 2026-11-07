@@ -103,6 +103,8 @@ public:
                 done();
             }
         });
+        // The analyzer loses track of the temporary std::function here; `send` moves it into a callback that owns it.
+        // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
     }
 
     /// @brief Selects which conversation `entries` shows.
@@ -223,6 +225,9 @@ private:
     }
 
     void refused(std::string reason) {
+        if (!_active) {
+            return;
+        }
         _active->error = std::move(reason);
         show();
         _active.reset();
@@ -263,16 +268,20 @@ private:
 
     // Redraws the running turn's entries.
     void show() {
-        Conversation& conversation = _conversations[_active->key];
-        conversation.resize(_active->base);
-        for (std::string const& tool : _active->tools) {
+        if (!_active) {
+            return;
+        }
+        Active const& active = *_active;
+        Conversation& conversation = _conversations[active.key];
+        conversation.resize(active.base);
+        for (std::string const& tool : active.tools) {
             conversation.push_back(Entry{.kind = "tool", .text = tool});
         }
-        if (!_active->text.empty()) {
-            conversation.push_back(Entry{.kind = "assistant", .text = _active->text});
+        if (!active.text.empty()) {
+            conversation.push_back(Entry{.kind = "assistant", .text = active.text});
         }
-        if (!_active->error.empty()) {
-            conversation.push_back(Entry{.kind = "error", .text = _active->error});
+        if (!active.error.empty()) {
+            conversation.push_back(Entry{.kind = "error", .text = active.error});
         }
         notify();
     }

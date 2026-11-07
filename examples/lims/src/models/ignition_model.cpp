@@ -57,11 +57,12 @@ namespace {
     if (!row) {
         throw NotFound{"no ignition test " + std::to_string(testId)};
     }
-    return std::move(*row);
+    return *row;
 }
 
 }  // namespace
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ListIgnitionTestsResult IgnitionModel::execute(const ListIgnitionTests& /*action*/) {
     requirePrincipal();
     Lightweight::DataMapper mapper;
@@ -72,6 +73,7 @@ ListIgnitionTestsResult IgnitionModel::execute(const ListIgnitionTests& /*action
     return result;
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 IgnitionTestView IgnitionModel::execute(const AddIgnitionTest& /*action*/) {
     requirePrincipal();
     Lightweight::DataMapper mapper;
@@ -80,6 +82,7 @@ IgnitionTestView IgnitionModel::execute(const AddIgnitionTest& /*action*/) {
     return viewOf(row);
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 IgnitionTestView IgnitionModel::execute(const RecordIgnitionValues& action) {
     requirePrincipal();
     Lightweight::DataMapper mapper;
@@ -97,10 +100,11 @@ IgnitionTestView IgnitionModel::execute(const RecordIgnitionValues& action) {
     return viewOf(row);
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 DeleteIgnitionTestResult IgnitionModel::execute(const DeleteIgnitionTest& action) {
     requirePrincipal();
     Lightweight::DataMapper mapper;
-    db::IgnitionTestRecord row = find(mapper, action.id);
+    db::IgnitionTestRecord const row = find(mapper, action.id);
     mapper.Delete(row);
     return DeleteIgnitionTestResult{.id = action.id};
 }

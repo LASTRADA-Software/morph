@@ -51,15 +51,15 @@ struct WorkModel {
         text = action.text;
         return text;
     }
-    std::string execute(GetText const& /*action*/) const { return text; }
-    Note execute(AddNote const& action) const { return Note{.id = 1, .text = action.text}; }
+    [[nodiscard]] std::string execute(GetText const& /*action*/) const { return text; }
+    [[nodiscard]] Note execute(AddNote const& action) const { return Note{.id = 1, .text = action.text}; }
 };
 
 struct LoggedAdd {
     std::string text;
 };
 struct LoggedModel {
-    std::string execute(LoggedAdd const& action) const { return action.text; }
+    [[nodiscard]] std::string execute(LoggedAdd const& action) const { return action.text; }
 };
 
 }  // namespace chat_settle
@@ -186,11 +186,13 @@ struct Rig {
 void negotiate(Rig& rig, morph::backend::ConnectionId cid, std::string const& watchBody) {
     wire::Envelope hello;
     hello.kind = "settle-hello";
-    REQUIRE(rig.call(std::move(hello), cid).kind == "ok");
+    auto const helloReply = rig.call(std::move(hello), cid);
+    REQUIRE(helloReply.kind == "ok");
     wire::Envelope watch;
     watch.kind = std::string{wire::kWatchKind};
     watch.body = watchBody;
-    REQUIRE(rig.call(std::move(watch), cid).kind == "ok");
+    auto const watchReply = rig.call(std::move(watch), cid);
+    REQUIRE(watchReply.kind == "ok");
 }
 
 }  // namespace
@@ -204,7 +206,7 @@ TEST_CASE("unscoped_execute_reaches_a_connections_private_instance", "[chat][set
 
     auto const read = rig.run(instance, "Settle_Work", "Settle_Get", "{}", cid);
     REQUIRE(read.kind == "ok");
-    CHECK(read.body.find("hello") != std::string::npos);
+    CHECK(read.body.contains("hello"));
 }
 
 TEST_CASE("unscoped_execute_on_a_private_instance_reaches_the_gui_as_an_event", "[chat][settle]") {
@@ -220,7 +222,7 @@ TEST_CASE("unscoped_execute_on_a_private_instance_reaches_the_gui_as_an_event", 
     REQUIRE(waitFor([&] { return !rig.wire.frames().empty(); }));
     auto const event = wire::decode(rig.wire.frames().front());
     CHECK(event.kind == wire::kEventKind);
-    CHECK(event.body.find(std::to_string(instance)) != std::string::npos);
+    CHECK(event.body.contains(std::to_string(instance)));
 }
 
 TEST_CASE("a_records_change_from_an_unscoped_execute_reaches_a_watcher_with_the_same_principal", "[chat][settle]") {
@@ -232,7 +234,7 @@ TEST_CASE("a_records_change_from_an_unscoped_execute_reaches_a_watcher_with_the_
     REQUIRE(rig.run(instance, "Settle_Work", "Settle_AddNote", R"({"text":"hello"})", 0).kind == "ok");
 
     REQUIRE(waitFor([&] { return !rig.wire.frames().empty(); }));
-    CHECK(wire::decode(rig.wire.frames().front()).body.find("Settle_Note") != std::string::npos);
+    CHECK(wire::decode(rig.wire.frames().front()).body.contains("Settle_Note"));
 }
 
 TEST_CASE("a_registration_attaching_a_log_gives_exactly_one_entry_per_action", "[chat][settle]") {

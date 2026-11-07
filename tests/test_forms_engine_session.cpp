@@ -142,12 +142,13 @@ TEST_CASE("FormSession: refill keeps the fields the user changed since the last 
     CHECK(harness.server.submits().size() == 1);  // the typed "8" on a ready form; no load submitted
 }
 
-// Mutation: leave the baseline where the last load put it -> the saved "9" counts as an edit and the record's 5 is lost.
+// Mutation: leave the baseline where the last load put it -> the saved "9" counts as an edit and the record's 5 is
+// lost.
 TEST_CASE("FormSession: a field saved by explicit submit takes the record's later value", "[forms-engine][session]") {
     Harness harness;
-    auto const form = harness.session(
-        "TestAction",
-        R"({"properties":{"a":{"type":"integer","x-order":0},"b":{"type":"integer","x-order":1}},
+    auto const form =
+        harness.session("TestAction",
+                        R"({"properties":{"a":{"type":"integer","x-order":0},"b":{"type":"integer","x-order":1}},
             "required":["a","b"],"x-submitMode":"explicit"})");
     harness.type(*form, "a", "9");
     harness.type(*form, "b", "2");
@@ -164,9 +165,9 @@ TEST_CASE("FormSession: a field saved by explicit submit takes the record's late
 // was in flight is replaced.
 TEST_CASE("FormSession: a field edited while its save was in flight keeps the edit", "[forms-engine][session]") {
     Harness harness;
-    auto const form = harness.session(
-        "TestAction",
-        R"({"properties":{"a":{"type":"integer","x-order":0},"b":{"type":"integer","x-order":1}},
+    auto const form =
+        harness.session("TestAction",
+                        R"({"properties":{"a":{"type":"integer","x-order":0},"b":{"type":"integer","x-order":1}},
             "required":["a","b"],"x-submitMode":"explicit"})");
     harness.type(*form, "a", "9");
     harness.type(*form, "b", "2");
@@ -185,7 +186,8 @@ TEST_CASE("FormSession: a field edited while its save was in flight keeps the ed
 
 // Mutation: accept what was sent whatever the field holds now -> the record loaded while the save was in flight counts
 // as an edit, and its later value is refused.
-TEST_CASE("FormSession: a record loaded while a save was in flight takes its later values", "[forms-engine][session]") {
+TEST_CASE("FormSession: a record loaded while a save was in flight takes its later values",
+          "[forms-engine][session]") {
     Harness harness;
     auto const form = harness.session(
         "TestAction",

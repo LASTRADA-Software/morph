@@ -289,7 +289,7 @@ public:
     /// its constructor, where it cannot yet hand out a reference to itself. Weak, since the server owns its services.
     /// Runs on the server strand, so it must not block.
     /// @param server The server.
-    virtual void bound(std::weak_ptr<RemoteServer> server) { static_cast<void>(server); }
+    virtual void bound(std::weak_ptr<RemoteServer> const& server) { static_cast<void>(server); }
 
     /// @brief Told that an open connection closed, once per connection.
     ///

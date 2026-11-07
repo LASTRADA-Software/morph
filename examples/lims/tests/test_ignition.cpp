@@ -26,7 +26,7 @@ morph::math::Rational mass(std::int64_t grams) { return decimal(grams * 1000, 10
 }  // namespace
 
 TEST_CASE("adding_and_recording_an_ignition_test_stores_it", "[lims][ignition]") {
-    DbFixture const db;
+    DbFixture const fixture;
     lims::test::ScopedPrincipal const principal{"tech"};
     lims::IgnitionModel model;
     auto const added = model.execute(lims::AddIgnitionTest{});
@@ -44,7 +44,7 @@ TEST_CASE("adding_and_recording_an_ignition_test_stores_it", "[lims][ignition]")
 }
 
 TEST_CASE("recording_only_some_values_keeps_the_others", "[lims][ignition]") {
-    DbFixture const db;
+    DbFixture const fixture;
     lims::test::ScopedPrincipal const principal{"tech"};
     lims::IgnitionModel model;
     auto const added = model.execute(lims::AddIgnitionTest{});
@@ -56,14 +56,14 @@ TEST_CASE("recording_only_some_values_keeps_the_others", "[lims][ignition]") {
 }
 
 TEST_CASE("recording_on_an_unknown_test_is_refused", "[lims][ignition]") {
-    DbFixture const db;
+    DbFixture const fixture;
     lims::test::ScopedPrincipal const principal{"tech"};
     lims::IgnitionModel model;
     CHECK_THROWS_AS(model.execute(lims::RecordIgnitionValues{.id = 999, .container = mass(1)}), lims::NotFound);
 }
 
 TEST_CASE("deleting_removes_it", "[lims][ignition]") {
-    DbFixture const db;
+    DbFixture const fixture;
     lims::test::ScopedPrincipal const principal{"tech"};
     lims::IgnitionModel model;
     auto const added = model.execute(lims::AddIgnitionTest{});
@@ -74,7 +74,7 @@ TEST_CASE("deleting_removes_it", "[lims][ignition]") {
 
 // Mutation: leave the container out of the numerator.
 TEST_CASE("the_result_is_worked_out_from_the_three_masses", "[lims][ignition]") {
-    DbFixture const db;
+    DbFixture const fixture;
     lims::test::ScopedPrincipal const principal{"tech"};
     lims::IgnitionModel model;
     auto const added = model.execute(lims::AddIgnitionTest{});
@@ -83,14 +83,14 @@ TEST_CASE("the_result_is_worked_out_from_the_three_masses", "[lims][ignition]") 
         lims::RecordIgnitionValues{.id = added.id, .container = mass(100), .before = mass(299), .after = mass(223)});
     // ((299 - 223) - 100) / (299 - 100)
     REQUIRE(recorded.result.has_value());
-    CHECK(*recorded.result == decimal(-1206, 10000, 4));
+    CHECK(recorded.result == decimal(-1206, 10000, 4));
     lims::IgnitionModel fresh;
     CHECK(fresh.execute(lims::ListIgnitionTests{}).tests.at(0).result == decimal(-1206, 10000, 4));
 }
 
 // Mutation: treat an absent mass as 0.
 TEST_CASE("there_is_no_result_until_every_mass_is_known", "[lims][ignition]") {
-    DbFixture const db;
+    DbFixture const fixture;
     lims::test::ScopedPrincipal const principal{"tech"};
     lims::IgnitionModel model;
     auto const added = model.execute(lims::AddIgnitionTest{});
@@ -101,7 +101,7 @@ TEST_CASE("there_is_no_result_until_every_mass_is_known", "[lims][ignition]") {
 
 // Mutation: divide anyway, which gives infinity or NaN and no JSON number at all.
 TEST_CASE("a_sample_of_no_mass_has_no_result", "[lims][ignition]") {
-    DbFixture const db;
+    DbFixture const fixture;
     lims::test::ScopedPrincipal const principal{"tech"};
     lims::IgnitionModel model;
     auto const added = model.execute(lims::AddIgnitionTest{});
