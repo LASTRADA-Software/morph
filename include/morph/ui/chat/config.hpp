@@ -80,6 +80,9 @@ struct ConfigFile {
     std::string systemPrompt;
 };
 
+/// @brief Looks a variable up in the process's environment.
+/// @param name The variable.
+/// @return Its value; nothing when it is not set.
 [[nodiscard]] inline std::optional<std::string> processEnvironment(std::string_view name) {
     // NOLINTNEXTLINE(concurrency-mt-unsafe): read at startup, before a server's threads run.
     char const* const value = std::getenv(std::string{name}.c_str());

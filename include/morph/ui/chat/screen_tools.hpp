@@ -36,10 +36,14 @@ struct BoundTool {
 
 namespace detail {
 
-// A tool name's limit, the strictest a provider's tool format is known to set.
+/// @brief A tool name's limit, the strictest a provider's tool format is known to set.
 inline constexpr std::size_t kMaxToolName = 64;
+/// @brief The hash's length, when a name needs one.
 inline constexpr std::size_t kToolHashDigits = 8;
 
+/// @brief Whether a provider's tool format would take a name.
+/// @param name The name.
+/// @return Whether it would.
 [[nodiscard]] inline bool validToolName(std::string_view name) {
     return !name.empty() && name.size() <= kMaxToolName && std::ranges::all_of(name, [](char const letter) {
         return (letter >= 'a' && letter <= 'z') || (letter >= 'A' && letter <= 'Z') ||
@@ -47,7 +51,9 @@ inline constexpr std::size_t kToolHashDigits = 8;
     });
 }
 
-// FNV-1a: stable across runs, so a name a conversation has already used keeps its meaning.
+/// @brief A hash of @p text, FNV-1a: stable across runs, so a name a conversation has already used keeps its meaning.
+/// @param text The text.
+/// @return Its hash, in hexadecimal.
 [[nodiscard]] inline std::string toolHash(std::string_view text) {
     std::uint32_t hash = 2166136261U;
     for (char const letter : text) {
@@ -64,7 +70,10 @@ inline constexpr std::size_t kToolHashDigits = 8;
     return out;
 }
 
-// A stem made valid and short enough to take the hash's suffix.
+/// @brief A stem made valid and short enough to take a hash as its suffix.
+/// @param stem     The name it starts from.
+/// @param identity What tells this tool from any other.
+/// @return The name.
 [[nodiscard]] inline std::string hashedToolName(std::string const& stem, std::string_view identity) {
     std::string made = stem.substr(0, kMaxToolName - kToolHashDigits - 1);
     std::ranges::replace_if(made, [](char const letter) { return !validToolName(std::string_view{&letter, 1}); }, '_');
@@ -155,6 +164,10 @@ private:
 };
 // NOLINTEND(misc-no-recursion)
 
+/// @brief An action's schema as a tool's, always an object.
+/// @param schemas Each action's schema, by action id.
+/// @param action  The action.
+/// @return The schema.
 [[nodiscard]] inline Json toolSchema(std::map<std::string, Json, std::less<>> const& schemas,
                                      std::string const& action) {
     auto const found = schemas.find(action);
@@ -166,6 +179,10 @@ private:
     return schema;
 }
 
+/// @brief What a tool says it does.
+/// @param named  What the document names.
+/// @param schema The tool's schema.
+/// @return The description.
 [[nodiscard]] inline std::string toolDescription(NamedAction const& named, Json const& schema) {
     std::string description = (named.changes ? "Changes data: runs " : "Reads data: runs ") + named.action + " on " +
                               named.model->name + ".";
