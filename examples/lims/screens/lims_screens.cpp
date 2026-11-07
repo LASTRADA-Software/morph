@@ -430,7 +430,8 @@ ui::Screen ignitionScreen() {
                                                                     {"before", ui::row("before")},
                                                                     {"after", ui::row("after")}}),
                                                 .key = ui::row("id"),
-                                                .fields = {{&RecordIgnitionValues::id, {.hidden = true}}}}),
+                                                .fields = {{&RecordIgnitionValues::id, {.hidden = true}}},
+                                                .presentation = {.submitLabel = "Save", .showStatus = false}}),
                                  ui::text({.text = ui::format("Result: {0}",
                                                               {ui::call("coalesce", {ui::row("result"), "not yet"})})})
                                      .testId("ignition_result"),

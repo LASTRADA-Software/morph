@@ -590,7 +590,10 @@ inline ui::Node FieldView::defaultControl() const {
         .text = [form] { return detail::engine::resultText(*form); },
         .role = [form] { return form->lastError() != nullptr ? ui::TextRole::Error : ui::TextRole::Success; },
     };
-    result.common.visible = [form] { return form->lastError() != nullptr || form->lastReply().has_value(); };
+    // A quiet form still reports a failure: nothing else on it would say the save did not happen.
+    result.common.visible = [form, shared] {
+        return form->lastError() != nullptr || (shared->showStatus && form->lastReply().has_value());
+    };
     result.common.testId = "form_result";
     children.push_back(ui::text(std::move(result)));
     return ui::column(ui::Column{.children = std::move(children), .gap = 4});

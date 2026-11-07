@@ -289,8 +289,9 @@ before it.
   empty, shown whatever `showTitle` says, since a title given is a title wanted; test id `form_title`), else the
   schema's title while `showTitle`. The status line while `showStatus`; a button in explicit mode labelled
   `submitLabel` (default `Submit`; a `ui::Prop`, so a host may bind it), enabled while ready and not in flight;
-  and the last reply or error. The status line names the label: `ready: press Deposit` for a form whose button
-  says *Deposit*.
+  the last error, and while `showStatus` the last reply: a quiet form still reports a failure, since nothing else on
+  it would say the save did not happen. The status line names the label: `ready: press Deposit` for a form whose
+  button says *Deposit*.
 - **Overrides** replace a field's control, resolved by field path, widget hint, unit, then kind. The replacement
   is handed a `FieldView` (the spec, the state, the session) and may wrap `defaultControl()`; it writes the draft
   as the built-in control does.

@@ -181,6 +181,11 @@ the server to turn the chat on (`docs/spec/ui/chat.md`, "Configuration"), and op
 "Add ignition test" and then "container 100, before 299, after 223" fill in a section, and
 `lims_ignition_actions.jsonl` records each change with the mark `assistant` and the words that led to it.
 
+The same screen works with no chat: **Add ignition test** adds a section, and its fields store on **Save**, journaled
+with no mark. Each test shows `((before - after) - container) / (before - container)` once its three masses are known,
+worked out on the server in exact arithmetic and shown to four places, so with a container of 100, before 299 and after
+223 it reads `-0.1206`.
+
 LIMS's sample entry screen does not yet work with a chat. It edits a working copy that a separate save stores, and its
 flags are set by its own buttons, so an assistant's calls change the working copy without those flags following.
 
