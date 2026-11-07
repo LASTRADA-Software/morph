@@ -20,10 +20,12 @@
 #include "lims/dto/offline_dto.hpp"
 #include "lims/dto/result_dto.hpp"
 #include "lims/dto/sample_dto.hpp"
+#include "lims/dto/ignition_dto.hpp"
 #include "lims/dto/sample_entry_dto.hpp"
 #include "lims/dto/verification_dto.hpp"
 #include "lims/models/analysis_catalog_model.hpp"
 #include "lims/models/auth_model.hpp"
+#include "lims/models/ignition_model.hpp"
 #include "lims/models/sample_model.hpp"
 
 namespace lims::screens {
@@ -402,6 +404,35 @@ ui::Screen sampleScreen() {
     });
 }
 
+// Ignition tests, one section each. Every action stores at once, so this works as well through a chat as by hand.
+ui::Screen ignitionScreen() {
+    return ui::screen(std::string{kIgnition}, [](ui::Scope& screen) {
+        screen.title("Ignition tests");
+        auto const ignition = screen.model<IgnitionModel>("ignition", {.instance = ui::Instance::Private});
+        auto const tests = screen.query<ListIgnitionTests>("tests", ignition);
+        auto const add = screen.mutation<AddIgnitionTest>("add", ignition);
+        auto const record = screen.mutation<RecordIgnitionValues>("record", ignition);
+        static_cast<void>(record);
+        auto const remove = screen.mutation<DeleteIgnitionTest>("remove", ignition);
+        return ui::column(
+            {ui::button({.label = "Add ignition test", .onClick = ui::run(add)}).testId("ignition_add"),
+             ui::forEach(tests.value().at(&ListIgnitionTestsResult::tests),
+                         {.key = ui::row("id"), .axis = std::string{"vertical"}, .gap = std::int64_t{2}},
+                         [&remove](ui::RowScope& /*test*/) {
+                             return ui::column(
+                                        {ui::text({.text = ui::format("Ignition test {0}", {ui::row("id")}),
+                                                   .role = std::string{"section"}}),
+                                         ui::text({.text = ui::format("Container: {0}", {ui::row("container")})}),
+                                         ui::text({.text = ui::format("Before: {0}", {ui::row("before")})}),
+                                         ui::text({.text = ui::format("After: {0}", {ui::row("after")})}),
+                                         ui::button({.label = "Delete",
+                                                     .onClick = ui::run(remove, {{&DeleteIgnitionTest::id,
+                                                                                  ui::row("id")}})})})
+                                 .testId("ignition_test_row");
+                         })});
+    });
+}
+
 // Sign-in: the only screen served before it, so it holds no query. A successful login installs the principal it
 // answered and opens sample registration.
 ui::Screen loginScreen() {
@@ -456,6 +487,8 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
         {.id = std::string{kLifecycle}, .title = "Lifecycle", .registered = screens.add(lifecycleScreen())});
     listed.push_back({.id = std::string{kResults}, .title = "Results", .registered = screens.add(resultsScreen())});
     listed.push_back({.id = std::string{kSample}, .title = "Sample", .registered = screens.add(sampleScreen())});
+    listed.push_back(
+        {.id = std::string{kIgnition}, .title = "Ignition tests", .registered = screens.add(ignitionScreen())});
     listed.push_back({.id = std::string{kLogin}, .title = "Sign in", .registered = screens.add(loginScreen())});
     for (Listed const& screen : listed) {
         if (!screen.registered) {

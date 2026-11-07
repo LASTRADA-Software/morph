@@ -365,7 +365,7 @@ private:
             if (call != nullptr) {
                 call->cancel();
             }
-            emit(*self, *turn, status == TurnStatus::Failed ? "error" : "done",
+            announce(*self, *turn, status == TurnStatus::Failed ? "error" : "done",
                  status == TurnStatus::Failed ? turn->state.error : std::string{});
         }
 
@@ -388,7 +388,7 @@ private:
         }
 
         // A hint to the turn's connection. Lost events are expected, so nothing depends on this arriving.
-        static void emit(Shared& self, Turn& turn, std::string_view kind, std::string text) {
+        static void announce(Shared& self, Turn& turn, std::string_view kind, std::string text) {
             std::shared_ptr<backend::RemoteServer> server;
             std::uint64_t seq = 0;
             {
@@ -553,7 +553,7 @@ private:
                     turn->state.text += piece;
                     turn->roundStreamed = true;
                 }
-                emit(*self, *turn, "text", piece);
+                announce(*self, *turn, "text", piece);
             };
             sink.done = [self, turn](std::expected<Response, std::string> outcome) {
                 auto held = std::make_shared<std::expected<Response, std::string>>(std::move(outcome));
@@ -593,7 +593,7 @@ private:
                 }
             }
             if (!streamed && !outcome->text.empty()) {
-                emit(*self, *turn, "text", outcome->text);
+                announce(*self, *turn, "text", outcome->text);
             }
             turn->messages.push_back(
                 Message{.role = "assistant",
@@ -682,7 +682,7 @@ private:
                 turn->state.steps.push_back(ToolStep{.name = call.name, .ok = ok, .message = text});
             }
             turn->results.push_back(ToolResult{.callId = call.id, .text = std::move(text), .isError = !ok});
-            emit(*self, *turn, "tool", call.name);
+            announce(*self, *turn, "tool", call.name);
             nextTool(self, turn);
         }
     };

@@ -8,6 +8,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/ui/author.hpp>
+#include <morph/ui/chat/client.hpp>
+#include <morph/ui/chat/panel.hpp>
+#include <morph/ui/chat/service.hpp>
 #include <morph/ui/service.hpp>
 
 namespace ui = morph::ui::author;

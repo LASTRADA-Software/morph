@@ -28,6 +28,9 @@ inline constexpr std::string_view kResults = "lims.results";
 /// @brief Sample entry: a private working copy of one sample (or a new one), edited section by section and saved.
 inline constexpr std::string_view kSample = "lims.sample";
 
+/// @brief Ignition tests: one section per test, each stored as it changes, so a chat's change applies at once.
+inline constexpr std::string_view kIgnition = "lims.ignition";
+
 /// @brief Sign-in, the one screen served before it: a successful login opens sample registration. In process the
 ///        client signs in its `--user` itself, so this is the server's way in.
 inline constexpr std::string_view kLogin = "lims.login";
