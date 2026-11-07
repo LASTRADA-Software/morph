@@ -37,6 +37,9 @@ using ui::Json;
 // off.
 constexpr int kTransferTimeoutMs = 300000;
 
+// This API requires a limit, and a streamed answer has no timeout for a large one to run into.
+constexpr int kDefaultMaxTokens = 64000;
+
 [[nodiscard]] Json const* member(Json const& value, std::string_view key) {
     auto const* const object = std::get_if<Json::object_t>(&value.data);
     if (object == nullptr) {
@@ -85,7 +88,7 @@ constexpr int kTransferTimeoutMs = 300000;
     return blocks;
 }
 
-[[nodiscard]] QByteArray bodyOf(chat::Request const& request, ChatProviderConfig const& config) {
+[[nodiscard]] QByteArray bodyOf(chat::Request const& request, chat::ProviderConfig const& config) {
     Json::array_t messages;
     for (chat::Message const& message : request.messages) {
         Json content = contentOf(message);
@@ -96,7 +99,7 @@ constexpr int kTransferTimeoutMs = 300000;
         messages.emplace_back(Json::object_t{{"role", message.role}, {"content", std::move(content)}});
     }
     Json::object_t body{{"model", config.model},
-                        {"max_tokens", static_cast<std::int64_t>(config.maxTokens)},
+                        {"max_tokens", static_cast<std::int64_t>(config.maxTokens.value_or(kDefaultMaxTokens))},
                         {"stream", true},
                         {"system", request.system},
                         {"messages", std::move(messages)},
@@ -365,7 +368,7 @@ private:
 
 class AnthropicProvider final : public chat::IProvider {
 public:
-    AnthropicProvider(ChatProviderConfig config, QObject* owner)
+    AnthropicProvider(chat::ProviderConfig config, QObject* owner)
         : _config{std::move(config)}, _owner{owner}, _network{new QNetworkAccessManager(owner)} {
         if (_config.baseUrl.empty()) {
             _config.baseUrl = "https://api.anthropic.com";
@@ -401,14 +404,14 @@ public:
     }
 
 private:
-    ChatProviderConfig _config;
+    chat::ProviderConfig _config;
     QPointer<QObject> _owner;
     QPointer<QNetworkAccessManager> _network;
 };
 
 }  // namespace
 
-std::expected<std::shared_ptr<ui::chat::IProvider>, std::string> makeQtChatProvider(ChatProviderConfig config,
+std::expected<std::shared_ptr<ui::chat::IProvider>, std::string> makeQtChatProvider(ui::chat::ProviderConfig config,
                                                                                     QObject* owner) {
     if (config.name != "anthropic") {
         return std::unexpected("no model provider is named `" + config.name + "`");

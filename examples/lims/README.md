@@ -176,8 +176,8 @@ transitions; journal as regulatory audit.
 ## Chat
 
 The ignition tests screen (`lims.ignition`) is the proof of server-hosted chat (`docs/spec/ui/chat.md`). Each test stores
-as soon as it changes, so a chat's change applies at once and appears through server push. Set `LIMS_CHAT_PROVIDER`,
-`LIMS_CHAT_API_KEY` and `LIMS_CHAT_MODEL` on the server to turn the chat on, and open the screen in the generic client.
+as soon as it changes, so a chat's change applies at once and appears through server push. Point `LIMS_CHAT_CONFIG` at a chat configuration file on
+the server to turn the chat on (`docs/spec/ui/chat.md`, "Configuration"), and open the screen in the generic client.
 "Add ignition test" and then "container 100, before 299, after 223" fill in a section, and
 `lims_ignition_actions.jsonl` records each change with the mark `assistant` and the words that led to it.
 

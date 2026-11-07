@@ -136,8 +136,8 @@ std::string const kToolStream =
     event("message_delta", R"({"type":"message_delta","delta":{"stop_reason":"tool_use"}})") +
     event("message_stop", R"({"type":"message_stop"})");
 
-morph::qt::ChatProviderConfig configFor(std::string url) {
-    morph::qt::ChatProviderConfig config;
+chat::ProviderConfig configFor(std::string url) {
+    chat::ProviderConfig config;
     config.name = "anthropic";
     config.baseUrl = std::move(url);
     config.apiKey = std::string{kKey};
@@ -262,6 +262,7 @@ TEST_CASE("a_request_carries_system_tools_key_and_model", "[qt][chat_provider]")
     CHECK(sent.contains("lab__Add"));
     CHECK(sent.contains("input_schema"));
     CHECK(sent.contains(R"("stream":true)"));
+    CHECK(sent.contains(R"("max_tokens":64000)"));
 }
 
 // Mutation: put the configuration in the reason.

@@ -10,6 +10,7 @@ the push path every other change uses. The design is in
 - [Protocol](#protocol)
 - [Tools](#tools)
 - [Providers](#providers)
+- [Configuration](#configuration)
 - [The turn loop](#the-turn-loop)
 - [Conversations](#conversations)
 - [The client](#the-client)
@@ -69,6 +70,28 @@ one name is `anthropic`, over `QNetworkAccessManager` on `owner`'s thread, and `
   `ConversationStore` clears it when trimming edits the history, and the message then goes back as its text and calls.
 - A tool call cut off by the token limit is reported as a failure and not run, since it usually still parses as a partial
   object.
+
+## Configuration
+
+`config.hpp`. `ChatConfig` is a plain struct of the provider, the limits and the system prompt. An application fills it
+from wherever it keeps settings, and hands it to `makeQtChatProvider` and `ChatOptions::configure`. `loadChatConfig` is an
+optional reader that fills it from a JSON file:
+
+```json
+{
+  "provider": { "name": "anthropic", "model": "...", "apiKeyEnv": "THE_KEY_VARIABLE" },
+  "limits": { "maxToolCallsPerTurn": 16, "idleRetentionMinutes": 480 },
+  "systemPrompt": "..."
+}
+```
+
+- `provider` takes `name`, `model`, `baseUrl`, `maxTokens`, and one of `apiKeyEnv` and `apiKey`. `apiKeyEnv` names an
+  environment variable, which keeps the secret out of the file. Naming both is refused.
+- `limits` takes each field of `ChatLimits`, with `idleRetentionMinutes` for its time limit. What is left out keeps its
+  default.
+- A key the format does not have is refused, so a misspelled limit cannot silently leave the default in force. A limit of
+  0 is refused, since it would refuse every turn.
+- A refusal says what is wrong without quoting the text, which may hold the key.
 
 ## The turn loop
 

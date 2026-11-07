@@ -31,6 +31,7 @@
 #include "../bundle.hpp"
 #include "../document.hpp"
 #include "../service.hpp"
+#include "config.hpp"
 #include "conversations.hpp"
 #include "protocol.hpp"
 #include "provider.hpp"
@@ -65,6 +66,15 @@ struct ChatOptions {
     std::function<std::chrono::steady_clock::time_point()> now;
     /// @brief The dispatcher the server's actions are registered on. Borrowed.
     ::morph::model::detail::ActionDispatcher* dispatcher = &::morph::model::detail::defaultDispatcher();
+
+    /// @brief Takes the limits and the system prompt from a configuration. An empty prompt keeps the default.
+    /// @param config The configuration, however the application filled it.
+    void configure(ChatConfig const& config) {
+        limits = config.limits;
+        if (!config.systemPrompt.empty()) {
+            systemPrompt = config.systemPrompt;
+        }
+    }
 };
 
 /// @brief Answers the chat kinds, and runs each turn's loop on the worker: read what the screen offers, ask the
