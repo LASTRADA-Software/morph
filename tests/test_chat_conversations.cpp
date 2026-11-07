@@ -158,3 +158,36 @@ TEST_CASE("trimming_clears_what_only_the_untouched_conversation_could_replay", "
         CHECK(message.opaque.empty());
     }
 }
+
+// Mutation: bound a conversation by its message count alone.
+TEST_CASE("a_conversation_is_bounded_in_bytes", "[chat][conversation]") {
+    auto configured = limits();
+    configured.maxConversationBytes = 100;
+    chat::ConversationStore store{configured};
+    auto const now = Clock::now();
+    chat::ConversationKey const key{.principal = "alice", .screenId = "s", .identity = "1"};
+    store.append(key, said(std::string(80, 'a')), now);
+    store.append(key, replied("short"), now);
+    store.append(key, said(std::string(80, 'b')), now);
+    auto const history = store.history(key, now);
+    REQUIRE_FALSE(history.empty());
+    CHECK(history.front().text == std::string(80, 'b'));
+    CHECK(history.size() == 1);
+}
+
+// Mutation: drop a message whose reasoning is what fills the conversation only after counting its text.
+TEST_CASE("what_only_a_provider_reads_counts_towards_the_bound", "[chat][conversation]") {
+    auto configured = limits();
+    configured.maxConversationBytes = 100;
+    chat::ConversationStore store{configured};
+    auto const now = Clock::now();
+    chat::ConversationKey const key{.principal = "alice", .screenId = "s", .identity = "1"};
+    store.append(key, said("one"), now);
+    auto big = replied("a");
+    big.opaque = std::string(200, 'o');
+    store.append(key, std::move(big), now);
+    store.append(key, said("two"), now);
+    auto const history = store.history(key, now);
+    REQUIRE_FALSE(history.empty());
+    CHECK(history.front().text == "two");
+}

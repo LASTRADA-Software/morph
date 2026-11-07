@@ -184,6 +184,8 @@ private:
         std::string roundText;
         bool roundStreamed = false;
         std::size_t toolCalls = 0;
+        // What the person said, until a round of the model's answer goes into the conversation with it.
+        std::optional<Message> said;
         // Guarded by Shared::mutex.
         TurnState state;
         std::uint64_t seq = 0;
@@ -203,6 +205,8 @@ private:
 
         // Finished turns are kept so a client that lost the last event can still read how one ended.
         static constexpr std::size_t kFinishedTurnsKept = 8;
+        // A tool step is shown in a turn's state, which must fit one envelope, whatever the tool returned.
+        static constexpr std::size_t kStepMessageBytes = 512;
 
         ChatOptions options;
         std::mutex mutex;
@@ -276,12 +280,18 @@ private:
                                    .identity = turn.request.identity};
         }
 
-        // Adds complete messages to the turn's conversation. Called only with whole rounds, a call together with its
-        // results, so a turn stopped part way leaves nothing a provider would refuse.
-        static void remember(Shared& self, Turn const& turn, std::vector<Message> const& messages) {
+        // Adds complete messages to the turn's conversation, with what the person said ahead of the first. So a turn
+        // stopped before the model answered leaves no trace: the next turn must not read a stopped request as still
+        // wanted. One stopped later keeps what it did, since those changes happened. Whole rounds only, a call with
+        // its results, so nothing is left that a provider would refuse.
+        static void remember(Shared& self, Turn& turn, std::vector<Message> const& messages) {
             std::scoped_lock const lock{self.mutex};
             if (turn.state.status != TurnStatus::Running) {
                 return;
+            }
+            if (turn.said) {
+                self.conversations.append(keyOf(turn), *turn.said, self.now());
+                turn.said.reset();
             }
             for (Message const& message : messages) {
                 self.conversations.append(keyOf(turn), message, self.now());
@@ -531,7 +541,7 @@ private:
                 std::scoped_lock const lock{self->mutex};
                 turn->messages = self->conversations.history(keyOf(*turn), self->now());
             }
-            remember(*self, *turn, {said});
+            turn->said = said;
             turn->messages.push_back(std::move(said));
             callProvider(self, turn);
         }
@@ -688,14 +698,29 @@ private:
                 });
         }
 
+        // @p text, cut at a character's edge when it is longer than @p limit, and saying so, so a model or a person
+        // does not take a part for the whole.
+        [[nodiscard]] static std::string bounded(std::string const& text, std::size_t limit) {
+            if (text.size() <= limit) {
+                return text;
+            }
+            std::size_t end = limit;
+            while (end > 0 && (static_cast<unsigned char>(text.at(end)) & 0xC0U) == 0x80U) {
+                --end;
+            }
+            return text.substr(0, end) + "\n[cut off: the whole was " + std::to_string(text.size()) + " bytes]";
+        }
+
         // Records what a tool call came to, and moves on to the next one.
         static void report(std::shared_ptr<Shared> const& self, TurnPtr const& turn, ToolCall const& call, bool ok,
                            std::string text) {
             {
                 std::scoped_lock const lock{self->mutex};
-                turn->state.steps.push_back(ToolStep{.name = call.name, .ok = ok, .message = text});
+                turn->state.steps.push_back(
+                    ToolStep{.name = call.name, .ok = ok, .message = bounded(text, kStepMessageBytes)});
             }
-            turn->results.push_back(ToolResult{.callId = call.id, .text = std::move(text), .isError = !ok});
+            turn->results.push_back(ToolResult{
+                .callId = call.id, .text = bounded(text, self->options.limits.maxToolResultBytes), .isError = !ok});
             announce(*self, *turn, "tool", call.name);
             nextTool(self, turn);
         }

@@ -141,13 +141,19 @@ record" means to a document, so a different record starts a fresh conversation a
 screen with no record has one conversation per principal.
 
 `ChatLimits` bounds them. `idleRetention` ends a conversation left untouched, and reading one counts as touching it. The
-least recently used goes past `maxConversationsPerPrincipal`. Past `maxMessagesPerConversation` the oldest messages go,
+least recently used goes past `maxConversationsPerPrincipal`. Past `maxMessagesPerConversation` or `maxConversationBytes`
+the oldest messages go,
 along with whatever would leave the history starting with anything but something a person said, since a provider refuses
 a history that opens with a reply or with a result whose call is gone. Nothing survives a restart, and the journal keeps
 what actually changed.
 
 A turn adds whole rounds only, a call together with its results, so one stopped part way leaves nothing a provider would
-refuse.
+refuse. What the person said goes in with the first round, so a turn stopped before the model answered leaves no trace: the
+next turn must not read a stopped request as still wanted, since a change applies at once. A turn stopped later keeps what
+it did, because those changes happened.
+
+A tool's result is cut at `maxToolResultBytes`, with a note saying so, so one large list cannot make every later request
+on that record too large. A turn's state shows a short form of each result, so it always fits one envelope.
 
 **Ending a chat.** The server cannot see a client's sign-out, which happens only in the client, and it learns of a new
 principal only from the connection's next envelope. So a client signing out sends `ui-chat-end`, which stops the

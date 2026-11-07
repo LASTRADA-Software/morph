@@ -797,7 +797,7 @@ TEST_CASE("returning_to_a_record_continues_its_conversation", "[chat][conversati
     CHECK(messages.back().text == "and now");
 }
 
-TEST_CASE("a_cancelled_turn_leaves_no_half_finished_round", "[chat][conversation]") {
+TEST_CASE("a_cancelled_request_is_not_carried_into_the_next_turn", "[chat][conversation]") {
     Rig rig;
     auto const cid = rig.gui();
     auto const id = rig.instance(cid);
@@ -812,10 +812,10 @@ TEST_CASE("a_cancelled_turn_leaves_no_half_finished_round", "[chat][conversation
     rig.fake->release();
     rig.fake->script(chat::Response{.text = "ok", .calls = {}, .opaque = {}});
     static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "second"), cid), cid));
+    // The person stopped it, so the next turn must not read it as still wanted.
     auto const messages = rig.fake->requests().at(1).messages;
-    REQUIRE(messages.size() == 2);
-    CHECK(messages.at(0).text == "first");
-    CHECK(messages.at(1).text == "second");
+    REQUIRE(messages.size() == 1);
+    CHECK(messages.at(0).text == "second");
 }
 
 TEST_CASE("end_of_chat_stops_the_turn_and_ends_the_conversations", "[chat][conversation]") {
@@ -881,4 +881,56 @@ TEST_CASE("the_turn_caps_hold", "[chat][conversation]") {
     auto const third = rig.start(Rig::turnOn(threeInstance, "go"), three);
     // The worker must outlive every turn, so the rig is torn down only once this one is over.
     CHECK(rig.finished(third, three).status == chat::TurnStatus::Done);
+}
+
+// Mutation: leave a stopped turn's completed rounds out, so the model no longer knows what already happened.
+TEST_CASE("a_turn_stopped_after_a_tool_ran_keeps_what_happened", "[chat][conversation]") {
+    chat::ChatLimits limits;
+    limits.maxToolCallsPerTurn = 1;
+    Rig rig{limits};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    // Two rounds: the first call runs, and the second hits the limit, which fails the turn.
+    rig.fake->script(chat::Response{
+        .text = "",
+        .calls = {chat::ToolCall{.id = "1", .name = "notes__Chat_Add", .argumentsJson = R"({"text":"a"})"}},
+        .opaque = {}});
+    rig.fake->script(chat::Response{
+        .text = "",
+        .calls = {chat::ToolCall{.id = "2", .name = "notes__Chat_Add", .argumentsJson = R"({"text":"b"})"}},
+        .opaque = {}});
+    CHECK(rig.finished(rig.start(Rig::turnOn(id, "add two"), cid), cid).status == chat::TurnStatus::Failed);
+    rig.fake->script(chat::Response{.text = "ok", .calls = {}, .opaque = {}});
+    static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "next"), cid), cid));
+    auto const messages = rig.fake->requests().back().messages;
+    REQUIRE(messages.size() == 4);
+    CHECK(messages.at(0).text == "add two");
+    CHECK(messages.at(1).calls.size() == 1);
+    CHECK(messages.at(2).results.size() == 1);
+    CHECK(messages.at(3).text == "next");
+}
+
+// Mutation: pass a tool's whole result along.
+TEST_CASE("a_large_tool_result_is_cut_and_the_turn_stays_readable", "[chat][service]") {
+    chat::ChatLimits limits;
+    limits.maxToolResultBytes = 200;
+    Rig rig{limits};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    std::string const big(5000, 'x');
+    rig.fake->script(
+        chat::Response{.text = "",
+                       .calls = {chat::ToolCall{
+                           .id = "1", .name = "notes__Chat_Add", .argumentsJson = R"({"text":")" + big + R"("})"}},
+                       .opaque = {}});
+    rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "add a lot"), cid), cid);
+    CHECK(state.status == chat::TurnStatus::Done);
+    REQUIRE(state.steps.size() == 1);
+    CHECK(state.steps.at(0).ok);
+    CHECK(state.steps.at(0).message.size() < 1000);
+    auto const sent = rig.fake->requests().at(1).messages.at(2).results.at(0).text;
+    CHECK(sent.size() < 400);
+    // The model is told, so it does not take a part for the whole.
+    CHECK(sent.contains("cut off"));
 }

@@ -71,6 +71,8 @@ struct LimitsFile {
     std::optional<std::size_t> maxConversationsPerPrincipal;
     std::optional<std::size_t> maxMessagesPerConversation;
     std::optional<std::size_t> maxTextBytes;
+    std::optional<std::size_t> maxToolResultBytes;
+    std::optional<std::size_t> maxConversationBytes;
     std::optional<std::int64_t> idleRetentionMinutes;
 };
 
@@ -151,6 +153,8 @@ struct ConfigFile {
     apply(limits.maxMessagesPerConversation, config.limits.maxMessagesPerConversation, "maxMessagesPerConversation",
           problem);
     apply(limits.maxTextBytes, config.limits.maxTextBytes, "maxTextBytes", problem);
+    apply(limits.maxToolResultBytes, config.limits.maxToolResultBytes, "maxToolResultBytes", problem);
+    apply(limits.maxConversationBytes, config.limits.maxConversationBytes, "maxConversationBytes", problem);
     if (!problem.empty()) {
         return std::unexpected(std::move(problem));
     }

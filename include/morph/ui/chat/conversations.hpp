@@ -34,6 +34,11 @@ struct ChatLimits {
     std::size_t maxMessagesPerConversation = 200;
     /// @brief The longest text one turn may carry.
     std::size_t maxTextBytes = std::size_t{64} * 1024;
+    /// @brief The most of one tool's result the model is given; past it the result is cut, and the model told.
+    std::size_t maxToolResultBytes = std::size_t{64} * 1024;
+    /// @brief The most one conversation holds; past it the oldest messages are dropped. Without it, one large result
+    ///        kept in a conversation would make every later request on that record too large.
+    std::size_t maxConversationBytes = std::size_t{1024} * 1024;
     /// @brief How long an untouched conversation is kept.
     std::chrono::minutes idleRetention{std::chrono::hours{8}};
 };
@@ -109,14 +114,34 @@ private:
         std::chrono::steady_clock::time_point touched;
     };
 
-    // Past the bound the oldest go, then whatever would leave the history starting with anything but something a
-    // person said: a provider refuses a history that opens with a reply, or with a result whose call is gone.
+    [[nodiscard]] static std::size_t bytesOf(Message const& message) {
+        std::size_t bytes = message.text.size() + message.opaque.size();
+        for (ToolCall const& call : message.calls) {
+            bytes += call.id.size() + call.name.size() + call.argumentsJson.size();
+        }
+        for (ToolResult const& result : message.results) {
+            bytes += result.callId.size() + result.text.size();
+        }
+        return bytes;
+    }
+
+    // Past a bound the oldest go, then whatever would leave the history starting with anything but something a person
+    // said: a provider refuses a history that opens with a reply, or with a result whose call is gone.
     void trim(std::vector<Message>& messages) const {
-        if (messages.size() <= _limits.maxMessagesPerConversation) {
+        std::size_t bytes = 0;
+        for (Message const& message : messages) {
+            bytes += bytesOf(message);
+        }
+        std::size_t drop = 0;
+        while (drop < messages.size() &&
+               (messages.size() - drop > _limits.maxMessagesPerConversation || bytes > _limits.maxConversationBytes)) {
+            bytes -= bytesOf(messages.at(drop));
+            ++drop;
+        }
+        if (drop == 0) {
             return;
         }
-        auto const excess = static_cast<std::ptrdiff_t>(messages.size() - _limits.maxMessagesPerConversation);
-        messages.erase(messages.begin(), messages.begin() + excess);
+        messages.erase(messages.begin(), messages.begin() + static_cast<std::ptrdiff_t>(drop));
         auto const start = std::ranges::find_if(
             messages, [](Message const& message) { return message.role == "user" && message.results.empty(); });
         messages.erase(messages.begin(), start);
