@@ -222,3 +222,55 @@ TEST_CASE("a_credential_action_gets_no_tool", "[chat][tools]") {
     CHECK(namesOf(chat::screenTools(loaded, models, Permitted{"Add", "List"}, {}, &actions)) ==
           std::vector<std::string>{"lab__List"});
 }
+
+// Mutation: drop any of the name's rules.
+TEST_CASE("a_tool_name_is_letters_digits_underscore_and_dash_up_to_its_limit", "[chat][tools]") {
+    CHECK(chat::detail::validToolName("aZ09_-"));
+    CHECK(chat::detail::validToolName(std::string(chat::detail::kMaxToolName, 'a')));
+    CHECK_FALSE(chat::detail::validToolName(""));
+    CHECK_FALSE(chat::detail::validToolName(std::string(chat::detail::kMaxToolName + 1, 'a')));
+    for (std::string_view const bad : {"a b", "a.b", "a/b", "a:b", "a@b", "a[b", "a`b", "a{b"}) {
+        CHECK_FALSE(chat::detail::validToolName(bad));
+    }
+}
+
+// Mutation: leave a form's action out of the walk, or read it as a query.
+TEST_CASE("a_form_gives_a_tool_that_changes_data", "[chat][tools]") {
+    auto const loaded = document(R"({
+      "vocab": "ui/1", "id": "lab.form",
+      "models": { "lab": { "type": "Lab" } },
+      "queries": { "list": { "model": "lab", "action": "Add" } },
+      "view": { "kind": "column", "children": [
+        { "kind": "form", "model": "lab", "action": "Add" },
+        { "kind": "form", "model": "lab", "action": "Save" } ] } })");
+    auto const models = refs(loaded);
+    auto const tools = chat::screenTools(loaded, models, Permitted{"Add", "Save"}, {});
+    CHECK(namesOf(tools) == std::vector<std::string>{"lab__Add", "lab__Save"});
+    CHECK(named(tools, "lab__Add").spec.description.contains("Changes data"));
+    CHECK(named(tools, "lab__Save").spec.description.contains("Changes data"));
+}
+
+// Mutation: walk only a node's children.
+TEST_CASE("a_form_inside_a_tab_gives_a_tool", "[chat][tools]") {
+    auto const loaded = document(R"({
+      "vocab": "ui/1", "id": "lab.tabs",
+      "models": { "lab": { "type": "Lab" } },
+      "view": { "kind": "tabs", "tabs": [
+        { "id": "one", "label": "One", "children": [ { "kind": "form", "model": "lab", "action": "Add" } ] } ] } })");
+    auto const models = refs(loaded);
+    auto const tools = chat::screenTools(loaded, models, Permitted{"Add"}, {});
+    CHECK(namesOf(tools) == std::vector<std::string>{"lab__Add"});
+}
+
+// Mutation: hand a model's tool format the schema as it came.
+TEST_CASE("a_schema_that_is_not_an_object_becomes_one", "[chat][tools]") {
+    auto const loaded = document(kScreen);
+    auto const models = refs(loaded);
+    Schemas schemas;
+    schemas.emplace("Add", ui::Json{true});
+    schemas.emplace("List", ui::Json::object_t{{"description", 3.0}});
+    auto const tools = chat::screenTools(loaded, models, Permitted{"Add", "List"}, schemas);
+    CHECK(std::get<std::string>(named(tools, "lab__Add").spec.inputSchema["type"].data) == "object");
+    // A description that is not text is left out.
+    CHECK(named(tools, "lab__List").spec.description == "Reads data: runs List on lab.");
+}

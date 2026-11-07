@@ -146,10 +146,10 @@ struct LogEntry {
     ///
     /// Copied from `morph::session::currentOrigin()`, which a client cannot set, so a non-empty value is the server's
     /// word and not a claim. An older line has no such key and reads as empty.
-    std::string originKind{};
+    std::string originKind;
 
     /// @brief The words that led to this execution, when `originKind` is set. Empty otherwise.
-    std::string originText{};
+    std::string originText;
 };
 
 /// @brief Thrown by `toJson`/`fromJson` when `LogEntry` (de)serialisation fails.

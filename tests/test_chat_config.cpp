@@ -139,3 +139,28 @@ TEST_CASE("a_file_is_read_from_disk_and_a_missing_one_is_named", "[chat][config]
     REQUIRE_FALSE(missing.has_value());
     CHECK(missing.error().contains(path.filename().string()));
 }
+
+// Mutation: require a key in the file.
+TEST_CASE("a_file_may_name_no_key", "[chat][config]") {
+    auto const config = chat::parseChatConfig(R"({ "provider": { "name": "anthropic", "model": "m" } })", environment);
+    REQUIRE(config.has_value());
+    CHECK(config->provider.apiKey.empty());
+}
+
+// Mutation: call the lookup without asking whether there is one.
+TEST_CASE("a_key_variable_with_no_environment_is_named", "[chat][config]") {
+    auto const config =
+        chat::parseChatConfig(R"({ "provider": { "name": "anthropic", "model": "m", "apiKeyEnv": "THE_KEY" } })", {});
+    REQUIRE_FALSE(config.has_value());
+    CHECK(config.error().contains("THE_KEY"));
+}
+
+// Mutation: let a later limit's problem replace an earlier one's.
+TEST_CASE("the_first_bad_limit_is_the_one_named", "[chat][config]") {
+    auto const config = chat::parseChatConfig(R"({ "provider": { "name": "anthropic", "model": "m" },
+      "limits": { "maxToolCallsPerTurn": 0, "maxTurnsPerPrincipal": 0 } })",
+                                              environment);
+    REQUIRE_FALSE(config.has_value());
+    CHECK(config.error().contains("maxToolCallsPerTurn"));
+    CHECK_FALSE(config.error().contains("maxTurnsPerPrincipal"));
+}

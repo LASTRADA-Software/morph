@@ -141,7 +141,7 @@ public:
             readState();
             return;
         }
-        show();
+        show(*_active);
     }
 
     /// @brief Tells the client its connection was replaced. A running turn ended with the old connection, since a new
@@ -149,7 +149,7 @@ public:
     void reconnected() {
         if (_active) {
             _active->error = "the connection was lost, so this turn stopped";
-            show();
+            show(*_active);
             _active.reset();
         }
         probe();
@@ -212,24 +212,21 @@ private:
             return;
         }
         if (!reply || reply->kind != "ok") {
-            refused(reply ? reply->message : reply.error());
+            refused(*_active, reply ? reply->message : reply.error());
             return;
         }
         auto const read = readTurnAccepted(reply->body);
         if (!read) {
-            refused(read.error());
+            refused(*_active, read.error());
             return;
         }
         _active->turnId = read->turnId;
         readState();
     }
 
-    void refused(std::string reason) {
-        if (!_active) {
-            return;
-        }
-        _active->error = std::move(reason);
-        show();
+    void refused(Active& active, std::string reason) {
+        active.error = std::move(reason);
+        show(active);
         _active.reset();
         notify();
     }
@@ -259,7 +256,7 @@ private:
             _active->tools.push_back(step.name);
         }
         bool const running = state->status == TurnStatus::Running;
-        show();
+        show(*_active);
         if (!running) {
             _active.reset();
             notify();
@@ -267,11 +264,7 @@ private:
     }
 
     // Redraws the running turn's entries.
-    void show() {
-        if (!_active) {
-            return;
-        }
-        Active const& active = *_active;
+    void show(Active const& active) {
         Conversation& conversation = _conversations[active.key];
         conversation.resize(active.base);
         for (std::string const& tool : active.tools) {

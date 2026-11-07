@@ -49,10 +49,14 @@ struct Rig {
     ui::Interpreter interpreter{harness.session, harness.dispatcher, ui::InterpreterOptions{.host = &harness.host}};
     std::unique_ptr<ui::Screen> screen;
 
-    Rig() {
+    explicit Rig(bool const withContext = true) {
         context->screenId = "the.screen";
         host.connect(harness.session);
-        binding = std::make_unique<chat::ChatPanelBinding>(host, client, [this] { return context; });
+        std::function<std::optional<chat::TurnRequest>()> reader;
+        if (withContext) {
+            reader = [this] { return context; };
+        }
+        binding = std::make_unique<chat::ChatPanelBinding>(host, client, std::move(reader));
         auto const document = chat::chatPanelDocument();
         INFO((document ? std::string{} : document.error().message()));
         REQUIRE(document.has_value());
@@ -174,4 +178,35 @@ TEST_CASE("the_frames_chat_slot_hides_signed_out_and_compact", "[chat][panel]") 
     CHECK(backend.prop(chatColumn, "visible") != "false");
     frame.setCompact(true);
     CHECK(backend.prop(chatColumn, "visible") == "false");
+}
+
+// Mutation: show a tool step's line like any other.
+TEST_CASE("the_panel_shows_a_tool_step_as_what_ran", "[chat][panel]") {
+    Rig rig;
+    rig.submit("hello");
+    rig.answers.at(0)(wire::makeOk(0, chat::writeMessage(chat::TurnAccepted{.turnId = 7})));
+    rig.harness.settle();
+    chat::TurnState state;
+    state.turnId = 7;
+    state.status = chat::TurnStatus::Done;
+    state.steps.push_back({.name = "lab__Add", .ok = true, .message = "{}"});
+    rig.answers.at(1)(wire::makeOk(0, chat::writeMessage(state)));
+    rig.harness.settle();
+    CHECK(rig.shows("Ran lab__Add"));
+}
+
+// Mutation: send while a turn is running.
+TEST_CASE("the_panel_does_not_send_while_a_turn_runs", "[chat][panel]") {
+    Rig rig;
+    rig.submit("hello");
+    rig.submit("again");
+    CHECK(rig.sent.size() == 1);
+}
+
+// Mutation: call the context without asking whether there is one.
+TEST_CASE("a_panel_with_no_context_disables_the_input", "[chat][panel]") {
+    Rig rig{false};
+    CHECK(rig.harness.backend.prop(rig.id("TextInput", "chat_input"), "enabled") == "false");
+    rig.submit("hello");
+    CHECK(rig.sent.empty());
 }

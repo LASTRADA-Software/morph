@@ -296,3 +296,130 @@ TEST_CASE("a_reply_after_destruction_reaches_nothing", "[chat][client]") {
     exchange.ok(chat::kTurnKind, chat::writeMessage(chat::TurnAccepted{.turnId = 7}));
     CHECK(changes == 0);
 }
+
+// Mutation: call `done` without asking whether there is one.
+TEST_CASE("end_needs_no_callback", "[chat][client]") {
+    Rig rig;
+    rig.client.end(nullptr);
+    rig.fakeExchange.ok(chat::kEndKind);
+    CHECK_FALSE(rig.client.running());
+}
+
+// Mutation: redraw on every select.
+TEST_CASE("selecting_the_same_conversation_changes_nothing", "[chat][client]") {
+    Rig rig;
+    rig.client.selectConversation("s", "1");
+    int const changes = rig.changes;
+    rig.client.selectConversation("s", "1");
+    CHECK(rig.changes == changes);
+}
+
+// Mutation: read a turn's fields with no turn.
+TEST_CASE("an_event_with_no_turn_is_ignored", "[chat][client]") {
+    Rig rig;
+    rig.client.deliverEvent(eventOf({.turnId = 7, .seq = 1, .kind = "text", .text = "stray"}));
+    CHECK(rig.client.entries().empty());
+    CHECK(rig.fakeExchange.sent.empty());
+}
+
+// Mutation: report a lost connection when no turn was running.
+TEST_CASE("a_reconnect_with_no_turn_only_probes", "[chat][client]") {
+    Rig rig;
+    rig.client.reconnected();
+    CHECK(rig.client.entries().empty());
+    REQUIRE(rig.fakeExchange.sent.size() == 1);
+    CHECK(rig.fakeExchange.sent.back().request.kind == chat::kStateKind);
+}
+
+// Mutation: call the session or change callback without asking whether there is one.
+TEST_CASE("a_client_works_without_a_session_or_a_change_callback", "[chat][client]") {
+    FakeExchange exchange;
+    chat::ChatClient client{exchange.exchange(), nullptr, nullptr};
+    client.send(turnOn("s", "1", "hello"));
+    CHECK(exchange.sent.back().request.session.token.empty());
+    exchange.ok(chat::kTurnKind, chat::writeMessage(chat::TurnAccepted{.turnId = 7}));
+    exchange.ok(chat::kStateKind, stateOf(7, chat::TurnStatus::Done, "done"));
+    CHECK_FALSE(client.running());
+    CHECK(client.entries().size() == 2);
+}
+
+// Mutation: take the acceptance whether or not the turn is still wanted.
+TEST_CASE("an_acceptance_after_the_chat_ended_starts_nothing", "[chat][client]") {
+    Rig rig;
+    rig.client.send(turnOn("s", "1", "hello"));
+    rig.client.end(nullptr);
+    rig.fakeExchange.ok(chat::kTurnKind, chat::writeMessage(chat::TurnAccepted{.turnId = 7}));
+    CHECK_FALSE(rig.client.running());
+    CHECK(rig.fakeExchange.count(chat::kStateKind) == 0);
+    CHECK(rig.client.entries().empty());
+}
+
+// Mutation: read the reply's message when there is no reply.
+TEST_CASE("a_turn_that_could_not_be_delivered_says_why", "[chat][client]") {
+    Rig rig;
+    rig.client.send(turnOn("s", "1", "hello"));
+    rig.fakeExchange.answer(chat::kTurnKind, std::unexpected(std::string{"not delivered"}));
+    CHECK(rig.shown() == Shown{"user:hello", "error:not delivered"});
+    CHECK_FALSE(rig.client.running());
+}
+
+// Mutation: keep running on an acceptance that cannot be read.
+TEST_CASE("an_unreadable_acceptance_ends_the_turn", "[chat][client]") {
+    Rig rig;
+    rig.client.send(turnOn("s", "1", "hello"));
+    rig.fakeExchange.ok(chat::kTurnKind, "[1]");
+    CHECK_FALSE(rig.client.running());
+    CHECK(rig.shown().size() == 2);
+    CHECK(rig.shown().back().starts_with("error:"));
+}
+
+// Mutation: read the state of a turn with no id.
+TEST_CASE("a_resync_reads_nothing_until_a_turn_has_an_id", "[chat][client]") {
+    Rig rig;
+    auto const resync = [&] {
+        rig.client.deliverEvent({.topic = std::string{wire::kResyncTopic}, .payload = glz::raw_json{"{}"}});
+    };
+    resync();
+    CHECK(rig.fakeExchange.count(chat::kStateKind) == 0);
+    rig.client.send(turnOn("s", "1", "hello"));
+    resync();
+    CHECK(rig.fakeExchange.count(chat::kStateKind) == 0);
+}
+
+// Mutation: treat a failed or unreadable state read as the turn's end.
+TEST_CASE("a_state_read_that_fails_leaves_the_turn_running", "[chat][client]") {
+    Rig rig;
+    rig.started();
+    rig.fakeExchange.answer(chat::kStateKind, wire::makeErr("refused", 0));
+    CHECK(rig.client.running());
+    rig.client.deliverEvent({.topic = std::string{wire::kResyncTopic}, .payload = glz::raw_json{"{}"}});
+    rig.fakeExchange.answer(chat::kStateKind, std::unexpected(std::string{"not delivered"}));
+    CHECK(rig.client.running());
+    rig.client.deliverEvent({.topic = std::string{wire::kResyncTopic}, .payload = glz::raw_json{"{}"}});
+    rig.fakeExchange.ok(chat::kStateKind, "[1]");
+    CHECK(rig.client.running());
+    CHECK(rig.shown() == Shown{"user:hello"});
+}
+
+// Mutation: apply a state read to whichever turn is running now.
+TEST_CASE("a_state_read_for_a_turn_that_is_over_changes_nothing", "[chat][client]") {
+    Rig rig;
+    rig.started();
+    rig.client.reconnected();
+    Shown const shown = rig.shown();
+    rig.fakeExchange.ok(chat::kStateKind, stateOf(7, chat::TurnStatus::Done, "too late"));
+    CHECK(rig.shown() == shown);
+}
+
+// Mutation: leave the state's tool steps out of what is shown.
+TEST_CASE("the_state_shows_a_turns_tool_steps", "[chat][client]") {
+    Rig rig;
+    rig.started();
+    chat::TurnState state;
+    state.turnId = 7;
+    state.status = chat::TurnStatus::Done;
+    state.text = "added";
+    state.steps.push_back({.name = "lab__Add", .ok = true, .message = "{}"});
+    rig.fakeExchange.ok(chat::kStateKind, chat::writeMessage(state));
+    CHECK(rig.shown() == Shown{"user:hello", "tool:lab__Add", "assistant:added"});
+}

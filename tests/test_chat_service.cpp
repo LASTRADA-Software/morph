@@ -7,6 +7,7 @@
 #include <morph/ui/value.hpp>
 // clang-format on
 
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_tostring.hpp>
@@ -32,6 +33,7 @@
 #include <morph/ui/testing/fake_chat_provider.hpp>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -229,7 +231,9 @@ struct Rig {
     EventWire eventWire;
     std::atomic<std::uint64_t> nextCall{1};
 
-    explicit Rig(chat::ChatLimits given = {}, bool withProvider = true) : limits{given} {
+    explicit Rig(chat::ChatLimits given = {}, bool withProvider = true,
+                 std::shared_ptr<chat::IProvider> other = nullptr)
+        : limits{given} {
         {
             std::scoped_lock const lock{chat_service_test::store().mutex};
             chat_service_test::store().notes.clear();
@@ -253,7 +257,8 @@ struct Rig {
         morph::backend::ServerConfig config;
         config.services.push_back(std::make_shared<ui::UiService>(bundle));
         chat::ChatOptions options;
-        options.provider = withProvider ? fake : nullptr;
+        options.provider =
+            other != nullptr ? other : (withProvider ? std::static_pointer_cast<chat::IProvider>(fake) : nullptr);
         options.worker = &worker;
         options.bundle = bundle;
         options.limits = limits;
@@ -361,6 +366,32 @@ struct Rig {
                 .id = "1", .name = "notes__Chat_Add", .argumentsJson = R"({"text":")" + text + R"("})"}}});
         fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
     }
+};
+
+// A provider the test answers by hand, whenever and however a real one might.
+struct ManualProvider final : chat::IProvider {
+    struct Call final : chat::IProviderCall {
+        void cancel() override {}
+    };
+
+    [[nodiscard]] std::shared_ptr<chat::IProviderCall> stream(chat::Request /*request*/,
+                                                              chat::ProviderSink given) override {
+        std::scoped_lock const lock{mutex};
+        sink = std::move(given);
+        return std::make_shared<Call>();
+    }
+
+    [[nodiscard]] chat::ProviderSink called() {
+        REQUIRE(waitFor([&] {
+            std::scoped_lock const lock{mutex};
+            return sink.has_value();
+        }));
+        std::scoped_lock const lock{mutex};
+        return *sink;
+    }
+
+    std::mutex mutex;
+    std::optional<chat::ProviderSink> sink;
 };
 
 std::size_t noteCount() {
@@ -941,4 +972,166 @@ TEST_CASE("a_large_tool_result_is_cut_and_the_turn_stays_readable", "[chat][serv
     CHECK(sent.size() < 400);
     // The model is told, so it does not take a part for the whole.
     CHECK(sent.contains("cut off"));
+}
+
+// Mutation: leave a provider's failure out of the turn's state.
+TEST_CASE("a_failing_provider_fails_the_turn_and_says_why", "[chat][service]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "hello"), cid), cid);
+    CHECK(state.status == chat::TurnStatus::Failed);
+    CHECK(state.error.contains("script ran out"));
+}
+
+// Mutation: show only what was streamed.
+TEST_CASE("a_provider_that_answers_only_at_the_end_still_shows_its_text", "[chat][service]") {
+    auto const provider = std::make_shared<ManualProvider>();
+    Rig rig{{}, true, provider};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    auto const turnId = rig.start(Rig::turnOn(id, "hello"), cid);
+    provider->called().done(chat::Response{.text = "the whole reply", .calls = {}, .opaque = {}});
+    auto const state = rig.finished(turnId, cid);
+    CHECK(state.status == chat::TurnStatus::Done);
+    CHECK(state.text == "the whole reply");
+    CHECK(waitFor([&] {
+        auto const events = rig.eventWire.events();
+        return std::ranges::any_of(events, [](wire::EventBody const& event) {
+            return event.topic == chat::kChatTopic && event.payload.str.contains("the whole reply");
+        });
+    }));
+}
+
+// Mutation: take a provider's text whatever the turn's status.
+TEST_CASE("a_provider_speaking_after_a_cancel_changes_nothing", "[chat][service]") {
+    auto const provider = std::make_shared<ManualProvider>();
+    Rig rig{{}, true, provider};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    auto const turnId = rig.start(Rig::turnOn(id, "hello"), cid);
+    auto const sink = provider->called();
+    wire::Envelope cancel;
+    cancel.kind = std::string{chat::kCancelKind};
+    auto const cancelReply = rig.call(std::move(cancel), cid);
+    REQUIRE(cancelReply.kind == "ok");
+    sink.text("late");
+    sink.done(chat::Response{.text = "late", .calls = {}, .opaque = {}});
+    morph::testing::storageOwner().runFor(50ms);
+    auto const state = rig.state(turnId, cid);
+    CHECK(state.status == chat::TurnStatus::Cancelled);
+    CHECK(state.text.empty());
+}
+
+// Mutation: refuse a call with no arguments as not being a JSON object.
+TEST_CASE("a_tool_call_with_no_arguments_runs_with_an_empty_object", "[chat][service]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(
+        chat::Response{.text = "",
+                       .calls = {chat::ToolCall{.id = "1", .name = "notes__Chat_Wipe", .argumentsJson = ""}},
+                       .opaque = {}});
+    rig.fake->script(chat::Response{.text = "wiped", .calls = {}, .opaque = {}});
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "wipe"), cid), cid);
+    CHECK(state.status == chat::TurnStatus::Done);
+    REQUIRE(state.steps.size() == 1);
+    CHECK(state.steps.at(0).ok);
+}
+
+// Mutation: keep every finished turn.
+TEST_CASE("only_the_latest_finished_turns_can_be_read", "[chat][service]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    std::vector<std::uint64_t> turns;
+    for (int count = 0; count < 9; ++count) {
+        rig.fake->script(chat::Response{.text = "done", .calls = {}, .opaque = {}});
+        turns.push_back(rig.start(Rig::turnOn(id, "hello"), cid));
+        static_cast<void>(rig.finished(turns.back(), cid));
+    }
+    CHECK(rig.state(turns.front(), cid).turnId == 0);
+    CHECK(rig.state(turns.at(1), cid).turnId == turns.at(1));
+    CHECK(rig.state(turns.back(), cid).status == chat::TurnStatus::Done);
+}
+
+// Mutation: answer an unreadable request as if it named no turn.
+TEST_CASE("a_state_request_names_a_turn_or_none_and_a_malformed_one_is_refused", "[chat][service]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    wire::Envelope none;
+    none.kind = std::string{chat::kStateKind};
+    auto const noneReply = rig.call(std::move(none), cid);
+    REQUIRE(noneReply.kind == "ok");
+    auto const read = chat::readTurnState(noneReply.body);
+    REQUIRE(read.has_value());
+    CHECK(read->turnId == 0);
+    CHECK(rig.state(9999, cid).turnId == 0);
+    wire::Envelope malformed;
+    malformed.kind = std::string{chat::kStateKind};
+    malformed.body = "[1]";
+    auto const malformedReply = rig.call(std::move(malformed), cid);
+    CHECK(malformedReply.kind == "err");
+}
+
+// Mutation: build a service with a provider and nothing to run it on.
+TEST_CASE("a_provider_needs_a_worker_and_a_bundle", "[chat][service]") {
+    Rig rig;
+    chat::ChatOptions noWorker;
+    noWorker.provider = rig.fake;
+    noWorker.worker = nullptr;
+    noWorker.bundle = rig.bundle;
+    CHECK_THROWS_AS(chat::ChatService{std::move(noWorker)}, std::invalid_argument);
+    chat::ChatOptions noBundle;
+    noBundle.provider = rig.fake;
+    noBundle.worker = &rig.worker;
+    noBundle.bundle = nullptr;
+    CHECK_THROWS_AS(chat::ChatService{std::move(noBundle)}, std::invalid_argument);
+}
+
+// Mutation: answer every kind.
+TEST_CASE("the_service_answers_only_the_chat_kinds", "[chat][service]") {
+    Rig rig;
+    CHECK(rig.chatService->serves(chat::kEndKind));
+    CHECK_FALSE(rig.chatService->serves("ui-chat-unknown"));
+}
+
+// Mutation: cancel every running turn, or count another principal's turn against this one.
+TEST_CASE("cancelling_stops_only_this_connections_turn", "[chat][service]") {
+    Rig rig;
+    auto const mine = rig.gui();
+    auto const theirs = rig.gui("bob");
+    auto const myInstance = rig.instance(mine);
+    auto const theirInstance = rig.instance(theirs, "bob");
+    rig.fake->hold(true);
+    rig.fake->script(chat::Response{.text = "mine", .calls = {}, .opaque = {}});
+    rig.fake->script(chat::Response{.text = "theirs", .calls = {}, .opaque = {}});
+    auto const myTurn = rig.start(Rig::turnOn(myInstance, "go"), mine);
+    REQUIRE(waitFor([&] { return rig.fake->calls() == 1; }));
+    auto const theirTurn = rig.start(Rig::turnOn(theirInstance, "go"), theirs, "bob");
+    REQUIRE(waitFor([&] { return rig.fake->calls() == 2; }));
+    wire::Envelope cancel;
+    cancel.kind = std::string{chat::kCancelKind};
+    auto const cancelReply = rig.call(std::move(cancel), mine);
+    REQUIRE(cancelReply.kind == "ok");
+    CHECK(rig.fake->cancelled() == 1);
+    CHECK(rig.state(myTurn, mine).status == chat::TurnStatus::Cancelled);
+    CHECK(rig.state(theirTurn, theirs, "bob").status == chat::TurnStatus::Running);
+    rig.fake->release();
+    CHECK(rig.finished(theirTurn, theirs, "bob").status == chat::TurnStatus::Done);
+}
+
+// Mutation: cut at the limit whatever falls there.
+TEST_CASE("a_cut_tool_result_never_splits_a_character", "[chat][service]") {
+    chat::ChatLimits limits;
+    // The note's reply opens with 16 bytes of ASCII, so the limit falls inside the first two-byte character.
+    limits.maxToolResultBytes = 17;
+    Rig rig{limits};
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.scriptAdd("\xC3\xA9\xC3\xA9\xC3\xA9");
+    auto const state = rig.finished(rig.start(Rig::turnOn(id, "add"), cid), cid);
+    REQUIRE(state.status == chat::TurnStatus::Done);
+    auto const sent = rig.fake->requests().at(1).messages.at(2).results.at(0).text;
+    CHECK(sent.starts_with(std::string{R"({"id":1,"text":")"} + "\n[cut off"));
 }
