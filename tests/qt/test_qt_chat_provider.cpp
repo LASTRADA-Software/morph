@@ -263,6 +263,8 @@ TEST_CASE("a_request_carries_system_tools_key_and_model", "[qt][chat_provider]")
     CHECK(sent.contains("input_schema"));
     CHECK(sent.contains(R"("stream":true)"));
     CHECK(sent.contains(R"("max_tokens":64000)"));
+    // A service at another address can refuse the whole request for a field only the provider's own address takes.
+    CHECK_FALSE(sent.contains("fallbacks"));
 }
 
 // Mutation: put the configuration in the reason.

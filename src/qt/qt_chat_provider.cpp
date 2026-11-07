@@ -40,6 +40,8 @@ constexpr int kTransferTimeoutMs = 300000;
 // This API requires a limit, and a streamed answer has no timeout for a large one to run into.
 constexpr int kDefaultMaxTokens = 64000;
 
+constexpr std::string_view kPublicAddress = "https://api.anthropic.com";
+
 [[nodiscard]] Json const* member(Json const& value, std::string_view key) {
     auto const* const object = std::get_if<Json::object_t>(&value.data);
     if (object == nullptr) {
@@ -102,9 +104,12 @@ constexpr int kDefaultMaxTokens = 64000;
                         {"max_tokens", static_cast<std::int64_t>(config.maxTokens.value_or(kDefaultMaxTokens))},
                         {"stream", true},
                         {"system", request.system},
-                        {"messages", std::move(messages)},
-                        // Reruns a request a safety classifier declined on a model suited to that category.
-                        {"fallbacks", "default"}};
+                        {"messages", std::move(messages)}};
+    // Reruns a request a safety classifier declined on a model suited to that category. Only the provider's own
+    // address is known to take it: a service speaking the same format elsewhere can refuse the whole request for it.
+    if (config.baseUrl == kPublicAddress) {
+        body.insert_or_assign("fallbacks", "default");
+    }
     if (!request.tools.empty()) {
         Json::array_t tools;
         for (chat::ToolSpec const& tool : request.tools) {
@@ -371,7 +376,7 @@ public:
     AnthropicProvider(chat::ProviderConfig config, QObject* owner)
         : _config{std::move(config)}, _owner{owner}, _network{new QNetworkAccessManager(owner)} {
         if (_config.baseUrl.empty()) {
-            _config.baseUrl = "https://api.anthropic.com";
+            _config.baseUrl = std::string{kPublicAddress};
         }
     }
 
@@ -395,7 +400,9 @@ public:
                 http.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
                 http.setRawHeader("x-api-key", QByteArray::fromStdString(config.apiKey));
                 http.setRawHeader("anthropic-version", "2026-10-21");
-                http.setRawHeader("anthropic-beta", "server-side-fallback-2026-07-01");
+                if (config.baseUrl == kPublicAddress) {
+                    http.setRawHeader("anthropic-beta", "server-side-fallback-2026-07-01");
+                }
                 http.setTransferTimeout(kTransferTimeoutMs);
                 call->start(*network, http, body);
             },

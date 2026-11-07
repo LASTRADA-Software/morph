@@ -62,8 +62,10 @@ one name is `anthropic`, over `QNetworkAccessManager` on `owner`'s thread, and `
 
 - `model` and `apiKey` have no default. Which model a deployment pays for is the deployer's choice, and the key appears in
   no log and no chat message.
-- Requests stream, and ask for `fallbacks: "default"`, so a request a safety classifier declines is rerun on a model
-  suited to that category. A refusal that remains is reported as the turn's failure.
+- Requests stream. At the provider's public address they ask for `fallbacks: "default"`, so a request a safety classifier
+  declines is rerun on a model suited to that category. At any other `baseUrl` they do not, since a service speaking the
+  same format, such as OpenRouter at `https://openrouter.ai/api`, can refuse the whole request for that field. A refusal
+  that remains is reported as the turn's failure.
 - **What must be replayed goes back unchanged.** `Response::opaque` holds the assistant message as the provider gave it,
   including the model's signed reasoning, and comes back through `Message::opaque`. Only the provider reads it, so nothing
   else in the chat knows a provider's content format. It is valid only in the conversation that produced it, so
