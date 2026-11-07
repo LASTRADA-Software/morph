@@ -12,6 +12,7 @@ to them, and every GUI watching what they change is told. The design is spec 8 Â
 - [Identity and checks](#identity-and-checks)
 - [Threads](#threads)
 - [stdio](#stdio)
+- [Agents and the built-in chat](#agents-and-the-built-in-chat)
 - [Design decisions](#design-decisions)
 
 ## Shape
@@ -69,6 +70,19 @@ are guarded by a mutex that is never held while a continuation runs: a continuat
 flushed, in order, until `in` ends. Its calling thread is the adapter's owner: it pumps the `MainThreadExecutor`
 it is given while it waits for each reply. An agent launches the server process with an option that turns it on
 (bank's server: `--mcp-stdio`), and the process serves its WebSocket clients as before.
+
+## Agents and the built-in chat
+
+`docs/spec/ui/chat.md` describes a chat built into the client, whose assistant also runs on the server. It differs from
+an agent over this adapter in what it acts on:
+
+| | An agent over `McpAdapter` | The built-in chat |
+|---|---|---|
+| Where the model runs | In the agent, which brings its own | On the server, behind `chat::IProvider` |
+| Tools | Every action `permitted` lists | What the open screen names |
+| Identity | The session the adapter was built with | The signed-in user's session |
+| Instances | Its own, on a connection of its own | The screen's own |
+| Journal | Like any other client's entry | An entry marked with the origin `assistant` |
 
 ## Design decisions
 

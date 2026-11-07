@@ -58,7 +58,7 @@ public:
         _inputRow->setGap(1);
         _inputRow->setAlign(Align::Center);
         _input->setLayout({.width = Sizing::stretch(), .height = {}});
-        _input->setPlaceholder("Ask about this screen");
+        _input->setPlaceholder("Message");
         _input->setTestId("chat_input");
         _input->setOnChange([this](std::string text) { _draft = std::move(text); });
         _input->setOnSubmit([this](std::string text) { submit(std::move(text)); });

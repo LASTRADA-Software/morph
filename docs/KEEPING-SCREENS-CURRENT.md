@@ -295,6 +295,10 @@ claude mcp add bank -e MORPH_MCP_PRINCIPAL=alice \
 See [`examples/bank/README.md`](../examples/bank/README.md) for the full setup, and
 [`docs/spec/ui/agent.md`](spec/ui/agent.md) for the adapter.
 
+A chat built into the client works the same way from the server's side. Its assistant calls the open screen's actions
+under the signed-in user's session, so the same effects refresh the same screens, the one in front of the person included.
+Nothing about a screen changes for it. See [`docs/spec/ui/chat.md`](spec/ui/chat.md).
+
 ## Seeing it in the explorer
 
 The app explorer's facts for an action show its effects (`changes Bank_Account`, `updates Lims_Result`,

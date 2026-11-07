@@ -539,6 +539,8 @@ visible to them, is declared effects:
 - Screens declare no refreshes: a document naming `invalidates`, `patch` or `refreshOn` is refused, and so is a query
   whose action declares effects.
 - `morph::ui::McpAdapter` (`ui/agent.hpp`) lets an AI agent drive the same server over MCP, as one more connection.
+- `morph::ui::chat` (`ui/chat/`) puts a chat in the client's shell, whose assistant runs on the server and calls the
+  open screen's actions under the signed-in user's session.
 
 The user guide is `docs/KEEPING-SCREENS-CURRENT.md`; the rules are in
 `docs/spec/core/registry.md` ("Effects"), `docs/spec/core/backend.md` ("Fan-out"), `docs/spec/ui/interpreter.md` and
@@ -771,6 +773,7 @@ folder.
 | `ui/document.hpp` | `Document`, `ScopeDecl` and the declaration structs, `Command`, `CommandKind`, `DocNode`, `Component`, `CustomizePoint`, `Catalog`, `ModelInfo`, `ActionInfo`, `LoadOptions`, `loadDocument`, `loadDocumentText`, `nodeKinds` — the document model and its load-time validation. See `docs/spec/ui/document.md`. |
 | `ui/interpreter.hpp` | `Interpreter`, `Screen`, `Session`, `SessionOptions`, `Dispatcher`, `ModelChannel`, `CallOptions`, `BridgeDispatcher`, `InterpreterHost`, `NavigateRequest`, `InterpreterOptions`, `MountOptions`, `BorrowedModel` (`morph::ui::`) — mounts a loaded document: scopes, the session's query cache, mutations, relations and commands, lowered to the view tree. See `docs/spec/ui/interpreter.md`. |
 | `ui/agent.hpp` | `McpAdapter`, `McpOptions`, `serveStdio` and the JSON-RPC error codes (`morph::ui::`) — an AI agent over MCP, as one more connection to the server. See `docs/spec/ui/agent.md`. |
+| `ui/chat/` | `ChatService`, `ChatClient`, `ChatPanel`, `ConversationStore`, `screenTools` and `IProvider` (`morph::ui::chat::`) — a chat in the client's shell whose assistant runs on the server. `qt/qt_chat_provider.hpp` is the one place that names a model provider. See `docs/spec/ui/chat.md`. |
 | `ui/author.hpp` | `Handle`, `AnyHandle`, `Body`, `ModelHandle`, `QueryHandle`, `MutationHandle`, `DeclScope`, `Scope`, `Command`, `Commands`, `Node`, `Nodes`, a builder per node kind and command, `Screen`, `screen`, `ScreenRegistry`, `screenRegistry`, `CatalogFacts`, `ModelFacts`, `ActionFacts`, `checkAccessibility`, `MORPH_REGISTER_SCREEN` (`morph::ui::author::`) — server-side authoring: typed builders that write a screen's document, and its registration with the load-time and accessibility rules. See `docs/spec/ui/author.md`. |
 | `ui/view.hpp` | `Node`, `NodeData`, `Prop<T>`, `SlotId`, `SlotBinding`, `slot()`, `Key`, `Common`, `Accessibility`, `KeyBinding`, `FieldState`, `MenuItem`, `Sizing`, `LayoutHints`, every node kind and its builder, `switchOn`, `forEach`, `table` (`morph::ui::`) — the immutable view tree whose properties are constants or slots. See `docs/spec/ui/view_tree.md`. |
 | `ui/backend.hpp` | `Widget`, `ContainerWidget`, `FieldWidget`, one widget interface per kind, `MenuEntry`, `IViewBackend`, `widthClassOf` — the retained widgets a renderer implements. See `docs/spec/ui/backend_contract.md`. |
