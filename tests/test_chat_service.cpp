@@ -568,6 +568,10 @@ TEST_CASE("a_malformed_tool_call_returns_as_a_tool_error_and_counts", "[chat][se
     CHECK_FALSE(state.steps.at(0).ok);
     CHECK_FALSE(state.steps.at(1).ok);
     CHECK_FALSE(state.steps.at(2).ok);
+    // Refused here with a reason the model can act on, before the server's decoder would have refused it less clearly.
+    CHECK(state.steps.at(0).message.contains("JSON object"));
+    CHECK(state.steps.at(1).message.contains("JSON object"));
+    CHECK(state.steps.at(2).message.contains("no tool"));
     CHECK(noteCount() == 0);
     auto const second = rig.fake->requests().at(1);
     REQUIRE(second.messages.size() == 3);

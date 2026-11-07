@@ -191,7 +191,7 @@ struct Rig {
 
 }  // namespace
 
-// Mutation: remove RecordIgnitionValues's effect (the screen keeps showing no values).
+// Checked by mutation: with RecordIgnitionValues declaring no effect, the screen keeps showing no values and this fails.
 TEST_CASE("the_chat_utterances_appear_on_the_mounted_screen", "[lims][ignition][chat]") {
     Rig rig;
     CHECK_FALSE(rig.showsText("ignition_test_row"));
@@ -204,7 +204,10 @@ TEST_CASE("the_chat_utterances_appear_on_the_mounted_screen", "[lims][ignition][
                    "Recorded.");
     REQUIRE(rig.pump([&] { return rig.showsText("Added."); }));
     rig.say("container 100, before 299, after 223");
-    REQUIRE(rig.pump([&] { return rig.showsText("299") && rig.showsText("223") && rig.showsText("100"); }));
+    // The screen's own lines: the numbers alone would also match what was typed in the chat.
+    REQUIRE(rig.pump([&] {
+        return rig.showsText("Container: 100") && rig.showsText("Before: 299") && rig.showsText("After: 223");
+    }));
     CHECK(rig.pump([&] { return rig.showsText("Recorded."); }));
     CHECK(rig.problems.empty());
 
