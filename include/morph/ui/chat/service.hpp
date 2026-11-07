@@ -232,6 +232,7 @@ private:
                 // The same answer for another principal's turn and for none, so ids reveal nothing.
                 if (found != turns.end() && found->second->session.principal == request.session.principal) {
                     state = found->second->state;
+                    state.seq = found->second->seq;
                 }
             }
             return wire::encode(wire::makeOk(request.callId, writeMessage(state)));

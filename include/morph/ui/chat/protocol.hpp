@@ -94,6 +94,8 @@ struct TurnState {
     std::string error;
     /// @brief The tool calls it has made, in order.
     std::vector<ToolStep> steps;
+    /// @brief The `TurnEvent::seq` this state covers, so a client does not apply an event it already includes.
+    std::uint64_t seq = 0;
 };
 
 /// @brief Asks for a turn's state.

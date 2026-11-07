@@ -12,6 +12,7 @@ the push path every other change uses. The design is in
 - [Providers](#providers)
 - [The turn loop](#the-turn-loop)
 - [Conversations](#conversations)
+- [The client](#the-client)
 
 ## Protocol
 
@@ -113,3 +114,19 @@ principal only from the connection's next envelope. So a client signing out send
 principal's turn on that connection and ends their conversations. A turn on another connection of theirs keeps running.
 The idle limit covers a client that never sent it. A token that stays valid after sign-out is not something a chat can
 revoke.
+
+## The client
+
+`client.hpp`. `ChatClient` sends what a person says and keeps what to show per conversation, for display only and for the
+session. It runs on the owner, and takes the source's exchange, the current session and a change callback.
+
+- **The probe.** `probe()` sends `ui-chat-state` with no turn. An `ok` means this server offers this principal a chat; any
+  other answer means it does not, which is not a fault to report.
+- **State beats events.** It reads `TurnState` when a turn starts, when an event says one ended, and on `resync`. What it
+  reads replaces what events built, and `TurnState::seq` says which events it already covers.
+- **A turn belongs to its conversation.** Switching tabs selects another conversation and leaves a running turn where it
+  started.
+- **A reconnect ends a running turn.** A new connection has new instance ids, and the old connection's close stopped the
+  turn on the server. What was shown stays, and the server's conversation continues from the next turn.
+- **`end` calls back whatever happens**, including when the exchange fails, so a sign-out never waits on a dead
+  connection.
