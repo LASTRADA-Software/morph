@@ -529,6 +529,32 @@ public:
         handleImpl(std::move(msg), std::move(reply), cid);
     }
 
+    /// @brief Runs an execute on behalf of server-side code, with an origin its journal entry records.
+    ///
+    /// For a service acting for a client: @p env carries that client's session, and every check an execute from a
+    /// transport gets applies to it. It runs unscoped, so it is not attributed to a connection and is not cancellable,
+    /// and it leaves every connection's principal baseline alone. No transport reaches this: the origin exists only
+    /// as this parameter, so a client cannot set or remove it.
+    ///
+    /// Callable from any thread. Runs on the server strand, then the instance's strand.
+    /// @param env    The `execute` envelope. `kind` is set to `execute`.
+    /// @param origin What started it.
+    /// @param reply  Called with the JSON-encoded reply envelope, once, from a pool thread.
+    void executeWithOrigin(::morph::wire::Envelope env, ::morph::session::RunOrigin origin,
+                           std::function<void(std::string)> reply) {
+        env.kind = "execute";
+        _strand.postTask(
+            [self = shared_from_this(), env = std::move(env), origin = std::move(origin),
+             reply = std::move(reply)]() mutable {
+                auto const callId = env.callId;
+                try {
+                    self->dispatchExecute(std::move(env), reply, 0, std::move(origin));
+                } catch (const std::exception& exc) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), callId)));
+                }
+            });
+    }
+
     /// @brief Processes a control `Envelope` on the server strand and returns
     ///        its reply, blocking the caller until it has one.
     ///
@@ -2321,7 +2347,8 @@ private:
     // docs/spec/security.md), so it is deliberately not broken up. On the
     // server strand; the admitted run is posted to the model's strand.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-    void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply, ConnectionId cid) {
+    void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply, ConnectionId cid,
+                         std::optional<::morph::session::RunOrigin> origin = std::nullopt) {
         // The admission phase only, on the server strand: the run itself is
         // posted to the model's strand and zoned there, in startRemote.
         MORPH_ZONE("RemoteServer::dispatchExecute");
@@ -2480,6 +2507,7 @@ private:
         run.stopSource = std::move(stopSource);
         run.mid = mid;
         run.cid = cid;
+        run.origin = std::move(origin);
         run.sharedKey = inst->sharedKey;
         // Posted in this strand's order, which is the order `handle()` was
         // called in; the model's strand runs its tasks in the order they were
@@ -2549,6 +2577,8 @@ private:
         ::morph::exec::detail::ModelId mid{};
         /// Connection the execute arrived on; `0` for unscoped.
         ConnectionId cid{0};
+        /// What the server says started it; empty for an execute from a transport.
+        std::optional<::morph::session::RunOrigin> origin;
         /// The instance's directory key at admission; empty for a private instance.
         std::optional<detail::DirectoryKey> sharedKey;
         std::chrono::steady_clock::time_point start;
@@ -2587,6 +2617,7 @@ private:
         std::exception_ptr error;
         try {
             ::morph::session::detail::ScopedContext const scoped{run.env.session};
+            ::morph::session::detail::ScopedOrigin const originScope{run.origin ? &*run.origin : nullptr};
             result = run.self->_dispatcher.dispatch(run.env.modelType, run.env.actionType, *run.holder, run.env.body);
         } catch (...) {
             error = std::current_exception();
@@ -2603,8 +2634,10 @@ private:
         std::shared_ptr<::morph::exec::detail::TaskResumer> executor;
         try {
             ::morph::session::detail::ScopedContext const scoped{run->env.session};
+            ::morph::session::detail::ScopedOrigin const originScope{run->origin ? &*run->origin : nullptr};
             auto const& strands = run->self->_strands;
-            executor = std::make_shared<::morph::exec::detail::TaskResumer>(strands, run->mid, run->env.session);
+            executor = std::make_shared<::morph::exec::detail::TaskResumer>(strands, run->mid, run->env.session,
+                                                                            run->origin);
             strands->enroll(run->mid, executor);
             auto token = run->stopSource ? run->stopSource->get_token() : ::core::async::StopToken{};
             run->self->_dispatcher.dispatchAsync(

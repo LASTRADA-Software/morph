@@ -51,6 +51,18 @@ struct Context {
     std::unordered_map<std::string, std::string> metadata;
 };
 
+/// @brief What started an execute, as the server says.
+///
+/// Deliberately not part of `Context`: a `Context` arrives in the envelope, so a client can send anything in it. A
+/// `RunOrigin` is passed by server-side code through `RemoteServer::executeWithOrigin`, has no wire form, and is read
+/// through `currentOrigin()`.
+struct RunOrigin {
+    /// @brief What started the run, such as `assistant`.
+    std::string kind;
+    /// @brief The words that led to it.
+    std::string text;
+};
+
 /// @brief The signed-in user's verified identity, readable outside a dispatch.
 ///
 /// `Context::principal` only exists *during* a dispatch — `session::current()`
@@ -328,6 +340,30 @@ private:
     const Context* _prev;
 };
 
+/// @brief Thread-local pointer to the `RunOrigin` of the currently dispatched action.
+/// @return The slot; it holds null for a run the server gave no origin.
+inline const RunOrigin*& tlsOrigin() {
+    thread_local const RunOrigin* tls = nullptr;
+    return tls;
+}
+
+/// @brief RAII helper that sets the thread-local `RunOrigin` for its scope.
+class ScopedOrigin {
+public:
+    /// @brief Installs @p origin until the scope exits.
+    /// @param origin The origin, which must outlive this object; null for a run without one.
+    explicit ScopedOrigin(const RunOrigin* origin) : _prev{tlsOrigin()} { tlsOrigin() = origin; }
+    /// @brief Restores the origin that was active at construction.
+    ~ScopedOrigin() { tlsOrigin() = _prev; }
+    ScopedOrigin(const ScopedOrigin&) = delete;
+    ScopedOrigin& operator=(const ScopedOrigin&) = delete;
+    ScopedOrigin(ScopedOrigin&&) = delete;
+    ScopedOrigin& operator=(ScopedOrigin&&) = delete;
+
+private:
+    const RunOrigin* _prev;
+};
+
 }  // namespace detail
 
 /// @brief Returns the active `Context` for the in-progress action, or `nullptr` if none.
@@ -335,5 +371,12 @@ private:
 /// Models that don't need session data can ignore this entirely. Models that do
 /// can read principal/locale/metadata without changing their `execute()` signature.
 inline const Context* current() noexcept { return detail::tlsCurrent(); }
+
+/// @brief Returns the server-set origin of the in-progress action, or `nullptr` if it has none.
+///
+/// A model that appends its own journal entries reads this to carry the origin onto them, since only entries written
+/// through `IModelHolder::recordIfAttached` get it automatically.
+/// @return The origin, valid until the action's current run on this thread ends; `nullptr` for an ordinary execute.
+inline const RunOrigin* currentOrigin() noexcept { return detail::tlsOrigin(); }
 
 }  // namespace morph::session
