@@ -22,6 +22,7 @@
 #include <morph/ui/document.hpp>
 #include <morph/ui/explorer.hpp>
 #include <morph/ui/host.hpp>
+#include <morph/ui/host_vocabulary.hpp>
 #include <morph/ui/inspector.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/mount.hpp>
@@ -206,6 +207,7 @@ public:
         sessionOptions.developmentTools = _options.dev ? ui::DevelopmentTools::On : ui::DevelopmentTools::Off;
         sessionOptions.watcher = source.watcher();
         _session = std::make_unique<ui::Session>(_context->runtime(), std::move(sessionOptions));
+        _chatHost.connect(*_session);
         followWidthClass();
         followConnection(source);
         listen(source);
@@ -473,15 +475,27 @@ private:
         buildChat();
     }
 
-    // The chat's panel in the new frame, shown once the server says it offers one. The client outlives frames, since a
-    // sign-in rebuilds the frame and what it was showing is the session's.
+    // The chat's panel in the new frame, shown once the server says it offers one. A document, mounted as any screen
+    // is. The client outlives frames, since a sign-in rebuilds the frame and what it was showing is the session's.
     void buildChat() {
         if (!_chat) {
             _chat = std::make_unique<ui::chat::ChatClient>(
                 _source->exchange(), [this] { return _source->currentSession(); }, [this] { chatChanged(); });
+            _chatBinding =
+                std::make_unique<ui::chat::ChatPanelBinding>(_chatHost, *_chat, [this] { return chatContext(); });
         }
-        _chatPanel = std::make_unique<ui::chat::ChatPanel>(*_backend, _frame->chatSlot(), *_chat,
-                                                           [this] { return chatContext(); });
+        auto document = ui::chat::chatPanelDocument();
+        if (!document) {
+            problem("the chat panel: " + document.error().message());
+            return;
+        }
+        _generated.insert_or_assign(std::string{ui::chat::kChatPanelId}, std::move(*document));
+        auto mounted = _host->mountInto(ui::chat::kChatPanelId, {}, _frame->chatSlot());
+        if (!mounted) {
+            problem("the chat panel: " + mounted.error().reason);
+            return;
+        }
+        _chatPanel = std::move(*mounted);
         _chat->probe();
         chatChanged();
     }
@@ -500,8 +514,8 @@ private:
         auto const context = chatContext();
         _chat->selectConversation(context ? context->screenId : std::string{},
                                   context ? context->identity : std::string{});
-        if (_chatPanel) {
-            _chatPanel->refresh();
+        if (_chatBinding) {
+            _chatBinding->refresh();
         }
     }
 
@@ -509,8 +523,8 @@ private:
         if (_frame) {
             _frame->setChatShown(_chat->available());
         }
-        if (_chatPanel) {
-            _chatPanel->refresh();
+        if (_chatBinding) {
+            _chatBinding->refresh();
         }
     }
 
@@ -966,6 +980,8 @@ private:
     // The documents the explorer generates for "Try it", by their screen ids.
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _generated;
     ui::ScreenHostRegistry _hosts;
+    // What the chat panel document reads and runs; it outlives the session it is connected to.
+    ui::HostVocabulary _chatHost;
     std::unique_ptr<ui::Session> _session;
     // Whether the source's connection-state listener is registered.
     bool _followingConnection = false;
@@ -974,9 +990,10 @@ private:
     std::unique_ptr<ApplicationHost> _application;
     std::unique_ptr<Host> _host;
     std::unique_ptr<ui::chat::ChatClient> _chat;
+    std::unique_ptr<ui::chat::ChatPanelBinding> _chatBinding;
     std::unique_ptr<ui::ShellFrame> _frame;
-    // Mounted into the frame's chat slot, so it goes before the frame.
-    std::unique_ptr<ui::chat::ChatPanel> _chatPanel;
+    // The panel document, mounted into the frame's chat slot, so it goes before the frame.
+    std::unique_ptr<ui::ScreenHandle> _chatPanel;
     std::unique_ptr<ui::Workspace> _workspace;
     // The app document's root for the current frame; destroyed after the tabs that read it.
     std::unique_ptr<ui::AppRoot> _appRoot;

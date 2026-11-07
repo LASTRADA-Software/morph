@@ -16,6 +16,8 @@
 #include <morph/ui/chat/client.hpp>
 #include <morph/ui/chat/panel.hpp>
 #include <morph/ui/chat/protocol.hpp>
+#include <morph/ui/host_vocabulary.hpp>
+#include <morph/ui/interpreter.hpp>
 #include <morph/ui/service_client.hpp>
 #include <morph/ui/shell_frame.hpp>
 #include <optional>
@@ -23,6 +25,7 @@
 #include <utility>
 
 #include "qt_quick_harness.hpp"
+#include "ui_interpreter_support.hpp"
 
 namespace {
 
@@ -54,30 +57,41 @@ TEST_CASE("qt_quick chat: the panel sits beside the page, and its input and line
     frame.setPrincipal("tech");
     frame.setChatShown(true);
 
-    std::unique_ptr<chat::ChatPanel> panel;
+    morph::ui::HostVocabulary host;
+    std::unique_ptr<chat::ChatPanelBinding> binding;
     chat::ChatClient client{
         [](morph::wire::Envelope const& /*request*/, std::function<void(morph::ui::ExchangeReply)> const& done) {
             done(morph::wire::makeOk(0, R"({"turnId":1})"));
         },
         [] { return morph::session::Context{}; },
-        [&panel] {
-            if (panel != nullptr) {
-                panel->refresh();
+        [&binding] {
+            if (binding != nullptr) {
+                binding->refresh();
             }
         }};
-    panel = std::make_unique<chat::ChatPanel>(scene.backend(), frame.chatSlot(), client,
-                                              [] { return std::optional<chat::TurnRequest>{chat::TurnRequest{}}; });
+    morph::reactive::testing::ManualScheduler scheduler;
+    morph::ui::Session session{scene.runtime(), morph::ui::SessionOptions{.scheduler = &scheduler}};
+    morph::ui::testing::ScriptedDispatcher dispatcher{scene.owner()};
+    morph::ui::testing::RecordingHost recordingHost;
+    morph::ui::Interpreter interpreter{session, dispatcher, morph::ui::InterpreterOptions{.host = &recordingHost}};
+    host.connect(session);
+    binding = std::make_unique<chat::ChatPanelBinding>(
+        host, client, [] { return std::optional<chat::TurnRequest>{chat::TurnRequest{}}; });
+    auto const document = chat::chatPanelDocument();
+    REQUIRE(document.has_value());
+    auto mounted =
+        interpreter.mount(*document, {}, scene.backend(), morph::ui::MountOptions{.parent = &frame.chatSlot()});
+    REQUIRE(mounted.has_value());
     chat::TurnRequest request;
     request.text = "container 100, before 299, after 223";
     client.send(request);
-    panel->refresh();
     scene.settle();
 
     QQuickItem const& page = itemFor("shell_page");
     QQuickItem const& column = itemFor("shell_chat");
     QQuickItem const& input = itemFor("chat_input");
     QQuickItem const& send = itemFor("chat_send");
-    QQuickItem const& line = itemFor("chat_entry_0");
+    QQuickItem const& line = itemFor("chat_entry");
 
     if (char const* const file = std::getenv("MORPH_CHAT_GRAB")) {  // NOLINT(concurrency-mt-unsafe): one thread here.
         CHECK(scene.window().grabWindow().save(QString::fromUtf8(file)));

@@ -179,12 +179,18 @@ session. It runs on the owner, and takes the source's exchange, the current sess
 
 ## The panel
 
-`panel.hpp`. `ChatPanel` is built from backend widgets, so every shell frontend has it: a conversation's lines
-(`chat_entry_<n>` inside `chat_entries`), an input (`chat_input`), a send button (`chat_send`) and, while a turn runs, a
-stop button (`chat_cancel`). It reads where the person is at each send, so a message goes to the screen they are looking
-at when they send it. A screen with no document behind it, such as the explorer, disables the input.
+`panel.hpp`. The panel is a document like any screen, `kChatPanelDocument`, so every frontend draws it and it uses the same
+vocabulary an application's screens use: a `forEach` of the conversation's lines (`chat_entry`, inside `chat_entries`), an
+input (`chat_input`), a send button (`chat_send`) and, while a turn runs, a stop button (`chat_cancel`).
 
-The client shell mounts it in `ShellFrame::chatSlot()`. It shows the slot only after a probe finds a chat, selects the
+`ChatPanelBinding` connects it to a `ChatClient` through a `HostVocabulary`, the seam a document has to anything the client
+owns: the values `chat.entries`, `chat.running`, `chat.onScreen` and `chat.canSend`, and the commands `chat.send` and
+`chat.cancel`. The commands are safe for an untrusted document: they do only what the person could do by typing, under
+their own session, and every action they lead to is checked on the server. The binding reads where the person is at each
+send, so a message goes to the screen they are looking at when they send it. A screen with no document behind it, such as
+the explorer, disables the input.
+
+The client shell mounts the document in `ShellFrame::chatSlot()`. It shows the slot only after a probe finds a chat, selects the
 active tab's conversation as tabs change, and forwards the source's events and reconnects to the `ChatClient`. A sign-out
 sends `ui-chat-end` first and continues when that is answered or fails. The panel is hidden in the frame's compact form,
 which has no width to spare beside the page.

@@ -969,10 +969,12 @@ TEST_CASE("switching_tabs_switches_the_conversation", "[client][chat]") {
     auto const input = rig.backend.find("TextInput", "testId", "chat_input");
     REQUIRE(input.has_value());
     rig.backend.submit(*input, "on the first screen");
-    REQUIRE(rig.backend.find("Text", "testId", "chat_entry_0").has_value());
+    REQUIRE(
+        pumpUntil(rig.context.owner(), [&] { return rig.backend.find("Text", "testId", "chat_entry").has_value(); }));
     auto const other = rig.backend.find("Button", "label", "Other");
     REQUIRE(other.has_value());
     rig.backend.click(*other);
     REQUIRE(pumpUntil(rig.context.owner(), [&] { return !shown(rig.backend, "other").empty(); }));
-    CHECK_FALSE(rig.backend.find("Text", "testId", "chat_entry_0").has_value());
+    CHECK(
+        pumpUntil(rig.context.owner(), [&] { return !rig.backend.find("Text", "testId", "chat_entry").has_value(); }));
 }
