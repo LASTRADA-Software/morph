@@ -222,17 +222,18 @@ std::shared_ptr<morph::journal::InMemoryActionLog> sharedLog() {
 struct Rig {
     std::shared_ptr<morph::journal::InMemoryActionLog> log = sharedLog();
     std::size_t logBefore = log->entries().size();
+    // Declared ahead of the pools, so it outlives the threads that write frames into it.
+    EventWire eventWire;
     morph::exec::ThreadPoolExecutor pool{2};
     morph::exec::ThreadPoolExecutor worker{2};
     std::shared_ptr<chat::testing::FakeChatProvider> fake = std::make_shared<chat::testing::FakeChatProvider>();
     chat::ChatLimits limits;
     std::shared_ptr<morph::backend::RemoteServer> server;
     std::shared_ptr<ui::ServedBundle const> bundle;
-    EventWire eventWire;
     std::atomic<std::uint64_t> nextCall{1};
 
     explicit Rig(chat::ChatLimits given = {}, bool withProvider = true,
-                 std::shared_ptr<chat::IProvider> other = nullptr)
+                 std::shared_ptr<chat::IProvider> const& other = nullptr)
         : limits{given} {
         {
             std::scoped_lock const lock{chat_service_test::store().mutex};
@@ -257,8 +258,11 @@ struct Rig {
         morph::backend::ServerConfig config;
         config.services.push_back(std::make_shared<ui::UiService>(bundle));
         chat::ChatOptions options;
-        options.provider =
-            other != nullptr ? other : (withProvider ? std::static_pointer_cast<chat::IProvider>(fake) : nullptr);
+        if (other != nullptr) {
+            options.provider = other;
+        } else if (withProvider) {
+            options.provider = fake;
+        }
         options.worker = &worker;
         options.bundle = bundle;
         options.limits = limits;
@@ -368,7 +372,8 @@ struct Rig {
     }
 };
 
-// A provider the test answers by hand, whenever and however a real one might.
+// A provider the test answers by hand, whenever and however a real one might. `called` hands the sink over rather
+// than keeping it: the sink holds the service, which holds this provider, so a kept one would never be freed.
 struct ManualProvider final : chat::IProvider {
     struct Call final : chat::IProviderCall {
         void cancel() override {}
@@ -387,7 +392,7 @@ struct ManualProvider final : chat::IProvider {
             return sink.has_value();
         }));
         std::scoped_lock const lock{mutex};
-        return *sink;
+        return *std::exchange(sink, std::nullopt);
     }
 
     std::mutex mutex;
@@ -1091,7 +1096,7 @@ TEST_CASE("a_provider_needs_a_worker_and_a_bundle", "[chat][service]") {
 
 // Mutation: answer every kind.
 TEST_CASE("the_service_answers_only_the_chat_kinds", "[chat][service]") {
-    Rig rig;
+    Rig const rig;
     CHECK(rig.chatService->serves(chat::kEndKind));
     CHECK_FALSE(rig.chatService->serves("ui-chat-unknown"));
 }

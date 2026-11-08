@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <deque>
 #include <expected>
@@ -110,32 +111,49 @@ public:
 private:
     struct State;
 
-    // Holds the state, so a call outlives the provider and a late cancel touches nothing freed.
+    // Holds the state, so a call outlives the provider and a late cancel touches nothing freed. A finished call lets
+    // go of its sink and leaves the held list: the sink usually owns whoever owns this provider, so keeping either
+    // would hold the two alive in a cycle. Both are destroyed outside the lock, since freeing the sink can free the
+    // provider.
     struct Pending final : IProviderCall {
         Pending(std::shared_ptr<State> shared, ProviderSink given)
             : state{std::move(shared)}, sink{std::move(given)} {}
 
         void cancel() override {
-            std::scoped_lock const lock{state->mutex};
-            if (!finished) {
-                finished = true;
-                ++state->cancelled;
-            }
-        }
-
-        void deliver() {
+            ProviderSink dropped;
+            std::shared_ptr<Pending> unheld;
             {
                 std::scoped_lock const lock{state->mutex};
                 if (finished) {
                     return;
                 }
                 finished = true;
+                ++state->cancelled;
+                dropped = std::move(sink);
+                auto const position = std::ranges::find_if(
+                    state->pending, [this](std::shared_ptr<Pending> const& held) { return held.get() == this; });
+                if (position != state->pending.end()) {
+                    unheld = std::move(*position);
+                    state->pending.erase(position);
+                }
             }
-            if (outcome && !outcome->text.empty() && sink.text) {
-                sink.text(outcome->text);
+        }
+
+        void deliver() {
+            ProviderSink taken;
+            {
+                std::scoped_lock const lock{state->mutex};
+                if (finished) {
+                    return;
+                }
+                finished = true;
+                taken = std::move(sink);
             }
-            if (sink.done) {
-                sink.done(std::move(outcome));
+            if (outcome && !outcome->text.empty() && taken.text) {
+                taken.text(outcome->text);
+            }
+            if (taken.done) {
+                taken.done(std::move(outcome));
             }
         }
 
