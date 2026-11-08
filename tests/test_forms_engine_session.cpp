@@ -142,6 +142,105 @@ TEST_CASE("FormSession: refill keeps the fields the user changed since the last 
     CHECK(harness.server.submits().size() == 1);  // the typed "8" on a ready form; no load submitted
 }
 
+// Mutation: leave the baseline where the last load put it -> the saved "9" counts as an edit and the record's 5 is
+// lost.
+TEST_CASE("FormSession: a field saved by explicit submit takes the record's later value", "[forms-engine][session]") {
+    Harness harness;
+    auto const form =
+        harness.session("TestAction",
+                        R"({"properties":{"a":{"type":"integer","x-order":0},"b":{"type":"integer","x-order":1}},
+            "required":["a","b"],"x-submitMode":"explicit"})");
+    harness.type(*form, "a", "9");
+    harness.type(*form, "b", "2");
+    form->submit();
+    harness.settle();
+    REQUIRE(form->successCount() == 1);
+    form->refill(R"({"a":5,"b":6})");
+    harness.settle();
+    CHECK(form->field("a").text().peek() == "5");
+    CHECK(form->field("b").text().peek() == "6");
+}
+
+// Mutation: take each field's text at the success as saved, rather than what was sent -> the "7" typed while the save
+// was in flight is replaced.
+TEST_CASE("FormSession: a field edited while its save was in flight keeps the edit", "[forms-engine][session]") {
+    Harness harness;
+    auto const form =
+        harness.session("TestAction",
+                        R"({"properties":{"a":{"type":"integer","x-order":0},"b":{"type":"integer","x-order":1}},
+            "required":["a","b"],"x-submitMode":"explicit"})");
+    harness.type(*form, "a", "9");
+    harness.type(*form, "b", "2");
+    harness.server.replyWith([](auto const&) { return std::optional<std::string>{}; });
+    form->submit();
+    harness.settle();
+    harness.type(*form, "a", "7");
+    harness.server.resolveSubmit(0, R"({"ok":true})");
+    harness.settle();
+    REQUIRE(form->successCount() == 1);
+    form->refill(R"({"a":5,"b":6})");
+    harness.settle();
+    CHECK(form->field("a").text().peek() == "7");
+    CHECK(form->field("b").text().peek() == "6");
+}
+
+// Mutation: accept what was sent whatever the field holds now -> the record loaded while the save was in flight counts
+// as an edit, and its later value is refused.
+TEST_CASE("FormSession: a record loaded while a save was in flight takes its later values",
+          "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session(
+        "TestAction",
+        R"({"properties":{"a":{"type":"integer","x-order":0}},"required":["a"],"x-submitMode":"explicit"})");
+    harness.type(*form, "a", "9");
+    harness.server.replyWith([](auto const&) { return std::optional<std::string>{}; });
+    form->submit();
+    harness.settle();
+    form->prefill(R"({"a":1})");
+    harness.server.resolveSubmit(0, R"({"ok":true})");
+    harness.settle();
+    REQUIRE(form->successCount() == 1);
+    form->refill(R"({"a":5})");
+    harness.settle();
+    CHECK(form->field("a").text().peek() == "5");
+}
+
+// Mutation: accept what was sent in automatic mode too -> a record's value loads under someone still typing.
+TEST_CASE("FormSession: an automatic form's saved field stays an edit", "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("TestAction", kTwoInts);
+    harness.type(*form, "a", "9");
+    harness.type(*form, "b", "2");
+    REQUIRE(form->successCount() == 1);
+    // The explicit trigger, which an automatic form also has, is no end of an edit either.
+    form->submit();
+    harness.settle();
+    REQUIRE(form->successCount() == 2);
+    form->refill(R"({"a":5,"b":6})");
+    harness.settle();
+    CHECK(form->field("a").text().peek() == "9");
+    CHECK(form->field("b").text().peek() == "2");
+}
+
+// Mutation: advance the baseline when the save is sent rather than when it succeeds -> a refused save loses what was
+// typed to the next refill.
+TEST_CASE("FormSession: a refused save stays an edit", "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session(
+        "TestAction",
+        R"({"properties":{"a":{"type":"integer","x-order":0}},"required":["a"],"x-submitMode":"explicit"})");
+    harness.type(*form, "a", "9");
+    harness.server.replyWith([](auto const&) { return std::optional<std::string>{}; });
+    form->submit();
+    harness.settle();
+    harness.server.rejectSubmit(0, "refused");
+    harness.settle();
+    REQUIRE(form->lastError() != nullptr);
+    form->refill(R"({"a":5})");
+    harness.settle();
+    CHECK(form->field("a").text().peek() == "9");
+}
+
 TEST_CASE("FormSession: reset clears every draft and does not submit a form that stays ready",
           "[forms-engine][session]") {
     Harness harness;

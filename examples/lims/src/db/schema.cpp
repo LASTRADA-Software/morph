@@ -169,4 +169,12 @@ LIGHTWEIGHT_SQL_MIGRATION(20261014000001, "Create lims_sample_entries table") {
         .RequiredForeignKey("sample_id", Bigint(), limsSamplesRef())
         .RequiredColumn("payload", Text(4096));
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20261107000001, "Create lims_ignition_tests table") {
+    plan.CreateTableIfNotExists("lims_ignition_tests")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .Column("mass_container", Real())
+        .Column("mass_before", Real())
+        .Column("mass_after", Real());
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

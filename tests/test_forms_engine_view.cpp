@@ -239,6 +239,30 @@ TEST_CASE("formView: a failed submission shows its error; an automatic form has 
     CHECK(mounted.backend.prop(result, "role") == "Error");
 }
 
+// Mutation: hide the result line with the status line -> a refused save says nothing; or leave it shown -> the reply's
+// JSON sits under a form that asked to be quiet.
+TEST_CASE("formView: a form with no status line shows a failure and no reply", "[forms-engine][view]") {
+    constexpr std::string_view kSchema =
+        R"({"x-submitMode":"explicit","properties":{"a":{"type":"integer","x-order":0}},"required":["a"]})";
+    Mounted mounted{kSchema, FormViewOptions{.showStatus = false}};
+    mounted.harness.server.replyWith([&](morph::test::formsengine::Call const& call) {
+        return call.body.contains("1") ? std::optional<std::string>{R"({"ok":true})"} : std::optional<std::string>{};
+    });
+    int const result = mounted.widget("Text", "form_result");
+    mounted.edit("a", "1");
+    mounted.backend.click(mounted.widget("Button", "form_submit"));
+    mounted.harness.settle();
+    REQUIRE(mounted.form->successCount() == 1);
+    CHECK(mounted.backend.prop(result, "visible") == "false");
+    mounted.edit("a", "2");
+    mounted.backend.click(mounted.widget("Button", "form_submit"));
+    mounted.harness.settle();
+    mounted.harness.server.rejectSubmit(1, "refused");
+    mounted.harness.settle();
+    CHECK(mounted.backend.prop(result, "visible") == "true");
+    CHECK(mounted.backend.prop(result, "text") == "error: refused");
+}
+
 TEST_CASE("formView: a field's error shows on its control", "[forms-engine][view]") {
     Mounted mounted{kKinds};
     int const count = mounted.widget("TextInput", "field_count");

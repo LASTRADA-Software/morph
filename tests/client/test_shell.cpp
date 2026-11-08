@@ -20,6 +20,7 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
+#include <morph/ui/chat/protocol.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <optional>
@@ -367,6 +368,85 @@ protected:
             .exchange = [this](morph::wire::Envelope const& request,
                                std::function<void(ui::ExchangeReply)> const& done) {
                 done(morph::wire::decode(_service->handle(request, *morph::session::allowAllAuthorizer())));
+            }};
+    }
+    void disconnect() override {
+        _workers.reset();
+        _service.reset();
+    }
+
+private:
+    std::shared_ptr<ui::UiService> _service;
+    std::unique_ptr<morph::exec::ThreadPoolExecutor> _workers;
+};
+
+/// A second screen, so a shell has two tabs to switch between.
+constexpr std::string_view kOtherScreen = R"({
+  "vocab": "ui/1", "id": "probe.other",
+  "view": { "kind": "text", "testId": "other", "text": "Other" } })";
+
+/// The env screen as one a signed-in person opens, so the frame shows its chrome.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> signedInBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::CatalogEntry entry;
+    entry.id = "probe.env";
+    if (auto added = served.addScreen(std::move(entry), std::string{kEnvScreen}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    ui::CatalogEntry other;
+    other.id = "probe.other";
+    other.title = "Other";
+    if (auto added = served.addScreen(std::move(other), std::string{kOtherScreen}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
+/// The env screen's application, with chat kinds answered by the test: `chatOffered` says whether the probe finds a
+/// chat, and an end of chat waits for the test unless the exchange is failing.
+class ChatSource final : public client::Source {
+public:
+    // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes): the test reads and sets these.
+    bool chatOffered = true;
+    bool failing = false;
+    std::vector<std::string> kinds;
+    std::vector<morph::wire::Envelope> turns;
+    std::function<void(ui::ExchangeReply)> pendingEnd;
+    // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
+
+    ChatSource() = default;
+    ~ChatSource() override { close(); }
+    ChatSource(ChatSource const&) = delete;
+    ChatSource& operator=(ChatSource const&) = delete;
+    ChatSource(ChatSource&&) = delete;
+    ChatSource& operator=(ChatSource&&) = delete;
+
+protected:
+    [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& /*context*/) override {
+        auto served = signedInBundle();
+        REQUIRE(served.has_value());
+        _service = std::make_shared<ui::UiService>(std::move(*served), morph::model::detail::defaultDispatcher());
+        _workers = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
+        return Transport{
+            .backend = std::make_unique<morph::backend::LocalBackend>(*_workers),
+            .exchange = [this](morph::wire::Envelope const& request,
+                               std::function<void(ui::ExchangeReply)> const& done) {
+                kinds.push_back(request.kind);
+                if (request.kind == ui::chat::kEndKind) {
+                    if (failing) {
+                        done(std::unexpected(std::string{"the connection is closed"}));
+                    } else {
+                        pendingEnd = done;
+                    }
+                } else if (request.kind == ui::chat::kStateKind) {
+                    done(chatOffered ? morph::wire::makeOk(request.callId, "{}")
+                                     : morph::wire::makeErr("unknown envelope kind", request.callId));
+                } else if (request.kind == ui::chat::kTurnKind) {
+                    turns.push_back(request);
+                    done(morph::wire::makeOk(request.callId, R"({"turnId":1})"));
+                } else {
+                    done(morph::wire::decode(_service->handle(request, *morph::session::allowAllAuthorizer())));
+                }
             }};
     }
     void disconnect() override {
@@ -791,4 +871,110 @@ TEST_CASE("Client shell: a screen's title role is the top bar's title, and the n
                         [&backend] { return propOf(backend, "Text", "shell_title", "role") == "Headline"; }));
     }
     source.close();
+}
+
+namespace {
+
+// A shell on a ChatSource, opened on the env screen.
+struct ChatRig {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    ChatSource source;
+    std::unique_ptr<ui::MountedShell> shell;
+
+    explicit ChatRig(bool offered = true) {
+        source.chatOffered = offered;
+        std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+        source.open(context,
+                    [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+        REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+        REQUIRE(opened->has_value());
+        shell = client::mountShell(context, backend, std::move(*opened), source,
+                                   client::ShellOptions{.startScreen = "probe.env"});
+        REQUIRE(pumpUntil(context.owner(), [this] { return shown(backend, "online") == "on"; }));
+        // Lets a probe's answer reach the frame.
+        static_cast<void>(pumpUntil(context.owner(), [] { return false; }, std::chrono::milliseconds{20}));
+    }
+
+    ~ChatRig() {
+        shell.reset();
+        source.close();
+    }
+    ChatRig(ChatRig const&) = delete;
+    ChatRig& operator=(ChatRig const&) = delete;
+    ChatRig(ChatRig&&) = delete;
+    ChatRig& operator=(ChatRig&&) = delete;
+
+    [[nodiscard]] bool panelShown() const {
+        auto const chat = backend.find("Row", "testId", "shell_chat");
+        return chat.has_value() && backend.prop(*chat, "visible") != "false";
+    }
+};
+
+}  // namespace
+
+// Mutation: show the slot whatever the probe said.
+TEST_CASE("the_shell_shows_the_panel_only_when_the_server_has_a_chat", "[client][chat]") {
+    ChatRig const offered;
+    CHECK(offered.panelShown());
+    ChatRig const refused{false};
+    CHECK_FALSE(refused.panelShown());
+}
+
+// Mutation: send the panel's context from the shell without the active tab's screen.
+TEST_CASE("sending_from_the_panel_carries_the_open_screen", "[client][chat]") {
+    ChatRig rig;
+    auto const input = rig.backend.find("TextInput", "testId", "chat_input");
+    REQUIRE(input.has_value());
+    rig.backend.submit(*input, "add ignition test");
+    REQUIRE(rig.source.turns.size() == 1);
+    auto const body = ui::chat::readTurnRequest(rig.source.turns.front().body);
+    REQUIRE(body.has_value());
+    CHECK(body->screenId == "probe.env");
+    CHECK(body->text == "add ignition test");
+}
+
+// Mutation: send the end of chat after the sign-out's reload.
+TEST_CASE("signing_out_sends_end_of_chat_first", "[client][chat]") {
+    ChatRig rig;
+    auto const button = rig.backend.find("Button", "testId", "shell_signOut");
+    REQUIRE(button.has_value());
+    rig.source.kinds.clear();
+    rig.backend.click(*button);
+    static_cast<void>(pumpUntil(rig.context.owner(), [] { return false; }, std::chrono::milliseconds{20}));
+    REQUIRE_FALSE(rig.source.kinds.empty());
+    CHECK(rig.source.kinds.front() == ui::chat::kEndKind);
+    // Nothing else goes until the server has answered it.
+    CHECK(rig.source.kinds.size() == 1);
+    REQUIRE(rig.source.pendingEnd);
+    rig.source.pendingEnd(morph::wire::makeOk(0));
+    CHECK(pumpUntil(rig.context.owner(), [&] { return rig.source.kinds.size() > 1; }));
+}
+
+// Mutation: wait for an answer only when the exchange succeeds.
+TEST_CASE("signing_out_does_not_hang_on_a_lost_connection", "[client][chat]") {
+    ChatRig rig;
+    auto const button = rig.backend.find("Button", "testId", "shell_signOut");
+    REQUIRE(button.has_value());
+    rig.source.failing = true;
+    rig.source.kinds.clear();
+    rig.backend.click(*button);
+    CHECK(pumpUntil(rig.context.owner(), [&] { return rig.source.kinds.size() > 1; }));
+    CHECK(rig.source.kinds.front() == ui::chat::kEndKind);
+}
+
+// Mutation: leave the conversation selected when the active tab changes.
+TEST_CASE("switching_tabs_switches_the_conversation", "[client][chat]") {
+    ChatRig rig;
+    auto const input = rig.backend.find("TextInput", "testId", "chat_input");
+    REQUIRE(input.has_value());
+    rig.backend.submit(*input, "on the first screen");
+    REQUIRE(
+        pumpUntil(rig.context.owner(), [&] { return rig.backend.find("Text", "testId", "chat_entry").has_value(); }));
+    auto const other = rig.backend.find("Button", "label", "Other");
+    REQUIRE(other.has_value());
+    rig.backend.click(*other);
+    REQUIRE(pumpUntil(rig.context.owner(), [&] { return !shown(rig.backend, "other").empty(); }));
+    CHECK(
+        pumpUntil(rig.context.owner(), [&] { return !rig.backend.find("Text", "testId", "chat_entry").has_value(); }));
 }

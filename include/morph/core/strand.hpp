@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <type_traits>
@@ -324,8 +325,10 @@ public:
     /// @param strands The strands the model's actions run on.
     /// @param key     The model instance whose strand resumptions are queued on.
     /// @param session The action's session context, installed for each resumption.
-    TaskResumer(std::shared_ptr<ModelStrands> strands, ModelId key, ::morph::session::Context session)
-        : _strands{std::move(strands)}, _key{key}, _session{std::move(session)} {}
+    /// @param origin  The action's server-set origin, installed for each resumption; empty for none.
+    TaskResumer(std::shared_ptr<ModelStrands> strands, ModelId key, ::morph::session::Context session,
+                std::optional<::morph::session::RunOrigin> origin = std::nullopt)
+        : _strands{std::move(strands)}, _key{key}, _session{std::move(session)}, _origin{std::move(origin)} {}
 
     using ::core::async::IExecutor::submit;
 
@@ -373,6 +376,7 @@ public:
     void within(Body&& body) {
         std::shared_ptr<void> const keep = shared_from_this();
         ::morph::session::detail::ScopedContext const scoped{_session};
+        ::morph::session::detail::ScopedOrigin const origin{_origin ? &*_origin : nullptr};
         ::core::async::ExecutorScope const scope{*this, &keep, nullptr};
         std::forward<Body>(body)();
     }
@@ -381,6 +385,7 @@ private:
     std::shared_ptr<ModelStrands> _strands;
     ModelId _key;
     ::morph::session::Context _session;
+    std::optional<::morph::session::RunOrigin> _origin;
 };
 
 inline void ModelStrands::AroundTask::operator()(const ModelId& key, ::core::async::RunTask run) const {

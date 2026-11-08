@@ -530,6 +530,14 @@ target_sources(morph
         include/morph/ui/shell_frame.hpp
         include/morph/ui/explorer.hpp
         include/morph/ui/agent.hpp
+        include/morph/ui/chat/client.hpp
+        include/morph/ui/chat/config.hpp
+        include/morph/ui/chat/conversations.hpp
+        include/morph/ui/chat/panel.hpp
+        include/morph/ui/chat/protocol.hpp
+        include/morph/ui/chat/provider.hpp
+        include/morph/ui/chat/screen_tools.hpp
+        include/morph/ui/chat/service.hpp
         include/morph/ui/preferences.hpp
         include/morph/ui/preference_sync.hpp
         include/morph/ui/host_vocabulary.hpp
@@ -538,6 +546,7 @@ target_sources(morph
         include/morph/ui/theme.hpp
         include/morph/ui/testing/memory_history.hpp
         include/morph/ui/testing/recording_backend.hpp
+        include/morph/ui/testing/fake_chat_provider.hpp
         include/morph/ui/testing/backend_conformance.hpp
         include/morph/render/i18n.hpp
         include/morph/render/locale_format.hpp
@@ -1049,7 +1058,7 @@ endif()
 
 # ── Qt WebSocket backend (optional) ─────────────────────────────────────────
 if(MORPH_BUILD_QT)
-    find_package(Qt6 COMPONENTS WebSockets REQUIRED)
+    find_package(Qt6 COMPONENTS Network WebSockets REQUIRED)
 
     # Header-only interface for consumers
     add_library(morph_qt INTERFACE)
@@ -1057,12 +1066,13 @@ if(MORPH_BUILD_QT)
     # Same standalone-compile check the core target gets: a listed header that
     # stops being self-contained must fail here, not silently pass (morph#230).
     set_target_properties(morph_qt PROPERTIES VERIFY_INTERFACE_HEADER_SETS ON)
-    target_link_libraries(morph_qt INTERFACE morph Qt6::WebSockets)
+    target_link_libraries(morph_qt INTERFACE morph Qt6::Network Qt6::WebSockets)
     target_sources(morph_qt
         INTERFACE
         FILE_SET HEADERS
         BASE_DIRS include
         FILES
+            include/morph/qt/qt_chat_provider.hpp
             include/morph/qt/qt_executor.hpp
             include/morph/qt/qt_tls.hpp
             include/morph/qt/qt_websocket_server.hpp
@@ -1072,6 +1082,7 @@ if(MORPH_BUILD_QT)
 
     # Compiled implementation (QObject subclass needs MOC via a .cpp file)
     add_library(morph_qt_impl STATIC
+        src/qt/qt_chat_provider.cpp
         src/qt/qt_websocket_server.cpp
         src/qt/qt_websocket_backend.cpp
         include/morph/qt/qt_websocket_server.hpp

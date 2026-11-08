@@ -321,6 +321,10 @@ struct IModelHolder {
         if (const auto* ctx = ::morph::session::current()) {
             entry.principal = ctx->principal;
         }
+        if (const auto* origin = ::morph::session::currentOrigin()) {
+            entry.originKind = origin->kind;
+            entry.originText = origin->text;
+        }
         entry.timestampMs =
             std::chrono::duration_cast<std::chrono::milliseconds>(_wallClock.now().time_since_epoch()).count();
         _actionLog->append(std::move(entry));

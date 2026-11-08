@@ -72,6 +72,14 @@ struct CallOptions {
     bool queueOffline = false;
 };
 
+/// @brief What a channel can say about the instance it is bound to.
+struct ChannelFacts {
+    /// @brief The instance's id on the server; `0` while the bind has not settled.
+    std::uint64_t instanceId = 0;
+    /// @brief The instance's primary key; empty for one with none.
+    std::string primary;
+};
+
 /// @brief One bound model alias: the instance a document's alias names, and the calls made through it.
 class ModelChannel {
 public:
@@ -89,6 +97,10 @@ public:
     /// @return The reply's JSON text, delivered on the runtime's owner.
     [[nodiscard]] virtual async::Completion<std::string> execute(std::string const& actionId,
                                                                  std::string const& bodyJson, CallOptions options) = 0;
+
+    /// @brief The instance it is bound to, as far as it knows.
+    /// @return The facts; an empty set for a channel with no instance of its own to report.
+    [[nodiscard]] virtual ChannelFacts facts() const { return {}; }
 };
 
 /// @brief The interpreter's view of the bridge: binds a model by its type id, privately or to a shared instance.
@@ -165,6 +177,10 @@ private:
                 return std::move(refused);
             }
             return _handler.execute(actionId, bodyJson);
+        }
+
+        [[nodiscard]] ChannelFacts facts() const override {
+            return ChannelFacts{.instanceId = _handler.instanceId(), .primary = _handler.primary()};
         }
 
     private:
@@ -3159,6 +3175,31 @@ public:
     /// @brief Evaluates the document's `identity`.
     /// @return It, or `null`.
     [[nodiscard]] Value identity() const { return detail::evalIn(*_scope, nullptr, _core->doc().identity); }
+
+    /// @brief One model alias of the screen's own scope, with an instance.
+    struct BoundAlias {
+        /// @brief Its declaration.
+        ModelDecl const* decl = nullptr;
+        /// @brief The instance it is bound to.
+        ChannelFacts facts;
+    };
+
+    /// @brief The aliases of the screen's own scope that hold an instance now. One still binding is left out, and so
+    ///        is one of a nested scope, which is mounted per row or per opening and so names no one instance.
+    /// @return Them, in declaration order.
+    [[nodiscard]] std::vector<BoundAlias> boundAliases() const {
+        std::vector<BoundAlias> bound;
+        for (auto const& alias : _scope->models) {
+            if (alias->channel == nullptr) {
+                continue;
+            }
+            ChannelFacts facts = alias->channel->facts();
+            if (facts.instanceId != 0) {
+                bound.push_back(BoundAlias{.decl = alias->decl, .facts = std::move(facts)});
+            }
+        }
+        return bound;
+    }
 
     /// @brief Whether the screen's shown root lays itself at the page's edges (`pageEdge`). A tracked read: it starts
     ///        at the view's root, and while the node is a `switch` it moves to the case shown now (the default when

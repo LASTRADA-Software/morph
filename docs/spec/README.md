@@ -147,6 +147,8 @@ registration that validates it once, with the accessibility rules ·
 filtered for the principal, and content-addressed bundles verified into the client's cache ·
 [`ui/preferences.md`](ui/preferences.md) — customization choices stored per person by the server's
 preferences model, keyed by the verified session, and loaded back into a mounted screen ·
+[`ui/chat.md`](ui/chat.md) — a chat built into a client whose assistant runs on the server: its protocol, turn loop,
+providers and limits ·
 [`ui/host_vocabulary.md`](ui/host_vocabulary.md) — the commands and values a client application registers
 (`host/1`): checked arguments, the trust gate, `can` and the handshake ·
 [`ui/catalogue.md`](ui/catalogue.md) — a bundle's message catalogues, the provider `t` resolves through, locale

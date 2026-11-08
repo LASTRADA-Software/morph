@@ -16,10 +16,13 @@
 #include <morph/core/wire.hpp>
 #include <morph/reactive/scheduler.hpp>
 #include <morph/reactive/signal.hpp>
+#include <morph/ui/chat/client.hpp>
+#include <morph/ui/chat/panel.hpp>
 #include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/explorer.hpp>
 #include <morph/ui/host.hpp>
+#include <morph/ui/host_vocabulary.hpp>
 #include <morph/ui/inspector.hpp>
 #include <morph/ui/interpreter.hpp>
 #include <morph/ui/mount.hpp>
@@ -149,6 +152,7 @@ public:
     ~Shell() override {
         *_alive = false;
         _backend->setOnWidthClass({});
+        _chatPanel.reset();
         // The head row's own mount first, since it is built from the Workspace's data and lives in the ShellFrame;
         // then the tabs, then the app document's root the tabs read, then the frame they sit in. The root goes before
         // the document host, whose interpreter runs its onUnmount.
@@ -174,10 +178,16 @@ public:
             if (auto const live = alive.lock(); live != nullptr && *live && _session) {
                 _session->reconnected();
             }
+            if (auto const live = alive.lock(); live != nullptr && *live && _chat) {
+                _chat->reconnected();
+            }
         });
         source.onEvent([this, alive = std::weak_ptr<bool>{_alive}](wire::EventBody const& event) {
             if (auto const live = alive.lock(); live != nullptr && *live && _session) {
                 _session->deliverEvent(event);
+            }
+            if (auto const live = alive.lock(); live != nullptr && *live && _chat) {
+                _chat->deliverEvent(event);
             }
         });
     }
@@ -197,6 +207,7 @@ public:
         sessionOptions.developmentTools = _options.dev ? ui::DevelopmentTools::On : ui::DevelopmentTools::Off;
         sessionOptions.watcher = source.watcher();
         _session = std::make_unique<ui::Session>(_context->runtime(), std::move(sessionOptions));
+        _chatHost.connect(*_session);
         followWidthClass();
         followConnection(source);
         listen(source);
@@ -354,6 +365,19 @@ private:
     // instances are released under the session that owns them; from a posted task, since the screen that signed out
     // may still be running its commands.
     void signOut() {
+        // Ends the chat first, while the session still proves who is asking: the server cannot see a sign-out.
+        if (_chat && _chat->available()) {
+            _chat->end([this, alive = std::weak_ptr<bool>{_alive}] {
+                if (auto const live = alive.lock(); live != nullptr && *live) {
+                    finishSignOut();
+                }
+            });
+            return;
+        }
+        finishSignOut();
+    }
+
+    void finishSignOut() {
         reloadThen(false, [this](auto done) {
             _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, done = std::move(done)] {
                 if (auto const live = alive.lock(); live != nullptr && *live) {
@@ -372,6 +396,7 @@ private:
     void buildFrame() {
         resetHead();
         _badges.reset();
+        _chatPanel.reset();
         _workspace.reset();
         _appRoot.reset();
         _frame.reset();
@@ -436,7 +461,10 @@ private:
             }
             return ui::WorkspaceScreen{};
         };
-        tabs.onChanged = [this] { showActiveTitle(); };
+        tabs.onChanged = [this] {
+            showActiveTitle();
+            followChat();
+        };
         tabs.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         tabs.hosts = &_hosts;
         // The shell mounts the head row itself, in its top bar: an in-page head would show it a second time.
@@ -444,6 +472,60 @@ private:
                                                      &_frame->page(), ui::HeadPlacement::External);
         mountApp();
         followBadges();
+        buildChat();
+    }
+
+    // The chat's panel in the new frame, shown once the server says it offers one. A document, mounted as any screen
+    // is. The client outlives frames, since a sign-in rebuilds the frame and what it was showing is the session's.
+    void buildChat() {
+        if (!_chat) {
+            _chat = std::make_unique<ui::chat::ChatClient>(
+                _source->exchange(), [this] { return _source->currentSession(); }, [this] { chatChanged(); });
+            _chatBinding =
+                std::make_unique<ui::chat::ChatPanelBinding>(_chatHost, *_chat, [this] { return chatContext(); });
+        }
+        auto document = ui::chat::chatPanelDocument();
+        if (!document) {
+            problem("the chat panel: " + document.error().message());
+            return;
+        }
+        _generated.insert_or_assign(std::string{ui::chat::kChatPanelId}, std::move(*document));
+        auto mounted = _host->mountInto(ui::chat::kChatPanelId, {}, _frame->chatSlot());
+        if (!mounted) {
+            problem("the chat panel: " + mounted.error().reason);
+            return;
+        }
+        _chatPanel = std::move(*mounted);
+        _chat->probe();
+        chatChanged();
+    }
+
+    // Where the person is, for a chat turn; nothing while a screen with no document behind it is active.
+    [[nodiscard]] std::optional<ui::chat::TurnRequest> chatContext() const {
+        ui::ScreenHandle* const shown = _workspace ? _workspace->activeHandle() : nullptr;
+        return shown == nullptr ? std::nullopt : ui::DocumentScreenHost::chatContext(*shown);
+    }
+
+    // The panel shows the active tab's conversation.
+    void followChat() {
+        if (!_chat) {
+            return;
+        }
+        auto const context = chatContext();
+        _chat->selectConversation(context ? context->screenId : std::string{},
+                                  context ? context->identity : std::string{});
+        if (_chatBinding) {
+            _chatBinding->refresh();
+        }
+    }
+
+    void chatChanged() {
+        if (_frame) {
+            _frame->setChatShown(_chat->available());
+        }
+        if (_chatBinding) {
+            _chatBinding->refresh();
+        }
     }
 
     // The frame is compact below `expanded`: with its sidebar, an 80-unit `medium` window would leave the page
@@ -898,6 +980,8 @@ private:
     // The documents the explorer generates for "Try it", by their screen ids.
     std::map<std::string, std::shared_ptr<ui::Document const>, std::less<>> _generated;
     ui::ScreenHostRegistry _hosts;
+    // What the chat panel document reads and runs; it outlives the session it is connected to.
+    ui::HostVocabulary _chatHost;
     std::unique_ptr<ui::Session> _session;
     // Whether the source's connection-state listener is registered.
     bool _followingConnection = false;
@@ -905,7 +989,11 @@ private:
     bool _listening = false;
     std::unique_ptr<ApplicationHost> _application;
     std::unique_ptr<Host> _host;
+    std::unique_ptr<ui::chat::ChatClient> _chat;
+    std::unique_ptr<ui::chat::ChatPanelBinding> _chatBinding;
     std::unique_ptr<ui::ShellFrame> _frame;
+    // The panel document, mounted into the frame's chat slot, so it goes before the frame.
+    std::unique_ptr<ui::ScreenHandle> _chatPanel;
     std::unique_ptr<ui::Workspace> _workspace;
     // The app document's root for the current frame; destroyed after the tabs that read it.
     std::unique_ptr<ui::AppRoot> _appRoot;

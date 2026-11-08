@@ -2993,6 +2993,10 @@ public:
         return _bridge.executeRaw(_binding, std::move(actionId), std::move(bodyJson), _cbExec);
     }
 
+    /// @brief The instance's id on the active backend.
+    /// @return It; `0` while the bind has not settled. A point-in-time read, safe from any thread.
+    [[nodiscard]] std::uint64_t instanceId() const noexcept { return _binding->currentId.load(); }
+
     /// @brief `execute`, cancellable through @p stop.
     /// @param actionId The action's registered type id.
     /// @param bodyJson The action's JSON body.

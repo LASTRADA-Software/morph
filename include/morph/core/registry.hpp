@@ -800,6 +800,7 @@ public:
         }
         entry.evaluator = &evaluateAction<Model, Action>;
         entry.coalesce = ActionLogPolicy<Action>::coalesce;
+        entry.loggable = detail::actionLoggable<Action>() == Loggable::Yes;
         entry.schema = detail::actionPayloadSchema<Action>();
         // Deliberately a thunk, not the description itself: registration runs
         // at static-init time, where `buildActionDescription`'s throw path (an
@@ -1176,6 +1177,15 @@ public:
         return iter == _actions.end() ? std::string{} : iter->second.schema;
     }
 
+    /// @brief Whether an action's executions are journaled when a log is attached.
+    /// @param modelId  Model type-id.
+    /// @param actionId Action type-id.
+    /// @return `false` for an action registered with `Loggable::No`; `true` otherwise, an unregistered pair included.
+    [[nodiscard]] bool isLoggable(std::string_view modelId, std::string_view actionId) const {
+        auto iter = _actions.find(detail::PairKeyView{modelId, actionId});
+        return iter == _actions.end() || iter->second.loggable;
+    }
+
     /// @brief Returns the `{actionType: schema}` document for every action
     ///        registered under @p modelId.
     ///
@@ -1320,6 +1330,8 @@ private:
         Evaluator evaluator = nullptr;
         /// @brief `ActionLogPolicy<Action>::coalesce` as registered.
         bool coalesce = false;
+        /// Whether its executions are journaled when a log is attached.
+        bool loggable = true;
         /// @brief `payloadFingerprint<Action>()` as registered.
         std::string schema;
         /// @brief Thunk yielding the process-lifetime `ActionDescription`.

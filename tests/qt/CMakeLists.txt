@@ -39,6 +39,8 @@ endif()
 # ── Catch2 tests ─────────────────────────────────────────────────────────────
 
 add_executable(morph_qt_tests
+    test_qt_chat_live.cpp
+    test_qt_chat_provider.cpp
     test_qt_executor_teardown.cpp
     test_qt_keywords.cpp
     test_qt_offline_queue.cpp

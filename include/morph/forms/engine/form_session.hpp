@@ -818,6 +818,7 @@ public:
         }
         markLoaded();
         _autoSubmit = std::make_unique<reactive::Effect>(runtime, [this] { autoSubmit(); });
+        _acceptSent = std::make_unique<reactive::Effect>(runtime, [this] { acceptSent(); });
     }
 
     ~FormSession() = default;
@@ -927,6 +928,7 @@ public:
         if (!body.has_value()) {
             return;
         }
+        rememberSent();
         _lastSubmitted = body;
         if (_mutation.run(*body)) {
             _attempts.set(_attempts.peek() + 1);
@@ -953,8 +955,11 @@ public:
 
     /// @brief Loads a stored payload like `prefill`, except that a top-level field the user changed since the form
     ///        was last loaded keeps what they entered: a later value of the record being edited, such as its first
-    ///        value arriving after the user started typing, or a refetch, does not discard the edit. Nothing is
-    ///        submitted. Text that is not a JSON object changes nothing.
+    ///        value arriving after the user started typing, or a refetch, does not discard the edit. An explicit
+    ///        form's successful submission ends the edit of every field still holding what it sent, so the record's
+    ///        later values reach those. An automatic form's does not: it submits while the person may still be
+    ///        typing, and loading the record's form of a number would change the text under their cursor. Nothing
+    ///        is submitted. Text that is not a JSON object changes nothing.
     /// @param bodyJson The payload.
     void refill(std::string_view bodyJson) {
         auto const dom = detail::engine::parseJson(bodyJson);
@@ -1061,6 +1066,39 @@ public:
     }
 
 private:
+    // Only while nothing is in flight: the submission is Exclusive, so a run made during one is refused and what it
+    // would have sent was never saved.
+    void rememberSent() {
+        if (_core->model().submitMode() != SubmitMode::Explicit) {
+            return;
+        }
+        runtime().untracked([&] {
+            if (_mutation.pending()) {
+                return;
+            }
+            _sent.clear();
+            for (auto const& field : _fields) {
+                _sent.push_back(field->snapshot());
+            }
+        });
+    }
+
+    void acceptSent() {
+        std::uint64_t const successes = _mutation.successCount();
+        if (successes == _acceptedSuccesses) {
+            return;
+        }
+        _acceptedSuccesses = successes;
+        runtime().untracked([&] {
+            for (std::size_t index = 0; index < _sent.size(); ++index) {
+                if (_fields.at(index)->snapshot() == _sent.at(index)) {
+                    _loaded.at(index) = _sent.at(index);
+                }
+            }
+            _sent.clear();
+        });
+    }
+
     void markLoaded() {
         _loaded.clear();
         for (auto const& field : _fields) {
@@ -1138,7 +1176,11 @@ private:
     std::optional<std::string> _lastSubmitted;
     /// @brief Each top-level field's snapshot as last loaded; a field whose snapshot differs was edited since.
     std::vector<std::string> _loaded;
+    /// @brief Each top-level field's snapshot when the explicit submission in flight was sent.
+    std::vector<std::string> _sent;
+    std::uint64_t _acceptedSuccesses = 0;
     std::unique_ptr<reactive::Effect> _autoSubmit;
+    std::unique_ptr<reactive::Effect> _acceptSent;
 };
 
 }  // namespace morph::forms

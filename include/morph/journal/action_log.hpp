@@ -141,6 +141,15 @@ struct LogEntry {
     /// sink later assigns it, and reuse that same identity as every cascaded
     /// entry's `causalParentId`.
     std::string causalParentId;
+
+    /// @brief What started this execution, as the server said, such as `assistant`. Empty for an ordinary execute.
+    ///
+    /// Copied from `morph::session::currentOrigin()`, which a client cannot set, so a non-empty value is the server's
+    /// word and not a claim. An older line has no such key and reads as empty.
+    std::string originKind;
+
+    /// @brief The words that led to this execution, when `originKind` is set. Empty otherwise.
+    std::string originText;
 };
 
 /// @brief Thrown by `toJson`/`fromJson` when `LogEntry` (de)serialisation fails.

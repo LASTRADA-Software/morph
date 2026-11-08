@@ -5515,7 +5515,7 @@ struct FormPresentation {
     AnyHandle title;
     /// @brief The explicit-mode button's label, which the status line names; absent is `Submit`.
     AnyHandle submitLabel;
-    /// @brief Whether the status line shows; absent shows it.
+    /// @brief Whether the status line and a successful reply show; absent shows them. A failure always shows.
     std::optional<bool> showStatus;
     /// @brief The columns of every group's grid, 1 to 12; absent keeps the engine's.
     std::optional<int> columns;

@@ -191,3 +191,9 @@ the tests use, and the
 sign-in mapping: a mapper reading `{user, jwt}` signs in, an empty principal is reported, and an `ApplicationHost`
 passed to a hand-built `DocumentScreenHost` runs a document's `signIn` and inline `upload`, while the same host
 without it reports both as not supported.
+
+## Chat
+
+When the server offers a chat, the shell mounts its panel in the frame's chat slot and follows the active tab. See
+[`../ui/chat.md`](../ui/chat.md#the-panel). A server with no chat answers the probe with an error, and the shell shows
+nothing and reports nothing.

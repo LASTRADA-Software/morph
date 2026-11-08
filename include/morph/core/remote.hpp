@@ -217,7 +217,12 @@ struct ConnectionFacts {
     /// @brief Whether the connection negotiated server-sent events: its
     ///        `ui-hello` offered them and the UI service accepted.
     bool events = false;
+    /// @brief The connection the envelope arrived on; `0` for one with no connection. The server sets it before each
+    ///        call.
+    ConnectionId cid = 0;
 };
+
+class RemoteServer;
 
 /// @brief Envelope kinds a `RemoteServer` answers through an extension, such as
 ///        the UI service's `ui-*` kinds.
@@ -277,6 +282,20 @@ public:
         static_cast<void>(facts);
         return handle(request, authorizer);
     }
+
+    /// @brief Hands the service its server, once, before the first envelope reaches any service.
+    ///
+    /// At the first service dispatch and not at construction: services are built before the server, and consumed by
+    /// its constructor, where it cannot yet hand out a reference to itself. Weak, since the server owns its services.
+    /// Runs on the server strand, so it must not block.
+    /// @param server The server.
+    virtual void bound(std::weak_ptr<RemoteServer> const& server) { static_cast<void>(server); }
+
+    /// @brief Told that an open connection closed, once per connection.
+    ///
+    /// Runs on the server strand, so it must not block. A throw is logged and goes no further.
+    /// @param cid The connection.
+    virtual void connectionClosed(ConnectionId cid) { static_cast<void>(cid); }
 };
 
 /// @brief Everything about a `RemoteServer` that is configured rather than
@@ -527,6 +546,31 @@ public:
     ///              `0` means unscoped.
     void handle(std::string msg, std::function<void(std::string)> reply, ConnectionId cid) {
         handleImpl(std::move(msg), std::move(reply), cid);
+    }
+
+    /// @brief Runs an execute on behalf of server-side code, with an origin its journal entry records.
+    ///
+    /// For a service acting for a client: @p env carries that client's session, and every check an execute from a
+    /// transport gets applies to it. It runs unscoped, so it is not attributed to a connection and is not cancellable,
+    /// and it leaves every connection's principal baseline alone. No transport reaches this: the origin exists only
+    /// as this parameter, so a client cannot set or remove it.
+    ///
+    /// Callable from any thread. Runs on the server strand, then the instance's strand.
+    /// @param env    The `execute` envelope. `kind` is set to `execute`.
+    /// @param origin What started it.
+    /// @param reply  Called with the JSON-encoded reply envelope, once, from a pool thread.
+    void executeWithOrigin(::morph::wire::Envelope env, ::morph::session::RunOrigin origin,
+                           std::function<void(std::string)> reply) {
+        env.kind = "execute";
+        _strand.postTask([self = shared_from_this(), env = std::move(env), origin = std::move(origin),
+                          reply = std::move(reply)]() mutable {
+            auto const callId = env.callId;
+            try {
+                self->dispatchExecute(std::move(env), reply, 0, std::move(origin));
+            } catch (const std::exception& exc) {
+                reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), callId)));
+            }
+        });
     }
 
     /// @brief Processes a control `Envelope` on the server strand and returns
@@ -944,6 +988,31 @@ private:
         return config;
     }
 
+    /// @brief Hands each service this server, the first time any of them is about to answer. On the server strand.
+    void bindServices() {
+        if (_servicesBound) {
+            return;
+        }
+        _servicesBound = true;
+        for (const auto& service : _config.services) {
+            service->bound(weak_from_this());
+        }
+    }
+
+    /// @brief Tells each service that @p cid closed. On the server strand.
+    /// @param cid The connection.
+    void notifyServicesClosed(ConnectionId cid) {
+        for (const auto& service : _config.services) {
+            try {
+                service->connectionClosed(cid);
+            } catch (const std::exception& exc) {
+                ::morph::log::logError("[service] a connection's close was not handled: {}", exc.what());
+            } catch (...) {
+                ::morph::log::logError("[service] a connection's close was not handled");
+            }
+        }
+    }
+
     /// @brief The service that answers @p kind, if any.
     /// @param kind The envelope's `kind`.
     /// @return The first configured service that serves it, or null.
@@ -1017,6 +1086,7 @@ private:
             }
         }
         _connectionScopes.erase(scopeIter);
+        notifyServicesClosed(cid);
     }
 
     /// @brief The facts a service records for connection @p cid. On the server
@@ -2300,7 +2370,10 @@ private:
                 // the service decides on the verified principal, never on the
                 // client's claim.
                 stampVerifiedPrincipal(env, cid);
-                reply(service->handle(env, *_authorizer, factsOf(cid)));
+                bindServices();
+                ConnectionFacts& facts = factsOf(cid);
+                facts.cid = cid;
+                reply(service->handle(env, *_authorizer, facts));
             } else {
                 reply(::morph::wire::encode(::morph::wire::makeErr("unknown envelope kind: " + env.kind, env.callId)));
             }
@@ -2321,7 +2394,8 @@ private:
     // docs/spec/security.md), so it is deliberately not broken up. On the
     // server strand; the admitted run is posted to the model's strand.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-    void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply, ConnectionId cid) {
+    void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply, ConnectionId cid,
+                         std::optional<::morph::session::RunOrigin> origin = std::nullopt) {
         // The admission phase only, on the server strand: the run itself is
         // posted to the model's strand and zoned there, in startRemote.
         MORPH_ZONE("RemoteServer::dispatchExecute");
@@ -2480,6 +2554,7 @@ private:
         run.stopSource = std::move(stopSource);
         run.mid = mid;
         run.cid = cid;
+        run.origin = std::move(origin);
         run.sharedKey = inst->sharedKey;
         // Posted in this strand's order, which is the order `handle()` was
         // called in; the model's strand runs its tasks in the order they were
@@ -2549,6 +2624,8 @@ private:
         ::morph::exec::detail::ModelId mid{};
         /// Connection the execute arrived on; `0` for unscoped.
         ConnectionId cid{0};
+        /// What the server says started it; empty for an execute from a transport.
+        std::optional<::morph::session::RunOrigin> origin;
         /// The instance's directory key at admission; empty for a private instance.
         std::optional<detail::DirectoryKey> sharedKey;
         std::chrono::steady_clock::time_point start;
@@ -2587,6 +2664,7 @@ private:
         std::exception_ptr error;
         try {
             ::morph::session::detail::ScopedContext const scoped{run.env.session};
+            ::morph::session::detail::ScopedOrigin const originScope{run.origin ? &*run.origin : nullptr};
             result = run.self->_dispatcher.dispatch(run.env.modelType, run.env.actionType, *run.holder, run.env.body);
         } catch (...) {
             error = std::current_exception();
@@ -2603,8 +2681,10 @@ private:
         std::shared_ptr<::morph::exec::detail::TaskResumer> executor;
         try {
             ::morph::session::detail::ScopedContext const scoped{run->env.session};
+            ::morph::session::detail::ScopedOrigin const originScope{run->origin ? &*run->origin : nullptr};
             auto const& strands = run->self->_strands;
-            executor = std::make_shared<::morph::exec::detail::TaskResumer>(strands, run->mid, run->env.session);
+            executor =
+                std::make_shared<::morph::exec::detail::TaskResumer>(strands, run->mid, run->env.session, run->origin);
             strands->enroll(run->mid, executor);
             auto token = run->stopSource ? run->stopSource->get_token() : ::core::async::StopToken{};
             run->self->_dispatcher.dispatchAsync(
@@ -2780,6 +2860,8 @@ private:
     // filed by `fileCancellable` and withdrawn by `callFinished` or the cancel
     // that stops them.
     std::unordered_map<CancelKey, CancelTarget, CancelKeyHash> _cancellable;
+    /// Whether the services have been handed this server. On the server strand.
+    bool _servicesBound{false};
     std::uint64_t _nextId{0};
     detail::OpaqueIdGenerator _idGen;
     // Admitted executes whose reply has not been sent: incremented at

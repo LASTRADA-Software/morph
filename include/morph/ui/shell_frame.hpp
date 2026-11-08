@@ -24,6 +24,9 @@ namespace morph::ui {
 
 /// @brief The frame's width for the sidebar, in units.
 inline constexpr int kShellSidebarWidth = 28;
+
+/// @brief The chat column's width, in units: enough for a message to read as prose beside the page.
+inline constexpr int kShellChatWidth = 32;
 static_assert(kShellSidebarWidth + 80 <= kExpandedWidthUnits,
               "the page beside the sidebar must not be narrower than a compact window");
 
@@ -106,6 +109,13 @@ public:
           _left{backend.createSpacer(_padded.get())},
           _content{backend.createStack(_padded.get(), Axis::Vertical)},
           _right{backend.createSpacer(_padded.get())},
+          _chat{backend.createStack(_root.get(), Axis::Horizontal)},
+          _chatStart{backend.createSpacer(_chat.get())},
+          _chatColumn{backend.createStack(_chat.get(), Axis::Vertical)},
+          _chatTop{backend.createSpacer(_chatColumn.get())},
+          _chatSlot{backend.createStack(_chatColumn.get(), Axis::Vertical)},
+          _chatBottom{backend.createSpacer(_chatColumn.get())},
+          _chatEnd{backend.createSpacer(_chat.get())},
           _onSignOut{options.onSignOut} {
         _root->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
         _root->setTestId("shell");
@@ -222,6 +232,20 @@ public:
         _left->setLayout({.width = Sizing::fixed(0), .height = {}});
         _content->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
         _right->setLayout({.width = Sizing::fixed(0), .height = {}});
+
+        // Spacers on every side pad the chat's content by its gaps, as the sidebar's do.
+        _chat->setSurface("sidebar");
+        _chat->setLayout({.width = Sizing::fixed(kShellChatWidth), .height = Sizing::stretch()});
+        _chat->setGap(3);
+        _chat->setTestId("shell_chat");
+        _chatStart->setLayout({.width = Sizing::fixed(0), .height = {}});
+        _chatColumn->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+        _chatColumn->setGap(3);
+        _chatTop->setLayout({.width = {}, .height = Sizing::fixed(0)});
+        _chatSlot->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+        _chatBottom->setLayout({.width = {}, .height = Sizing::fixed(0)});
+        _chatEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
+        showChat();
     }
 
     ShellFrame(ShellFrame const&) = delete;
@@ -233,6 +257,18 @@ public:
     /// @brief The container the client places the workspace in.
     /// @return It.
     [[nodiscard]] ContainerWidget& page() noexcept { return *_content; }
+
+    /// @brief The container a client mounts a chat panel into, at the window's trailing edge.
+    /// @return It.
+    [[nodiscard]] ContainerWidget& chatSlot() noexcept { return *_chatSlot; }
+
+    /// @brief Says whether there is a chat to show. It stays hidden signed out and while compact whatever this says: a
+    ///        compact window has no width to spare for a column beside the page.
+    /// @param shown Whether there is a chat.
+    void setChatShown(bool shown) {
+        _chatWanted = shown;
+        showChat();
+    }
 
     /// @brief The navigator in the sidebar.
     /// @return It.
@@ -452,8 +488,11 @@ private:
         _topBar->setVisible(_signedIn);
         _navMenu->setVisible(_compact);
         _principal->setVisible(!_principalInHead);
+        showChat();
         showTrail();
     }
+
+    void showChat() { _chat->setVisible(_chatWanted && _signedIn && !_compact); }
 
     // What the trail holds shows: the principal while it sits in the head, the frame is expanded and there is a name,
     // the slot while the head shows, and the row while either does. Every call that changes one of those ends here,
@@ -537,6 +576,13 @@ private:
     std::unique_ptr<SpacerWidget> _left;
     std::unique_ptr<StackWidget> _content;
     std::unique_ptr<SpacerWidget> _right;
+    std::unique_ptr<StackWidget> _chat;
+    std::unique_ptr<SpacerWidget> _chatStart;
+    std::unique_ptr<StackWidget> _chatColumn;
+    std::unique_ptr<SpacerWidget> _chatTop;
+    std::unique_ptr<StackWidget> _chatSlot;
+    std::unique_ptr<SpacerWidget> _chatBottom;
+    std::unique_ptr<SpacerWidget> _chatEnd;
     std::function<void()> _onSignOut;
     std::string _principalName;
     std::string _titleText;
@@ -544,6 +590,7 @@ private:
     std::string _headSurface;
     std::size_t _navEntryCount = 0;
     bool _signedIn = true;
+    bool _chatWanted = false;
     bool _compact = false;
     bool _headShown = false;
     bool _leadInline = false;

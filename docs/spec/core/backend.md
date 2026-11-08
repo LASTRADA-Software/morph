@@ -919,6 +919,9 @@ ships; it answers `ui-hello`, `ui-catalog` and `ui-fetch`.
     service handles for an open connection, and are dropped by
     `closeConnection(cid)`. A reconnect is a new connection and starts from
     `events = false`.
+  - `ConnectionFacts::cid` is the connection the envelope arrived on. The server
+    sets it before each call, so a service can reach that connection later
+    through `post`.
   - A message with no open connection behind it — `handle(msg, reply)`,
     `handleInline(msg)`, or a `cid` never opened or already closed — is handed
     throwaway facts, reset to `events = false` before each such message and
@@ -2418,6 +2421,9 @@ server: each call is a loop task, so the loop serialises them.
 | `RemoteServer(workerPool, authorizer, config, dispatcher, registry)` | Both. Every constructor reads the record and effects registries and throws `EffectsRegistrationError` if they are invalid. |
 | `handle(msg, reply)` | Async: decodes on the calling thread, posts to the server strand, calls `reply` once from a pool thread. Unscoped (`cid == 0`). Callable from any thread; calls from one thread are handled in call order — see [Per-model execute ordering](#per-model-execute-ordering). |
 | `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. |
+| `IEnvelopeService::bound(server)` | Called once on each service, on the server strand, before the first envelope reaches any service, with a `weak_ptr` to the server. Services are built before the server, so they cannot receive it at construction. |
+| `IEnvelopeService::connectionClosed(cid)` | Called on each service, on the server strand, once for each open connection that closes. A throw is logged and goes no further. |
+| `executeWithOrigin(env, origin, reply)` | Async, from any thread: runs `env` as an `execute`, with every check one from a transport gets, and installs `origin` for the run, so its journal entry records it. Unscoped, so it is not cancellable and leaves every connection's principal baseline alone. No transport reaches it. See [journal.md](../journal/journal.md#the-runs-origin). |
 | `handleInline(msg)` | Sync: runs the control envelope on the server strand — posted and waited for, or inline when already on it — and returns the reply JSON. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Needs a pool thread other than the caller's free to run the strand. Unscoped. |
 | `openConnection()` | Returns a fresh non-zero `ConnectionId` at once; its empty scope is opened on the server strand, before the caller's next `handle()`. |
 | `closeConnection(cid)` | Posts: erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope, its writer, its `ConnectionFacts` and its watches. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. |

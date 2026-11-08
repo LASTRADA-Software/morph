@@ -189,7 +189,11 @@ it. A view mounted on it is destroyed first.
   engagement, and its members' and rows') as `prefill`, `reset` or `assign` last left it, and as it was built.
   `refill(bodyJson)` loads like `prefill`, except that a top-level field whose snapshot differs (the user changed
   it since) keeps what was entered. It is for a later value of the record already being edited; `prefill` is for
-  another record.
+  another record. A successful submission of an explicit form ends the edit of every field still holding what it
+  sent, so the record's later values reach those; a field changed while the submission was in flight, or one whose
+  submission failed, stays an edit. An automatic form's submission does not end an edit: it goes out while the person
+  may still be typing, and loading the record's form of a number (`1.000` for a typed `1`) would change the text
+  under their cursor.
 - **Choice options** are a `reactive::Query<std::string, std::string>` per Choice, keyed on the options request:
   `{}` for an independent Choice, `{"parent": <literal>, …}` once every parent encodes, idle while one does not.
   A parent change refetches, and a reply for a superseded request is dropped. A selection the answered options no
@@ -285,8 +289,9 @@ before it.
   empty, shown whatever `showTitle` says, since a title given is a title wanted; test id `form_title`), else the
   schema's title while `showTitle`. The status line while `showStatus`; a button in explicit mode labelled
   `submitLabel` (default `Submit`; a `ui::Prop`, so a host may bind it), enabled while ready and not in flight;
-  and the last reply or error. The status line names the label: `ready: press Deposit` for a form whose button
-  says *Deposit*.
+  the last error, and while `showStatus` the last reply: a quiet form still reports a failure, since nothing else on
+  it would say the save did not happen. The status line names the label: `ready: press Deposit` for a form whose
+  button says *Deposit*.
 - **Overrides** replace a field's control, resolved by field path, widget hint, unit, then kind. The replacement
   is handed a `FieldView` (the spec, the state, the session) and may wrap `defaultControl()`; it writes the draft
   as the built-in control does.

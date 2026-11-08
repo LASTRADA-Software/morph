@@ -38,6 +38,14 @@ API surface).
 
 ### Added
 
+- **A chat built into the client, with its assistant on the server.** A server given a `morph::ui::chat::ChatService`
+  offers a chat, and the client's shell shows a panel for it. What a person types runs on the server: the assistant
+  calls the open screen's actions under their session, with every check the screen's own calls get, and the screen
+  updates by push. Changes apply at once, destructive ones included, bounded by configurable limits. Each is journaled
+  with the origin `assistant` and the words that led to it, in new `LogEntry` fields no client can set. The model sits
+  behind one interface, `IProvider`, and `morph::qt::makeQtChatProvider` is the one place that names a provider. See
+  `docs/spec/ui/chat.md`, and LIMS's ignition tests screen for a worked example.
+
 - **The app explorer** (`ui/explorer.hpp`). `ui::Explorer` is a host screen
   listing an application's screens and every model its catalog names with
   every action of it; for one action it shows the catalog's facts, the fields

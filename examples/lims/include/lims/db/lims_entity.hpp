@@ -11,6 +11,15 @@
 
 namespace lims::db {
 
+/// @brief One ignition test. The columns are named for the masses because `before` and `after` are SQL keywords.
+struct IgnitionTestRecord {
+    static constexpr std::string_view TableName = "lims_ignition_tests";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::optional<double>, Light::SqlRealName{"mass_container"}> container;                   // 1
+    Light::Field<std::optional<double>, Light::SqlRealName{"mass_before"}> before;                         // 2
+    Light::Field<std::optional<double>, Light::SqlRealName{"mass_after"}> after;                           // 3
+};
+
 struct ClientRecord {
     static constexpr std::string_view TableName = "lims_clients";
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0

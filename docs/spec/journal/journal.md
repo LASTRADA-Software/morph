@@ -27,6 +27,7 @@ by `contextKey`; see [Attaching a log to remote instances](#attaching-a-log-to-r
 ## Contents
 
 - [LogEntry — one recorded action execution](#logentry--one-recorded-action-execution)
+  - [The run's origin](#the-runs-origin)
   - [A refused recording is not an execution failure](#a-refused-recording-is-not-an-execution-failure)
 - [Serialization](#serialization)
   - [Why the codec is a separate header](#why-the-codec-is-a-separate-header)
@@ -76,6 +77,8 @@ construct or append these directly.
 | `idempotencyKey` | `std::string` | Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries never set it. Mirrors `morph::offline::QueueItem::idempotencyKey`'s exact contract. See [Transactional outbox (opt-in)](#transactional-outbox-opt-in). |
 | `v` | `std::uint32_t` | Line-format version this entry was written at. Defaults to `kLogFormatVersion`. See [Line-format version (`v`)](#line-format-version-v). |
 | `causalParentId` | `std::string` | Identity of the "trigger" entry that caused this entry to be recorded, or empty (the sentinel) if none. Set by application code that journals a cascaded mutation (e.g. an automation rule reacting to one recorded action by executing a further one). See [Causal links and replay-mode signaling](#causal-links-and-replay-mode-signaling). |
+| `originKind` | `std::string` | What started this execution, as the server said, from `morph::session::currentOrigin()`, such as `assistant`. Empty for an ordinary execute, and for an older line with no such key. A client cannot set it: see [The run's origin](#the-runs-origin). |
+| `originText` | `std::string` | The words that led to this execution when `originKind` is set; empty otherwise. |
 
 `LogEntry` is a plain aggregate — Glaze reflects it without a `glz::meta`
 specialisation of its own, the same automatic reflection `BRIDGE_REGISTER_ACTION`
@@ -85,6 +88,18 @@ runner (server/remote topologies) and `Bridge::executeVia`'s `localOp`
 the `catch` records a `Failed` entry (`error = exc.what()`, `result` empty)
 and rethrows unchanged, so the caller's error handling is unaffected — only
 the journal gains an entry it previously lacked.
+
+### The run's origin
+
+`originKind` and `originText` say what started an execution when the principal alone cannot: an assistant acting for a
+signed-in user has that user's principal. Their value comes from `session::RunOrigin`, which is not part of
+`session::Context`. A `Context` arrives in the envelope and is the client's to fill, so anything carried in it could be
+forged, and every decode path would have to clear it. A `RunOrigin` has no wire form. Server-side code passes one to
+`RemoteServer::executeWithOrigin`, and the run installs it on its thread beside the session, including on each
+resumption of a `Task` handler.
+
+`IModelHolder::recordIfAttached` copies it onto the entry. A model that appends its own entries bypasses that call, so
+it reads `session::currentOrigin()` itself, or its entries carry no origin.
 
 ### A refused recording is not an execution failure
 

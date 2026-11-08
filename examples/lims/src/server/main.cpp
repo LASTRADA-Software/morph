@@ -5,18 +5,27 @@
 // the roles `GrantRole` gave its principal.
 //
 // Environment: LIMS_TOKEN_SECRET (required, non-empty), LIMS_PORT (default 8771), LIMS_DB (default lims.db).
+// LIMS_CHAT_CONFIG names a chat configuration file (docs/spec/ui/chat.md), which turns the screens' chat on; one that
+// does not work stops the server, rather than leave it running with no chat and no word why.
 
 #include <QCoreApplication>
+#include <QObject>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <lims_screens.hpp>
 #include <memory>
 #include <morph/core/executor.hpp>
 #include <morph/core/remote.hpp>
+#include <morph/journal/file_action_log.hpp>
+#include <morph/qt/qt_chat_provider.hpp>
+#include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <morph/session/session_auth.hpp>
+#include <morph/ui/chat/config.hpp>
+#include <morph/ui/chat/service.hpp>
 #include <morph/ui/service.hpp>
 #include <string>
 #include <string_view>
@@ -24,6 +33,7 @@
 #include "lims/auth/lims_authorizer.hpp"
 #include "lims/db/database.hpp"
 #include "lims/models/auth_model.hpp"
+#include "lims/models/ignition_model.hpp"
 #include "lims/models/sample_model.hpp"
 
 namespace {
@@ -58,9 +68,33 @@ int main(int argc, char** argv) {
             std::cerr << "lims-server: the screens do not build: " << bundle.error().message() << '\n';
             return 1;
         }
+        // Ignition tests journal through their registration; the other models journal for themselves.
+        morph::qt::QtExecutor journalOwner;
+        lims::attachIgnitionLog(std::make_shared<morph::journal::FileActionLog>(
+            journalOwner, std::filesystem::current_path() / "lims_ignition_actions.jsonl"));
+        morph::exec::ThreadPoolExecutor chatWorkers{2};
         morph::exec::ThreadPoolExecutor workers{4};
         morph::backend::ServerConfig config;
         config.services.push_back(std::make_shared<morph::ui::UiService>(*bundle));
+        QObject providerOwner;
+        if (std::string const path = environment("LIMS_CHAT_CONFIG", ""); !path.empty()) {
+            auto const chatConfig = morph::ui::chat::loadChatConfig(path);
+            if (!chatConfig) {
+                std::cerr << "lims-server: " << chatConfig.error() << '\n';
+                return 1;
+            }
+            auto provider = morph::qt::makeQtChatProvider(chatConfig->provider, &providerOwner);
+            if (!provider) {
+                std::cerr << "lims-server: " << provider.error() << '\n';
+                return 1;
+            }
+            morph::ui::chat::ChatOptions chat;
+            chat.configure(*chatConfig);
+            chat.provider = *provider;
+            chat.worker = &chatWorkers;
+            chat.bundle = *bundle;
+            config.services.push_back(std::make_shared<morph::ui::chat::ChatService>(std::move(chat)));
+        }
         auto const server = std::make_shared<morph::backend::RemoteServer>(
             workers,
             std::make_shared<lims::auth::LimsAuthorizer>(
