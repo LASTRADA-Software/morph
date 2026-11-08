@@ -1393,6 +1393,27 @@ TEST_CASE("expired_session_drop_is_one_resync", "[push][watch]") {
     CHECK(rig.wire(watcher).topics() == std::vector<std::string>{"resync"});
 }
 
+TEST_CASE("expired_session_drops_an_instance_only_watch", "[push][watch]") {
+    auto const guard = std::make_shared<FlipGuard>();
+    FanRig rig{std::chrono::milliseconds{0}, guard};
+    auto const caller = rig.connect();
+    auto const watcher = rig.connect();
+    rig.watch(watcher, instance(std::string{kFanModel}, "k1"), "carol");
+    auto const mid = rig.create(caller, "k1", "alice");
+
+    // The instance change is the first topic carol's watch is asked about: its session no longer
+    // authenticates, so the watch goes and the connection is owed a resync instead of the change.
+    guard->expire("carol");
+    CHECK(rig.execute(caller, mid, "T_FanTouch", R"({"by":1})", "alice").kind == "ok");
+    rig.flush();
+    CHECK(rig.wire(watcher).topics() == std::vector<std::string>{"resync"});
+
+    // The drop is permanent: a later change reaches no one.
+    CHECK(rig.execute(caller, mid, "T_FanTouch", R"({"by":2})", "alice").kind == "ok");
+    rig.flush();
+    CHECK(rig.wire(watcher).topics() == std::vector<std::string>{"resync"});
+}
+
 TEST_CASE("principal_change_owes_one_resync", "[push][watch]") {
     FanRig rig{std::chrono::milliseconds{0}, std::make_shared<SecretGuard>()};
     auto const cid = rig.connect();
