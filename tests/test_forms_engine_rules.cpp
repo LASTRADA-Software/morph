@@ -303,3 +303,22 @@ TEST_CASE("RuleExpr: a rule too large for expr/1 is a SchemaError", "[forms-engi
     CHECK(parsed.error().path == "x-rules[1]");
     CHECK(parsed.error().message.starts_with("the rule does not translate into an expression: "));
 }
+
+TEST_CASE("RuleExpr: a presentation rule nested as a condition decides nothing", "[forms-engine][rules]") {
+    Fields const fields{{{"yes", valid(ui::Value{"x"})}}};
+    auto const lookup = fields.lookup();
+    auto const verdict = [&](std::string_view json) { return rule(json).evaluate(lookup); };
+    for (std::string_view const kind : {"requiredWhen", "visibleWhen", "readonlyWhen"}) {
+        INFO(kind);
+        std::string const nested =
+            R"({"kind":")" + std::string{kind} + R"(","fields":["yes"],"when":{"kind":"engaged","fields":["yes"]}})";
+        // A true sibling settles an `or`; a true sibling cannot settle an `and`; the nested node itself reads null.
+        CHECK(verdict(R"({"kind":"not","condition":)" + nested + "}") == Tri::Unknown);
+        CHECK(verdict(R"({"kind":"and","conditions":[)" + nested + R"(,{"kind":"engaged","fields":["yes"]}]})") ==
+              Tri::Unknown);
+        CHECK(verdict(R"({"kind":"or","conditions":[)" + nested + R"(,{"kind":"engaged","fields":["yes"]}]})") ==
+              Tri::True);
+        CHECK(verdict(R"({"kind":"and","conditions":[)" + nested + R"(,{"kind":"engaged","fields":["no"]}]})") ==
+              Tri::False);
+    }
+}
