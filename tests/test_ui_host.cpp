@@ -744,6 +744,11 @@ constexpr std::string_view kIdEnv = R"({ "vocab": "ui/1", "id": "idEnv",
 constexpr std::string_view kIdBadLogic = R"({ "vocab": "ui/1", "id": "idBadLogic", "params": { "v": "any" },
   "identity": { "fn": "and", "args": [ { "ref": "v" }, true ] }, "view": { "kind": "text", "text": "x" } })";
 
+/// A screen that saves bytes it holds.
+constexpr std::string_view kInlineSave = R"({ "vocab": "ui/1", "id": "inlineSave", "view": { "kind": "button",
+  "testId": "bytes", "label": "bytes",
+  "onClick": [ { "download": "eHk=", "from": "bytes", "save": "dialog", "name": "a.bin" } ] } })";
+
 /// A host over these documents with an optional application, collecting diagnostics, and keeping the default
 /// `onScreenClosed`.
 class RelayHost final : public DocumentScreenHost {
@@ -764,6 +769,7 @@ private:
         static std::map<std::string, std::shared_ptr<Document const>, std::less<>> const documents{
             {"relay", loadOrFail(kRelay, morph::ui::testing::corpusCatalog())},
             {"note", loadOrFail(kNote, morph::ui::testing::corpusCatalog())},
+            {"inlineSave", loadOrFail(kInlineSave, morph::ui::testing::corpusCatalog())},
             {"idNested", loadOrFail(kIdNested, morph::ui::testing::corpusCatalog())},
             {"idFormat", loadOrFail(kIdFormat, morph::ui::testing::corpusCatalog())},
             {"idPref", loadOrFail(kIdPref, morph::ui::testing::corpusCatalog())},
@@ -1052,4 +1058,38 @@ TEST_CASE("A screen's head answers false for a switch case of two nodes, and tru
     harness.backend.click(harness.byTestId("Button", press));
     harness.settle();
     CHECK(head->pageEdge()->get() == (press == "other"));
+}
+
+// Mutation: answer `true` without handing the file to the application, or hand it over when none is given.
+TEST_CASE("DocumentScreenHost hands an inline file to the application, and refuses it without one", "[ui][host]") {
+    Harness withApp;
+    RelayHost relayed{withApp, true};
+    auto const relay = std::move(*relayed.mount("inlineSave", ParamMap{}));
+    withApp.settle();
+    clickEach(withApp, {"bytes"});
+    REQUIRE(withApp.host.saved.size() == 1);
+    CHECK(withApp.host.saved.front().bytes == "xy");
+    CHECK(count(withApp.host.log, "saveFile a.bin dialog") == 1);
+    CHECK(relayed.diagnostics.empty());
+
+    Harness without;
+    RelayHost alone{without, false};
+    auto const bare = std::move(*alone.mount("inlineSave", ParamMap{}));
+    without.settle();
+    clickEach(without, {"bytes"});
+    CHECK(without.host.saved.empty());
+    REQUIRE(alone.diagnostics.size() == 1);
+    CHECK(alone.diagnostics.front() == "`download` is not supported by the host");
+}
+
+// Mutation: answer a route for a screen the host has no document for.
+TEST_CASE("routeOf names a known screen's route, and refuses an unknown screen with its id", "[ui][host]") {
+    Harness harness;
+    Shell const shell{harness, std::nullopt};
+    auto const known = shell.routeOf("note", ParamMap{{"noteId", Value{std::int64_t{7}}}});
+    REQUIRE(known.has_value());
+    CHECK(known->contains("note"));
+    auto const unknown = shell.routeOf("nothing", ParamMap{});
+    REQUIRE_FALSE(unknown.has_value());
+    CHECK(unknown.error() == "unknown screen `nothing`");
 }
