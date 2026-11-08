@@ -370,3 +370,82 @@ TEST_CASE("reactive: a timer handle with no probe is active until cancelled, and
     CHECK_FALSE(probing.active());
     CHECK_FALSE(morph::reactive::TimerHandle{}.active());
 }
+
+TEST_CASE("reactive misuse: stats list the latest misuse sites oldest first, at most the ring's size",
+          "[reactive][misuse]") {
+    Owner owner;
+    Probe const probe{owner.coreExecutor()};
+    Runtime runtime{owner};
+    Signal<int> base{runtime, 0};
+    Signal<int> other{runtime, 0};
+    Computed<int> const sneaky{runtime, [&] {
+                                   other.set(7);
+                                   return base.get();
+                               }};
+    CHECK(runtime.stats().recentMisuses.empty());
+
+    static_cast<void>(sneaky.get());
+    std::thread{[&] { base.set(1); }}.join();
+    auto const two = runtime.stats();
+    CHECK(two.misuses == 2);
+    REQUIRE(two.recentMisuses.size() == 2);
+    CHECK(two.recentMisuses.at(0) == site::kSetInComputed);
+    CHECK(two.recentMisuses.at(1) == site::kOffOwner);
+
+    // Past the ring: the oldest report falls out, and the rest keep their order.
+    constexpr std::size_t kRing = morph::reactive::detail::kRecentMisuses;
+    for (std::size_t more = 0; more < kRing; ++more) {
+        std::thread{[&] { base.set(1); }}.join();
+    }
+    auto const full = runtime.stats();
+    CHECK(full.misuses == 2 + kRing);
+    REQUIRE(full.recentMisuses.size() == kRing);
+    for (auto const& where : full.recentMisuses) {
+        CHECK(where == site::kOffOwner);
+    }
+}
+
+TEST_CASE("reactive misuse: an Effect queued behind a cut write cycle is dropped, and runs on its next write",
+          "[reactive][misuse]") {
+    Owner owner;
+    Probe const probe{owner.coreExecutor()};
+    Runtime runtime{owner, RuntimeOptions{.maxEffectRunsPerFlush = 10}};
+    Signal<int> ping{runtime, 0};
+    Signal<int> pong{runtime, 0};
+    Signal<int> bystander{runtime, 0};
+    int forwardRuns = 0;
+    int backwardRuns = 0;
+    Effect const forward{runtime, [&] {
+                             if (++forwardRuns > 1000) {
+                                 return;
+                             }
+                             pong.set(ping.get() + 1);
+                         }};
+    Effect const backward{runtime, [&] {
+                              if (++backwardRuns > 1000) {
+                                  return;
+                              }
+                              ping.set(pong.get() + 1);
+                          }};
+    int bystanderRuns = 0;
+    int seen = 0;
+    Effect const watcher{runtime, [&] {
+                             seen = bystander.get();
+                             ++bystanderRuns;
+                         }};
+    REQUIRE(bystanderRuns == 1);
+
+    bystander.set(1);
+    owner.runAll();
+    REQUIRE(probe.count(site::kWriteCycle) == 1);
+    // The flush stopped at the cycle's bound with the watcher still queued: it was dropped, not run.
+    CHECK(bystanderRuns == 1);
+    CHECK(seen == 0);
+    CHECK(owner.pending() == 0);
+
+    // Dropping left it ready to be queued again.
+    bystander.set(2);
+    owner.runAll();
+    CHECK(bystanderRuns == 2);
+    CHECK(seen == 2);
+}
