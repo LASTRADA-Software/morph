@@ -422,9 +422,11 @@ TEST_CASE("schemasOf: a document that is not an object, or not JSON, is refused 
 TEST_CASE("tryItCatalog: the client's own answer wins, and an action nobody lists is unknown", "[ui][explorer]") {
     Catalog const base = corpusCatalog();
     Catalog const catalog = morph::ui::tryItCatalog(
-        base, SchemasByModel{{"Lims_SampleModel", R"({"Lims_ConfirmSample":{"type":"object","title":"Other"}})"},
-                             {"Lims_Broken", "not json"},
-                             {"Lims_Refused", std::unexpected(std::string{"not authorized"})}});
+        base, SchemasByModel{
+                  {"Lims_SampleModel", R"({"Lims_ConfirmSample":{"type":"object","title":"Other"}})"},
+                  {"Lims_Broken", "not json"},
+                  {"Lims_Refused", std::unexpected(std::string{"not authorized"})},
+              });
     CHECK(catalog.schema("Lims_ConfirmSample") == base.schema("Lims_ConfirmSample"));
     CHECK(catalog.action("Lims_ConfirmSample")->modelType == "Lims_SampleModel");
     // The corpus catalog answers every action, so the fallback is reached only with no inner lookup.
@@ -440,9 +442,8 @@ TEST_CASE("tryItCatalog: the client's own answer wins, and an action nobody list
 // missing).
 TEST_CASE("Explorer: a model whose schemas never arrived, or are no JSON, says so", "[ui][explorer]") {
     Fixture f;
-    auto const explorer = f.explorer([](ExplorerOptions& options) {
-        options.schemas = SchemasByModel{{"Lims_SecretModel", "{nope"}};
-    });
+    auto const explorer =
+        f.explorer([](ExplorerOptions& options) { options.schemas = SchemasByModel{{"Lims_SecretModel", "{nope"}}; });
     CHECK(f.shows("Text", "not described: the schemas did not arrive"));
     bool shown = false;
     for (int const text : f.harness.backend.all("Text")) {
@@ -485,8 +486,11 @@ TEST_CASE("Explorer: a schema's payload fingerprint and shape are shown as facts
     Fixture f;
     auto const explorer = f.explorer([](ExplorerOptions& options) {
         options.schemas = SchemasByModel{
-            {"Lims_SampleModel",
-             R"({"Lims_Fp":{"type":"object","properties":{},"x-payloadFingerprint":"abc","x-payloadShape":{"a":1}}})"}};
+            {
+                "Lims_SampleModel",
+                R"({"Lims_Fp":{"type":"object","properties":{},"x-payloadFingerprint":"abc","x-payloadShape":{"a":1}}})",
+            },
+        };
     });
     REQUIRE(explorer->select("Lims_Fp"));
     f.harness.settle();
@@ -527,10 +531,12 @@ TEST_CASE("Explorer: with no facts given, the catalog's own decide whether Try i
 
 // Mutation: ignore the catalog's collection and wizard documents when choosing what Try it builds, or when showing
 // the action's schema.
-TEST_CASE("Explorer: an action the catalog serves a collection or a wizard for shows that document", "[ui][explorer]") {
+TEST_CASE("Explorer: an action the catalog serves a collection or a wizard for shows that document",
+          "[ui][explorer]") {
     Fixture f;
     auto const explorer = f.explorer([](ExplorerOptions& options) {
-        options.catalog.views = std::map<std::string, std::string, std::less<>>{{"Lims_CaptureConcentration", "VIEWDOC"}};
+        options.catalog.views =
+            std::map<std::string, std::string, std::less<>>{{"Lims_CaptureConcentration", "VIEWDOC"}};
         options.catalog.wizards = std::map<std::string, std::string, std::less<>>{{"Lims_ConfirmSample", "WIZDOC"}};
         options.catalog.permitted.emplace_back("Lims_ConfirmSample");
     });
