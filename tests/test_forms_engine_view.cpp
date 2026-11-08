@@ -548,3 +548,50 @@ TEST_CASE("formView: a control an override draws keeps its help as a muted text 
     REQUIRE(help.has_value());
     CHECK(mounted.backend.prop(*help, "role") == "Muted");
 }
+
+TEST_CASE("formView: a check box, a date-time input and a slider write their draft back to the field",
+          "[forms-engine][view]") {
+    Mounted mounted{kKinds};
+    int const flag = mounted.widget("Checkbox", "field_flag");
+    mounted.backend.toggle(flag);
+    CHECK(mounted.form->field("flag").text().peek() == "true");
+    mounted.backend.toggle(flag);
+    CHECK(mounted.form->field("flag").text().peek() == "false");
+
+    auto const instant = morph::forms::detail::engine::draftInstant("2024-01-01T10:00", false, 0);
+    REQUIRE(instant.has_value());
+    mounted.backend.setDateTime(mounted.widget("DateTimeInput", "field_when"), instant);
+    CHECK(mounted.form->field("when").text().peek() == "2024-01-01T10:00:00");
+    mounted.backend.setDateTime(mounted.widget("DateTimeInput", "field_when"), std::nullopt);
+    CHECK(mounted.form->field("when").text().peek().empty());
+
+    mounted.backend.slide(mounted.widget("Slider", "field_volume"), 6);
+    CHECK(mounted.form->field("volume").text().peek() == "6");
+}
+
+TEST_CASE("formView: an object too deeply nested to describe is drawn as a note, not a form", "[forms-engine][view]") {
+    constexpr std::string_view kSchema = R"({"properties":{
+      "deep":{"type":["object","null"],"x-order":0}}})";
+    Mounted const mounted{kSchema};
+    auto const note = mounted.backend.find("Text", "text", "nested too deeply to edit here");
+    REQUIRE(note.has_value());
+    CHECK(mounted.backend.prop(*note, "role") == "Muted");
+}
+
+TEST_CASE("formView: an inline cell under an override draws the help in a row of its own", "[forms-engine][view]") {
+    constexpr std::string_view kSchema = R"({"properties":{
+      "note":{"type":"string","description":"Shown to the customer","x-order":0}}})";
+    FormViewOptions options{};
+    options.fieldLayout = morph::forms::FieldLayout::Inline;
+    options.overrides.byField("note", [](FieldView const&) { return ui::text(ui::Text{.text = "custom"}); });
+    Mounted const mounted{kSchema, std::move(options)};
+    // An override draws no description of its own, so the cell stacks the line over a muted help row.
+    int const cell = mounted.widget("Column", "cell_note");
+    std::vector<int> const rows = mounted.backend.children(cell);
+    REQUIRE(rows.size() == 2);
+    std::vector<int> const help = mounted.backend.children(rows.at(1));
+    REQUIRE(help.size() == 2);
+    CHECK(mounted.backend.kindOf(help.at(0)) == "Spacer");
+    CHECK(mounted.backend.prop(help.at(1), "text") == "Shown to the customer");
+    CHECK(mounted.backend.prop(help.at(1), "role") == "Muted");
+}
