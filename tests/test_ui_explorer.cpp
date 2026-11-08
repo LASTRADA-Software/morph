@@ -508,16 +508,21 @@ TEST_CASE("Explorer: an effect without a record is listed by its kind", "[ui][ex
     CHECK(f.shows("Text", "touches"));
 }
 
-// Mutation: build the explorer's facts only from the options (the catalog's own are never read).
-TEST_CASE("Explorer: with no facts given, the catalog's own are used to read the documents", "[ui][explorer]") {
+// Mutation: leave the facts empty ("Try it" builds for an action the catalog places on another model).
+TEST_CASE("Explorer: with no facts given, the catalog's own decide whether Try it can be built", "[ui][explorer]") {
     Fixture f;
     auto const explorer = f.explorer([](ExplorerOptions& options) {
         options.facts = {};
-        options.catalog.actions->at("Lims_CaptureConcentration").modelType = "Lims_SampleModel";
+        options.catalog.actions->at("Lims_CaptureConcentration").modelType = "Lims_OtherModel";
     });
     REQUIRE(explorer->select("Lims_CaptureConcentration"));
     f.harness.settle();
-    CHECK(f.shows("Text", "samples  /view/children/1  (form)"));
+    bool refused = false;
+    for (int const text : f.harness.backend.all("Text")) {
+        refused = refused || f.harness.backend.prop(text, "text").starts_with("Cannot build it: ");
+    }
+    CHECK(refused);
+    CHECK(f.provided.empty());
 }
 
 // Mutation: ignore the catalog's collection and wizard documents when choosing what Try it builds, or when showing
@@ -527,15 +532,15 @@ TEST_CASE("Explorer: an action the catalog serves a collection or a wizard for s
     auto const explorer = f.explorer([](ExplorerOptions& options) {
         options.catalog.views = std::map<std::string, std::string, std::less<>>{{"Lims_CaptureConcentration", "VIEWDOC"}};
         options.catalog.wizards = std::map<std::string, std::string, std::less<>>{{"Lims_ConfirmSample", "WIZDOC"}};
+        options.catalog.permitted.emplace_back("Lims_ConfirmSample");
     });
-    // Each kind of "Try it" is built from a document the catalog serves; the corpus serves none for these actions, so
-    // neither is built, where a form would have been.
+    // A collection or wizard is what "Try it" builds for these actions, not the form with the action's fields.
     REQUIRE(explorer->select("Lims_CaptureConcentration"));
     f.harness.settle();
     CHECK(f.shows("Text", "VIEWDOC"));
-    CHECK_FALSE(f.provided.contains("explorer:try:Lims_CaptureConcentration"));
+    CHECK_FALSE(f.harness.backend.find("TextInput", "testId", "field_sampleId").has_value());
     REQUIRE(explorer->select("Lims_ConfirmSample"));
     f.harness.settle();
     CHECK(f.shows("Text", "WIZDOC"));
-    CHECK_FALSE(f.provided.contains("explorer:try:Lims_ConfirmSample"));
+    CHECK_FALSE(f.harness.backend.find("TextInput", "testId", "field_sampleId").has_value());
 }
