@@ -1,4 +1,5 @@
 var structmorph_1_1backend_1_1ConnectionFacts =
 [
-    [ "events", "d8/d2f/structmorph_1_1backend_1_1ConnectionFacts.html#ac5c66b7056ed85f760700a25c861c170", null ]
+    [ "events", "d8/d2f/structmorph_1_1backend_1_1ConnectionFacts.html#ac5c66b7056ed85f760700a25c861c170", null ],
+    [ "cid", "d8/d2f/structmorph_1_1backend_1_1ConnectionFacts.html#a7d372f86d5916532796aab46b53bed2a", null ]
 ];

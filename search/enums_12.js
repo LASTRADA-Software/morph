@@ -10,5 +10,6 @@ var searchData=
   ['tone_7',['Tone',['../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a',1,'morph::ui']]],
   ['tri_8',['Tri',['../d8/d26/rules_8hpp.html#a47ab229d7c8484a52f99e68d3274a865',1,'morph::forms']]],
   ['tryitkind_9',['TryItKind',['../d9/da5/explorer_8hpp.html#a6b393f9a7c4fab3681ed905652701c7d',1,'morph::ui']]],
-  ['typekind_10',['TypeKind',['../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349',1,'morph::ui']]]
+  ['turnstatus_10',['TurnStatus',['../d8/dd1/protocol_8hpp.html#ad91478fea6e18364f199511bbb666ec7',1,'morph::ui::chat']]],
+  ['typekind_11',['TypeKind',['../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349',1,'morph::ui']]]
 ];

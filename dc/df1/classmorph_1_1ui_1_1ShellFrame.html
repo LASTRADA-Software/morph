@@ -140,6 +140,10 @@ Public Member Functions</h2></td></tr>
 <a class="el" href="#a8e5ef822f08f6b883b6c7007482e1bef">ShellFrame</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a8e5ef822f08f6b883b6c7007482e1bef">ShellFrame</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a9b2a9f0ffca9203de6da44a84bb5fbe4" id="r_a9b2a9f0ffca9203de6da44a84bb5fbe4"><td class="memItemLeft"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a9b2a9f0ffca9203de6da44a84bb5fbe4">page</a> () noexcept</td></tr>
 <tr class="memdesc:a9b2a9f0ffca9203de6da44a84bb5fbe4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The container the client places the workspace in.  <br /></td></tr>
+<tr class="memitem:ae567f8660c63c84336249d375d7645b8" id="r_ae567f8660c63c84336249d375d7645b8"><td class="memItemLeft"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ae567f8660c63c84336249d375d7645b8">chatSlot</a> () noexcept</td></tr>
+<tr class="memdesc:ae567f8660c63c84336249d375d7645b8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The container a client mounts a chat panel into, at the window's trailing edge.  <br /></td></tr>
+<tr class="memitem:a5a2906a20ae3e430fe71be124ab24bac" id="r_a5a2906a20ae3e430fe71be124ab24bac"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a5a2906a20ae3e430fe71be124ab24bac">setChatShown</a> (bool shown)</td></tr>
+<tr class="memdesc:a5a2906a20ae3e430fe71be124ab24bac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Says whether there is a chat to show. It stays hidden signed out and while compact whatever this says: a compact window has no width to spare for a column beside the page.  <br /></td></tr>
 <tr class="memitem:aa25b568734c86b7845d1d667691473ab" id="r_aa25b568734c86b7845d1d667691473ab"><td class="memItemLeft"><a class="el" href="../../d6/d15/classmorph_1_1ui_1_1Navigator.html">Navigator</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#aa25b568734c86b7845d1d667691473ab">navigator</a> () noexcept</td></tr>
 <tr class="memdesc:aa25b568734c86b7845d1d667691473ab"><td class="mdescLeft">&#160;</td><td class="mdescRight">The navigator in the sidebar.  <br /></td></tr>
 <tr class="memitem:a078a9f66d5aeb394ce6debbb48ab764d" id="r_a078a9f66d5aeb394ce6debbb48ab764d"><td class="memItemLeft"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a078a9f66d5aeb394ce6debbb48ab764d">headEyebrowSlot</a> () noexcept</td></tr>
@@ -189,7 +193,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>The frame around a client's screens. </p>
 <p>A row filling the window: the sidebar (surface <span class="tt">sidebar</span>, <span class="tt"><a class="el" href="../../db/d4f/shell__frame_8hpp.html#af30fd407fc56d3ebb11309ba2e1c7cd5" title="The frame&#39;s width for the sidebar, in units.">kShellSidebarWidth</a></span> units wide), holding the application's name and a <span class="tt"><a class="el" href="../../d6/d15/classmorph_1_1ui_1_1Navigator.html" title="The catalog as a list a person opens screens from, with a title search and pinned shortcuts.">Navigator</a></span>, and the main column holding the top bar (surface <span class="tt">toolbar</span>) above the page (surface <span class="tt"><a class="el" href="#a9b2a9f0ffca9203de6da44a84bb5fbe4" title="The container the client places the workspace in.">page</a></span>), where the client places the workspace. The top bar is one line that wraps only when it is out of room: the shown screen's title with the active head's lead (subtitle and badges) under it, and the head's trail (tools and actions, then the principal while it sits in the head) at the trailing edge, dropping to a line of its own where it does not fit. The principal and a sign-out button sit at the sidebar's foot. Signed out, the sidebar and the top bar are hidden and the page is all there is. Compact (<span class="tt">setCompact(true)</span>), the sidebar is hidden and the top bar starts with a navigation menu over the navigator's entries, ending with the principal's sign-out entry, so the page has nearly the whole window. Neither copyable nor movable; owned by the owner thread of its backend. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a8e5ef822f08f6b883b6c7007482e1bef" name="a8e5ef822f08f6b883b6c7007482e1bef"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8e5ef822f08f6b883b6c7007482e1bef">&#9670;&#160;</a></span>ShellFrame()</h2>
@@ -233,7 +237,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -264,7 +268,72 @@ Public Member Functions</h2></td></tr>
 <p>The container the client places the workspace in. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae567f8660c63c84336249d375d7645b8" name="ae567f8660c63c84336249d375d7645b8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae567f8660c63c84336249d375d7645b8">&#9670;&#160;</a></span>chatSlot()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp; morph::ui::ShellFrame::chatSlot </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The container a client mounts a chat panel into, at the window's trailing edge. </p>
+<dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5a2906a20ae3e430fe71be124ab24bac" name="a5a2906a20ae3e430fe71be124ab24bac"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5a2906a20ae3e430fe71be124ab24bac">&#9670;&#160;</a></span>setChatShown()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::ShellFrame::setChatShown </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>shown</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Says whether there is a chat to show. It stays hidden signed out and while compact whatever this says: a compact window has no width to spare for a column beside the page. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">shown</td><td>Whether there is a chat. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00268">268</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -294,7 +363,7 @@ Public Member Functions</h2></td></tr>
 <p>The navigator in the sidebar. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -324,7 +393,7 @@ Public Member Functions</h2></td></tr>
 <p>The container a client mounts the active head's eyebrow into: at the top of the lead block, above the title, shown only while <span class="tt">setHeadShown(true)</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00244">244</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -354,7 +423,7 @@ Public Member Functions</h2></td></tr>
 <p>The container a client mounts the active head's lead into: under the title, in the top bar's first line, shown only while <span class="tt">setHeadShown(true)</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -384,7 +453,7 @@ Public Member Functions</h2></td></tr>
 <p>The container a client mounts the active head's inline lead into: on the title's line, right after the title, shown only while <span class="tt">setLeadInline(true)</span> and <span class="tt">setHeadShown(true)</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00254">254</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00290">290</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -414,7 +483,7 @@ Public Member Functions</h2></td></tr>
 <p>The container a client mounts the active head's trail into: at the trailing edge of the top bar's line, followed by the principal while it sits in the head, as one wrapping row that drops under the title where it does not fit beside it. Shown only while <span class="tt">setHeadShown(true)</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00296">296</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -449,7 +518,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00265">265</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00301">301</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -484,7 +553,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00277">277</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00313">313</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -519,7 +588,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -554,7 +623,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00294">294</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00330">330</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -589,7 +658,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00304">304</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00340">340</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -624,7 +693,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00348">348</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -659,7 +728,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00320">320</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00356">356</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -694,7 +763,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00326">326</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00362">362</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -729,7 +798,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00333">333</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -764,7 +833,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00378">378</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -799,7 +868,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00351">351</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00387">387</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -834,7 +903,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00358">358</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00394">394</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -869,7 +938,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00368">368</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00404">404</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -904,7 +973,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00380">380</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00416">416</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -939,7 +1008,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00397">397</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00433">433</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -969,7 +1038,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the frame has its compact form. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00405">405</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00441">441</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -1009,7 +1078,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00412">412</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00448">448</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>

@@ -23,6 +23,8 @@ var classmorph_1_1client_1_1Source =
     [ "backendName", "d3/de2/classmorph_1_1client_1_1Source.html#a5ad2a981175d1953d0e1f85981fe6a3b", null ],
     [ "onEvent", "d3/de2/classmorph_1_1client_1_1Source.html#aaced127408e2c1571846dbbaf5f7f571", null ],
     [ "watcher", "d3/de2/classmorph_1_1client_1_1Source.html#afdfba1674160333501f20f4bfcf02fab", null ],
+    [ "exchange", "d3/de2/classmorph_1_1client_1_1Source.html#a5be07792ad9bd8208658bd3325192139", null ],
+    [ "currentSession", "d3/de2/classmorph_1_1client_1_1Source.html#a9a92b1be936b140f2d6bca257d11c391", null ],
     [ "signedOutPrincipal", "d3/de2/classmorph_1_1client_1_1Source.html#a9f0ce0ddf01e5b94ab9b6d73f37992fa", null ],
     [ "connect", "d3/de2/classmorph_1_1client_1_1Source.html#a76915c4423587ca6cd84cf21a4942132", null ],
     [ "openTimeout", "d3/de2/classmorph_1_1client_1_1Source.html#ad3bb5c6c2cde64c02ad53f8419053b94", null ],

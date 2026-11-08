@@ -156,6 +156,10 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a9ca4bf6f47ab3438eebbabde2fb9807a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Line-format version this entry was written at.  <br /></td></tr>
 <tr class="memitem:a3f6645af9ccf2dd75508e1771ef1e1e5" id="r_a3f6645af9ccf2dd75508e1771ef1e1e5"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a3f6645af9ccf2dd75508e1771ef1e1e5">causalParentId</a></td></tr>
 <tr class="memdesc:a3f6645af9ccf2dd75508e1771ef1e1e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Identity of the "trigger" entry that caused this entry to be recorded, or empty (the sentinel) if this entry was not caused by another one.  <br /></td></tr>
+<tr class="memitem:a1fb6748bcb1d4143a1f00d6044fb9192" id="r_a1fb6748bcb1d4143a1f00d6044fb9192"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a1fb6748bcb1d4143a1f00d6044fb9192">originKind</a></td></tr>
+<tr class="memdesc:a1fb6748bcb1d4143a1f00d6044fb9192"><td class="mdescLeft">&#160;</td><td class="mdescRight">What started this execution, as the server said, such as <span class="tt">assistant</span>. Empty for an ordinary execute.  <br /></td></tr>
+<tr class="memitem:a084ff1fb86b035f282083050138b76c1" id="r_a084ff1fb86b035f282083050138b76c1"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a084ff1fb86b035f282083050138b76c1">originText</a></td></tr>
+<tr class="memdesc:a084ff1fb86b035f282083050138b76c1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The words that led to this execution, when <span class="tt"><a class="el" href="#a1fb6748bcb1d4143a1f00d6044fb9192" title="What started this execution, as the server said, such as assistant. Empty for an ordinary execute.">originKind</a></span> is set. Empty otherwise.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One recorded execution of an action against a model instance. </p>
@@ -418,6 +422,43 @@ fingerprint".</p>
 <dl class="section warning"><dt>Warning</dt><dd><b>Must not be a <span class="tt"><a class="el" href="#af622c4dbb839692d172057ecaec56a2d" title="Monotonic order assigned by the sink on append(). Callers pass 0.">LogEntry::seq</a></span> value.</b> <span class="tt"><a class="el" href="#af622c4dbb839692d172057ecaec56a2d" title="Monotonic order assigned by the sink on append(). Callers pass 0.">seq</a></span> is sink-local and re-stamped by every sink's <span class="tt">append()</span> (and again by <span class="tt"><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">SessionLog::checkpoint()</a></span> when forwarding) — it is not a stable, cross-sink or cross-restart identifier (see the Invariants section of <span class="tt">docs/spec/journal/journal.md</span>). A <span class="tt"><a class="el" href="#a3f6645af9ccf2dd75508e1771ef1e1e5" title="Identity of the &quot;trigger&quot; entry that caused this entry to be recorded, or empty (the sentinel) if thi...">causalParentId</a></span> wired to a raw <span class="tt"><a class="el" href="#af622c4dbb839692d172057ecaec56a2d" title="Monotonic order assigned by the sink on append(). Callers pass 0.">seq</a></span> would stop matching anything the moment the trigger entry is forwarded to another sink or the process restarts. Application code must instead mint its own opaque/UUID-style identity for the trigger entry at the point it is created, independent of whatever <span class="tt"><a class="el" href="#af622c4dbb839692d172057ecaec56a2d" title="Monotonic order assigned by the sink on append(). Callers pass 0.">seq</a></span> any sink later assigns it, and reuse that same identity as every cascaded entry's <span class="tt"><a class="el" href="#a3f6645af9ccf2dd75508e1771ef1e1e5" title="Identity of the &quot;trigger&quot; entry that caused this entry to be recorded, or empty (the sentinel) if thi...">causalParentId</a></span>. </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00143">143</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1fb6748bcb1d4143a1f00d6044fb9192" name="a1fb6748bcb1d4143a1f00d6044fb9192"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1fb6748bcb1d4143a1f00d6044fb9192">&#9670;&#160;</a></span>originKind</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::journal::LogEntry::originKind</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>What started this execution, as the server said, such as <span class="tt">assistant</span>. Empty for an ordinary execute. </p>
+<p>Copied from <span class="tt">morph::session::currentOrigin()</span>, which a client cannot set, so a non-empty value is the server's word and not a claim. An older line has no such key and reads as empty. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a084ff1fb86b035f282083050138b76c1" name="a084ff1fb86b035f282083050138b76c1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a084ff1fb86b035f282083050138b76c1">&#9670;&#160;</a></span>originText</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::journal::LogEntry::originText</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The words that led to this execution, when <span class="tt"><a class="el" href="#a1fb6748bcb1d4143a1f00d6044fb9192" title="What started this execution, as the server said, such as assistant. Empty for an ordinary execute.">originKind</a></span> is set. Empty otherwise. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>

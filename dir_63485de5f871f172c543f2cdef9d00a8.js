@@ -1,5 +1,6 @@
 var dir_63485de5f871f172c543f2cdef9d00a8 =
 [
+    [ "chat", "dir_ad21ecf5ee49c30519e887cac9edaebc.html", "dir_ad21ecf5ee49c30519e887cac9edaebc" ],
     [ "testing", "dir_38ec2fbe70709af2d3c11d894513cd88.html", "dir_38ec2fbe70709af2d3c11d894513cd88" ],
     [ "agent.hpp", "dd/d2d/agent_8hpp.html", "dd/d2d/agent_8hpp" ],
     [ "alignment.hpp", "d9/dd9/alignment_8hpp.html", "d9/dd9/alignment_8hpp" ],

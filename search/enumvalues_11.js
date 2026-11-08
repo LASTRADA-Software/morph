@@ -20,5 +20,6 @@ var searchData=
   ['round_17',['Round',['../d9/d6d/control__shape_8hpp.html#acb63d4890b58b811a6eab08f80b4c212ab7f41fc1412ad2ee75e9b2635d3b9d5c',1,'morph::ui']]],
   ['row_18',['Row',['../d4/db6/collection_8hpp.html#ab793459efd58cfa40b89c78ad469feb5aa70367aa7cb74e510f4f9413ccf059d3',1,'Rowmorph::forms'],['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663aa70367aa7cb74e510f4f9413ccf059d3',1,'Rowmorph::ui']]],
   ['run_19',['Run',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0eac5301693c4e792bcd5a479ef38fb8f8d',1,'morph::ui']]],
-  ['runs_20',['Runs',['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a294df7f1250ae104eb34bd7fb01526d2',1,'morph::ui']]]
+  ['running_20',['Running',['../d8/dd1/protocol_8hpp.html#ad91478fea6e18364f199511bbb666ec7a5bda814c4aedb126839228f1a3d92f09',1,'morph::ui::chat']]],
+  ['runs_21',['Runs',['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a294df7f1250ae104eb34bd7fb01526d2',1,'morph::ui']]]
 ];

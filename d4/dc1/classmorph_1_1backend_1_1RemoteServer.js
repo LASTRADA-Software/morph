@@ -8,6 +8,7 @@ var classmorph_1_1backend_1_1RemoteServer =
     [ "~RemoteServer", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a6dc3cbe98d90ff6a39f298f66708310a", null ],
     [ "handle", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701", null ],
     [ "handle", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a73dbbbc8a19d6df1e2d1a8c7353fdb1a", null ],
+    [ "executeWithOrigin", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a617cb5c476a2339bd02a449ff2370387", null ],
     [ "handleInline", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818", null ],
     [ "handleInline", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a70db4922eb76217cb1126bd54493f745", null ],
     [ "openConnection", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#adfa3bd5a86b06e05a374be4433bcad0d", null ],

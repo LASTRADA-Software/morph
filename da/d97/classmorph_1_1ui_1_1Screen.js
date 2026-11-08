@@ -1,11 +1,13 @@
 var classmorph_1_1ui_1_1Screen =
 [
+    [ "BoundAlias", "d4/d41/structmorph_1_1ui_1_1Screen_1_1BoundAlias.html", "d4/d41/structmorph_1_1ui_1_1Screen_1_1BoundAlias" ],
     [ "~Screen", "da/d97/classmorph_1_1ui_1_1Screen.html#a59328acdd48a28a5e5e2195c8f2d3ed6", null ],
     [ "root", "da/d97/classmorph_1_1ui_1_1Screen.html#ad1bf04a0719e46b540ec763128aa8bf0", null ],
     [ "id", "da/d97/classmorph_1_1ui_1_1Screen.html#a78f564fd876538a0ee0a7c9548119e8a", null ],
     [ "read", "da/d97/classmorph_1_1ui_1_1Screen.html#a796c86a009c132c2285612c6f8c6cc3f", null ],
     [ "title", "da/d97/classmorph_1_1ui_1_1Screen.html#a9d170f37684ec1cf1d5f5425b050925d", null ],
     [ "identity", "da/d97/classmorph_1_1ui_1_1Screen.html#a965ff0074fb10c900a0a1671aa9e9036", null ],
+    [ "boundAliases", "da/d97/classmorph_1_1ui_1_1Screen.html#a3e244007234b4ef590e62be2ead22f6f", null ],
     [ "pageEdge", "da/d97/classmorph_1_1ui_1_1Screen.html#a729c744c95f1978e2c50c13c91015e04", null ],
     [ "headJoined", "da/d97/classmorph_1_1ui_1_1Screen.html#a19868bfeff3ff45e216e06ef2bde5650", null ],
     [ "leadPlacement", "da/d97/classmorph_1_1ui_1_1Screen.html#a500375c9efb61646704bc8a26eda7fb1", null ],

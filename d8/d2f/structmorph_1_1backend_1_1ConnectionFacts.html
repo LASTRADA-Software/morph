@@ -130,10 +130,12 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d2f/structm
 Public Attributes</h2></td></tr>
 <tr class="memitem:ac5c66b7056ed85f760700a25c861c170" id="r_ac5c66b7056ed85f760700a25c861c170"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ac5c66b7056ed85f760700a25c861c170">events</a> = false</td></tr>
 <tr class="memdesc:ac5c66b7056ed85f760700a25c861c170"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the connection negotiated server-sent events: its <span class="tt">ui-hello</span> offered them and the UI service accepted.  <br /></td></tr>
+<tr class="memitem:a7d372f86d5916532796aab46b53bed2a" id="r_a7d372f86d5916532796aab46b53bed2a"><td class="memItemLeft"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7d372f86d5916532796aab46b53bed2a">cid</a> = 0</td></tr>
+<tr class="memdesc:a7d372f86d5916532796aab46b53bed2a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The connection the envelope arrived on; <span class="tt">0</span> for one with no connection. The server sets it before each call.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> knows about one connection that a service, not core, decides: handed to <span class="tt"><a class="el" href="../../d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html#a8824ddf6059dffcbe63219f81da70c7c" title="Answers one envelope of a kind serves accepted.">IEnvelopeService::handle</a></span> with each envelope. </p>
-<p>A service sets a fact while answering an envelope it serves, and core reads it later without parsing that service's bodies. The facts live as long as the connection; a message handled without a connection (<span class="tt">cid</span> 0) is handed fresh facts that are dropped after its reply. </p>
+<p>A service sets a fact while answering an envelope it serves, and core reads it later without parsing that service's bodies. The facts live as long as the connection; a message handled without a connection (<span class="tt"><a class="el" href="#a7d372f86d5916532796aab46b53bed2a" title="The connection the envelope arrived on; 0 for one with no connection. The server sets it before each ...">cid</a></span> 0) is handed fresh facts that are dropped after its reply. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00216">216</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
@@ -152,6 +154,24 @@ Public Attributes</h2></td></tr>
 <p>Whether the connection negotiated server-sent events: its <span class="tt">ui-hello</span> offered them and the UI service accepted. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7d372f86d5916532796aab46b53bed2a" name="a7d372f86d5916532796aab46b53bed2a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7d372f86d5916532796aab46b53bed2a">&#9670;&#160;</a></span>cid</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a> morph::backend::ConnectionFacts::cid = 0</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The connection the envelope arrived on; <span class="tt">0</span> for one with no connection. The server sets it before each call. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

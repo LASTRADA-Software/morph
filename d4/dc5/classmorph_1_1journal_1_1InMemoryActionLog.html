@@ -170,7 +170,7 @@ Protected Member Functions</h2></td></tr>
 <p>Suitable for testing and for applications that do not need cross-process durability. Mirrors <span class="tt"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html" title="In-memory implementation of IOfflineQueue, owned by one executor.">morph::offline::InMemoryOfflineQueue</a></span>'s shape. Dedups <span class="tt"><a class="el" href="#a756682651761cdd8c39b81a3ee871cf0" title="Appends entry, assigning a monotonically increasing seq, on the owner.">append()</a></span> on a non-empty <span class="tt"><a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24" title="Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries (fr...">LogEntry::idempotencyKey</a></span> — see <span class="tt"><a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html" title="Interface for durable storage of executed-action entries.">IActionLog</a></span>'s class docs.</p>
 <dl class="section user"><dt>One owner</dt><dd>The entries belong to the executor given at construction, which must run one task at a time. <span class="tt"><a class="el" href="#a756682651761cdd8c39b81a3ee871cf0" title="Appends entry, assigning a monotonically increasing seq, on the owner.">append()</a></span> runs there: at once when called on it, posted from anywhere else (a model's strand). <span class="tt"><a class="el" href="#aa0f4b5543fa43c475f6974451f99250d" title="Returns a snapshot of matching entries in append order. On the owner.">entries()</a></span> answers only on it; a caller elsewhere uses <span class="tt">entries(replyExec, entityKey)</span>. See <span class="tt">docs/spec/journal/journal.md</span>, "One owner". </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ae744bb3c1afb4fa95f442743579e961e" name="ae744bb3c1afb4fa95f442743579e961e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae744bb3c1afb4fa95f442743579e961e">&#9670;&#160;</a></span>InMemoryActionLog()</h2>
@@ -203,7 +203,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00330">330</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -241,7 +241,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00336">336</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00345">345</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,7 +272,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00356">356</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -310,7 +310,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac13399c56e34fdd944a9a75cd8df4cda">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00352">352</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00361">361</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -342,7 +342,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#aa86b40cd5de2e717ad5f1545d79bbd8e">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00358">358</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00367">367</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -385,7 +385,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#af9aad4a907dc5a79613a57c01c12615a">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00374">374</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -426,7 +426,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The matching entries, in append order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -462,7 +462,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> once the entries are durable; rejected with the error <span class="tt"><a class="el" href="#a7513e6ef686d68eaf955f7a468c53a06" title="No-op — there is no external backend to flush to. Callable anywhere.">flush()</a></span> would have thrown. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00254">254</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>

@@ -176,6 +176,8 @@ ScreenHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHost
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
+<tr class="memitem:a15c7671bd7a65a4fd3d7ed67c25876e8" id="r_a15c7671bd7a65a4fd3d7ed67c25876e8"><td class="memItemLeft">static std::optional&lt; <a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">chat::TurnRequest</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a15c7671bd7a65a4fd3d7ed67c25876e8">chatContext</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle)</td></tr>
+<tr class="memdesc:a15c7671bd7a65a4fd3d7ed67c25876e8"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a chat turn says about a screen this host mounted: its id, its params and identity, and the aliases of its own scope that hold an instance. <span class="tt">TurnRequest::text</span> is left for the caller.  <br /></td></tr>
 <tr class="memitem:a844e396fdd2abf685b93e9ea0b29822b" id="r_a844e396fdd2abf685b93e9ea0b29822b"><td class="memItemLeft">static std::optional&lt; <a class="el" href="../../dd/db3/classmorph_1_1ui_1_1Inspector.html">Inspector</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a844e396fdd2abf685b93e9ea0b29822b">inspector</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle)</td></tr>
 <tr class="memdesc:a844e396fdd2abf685b93e9ea0b29822b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The development inspector over a screen this host mounted (spec 6 §21): what a shell's inspector window reads. It hands out no access to the screen beyond the inspector's own read-only view and its <span class="tt">refetch</span> command.  <br /></td></tr>
 <tr class="memitem:a467d4ac1ec375b631da0a35f89e3da86" id="r_a467d4ac1ec375b631da0a35f89e3da86"><td class="memItemLeft">static <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a467d4ac1ec375b631da0a35f89e3da86">rootOf</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;handle)</td></tr>
@@ -190,7 +192,7 @@ Protected Member Functions</h2></td></tr>
 <div class="textblock"><p>The framework's <span class="tt"><a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html" title="What mounts screens for a host that owns its own shell; the workspace shell is one.">ScreenHost</a></span> over UI documents: it mounts them through an <span class="tt"><a class="el" href="../../da/d2a/classmorph_1_1ui_1_1Interpreter.html" title="Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher.">Interpreter</a></span>, closes them by the protocol of spec 6 §3, and hands a document's <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6b76ddb0f199f53e12cf5d785e89862d" title="Opens another screen.">navigate</a></span> to <span class="tt"><a class="el" href="#ad8dd83c3ddbad125e85d47671bdc29b6" title="A document asked to open another screen, with how (as). The default hands the screen and its params t...">onNavigate</a></span>, which the deriving host implements. </p>
 <p>It is the interpreter's <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html" title="What the application answers for the commands a document cannot carry out alone (spec 6)....">InterpreterHost</a></span> for <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6b76ddb0f199f53e12cf5d785e89862d" title="Opens another screen.">navigate</a></span>; every other command goes to the application's host, if one was given. Everything runs on the runtime's owner. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00446">446</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00447">447</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a51c4224debcf787015d0d83ef863a34f" name="a51c4224debcf787015d0d83ef863a34f"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a51c4224debcf787015d0d83ef863a34f">&#9670;&#160;</a></span>DocumentScreenHost()</h2>
@@ -240,7 +242,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00453">453</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00454">454</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -284,7 +286,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html#a590ee6f22dd29005a07be8ab5e6df4e2">morph::ui::ScreenHost</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00470">470</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00471">471</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -331,7 +333,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its handle, or why it could not be mounted. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00481">481</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00482">482</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -367,7 +369,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The root, or why it was refused: no document, a document whose id is not <span class="tt">app</span>, or a second root on the session. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00495">495</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00496">496</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -410,7 +412,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html#a74baa68354c22a07a32a4f271c08289d">morph::ui::ScreenHost</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00513">513</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00514">514</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -450,7 +452,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00536">536</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00537">537</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -491,7 +493,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The route, or why it has none: an unknown screen, or a param with no route form. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00569">569</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00570">570</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -527,7 +529,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screen and its params, or why the route is refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00581">581</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00582">582</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -562,7 +564,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00588">588</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00589">589</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -597,7 +599,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00598">598</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00599">599</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -638,7 +640,43 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or why the old screen was kept: a foreign or closed handle, a close or save in progress, or the interpreter's refusal of the new document. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00610">610</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00611">611</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a15c7671bd7a65a4fd3d7ed67c25876e8" name="a15c7671bd7a65a4fd3d7ed67c25876e8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a15c7671bd7a65a4fd3d7ed67c25876e8">&#9670;&#160;</a></span>chatContext()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; <a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">chat::TurnRequest</a> &gt; morph::ui::DocumentScreenHost::chatContext </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>handle</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What a chat turn says about a screen this host mounted: its id, its params and identity, and the aliases of its own scope that hold an instance. <span class="tt">TurnRequest::text</span> is left for the caller. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handle</td><td>A handle this host mounted. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The context; nothing for a closed or foreign handle. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00625">625</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -674,7 +712,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The inspector, valid until the screen closes or is remounted; nothing for a closed or foreign handle, and nothing for a screen whose session has <span class="tt"><a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36" title="Nothing is recorded, no inspector is handed out, and the inspector&#39;s shortcut does nothing.">DevelopmentTools::Off</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00626">626</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00651">651</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -703,7 +741,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Cancels every call no mount has adopted: each one's <span class="tt">onCancel</span> runs, oldest first. What a shell does when it closes every screen, so no call outlives the screens it was filed among and a later mount never answers an opener that is gone. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00638">638</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00663">663</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -739,7 +777,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its root widget, or <span class="tt">nullptr</span> for a closed or foreign handle. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00647">647</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00672">672</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -779,7 +817,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00663">663</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00688">688</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>

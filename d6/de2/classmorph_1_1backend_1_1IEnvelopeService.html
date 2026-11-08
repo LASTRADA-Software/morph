@@ -132,6 +132,7 @@ Inheritance diagram for morph::backend::IEnvelopeService:</div>
   <img src="../../d6/de2/classmorph_1_1backend_1_1IEnvelopeService.png" usemap="#morph_3A_3Abackend_3A_3AIEnvelopeService_map" alt=""/>
   <map id="morph_3A_3Abackend_3A_3AIEnvelopeService_map" name="morph_3A_3Abackend_3A_3AIEnvelopeService_map">
 <area href="../../d1/d38/classmorph_1_1ui_1_1UiService.html" title="The UI service: answers ui-hello, ui-catalog and ui-fetch from one ServedBundle, and ui-evaluate thro..." alt="morph::ui::UiService" shape="rect" coords="0,56,207,80"/>
+<area href="../../db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html" title="Answers the chat kinds, and runs each turn&#39;s loop on the worker: read what the screen offers,..." alt="morph::ui::chat::ChatService" shape="rect" coords="217,56,424,80"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -151,12 +152,16 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 <tr class="memdesc:a8824ddf6059dffcbe63219f81da70c7c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Answers one envelope of a kind <span class="tt"><a class="el" href="#a508eee14a840935f84eb6ab6ef91fece" title="Whether this service answers kind.">serves</a></span> accepted.  <br /></td></tr>
 <tr class="memitem:abfc8dd71a442686b61b259d60e17a08b" id="r_abfc8dd71a442686b61b259d60e17a08b"><td class="memItemLeft">virtual std::string&#160;</td><td class="memItemRight"><a class="el" href="#abfc8dd71a442686b61b259d60e17a08b">handle</a> (const <a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> &amp;request, const <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> &amp;authorizer, <a class="el" href="../../d8/d2f/structmorph_1_1backend_1_1ConnectionFacts.html">ConnectionFacts</a> &amp;facts)</td></tr>
 <tr class="memdesc:abfc8dd71a442686b61b259d60e17a08b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Answers one envelope of a kind <span class="tt"><a class="el" href="#a508eee14a840935f84eb6ab6ef91fece" title="Whether this service answers kind.">serves</a></span> accepted, with the facts of the connection it arrived on.  <br /></td></tr>
+<tr class="memitem:a984597cfd2794a8b09e0d2d1e7d5f43f" id="r_a984597cfd2794a8b09e0d2d1e7d5f43f"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a984597cfd2794a8b09e0d2d1e7d5f43f">bound</a> (std::weak_ptr&lt; <a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">RemoteServer</a> &gt; const &amp;server)</td></tr>
+<tr class="memdesc:a984597cfd2794a8b09e0d2d1e7d5f43f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Hands the service its server, once, before the first envelope reaches any service.  <br /></td></tr>
+<tr class="memitem:adbc00f199a316ff624128834ff68508d" id="r_adbc00f199a316ff624128834ff68508d"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#adbc00f199a316ff624128834ff68508d">connectionClosed</a> (<a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a> cid)</td></tr>
+<tr class="memdesc:adbc00f199a316ff624128834ff68508d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Told that an open connection closed, once per connection.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Envelope kinds a <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> answers through an extension, such as the UI service's <span class="tt">ui-*</span> kinds. </p>
 <p>Core does not know the kinds a higher layer adds, and must not include that layer. A server consults its services only for a kind it does not answer itself, so a service cannot take over <span class="tt">execute</span>, <span class="tt">hello</span> or any other built-in kind; a kind no service serves is still answered <span class="tt">err "unknown envelope kind: &lt;kind&gt;"</span>. See <span class="tt">docs/spec/core/backend.md</span>, "Envelope services". </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a508eee14a840935f84eb6ab6ef91fece" name="a508eee14a840935f84eb6ab6ef91fece"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a508eee14a840935f84eb6ab6ef91fece">&#9670;&#160;</a></span>serves()</h2>
@@ -190,7 +195,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> to have <span class="tt"><a class="el" href="#a8824ddf6059dffcbe63219f81da70c7c" title="Answers one envelope of a kind serves accepted.">handle</a></span> answer it. </dd></dl>
 
-<p>Implemented in <a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html#abccafa420a95c3d6b73a35621f81bc77">morph::ui::UiService</a>.</p>
+<p>Implemented in <a class="el" href="../../db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html#ad98ebd14cb3fe07bc2625ca5d4198210">morph::ui::chat::ChatService</a>, and <a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html#abccafa420a95c3d6b73a35621f81bc77">morph::ui::UiService</a>.</p>
 
 </div>
 </div>
@@ -231,7 +236,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The encoded reply envelope (<span class="tt">wire::encode</span>), addressed to <span class="tt">request.callId</span>. </dd></dl>
 
-<p>Implemented in <a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html#a97d689952e3e755b7b1e70035f02f376">morph::ui::UiService</a>.</p>
+<p>Implemented in <a class="el" href="../../db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html#a9b4908996d5095e4438c5ab5e64f83c0">morph::ui::chat::ChatService</a>, and <a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html#a97d689952e3e755b7b1e70035f02f376">morph::ui::UiService</a>.</p>
 
 </div>
 </div>
@@ -278,9 +283,83 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The encoded reply envelope (<span class="tt">wire::encode</span>), addressed to <span class="tt">request.callId</span>. </dd></dl>
 
-<p>Reimplemented in <a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html#a521159d2bd8e75b21dd6a6a2a726385d">morph::ui::UiService</a>.</p>
+<p>Reimplemented in <a class="el" href="../../db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html#a356c1caf8d98d4d44a7d300e2d70cd12">morph::ui::chat::ChatService</a>, and <a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html#a521159d2bd8e75b21dd6a6a2a726385d">morph::ui::UiService</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a984597cfd2794a8b09e0d2d1e7d5f43f" name="a984597cfd2794a8b09e0d2d1e7d5f43f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a984597cfd2794a8b09e0d2d1e7d5f43f">&#9670;&#160;</a></span>bound()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::backend::IEnvelopeService::bound </td>
+          <td>(</td>
+          <td class="paramtype">std::weak_ptr&lt; <a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">RemoteServer</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>server</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Hands the service its server, once, before the first envelope reaches any service. </p>
+<p>At the first service dispatch and not at construction: services are built before the server, and consumed by its constructor, where it cannot yet hand out a reference to itself. Weak, since the server owns its services. Runs on the server strand, so it must not block. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">server</td><td>The server. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Reimplemented in <a class="el" href="../../db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html#adb1ea2b819a2ccbed6382f90cde8de2f">morph::ui::chat::ChatService</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00292">292</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adbc00f199a316ff624128834ff68508d" name="adbc00f199a316ff624128834ff68508d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adbc00f199a316ff624128834ff68508d">&#9670;&#160;</a></span>connectionClosed()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::backend::IEnvelopeService::connectionClosed </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/d12/connection__writer_8hpp.html#a85eb19bfc15378ec6e1719bc0bbd6ad2">ConnectionId</a></td>          <td class="paramname"><span class="paramname"><em>cid</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Told that an open connection closed, once per connection. </p>
+<p>Runs on the server strand, so it must not block. A throw is logged and goes no further. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">cid</td><td>The connection. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Reimplemented in <a class="el" href="../../db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html#a23b83f11d367d64bfc034d9eb46ea549">morph::ui::chat::ChatService</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

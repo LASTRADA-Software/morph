@@ -164,7 +164,7 @@ Protected Member Functions</h2></td></tr>
 <p>Entries are never removed by the framework — this is a permanent, append-only record, unlike <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">morph::offline::IOfflineQueue</a></span> (whose <span class="tt">markDone()</span> deletes items once retried successfully). Implementations range from in-memory (<span class="tt"><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="In-memory implementation of IActionLog, owned by one executor.">InMemoryActionLog</a></span>) to file, SQL, or network-backed stores supplied by the host application.</p>
 <dl class="section user"><dt>Idempotency-key dedup (optional)</dt><dd>An implementation MAY treat a non-empty <span class="tt"><a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24" title="Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries (fr...">LogEntry::idempotencyKey</a></span> as a dedup key on <span class="tt"><a class="el" href="#ac49e1e4a818057762c752994295549db" title="Appends entry. Implementations assign entry.seq.">append()</a></span>: if an entry with the same key was already recorded, treat the call as a no-op. This is not required by the interface, but <span class="tt"><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="In-memory implementation of IActionLog, owned by one executor.">InMemoryActionLog</a></span> and <span class="tt"><a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html" title="Append-only, newline-delimited-JSON IActionLog backed by a local file.">FileActionLog</a></span> both do it, which is what makes them safe choices for <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#ae687340d723cfe17f30f8443ce5b2570" title="Durable audit sink rows are forwarded to.">journal::OutboxRelay::sink</a></span> (see <span class="tt"><a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a></span>) — a re-relayed row after a crash between <span class="tt"><a class="el" href="#ac49e1e4a818057762c752994295549db" title="Appends entry. Implementations assign entry.seq.">append()</a></span> and marking it relayed lands here twice but is stored once. An entry with an empty <span class="tt">idempotencyKey</span> is never deduped. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00174">174</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00183">183</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="ac49e1e4a818057762c752994295549db" name="ac49e1e4a818057762c752994295549db"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac49e1e4a818057762c752994295549db">&#9670;&#160;</a></span>append()</h2>
@@ -308,7 +308,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a2a5fc9bd4b961a1570a54c217014dcbe">morph::journal::FileActionLog</a>, <a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html#a8dfd097bc4ae1cfc762dfd7705116386">morph::journal::InMemoryActionLog</a>, and <a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a37f8577c8cefe2048ea2e8b3ded867ed">morph::journal::SessionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00228">228</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -349,7 +349,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The matching entries, in append order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -385,7 +385,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> once the entries are durable; rejected with the error <span class="tt"><a class="el" href="#a1166c1f704607f315395a209c27e2bf9" title="Pushes any buffered entries to the durable backend. No-op for sinks with nothing to buffer (e....">flush()</a></span> would have thrown. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00254">254</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -428,7 +428,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#ad709c7f542b1f9aac8910997a279d1dd">morph::journal::FileActionLog</a>, <a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html#af47e595f05ef8d0302c55b92eb40c6fd">morph::journal::InMemoryActionLog</a>, and <a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a157f597e944435efca863cdf3babf477">morph::journal::SessionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00256">256</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00265">265</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -466,7 +466,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a29dbcf90124891eebc6bfd9eb38db20c">morph::journal::FileActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00283">283</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>

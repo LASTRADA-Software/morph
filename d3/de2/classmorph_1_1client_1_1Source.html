@@ -188,6 +188,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:aaced127408e2c1571846dbbaf5f7f571"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a listener for the events the server sends: what a shell hands to <span class="tt">Session::deliverEvent</span>.  <br /></td></tr>
 <tr class="memitem:afdfba1674160333501f20f4bfcf02fab" id="r_afdfba1674160333501f20f4bfcf02fab"><td class="memItemLeft"><a class="el" href="../../db/d42/interpreter_8hpp.html#ab1da6e62f0770d24628900fab76a3b58">ui::Watcher</a>&#160;</td><td class="memItemRight"><a class="el" href="#afdfba1674160333501f20f4bfcf02fab">watcher</a> ()</td></tr>
 <tr class="memdesc:afdfba1674160333501f20f4bfcf02fab"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the session's <span class="tt">SessionOptions::watcher</span> sends the cache's watch changes through: <span class="tt">watcherOver</span> the source's exchange, stamping the session current at each send. Empty for a source whose transport carries no server events, such as an in-process one.  <br /></td></tr>
+<tr class="memitem:a5be07792ad9bd8208658bd3325192139" id="r_a5be07792ad9bd8208658bd3325192139"><td class="memItemLeft"><a class="el" href="../../dd/d56/service__client_8hpp.html#a96f7e4884f3c2bd61741d715df661bf2">ui::Exchange</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a5be07792ad9bd8208658bd3325192139">exchange</a> () const noexcept</td></tr>
+<tr class="memdesc:a5be07792ad9bd8208658bd3325192139"><td class="mdescLeft">&#160;</td><td class="mdescRight">The exchange the UI service is reached by, which a client's other services share.  <br /></td></tr>
+<tr class="memitem:a9a92b1be936b140f2d6bca257d11c391" id="r_a9a92b1be936b140f2d6bca257d11c391"><td class="memItemLeft"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">session::Context</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a9a92b1be936b140f2d6bca257d11c391">currentSession</a> () const noexcept</td></tr>
+<tr class="memdesc:a9a92b1be936b140f2d6bca257d11c391"><td class="mdescLeft">&#160;</td><td class="mdescRight">The session every call carries now, which a sign-in replaces.  <br /></td></tr>
 <tr class="memitem:a9f0ce0ddf01e5b94ab9b6d73f37992fa" id="r_a9f0ce0ddf01e5b94ab9b6d73f37992fa"><td class="memItemLeft">virtual std::string&#160;</td><td class="memItemRight"><a class="el" href="#a9f0ce0ddf01e5b94ab9b6d73f37992fa">signedOutPrincipal</a> () const</td></tr>
 <tr class="memdesc:a9f0ce0ddf01e5b94ab9b6d73f37992fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">The principal before any sign-in, which <span class="tt"><a class="el" href="#ae9bdce10fa607e44b65882ee20b16914" title="Ends the session: back to the principal before any sign-in, with no token, and the catalog reloaded f...">signOut</a></span> returns to.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1AppSource"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d5/d3d/classmorph_1_1ui_1_1AppSource.html">morph::ui::AppSource</a></td></tr>
@@ -895,6 +899,66 @@ Protected Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a5be07792ad9bd8208658bd3325192139" name="a5be07792ad9bd8208658bd3325192139"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5be07792ad9bd8208658bd3325192139">&#9670;&#160;</a></span>exchange()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/d56/service__client_8hpp.html#a96f7e4884f3c2bd61741d715df661bf2">ui::Exchange</a> const  &amp; morph::client::Source::exchange </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The exchange the UI service is reached by, which a client's other services share. </p>
+<dl class="section return"><dt>Returns</dt><dd>It; empty before the source opened. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00190">190</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9a92b1be936b140f2d6bca257d11c391" name="a9a92b1be936b140f2d6bca257d11c391"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9a92b1be936b140f2d6bca257d11c391">&#9670;&#160;</a></span>currentSession()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">session::Context</a> const  &amp; morph::client::Source::currentSession </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The session every call carries now, which a sign-in replaces. </p>
+<dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00194">194</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a9f0ce0ddf01e5b94ab9b6d73f37992fa" name="a9f0ce0ddf01e5b94ab9b6d73f37992fa"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a9f0ce0ddf01e5b94ab9b6d73f37992fa">&#9670;&#160;</a></span>signedOutPrincipal()</h2>
 
@@ -923,7 +987,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html#a186bfa54800603e503af579499bd026f">morph::client::LocalSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00190">190</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00198">198</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -991,7 +1055,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d2/d13/classmorph_1_1client_1_1RemoteSource.html#aaf58b97837f7d5217dda96ae7d16e7dc">morph::client::RemoteSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -1022,7 +1086,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html#aecef09617452f1b38080912d72268f25">morph::client::LocalSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00214">214</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -1092,7 +1156,7 @@ Protected Member Functions</h2></td></tr>
 <p>The session every request carries, for a source to fill before <span class="tt"><a class="el" href="#a9d81d8a1c64187d1be0b70aafc11011c" title="Opens the source: the transport, the bridge and the bundle, verified.">open</a></span> sends anything. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00225">225</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00233">233</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>

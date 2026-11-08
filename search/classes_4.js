@@ -14,7 +14,7 @@ var searchData=
   ['engine_11',['Engine',['../dd/d72/classmorph_1_1table_1_1Engine.html',1,'morph::table']]],
   ['engineoptions_12',['EngineOptions',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html',1,'morph::table']]],
   ['enginestats_13',['EngineStats',['../de/d18/structmorph_1_1table_1_1EngineStats.html',1,'morph::table']]],
-  ['entry_14',['Entry',['../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html',1,'morph::table::CompiledFilter::Entry'],['../db/d76/structmorph_1_1ui_1_1testing_1_1detail_1_1Entry.html',1,'morph::ui::testing::detail::Entry']]],
+  ['entry_14',['Entry',['../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html',1,'morph::table::CompiledFilter::Entry'],['../d5/de2/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1Entry.html',1,'morph::ui::chat::ChatClient::Entry'],['../db/d76/structmorph_1_1ui_1_1testing_1_1detail_1_1Entry.html',1,'morph::ui::testing::detail::Entry']]],
   ['envelope_15',['Envelope',['../d5/d77/structmorph_1_1wire_1_1Envelope.html',1,'morph::wire']]],
   ['environment_16',['Environment',['../dc/d40/classmorph_1_1ui_1_1Environment.html',1,'morph::ui']]],
   ['equalityusable_17',['EqualityUsable',['../de/d44/structmorph_1_1reactive_1_1detail_1_1EqualityUsable.html',1,'morph::reactive::detail']]],

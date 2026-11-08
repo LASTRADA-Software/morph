@@ -146,7 +146,7 @@ Public Attributes</h2></td></tr>
 <p>Deliberately <b>not</b> a process-wide global: the caller installs it on the specific <span class="tt">Bridge</span> (or other session-scoped object) whose backend it came from — see <span class="tt">Bridge::setPrincipal</span>/<span class="tt">Bridge::currentPrincipal</span> (<span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">core/bridge.hpp</a></span>) — rather than one ambient value shared by every backend a process happens to hold.</p>
 <dl class="section warning"><dt>Warning</dt><dd>Populate this only from data the server actually returned (e.g. an action's <span class="tt">Result</span>, such as the bank example's <span class="tt">AuthResult</span>), never from a client-side guess — the server remains the sole authority for what a principal may do; this is a read-only cache of what it last told the client, not a second, independently-decided permission set. Roles can change server-side mid-session, so every dispatch is still authorized there regardless of what a stale <span class="tt"><a class="el" href="../../d0/d26/structmorph_1_1session_1_1Principal.html" title="The signed-in user&#39;s verified identity, readable outside a dispatch.">Principal</a></span> says client-side; this only shapes the UI, it never replaces server-side authorization. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="afaca81a57beb5b33f5e8ae76b4adbc04" name="afaca81a57beb5b33f5e8ae76b4adbc04"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#afaca81a57beb5b33f5e8ae76b4adbc04">&#9670;&#160;</a></span>hasRole()</h2>
@@ -180,7 +180,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if <code class="param">role</code> is present in <span class="tt"><a class="el" href="#a593aec2dfea0ee6d4c842e48053272cc" title="Coarse-grained roles the app can gate UI on (e.g. &quot;editor&quot;, &quot;admin&quot;).">roles</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00103">103</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>
@@ -199,7 +199,7 @@ Public Attributes</h2></td></tr>
 
 <p>Verified identity (e.g. username), as returned by the server. Empty if signed out. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>
@@ -217,7 +217,7 @@ Public Attributes</h2></td></tr>
 
 <p>Coarse-grained roles the app can gate UI on (e.g. <span class="tt">"editor"</span>, <span class="tt">"admin"</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +235,7 @@ Public Attributes</h2></td></tr>
 
 <p>Free-form bag of string→string claims beyond <span class="tt"><a class="el" href="#ad406fb528bf29d330bd636f748aa10de" title="Verified identity (e.g. username), as returned by the server. Empty if signed out.">id</a></span>/<span class="tt"><a class="el" href="#a593aec2dfea0ee6d4c842e48053272cc" title="Coarse-grained roles the app can gate UI on (e.g. &quot;editor&quot;, &quot;admin&quot;).">roles</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>

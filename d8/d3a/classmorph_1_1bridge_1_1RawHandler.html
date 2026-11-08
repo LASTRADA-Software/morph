@@ -142,6 +142,8 @@ Public Member Functions</h2></td></tr>
 <a class="el" href="#afa6709b1a4dc979f1191219a5929e2d5">RawHandler</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#afa6709b1a4dc979f1191219a5929e2d5">RawHandler</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a0acdaa306e23053a99bcd08b7366cede" id="r_a0acdaa306e23053a99bcd08b7366cede"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0acdaa306e23053a99bcd08b7366cede">execute</a> (std::string actionId, std::string bodyJson)</td></tr>
 <tr class="memdesc:a0acdaa306e23053a99bcd08b7366cede"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches the action registered as <code class="param">actionId</code> with <code class="param">bodyJson</code>.  <br /></td></tr>
+<tr class="memitem:ae60ed3c06a564c61f04503959f66cf07" id="r_ae60ed3c06a564c61f04503959f66cf07"><td class="memItemLeft">std::uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#ae60ed3c06a564c61f04503959f66cf07">instanceId</a> () const noexcept</td></tr>
+<tr class="memdesc:ae60ed3c06a564c61f04503959f66cf07"><td class="mdescLeft">&#160;</td><td class="mdescRight">The instance's id on the active backend.  <br /></td></tr>
 <tr class="memitem:a0f82f000b47a5cadcba37871defef907" id="r_a0f82f000b47a5cadcba37871defef907"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0f82f000b47a5cadcba37871defef907">execute</a> (std::string actionId, std::string bodyJson, ::core::async::StopToken stop)</td></tr>
 <tr class="memdesc:a0f82f000b47a5cadcba37871defef907"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#a0acdaa306e23053a99bcd08b7366cede" title="Dispatches the action registered as actionId with bodyJson.">execute</a></span>, cancellable through <code class="param">stop</code>.  <br /></td></tr>
 <tr class="memitem:a4c0ea0533a042f2dbbdde8ce062f2386" id="r_a4c0ea0533a042f2dbbdde8ce062f2386"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4c0ea0533a042f2dbbdde8ce062f2386">executeOn</a> (std::string instanceKey, std::string actionId, std::string bodyJson)</td></tr>
@@ -298,6 +300,36 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="ae60ed3c06a564c61f04503959f66cf07" name="ae60ed3c06a564c61f04503959f66cf07"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae60ed3c06a564c61f04503959f66cf07">&#9670;&#160;</a></span>instanceId()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::uint64_t morph::bridge::RawHandler::instanceId </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The instance's id on the active backend. </p>
+<dl class="section return"><dt>Returns</dt><dd>It; <span class="tt">0</span> while the bind has not settled. A point-in-time read, safe from any thread. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l02998">2998</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a0f82f000b47a5cadcba37871defef907" name="a0f82f000b47a5cadcba37871defef907"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a0f82f000b47a5cadcba37871defef907">&#9670;&#160;</a></span>execute() <span class="overload">[2/2]</span></h2>
 
@@ -341,7 +373,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion resolving with the reply's JSON text, or rejected with <span class="tt">core::async::OperationCancelled</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03002">3002</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03006">3006</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -395,7 +427,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03018">3018</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03022">3022</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -437,7 +469,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03032">3032</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03036">3036</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -467,7 +499,7 @@ Public Member Functions</h2></td></tr>
 <p>This handler's current instance key. </p>
 <dl class="section return"><dt>Returns</dt><dd>The attached key, or empty before the first attach settles. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03036">3036</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03040">3040</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -497,7 +529,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the handler holds a live instance now. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when bound. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03040">3040</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03044">3044</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -527,7 +559,7 @@ Public Member Functions</h2></td></tr>
 <p>The model's registered type id. </p>
 <dl class="section return"><dt>Returns</dt><dd>The id given at construction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03044">3044</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l03048">3048</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

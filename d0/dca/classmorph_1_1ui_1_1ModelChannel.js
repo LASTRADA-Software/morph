@@ -1,4 +1,5 @@
 var classmorph_1_1ui_1_1ModelChannel =
 [
-    [ "execute", "d0/dca/classmorph_1_1ui_1_1ModelChannel.html#af066ee2e64c2df167c39be29aef7a3f7", null ]
+    [ "execute", "d0/dca/classmorph_1_1ui_1_1ModelChannel.html#af066ee2e64c2df167c39be29aef7a3f7", null ],
+    [ "facts", "d0/dca/classmorph_1_1ui_1_1ModelChannel.html#a52f0b1c8a44644d8c853d957d335a161", null ]
 ];

@@ -1,6 +1,7 @@
 var interpreter_8hpp =
 [
     [ "morph::ui::CallOptions", "df/dd1/structmorph_1_1ui_1_1CallOptions.html", "df/dd1/structmorph_1_1ui_1_1CallOptions" ],
+    [ "morph::ui::ChannelFacts", "d8/dc6/structmorph_1_1ui_1_1ChannelFacts.html", "d8/dc6/structmorph_1_1ui_1_1ChannelFacts" ],
     [ "morph::ui::ModelChannel", "d0/dca/classmorph_1_1ui_1_1ModelChannel.html", "d0/dca/classmorph_1_1ui_1_1ModelChannel" ],
     [ "morph::ui::Dispatcher", "d5/d80/classmorph_1_1ui_1_1Dispatcher.html", "d5/d80/classmorph_1_1ui_1_1Dispatcher" ],
     [ "morph::ui::BridgeDispatcher", "db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html", "db/d70/classmorph_1_1ui_1_1BridgeDispatcher" ],
@@ -51,6 +52,7 @@ var interpreter_8hpp =
     [ "morph::ui::HeadMenuEntry", "d8/d69/structmorph_1_1ui_1_1HeadMenuEntry.html", "d8/d69/structmorph_1_1ui_1_1HeadMenuEntry" ],
     [ "morph::ui::HeadTool", "dd/d27/structmorph_1_1ui_1_1HeadTool.html", "dd/d27/structmorph_1_1ui_1_1HeadTool" ],
     [ "morph::ui::Screen", "da/d97/classmorph_1_1ui_1_1Screen.html", "da/d97/classmorph_1_1ui_1_1Screen" ],
+    [ "morph::ui::Screen::BoundAlias", "d4/d41/structmorph_1_1ui_1_1Screen_1_1BoundAlias.html", "d4/d41/structmorph_1_1ui_1_1Screen_1_1BoundAlias" ],
     [ "morph::ui::AppRoot", "dd/d83/classmorph_1_1ui_1_1AppRoot.html", "dd/d83/classmorph_1_1ui_1_1AppRoot" ],
     [ "morph::ui::Interpreter", "da/d2a/classmorph_1_1ui_1_1Interpreter.html", "da/d2a/classmorph_1_1ui_1_1Interpreter" ],
     [ "morph::ui::detail::DateReading", "dd/d16/structmorph_1_1ui_1_1detail_1_1DateReading.html", "dd/d16/structmorph_1_1ui_1_1detail_1_1DateReading" ],

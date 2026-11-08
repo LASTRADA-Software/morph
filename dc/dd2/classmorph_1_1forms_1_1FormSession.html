@@ -158,7 +158,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a6f6036d196b6dec1fe6f2b742471c637" id="r_a6f6036d196b6dec1fe6f2b742471c637"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a6f6036d196b6dec1fe6f2b742471c637">prefill</a> (std::string_view bodyJson)</td></tr>
 <tr class="memdesc:a6f6036d196b6dec1fe6f2b742471c637"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads a stored payload for editing. Every field is replaced (an absent member starts blank), every unit returns to the canonical one, and nothing is submitted. Text that is not a JSON object changes nothing.  <br /></td></tr>
 <tr class="memitem:a940685a66b4561b9dba6517641457c47" id="r_a940685a66b4561b9dba6517641457c47"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a940685a66b4561b9dba6517641457c47">refill</a> (std::string_view bodyJson)</td></tr>
-<tr class="memdesc:a940685a66b4561b9dba6517641457c47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads a stored payload like <span class="tt"><a class="el" href="#a6f6036d196b6dec1fe6f2b742471c637" title="Loads a stored payload for editing. Every field is replaced (an absent member starts blank),...">prefill</a></span>, except that a top-level field the user changed since the form was last loaded keeps what they entered: a later value of the record being edited, such as its first value arriving after the user started typing, or a refetch, does not discard the edit. Nothing is submitted. Text that is not a JSON object changes nothing.  <br /></td></tr>
+<tr class="memdesc:a940685a66b4561b9dba6517641457c47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Loads a stored payload like <span class="tt"><a class="el" href="#a6f6036d196b6dec1fe6f2b742471c637" title="Loads a stored payload for editing. Every field is replaced (an absent member starts blank),...">prefill</a></span>, except that a top-level field the user changed since the form was last loaded keeps what they entered: a later value of the record being edited, such as its first value arriving after the user started typing, or a refetch, does not discard the edit. An explicit form's successful submission ends the edit of every field still holding what it sent, so the record's later values reach those. An automatic form's does not: it submits while the person may still be typing, and loading the record's form of a number would change the text under their cursor. Nothing is submitted. Text that is not a JSON object changes nothing.  <br /></td></tr>
 <tr class="memitem:a566022aa74f3dae7d51a349db68d4256" id="r_a566022aa74f3dae7d51a349db68d4256"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a566022aa74f3dae7d51a349db68d4256">assign</a> (std::string_view path, std::string_view jsonValue)</td></tr>
 <tr class="memdesc:a566022aa74f3dae7d51a349db68d4256"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets one field from a JSON value, programmatically (nothing is submitted).  <br /></td></tr>
 <tr class="memitem:a73c567f983b84fb204fd28eaa409638e" id="r_a73c567f983b84fb204fd28eaa409638e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a73c567f983b84fb204fd28eaa409638e">reset</a> ()</td></tr>
@@ -280,7 +280,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The form model. </p>
 <dl class="section return"><dt>Returns</dt><dd>The model. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00831">831</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00832">832</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -310,7 +310,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The runtime. </p>
 <dl class="section return"><dt>Returns</dt><dd>The runtime passed at construction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00835">835</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00836">836</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -340,7 +340,7 @@ Static Public Member Functions</h2></td></tr>
 <p>When the form submits. </p>
 <dl class="section return"><dt>Returns</dt><dd>The model's submit mode. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00839">839</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00840">840</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -370,7 +370,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The session options. </p>
 <dl class="section return"><dt>Returns</dt><dd>The options. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00843">843</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00844">844</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -400,7 +400,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The top-level fields, in <span class="tt">x-order</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The fields. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00847">847</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00848">848</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -436,7 +436,7 @@ Static Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The position, or <span class="tt">std::nullopt</span> unless the text is all decimal digits. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00852">852</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00853">853</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -478,7 +478,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00866">866</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00867">867</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -508,7 +508,7 @@ Static Public Member Functions</h2></td></tr>
 <p>Whether the form can submit. Tracked. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when every required field encodes, no field has an error, no gating rule is False, and <span class="tt"><a class="el" href="#ae71dc1ef3f256bc1d66aaf0cba8ec032" title="The session options.">options()</a>.accepts</span> (when set) accepts the body. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00916">916</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00917">917</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -538,7 +538,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The body the form would submit. Tracked. </p>
 <dl class="section return"><dt>Returns</dt><dd>The JSON body, fields in <span class="tt">x-order</span>, while ready; <span class="tt">std::nullopt</span> otherwise. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00920">920</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00921">921</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -567,7 +567,7 @@ Static Public Member Functions</h2></td></tr>
 
 <p>Submits the current body; does nothing while not ready, or while a submission is in flight (the submission is <span class="tt">Exclusive</span>). The explicit-mode trigger; in automatic mode it forces a resubmission of an unchanged body. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00925">925</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00926">926</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -602,7 +602,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00940">940</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00942">942</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -629,7 +629,7 @@ Static Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Loads a stored payload like <span class="tt"><a class="el" href="#a6f6036d196b6dec1fe6f2b742471c637" title="Loads a stored payload for editing. Every field is replaced (an absent member starts blank),...">prefill</a></span>, except that a top-level field the user changed since the form was last loaded keeps what they entered: a later value of the record being edited, such as its first value arriving after the user started typing, or a refetch, does not discard the edit. Nothing is submitted. Text that is not a JSON object changes nothing. </p>
+<p>Loads a stored payload like <span class="tt"><a class="el" href="#a6f6036d196b6dec1fe6f2b742471c637" title="Loads a stored payload for editing. Every field is replaced (an absent member starts blank),...">prefill</a></span>, except that a top-level field the user changed since the form was last loaded keeps what they entered: a later value of the record being edited, such as its first value arriving after the user started typing, or a refetch, does not discard the edit. An explicit form's successful submission ends the edit of every field still holding what it sent, so the record's later values reach those. An automatic form's does not: it submits while the person may still be typing, and loading the record's form of a number would change the text under their cursor. Nothing is submitted. Text that is not a JSON object changes nothing. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">bodyJson</td><td>The payload. </td></tr>
@@ -637,7 +637,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00959">959</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00964">964</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -683,7 +683,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00985">985</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00990">990</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -712,7 +712,7 @@ Static Public Member Functions</h2></td></tr>
 
 <p>Blanks every field, programmatically (nothing is submitted). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01006">1006</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01011">1011</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -742,7 +742,7 @@ Static Public Member Functions</h2></td></tr>
 <p>Whether a submission is in flight. Tracked. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> while one is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01018">1018</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01023">1023</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -772,7 +772,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The last successful reply. Tracked. </p>
 <dl class="section return"><dt>Returns</dt><dd>The reply JSON, or <span class="tt">std::nullopt</span> before the first success. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01022">1022</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01027">1027</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -802,7 +802,7 @@ Static Public Member Functions</h2></td></tr>
 <p>The last failure. Tracked. </p>
 <dl class="section return"><dt>Returns</dt><dd>The exception, or null; cleared by the next success. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01026">1026</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01031">1031</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -832,7 +832,7 @@ Static Public Member Functions</h2></td></tr>
 <p>How many submissions have succeeded. Tracked; each success ticks it, so an observer sees every submission even when two replies are equal. </p>
 <dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01031">1031</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01036">1036</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -862,7 +862,7 @@ Static Public Member Functions</h2></td></tr>
 <p>How many submissions have been sent, automatic and explicit. Tracked; a submission the <span class="tt">Exclusive</span> mutation refused while another was in flight does not count. </p>
 <dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01036">1036</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01041">1041</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -904,7 +904,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01042">1042</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01047">1047</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -946,7 +946,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01048">1048</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01053">1053</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>
@@ -988,7 +988,7 @@ Static Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01054">1054</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l01059">1059</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>

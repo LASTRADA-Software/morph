@@ -63,5 +63,7 @@ var searchData=
   ['prop_3c_20std_3a_3avector_3c_20std_3a_3astring_20_3e_20_3e_60',['Prop&lt; std::vector&lt; std::string &gt; &gt;',['../db/d73/classmorph_1_1ui_1_1Prop.html',1,'morph::ui']]],
   ['prop_3c_20textrole_20_3e_61',['Prop&lt; TextRole &gt;',['../db/d73/classmorph_1_1ui_1_1Prop.html',1,'morph::ui']]],
   ['prop_3c_20tone_20_3e_62',['Prop&lt; Tone &gt;',['../db/d73/classmorph_1_1ui_1_1Prop.html',1,'morph::ui']]],
-  ['protocolrange_63',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]]
+  ['protocolrange_63',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
+  ['providerconfig_64',['ProviderConfig',['../d3/d67/structmorph_1_1ui_1_1chat_1_1ProviderConfig.html',1,'morph::ui::chat']]],
+  ['providersink_65',['ProviderSink',['../db/d17/structmorph_1_1ui_1_1chat_1_1ProviderSink.html',1,'morph::ui::chat']]]
 ];

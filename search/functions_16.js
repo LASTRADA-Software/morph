@@ -53,7 +53,7 @@ var searchData=
   ['wrappingrowstartslinewhenoutofroom_50',['wrappingRowStartsLineWhenOutOfRoom',['../d8/d3e/backend__conformance_8hpp.html#a8fa4abf8b916157122e2f16842e02cee',1,'morph::ui::testing::detail']]],
   ['wrappingrowstretchtakeslinespare_51',['wrappingRowStretchTakesLineSpare',['../d8/d3e/backend__conformance_8hpp.html#af5129b7e807a820070a25b90d95031b0',1,'morph::ui::testing::detail']]],
   ['write_52',['write',['../d4/d0c/classmorph_1_1ui_1_1author_1_1Screen.html#ae3739a9cb7918c38d816e0423626a0da',1,'morph::ui::author::Screen']]],
-  ['writemessage_53',['writeMessage',['../d0/dab/bundle_8hpp.html#a8943b1f80c3cfa01e1eadaaa9501b30f',1,'morph::ui::detail']]],
+  ['writemessage_53',['writeMessage',['../d0/dab/bundle_8hpp.html#a8943b1f80c3cfa01e1eadaaa9501b30f',1,'morph::ui::detail::writeMessage()'],['../d8/dd1/protocol_8hpp.html#a12a770e79b9fe75b1481358d8d8d114b',1,'morph::ui::chat::writeMessage()']]],
   ['writeto_54',['writeTo',['../d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a4669a2921acff230cfbe70c32ec293e9',1,'morph::ui::author::DeclScope']]],
   ['writtencell_55',['writtenCell',['../dd/def/query_8hpp.html#a370bc0214d7d860f22fc843075c778c8',1,'morph::table::detail']]]
 ];

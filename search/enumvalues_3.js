@@ -19,7 +19,7 @@ var searchData=
   ['discarded_16',['Discarded',['../db/d42/interpreter_8hpp.html#acd38e4a7196e4cfc2575a5fe285eb2c6a5d5fbe880f62680a14a5e3979a19c861',1,'morph::ui']]],
   ['display_17',['Display',['../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5ab9987a246a537f4fe86f1f2e3d10dbdb',1,'morph::ui']]],
   ['divisionbyzero_18',['DivisionByZero',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea34e540e6594987eef203290f0a593bd2',1,'morph::math']]],
-  ['done_19',['Done',['../d8/d11/view_8hpp.html#af1e741ceb88969a1b66bd60701528da0af92965e2c8a7afb3c1b9a5c09a263636',1,'morph::ui']]],
+  ['done_19',['Done',['../d8/dd1/protocol_8hpp.html#ad91478fea6e18364f199511bbb666ec7af92965e2c8a7afb3c1b9a5c09a263636',1,'Donemorph::ui::chat'],['../d8/d11/view_8hpp.html#af1e741ceb88969a1b66bd60701528da0af92965e2c8a7afb3c1b9a5c09a263636',1,'Donemorph::ui']]],
   ['dotted_20',['Dotted',['../d1/dc0/author_8hpp.html#ace733a5f8b6c827e0edc2d606e017a39a90c09393a4c0970bc9a6703ad527781c',1,'Dottedmorph::ui::author'],['../d8/d11/view_8hpp.html#a02814acd0e2a2848c51eb47102c27aaba90c09393a4c0970bc9a6703ad527781c',1,'Dottedmorph::ui']]],
   ['download_21',['Download',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ea801ab24683a4a8c433c6eb40c48bcd9d',1,'morph::ui']]],
   ['drawer_22',['Drawer',['../d1/dc0/author_8hpp.html#a320acba32f9877358d74ee2052b65ef6a9b1ed2cbe56f7a315f0a365d2b97cb59',1,'morph::ui::author']]],

@@ -195,6 +195,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:aaced127408e2c1571846dbbaf5f7f571 pub_methods_classmorph_1_1client_1_1Source"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a listener for the events the server sends: what a shell hands to <span class="tt">Session::deliverEvent</span>.  <br /></td></tr>
 <tr class="memitem:afdfba1674160333501f20f4bfcf02fab pub_methods_classmorph_1_1client_1_1Source" id="r_afdfba1674160333501f20f4bfcf02fab"><td class="memItemLeft"><a class="el" href="../../db/d42/interpreter_8hpp.html#ab1da6e62f0770d24628900fab76a3b58">ui::Watcher</a>&#160;</td><td class="memItemRight"><a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#afdfba1674160333501f20f4bfcf02fab">watcher</a> ()</td></tr>
 <tr class="memdesc:afdfba1674160333501f20f4bfcf02fab pub_methods_classmorph_1_1client_1_1Source"><td class="mdescLeft">&#160;</td><td class="mdescRight">What the session's <span class="tt">SessionOptions::watcher</span> sends the cache's watch changes through: <span class="tt">watcherOver</span> the source's exchange, stamping the session current at each send. Empty for a source whose transport carries no server events, such as an in-process one.  <br /></td></tr>
+<tr class="memitem:a5be07792ad9bd8208658bd3325192139 pub_methods_classmorph_1_1client_1_1Source" id="r_a5be07792ad9bd8208658bd3325192139"><td class="memItemLeft"><a class="el" href="../../dd/d56/service__client_8hpp.html#a96f7e4884f3c2bd61741d715df661bf2">ui::Exchange</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#a5be07792ad9bd8208658bd3325192139">exchange</a> () const noexcept</td></tr>
+<tr class="memdesc:a5be07792ad9bd8208658bd3325192139 pub_methods_classmorph_1_1client_1_1Source"><td class="mdescLeft">&#160;</td><td class="mdescRight">The exchange the UI service is reached by, which a client's other services share.  <br /></td></tr>
+<tr class="memitem:a9a92b1be936b140f2d6bca257d11c391 pub_methods_classmorph_1_1client_1_1Source" id="r_a9a92b1be936b140f2d6bca257d11c391"><td class="memItemLeft"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">session::Context</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#a9a92b1be936b140f2d6bca257d11c391">currentSession</a> () const noexcept</td></tr>
+<tr class="memdesc:a9a92b1be936b140f2d6bca257d11c391 pub_methods_classmorph_1_1client_1_1Source"><td class="mdescLeft">&#160;</td><td class="mdescRight">The session every call carries now, which a sign-in replaces.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1AppSource"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d5/d3d/classmorph_1_1ui_1_1AppSource.html">morph::ui::AppSource</a></td></tr>
 <tr class="memitem:aadce7167f3b79c803f69c7cd8d2817ac pub_methods_classmorph_1_1ui_1_1AppSource" id="r_aadce7167f3b79c803f69c7cd8d2817ac"><td class="memItemLeft">
 &#160;</td><td class="memItemRight"><b>AppSource</b> (AppSource const &amp;)=delete</td></tr>
@@ -224,7 +228,7 @@ Protected Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Runs a linked application in-process (<span class="tt">--app</span>): its models over a <span class="tt">LocalBackend</span>, its bundle answered by a <span class="tt">UiService</span> in the same process, and verified by the same client as a remote one. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00308">308</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00316">316</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a8003247c8b5ab052230f076a64aa036c" name="a8003247c8b5ab052230f076a64aa036c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8003247c8b5ab052230f076a64aa036c">&#9670;&#160;</a></span>LocalSource()</h2>
@@ -285,7 +289,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#a9f0ce0ddf01e5b94ab9b6d73f37992fa">morph::client::Source</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00330">330</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -317,7 +321,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#a5ad2a981175d1953d0e1f85981fe6a3b">morph::client::Source</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00326">326</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>

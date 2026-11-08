@@ -2,6 +2,8 @@ var classmorph_1_1ui_1_1ShellFrame =
 [
     [ "ShellFrame", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a8e5ef822f08f6b883b6c7007482e1bef", null ],
     [ "page", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a9b2a9f0ffca9203de6da44a84bb5fbe4", null ],
+    [ "chatSlot", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#ae567f8660c63c84336249d375d7645b8", null ],
+    [ "setChatShown", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a5a2906a20ae3e430fe71be124ab24bac", null ],
     [ "navigator", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#aa25b568734c86b7845d1d667691473ab", null ],
     [ "headEyebrowSlot", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#a078a9f66d5aeb394ce6debbb48ab764d", null ],
     [ "headLeadSlot", "dc/df1/classmorph_1_1ui_1_1ShellFrame.html#afd49db2af9fa1c45a343f2d25467cff7", null ],

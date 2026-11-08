@@ -443,128 +443,134 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/ddc/model_8
 <div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span>        <span class="keywordflow">if</span> (<span class="keyword">const</span> <span class="keyword">auto</span>* ctx = ::morph::session::current()) {</div>
 <div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span>            entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30">principal</a> = ctx-&gt;principal;</div>
 <div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span>        }</div>
-<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span>        entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07">timestampMs</a> =</div>
-<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span>            std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(_wallClock.now().time_since_epoch()).count();</div>
-<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span>        _actionLog-&gt;append(std::move(entry));</div>
-<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span>    }</div>
-<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span> </div>
-<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span><span class="keyword">protected</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span><span class="comment">    /// @brief Forwards @p log/@p contextKey to the wrapped model&#39;s own</span></div>
-<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span><span class="comment">    ///        `attachActionLog`, if it declares one.</span></div>
-<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span><span class="comment">    /// `ModelHolder&lt;Model&gt;` implements it, detecting the member structurally</span></div>
-<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span><span class="comment">    /// (`ModelLevelActionLogAttachable&lt;Model&gt;`) and doing nothing for a model</span></div>
-<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span><span class="comment">    /// without one; this default does nothing, for a holder that is not a</span></div>
-<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span><span class="comment">    /// `ModelHolder`. It is what lets a registry-constructed instance hold a</span></div>
-<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span><span class="comment">    /// model-level log reference (e.g. for an activity-stream view) beside</span></div>
-<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span><span class="comment">    /// the holder&#39;s own, which `recordIfAttached`&#39;s auto-append uses.</span></div>
-<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span><span class="comment">    /// @param log        Sink entries are forwarded to.</span></div>
-<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span><span class="comment">    /// @param contextKey Stable identity of this model instance.</span></div>
-<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span>    <span class="keyword">virtual</span> <span class="keywordtype">void</span> onActionLogAttached(<span class="keyword">const</span> std::shared_ptr&lt;::morph::journal::IActionLog&gt;&amp; log,</div>
-<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span>                                     <span class="keyword">const</span> std::string&amp; contextKey) {</div>
-<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span>        (void)log;</div>
-<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span>        (void)contextKey;</div>
-<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span>    }</div>
-<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span><span class="comment"></span> </div>
-<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span><span class="comment">    /// @brief Forwards @p primaryKey to the wrapped model&#39;s own</span></div>
-<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span><span class="comment">    ///        `attachIdentity`, if it declares one.</span></div>
-<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00350" name="l00350"></a><span class="lineno">  350</span><span class="comment">    /// `ModelHolder&lt;Model&gt;` implements it, detecting the member structurally</span></div>
-<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span><span class="comment">    /// (`ModelIdentityAttachable&lt;Model&gt;`) and doing nothing for a model</span></div>
-<div class="line"><a id="l00352" name="l00352"></a><span class="lineno">  352</span><span class="comment">    /// without one; this default does nothing, for a holder that is not a</span></div>
-<div class="line"><a id="l00353" name="l00353"></a><span class="lineno">  353</span><span class="comment">    /// `ModelHolder`.</span></div>
-<div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span><span class="comment">    /// @param primaryKey Stable identity of this model instance; never empty</span></div>
-<div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span><span class="comment">    ///                    (the public `attachIdentity` filters that case out).</span></div>
-<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span>    <span class="keyword">virtual</span> <span class="keywordtype">void</span> onIdentityAttached(<span class="keyword">const</span> std::string&amp; primaryKey) { (void)primaryKey; }</div>
-<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span> </div>
-<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span><span class="keyword">private</span>:</div>
-<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span>    ActionGate _actionGate;</div>
-<div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span>    std::shared_ptr&lt;::morph::journal::IActionLog&gt; _actionLog;</div>
-<div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span>    std::string _contextKey;</div>
-<div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span>    ::core::platform::WallClockRef _wallClock{::core::platform::defaultSystemWallClock()};</div>
-<div class="line"><a id="l00363" name="l00363"></a><span class="lineno">  363</span>    <span class="keywordtype">bool</span> _outboxManaged{<span class="keyword">false</span>};</div>
-<div class="line"><a id="l00364" name="l00364"></a><span class="lineno">  364</span>};</div>
-<div class="line"><a id="l00365" name="l00365"></a><span class="lineno">  365</span><span class="comment">// NOLINTEND(cppcoreguidelines-special-member-functions)</span></div>
-<div class="line"><a id="l00366" name="l00366"></a><span class="lineno">  366</span><span class="comment"></span> </div>
-<div class="line"><a id="l00367" name="l00367"></a><span class="lineno">  367</span><span class="comment">/// @brief Concrete holder that stores a `Model` by value.</span></div>
-<div class="line"><a id="l00368" name="l00368"></a><span class="lineno">  368</span><span class="comment">///</span></div>
-<div class="line"><a id="l00369" name="l00369"></a><span class="lineno">  369</span><span class="comment">/// Inherits `BackendChangedMixin&lt;Model&gt;` so that backend-change notifications</span></div>
-<div class="line"><a id="l00370" name="l00370"></a><span class="lineno">  370</span><span class="comment">/// are forwarded automatically when `Model` opts in.</span></div>
-<div class="line"><a id="l00371" name="l00371"></a><span class="lineno">  371</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Model&gt;</div>
-<div class="line"><a id="l00372" name="l00372"></a><span class="lineno">  372</span><span class="keyword">struct </span>ModelHolder : IModelHolder, BackendChangedMixin&lt;Model&gt; {<span class="comment"></span></div>
-<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span><span class="comment">    /// @brief The owned model instance.</span></div>
-<div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span>    <a class="code hl_enumvalue" href="../../dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095aa559b87068921eec05086ce5485e9784">Model</a> model;</div>
-<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span><span class="comment"></span> </div>
-<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span><span class="comment">    /// @brief Constructs the model by forwarding all arguments.</span></div>
-<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
-<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span>    <span class="keyword">explicit</span> ModelHolder(Args&amp;&amp;... args) : model{std::forward&lt;Args&gt;(args)...} {}</div>
+<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span>        <span class="keywordflow">if</span> (<span class="keyword">const</span> <span class="keyword">auto</span>* origin = ::morph::session::currentOrigin()) {</div>
+<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span>            entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a1fb6748bcb1d4143a1f00d6044fb9192">originKind</a> = origin-&gt;kind;</div>
+<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span>            entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a084ff1fb86b035f282083050138b76c1">originText</a> = origin-&gt;text;</div>
+<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span>        }</div>
+<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span>        entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07">timestampMs</a> =</div>
+<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span>            std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(_wallClock.now().time_since_epoch()).count();</div>
+<div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span>        _actionLog-&gt;append(std::move(entry));</div>
+<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span>    }</div>
+<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span> </div>
+<div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span><span class="keyword">protected</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span><span class="comment">    /// @brief Forwards @p log/@p contextKey to the wrapped model&#39;s own</span></div>
+<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span><span class="comment">    ///        `attachActionLog`, if it declares one.</span></div>
+<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span><span class="comment">    /// `ModelHolder&lt;Model&gt;` implements it, detecting the member structurally</span></div>
+<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span><span class="comment">    /// (`ModelLevelActionLogAttachable&lt;Model&gt;`) and doing nothing for a model</span></div>
+<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span><span class="comment">    /// without one; this default does nothing, for a holder that is not a</span></div>
+<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span><span class="comment">    /// `ModelHolder`. It is what lets a registry-constructed instance hold a</span></div>
+<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span><span class="comment">    /// model-level log reference (e.g. for an activity-stream view) beside</span></div>
+<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span><span class="comment">    /// the holder&#39;s own, which `recordIfAttached`&#39;s auto-append uses.</span></div>
+<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span><span class="comment">    /// @param log        Sink entries are forwarded to.</span></div>
+<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span><span class="comment">    /// @param contextKey Stable identity of this model instance.</span></div>
+<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span>    <span class="keyword">virtual</span> <span class="keywordtype">void</span> onActionLogAttached(<span class="keyword">const</span> std::shared_ptr&lt;::morph::journal::IActionLog&gt;&amp; log,</div>
+<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span>                                     <span class="keyword">const</span> std::string&amp; contextKey) {</div>
+<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span>        (void)log;</div>
+<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span>        (void)contextKey;</div>
+<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span>    }</div>
+<div class="line"><a id="l00350" name="l00350"></a><span class="lineno">  350</span><span class="comment"></span> </div>
+<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span><span class="comment">    /// @brief Forwards @p primaryKey to the wrapped model&#39;s own</span></div>
+<div class="line"><a id="l00352" name="l00352"></a><span class="lineno">  352</span><span class="comment">    ///        `attachIdentity`, if it declares one.</span></div>
+<div class="line"><a id="l00353" name="l00353"></a><span class="lineno">  353</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span><span class="comment">    /// `ModelHolder&lt;Model&gt;` implements it, detecting the member structurally</span></div>
+<div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span><span class="comment">    /// (`ModelIdentityAttachable&lt;Model&gt;`) and doing nothing for a model</span></div>
+<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span><span class="comment">    /// without one; this default does nothing, for a holder that is not a</span></div>
+<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span><span class="comment">    /// `ModelHolder`.</span></div>
+<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span><span class="comment">    /// @param primaryKey Stable identity of this model instance; never empty</span></div>
+<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span><span class="comment">    ///                    (the public `attachIdentity` filters that case out).</span></div>
+<div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span>    <span class="keyword">virtual</span> <span class="keywordtype">void</span> onIdentityAttached(<span class="keyword">const</span> std::string&amp; primaryKey) { (void)primaryKey; }</div>
+<div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span> </div>
+<div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span><span class="keyword">private</span>:</div>
+<div class="line"><a id="l00363" name="l00363"></a><span class="lineno">  363</span>    ActionGate _actionGate;</div>
+<div class="line"><a id="l00364" name="l00364"></a><span class="lineno">  364</span>    std::shared_ptr&lt;::morph::journal::IActionLog&gt; _actionLog;</div>
+<div class="line"><a id="l00365" name="l00365"></a><span class="lineno">  365</span>    std::string _contextKey;</div>
+<div class="line"><a id="l00366" name="l00366"></a><span class="lineno">  366</span>    ::core::platform::WallClockRef _wallClock{::core::platform::defaultSystemWallClock()};</div>
+<div class="line"><a id="l00367" name="l00367"></a><span class="lineno">  367</span>    <span class="keywordtype">bool</span> _outboxManaged{<span class="keyword">false</span>};</div>
+<div class="line"><a id="l00368" name="l00368"></a><span class="lineno">  368</span>};</div>
+<div class="line"><a id="l00369" name="l00369"></a><span class="lineno">  369</span><span class="comment">// NOLINTEND(cppcoreguidelines-special-member-functions)</span></div>
+<div class="line"><a id="l00370" name="l00370"></a><span class="lineno">  370</span><span class="comment"></span> </div>
+<div class="line"><a id="l00371" name="l00371"></a><span class="lineno">  371</span><span class="comment">/// @brief Concrete holder that stores a `Model` by value.</span></div>
+<div class="line"><a id="l00372" name="l00372"></a><span class="lineno">  372</span><span class="comment">///</span></div>
+<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span><span class="comment">/// Inherits `BackendChangedMixin&lt;Model&gt;` so that backend-change notifications</span></div>
+<div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span><span class="comment">/// are forwarded automatically when `Model` opts in.</span></div>
+<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span> Model&gt;</div>
+<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span><span class="keyword">struct </span>ModelHolder : IModelHolder, BackendChangedMixin&lt;Model&gt; {<span class="comment"></span></div>
+<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span><span class="comment">    /// @brief The owned model instance.</span></div>
+<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span>    <a class="code hl_enumvalue" href="../../dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095aa559b87068921eec05086ce5485e9784">Model</a> model;</div>
 <div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span><span class="comment"></span> </div>
-<div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span><span class="comment">    /// @brief Returns `typeid(Model)` wrapped in a `std::type_index`.</span></div>
-<div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span>    [[nodiscard]] std::type_index type() const noexcept<span class="keyword"> override </span>{ <span class="keywordflow">return</span> <span class="keyword">typeid</span>(<a class="code hl_enumvalue" href="../../dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095aa559b87068921eec05086ce5485e9784">Model</a>); }</div>
-<div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span><span class="comment"></span> </div>
-<div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span><span class="comment">    /// @brief Returns `BackendChangedNotifiable&lt;Model&gt;` — a compile-time constant.</span></div>
-<div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span>    [[nodiscard]] <span class="keywordtype">bool</span> isBackendChangeAware() const noexcept<span class="keyword"> override </span>{ <span class="keywordflow">return</span> BackendChangedNotifiable&lt;Model&gt;; }</div>
-<div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span><span class="comment"></span> </div>
-<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span><span class="comment">    /// @brief Forwards to `Model::onBackendChanged()` iff `Model` declared one; no-op otherwise.</span></div>
-<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span><span class="comment">    /// This single definition is the final overrider for two unrelated base</span></div>
-<div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span><span class="comment">    /// virtuals: `IModelHolder::onBackendChanged` (always), and — when `Model`</span></div>
-<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span><span class="comment">    /// is notifiable — `IBackendChangedSink::onBackendChanged`, reached via</span></div>
-<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span><span class="comment">    /// `BackendChangedMixin&lt;Model, true&gt;`; both call paths (`IModelHolder*` and</span></div>
-<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span><span class="comment">    /// `dynamic_cast&lt;IBackendChangedSink*&gt;`) land here.</span></div>
-<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span>    <span class="keywordtype">void</span> onBackendChanged()<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (BackendChangedNotifiable&lt;Model&gt;) {</div>
-<div class="line"><a id="l00395" name="l00395"></a><span class="lineno">  395</span>            model.onBackendChanged();</div>
-<div class="line"><a id="l00396" name="l00396"></a><span class="lineno">  396</span>        }</div>
-<div class="line"><a id="l00397" name="l00397"></a><span class="lineno">  397</span>    }</div>
-<div class="line"><a id="l00398" name="l00398"></a><span class="lineno">  398</span> </div>
-<div class="line"><a id="l00399" name="l00399"></a><span class="lineno">  399</span><span class="keyword">protected</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span><span class="comment">    /// @brief Forwards to `Model::attachActionLog(log, contextKey)` iff `Model`</span></div>
-<div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span><span class="comment">    ///        declared one matching `ModelLevelActionLogAttachable`; no-op otherwise.</span></div>
-<div class="line"><a id="l00402" name="l00402"></a><span class="lineno">  402</span>    <span class="keywordtype">void</span> onActionLogAttached(<span class="keyword">const</span> std::shared_ptr&lt;::morph::journal::IActionLog&gt;&amp; log,</div>
-<div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span>                             <span class="keyword">const</span> std::string&amp; contextKey)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00404" name="l00404"></a><span class="lineno">  404</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (ModelLevelActionLogAttachable&lt;Model&gt;) {</div>
-<div class="line"><a id="l00405" name="l00405"></a><span class="lineno">  405</span>            model.attachActionLog(log, contextKey);</div>
-<div class="line"><a id="l00406" name="l00406"></a><span class="lineno">  406</span>        }</div>
-<div class="line"><a id="l00407" name="l00407"></a><span class="lineno">  407</span>    }</div>
-<div class="line"><a id="l00408" name="l00408"></a><span class="lineno">  408</span><span class="comment"></span> </div>
-<div class="line"><a id="l00409" name="l00409"></a><span class="lineno">  409</span><span class="comment">    /// @brief Forwards to `Model::attachIdentity(primaryKey)` iff `Model`</span></div>
-<div class="line"><a id="l00410" name="l00410"></a><span class="lineno">  410</span><span class="comment">    ///        declared one matching `ModelIdentityAttachable`; no-op otherwise.</span></div>
-<div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span>    <span class="keywordtype">void</span> onIdentityAttached(<span class="keyword">const</span> std::string&amp; primaryKey)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00412" name="l00412"></a><span class="lineno">  412</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (ModelIdentityAttachable&lt;Model&gt;) {</div>
-<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span>            model.attachIdentity(primaryKey);</div>
-<div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span>        }</div>
-<div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span>    }</div>
-<div class="line"><a id="l00416" name="l00416"></a><span class="lineno">  416</span>};</div>
-<div class="line"><a id="l00417" name="l00417"></a><span class="lineno">  417</span><span class="comment"></span> </div>
-<div class="line"><a id="l00418" name="l00418"></a><span class="lineno">  418</span><span class="comment">/// @brief Factory that creates default-constructed `ModelHolder&lt;Model&gt;` instances.</span></div>
-<div class="line"><a id="l00419" name="l00419"></a><span class="lineno">  419</span><span class="keyword">class </span>ModelFactory {</div>
-<div class="line"><a id="l00420" name="l00420"></a><span class="lineno">  420</span><span class="keyword">public</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00421" name="l00421"></a><span class="lineno">  421</span><span class="comment">    /// @brief Creates a new `ModelHolder&lt;Model&gt;` on the heap.</span></div>
-<div class="line"><a id="l00422" name="l00422"></a><span class="lineno">  422</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00423" name="l00423"></a><span class="lineno">  423</span><span class="comment">    /// If a process-wide default action log is installed (see</span></div>
-<div class="line"><a id="l00424" name="l00424"></a><span class="lineno">  424</span><span class="comment">    /// `morph::journal::setActionLog`), it is attached to the new holder</span></div>
-<div class="line"><a id="l00425" name="l00425"></a><span class="lineno">  425</span><span class="comment">    /// automatically (with an empty `entityKey`) — this is the single</span></div>
-<div class="line"><a id="l00426" name="l00426"></a><span class="lineno">  426</span><span class="comment">    /// construction path behind every ordinary model registration, local or</span></div>
-<div class="line"><a id="l00427" name="l00427"></a><span class="lineno">  427</span><span class="comment">    /// remote, which is what makes &quot;set the log once in `main()`&quot; work</span></div>
-<div class="line"><a id="l00428" name="l00428"></a><span class="lineno">  428</span><span class="comment">    /// uniformly across topologies. Callers that need a specific instance</span></div>
-<div class="line"><a id="l00429" name="l00429"></a><span class="lineno">  429</span><span class="comment">    /// identity call `attachActionLog` again afterward to override it.</span></div>
-<div class="line"><a id="l00430" name="l00430"></a><span class="lineno">  430</span><span class="comment">    /// @tparam Model The model type to instantiate.</span></div>
-<div class="line"><a id="l00431" name="l00431"></a><span class="lineno">  431</span><span class="comment">    /// @return Owning pointer to the new holder.</span></div>
-<div class="line"><a id="l00432" name="l00432"></a><span class="lineno">  432</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> Model&gt;</div>
-<div class="line"><a id="l00433" name="l00433"></a><span class="lineno">  433</span>    <span class="keyword">static</span> std::unique_ptr&lt;IModelHolder&gt; create() {</div>
-<div class="line"><a id="l00434" name="l00434"></a><span class="lineno">  434</span>        <span class="keyword">auto</span> holder = std::make_unique&lt;ModelHolder&lt;Model&gt;&gt;();</div>
-<div class="line"><a id="l00435" name="l00435"></a><span class="lineno">  435</span>        <span class="keywordflow">if</span> (<span class="keyword">auto</span> log = ::morph::journal::defaultActionLog()) {</div>
-<div class="line"><a id="l00436" name="l00436"></a><span class="lineno">  436</span>            holder-&gt;attachActionLog(std::move(log), {});</div>
-<div class="line"><a id="l00437" name="l00437"></a><span class="lineno">  437</span>        }</div>
-<div class="line"><a id="l00438" name="l00438"></a><span class="lineno">  438</span>        <span class="keywordflow">return</span> holder;</div>
-<div class="line"><a id="l00439" name="l00439"></a><span class="lineno">  439</span>    }</div>
-<div class="line"><a id="l00440" name="l00440"></a><span class="lineno">  440</span>};</div>
-<div class="line"><a id="l00441" name="l00441"></a><span class="lineno">  441</span> </div>
-<div class="line"><a id="l00442" name="l00442"></a><span class="lineno">  442</span>}  <span class="comment">// namespace morph::model::detail</span></div>
+<div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span><span class="comment">    /// @brief Constructs the model by forwarding all arguments.</span></div>
+<div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
+<div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span>    <span class="keyword">explicit</span> ModelHolder(Args&amp;&amp;... args) : model{std::forward&lt;Args&gt;(args)...} {}</div>
+<div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span><span class="comment"></span> </div>
+<div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span><span class="comment">    /// @brief Returns `typeid(Model)` wrapped in a `std::type_index`.</span></div>
+<div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span>    [[nodiscard]] std::type_index type() const noexcept<span class="keyword"> override </span>{ <span class="keywordflow">return</span> <span class="keyword">typeid</span>(<a class="code hl_enumvalue" href="../../dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095aa559b87068921eec05086ce5485e9784">Model</a>); }</div>
+<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span><span class="comment"></span> </div>
+<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span><span class="comment">    /// @brief Returns `BackendChangedNotifiable&lt;Model&gt;` — a compile-time constant.</span></div>
+<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>    [[nodiscard]] <span class="keywordtype">bool</span> isBackendChangeAware() const noexcept<span class="keyword"> override </span>{ <span class="keywordflow">return</span> BackendChangedNotifiable&lt;Model&gt;; }</div>
+<div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span><span class="comment"></span> </div>
+<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span><span class="comment">    /// @brief Forwards to `Model::onBackendChanged()` iff `Model` declared one; no-op otherwise.</span></div>
+<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span><span class="comment">    /// This single definition is the final overrider for two unrelated base</span></div>
+<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span><span class="comment">    /// virtuals: `IModelHolder::onBackendChanged` (always), and — when `Model`</span></div>
+<div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span><span class="comment">    /// is notifiable — `IBackendChangedSink::onBackendChanged`, reached via</span></div>
+<div class="line"><a id="l00395" name="l00395"></a><span class="lineno">  395</span><span class="comment">    /// `BackendChangedMixin&lt;Model, true&gt;`; both call paths (`IModelHolder*` and</span></div>
+<div class="line"><a id="l00396" name="l00396"></a><span class="lineno">  396</span><span class="comment">    /// `dynamic_cast&lt;IBackendChangedSink*&gt;`) land here.</span></div>
+<div class="line"><a id="l00397" name="l00397"></a><span class="lineno">  397</span>    <span class="keywordtype">void</span> onBackendChanged()<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00398" name="l00398"></a><span class="lineno">  398</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (BackendChangedNotifiable&lt;Model&gt;) {</div>
+<div class="line"><a id="l00399" name="l00399"></a><span class="lineno">  399</span>            model.onBackendChanged();</div>
+<div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span>        }</div>
+<div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span>    }</div>
+<div class="line"><a id="l00402" name="l00402"></a><span class="lineno">  402</span> </div>
+<div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span><span class="keyword">protected</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00404" name="l00404"></a><span class="lineno">  404</span><span class="comment">    /// @brief Forwards to `Model::attachActionLog(log, contextKey)` iff `Model`</span></div>
+<div class="line"><a id="l00405" name="l00405"></a><span class="lineno">  405</span><span class="comment">    ///        declared one matching `ModelLevelActionLogAttachable`; no-op otherwise.</span></div>
+<div class="line"><a id="l00406" name="l00406"></a><span class="lineno">  406</span>    <span class="keywordtype">void</span> onActionLogAttached(<span class="keyword">const</span> std::shared_ptr&lt;::morph::journal::IActionLog&gt;&amp; log,</div>
+<div class="line"><a id="l00407" name="l00407"></a><span class="lineno">  407</span>                             <span class="keyword">const</span> std::string&amp; contextKey)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00408" name="l00408"></a><span class="lineno">  408</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (ModelLevelActionLogAttachable&lt;Model&gt;) {</div>
+<div class="line"><a id="l00409" name="l00409"></a><span class="lineno">  409</span>            model.attachActionLog(log, contextKey);</div>
+<div class="line"><a id="l00410" name="l00410"></a><span class="lineno">  410</span>        }</div>
+<div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span>    }</div>
+<div class="line"><a id="l00412" name="l00412"></a><span class="lineno">  412</span><span class="comment"></span> </div>
+<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span><span class="comment">    /// @brief Forwards to `Model::attachIdentity(primaryKey)` iff `Model`</span></div>
+<div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span><span class="comment">    ///        declared one matching `ModelIdentityAttachable`; no-op otherwise.</span></div>
+<div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span>    <span class="keywordtype">void</span> onIdentityAttached(<span class="keyword">const</span> std::string&amp; primaryKey)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00416" name="l00416"></a><span class="lineno">  416</span>        <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (ModelIdentityAttachable&lt;Model&gt;) {</div>
+<div class="line"><a id="l00417" name="l00417"></a><span class="lineno">  417</span>            model.attachIdentity(primaryKey);</div>
+<div class="line"><a id="l00418" name="l00418"></a><span class="lineno">  418</span>        }</div>
+<div class="line"><a id="l00419" name="l00419"></a><span class="lineno">  419</span>    }</div>
+<div class="line"><a id="l00420" name="l00420"></a><span class="lineno">  420</span>};</div>
+<div class="line"><a id="l00421" name="l00421"></a><span class="lineno">  421</span><span class="comment"></span> </div>
+<div class="line"><a id="l00422" name="l00422"></a><span class="lineno">  422</span><span class="comment">/// @brief Factory that creates default-constructed `ModelHolder&lt;Model&gt;` instances.</span></div>
+<div class="line"><a id="l00423" name="l00423"></a><span class="lineno">  423</span><span class="keyword">class </span>ModelFactory {</div>
+<div class="line"><a id="l00424" name="l00424"></a><span class="lineno">  424</span><span class="keyword">public</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00425" name="l00425"></a><span class="lineno">  425</span><span class="comment">    /// @brief Creates a new `ModelHolder&lt;Model&gt;` on the heap.</span></div>
+<div class="line"><a id="l00426" name="l00426"></a><span class="lineno">  426</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00427" name="l00427"></a><span class="lineno">  427</span><span class="comment">    /// If a process-wide default action log is installed (see</span></div>
+<div class="line"><a id="l00428" name="l00428"></a><span class="lineno">  428</span><span class="comment">    /// `morph::journal::setActionLog`), it is attached to the new holder</span></div>
+<div class="line"><a id="l00429" name="l00429"></a><span class="lineno">  429</span><span class="comment">    /// automatically (with an empty `entityKey`) — this is the single</span></div>
+<div class="line"><a id="l00430" name="l00430"></a><span class="lineno">  430</span><span class="comment">    /// construction path behind every ordinary model registration, local or</span></div>
+<div class="line"><a id="l00431" name="l00431"></a><span class="lineno">  431</span><span class="comment">    /// remote, which is what makes &quot;set the log once in `main()`&quot; work</span></div>
+<div class="line"><a id="l00432" name="l00432"></a><span class="lineno">  432</span><span class="comment">    /// uniformly across topologies. Callers that need a specific instance</span></div>
+<div class="line"><a id="l00433" name="l00433"></a><span class="lineno">  433</span><span class="comment">    /// identity call `attachActionLog` again afterward to override it.</span></div>
+<div class="line"><a id="l00434" name="l00434"></a><span class="lineno">  434</span><span class="comment">    /// @tparam Model The model type to instantiate.</span></div>
+<div class="line"><a id="l00435" name="l00435"></a><span class="lineno">  435</span><span class="comment">    /// @return Owning pointer to the new holder.</span></div>
+<div class="line"><a id="l00436" name="l00436"></a><span class="lineno">  436</span>    <span class="keyword">template</span> &lt;<span class="keyword">typename</span> Model&gt;</div>
+<div class="line"><a id="l00437" name="l00437"></a><span class="lineno">  437</span>    <span class="keyword">static</span> std::unique_ptr&lt;IModelHolder&gt; create() {</div>
+<div class="line"><a id="l00438" name="l00438"></a><span class="lineno">  438</span>        <span class="keyword">auto</span> holder = std::make_unique&lt;ModelHolder&lt;Model&gt;&gt;();</div>
+<div class="line"><a id="l00439" name="l00439"></a><span class="lineno">  439</span>        <span class="keywordflow">if</span> (<span class="keyword">auto</span> log = ::morph::journal::defaultActionLog()) {</div>
+<div class="line"><a id="l00440" name="l00440"></a><span class="lineno">  440</span>            holder-&gt;attachActionLog(std::move(log), {});</div>
+<div class="line"><a id="l00441" name="l00441"></a><span class="lineno">  441</span>        }</div>
+<div class="line"><a id="l00442" name="l00442"></a><span class="lineno">  442</span>        <span class="keywordflow">return</span> holder;</div>
+<div class="line"><a id="l00443" name="l00443"></a><span class="lineno">  443</span>    }</div>
+<div class="line"><a id="l00444" name="l00444"></a><span class="lineno">  444</span>};</div>
+<div class="line"><a id="l00445" name="l00445"></a><span class="lineno">  445</span> </div>
+<div class="line"><a id="l00446" name="l00446"></a><span class="lineno">  446</span>}  <span class="comment">// namespace morph::model::detail</span></div>
 <div class="ttc" id="adocument_8hpp_html_a2e79a467dd05ffb590a4f801b1d08095aa559b87068921eec05086ce5485e9784"><div class="ttname"><a href="../../dd/d39/document_8hpp.html#a2e79a467dd05ffb590a4f801b1d08095aa559b87068921eec05086ce5485e9784">morph::ui::detail::NameCategory::Model</a></div><div class="ttdeci">@ Model</div><div class="ttdoc">A model alias.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d39/document_8hpp_source.html#l02432">document.hpp:2432</a></div></div>
 <div class="ttc" id="astrand_8hpp_html"><div class="ttname"><a href="../../de/dc1/strand_8hpp.html">strand.hpp</a></div><div class="ttdoc">morph&#39;s strands: one per model instance, from core-cpp&#39;s core::async::KeyedStrands,...</div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_a0179dc557393efbb5572f4609b651b30"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30">morph::journal::LogEntry::principal</a></div><div class="ttdeci">std::string principal</div><div class="ttdoc">Auth principal from morph::session::current(), if any. Empty if unset.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00099">action_log.hpp:99</a></div></div>
+<div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_a084ff1fb86b035f282083050138b76c1"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a084ff1fb86b035f282083050138b76c1">morph::journal::LogEntry::originText</a></div><div class="ttdeci">std::string originText</div><div class="ttdoc">The words that led to this execution, when originKind is set. Empty otherwise.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00152">action_log.hpp:152</a></div></div>
+<div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_a1fb6748bcb1d4143a1f00d6044fb9192"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a1fb6748bcb1d4143a1f00d6044fb9192">morph::journal::LogEntry::originKind</a></div><div class="ttdeci">std::string originKind</div><div class="ttdoc">What started this execution, as the server said, such as assistant. Empty for an ordinary execute.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00149">action_log.hpp:149</a></div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_a253bed67a42a440ad432356b338f5b48"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a253bed67a42a440ad432356b338f5b48">morph::journal::LogEntry::entityKey</a></div><div class="ttdeci">std::string entityKey</div><div class="ttdoc">Stable identity of the model instance (e.g. an account id), stamped from the value passed to attachAc...</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00055">action_log.hpp:55</a></div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_ab965e19dcd3a6526e4d17e898bd69a07"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07">morph::journal::LogEntry::timestampMs</a></div><div class="ttdeci">int64_t timestampMs</div><div class="ttdoc">Wall-clock time of execution, milliseconds since the Unix epoch.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00102">action_log.hpp:102</a></div></div>
 <div class="ttc" id="astructmorph_1_1model_1_1ActionTraits_html"><div class="ttname"><a href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">morph::model::Result</a></div></div>

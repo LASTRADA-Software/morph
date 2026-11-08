@@ -90,7 +90,7 @@ var searchData=
   ['wizardtraits_87',['WizardTraits',['../de/d61/structmorph_1_1flows_1_1WizardTraits.html',1,'morph::flows']]],
   ['wizardview_88',['wizardView',['../df/df7/wizard__view_8hpp.html#a4834b3606dfbe8a7b13eee0bf067bad1',1,'morph::forms']]],
   ['wizardviewoptions_89',['WizardViewOptions',['../d3/dfe/structmorph_1_1forms_1_1WizardViewOptions.html',1,'morph::forms']]],
-  ['worker_90',['worker',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html#af450e166892e8dbd892468e736703eb0',1,'morph::table::EngineOptions']]],
+  ['worker_90',['worker',['../dd/deb/structmorph_1_1table_1_1EngineOptions.html#af450e166892e8dbd892468e736703eb0',1,'morph::table::EngineOptions::worker'],['../d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html#a0523aeb9740cf7e7fbb2944ce968ce14',1,'morph::ui::chat::ChatOptions::worker']]],
   ['workspace_91',['Workspace',['../d6/d77/classmorph_1_1ui_1_1Workspace.html',1,'morph::ui::Workspace'],['../d6/d77/classmorph_1_1ui_1_1Workspace.html#a340308fb37647b78ee0d5d12b133566e',1,'morph::ui::Workspace::Workspace()']]],
   ['workspace_2ehpp_92',['workspace.hpp',['../dc/de1/workspace_8hpp.html',1,'']]],
   ['workspace_5fmodel_2ehpp_93',['workspace_model.hpp',['../d0/d27/workspace__model_8hpp.html',1,'']]],
@@ -112,7 +112,7 @@ var searchData=
   ['wrappingrowstretchtakeslinespare_109',['wrappingRowStretchTakesLineSpare',['../d8/d3e/backend__conformance_8hpp.html#af5129b7e807a820070a25b90d95031b0',1,'morph::ui::testing::detail']]],
   ['write_110',['write',['../dc/d5d/structmorph_1_1backend_1_1ConnectionWriter.html#a44c48ab3c44fcf02306e495bb26ce37f',1,'morph::backend::ConnectionWriter::write'],['../d4/d0c/classmorph_1_1ui_1_1author_1_1Screen.html#ae3739a9cb7918c38d816e0423626a0da',1,'morph::ui::author::Screen::write()']]],
   ['writeenvelope_111',['writeEnvelope',['../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html#aefb0097d261175dbb3107c9df35c3482',1,'morph::wire::WireCodecOps']]],
-  ['writemessage_112',['writeMessage',['../d0/dab/bundle_8hpp.html#a8943b1f80c3cfa01e1eadaaa9501b30f',1,'morph::ui::detail']]],
+  ['writemessage_112',['writeMessage',['../d0/dab/bundle_8hpp.html#a8943b1f80c3cfa01e1eadaaa9501b30f',1,'morph::ui::detail::writeMessage()'],['../d8/dd1/protocol_8hpp.html#a12a770e79b9fe75b1481358d8d8d114b',1,'morph::ui::chat::writeMessage()']]],
   ['writeto_113',['writeTo',['../d0/d8f/classmorph_1_1ui_1_1author_1_1DeclScope.html#a4669a2921acff230cfbe70c32ec293e9',1,'morph::ui::author::DeclScope']]],
   ['writtencell_114',['writtenCell',['../dd/def/query_8hpp.html#a370bc0214d7d860f22fc843075c778c8',1,'morph::table::detail']]],
   ['ws_5fconnection_2ehpp_115',['ws_connection.hpp',['../d7/dd2/ws__connection_8hpp.html',1,'']]]

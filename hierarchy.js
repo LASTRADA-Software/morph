@@ -21,7 +21,8 @@ var hierarchy =
     ] ],
     [ "morph::backend::HealthStatus", "d1/d59/structmorph_1_1backend_1_1HealthStatus.html", null ],
     [ "morph::backend::IEnvelopeService", "d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html", [
-      [ "morph::ui::UiService", "d1/d38/classmorph_1_1ui_1_1UiService.html", null ]
+      [ "morph::ui::UiService", "d1/d38/classmorph_1_1ui_1_1UiService.html", null ],
+      [ "morph::ui::chat::ChatService", "db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html", null ]
     ] ],
     [ "morph::backend::IEnvelopeTransport", "d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html", [
       [ "morph::net::SocketBackend", "d5/d98/classmorph_1_1net_1_1SocketBackend.html", null ],
@@ -298,12 +299,14 @@ var hierarchy =
     [ "morph::session::Context", "dd/d85/structmorph_1_1session_1_1Context.html", null ],
     [ "morph::session::detail::EscapingWriteOpts", "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html", null ],
     [ "morph::session::detail::ScopedContext", "dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext.html", null ],
+    [ "morph::session::detail::ScopedOrigin", "d7/d6b/classmorph_1_1session_1_1detail_1_1ScopedOrigin.html", null ],
     [ "morph::session::IAuthorizer", "d5/d07/structmorph_1_1session_1_1IAuthorizer.html", [
       [ "morph::session::AllowAllAuthorizer", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html", null ],
       [ "morph::session::SigningAuthorizer", "db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html", null ]
     ] ],
     [ "morph::session::IAuthorizer::Admission", "dd/d88/structmorph_1_1session_1_1IAuthorizer_1_1Admission.html", null ],
     [ "morph::session::Principal", "d0/d26/structmorph_1_1session_1_1Principal.html", null ],
+    [ "morph::session::RunOrigin", "d7/df6/structmorph_1_1session_1_1RunOrigin.html", null ],
     [ "morph::session::SessionToken", "d8/dd5/structmorph_1_1session_1_1SessionToken.html", null ],
     [ "morph::session::TokenIssuer", "dc/de7/classmorph_1_1session_1_1TokenIssuer.html", null ],
     [ "morph::session::TokenVerifier", "d5/dc7/classmorph_1_1session_1_1TokenVerifier.html", null ],
@@ -513,6 +516,7 @@ var hierarchy =
     [ "morph::ui::CatalogEntry", "d7/d47/structmorph_1_1ui_1_1CatalogEntry.html", null ],
     [ "morph::ui::CatalogReply", "de/df1/structmorph_1_1ui_1_1CatalogReply.html", null ],
     [ "morph::ui::Catalogue", "d9/d73/structmorph_1_1ui_1_1Catalogue.html", null ],
+    [ "morph::ui::ChannelFacts", "d8/dc6/structmorph_1_1ui_1_1ChannelFacts.html", null ],
     [ "morph::ui::Chart", "d5/dee/structmorph_1_1ui_1_1Chart.html", null ],
     [ "morph::ui::ChartData", "dd/dcc/structmorph_1_1ui_1_1ChartData.html", null ],
     [ "morph::ui::ChartLine", "de/d88/structmorph_1_1ui_1_1ChartLine.html", null ],
@@ -521,6 +525,34 @@ var hierarchy =
     [ "morph::ui::ChartSeries", "d9/dfd/structmorph_1_1ui_1_1ChartSeries.html", null ],
     [ "morph::ui::ChartTick", "d5/dfb/structmorph_1_1ui_1_1ChartTick.html", null ],
     [ "morph::ui::ChartTicks", "da/daa/structmorph_1_1ui_1_1ChartTicks.html", null ],
+    [ "morph::ui::chat::BoundTool", "df/d6c/structmorph_1_1ui_1_1chat_1_1BoundTool.html", null ],
+    [ "morph::ui::chat::ChatClient", "dd/dc9/classmorph_1_1ui_1_1chat_1_1ChatClient.html", null ],
+    [ "morph::ui::chat::ChatClient::Entry", "d5/de2/structmorph_1_1ui_1_1chat_1_1ChatClient_1_1Entry.html", null ],
+    [ "morph::ui::chat::ChatConfig", "d6/d12/structmorph_1_1ui_1_1chat_1_1ChatConfig.html", null ],
+    [ "morph::ui::chat::ChatLimits", "d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html", null ],
+    [ "morph::ui::chat::ChatOptions", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html", null ],
+    [ "morph::ui::chat::ChatPanelBinding", "df/d0d/classmorph_1_1ui_1_1chat_1_1ChatPanelBinding.html", null ],
+    [ "morph::ui::chat::ConversationKey", "d6/db8/structmorph_1_1ui_1_1chat_1_1ConversationKey.html", null ],
+    [ "morph::ui::chat::ConversationStore", "dd/daa/classmorph_1_1ui_1_1chat_1_1ConversationStore.html", null ],
+    [ "morph::ui::chat::IProvider", "d9/da2/classmorph_1_1ui_1_1chat_1_1IProvider.html", [
+      [ "morph::ui::chat::testing::FakeChatProvider", "d0/d45/classmorph_1_1ui_1_1chat_1_1testing_1_1FakeChatProvider.html", null ]
+    ] ],
+    [ "morph::ui::chat::IProviderCall", "d9/ddb/classmorph_1_1ui_1_1chat_1_1IProviderCall.html", null ],
+    [ "morph::ui::chat::Message", "dc/d1a/structmorph_1_1ui_1_1chat_1_1Message.html", null ],
+    [ "morph::ui::chat::ModelRef", "d6/d10/structmorph_1_1ui_1_1chat_1_1ModelRef.html", null ],
+    [ "morph::ui::chat::ProviderConfig", "d3/d67/structmorph_1_1ui_1_1chat_1_1ProviderConfig.html", null ],
+    [ "morph::ui::chat::ProviderSink", "db/d17/structmorph_1_1ui_1_1chat_1_1ProviderSink.html", null ],
+    [ "morph::ui::chat::Request", "d9/d9b/structmorph_1_1ui_1_1chat_1_1Request.html", null ],
+    [ "morph::ui::chat::Response", "dd/d89/structmorph_1_1ui_1_1chat_1_1Response.html", null ],
+    [ "morph::ui::chat::StateRequest", "d2/d1d/structmorph_1_1ui_1_1chat_1_1StateRequest.html", null ],
+    [ "morph::ui::chat::ToolCall", "d5/d23/structmorph_1_1ui_1_1chat_1_1ToolCall.html", null ],
+    [ "morph::ui::chat::ToolResult", "d5/d82/structmorph_1_1ui_1_1chat_1_1ToolResult.html", null ],
+    [ "morph::ui::chat::ToolSpec", "dc/d9e/structmorph_1_1ui_1_1chat_1_1ToolSpec.html", null ],
+    [ "morph::ui::chat::ToolStep", "d3/dcf/structmorph_1_1ui_1_1chat_1_1ToolStep.html", null ],
+    [ "morph::ui::chat::TurnAccepted", "df/df9/structmorph_1_1ui_1_1chat_1_1TurnAccepted.html", null ],
+    [ "morph::ui::chat::TurnEvent", "d1/d31/structmorph_1_1ui_1_1chat_1_1TurnEvent.html", null ],
+    [ "morph::ui::chat::TurnRequest", "d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html", null ],
+    [ "morph::ui::chat::TurnState", "d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html", null ],
     [ "morph::ui::Checkbox", "d0/db4/structmorph_1_1ui_1_1Checkbox.html", null ],
     [ "morph::ui::CheckDecl", "d8/d34/structmorph_1_1ui_1_1CheckDecl.html", null ],
     [ "morph::ui::Collapsible", "d0/db5/structmorph_1_1ui_1_1Collapsible.html", null ],
@@ -756,6 +788,7 @@ var hierarchy =
     [ "morph::ui::Row", "d7/da8/structmorph_1_1ui_1_1Row.html", null ],
     [ "morph::ui::ScopeDecl", "d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html", null ],
     [ "morph::ui::Screen", "da/d97/classmorph_1_1ui_1_1Screen.html", null ],
+    [ "morph::ui::Screen::BoundAlias", "d4/d41/structmorph_1_1ui_1_1Screen_1_1BoundAlias.html", null ],
     [ "morph::ui::ScreenHandle", "da/de8/classmorph_1_1ui_1_1ScreenHandle.html", [
       [ "morph::ui::Explorer", "d9/df4/classmorph_1_1ui_1_1Explorer.html", null ]
     ] ],

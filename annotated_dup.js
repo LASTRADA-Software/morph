@@ -319,12 +319,14 @@ var annotated_dup =
       [ "session", null, [
         [ "detail", null, [
           [ "EscapingWriteOpts", "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html", "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts" ],
-          [ "ScopedContext", "dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext.html", "dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext" ]
+          [ "ScopedContext", "dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext.html", "dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext" ],
+          [ "ScopedOrigin", "d7/d6b/classmorph_1_1session_1_1detail_1_1ScopedOrigin.html", "d7/d6b/classmorph_1_1session_1_1detail_1_1ScopedOrigin" ]
         ] ],
         [ "AllowAllAuthorizer", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer" ],
         [ "Context", "dd/d85/structmorph_1_1session_1_1Context.html", "dd/d85/structmorph_1_1session_1_1Context" ],
         [ "IAuthorizer", "d5/d07/structmorph_1_1session_1_1IAuthorizer.html", "d5/d07/structmorph_1_1session_1_1IAuthorizer" ],
         [ "Principal", "d0/d26/structmorph_1_1session_1_1Principal.html", "d0/d26/structmorph_1_1session_1_1Principal" ],
+        [ "RunOrigin", "d7/df6/structmorph_1_1session_1_1RunOrigin.html", "d7/df6/structmorph_1_1session_1_1RunOrigin" ],
         [ "SessionToken", "d8/dd5/structmorph_1_1session_1_1SessionToken.html", "d8/dd5/structmorph_1_1session_1_1SessionToken" ],
         [ "SigningAuthorizer", "db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html", "db/dd9/classmorph_1_1session_1_1SigningAuthorizer" ],
         [ "TokenIssuanceError", "d1/da4/structmorph_1_1session_1_1TokenIssuanceError.html", null ],
@@ -513,6 +515,37 @@ var annotated_dup =
           [ "RegisteredScreen", "d2/dc8/structmorph_1_1ui_1_1author_1_1RegisteredScreen.html", "d2/dc8/structmorph_1_1ui_1_1author_1_1RegisteredScreen" ],
           [ "ScreenRegistry", "dc/d7c/classmorph_1_1ui_1_1author_1_1ScreenRegistry.html", "dc/d7c/classmorph_1_1ui_1_1author_1_1ScreenRegistry" ]
         ] ],
+        [ "chat", null, [
+          [ "testing", null, [
+            [ "FakeChatProvider", "d0/d45/classmorph_1_1ui_1_1chat_1_1testing_1_1FakeChatProvider.html", "d0/d45/classmorph_1_1ui_1_1chat_1_1testing_1_1FakeChatProvider" ]
+          ] ],
+          [ "BoundTool", "df/d6c/structmorph_1_1ui_1_1chat_1_1BoundTool.html", "df/d6c/structmorph_1_1ui_1_1chat_1_1BoundTool" ],
+          [ "ChatClient", "dd/dc9/classmorph_1_1ui_1_1chat_1_1ChatClient.html", "dd/dc9/classmorph_1_1ui_1_1chat_1_1ChatClient" ],
+          [ "ChatConfig", "d6/d12/structmorph_1_1ui_1_1chat_1_1ChatConfig.html", "d6/d12/structmorph_1_1ui_1_1chat_1_1ChatConfig" ],
+          [ "ChatLimits", "d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits.html", "d4/d9d/structmorph_1_1ui_1_1chat_1_1ChatLimits" ],
+          [ "ChatOptions", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html", "d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions" ],
+          [ "ChatPanelBinding", "df/d0d/classmorph_1_1ui_1_1chat_1_1ChatPanelBinding.html", "df/d0d/classmorph_1_1ui_1_1chat_1_1ChatPanelBinding" ],
+          [ "ChatService", "db/df0/classmorph_1_1ui_1_1chat_1_1ChatService.html", "db/df0/classmorph_1_1ui_1_1chat_1_1ChatService" ],
+          [ "ConversationKey", "d6/db8/structmorph_1_1ui_1_1chat_1_1ConversationKey.html", "d6/db8/structmorph_1_1ui_1_1chat_1_1ConversationKey" ],
+          [ "ConversationStore", "dd/daa/classmorph_1_1ui_1_1chat_1_1ConversationStore.html", "dd/daa/classmorph_1_1ui_1_1chat_1_1ConversationStore" ],
+          [ "IProvider", "d9/da2/classmorph_1_1ui_1_1chat_1_1IProvider.html", "d9/da2/classmorph_1_1ui_1_1chat_1_1IProvider" ],
+          [ "IProviderCall", "d9/ddb/classmorph_1_1ui_1_1chat_1_1IProviderCall.html", "d9/ddb/classmorph_1_1ui_1_1chat_1_1IProviderCall" ],
+          [ "Message", "dc/d1a/structmorph_1_1ui_1_1chat_1_1Message.html", "dc/d1a/structmorph_1_1ui_1_1chat_1_1Message" ],
+          [ "ModelRef", "d6/d10/structmorph_1_1ui_1_1chat_1_1ModelRef.html", "d6/d10/structmorph_1_1ui_1_1chat_1_1ModelRef" ],
+          [ "ProviderConfig", "d3/d67/structmorph_1_1ui_1_1chat_1_1ProviderConfig.html", "d3/d67/structmorph_1_1ui_1_1chat_1_1ProviderConfig" ],
+          [ "ProviderSink", "db/d17/structmorph_1_1ui_1_1chat_1_1ProviderSink.html", "db/d17/structmorph_1_1ui_1_1chat_1_1ProviderSink" ],
+          [ "Request", "d9/d9b/structmorph_1_1ui_1_1chat_1_1Request.html", "d9/d9b/structmorph_1_1ui_1_1chat_1_1Request" ],
+          [ "Response", "dd/d89/structmorph_1_1ui_1_1chat_1_1Response.html", "dd/d89/structmorph_1_1ui_1_1chat_1_1Response" ],
+          [ "StateRequest", "d2/d1d/structmorph_1_1ui_1_1chat_1_1StateRequest.html", "d2/d1d/structmorph_1_1ui_1_1chat_1_1StateRequest" ],
+          [ "ToolCall", "d5/d23/structmorph_1_1ui_1_1chat_1_1ToolCall.html", "d5/d23/structmorph_1_1ui_1_1chat_1_1ToolCall" ],
+          [ "ToolResult", "d5/d82/structmorph_1_1ui_1_1chat_1_1ToolResult.html", "d5/d82/structmorph_1_1ui_1_1chat_1_1ToolResult" ],
+          [ "ToolSpec", "dc/d9e/structmorph_1_1ui_1_1chat_1_1ToolSpec.html", "dc/d9e/structmorph_1_1ui_1_1chat_1_1ToolSpec" ],
+          [ "ToolStep", "d3/dcf/structmorph_1_1ui_1_1chat_1_1ToolStep.html", "d3/dcf/structmorph_1_1ui_1_1chat_1_1ToolStep" ],
+          [ "TurnAccepted", "df/df9/structmorph_1_1ui_1_1chat_1_1TurnAccepted.html", "df/df9/structmorph_1_1ui_1_1chat_1_1TurnAccepted" ],
+          [ "TurnEvent", "d1/d31/structmorph_1_1ui_1_1chat_1_1TurnEvent.html", "d1/d31/structmorph_1_1ui_1_1chat_1_1TurnEvent" ],
+          [ "TurnRequest", "d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html", "d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest" ],
+          [ "TurnState", "d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html", "d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState" ]
+        ] ],
         [ "detail", null, [
           [ "catalogue", null, [
             [ "TitleParts", "d2/d80/structmorph_1_1ui_1_1detail_1_1catalogue_1_1TitleParts.html", "d2/d80/structmorph_1_1ui_1_1detail_1_1catalogue_1_1TitleParts" ]
@@ -676,6 +709,7 @@ var annotated_dup =
         [ "CatalogEntry", "d7/d47/structmorph_1_1ui_1_1CatalogEntry.html", "d7/d47/structmorph_1_1ui_1_1CatalogEntry" ],
         [ "CatalogReply", "de/df1/structmorph_1_1ui_1_1CatalogReply.html", "de/df1/structmorph_1_1ui_1_1CatalogReply" ],
         [ "Catalogue", "d9/d73/structmorph_1_1ui_1_1Catalogue.html", "d9/d73/structmorph_1_1ui_1_1Catalogue" ],
+        [ "ChannelFacts", "d8/dc6/structmorph_1_1ui_1_1ChannelFacts.html", "d8/dc6/structmorph_1_1ui_1_1ChannelFacts" ],
         [ "Chart", "d5/dee/structmorph_1_1ui_1_1Chart.html", "d5/dee/structmorph_1_1ui_1_1Chart" ],
         [ "ChartData", "dd/dcc/structmorph_1_1ui_1_1ChartData.html", "dd/dcc/structmorph_1_1ui_1_1ChartData" ],
         [ "ChartLine", "de/d88/structmorph_1_1ui_1_1ChartLine.html", "de/d88/structmorph_1_1ui_1_1ChartLine" ],

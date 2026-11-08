@@ -138,11 +138,13 @@ ModelChannel &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ModelCha
 ModelChannel &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ModelChannel &amp;&amp;)=delete</td></tr>
 <tr class="memitem:af066ee2e64c2df167c39be29aef7a3f7" id="r_af066ee2e64c2df167c39be29aef7a3f7"><td class="memItemLeft">virtual <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">async::Completion</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af066ee2e64c2df167c39be29aef7a3f7">execute</a> (std::string const &amp;actionId, std::string const &amp;bodyJson, <a class="el" href="../../df/dd1/structmorph_1_1ui_1_1CallOptions.html">CallOptions</a> options)=0</td></tr>
 <tr class="memdesc:af066ee2e64c2df167c39be29aef7a3f7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends one action.  <br /></td></tr>
+<tr class="memitem:a52f0b1c8a44644d8c853d957d335a161" id="r_a52f0b1c8a44644d8c853d957d335a161"><td class="memItemLeft">virtual <a class="el" href="../../d8/dc6/structmorph_1_1ui_1_1ChannelFacts.html">ChannelFacts</a>&#160;</td><td class="memItemRight"><a class="el" href="#a52f0b1c8a44644d8c853d957d335a161">facts</a> () const</td></tr>
+<tr class="memdesc:a52f0b1c8a44644d8c853d957d335a161"><td class="mdescLeft">&#160;</td><td class="mdescRight">The instance it is bound to, as far as it knows.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One bound model alias: the instance a document's alias names, and the calls made through it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="af066ee2e64c2df167c39be29aef7a3f7" name="af066ee2e64c2df167c39be29aef7a3f7"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af066ee2e64c2df167c39be29aef7a3f7">&#9670;&#160;</a></span>execute()</h2>
@@ -186,6 +188,36 @@ ModelChannel &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ModelCha
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reply's JSON text, delivered on the runtime's owner. </dd></dl>
+
+</div>
+</div>
+<a id="a52f0b1c8a44644d8c853d957d335a161" name="a52f0b1c8a44644d8c853d957d335a161"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a52f0b1c8a44644d8c853d957d335a161">&#9670;&#160;</a></span>facts()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../d8/dc6/structmorph_1_1ui_1_1ChannelFacts.html">ChannelFacts</a> morph::ui::ModelChannel::facts </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The instance it is bound to, as far as it knows. </p>
+<dl class="section return"><dt>Returns</dt><dd>The facts; an empty set for a channel with no instance of its own to report. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l00103">103</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
