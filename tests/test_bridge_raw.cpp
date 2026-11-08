@@ -108,6 +108,12 @@ TEST_CASE("RawHandler: dispatches by id and keeps the instance's state", "[bridg
     CHECK(await(rig, handler.execute("Raw_Rename", R"({"name":"lab"})")).value == R"("renamed to lab")");
 }
 
+TEST_CASE("RawHandler: typeId names the model the handler was made for", "[bridge][raw]") {
+    RawRig rig{Mode::Local};
+    RawHandler handler{*rig.bridge, &rig.owner, "Raw_Counter"};
+    CHECK(handler.typeId() == "Raw_Counter");
+}
+
 TEST_CASE("RawHandler: a model's refusal, an unknown action and a malformed body reject the call", "[bridge][raw]") {
     auto const mode = GENERATE(Mode::Local, Mode::Remote);
     RawRig rig{mode};

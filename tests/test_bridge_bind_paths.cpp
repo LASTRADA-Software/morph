@@ -791,3 +791,26 @@ TEST_CASE("A call made on the owner before a posted handler registration runs is
     REQUIRE(failure.what.empty());
     REQUIRE(result.load() == 3);
 }
+
+// ── Small observable surface ─────────────────────────────────────────────────
+
+TEST_CASE("describeFailure reads a std::exception by its message and anything else generically", "[bridge][log]") {
+    using morph::bridge::detail::describeFailure;
+    CHECK(describeFailure(std::make_exception_ptr(std::runtime_error{"boom"})) == "boom");
+    CHECK(describeFailure(std::make_exception_ptr(42)) == "unknown error");
+    CHECK(describeFailure(std::exception_ptr{}) == "unknown error");
+}
+
+TEST_CASE("Bridge::hasSubscribers follows the handler's subscription", "[bridge][subscribe]") {
+    Rig rig;
+    CHECK_FALSE(rig.bridge->hasSubscribers());
+    {
+        BridgeHandler<BbpModel> handler{*rig.bridge, &rig.owner};
+        handler.subscribe<BbpValue>([](BbpValue) {});
+        CHECK(rig.bridge->hasSubscribers());
+        handler.unsubscribe<BbpValue>();
+        CHECK_FALSE(rig.bridge->hasSubscribers());
+        handler.subscribe<BbpValue>([](BbpValue) {});
+        CHECK(rig.bridge->hasSubscribers());
+    }
+}
