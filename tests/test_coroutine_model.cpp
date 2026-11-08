@@ -1588,3 +1588,72 @@ TEST_CASE("ActionGate counts a second thread inside it as an overlap", "[corouti
     release.set_value();
     holder.join();
 }
+
+// ── Handlers that throw something that is not a std::exception ───────────────
+
+namespace coro_test {
+struct ForeignPlain {
+    int tag = 0;
+};
+struct ForeignPreTask {
+    int tag = 0;
+};
+/// A model whose handlers fail with an `int`, an ordinary one and a Task handler that throws
+/// before it returns its Task.
+struct ForeignThrowModel {
+    // NOLINTBEGIN(readability-convert-member-functions-to-static, hicpp-exception-baseclass, bugprone-std-exception-baseclass)
+    int execute(const ForeignPlain& /*action*/) { throw 42; }
+    core::async::Task<int> execute(const ForeignPreTask& /*action*/) { throw 43; }
+    // NOLINTEND(readability-convert-member-functions-to-static, hicpp-exception-baseclass, bugprone-std-exception-baseclass)
+};
+}  // namespace coro_test
+
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define CORO_FOREIGN_ACTION(ACTION, NAME)                                                         \
+    template <>                                                                                   \
+    struct morph::model::ActionTraits<coro_test::ACTION> {                                        \
+        using Result = int;                                                                       \
+        static constexpr std::string_view typeId() { return NAME; }                               \
+        static std::string toJson(const coro_test::ACTION&) { return "{}"; }                      \
+        static coro_test::ACTION fromJson(std::string_view) { return {}; }                        \
+        static std::string resultToJson(const int& result) { return std::to_string(result); }     \
+        static int resultFromJson(std::string_view json) { return std::stoi(std::string{json}); } \
+    };
+// NOLINTNEXTLINE(modernize-use-string-view)
+CORO_FOREIGN_ACTION(ForeignPlain, "Coro_ForeignPlain")
+// NOLINTNEXTLINE(modernize-use-string-view)
+CORO_FOREIGN_ACTION(ForeignPreTask, "Coro_ForeignPreTask")
+#undef CORO_FOREIGN_ACTION
+
+template <>
+struct morph::model::ModelTraits<coro_test::ForeignThrowModel> {
+    static constexpr std::string_view typeId() { return "Coro_ForeignThrowModel"; }
+};
+
+TEST_CASE("dispatchAsync hands a handler's non-std exception to done", "[coroutine][remote]") {
+    morph::model::detail::ActionDispatcher dispatcher;
+    dispatcher.registerAction<coro_test::ForeignThrowModel, coro_test::ForeignPlain>("Coro_ForeignThrowModel",
+                                                                                     "Coro_ForeignPlain");
+    dispatcher.registerAction<coro_test::ForeignThrowModel, coro_test::ForeignPreTask>("Coro_ForeignThrowModel",
+                                                                                       "Coro_ForeignPreTask");
+    auto holder = morph::model::detail::ModelFactory::create<coro_test::ForeignThrowModel>();
+
+    auto const thrownBy = [&](std::string_view action) {
+        int thrown = 0;
+        bool called = false;
+        dispatcher.dispatchAsync("Coro_ForeignThrowModel", action, *holder, "{}", nullptr, core::async::StopToken{},
+                                 [&](const std::string&, const std::exception_ptr& error) {
+                                     called = true;
+                                     REQUIRE(error != nullptr);
+                                     try {
+                                         std::rethrow_exception(error);
+                                     } catch (int const& value) {
+                                         thrown = value;
+                                     }
+                                 });
+        REQUIRE(called);
+        return thrown;
+    };
+    CHECK(thrownBy("Coro_ForeignPlain") == 42);
+    CHECK(thrownBy("Coro_ForeignPreTask") == 43);
+}
