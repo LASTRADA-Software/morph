@@ -136,7 +136,14 @@ TEST_CASE("lims screens: registration registers a client and a sample, then open
         auto const rows = harness.backend().children(sites);
         return std::ranges::any_of(rows, [&harness](int row) { return harness.backend().hasProp(row, "rowKey"); });
     }));
+    // A client alone is not enough: the button waits for a site too.
+    auto const registerEnabled = [&harness] {
+        return harness.backend().prop(*harness.backend().find("Button", "testId", "registerSample"), "enabled") !=
+               "false";
+    };
+    CHECK_FALSE(registerEnabled());
     harness.backend().selectRows(sites, {morph::ui::Key{std::int64_t{1}}});
+    REQUIRE(harness.waitFor(registerEnabled));
     harness.edit("reference", "WW-7");
     harness.click("registerSample");
     REQUIRE(harness.waitFor([&harness] { return harness.mounted().size() == 2; }));

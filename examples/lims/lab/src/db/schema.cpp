@@ -180,6 +180,9 @@ LIGHTWEIGHT_SQL_MIGRATION(20261107000001, "Create lims_ignition_tests table") {
         .Column("mass_after", Real());
 }
 
+// Must run after org's companies/sites migration (20261109000001): the foreign key names org_sites and the backfill
+// names the seeded site, both of which that migration creates. Migrations run in timestamp order, and the
+// timestamps are what put this one second.
 LIGHTWEIGHT_SQL_MIGRATION(20261109000002, "Give every lims_samples row its site") {
     plan.AlterTable("lims_samples")
         .AddNotRequiredForeignKeyColumn(

@@ -24,12 +24,14 @@ public:
     /// @param action Its name, base currency and fiscal-year start.
     /// @return The new company.
     /// @throws ValidationError if the name is empty or longer than 128 bytes.
+    /// @throws Conflict if a company already has that name.
     /// @throws EmptyPrincipalError if no principal is authenticated.
     CompanyView execute(const CreateCompany& action);
 
     /// @brief Lists the companies.
     /// @param action Carries nothing.
     /// @return Every company, by id.
+    /// @throws ValidationError if a stored row holds a currency or month outside its enumeration.
     ListCompaniesResult execute(const ListCompanies& action);
 
     /// @brief Creates a site in a company.
@@ -37,6 +39,7 @@ public:
     /// @return The new site.
     /// @throws ValidationError if no company is named, or the name is empty or longer than 128 bytes.
     /// @throws NotFound if the company does not exist.
+    /// @throws Conflict if the company already has a site with that name.
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SiteView execute(const CreateSite& action);
 

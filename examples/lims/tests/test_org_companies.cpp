@@ -3,12 +3,14 @@
 // Companies and sites (lims/org): the scopes every later record and role is judged in. The first org migration seeds
 // one company and one site, because every record that existed before companies did needs one to belong to.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <glaze/glaze.hpp>
 #include <morph/core/registry.hpp>
 #include <string>
 
 #include "lims/org/core/errors.hpp"
+#include "lims/org/db/org_entity.hpp"
 #include "lims/org/dto/company_dto.hpp"
 #include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
@@ -103,3 +105,69 @@ TEST_CASE("org: the company and site forms are served with explicit submit and c
     CHECK(company.contains("December"));
 }
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
+// Mutation: lift the 128-byte bound (a 129-byte name is accepted).
+TEST_CASE("org: a company or site name of 128 bytes is accepted and one of 129 is refused", "[lims][org]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    std::string const longest(128, 'a');
+    std::string const tooLong(129, 'b');
+
+    CHECK(org.execute(lims::CreateCompany{.name = longest}).name == longest);
+    CHECK_THROWS_AS(org.execute(lims::CreateCompany{.name = tooLong}), lims::ValidationError);
+    CHECK(org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = longest}).name == longest);
+    CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = tooLong}),
+                    lims::ValidationError);
+}
+
+// Mutation: drop the company-name check (a second "Main laboratory" is created).
+TEST_CASE("org: a company name is unique", "[lims][org]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    CHECK_THROWS_AS(org.execute(lims::CreateCompany{.name = "Main laboratory"}), lims::Conflict);
+    CHECK(org.execute(lims::ListCompanies{}).companies.size() == 1);
+    CHECK(org.execute(lims::CreateCompany{.name = "Osaka branch"}).id.hasValue());
+}
+
+// Mutation: drop the site-name check (a second "Main site" is created in the company).
+TEST_CASE("org: a site name is unique within its company, not across companies", "[lims][org]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Main site"}),
+                    lims::Conflict);
+    CHECK(org.execute(lims::ListSites{}).sites.size() == 1);
+
+    auto const osaka = org.execute(lims::CreateCompany{.name = "Osaka branch"});
+    auto const sameName = org.execute(lims::CreateSite{.companyId = osaka.id, .name = "Main site"});
+    CHECK(sameName.companyId == osaka.id);
+    CHECK(org.execute(lims::ListSites{}).sites.size() == 2);
+}
+
+// Mutation: cast the stored integers without the range check (the corrupt row reads back as a value outside the enum).
+TEST_CASE("org: a company row storing a currency or month outside its enumeration is refused on read", "[lims][org]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    {
+        Lightweight::DataMapper mapper;
+        lims::db::CompanyRecord row;
+        row.name = Lightweight::SqlAnsiString<128>{"Corrupt currency"};
+        row.baseCurrency = 99;
+        mapper.Create(row);
+    }
+    CHECK_THROWS_AS(org.execute(lims::ListCompanies{}), lims::ValidationError);
+    {
+        Lightweight::DataMapper mapper;
+        for (auto& row : mapper.Query<lims::db::CompanyRecord>().All()) {
+            if (row.baseCurrency.Value() == 99) {
+                row.baseCurrency = 0;
+                row.fiscalYearStart = 12;
+                mapper.Update(row);
+            }
+        }
+    }
+    CHECK_THROWS_AS(org.execute(lims::ListCompanies{}), lims::ValidationError);
+}

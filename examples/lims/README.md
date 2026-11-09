@@ -141,7 +141,12 @@ transitions; journal as regulatory audit.
   new build replays, and a renamed field throws `SchemaMismatchError` rather
   than decoding a lab result to a default. An additive field throws there
   too — `replay()`'s gate is fingerprint equality, not compatibility — and
-  is admitted by a pass-through migration. The *wire* half (an old
+  is admitted by a pass-through migration. This rung's shipped code never
+  calls `journal::replay()` and registers no `PayloadMigrationRegistry`, so the
+  fields an action gains (`RegisterSample::siteId`, `HeaderSection::siteId`)
+  need no migration here: entries recorded afterwards carry the new
+  fingerprint, and only a deployment that replays an older journal registers a
+  pass-through migration for the action. The *wire* half (an old
   `MORPH_CLIENT_ONLY` client against a new server) stays open: nothing
   mechanically enforces the action-evolution policy on that path: there is no
   per-action `hello` fingerprint to assert on.

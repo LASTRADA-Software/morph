@@ -40,6 +40,7 @@
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/lab/offline/field_outbox.hpp"
 #include "lims/org/core/errors.hpp"
+#include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
@@ -168,6 +169,41 @@ TEST_CASE("A payload-keyed OpenSample attaches a fresh handler in every mode", "
     // And key-less actions on it now act on that sample.
     CHECK(awaitQt(office.execute(lims::ReceiveSample{})).state == lims::SampleState::Received);
     CHECK(awaitQt(office.execute(lims::GetSample{})).state == lims::SampleState::Received);
+}
+
+TEST_CASE("OrgModel over the full backend-mode matrix: a company, its site and a sample registered there",
+          "[lims][matrix][org]") {
+    const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    DbFixture fixture;
+
+    BackendRig rig{mode, 1, makeAuthorizer()};
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "alice"));
+
+    auto org = rig.client<lims::OrgModel>(0);
+    const auto company = awaitQt(org.execute(lims::CreateCompany{
+        .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April}));
+    REQUIRE(company.id.hasValue());
+    const auto site = awaitQt(org.execute(lims::CreateSite{.companyId = company.id, .name = "Osaka lab"}));
+    REQUIRE(site.id.hasValue());
+    CHECK(site.companyId == company.id);
+
+    const auto companies = awaitQt(org.execute(lims::ListCompanies{})).companies;
+    REQUIRE(companies.size() == 2);
+    CHECK(companies.back().id == company.id);
+    CHECK(companies.back().baseCurrency == lims::CurrencyCode::JPY);
+    CHECK(companies.back().fiscalYearStart == lims::Month::April);
+    const auto sites = awaitQt(org.execute(lims::ListSites{})).sites;
+    REQUIRE(sites.size() == 2);
+    CHECK(sites.back().id == site.id);
+    CHECK(sites.back().companyId == company.id);
+
+    auto bench = rig.client<lims::SampleModel>(0);
+    const auto client = awaitQt(bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
+    const auto registered = awaitQt(
+        bench.execute(lims::RegisterSample{.siteId = site.id, .clientId = client.clientId, .reference = "OS-1"}));
+    CHECK(registered.siteId == site.id);
 }
 
 TEST_CASE("Two connections attached to one sample share the instance", "[lims][matrix][socket-only]") {

@@ -16,15 +16,28 @@ namespace lims {
 
 namespace {
 
+/// @brief The highest stored value of `CurrencyCode`.
+constexpr int kMaxCurrencyCode = static_cast<int>(CurrencyCode::JPY);
+
+/// @brief The highest stored value of `Month`.
+constexpr int kMaxMonth = static_cast<int>(Month::December);
+
 /// @brief Maps a company row to its view.
 /// @param row The row.
 /// @return The view.
+/// @throws ValidationError if the row stores a currency or a month outside its enumeration.
 [[nodiscard]] CompanyView toView(db::CompanyRecord const& row) {
+    int const currency = row.baseCurrency.Value();
+    int const month = row.fiscalYearStart.Value();
+    if (currency < 0 || currency > kMaxCurrencyCode || month < 0 || month > kMaxMonth) {
+        throw ValidationError{"company " + std::to_string(row.id.Value()) +
+                              " stores a base currency or fiscal-year start outside its range"};
+    }
     return CompanyView{
         .id = CompanyId{static_cast<std::int64_t>(row.id.Value())},
         .name = std::string{row.name.Value().ToStringView()},
-        .baseCurrency = static_cast<CurrencyCode>(row.baseCurrency.Value()),
-        .fiscalYearStart = static_cast<Month>(row.fiscalYearStart.Value()),
+        .baseCurrency = static_cast<CurrencyCode>(currency),
+        .fiscalYearStart = static_cast<Month>(month),
     };
 }
 
@@ -47,6 +60,11 @@ CompanyView OrgModel::execute(const CreateCompany& action) {
         throw ValidationError{"CreateCompany: a name of at most 128 bytes is required"};
     }
     Lightweight::DataMapper mapper;
+    for (auto const& existing : mapper.Query<db::CompanyRecord>().All()) {
+        if (existing.name.Value().ToStringView() == action.name) {
+            throw Conflict{"CreateCompany: a company named \"" + action.name + "\" already exists"};
+        }
+    }
     db::CompanyRecord row;
     row.name = Lightweight::SqlAnsiString<128>{action.name};
     row.baseCurrency = static_cast<int>(action.baseCurrency);
@@ -79,6 +97,13 @@ SiteView OrgModel::execute(const CreateSite& action) {
             .All()
             .empty()) {
         throw NotFound{"CreateSite: company " + std::to_string(*action.companyId) + " does not exist"};
+    }
+    for (auto const& existing : mapper.Query<db::SiteRecord>().All()) {
+        if (static_cast<std::int64_t>(existing.company.Value()) == *action.companyId &&
+            existing.name.Value().ToStringView() == action.name) {
+            throw Conflict{"CreateSite: company " + std::to_string(*action.companyId) +
+                           " already has a site named \"" + action.name + "\""};
+        }
     }
     db::SiteRecord row;
     row.company = static_cast<std::uint64_t>(*action.companyId);

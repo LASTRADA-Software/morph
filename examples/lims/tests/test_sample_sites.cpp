@@ -127,3 +127,54 @@ TEST_CASE("lab: samples registered before sites existed migrate to the seeded si
     REQUIRE(rows.size() == 1);
     CHECK(rows.front().siteId.Value() == std::optional<std::int64_t>{lims::db::kSeededSiteId});
 }
+
+// Mutation: delete the site lookup from SaveSample (a header naming site 999 stores a sample).
+TEST_CASE("lab: sample entry refuses a header naming a site that does not exist", "[lims][org][sites]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
+    model.execute(lims::NewSample{});
+    model.execute(lims::HeaderSection{.clientId = client.clientId,
+                                      .reference = "WW-1",
+                                      .receivedOn = 0,
+                                      .remarks = {},
+                                      .siteId = lims::SiteId{999}});
+    model.execute(lims::SelectProject{.projectId = 2});
+    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::NotFound);
+}
+
+// Mutation: drop the site assignment from SaveSample's update branch (the moved sample reads back its old site).
+TEST_CASE("lab: a saved sample can be moved to another site", "[lims][org][sites]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    auto const fieldLab = org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Field lab"});
+
+    lims::SampleModel model;
+    auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
+    model.execute(lims::NewSample{});
+    model.execute(lims::HeaderSection{.clientId = client.clientId,
+                                      .reference = "WW-1",
+                                      .receivedOn = 0,
+                                      .remarks = {},
+                                      .siteId = lims::test::seededSite()});
+    model.execute(lims::SelectProject{.projectId = 2});
+    auto const first = model.execute(lims::SaveSample{});
+    REQUIRE(first.error == lims::SaveError::none);
+
+    lims::SampleModel editor;
+    auto const loaded = editor.execute(lims::LoadSample{.id = first.sampleId});
+    REQUIRE(loaded.siteId == lims::test::seededSite());
+    editor.execute(lims::HeaderSection{.clientId = loaded.clientId,
+                                       .reference = loaded.reference,
+                                       .receivedOn = loaded.receivedOn,
+                                       .remarks = loaded.remarks,
+                                       .siteId = fieldLab.id});
+    auto const moved = editor.execute(lims::SaveSample{});
+    REQUIRE(moved.error == lims::SaveError::none);
+    CHECK(moved.sampleId == first.sampleId);
+
+    lims::SampleModel reader;
+    CHECK(reader.execute(lims::LoadSample{.id = first.sampleId}).siteId == fieldLab.id);
+}

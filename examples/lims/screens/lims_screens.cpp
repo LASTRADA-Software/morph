@@ -85,7 +85,7 @@ ui::Screen registerScreen() {
                                            {&RegisterSample::clientId, client.at(&RegisterClientResult::clientId)},
                                            {&RegisterSample::reference, reference.value()}})})
                       .testId("registerSample")
-                      .enabled(ui::engaged(client)),
+                      .enabled(ui::engaged(client) && ui::engaged(ui::call("first", {siteList.selection()}))),
                   ui::text({.text = registerSample.error()}).testId("sampleError")},
                  {.title = "Sample", .padding = 2})},
             {.gap = 3});
