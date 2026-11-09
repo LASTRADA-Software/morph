@@ -22,8 +22,8 @@ namespace lims {
 /// @return Its site; an empty site when the sample does not exist or has no site, which holds no role.
 [[nodiscard]] Scope siteScopeOfSample(SampleId sample);
 
-/// @brief The rule of a write on an existing sample: some role at the sample's site, which the model resolves from
-///        the sample it is attached to, since the payload names none.
+/// @brief The rule of a write on a sample the handler holds: some role at a site the model resolves from the sample
+///        (or, for a sample entry, from its header), since the payload names none.
 struct AnyRoleAtAttachedSite {
     /// @brief Any role is enough.
     static constexpr bool anyRole = true;
@@ -53,6 +53,15 @@ struct Authorization<RejectSample> : AnyRoleAtAttachedSite {};
 /// @brief Capturing a reading needs some role at the attached sample's site.
 template <>
 struct Authorization<CaptureConcentration> : AnyRoleAtAttachedSite {};
+
+/// @brief Saving a sample entry needs some role at the header's site and, when it updates a stored sample, at that
+///        sample's stored site too, so moving a sample needs a role at both ends.
+template <>
+struct Authorization<SaveSample> : AnyRoleAtAttachedSite {};
+
+/// @brief Deleting a sample needs some role at the attached sample's site.
+template <>
+struct Authorization<DeleteSample> : AnyRoleAtAttachedSite {};
 
 /// @brief Replaying a queued capture needs some role, held by the operator who captured it (the replay runs as that
 ///        operator), at the site of the sample the capture names.

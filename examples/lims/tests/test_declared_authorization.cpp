@@ -511,7 +511,7 @@ TEST_CASE("declared authorization: a sample with no site cannot be verified by a
         ScopedPrincipal const principal{who};
         lims::SampleModel verifier;
         CHECK_THROWS_WITH(verifier.execute(lims::VerifyResult{.resultId = lab.result}),
-                          Catch::Matchers::ContainsSubstring("role at no site"));
+                          Catch::Matchers::ContainsSubstring("role at an unassigned site"));
     }
 }
 
@@ -632,35 +632,79 @@ TEST_CASE("declared authorization: a role at the sample's site or at its company
     CHECK_NOTHROW(runWrite(write, bench, holder.first));
 }
 
-// Mutation: look the sample up before asking for the role (eve learns that sample 9999 does not exist).
-TEST_CASE("declared authorization: a caller without a role at the site is refused before the row is looked up",
+/// @brief Calls every lab write that names a site, sample or conflict by id with an id that names nothing, as the
+///        principal in scope.
+/// @tparam Exception What each call must throw.
+/// @param bench The bench, for a client and a reading.
+/// @param who The principal in scope.
+template <typename Exception>
+void checkGhostWrites(Bench const& bench, std::string const& who) {
+    lims::SampleModel model;
+    CHECK_THROWS_AS(model.execute(lims::RegisterSample{
+                        .siteId = lims::SiteId{999}, .clientId = bench.client, .reference = "WW-9"}),
+                    Exception);
+    CHECK_THROWS_AS(model.execute(lims::QueuedCapture{.sampleId = lims::SampleId{9999},
+                                                      .baseVersion = lims::SampleVersion{1},
+                                                      .capturedBy = who,
+                                                      .operationKey = lims::OperationKey{"op-ghost-" + who},
+                                                      .capture = reading(bench)}),
+                    Exception);
+    CHECK_THROWS_AS(model.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "ghost"}),
+                    Exception);
+}
+
+// The order of every scoped lab write: a caller with no role anywhere is Forbidden before any lookup, so learns
+// nothing about which ids exist; a caller with a role is told NotFound for an id that names nothing.
+// Mutation: look the row up before asking for the role (mallory learns that sample 9999 does not exist); ask for the
+// site's role before the lookup (eve, who holds a role, is refused instead of told NotFound).
+TEST_CASE("declared authorization: no role anywhere is Forbidden, a missing row NotFound, the wrong site Forbidden",
           "[lims][authorization][lab]") {
     DbFixture fixture;
     auto const bench = benchIn(lims::SampleState::InProgress);
     static_cast<void>(rivalWithEve());
-    ScopedPrincipal const eve{"eve"};
-    lims::SampleModel model;
-    CHECK_THROWS_AS(model.execute(lims::RegisterSample{
-                        .siteId = lims::SiteId{999}, .clientId = bench.client, .reference = "WW-9"}),
-                    lims::Forbidden);
-    CHECK_THROWS_AS(model.execute(lims::QueuedCapture{.sampleId = lims::SampleId{9999},
-                                                      .baseVersion = lims::SampleVersion{1},
-                                                      .capturedBy = "eve",
-                                                      .operationKey = lims::OperationKey{"op-ghost"},
-                                                      .capture = reading(bench)}),
-                    lims::Forbidden);
-    CHECK_THROWS_AS(model.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "ghost"}),
-                    lims::Forbidden);
+    {
+        ScopedPrincipal const mallory{"mallory"};
+        checkGhostWrites<lims::Forbidden>(bench, "mallory");
+        lims::SampleModel unattached;
+        CHECK_THROWS_AS(unattached.execute(lims::ReceiveSample{}), lims::Forbidden);
+        CHECK_THROWS_AS(unattached.execute(reading(bench)), lims::Forbidden);
+        CHECK_THROWS_AS(unattached.execute(lims::DeleteSample{}), lims::Forbidden);
+        CHECK_THROWS_WITH(unattached.execute(lims::DeleteSample{}),
+                          Catch::Matchers::ContainsSubstring("does not hold any role") &&
+                              !Catch::Matchers::ContainsSubstring("at no site"));
+    }
+    {
+        ScopedPrincipal const eve{"eve"};
+        checkGhostWrites<lims::NotFound>(bench, "eve");
+        lims::SampleModel unattached;
+        CHECK_THROWS_AS(unattached.execute(lims::ReceiveSample{}), lims::NotFound);
+        CHECK_THROWS_AS(unattached.execute(reading(bench)), lims::NotFound);
+        CHECK_THROWS_AS(unattached.execute(lims::DeleteSample{}), lims::NotFound);
+    }
 }
 
 // The replay runs as the operator who captured the reading, so the check is about that operator when the queue
-// reaches the server: an operator who has since lost the role is refused.
-// Mutation: skip the check on QueuedCapture (fiona, whose role was revoked, replays).
+// reaches the server: an operator who has since lost the role is refused a new operation, and still told Skipped for
+// a redelivery of one that was already applied.
+// Mutation: skip the check on QueuedCapture (fiona, whose role was revoked, replays); check the role before the
+// idempotency key (fiona's redelivery is refused instead of Skipped).
 TEST_CASE("declared authorization: a queued capture is judged on the operator's role at replay time",
           "[lims][authorization][lab]") {
     DbFixture fixture;
     auto const bench = benchIn(lims::SampleState::InProgress);
     auto const assignment = lims::test::grant("fiona", lims::LimsRole::Analyst);
+    auto const capture = [&bench](std::string const& key) {
+        return lims::QueuedCapture{.sampleId = bench.sample,
+                                   .baseVersion = lims::SampleVersion{3},
+                                   .capturedBy = "fiona",
+                                   .operationKey = lims::OperationKey{key},
+                                   .capture = reading(bench)};
+    };
+    {
+        ScopedPrincipal const fiona{"fiona"};
+        lims::SampleModel model;
+        CHECK(model.execute(capture("op-early")).outcome == lims::ReplayOutcome::Applied);
+    }
     {
         ScopedPrincipal const alice{"alice"};
         lims::OrgModel org;
@@ -669,12 +713,136 @@ TEST_CASE("declared authorization: a queued capture is judged on the operator's 
     }
     ScopedPrincipal const fiona{"fiona"};
     lims::SampleModel model;
-    CHECK_THROWS_WITH(model.execute(lims::QueuedCapture{.sampleId = bench.sample,
-                                                        .baseVersion = lims::SampleVersion{3},
-                                                        .capturedBy = "fiona",
-                                                        .operationKey = lims::OperationKey{"op-late"},
-                                                        .capture = reading(bench)}),
-                      Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+    CHECK(model.execute(capture("op-early")).outcome == lims::ReplayOutcome::Skipped);
+    CHECK_THROWS_WITH(model.execute(capture("op-late")), Catch::Matchers::ContainsSubstring("does not hold any role"));
+}
+
+namespace {
+
+/// @brief Fills @p model's working copy with a header at @p site, ready to save.
+/// @param model The handler.
+/// @param client The client the sample belongs to.
+/// @param reference The reference.
+/// @param site The site the header names.
+void fillHeader(lims::SampleModel& model, lims::ClientId client, std::string reference, lims::SiteId site) {
+    model.execute(lims::HeaderSection{
+        .clientId = client, .reference = std::move(reference), .receivedOn = 0, .remarks = {}, .siteId = site});
+    model.execute(lims::SelectProject{.projectId = 2});
+}
+
+/// @brief Saves a sample at the seeded site through sample entry, as alice.
+/// @param client The client.
+/// @return The sample's id.
+[[nodiscard]] lims::SampleId savedEntry(lims::ClientId client) {
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    model.execute(lims::NewSample{});
+    fillHeader(model, client, "WW-A", lims::test::seededSite());
+    auto const saved = model.execute(lims::SaveSample{});
+    REQUIRE(saved.error == lims::SaveError::none);
+    return saved.sampleId;
+}
+
+/// @brief What a sample's row holds, to show a refused entry changed nothing.
+/// @param sample The sample.
+/// @return Its reference and site, or an empty reference when the row is gone.
+[[nodiscard]] std::pair<std::string, std::optional<std::int64_t>> sampleRow(lims::SampleId sample) {
+    Lightweight::DataMapper mapper;
+    auto const rows = mapper.Query<lims::db::SampleRecord>()
+                          .Where(::Lightweight::FieldNameOf<&lims::db::SampleRecord::id>, "=", *sample)
+                          .All();
+    if (rows.empty()) {
+        return {std::string{}, std::nullopt};
+    }
+    return {std::string{rows.front().reference.Value().ToStringView()}, rows.front().siteId.Value()};
+}
+
+}  // namespace
+
+// Sample entry writes a sample whose site the header names, so a role is needed at that site, and, when it updates a
+// stored sample, at the site it is stored at: moving a sample needs a role at both ends.
+// Mutations: drop the header-site check (eve creates a sample at the seeded site, and moves a rival sample into it);
+// drop the stored-site check (eve rewrites alice's sample); drop DeleteSample's check (eve deletes alice's sample).
+TEST_CASE("declared authorization: sample entry is refused for another company's sites and samples",
+          "[lims][authorization][lab][entry]") {
+    DbFixture fixture;
+    auto const rival = rivalWithEve();
+    auto const bench = benchIn(lims::SampleState::Registered);
+    auto const alicesSample = savedEntry(bench.client);
+    auto const countBefore = sampleTables().size();
+    ScopedPrincipal const eve{"eve"};
+
+    SECTION("creating a sample at a site of another company") {
+        lims::SampleModel model;
+        model.execute(lims::NewSample{});
+        fillHeader(model, bench.client, "WW-EVE", lims::test::seededSite());
+        CHECK_THROWS_WITH(model.execute(lims::SaveSample{}),
+                          Catch::Matchers::ContainsSubstring("eve' does not hold any role at site"));
+        CHECK(sampleTables().size() == countBefore);
+    }
+    SECTION("rewriting a sample of another company") {
+        lims::SampleModel model;
+        auto const loaded = model.execute(lims::LoadSample{.id = alicesSample});
+        REQUIRE(loaded.siteId == lims::test::seededSite());
+        fillHeader(model, loaded.clientId, "WW-EVE", rival.site);
+        CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::Forbidden);
+        fillHeader(model, loaded.clientId, "WW-EVE", lims::test::seededSite());
+        CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::Forbidden);
+        CHECK(sampleRow(alicesSample) == std::pair{std::string{"WW-A"}, std::optional{*lims::test::seededSite()}});
+    }
+    SECTION("moving her own sample into another company's site") {
+        lims::SampleModel model;
+        model.execute(lims::NewSample{});
+        fillHeader(model, bench.client, "WW-EVE", rival.site);
+        auto const own = model.execute(lims::SaveSample{});
+        REQUIRE(own.error == lims::SaveError::none);
+        fillHeader(model, bench.client, "WW-EVE", lims::test::seededSite());
+        CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::Forbidden);
+        CHECK(sampleRow(own.sampleId) == std::pair{std::string{"WW-EVE"}, std::optional{*rival.site}});
+    }
+    SECTION("moving a sample of another company into her own site") {
+        lims::SampleModel model;
+        auto const loaded = model.execute(lims::LoadSample{.id = alicesSample});
+        fillHeader(model, loaded.clientId, loaded.reference, rival.site);
+        CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::Forbidden);
+        CHECK(sampleRow(alicesSample).second == std::optional{*lims::test::seededSite()});
+    }
+    SECTION("deleting a sample of another company") {
+        lims::SampleModel model;
+        model.execute(lims::LoadSample{.id = alicesSample});
+        CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::Forbidden);
+        CHECK(sampleRow(alicesSample).first == "WW-A");
+    }
+}
+
+// Mutation: check the site role only (cara, an analyst at the company, is refused); check the company only (ann, an
+// analyst at the site, is refused); require the role at the header's site but not the stored one (a move passes with
+// the new site's role alone).
+TEST_CASE("declared authorization: a role at the site or at its company allows sample entry",
+          "[lims][authorization][lab][entry]") {
+    auto const holder = GENERATE(std::pair{"ann", false}, std::pair{"cara", true});
+    CAPTURE(holder.first);
+    DbFixture fixture;
+    auto const bench = benchIn(lims::SampleState::Registered);
+    auto const stored = savedEntry(bench.client);
+    lims::test::grant(
+        holder.first, lims::LimsRole::Analyst,
+        holder.second ? lims::Scope{lims::test::seededCompany()} : lims::Scope{lims::test::seededSite()});
+    ScopedPrincipal const principal{holder.first};
+
+    lims::SampleModel creator;
+    creator.execute(lims::NewSample{});
+    fillHeader(creator, bench.client, "WW-NEW", lims::test::seededSite());
+    CHECK(creator.execute(lims::SaveSample{}).error == lims::SaveError::none);
+
+    lims::SampleModel editor;
+    auto const loaded = editor.execute(lims::LoadSample{.id = stored});
+    fillHeader(editor, loaded.clientId, "WW-EDITED", lims::test::seededSite());
+    CHECK(editor.execute(lims::SaveSample{}).error == lims::SaveError::none);
+    CHECK(sampleRow(stored).first == "WW-EDITED");
+
+    CHECK(editor.execute(lims::DeleteSample{}).sampleId == stored);
+    CHECK(sampleRow(stored).first.empty());
 }
 
 // Mutation: drop the requirement from RegisterSample, ReceiveSample or ResolveConflict (eve's call is recorded in that

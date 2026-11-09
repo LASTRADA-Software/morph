@@ -56,8 +56,9 @@ public:
     /// @param action The owning client and the lab's container reference.
     /// @return The new sample's full state.
     /// @throws ValidationError if the action is not well-formed.
-    /// @throws NotFound if the named client does not exist.
-    /// @throws Forbidden if the caller holds no role at the site the action names (a role at its company counts).
+    /// @throws NotFound if the named client or site does not exist.
+    /// @throws Forbidden if the caller holds no role anywhere, or none at the site the action names (a role at its
+    ///         company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const RegisterSample& action);
 
@@ -84,7 +85,8 @@ public:
     /// @param action Carries no fields of its own.
     /// @return The sample's state after the transition.
     /// @throws IllegalTransition if the sample is not `Registered`.
-    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
+    /// @throws Forbidden if the caller holds no role anywhere, or none at the attached sample's site (a role at its
+    ///         company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const ReceiveSample& action);
 
@@ -92,7 +94,8 @@ public:
     /// @param action Carries no fields of its own.
     /// @return The sample's state after the transition.
     /// @throws IllegalTransition if the sample is not `Received`.
-    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
+    /// @throws Forbidden if the caller holds no role anywhere, or none at the attached sample's site (a role at its
+    ///         company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const StartWork& action);
 
@@ -100,7 +103,8 @@ public:
     /// @param action Carries no fields of its own.
     /// @return The sample's state after the transition.
     /// @throws IllegalTransition if the sample is not `InProgress`.
-    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
+    /// @throws Forbidden if the caller holds no role anywhere, or none at the attached sample's site (a role at its
+    ///         company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const SubmitForVerification& action);
 
@@ -109,7 +113,8 @@ public:
     /// @return The sample's state after the transition.
     /// @throws ValidationError if no reason is given.
     /// @throws IllegalTransition if the sample is not `ToBeVerified`.
-    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
+    /// @throws Forbidden if the caller holds no role anywhere, or none at the attached sample's site (a role at its
+    ///         company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const ReturnForRework& action);
 
@@ -117,7 +122,8 @@ public:
     /// @param action Carries no fields of its own.
     /// @return The sample's state after the transition.
     /// @throws IllegalTransition if the sample is not `ToBeVerified`.
-    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
+    /// @throws Forbidden if the caller holds no role anywhere, or none at the attached sample's site (a role at its
+    ///         company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const PublishSample& action);
 
@@ -126,7 +132,8 @@ public:
     /// @return The sample's state after the transition.
     /// @throws ValidationError if no reason is given.
     /// @throws IllegalTransition if the sample has already been worked.
-    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
+    /// @throws Forbidden if the caller holds no role anywhere, or none at the attached sample's site (a role at its
+    ///         company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const RejectSample& action);
 
@@ -148,7 +155,8 @@ public:
     ///         value carries more precision than the version declares.
     /// @throws NotFound if the analysis version does not exist.
     /// @throws IllegalTransition if the sample is not `InProgress`.
-    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
+    /// @throws Forbidden if the caller holds no role anywhere, or none at the attached sample's site (a role at its
+    ///         company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     ResultView execute(const CaptureConcentration& action);
 
@@ -186,14 +194,19 @@ public:
     /// a client shows one message per reason and the working copy stays as it was.
     /// @param action Carries no fields of its own.
     /// @return The saved sample, or why the save was refused.
-    /// @throws NotFound if the header's client does not exist.
+    /// @throws Forbidden if the caller holds no role anywhere; or, once the client, the site and the stored sample are
+    ///         found, holds none at the header's site or, for an update, at the site the sample is stored at (a role
+    ///         at a site's company counts).
+    /// @throws NotFound if the header's client or site does not exist, or the sample being updated is gone.
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SaveSampleResult execute(const SaveSample& action);
 
     /// @brief Deletes the stored sample the working copy was loaded from, and discards the working copy.
     /// @param action Carries no fields of its own.
     /// @return The deleted sample.
-    /// @throws NotFound if the working copy was never saved.
+    /// @throws Forbidden if the caller holds no role anywhere, or none at the stored sample's site (a role at its
+    ///         company counts).
+    /// @throws NotFound if the working copy was never saved, or its sample is gone.
     /// @throws IllegalTransition if the sample has left `Registered`.
     /// @throws EmptyPrincipalError if no principal is authenticated.
     DeleteSampleResult execute(const DeleteSample& action);
@@ -319,9 +332,11 @@ public:
     /// @param action The queued update, with the base version it assumed.
     /// @return What replay did, and the conflict id if it flagged one.
     /// @throws ValidationError if the envelope is not well-formed.
-    /// @throws Forbidden if `capturedBy` is not the authenticated principal, or that operator holds no role at the
-    /// sample's site now.
-    /// @throws NotFound if the sample or the analysis version does not exist.
+    /// @throws Forbidden if `capturedBy` is not the authenticated principal; or, for an operation not yet decided,
+    ///         the operator holds no role anywhere, or none at the sample's site now (a role at its company counts).
+    ///         A redelivery of an operation already decided is answered `Skipped` whatever the operator holds.
+    /// @throws NotFound if the sample does not exist (asked after the operator is known to hold some role), or the
+    ///         analysis version does not exist.
     /// @throws EmptyPrincipalError if no principal is authenticated.
     ReplayCaptureResult execute(const QueuedCapture& action);
 
@@ -341,7 +356,9 @@ public:
     /// @param action The conflict, the decision, and why.
     /// @return The conflict in its resolved state.
     /// @throws ValidationError if no conflict is named or no reason is given.
-    /// @throws NotFound if the conflict does not exist.
+    /// @throws Forbidden if the caller holds no role anywhere, or none at the site of the conflict's sample (a role
+    ///         at its company counts).
+    /// @throws NotFound if the conflict does not exist (asked after the caller is known to hold some role).
     /// @throws Conflict if it has already been resolved.
     /// @throws EmptyPrincipalError if no principal is authenticated.
     ConflictView execute(const ResolveConflict& action);

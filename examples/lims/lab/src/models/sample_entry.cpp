@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "lims/lab/authorization/lab_authorization.hpp"
 #include "lims/lab/db/lims_entity.hpp"
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/org/core/errors.hpp"
@@ -192,6 +193,7 @@ SaveSampleResult SampleModel::execute(const SaveSample& action) {
         return {.error = SaveError::noSite, .sampleId = {}};
     }
     requirePrincipal();
+    requireRoleSomewhere<SaveSample>();
 
     Lightweight::DataMapper mapper;
     auto clients = mapper.Query<db::ClientRecord>()
@@ -203,6 +205,20 @@ SaveSampleResult SampleModel::execute(const SaveSample& action) {
     if (!OrgModel::findSite(header.siteId)) {
         throw NotFound{"SaveSample: no such site"};
     }
+    std::vector<db::SampleRecord> stored;
+    if (_sampleId) {
+        stored = mapper.Query<db::SampleRecord>()
+                     .Where(::Lightweight::FieldNameOf<&db::SampleRecord::id>, "=", *_sampleId)
+                     .All();
+        if (stored.empty()) {
+            throw NotFound{"sample " + std::to_string(*_sampleId) + " does not exist"};
+        }
+    }
+    // The site the sample is written to, and, for an update, the site it is stored at: a move needs a role at both.
+    requireAuthorizedIn(action, Scope{header.siteId});
+    if (_sampleId) {
+        requireAuthorizedIn(action, Scope{SiteId::fromOptional(stored.front().siteId.Value())});
+    }
     std::string payload;
     if (auto const error = glz::write_json(*_draft, payload); error) {
         throw ValidationError{"SaveSample: the working copy does not encode"};
@@ -211,13 +227,7 @@ SaveSampleResult SampleModel::execute(const SaveSample& action) {
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     std::int64_t sampleId = 0;
     if (_sampleId) {
-        auto samples = mapper.Query<db::SampleRecord>()
-                           .Where(::Lightweight::FieldNameOf<&db::SampleRecord::id>, "=", *_sampleId)
-                           .All();
-        if (samples.empty()) {
-            throw NotFound{"sample " + std::to_string(*_sampleId) + " does not exist"};
-        }
-        db::SampleRecord& row = samples.front();
+        db::SampleRecord& row = stored.front();
         row.client = clients.front();
         row.reference = Lightweight::SqlAnsiString<64>{header.reference};
         row.siteId = std::optional<std::int64_t>{*header.siteId};
@@ -257,6 +267,7 @@ SaveSampleResult SampleModel::execute(const SaveSample& action) {
 
 DeleteSampleResult SampleModel::execute(const DeleteSample& action) {
     requirePrincipal();
+    requireRoleSomewhere<DeleteSample>();
     if (!_sampleId) {
         throw NotFound{"DeleteSample: the working copy was never saved"};
     }
@@ -267,6 +278,7 @@ DeleteSampleResult SampleModel::execute(const DeleteSample& action) {
     if (samples.empty()) {
         throw NotFound{"sample " + std::to_string(*_sampleId) + " does not exist"};
     }
+    requireAuthorizedIn(action, Scope{SiteId::fromOptional(samples.front().siteId.Value())});
     // A sample that has been received is part of the lab's record; only a registration can be withdrawn.
     if (static_cast<SampleState>(samples.front().state.Value()) != SampleState::Registered) {
         std::string const error = "DeleteSample: only a registered sample can be deleted";

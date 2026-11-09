@@ -35,15 +35,15 @@ namespace lims {
 /// - `static constexpr bool anyRole = true` — some role, whichever: the principal must hold at least one role in the
 ///   scope, and the action does not care which;
 ///
-/// and optionally:
+/// and, each only where the action needs it:
 /// - `static Scope scopeOf(Action const&)` — the scope the action's payload names, read from its scope field; without
 ///   it the role is needed in some scope, any. A role held at a company holds at its sites;
 /// - `static constexpr bool scopeFromModel = true` — the payload names no scope but the model knows it (the site of
 ///   the sample the handler is attached to): the model then judges with `requireAuthorizedIn` and passes the scope;
-/// - optionally `static ::morph::math::Rational amountOf(Action const&)` and
+/// - `static ::morph::math::Rational amountOf(Action const&)` and
 ///   `static std::optional<::morph::math::Rational> limitOf(std::string_view principal, Scope const&)` — a value
 ///   limit: the principal may act on amounts up to their limit in the scope, and on none without one;
-/// - optionally `static constexpr std::string_view separatedFrom` (the action id of the pair's first half),
+/// - `static constexpr std::string_view separatedFrom` (the action id of the pair's first half),
 ///   `static constexpr std::string_view sameActorRefusal` (the refusal's words) and
 ///   `static std::optional<std::string> firstPerformerOf(Action const&)` (who performed the first half on the same
 ///   subject) — a separation-of-duties pair: the principal may not be that performer.

@@ -210,12 +210,13 @@ SampleView SampleModel::execute(const RegisterSample& action) {
     if (!action.validate()) {
         throw ValidationError{"RegisterSample: a site, a client and a reference are required"};
     }
-    // Before the site is looked up: a site that does not exist holds no role, so a caller without one learns
-    // nothing about which sites exist.
-    requireAuthorized(action);
+    // A caller with no role anywhere learns nothing about which sites exist; a missing site is NotFound; a role at
+    // the wrong site is refused last.
+    requireRoleSomewhere<RegisterSample>();
     if (!OrgModel::findSite(action.siteId)) {
         throw NotFound{"RegisterSample: no such site"};
     }
+    requireAuthorized(action);
 
     Lightweight::DataMapper mapper;
     auto clients = mapper.Query<db::ClientRecord>()
@@ -338,8 +339,9 @@ SampleView SampleModel::transition(const Action& action, SampleState target) {
             throw ValidationError{std::string{::morph::model::ActionTraits<Action>::typeId()} +
                                   ": the action is not well-formed"};
         }
-        requireAuthorizedIn(action, attachedSiteScope());
+        requireRoleSomewhere<Action>();
         const auto before = loadAttached();
+        requireAuthorizedIn(action, attachedSiteScope());
         if (!isLegalTransition(before.state, target)) {
             throw IllegalTransition{std::string{"a "} + std::string{stateName(before.state)} +
                                     " sample cannot become " + std::string{stateName(target)}};
@@ -574,9 +576,12 @@ ListDilutionModesResult SampleModel::execute(const ListDilutionModes& action) {
 ResultView SampleModel::execute(const CaptureConcentration& action) {
     requirePrincipal();
     if (!_sampleId.has_value()) {
+        requireRoleSomewhere<CaptureConcentration>();
         throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
     }
     try {
+        requireRoleSomewhere<CaptureConcentration>();
+        static_cast<void>(loadAttached());
         requireAuthorizedIn(action, attachedSiteScope());
         auto view = applyCapture(SampleId{*_sampleId}, action, ::morph::session::current()->principal);
         _journal.recordSuccess<SampleModel>(action, view, nowMillis());
@@ -632,18 +637,20 @@ ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
                             "'), not '" + principal + "'"};
         }
 
-        // The operator must hold some role at the sample's site now, at replay time, not when the reading was taken.
-        requireAuthorized(action);
-
         // At-most-once, enforced here because the queue is documented not to
         // enforce it -- and because the shipped queues disagree about whether
-        // they do anyway.
+        // they do anyway. Asked before the role: a redelivery of an operation that was already decided answers
+        // Skipped even from an operator whose role has been revoked since.
         if (alreadyDecided(*action.operationKey)) {
             return ReplayCaptureResult{.outcome = ReplayOutcome::Skipped, .sampleId = action.sampleId};
         }
 
+        // A new operation needs the operator to hold some role at the sample's site now, at replay time, not when
+        // the reading was taken: no role anywhere is Forbidden, a missing sample NotFound, the wrong site Forbidden.
+        requireRoleSomewhere<QueuedCapture>();
         Lightweight::DataMapper mapper;
         const auto sample = toView(loadSample(mapper, *action.sampleId));
+        requireAuthorized(action);
         const auto serverVersion = SampleVersion{*sample.version};
 
         // The two ways a queued update can be out of date, in the order that
@@ -735,9 +742,9 @@ ConflictView SampleModel::execute(const ResolveConflict& action) {
         if (!action.validate()) {
             throw ValidationError{"ResolveConflict: a conflict and a stated reason are required"};
         }
-        // Before the conflict is looked up: a conflict that does not exist holds no role, so a caller without one
-        // learns nothing about which conflicts exist.
-        requireAuthorized(action);
+        // A caller with no role anywhere learns nothing about which conflicts exist; a missing conflict is
+        // NotFound; a role at the wrong site is refused last.
+        requireRoleSomewhere<ResolveConflict>();
         Lightweight::DataMapper mapper;
         auto rows = mapper.Query<db::OfflineConflictRecord>()
                         .Where(::Lightweight::FieldNameOf<&db::OfflineConflictRecord::id>, "=", *action.conflictId)
@@ -745,6 +752,7 @@ ConflictView SampleModel::execute(const ResolveConflict& action) {
         if (rows.empty()) {
             throw NotFound{"ResolveConflict: no such conflict"};
         }
+        requireAuthorized(action);
         auto row = rows.front();
         // Same reason as `execute(VerifyResult)`: a resolution belongs to the
         // conflict's sample, whatever this handler is attached to.

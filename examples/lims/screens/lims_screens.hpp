@@ -42,8 +42,11 @@ inline constexpr std::string_view kAccess = "lims.org.access";
 inline constexpr std::string_view kLogin = "lims.login";
 
 /// @brief Prepares lims to run in process: installs a token issuer with a development secret, which `LimsLogin` mints
-///        its tokens with and a server installs at start-up.
-void prepareLocal();
+///        its tokens with and a server installs at start-up, and, in a lab with no supervisor yet, makes @p user
+///        Supervisor at the seeded company through the bootstrap `AssignRole`, so a fresh local client can register
+///        samples with no other setup.
+/// @param user The local principal, from `--user`; empty to appoint nobody.
+void prepareLocal(std::string_view user);
 
 /// @brief The application's bundle: every lims screen, registered and validated.
 /// @return The bundle, or the refusal.

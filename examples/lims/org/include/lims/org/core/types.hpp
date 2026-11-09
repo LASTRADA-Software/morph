@@ -60,7 +60,7 @@ using Scope = std::variant<CompanyId, SiteId>;
         return company->hasValue() ? "company " + std::to_string(**company) : std::string{"no company"};
     }
     auto const& site = std::get<SiteId>(scope);
-    return site.hasValue() ? "site " + std::to_string(*site) : std::string{"no site"};
+    return site.hasValue() ? "site " + std::to_string(*site) : std::string{"an unassigned site"};
 }
 
 }  // namespace lims

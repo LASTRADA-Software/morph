@@ -724,6 +724,11 @@ The bootstrap carve-out moves with the action: the first assignment on a lab wit
 and the carve-out closes as soon as any supervisor exists. Revoking a company's last supervisor assignment is refused
 (decision 24).
 
+A local client starts on a fresh database with no assignments, and every write on a sample needs a role, so
+`lims::screens::prepareLocal(user)` appoints the local user (`--user`) Supervisor at the seeded company through the
+same bootstrap `AssignRole` a first supervisor uses. It applies only while the lab has no supervisor; once one exists,
+roles are assigned as for any lab and `prepareLocal` leaves them alone.
+
 Assignments are not a sample's history, so a sample's audit trail no longer shows them. `OrgModel` is journaled by
 the framework's dispatcher, which records every loggable action it runs, and `AssignRole` and `RevokeRole` are
 loggable: a successful assignment is an `Outcome::Succeeded` entry naming the caller, and a refused one (a model
@@ -760,8 +765,7 @@ optional separation-of-duties pair. Capture and verify are the first declared pa
 verifier role at the sample's site (a role at the site's company holds there), and the verifier must not be the analyst
 who captured it. `lims::requireAuthorized` checks a declaration inside the model, on every dispatch path; the server
 edge checks only that the principal holds the declared role somewhere, from a table the app composes from every
-module's declarations (`lims::app::declaredRequirements`). A caller who holds the role nowhere is refused before any
-row the action names is looked up, as decision 23 requires of role assignments.
+module's declarations (`lims::app::declaredRequirements`).
 
 `CreateCompany` declares `Supervisor` in any scope, because a new company has no scope yet, and is refused while no
 supervisor exists anywhere, so the bootstrap `AssignRole` stays the first administrative act. A supervisor at only a
@@ -769,15 +773,21 @@ site may therefore create a company; that is intended, since the rule is "a Supe
 declares `Supervisor` at the site's company.
 
 Every write on a sample declares that the caller holds some role, whichever, at the sample's site (a role at the
-site's company counts): `RegisterSample` at the site its payload names, the lifecycle transitions and
-`CaptureConcentration` at the site of the sample the handler is attached to, and `QueuedCapture` at the site of the
-sample it names, and `ResolveConflict` at the site of the sample the conflict belongs to. A principal of another
-company is refused on all of them. `QueuedCapture` replays as the operator who
-captured the reading (decision 13), so the check applies to that operator at replay time: an operator who has lost
-their role at the site is refused when the queue reaches the server, whatever role they held when they took the
-reading. The check runs before the site or sample is looked up, so a caller without a role at the named site gets
-`Forbidden` whether or not it exists. The sample-entry actions remain open, listed in
-`lims::app::openMutatingActions`; ignition tests are open because they belong to no site (decision 22).
+site's company counts): `RegisterSample` at the site its payload names, the lifecycle transitions,
+`CaptureConcentration` and `DeleteSample` at the site of the sample the handler is attached to, `QueuedCapture` at the
+site of the sample it names, `ResolveConflict` at the site of the sample the conflict belongs to, and `SaveSample` at
+the site its header names and, when it updates a stored sample, at the site that sample is stored at, so moving a
+sample needs a role at both sites. A principal of another company is refused on all of them. `QueuedCapture` replays
+as the operator who captured the reading (decision 13), so the check applies to that operator at replay time: an
+operator who has lost their role at the site is refused a new operation when the queue reaches the server, whatever
+role they held when they took the reading, while a redelivery of an operation already decided still answers
+`Skipped`.
+
+Every scoped lab write follows the order decision 23 gives role assignments, one rule for the mechanism: a caller who
+holds no role anywhere is refused with `Forbidden` before anything is looked up; a site, sample or conflict that does
+not exist is `NotFound`; a role held only at another site is `Forbidden`. `LoadSample` stays a read. The remaining
+sample-entry sections and ignition tests are open, listed in `lims::app::openMutatingActions`; ignition tests belong
+to no site (decision 22).
 
 **Hypothesis 6 (authorization cannot see the payload) is confirmed for this instance.**
 `IAuthorizer::authorize(ctx, modelType, actionType)` decides before the payload is decoded: its signature

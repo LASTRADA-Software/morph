@@ -450,6 +450,17 @@ bool OrgModel::supervisorExists() {
                 .empty();
 }
 
+void OrgModel::appointFirstSupervisor(std::string_view principal) {
+    ::morph::session::Context context;
+    context.principal = std::string{principal};
+    ::morph::session::detail::ScopedContext const scope{context};
+    OrgModel org;
+    org.execute(AssignRole{.principal = std::string{principal},
+                           .role = LimsRole::Supervisor,
+                           .company = CompanyId{db::kSeededCompanyId},
+                           .site = {}});
+}
+
 std::optional<SiteView> OrgModel::findSite(SiteId site) {
     if (!site.hasValue()) {
         return std::nullopt;

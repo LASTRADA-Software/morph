@@ -24,25 +24,25 @@ namespace lims::app {
 /// `declaredRequirements()` or here; the declared-authorization suite fails for a mutating action of the org, sample,
 /// analysis-catalog or ignition model that is in neither, and for an id here that is also declared.
 /// @return The action ids.
-[[nodiscard]] inline std::array<std::string_view, 16> const& openMutatingActions() {
-    static constexpr std::array<std::string_view, 16> open{
-        "DefineAnalysis", "ReviseAnalysis",  "RegisterClient",       "NewSample",          "LoadSample",
-        "SaveSample",     "DeleteSample",    "HeaderSection",        "SamplingSection",    "TurbiditySection",
-        "NitrateSection", "AddIgnitionTest", "RecordIgnitionValues", "DeleteIgnitionTest", "ClearOptionalMeasurement",
-        "SelectProject",
+[[nodiscard]] inline std::array<std::string_view, 14> const& openMutatingActions() {
+    static constexpr std::array<std::string_view, 14> open{
+        "DefineAnalysis",       "ReviseAnalysis",     "RegisterClient",           "NewSample",      "LoadSample",
+        "HeaderSection",        "SamplingSection",    "TurbiditySection",         "NitrateSection", "AddIgnitionTest",
+        "RecordIgnitionValues", "DeleteIgnitionTest", "ClearOptionalMeasurement", "SelectProject",
     };
     return open;
 }
 
 /// @brief Every action a module declares a role, or some role, for.
 /// @return The table.
-[[nodiscard]] inline std::array<RoleRequirement, 15> const& declaredRequirements() {
-    static constexpr std::array<RoleRequirement, 15> requirements{
+[[nodiscard]] inline std::array<RoleRequirement, 17> const& declaredRequirements() {
+    static constexpr std::array<RoleRequirement, 17> requirements{
         requirementOf<VerifyResult>(),         requirementOf<CreateCompany>(), requirementOf<CreateSite>(),
         requirementOf<AssignRole>(),           requirementOf<RevokeRole>(),    requirementOf<RegisterSample>(),
         requirementOf<ReceiveSample>(),        requirementOf<StartWork>(),     requirementOf<SubmitForVerification>(),
         requirementOf<ReturnForRework>(),      requirementOf<PublishSample>(), requirementOf<RejectSample>(),
         requirementOf<CaptureConcentration>(), requirementOf<QueuedCapture>(), requirementOf<ResolveConflict>(),
+        requirementOf<SaveSample>(),           requirementOf<DeleteSample>(),
     };
     return requirements;
 }

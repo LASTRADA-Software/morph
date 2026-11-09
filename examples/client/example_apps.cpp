@@ -67,7 +67,7 @@ std::vector<::morph::client::LocalApp> localApps() {
         .name = "lims", .bundle = &lims::screens::bundle, .setUp = [](::morph::client::LocalSetup const& setup) {
             std::string const file = setup.db.empty() ? std::string{"lims.db"} : setup.db;
             lims::db::setup("DRIVER=SQLite3;Database=" + file);
-            lims::screens::prepareLocal();
+            lims::screens::prepareLocal(setup.user);
         }});
 #endif
     return apps;

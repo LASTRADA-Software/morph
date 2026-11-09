@@ -493,10 +493,18 @@ ui::Screen loginScreen() {
 
 }  // namespace
 
-void prepareLocal() {
+void prepareLocal(std::string_view user) {
     // A development secret: local mode signs nothing that leaves the process.
     auth::setTokenIssuer(
         std::make_shared<morph::session::TokenIssuer>("lims-local-development", morph::session::hmacSha256));
+    // A fresh lab has no role assignments, and every write on a sample needs a role, so a fresh local client could
+    // register nothing. The first supervisor is appointed through the same bootstrap `AssignRole` a first supervisor
+    // uses anywhere: it applies only while the lab has none, and the assignment names the user as its maker. Once a
+    // lab has a supervisor, its roles are its own business and are left alone.
+    if (user.empty() || OrgModel::supervisorExists()) {
+        return;
+    }
+    OrgModel::appointFirstSupervisor(user);
 }
 
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle() {

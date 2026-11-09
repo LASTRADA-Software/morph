@@ -155,6 +155,39 @@ TEST_CASE("lims screens: registration registers a client and a sample, then open
     }));
 }
 
+// Mutation: drop the first-supervisor appointment from prepareLocal (the registration is refused for want of a role).
+TEST_CASE("lims screens: a fresh local user registers a sample with no other setup", "[lims-screens]") {
+    morph::ladder::testkit::DbFixture fixture;
+    LocalApp app = limsApp();
+    app.setUp = [](LocalSetup const& setup) { lims::screens::prepareLocal(setup.user); };
+    ScreenHarness harness{
+        app, std::string{lims::screens::kRegister}, RigMode::Local, {}, LocalSetup{.db = {}, .user = "newcomer"}};
+    harness.edit("clientName", "Waterworks Ltd");
+    harness.click("registerClient");
+    REQUIRE(harness.waitFor([&harness] {
+        auto const text = harness.text("clientId");
+        return text && text->starts_with("Client ");
+    }));
+    int const sites = harness.find("Table", "sites").value();
+    REQUIRE(harness.waitFor([&harness, sites] {
+        auto const rows = harness.backend().children(sites);
+        return std::ranges::any_of(rows, [&harness](int row) { return harness.backend().hasProp(row, "rowKey"); });
+    }));
+    harness.backend().selectRows(sites, {morph::ui::Key{std::int64_t{1}}});
+    harness.edit("reference", "WW-8");
+    REQUIRE(harness.waitFor([&harness] {
+        return harness.backend().prop(*harness.backend().find("Button", "testId", "registerSample"), "enabled") !=
+               "false";
+    }));
+    harness.click("registerSample");
+    bool const opened = harness.waitFor([&harness] { return harness.mounted().size() == 2; });
+    INFO("error: " << harness.text("error").value_or("<none>"));
+    REQUIRE(opened);
+    CHECK(harness.mounted().back() == lims::screens::kLifecycle);
+    CHECK(lims::OrgModel::rolesIn("newcomer", lims::Scope{lims::test::seededCompany()}) ==
+          std::vector<lims::LimsRole>{lims::LimsRole::Supervisor});
+}
+
 // Mutation: show nothing for a refused open (the error text stays empty).
 TEST_CASE("lims screens: a model's refusal reaches the screen as its own message", "[lims-screens]") {
     lims::test::LabFixture fixture;
@@ -211,7 +244,7 @@ TEST_CASE("lims screens: a captured result is listed with its exact decimal", "[
 TEST_CASE("lims screens: signing in to a server opens sample registration", "[lims-screens]") {
     lims::test::LabFixture fixture;
     LocalApp app = limsApp();
-    app.setUp = [](LocalSetup const&) { lims::screens::prepareLocal(); };
+    app.setUp = [](LocalSetup const& setup) { lims::screens::prepareLocal(setup.user); };
     // The secret prepareLocal's issuer signs with, which the simulated server verifies, with lims' own role lookup.
     app.serverAuthorizer = [] {
         return std::make_shared<lims::auth::LimsAuthorizer>(
