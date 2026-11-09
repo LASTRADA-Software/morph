@@ -170,7 +170,7 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>One owner</dt><dd><span class="tt"><a class="el" href="#a1633180aa493e4cd83f3b9247844d724" title="Runs the reconnect → activate → bind → replay sequence on the offline strand.">onOnline()</a></span> posts its whole sequence, retry sleeps included, as one task on the offline strand; <span class="tt"><a class="el" href="#a1e68df1af6563ea1295f8c48023ae6f5" title="Switches to the local backend and rebinds context, on the offline strand.">onOffline()</a></span> posts its two steps as another. A strand runs one task at a time, in post order, so the two never overlap and an <span class="tt"><a class="el" href="#a1e68df1af6563ea1295f8c48023ae6f5" title="Switches to the local backend and rebinds context, on the offline strand.">onOffline()</a></span> can never land between <span class="tt">bindContext()</span> and <span class="tt">replay()</span>. Both are callable from any thread and return at once. The executor should be a worker pool, <b>not</b> the I/O loop that runs <span class="tt"><a class="el" href="../../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html" title="Connectivity monitor that calls a probe on a timer and fires callbacks on state changes.">NetworkMonitor</a></span>'s callbacks: the retry sleeps block the thread the task runs on.</dd></dl>
 <p>A <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> given <span class="tt"><a class="el" href="#af79ee6a2c6badc5f6f2df20661052b40" title="The offline strand, as an executor: what a SyncWorker that replays for this coordinator is given as i...">strand()</a></span> as its owner drains inside the <span class="tt">replay</span> step when the step calls its <span class="tt">run()</span>, rather than after the task. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00097">97</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="af3e7ffb97a416c00981893ba53d5421b" name="af3e7ffb97a416c00981893ba53d5421b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af3e7ffb97a416c00981893ba53d5421b">&#9670;&#160;</a></span>Config</h2>
@@ -186,7 +186,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -234,7 +234,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <p>A null <span class="tt"><a class="el" href="../../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html" title="Injected, host-supplied side effects. None may be null. Each is called on the offline strand.">Deps</a></span> member is logged via <span class="tt">morph::log::logError</span> in all builds; construction still succeeds. Invoking the coordinator with any null member is undefined behaviour. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -263,7 +263,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Closes the offline strand: a sequence not yet started is dropped, one running on another thread is waited for. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00159">159</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00160">160</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -301,7 +301,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> settled on the offline strand with how the sequence ended (see <span class="tt">ReconnectOutcome</span>), delivered on <code class="param">replyExec</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00179">179</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -331,7 +331,7 @@ Public Member Functions</h2></td></tr>
 <p>Switches to the local backend and rebinds context, on the offline strand. </p>
 <p>Idempotent at the policy level: safe to call when already local. Posted after any <span class="tt"><a class="el" href="#a1633180aa493e4cd83f3b9247844d724" title="Runs the reconnect → activate → bind → replay sequence on the offline strand.">onOnline()</a></span>/<span class="tt"><a class="el" href="#a1e68df1af6563ea1295f8c48023ae6f5" title="Switches to the local backend and rebinds context, on the offline strand.">onOffline()</a></span> posted before it. Callable from any thread; returns at once. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00196">196</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -361,7 +361,7 @@ Public Member Functions</h2></td></tr>
 <p>The offline strand, as an executor: what a <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> that replays for this coordinator is given as its owner. </p>
 <dl class="section return"><dt>Returns</dt><dd>The strand every <span class="tt"><a class="el" href="#a1633180aa493e4cd83f3b9247844d724" title="Runs the reconnect → activate → bind → replay sequence on the offline strand.">onOnline()</a></span>/<span class="tt"><a class="el" href="#a1e68df1af6563ea1295f8c48023ae6f5" title="Switches to the local backend and rebinds context, on the offline strand.">onOffline()</a></span> body runs on. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00207">207</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00208">208</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>

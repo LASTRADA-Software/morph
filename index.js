@@ -47,18 +47,22 @@ var index =
         [ "<span class=\"tt\">util/</span> — exact values, units, time", "index.html#util--exact-values-units-time", null ],
         [ "<span class=\"tt\">reactive/</span> — signal graph, view state, declarative control", "index.html#reactive--signal-graph-view-state-declarative-control", null ],
         [ "<span class=\"tt\">ui/</span> — the UI document, <span class=\"tt\">expr/1</span>, view tree, mount, frontend seam", "index.html#ui--the-ui-document-expr1-view-tree-mount-frontend-seam", null ],
-        [ "<span class=\"tt\">testing/</span> — the installed owner test kit", "index.html#testing--the-installed-owner-test-kit", null ]
+        [ "<span class=\"tt\">testing/</span> — the installed owner test kit", "index.html#testing--the-installed-owner-test-kit", null ],
+        [ "<span class=\"tt\">table/</span> — the table engine", "index.html#table--the-table-engine", null ],
+        [ "<span class=\"tt\">render/</span> — client-side rendering helpers", "index.html#render--client-side-rendering-helpers", null ],
+        [ "<span class=\"tt\">client/</span> — the generic client", "index.html#client--the-generic-client", null ]
       ] ],
+      [ "Socket transport headers (<span class=\"tt\">include/morph/net/</span>)", "index.html#socket-transport-headers-includemorphnet", null ],
       [ "Terminal frontend headers (<span class=\"tt\">include/morph/tui/</span>, sources in <span class=\"tt\">src/tui/</span>)", "index.html#terminal-frontend-headers-includemorphtui-sources-in-srctui", null ],
-      [ "Qt integration headers (<span class=\"tt\">include/morph/qt/</span>)", "index.html#qt-integration-headers-includemorphqt", null ],
+      [ "Qt integration headers (<span class=\"tt\">include/morph/qt/</span>, sources in <span class=\"tt\">src/qt/</span>)", "index.html#qt-integration-headers-includemorphqt-sources-in-srcqt", null ],
       [ "Qt Quick renderer headers (<span class=\"tt\">include/morph/qt_quick/</span>, sources in <span class=\"tt\">src/qt_quick/</span>)", "index.html#qt-quick-renderer-headers-includemorphqt_quick-sources-in-srcqt_quick", null ]
     ] ],
     [ "Known limitations", "index.html#known-limitations", [
       [ "<span class=\"tt\">RemoteServer</span> must be heap-allocated", "index.html#remoteserver-must-be-heap-allocated", null ],
       [ "<span class=\"tt\">NetworkMonitor</span> callbacks must not block", "index.html#networkmonitor-callbacks-must-not-block", null ],
-      [ "<span class=\"tt\">Bridge::switchBackend</span> must not be called from <span class=\"tt\">onBackendChanged</span>", "index.html#bridgeswitchbackend-must-not-be-called-from-onbackendchanged", null ],
+      [ "<span class=\"tt\">onBackendChanged</span> runs on the model's strand, not inside <span class=\"tt\">switchBackend</span>", "index.html#onbackendchanged-runs-on-the-models-strand-not-inside-switchbackend", null ],
       [ "A null callback executor drops the callback (but not the orphan log)", "index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log", null ],
-      [ "<span class=\"tt\">MainThreadExecutor::runFor</span> does not drain on timeout", "index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout", null ]
+      [ "<span class=\"tt\">MainThreadExecutor::runFor</span> is a pump, not a flush", "index.html#mainthreadexecutorrunfor-is-a-pump-not-a-flush", null ]
     ] ],
     [ "Versioning &amp; compatibility", "index.html#versioning--compatibility", null ],
     [ "Key design decisions", "index.html#key-design-decisions", null ],
