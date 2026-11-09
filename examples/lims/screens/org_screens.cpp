@@ -2,6 +2,7 @@
 
 #include "org_screens.hpp"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,13 @@ namespace {
 /// @param member The member's wire name.
 /// @return The cell.
 [[nodiscard]] ui::Node cell(std::string const& member) { return ui::text({.text = ui::row(member)}); }
+
+/// @brief The roles of a user row, one text per role.
+/// @return The cell.
+[[nodiscard]] ui::Node rolesCell() {
+    return ui::forEach(ui::row("roles"), {.key = ui::row(), .axis = std::string{"horizontal"}, .gap = std::int64_t{2}},
+                       [](ui::RowScope& /*role*/) { return ui::text({.text = ui::row()}).testId("userRole"); });
+}
 
 }  // namespace
 
@@ -81,7 +89,7 @@ ui::Screen accessScreen() {
              ui::panel({ui::text({.text = ui::format("{0} users", {ui::count(userRows)})}).testId("userCount"),
                         ui::table(userRows, {.key = ui::row("id"),
                                              .columns = {{.name = "id", .label = "User", .cell = cell("id")},
-                                                         {.name = "roles", .label = "Roles", .cell = cell("roles")}}})
+                                                         {.name = "roles", .label = "Roles", .cell = rolesCell()}}})
                             .a11y("Users")
                             .testId("users")},
                        {.title = ui::t("lims.org.users", "Users"), .padding = 2}),
