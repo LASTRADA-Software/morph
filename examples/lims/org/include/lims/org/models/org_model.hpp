@@ -118,12 +118,9 @@ public:
     /// @return Whether one does.
     [[nodiscard]] static bool supervisorExists();
 
-    /// @brief Makes @p principal Supervisor at the seeded company, through the same bootstrap `AssignRole` a first
-    ///        supervisor uses: it applies only while no supervisor exists, and the assignment names @p principal as
-    ///        its maker.
-    /// @param principal The principal to appoint.
-    /// @throws ValidationError when @p principal is not a valid principal name.
-    static void appointFirstSupervisor(std::string_view principal);
+    /// @brief The company the first migration seeds, which holds every record that predates companies.
+    /// @return Its id.
+    [[nodiscard]] static CompanyId seededCompany();
 
     /// @brief The site with @p site's id, for a module that records where something happened.
     /// @param site The site.

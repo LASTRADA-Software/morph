@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <memory>
 #include <morph/client/source.hpp>
+#include <morph/journal/action_log.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/ui/value.hpp>
 #include <morph/util/rational.hpp>
@@ -20,6 +21,7 @@
 #include <testkit/bundle_warnings.hpp>
 #include <testkit/db_fixture.hpp>
 #include <testkit/screen_harness.hpp>
+#include <testkit/storage_owner.hpp>
 #include <vector>
 
 #include "lims/app/lims_authorizer.hpp"
@@ -153,6 +155,24 @@ TEST_CASE("lims screens: registration registers a client and a sample, then open
         auto const header = harness.text("header");
         return header && header->ends_with("Registered (v1)");
     }));
+}
+
+// Mutation: appoint the supervisor without dispatching (no entry reaches the log), or dispatch it as another
+// principal.
+TEST_CASE("lims screens: the local bootstrap appointment is a dispatched, journalled AssignRole",
+          "[lims-screens][audit]") {
+    morph::ladder::testkit::DbFixture fixture;
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
+    morph::journal::ScopedActionLog const scoped{log};
+    lims::screens::prepareLocal("newcomer");
+    morph::ladder::testkit::storageOwner().drain();
+    auto const entries = log->entries();
+    REQUIRE(entries.size() == 1);
+    CHECK(entries.front().modelType == "OrgModel");
+    CHECK(entries.front().actionType == "AssignRole");
+    CHECK(entries.front().principal == "newcomer");
+    CHECK(entries.front().outcome == morph::journal::Outcome::Succeeded);
+    CHECK(lims::OrgModel::supervisorExists());
 }
 
 // Mutation: drop the first-supervisor appointment from prepareLocal (the registration is refused for want of a role).

@@ -725,9 +725,11 @@ and the carve-out closes as soon as any supervisor exists. Revoking a company's 
 (decision 24).
 
 A local client starts on a fresh database with no assignments, and every write on a sample needs a role, so
-`lims::screens::prepareLocal(user)` appoints the local user (`--user`) Supervisor at the seeded company through the
-same bootstrap `AssignRole` a first supervisor uses. It applies only while the lab has no supervisor; once one exists,
-roles are assigned as for any lab and `prepareLocal` leaves them alone.
+`lims::screens::prepareLocal(user)` appoints the local user (`--user`) Supervisor at the seeded company by dispatching
+the ordinary bootstrap `AssignRole` as that user, through a bridge over a local backend that carries the user's
+session. It applies only while the lab has no supervisor; once one exists, roles are assigned as for any lab and
+`prepareLocal` leaves them alone. The appointment is a dispatched action like any other, so it appears in the audit
+trail as an `AssignRole` entry whose principal is the local user, who is also the assignment's maker.
 
 Assignments are not a sample's history, so a sample's audit trail no longer shows them. `OrgModel` is journaled by
 the framework's dispatcher, which records every loggable action it runs, and `AssignRole` and `RevokeRole` are

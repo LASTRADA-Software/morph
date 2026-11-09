@@ -193,110 +193,125 @@ SaveSampleResult SampleModel::execute(const SaveSample& action) {
         return {.error = SaveError::noSite, .sampleId = {}};
     }
     requirePrincipal();
-    requireRoleSomewhere<SaveSample>();
+    try {
+        requireRoleSomewhere<SaveSample>();
 
-    Lightweight::DataMapper mapper;
-    auto clients = mapper.Query<db::ClientRecord>()
-                       .Where(::Lightweight::FieldNameOf<&db::ClientRecord::id>, "=", *header.clientId)
-                       .All();
-    if (clients.empty()) {
-        throw NotFound{"SaveSample: no such client"};
-    }
-    if (!OrgModel::findSite(header.siteId)) {
-        throw NotFound{"SaveSample: no such site"};
-    }
-    std::vector<db::SampleRecord> stored;
-    if (_sampleId) {
-        stored = mapper.Query<db::SampleRecord>()
-                     .Where(::Lightweight::FieldNameOf<&db::SampleRecord::id>, "=", *_sampleId)
-                     .All();
-        if (stored.empty()) {
-            throw NotFound{"sample " + std::to_string(*_sampleId) + " does not exist"};
+        Lightweight::DataMapper mapper;
+        auto clients = mapper.Query<db::ClientRecord>()
+                           .Where(::Lightweight::FieldNameOf<&db::ClientRecord::id>, "=", *header.clientId)
+                           .All();
+        if (clients.empty()) {
+            throw NotFound{"SaveSample: no such client"};
         }
-    }
-    // The site the sample is written to, and, for an update, the site it is stored at: a move needs a role at both.
-    requireAuthorizedIn(action, Scope{header.siteId});
-    if (_sampleId) {
-        requireAuthorizedIn(action, Scope{SiteId::fromOptional(stored.front().siteId.Value())});
-    }
-    std::string payload;
-    if (auto const error = glz::write_json(*_draft, payload); error) {
-        throw ValidationError{"SaveSample: the working copy does not encode"};
-    }
+        if (!OrgModel::findSite(header.siteId)) {
+            throw NotFound{"SaveSample: no such site"};
+        }
+        std::vector<db::SampleRecord> stored;
+        if (_sampleId) {
+            stored = mapper.Query<db::SampleRecord>()
+                         .Where(::Lightweight::FieldNameOf<&db::SampleRecord::id>, "=", *_sampleId)
+                         .All();
+            if (stored.empty()) {
+                throw NotFound{"sample " + std::to_string(*_sampleId) + " does not exist"};
+            }
+        }
+        // The site the sample is written to, and, for an update, the site it is stored at: a move needs a role at
+        // both.
+        requireAuthorizedIn(action, Scope{header.siteId});
+        if (_sampleId) {
+            requireAuthorizedIn(action, Scope{SiteId::fromOptional(stored.front().siteId.Value())});
+        }
+        std::string payload;
+        if (auto const error = glz::write_json(*_draft, payload); error) {
+            throw ValidationError{"SaveSample: the working copy does not encode"};
+        }
 
-    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    std::int64_t sampleId = 0;
-    if (_sampleId) {
-        db::SampleRecord& row = stored.front();
-        row.client = clients.front();
-        row.reference = Lightweight::SqlAnsiString<64>{header.reference};
-        row.siteId = std::optional<std::int64_t>{*header.siteId};
-        mapper.Update(row);
-        sampleId = *_sampleId;
-    } else {
-        db::SampleRecord row;
-        row.client = clients.front();
-        row.reference = Lightweight::SqlAnsiString<64>{header.reference};
-        row.siteId = std::optional<std::int64_t>{*header.siteId};
-        row.state = static_cast<int>(SampleState::Registered);
-        row.version = 1;
-        row.registeredAt = nowMillis();
-        mapper.Create(row);
-        sampleId = static_cast<std::int64_t>(row.id.Value());
-    }
-    auto entries = entryRows(mapper, sampleId);
-    if (entries.empty()) {
-        db::SampleEntryRecord entry;
-        entry.sampleId = sampleId;
-        entry.payload = Lightweight::SqlDynamicAnsiString<4096>{payload};
-        mapper.Create(entry);
-    } else {
-        entries.front().payload = Lightweight::SqlDynamicAnsiString<4096>{payload};
-        mapper.Update(entries.front());
-    }
-    sqlTxn.Commit();
+        Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+        std::int64_t sampleId = 0;
+        if (_sampleId) {
+            db::SampleRecord& row = stored.front();
+            row.client = clients.front();
+            row.reference = Lightweight::SqlAnsiString<64>{header.reference};
+            row.siteId = std::optional<std::int64_t>{*header.siteId};
+            mapper.Update(row);
+            sampleId = *_sampleId;
+        } else {
+            db::SampleRecord row;
+            row.client = clients.front();
+            row.reference = Lightweight::SqlAnsiString<64>{header.reference};
+            row.siteId = std::optional<std::int64_t>{*header.siteId};
+            row.state = static_cast<int>(SampleState::Registered);
+            row.version = 1;
+            row.registeredAt = nowMillis();
+            mapper.Create(row);
+            sampleId = static_cast<std::int64_t>(row.id.Value());
+        }
+        auto entries = entryRows(mapper, sampleId);
+        if (entries.empty()) {
+            db::SampleEntryRecord entry;
+            entry.sampleId = sampleId;
+            entry.payload = Lightweight::SqlDynamicAnsiString<4096>{payload};
+            mapper.Create(entry);
+        } else {
+            entries.front().payload = Lightweight::SqlDynamicAnsiString<4096>{payload};
+            mapper.Update(entries.front());
+        }
+        sqlTxn.Commit();
 
-    if (!_sampleId) {
-        _sampleId = sampleId;
-        _journal.rekey(std::to_string(sampleId));
+        if (!_sampleId) {
+            _sampleId = sampleId;
+            _journal.rekey(std::to_string(sampleId));
+        }
+        SaveSampleResult result{.error = SaveError::none, .sampleId = SampleId{sampleId}};
+        _journal.recordSuccess<SampleModel>(action, result, nowMillis());
+        return result;
+    } catch (const LimsError& error) {
+        // A refused rewrite of a stored sample belongs in that sample's trail; a draft that was never saved has none.
+        if (_sampleId) {
+            _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
+        }
+        throw;
     }
-    SaveSampleResult result{.error = SaveError::none, .sampleId = SampleId{sampleId}};
-    _journal.recordSuccess<SampleModel>(action, result, nowMillis());
-    return result;
 }
 
 DeleteSampleResult SampleModel::execute(const DeleteSample& action) {
     requirePrincipal();
-    requireRoleSomewhere<DeleteSample>();
-    if (!_sampleId) {
-        throw NotFound{"DeleteSample: the working copy was never saved"};
-    }
-    Lightweight::DataMapper mapper;
-    auto samples = mapper.Query<db::SampleRecord>()
-                       .Where(::Lightweight::FieldNameOf<&db::SampleRecord::id>, "=", *_sampleId)
-                       .All();
-    if (samples.empty()) {
-        throw NotFound{"sample " + std::to_string(*_sampleId) + " does not exist"};
-    }
-    requireAuthorizedIn(action, Scope{SiteId::fromOptional(samples.front().siteId.Value())});
-    // A sample that has been received is part of the lab's record; only a registration can be withdrawn.
-    if (static_cast<SampleState>(samples.front().state.Value()) != SampleState::Registered) {
-        std::string const error = "DeleteSample: only a registered sample can be deleted";
-        _journal.recordFailure<SampleModel>(action, error, nowMillis());
-        throw IllegalTransition{error};
-    }
-    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    mapper.Query<db::SampleEntryRecord>()
-        .Where(::Lightweight::FieldNameOf<&db::SampleEntryRecord::sampleId>, "=", *_sampleId)
-        .Delete();
-    mapper.Delete(samples.front());
-    sqlTxn.Commit();
+    try {
+        requireRoleSomewhere<DeleteSample>();
+        if (!_sampleId) {
+            throw NotFound{"DeleteSample: the working copy was never saved"};
+        }
+        Lightweight::DataMapper mapper;
+        auto samples = mapper.Query<db::SampleRecord>()
+                           .Where(::Lightweight::FieldNameOf<&db::SampleRecord::id>, "=", *_sampleId)
+                           .All();
+        if (samples.empty()) {
+            throw NotFound{"sample " + std::to_string(*_sampleId) + " does not exist"};
+        }
+        requireAuthorizedIn(action, Scope{SiteId::fromOptional(samples.front().siteId.Value())});
+        // A sample that has been received is part of the lab's record; only a registration can be withdrawn.
+        if (static_cast<SampleState>(samples.front().state.Value()) != SampleState::Registered) {
+            throw IllegalTransition{"DeleteSample: only a registered sample can be deleted"};
+        }
+        Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+        mapper.Query<db::SampleEntryRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::SampleEntryRecord::sampleId>, "=", *_sampleId)
+            .Delete();
+        mapper.Delete(samples.front());
+        sqlTxn.Commit();
 
-    DeleteSampleResult result{.sampleId = SampleId{*_sampleId}};
-    _journal.recordSuccess<SampleModel>(action, result, nowMillis());
-    _sampleId.reset();
-    _draft.reset();
-    return result;
+        DeleteSampleResult result{.sampleId = SampleId{*_sampleId}};
+        _journal.recordSuccess<SampleModel>(action, result, nowMillis());
+        _sampleId.reset();
+        _draft.reset();
+        return result;
+    } catch (const LimsError& error) {
+        // A refused delete of a stored sample belongs in that sample's trail; a draft that was never saved has none.
+        if (_sampleId) {
+            _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
+        }
+        throw;
+    }
 }
 
 HeaderView SampleModel::execute(const HeaderSection& action) {

@@ -22,6 +22,7 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/journal/action_log.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
@@ -48,6 +49,7 @@
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
+#include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
 using morph::bridge::AllowShared;
@@ -762,7 +764,8 @@ void fillHeader(lims::SampleModel& model, lims::ClientId client, std::string ref
 // Sample entry writes a sample whose site the header names, so a role is needed at that site, and, when it updates a
 // stored sample, at the site it is stored at: moving a sample needs a role at both ends.
 // Mutations: drop the header-site check (eve creates a sample at the seeded site, and moves a rival sample into it);
-// drop the stored-site check (eve rewrites alice's sample); drop DeleteSample's check (eve deletes alice's sample).
+// drop the stored-site check (eve rewrites alice's sample, and a move passes with the new site's role alone); drop
+// DeleteSample's check (eve deletes alice's sample).
 TEST_CASE("declared authorization: sample entry is refused for another company's sites and samples",
           "[lims][authorization][lab][entry]") {
     DbFixture fixture;
@@ -816,8 +819,7 @@ TEST_CASE("declared authorization: sample entry is refused for another company's
 }
 
 // Mutation: check the site role only (cara, an analyst at the company, is refused); check the company only (ann, an
-// analyst at the site, is refused); require the role at the header's site but not the stored one (a move passes with
-// the new site's role alone).
+// analyst at the site, is refused).
 TEST_CASE("declared authorization: a role at the site or at its company allows sample entry",
           "[lims][authorization][lab][entry]") {
     auto const holder = GENERATE(std::pair{"ann", false}, std::pair{"cara", true});
@@ -843,6 +845,72 @@ TEST_CASE("declared authorization: a role at the site or at its company allows s
 
     CHECK(editor.execute(lims::DeleteSample{}).sampleId == stored);
     CHECK(sampleRow(stored).first.empty());
+}
+
+// Mutation: require a role at one site only, the stored one or the header's (gina, who holds a role at both, is
+// refused the move).
+TEST_CASE("declared authorization: a principal holding a role at both sites may move a sample between them",
+          "[lims][authorization][lab][entry]") {
+    DbFixture fixture;
+    auto const bench = benchIn(lims::SampleState::Registered);
+    auto const stored = savedEntry(bench.client);
+    lims::SiteId second;
+    {
+        ScopedPrincipal const alice{"alice"};
+        lims::test::grant("alice", lims::LimsRole::Supervisor);
+        lims::OrgModel org;
+        second = org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Second bench"}).id;
+    }
+    lims::test::grant("gina", lims::LimsRole::Analyst, lims::Scope{lims::test::seededSite()});
+    lims::test::grant("gina", lims::LimsRole::Analyst, lims::Scope{second});
+    ScopedPrincipal const gina{"gina"};
+
+    lims::SampleModel model;
+    auto const loaded = model.execute(lims::LoadSample{.id = stored});
+    fillHeader(model, loaded.clientId, loaded.reference, second);
+    CHECK(model.execute(lims::SaveSample{}).error == lims::SaveError::none);
+    CHECK(sampleRow(stored) == std::pair{std::string{"WW-A"}, std::optional{*second}});
+}
+
+// Mutation: leave the refusal out of SaveSample's or DeleteSample's catch (eve's refused rewrite or delete is missing
+// from the sample's trail).
+TEST_CASE("declared authorization: a refused rewrite or delete of a stored sample appears in its audit trail",
+          "[lims][authorization][lab][entry][audit]") {
+    DbFixture fixture;
+    auto const rival = rivalWithEve();
+    auto const bench = benchIn(lims::SampleState::Registered);
+    auto const stored = savedEntry(bench.client);
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
+    auto const refusedSteps = [&](std::string_view action) {
+        ScopedPrincipal const alice{"alice"};
+        lims::SampleModel reader;
+        reader.attachActionLog(log, std::string{});
+        reader.execute(lims::LoadSample{.id = stored});
+        std::vector<lims::AuditStep> found;
+        for (auto const& step : reader.execute(lims::GetAuditTrail{}).steps) {
+            if (step.action == action && step.outcome == lims::AuditOutcome::Refused) {
+                found.push_back(step);
+            }
+        }
+        return found;
+    };
+
+    ScopedPrincipal const eve{"eve"};
+    lims::SampleModel model;
+    model.attachActionLog(log, std::string{});
+    auto const loaded = model.execute(lims::LoadSample{.id = stored});
+    REQUIRE(refusedSteps("DeleteSample").empty());
+    CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::Forbidden);
+    fillHeader(model, loaded.clientId, "WW-EVE", rival.site);
+    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::Forbidden);
+
+    auto const deletes = refusedSteps("DeleteSample");
+    REQUIRE(deletes.size() == 1);
+    CHECK(deletes.front().principal == "eve");
+    CHECK_FALSE(deletes.front().detail.empty());
+    auto const saves = refusedSteps("SaveSample");
+    REQUIRE(saves.size() == 1);
+    CHECK(saves.front().principal == "eve");
 }
 
 // Mutation: drop the requirement from RegisterSample, ReceiveSample or ResolveConflict (eve's call is recorded in that

@@ -6,6 +6,10 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/table/query.hpp>
 #include <morph/ui/author.hpp>
@@ -498,13 +502,38 @@ void prepareLocal(std::string_view user) {
     auth::setTokenIssuer(
         std::make_shared<morph::session::TokenIssuer>("lims-local-development", morph::session::hmacSha256));
     // A fresh lab has no role assignments, and every write on a sample needs a role, so a fresh local client could
-    // register nothing. The first supervisor is appointed through the same bootstrap `AssignRole` a first supervisor
-    // uses anywhere: it applies only while the lab has none, and the assignment names the user as its maker. Once a
-    // lab has a supervisor, its roles are its own business and are left alone.
+    // register nothing. The first supervisor is appointed by dispatching the ordinary bootstrap `AssignRole` as the
+    // user, through a bridge over a local backend that carries the user's session: it applies only while the lab has
+    // no supervisor, names the user as its maker, and is journalled like any dispatched action. Once a lab has a
+    // supervisor, its roles are its own business and are left alone.
     if (user.empty() || OrgModel::supervisorExists()) {
         return;
     }
-    OrgModel::appointFirstSupervisor(user);
+    morph::exec::ThreadPoolExecutor workers{1};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workers), owner};
+    morph::session::Context session;
+    session.principal = std::string{user};
+    bridge.setDefaultSession(std::move(session));
+    morph::bridge::BridgeHandler<OrgModel> org{bridge, &owner};
+    bool done = false;
+    std::exception_ptr failure;
+    org.execute(AssignRole{.principal = std::string{user},
+                           .role = LimsRole::Supervisor,
+                           .company = OrgModel::seededCompany(),
+                           .site = {}})
+        .then([&done](auto const&) { done = true; })
+        .onError([&done, &failure](std::exception_ptr error) {
+            failure = std::move(error);
+            done = true;
+        });
+    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{30};
+    while (!done && std::chrono::steady_clock::now() < deadline) {
+        owner.runFor(std::chrono::milliseconds{10});
+    }
+    if (failure) {
+        std::rethrow_exception(failure);
+    }
 }
 
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle() {
