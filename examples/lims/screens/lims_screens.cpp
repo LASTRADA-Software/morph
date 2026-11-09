@@ -15,6 +15,7 @@
 #include <morph/ui/author.hpp>
 #include <morph/ui/service.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -533,6 +534,9 @@ void prepareLocal(std::string_view user) {
     }
     if (failure) {
         std::rethrow_exception(failure);
+    }
+    if (!done) {
+        throw std::runtime_error{"lims: appointing the local user as the first supervisor did not finish within 30 s"};
     }
 }
 
