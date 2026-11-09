@@ -196,6 +196,20 @@ public:
         return _backend.find(kind, "testId", testId);
     }
 
+    /// @brief Every widget of @p kind with @p testId, in document (creation) order.
+    /// @param kind   The widget kind, as the dump shows it.
+    /// @param testId The test id.
+    /// @return Their ids; empty when none is mounted.
+    [[nodiscard]] std::vector<int> findAll(std::string_view kind, std::string_view testId) const {
+        std::vector<int> matches;
+        for (int const widget : _backend.all(kind)) {
+            if (_backend.prop(widget, "testId") == testId) {
+                matches.push_back(widget);
+            }
+        }
+        return matches;
+    }
+
     /// @brief The text a `Text` with @p testId shows.
     /// @param testId The test id.
     /// @return The text, or nothing when no such widget is mounted.
@@ -212,6 +226,19 @@ public:
     /// @brief Clicks the button with @p testId.
     /// @param testId The test id.
     void click(std::string_view testId) { _backend.click(require("Button", testId)); }
+
+    /// @brief Clicks the @p n-th button with @p testId, counting from 0 in document order; a table's rows each carry
+    ///        one, so this presses a given row's.
+    /// @param testId The test id.
+    /// @param n      Which match.
+    void clickNth(std::string_view testId, std::size_t n) {
+        auto const matches = findAll("Button", testId);
+        if (n >= matches.size()) {
+            throw std::runtime_error{"ScreenHarness: no button " + std::to_string(n) + " with test id " +
+                                     std::string{testId}};
+        }
+        _backend.click(matches[n]);
+    }
 
     /// @brief Types @p value into the text input with @p testId, as the user would.
     /// @param testId The test id.

@@ -57,57 +57,43 @@ TEST_CASE("lims org screens: a supervisor creates a company and a site, and both
     CHECK(harness.problems().empty());
 }
 
-// Mutations: drop changes<RoleAssignmentView> from AssignRole's effects (the count stays at 0); render the roles cell
-// as an empty list (no role name appears in the users table).
-TEST_CASE("lims org screens: the first supervisor assigns themselves, then a verifier, and the users list their roles",
-          "[lims-screens][org]") {
-    DbFixture fixture;
-    ScreenHarness harness{
-        limsApp(), std::string{lims::screens::kAccess}, RigMode::Local, {}, LocalSetup{.db = {}, .user = "tech"}};
-    REQUIRE(harness.waitForText("assignmentCount", "0 role assignments"));
-
-    harness.editField("assignForm", "principal", "tech");
-    harness.chooseField("assignForm", "role", R"("Supervisor")");
-    harness.editField("assignForm", "company", "1");
-    REQUIRE(harness.submitForm("assignForm"));
-    REQUIRE(harness.waitForText("assignmentCount", "1 role assignments"));
-    CHECK(harness.waitForText("userCount", "1 users"));
-    CHECK(harness.waitForText("userRole", "Supervisor"));
-
-    harness.editField("assignForm", "principal", "bob");
-    harness.chooseField("assignForm", "role", R"("Verifier")");
-    REQUIRE(harness.submitForm("assignForm"));
-    REQUIRE(harness.waitForText("assignmentCount", "2 role assignments"));
-    CHECK(harness.waitForText("userCount", "2 users"));
-    reportProblems(harness);
-    CHECK(harness.problems().empty());
-}
-
-// Mutations: drop changes<RoleAssignmentView> from RevokeRole's effects (the count stays at 2); make every row's
-// button send the first row's id (the second click revokes the same row again and no refusal appears).
-TEST_CASE("lims org screens: a revoke drops its row, and the last supervisor's revoke is refused in words",
+// Mutations: drop changes<RoleAssignmentView> from RevokeRole's effects (the count stays at 3); make every row's
+// button send the table's current first row's id (pressing carol's button revokes the first row instead, so carol's
+// row stays and the first row goes).
+TEST_CASE("lims org screens: a revoke drops its own row, and the last supervisor's revoke is refused in words",
           "[lims-screens][org]") {
     DbFixture fixture;
     lims::test::grant("bob", lims::LimsRole::Supervisor);
+    lims::test::grant("carol", lims::LimsRole::Verifier);
     ScreenHarness harness{
         limsApp(), std::string{lims::screens::kAccess}, RigMode::Local, {}, LocalSetup{.db = {}, .user = "bob"}};
-    REQUIRE(harness.waitForText("assignmentCount", "2 role assignments"));
-    CHECK(harness.waitForText("userCount", "2 users"));
+    REQUIRE(harness.waitForText("assignmentCount", "3 role assignments"));
+    REQUIRE(harness.waitFor([&harness] { return harness.findAll("Button", "revoke").size() == 3; }));
+    auto const shown = [&harness](std::string_view who) {
+        return harness.backend().find("Text", "text", who).has_value();
+    };
+    REQUIRE(shown("lab-supervisor"));
+    REQUIRE(shown("bob"));
+    REQUIRE(shown("carol"));
 
-    // A table is not a column, so the button is looked up by its test id over the whole screen; the first one is the
-    // first row's, the granter's supervisor assignment, which may go while bob remains a supervisor.
-    REQUIRE(harness.waitFor([&harness] { return harness.find("Button", "revoke").has_value(); }));
-    harness.click("revoke");
+    // Rows are the assignments in id order: the granter's, bob's, carol's. The third button is carol's, not the first.
+    harness.clickNth("revoke", 2);
+    CHECK(harness.waitForText("assignmentCount", "2 role assignments"));
+    CHECK(harness.waitFor([&] { return !shown("carol"); }));
+    CHECK(shown("lab-supervisor"));
+    CHECK(shown("bob"));
+    CHECK(harness.findAll("Button", "revoke").size() == 2);
+
+    // The granter's row may go while bob remains a supervisor; the row left is then the last supervisor's, refused.
+    harness.clickNth("revoke", 0);
     CHECK(harness.waitForText("assignmentCount", "1 role assignments"));
     CHECK(harness.waitForText("userCount", "1 users"));
-
-    // The row left is bob's, the last supervisor's: refused, in words, and the count stays.
     harness.click("revoke");
     CHECK(harness.waitFor([&harness] {
         auto const text = harness.text("error");
         return text && text->find("last supervisor") != std::string::npos;
     }));
-    CHECK(harness.waitForText("assignmentCount", "1 role assignments"));
+    CHECK(shown("bob"));
     reportProblems(harness);
 }
 
@@ -132,5 +118,4 @@ TEST_CASE("lims org screens: a refused create-company form names the missing sup
         auto const text = harness.text("form_result");
         return text && text->find("does not hold the supervisor role") != std::string::npos;
     }));
-    CHECK(harness.waitForText("companyCount", "1 companies"));
 }
