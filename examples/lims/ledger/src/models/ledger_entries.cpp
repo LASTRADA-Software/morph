@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlStatement.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
 #include <cstdint>
@@ -94,7 +95,8 @@ struct LoadedEntry {
 /// @param mapper The open mapper, for the account codes.
 /// @param entry The rows.
 /// @return The view.
-/// @throws ValidationError if a row holds a state or currency outside its enumeration.
+/// @throws ValidationError if a row holds a state, currency or side outside its enumeration, or a line names an
+///         account that does not exist.
 [[nodiscard]] JournalEntryView toView(Lightweight::DataMapper& mapper, LoadedEntry const& entry) {
     auto const& row = entry.header;
     int const state = row.state.Value();
@@ -123,19 +125,46 @@ struct LoadedEntry {
         .postedBy = std::string{row.postedBy.Value().ToStringView()},
     };
     for (auto const& line : entry.lines) {
+        int const side = line.side.Value();
+        if (side != static_cast<int>(PostingSide::Debit) && side != static_cast<int>(PostingSide::Credit)) {
+            throw ValidationError{"entry " + std::to_string(row.id.Value()) + " stores a line side out of range"};
+        }
         auto const accounts = mapper.Query<db::AccountRecord>()
                                   .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", line.account.Value())
                                   .All();
+        if (accounts.empty()) {
+            throw ValidationError{"entry " + std::to_string(row.id.Value()) + " has a line on account " +
+                                  std::to_string(line.account.Value()) + ", which does not exist"};
+        }
         view.lines.push_back(PostingLine{
-            .accountCode =
-                accounts.empty() ? std::string{} : std::string{accounts.front().code.Value().ToStringView()},
-            .side =
-                line.side.Value() == static_cast<int>(PostingSide::Credit) ? PostingSide::Credit : PostingSide::Debit,
+            .accountCode = std::string{accounts.front().code.Value().ToStringView()},
+            .side = static_cast<PostingSide>(side),
             .amount = amountOf(line.amountNum.Value(), line.amountDen.Value(), transaction),
             .companyAmount = amountOf(line.companyNum.Value(), line.companyDen.Value(), base),
         });
     }
     return view;
+}
+
+/// @brief Changes the entry row @p entryId only where it still holds the state the caller read.
+///
+/// One conditional UPDATE, so two callers acting on the same read cannot both succeed: the second finds the row
+/// changed and matches nothing.
+/// @param mapper The open mapper, inside the caller's transaction.
+/// @param entryId The entry.
+/// @param set The columns to set and their new values, as SQL literals built by the query formatter.
+/// @param guard Adds the condition the row must still meet.
+/// @return Whether a row matched and changed.
+template <typename Set, typename Guard>
+[[nodiscard]] bool updateEntryIf(Lightweight::DataMapper& mapper, std::int64_t entryId, Set const& set,
+                                 Guard const& guard) {
+    auto query = mapper.Connection().Query(db::EntryRecord::TableName).Update();
+    set(query);
+    (void)query.Where("id", "=", entryId);
+    guard(query);
+    Lightweight::SqlStatement statement{mapper.Connection()};
+    auto const cursor = statement.ExecuteDirect(query.ToSql());
+    return cursor.NumRowsAffected() == 1U;
 }
 
 /// @brief The period of @p company that @p date falls in.
@@ -157,7 +186,7 @@ struct LoadedEntry {
     return rows.front();
 }
 
-/// @brief Throws `Conflict` when @p period does not take what @p allowed permits.
+/// @brief Throws `Conflict` when @p period does not take what the caller is recording.
 /// @param period The period.
 /// @param allowsClosing Whether a closing period takes it.
 /// @param what What is refused, for the message.
@@ -238,9 +267,14 @@ std::int64_t writeEntry(Lightweight::DataMapper& mapper, db::EntryRecord& header
 }
 
 /// @brief Throws `ValidationError` naming @p where when @p lines cannot be recorded.
+/// @param where The action, for the message.
+/// @param lines The lines.
+/// @param transaction The transaction currency.
+/// @param company The company's currency.
+/// @param rate Company-currency units per transaction-currency unit.
 void requireBalanced(std::string_view where, std::span<PostingLine const> lines, CurrencyCode transaction,
-                     CurrencyCode company) {
-    if (auto const problem = entryProblem(lines, transaction, company)) {
+                     CurrencyCode company, Rate const& rate) {
+    if (auto const problem = entryProblem(lines, transaction, company, rate)) {
         throw ValidationError{std::string{where} + ": " + *problem};
     }
 }
@@ -272,7 +306,7 @@ JournalEntryView LedgerModel::execute(const CreateDraftEntry& action) {
     CurrencyCode const base = companyCurrency(action.company);
     requireAuthorized(action);
     requireRate("CreateDraftEntry", *action.rate, action.currency, base);
-    requireBalanced("CreateDraftEntry", action.lines, action.currency, base);
+    requireBalanced("CreateDraftEntry", action.lines, action.currency, base, action.rate);
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     auto const period = periodOf(mapper, action.company, action.date);
@@ -314,7 +348,16 @@ JournalEntryView LedgerModel::execute(const PostEntry& action) {
     requireRecordable(periods.front(), true, "PostEntry");
     entry->header.state = static_cast<int>(EntryState::Posted);
     entry->header.postedBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
-    mapper.Update(entry->header);
+    // Only a row still in Draft is posted: a concurrent post that won leaves nothing here to change.
+    if (!updateEntryIf(
+            mapper, *action.entryId,
+            [&](auto& query) {
+                query.Set("state", static_cast<int>(EntryState::Posted))
+                    .Set("posted_by", ::morph::session::current()->principal);
+            },
+            [](auto& query) { (void)query.Where("state", "=", static_cast<int>(EntryState::Draft)); })) {
+        throw Conflict{"PostEntry: entry " + std::to_string(*action.entryId) + " was posted meanwhile"};
+    }
     sqlTxn.Commit();
     return toView(mapper, *entry);
 }
@@ -335,7 +378,7 @@ JournalEntryView LedgerModel::execute(const ReverseEntry& action) {
     }
     requireAuthorized(action);
     if (original->header.state.Value() != static_cast<int>(EntryState::Posted)) {
-        throw IllegalTransition{"ReverseEntry: a draft is corrected by editing it away, not by reversal"};
+        throw IllegalTransition{"ReverseEntry: only a posted entry is reversed; a draft is not on the books"};
     }
     if (original->header.reversedById.Value().has_value()) {
         throw Conflict{"ReverseEntry: entry " + std::to_string(*action.entryId) + " is already reversed"};
@@ -345,6 +388,8 @@ JournalEntryView LedgerModel::execute(const ReverseEntry& action) {
     for (PostingLine& line : lines) {
         line.side = line.side == PostingSide::Debit ? PostingSide::Credit : PostingSide::Debit;
     }
+    // The mirror is checked like any entry: a mirroring defect is a refusal, not bad books.
+    requireBalanced("ReverseEntry", lines, view.currency, companyCurrency(view.company), view.rate);
     auto const period = periodOf(mapper, view.company, action.date);
     requireRecordable(period, true, "ReverseEntry");
     auto const accounts = accountIds(mapper, view.company, lines);
@@ -353,8 +398,13 @@ JournalEntryView LedgerModel::execute(const ReverseEntry& action) {
     header.sourceReference = Lightweight::SqlAnsiString<128>{"reversal of entry " + std::to_string(*action.entryId)};
     header.reversesId = *action.entryId;
     std::int64_t const created = writeEntry(mapper, header, accounts, lines);
-    original->header.reversedById = created;
-    mapper.Update(original->header);
+    // Only an entry still unreversed is marked: a concurrent reversal that won leaves nothing here to change, and
+    // this transaction's reversal rolls back with it.
+    if (!updateEntryIf(
+            mapper, *action.entryId, [&](auto& query) { query.Set("reversed_by_id", created); },
+            [](auto& query) { (void)query.WhereNull("reversed_by_id"); })) {
+        throw Conflict{"ReverseEntry: entry " + std::to_string(*action.entryId) + " was reversed meanwhile"};
+    }
     sqlTxn.Commit();
     return toView(mapper, loadWritten(mapper, created));
 }

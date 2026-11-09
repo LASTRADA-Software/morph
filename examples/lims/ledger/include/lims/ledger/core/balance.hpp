@@ -16,12 +16,16 @@ namespace lims {
 ///
 /// An entry needs two or more lines, each with a non-negative amount in @p transaction's minor units and a value in
 /// @p company's minor units; the debits equal the credits in each; and when the currencies are the same, each line's
-/// two amounts are equal. Nothing is rounded: a value with more decimals than its currency is refused.
+/// two amounts are equal. Nothing is rounded: a value with more decimals than its currency is refused. When the
+/// currencies differ, each line's value lies within half a company minor unit of its amount times @p rate (computed
+/// exactly; a product that does not fit is refused); a line of zero amount is the poster's rounding line and is
+/// exempt.
 /// @param lines The lines.
 /// @param transaction The transaction currency.
 /// @param company The company's currency.
+/// @param rate Company-currency units per transaction-currency unit.
 /// @return The reason, in words; nothing when the lines may be recorded.
 [[nodiscard]] std::optional<std::string> entryProblem(std::span<PostingLine const> lines, CurrencyCode transaction,
-                                                      CurrencyCode company);
+                                                      CurrencyCode company, Rate const& rate);
 
 }  // namespace lims

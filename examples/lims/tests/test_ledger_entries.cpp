@@ -4,6 +4,7 @@
 // corrected by reversal.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -62,6 +63,29 @@ constexpr std::string_view kSecret = "lims-ledger-entries-test-secret-at-least-3
 /// @return It.
 [[nodiscard]] lims::Rate one() { return lims::Rate{Rational{1, DecimalPlaces{6}}}; }
 
+/// @brief A rate of @p millionths millionths.
+/// @param millionths The rate times 10^6.
+/// @return It.
+[[nodiscard]] lims::Rate rateOf(std::int64_t millionths) {
+    return lims::Rate{Rational{Numerator{millionths}, Denominator{1000000}, DecimalPlaces{6}}};
+}
+
+/// @brief A line valued at @p company minor units of the company currency.
+/// @param code The account.
+/// @param side The side.
+/// @param minor The amount in minor units of the transaction currency.
+/// @param company The value in minor units of the company currency.
+/// @param places The company currency's decimals.
+/// @return The line.
+[[nodiscard]] lims::PostingLine valued(std::string code, lims::PostingSide side, std::int64_t minor,
+                                       std::int64_t company, std::uint32_t transactionPlaces = 2,
+                                       std::uint32_t places = 2) {
+    return lims::PostingLine{.accountCode = std::move(code),
+                             .side = side,
+                             .amount = money(minor, transactionPlaces),
+                             .companyAmount = money(company, places)};
+}
+
 /// @brief The books every case starts from: alice an accountant at the seeded company (EUR), its chart and
 ///        November 2026 open.
 /// @return November's period.
@@ -95,7 +119,7 @@ lims::JournalEntryView accrual(lims::LedgerModel& ledger, morph::time::Timestamp
         .lines = {line("6900", lims::PostingSide::Debit, 5000), line("2200", lims::PostingSide::Credit, 5000)}});
 }
 
-/// @brief Sets November 2026's state directly: the closing steps beyond "closing" are a later task's.
+/// @brief Sets November 2026's state directly: there is no action that closes a period yet.
 /// @param period The period.
 /// @param state The state.
 void forceState(lims::PeriodId period, lims::PeriodState state) {
@@ -108,6 +132,31 @@ void forceState(lims::PeriodId period, lims::PeriodState state) {
     mapper.Update(rows.front());
 }
 
+/// @brief Runs @p sql on the fixture's database.
+/// @param sql The statement.
+void execute(std::string const& sql) {
+    Lightweight::SqlStatement statement;
+    (void)statement.ExecuteDirect(sql);
+}
+
+/// @brief A posted entry of four distinct USD lines valued in the EUR company at a rate none of whose line values is
+///        the one rounding amount x rate gives for every line.
+/// @param ledger The model.
+/// @return The posted entry.
+lims::JournalEntryView postedUsdEntry(lims::LedgerModel& ledger) {
+    auto const draft =
+        ledger.execute(lims::CreateDraftEntry{.company = lims::test::seededCompany(),
+                                              .date = morph::time::Timestamp{lims::test::at(2026, 11, 12)},
+                                              .memo = "usd",
+                                              .currency = lims::CurrencyCode::USD,
+                                              .rate = rateOf(921500),
+                                              .lines = {valued("1200", lims::PostingSide::Debit, 1000, 921),
+                                                        valued("4000", lims::PostingSide::Credit, 2000, 1843),
+                                                        valued("6900", lims::PostingSide::Debit, 1250, 1152),
+                                                        valued("2200", lims::PostingSide::Credit, 250, 230)}});
+    return ledger.execute(lims::PostEntry{.entryId = draft.id});
+}
+
 }  // namespace
 
 // Mutation: skip the company-currency sum in entryProblem (the 1-cent company difference passes).
@@ -115,14 +164,14 @@ TEST_CASE("ledger entries: an entry balances per transaction currency and in com
           "[lims][ledger]") {
     std::vector<lims::PostingLine> balanced{line("1200", lims::PostingSide::Debit, 1000),
                                             line("4000", lims::PostingSide::Credit, 1000)};
-    CHECK_FALSE(lims::entryProblem(balanced, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR).has_value());
+    CHECK_FALSE(lims::entryProblem(balanced, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR, one()).has_value());
 
     std::vector<lims::PostingLine> oneLine{line("1200", lims::PostingSide::Debit, 1000)};
-    CHECK(lims::entryProblem(oneLine, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR).has_value());
+    CHECK(lims::entryProblem(oneLine, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR, one()).has_value());
 
     std::vector<lims::PostingLine> unbalanced{line("1200", lims::PostingSide::Debit, 1000),
                                               line("4000", lims::PostingSide::Credit, 999)};
-    CHECK(lims::entryProblem(unbalanced, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR).has_value());
+    CHECK(lims::entryProblem(unbalanced, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR, one()).has_value());
 
     // USD lines in a EUR company: the USD amounts balance, the EUR values are one cent apart.
     std::vector<lims::PostingLine> companyOff{
@@ -131,7 +180,7 @@ TEST_CASE("ledger entries: an entry balances per transaction currency and in com
          .side = lims::PostingSide::Credit,
          .amount = money(1000),
          .companyAmount = money(920)}};
-    auto const problem = lims::entryProblem(companyOff, lims::CurrencyCode::USD, lims::CurrencyCode::EUR);
+    auto const problem = lims::entryProblem(companyOff, lims::CurrencyCode::USD, lims::CurrencyCode::EUR, one());
     REQUIRE(problem.has_value());
     CHECK_THAT(*problem, Catch::Matchers::ContainsSubstring("company currency"));
 
@@ -145,7 +194,7 @@ TEST_CASE("ledger entries: an entry balances per transaction currency and in com
          .side = lims::PostingSide::Credit,
          .amount = money(1000),
          .companyAmount = lims::Amount{Rational{Numerator{92051}, Denominator{10000}, DecimalPlaces{4}}}}};
-    CHECK(lims::entryProblem(unrounded, lims::CurrencyCode::USD, lims::CurrencyCode::EUR).has_value());
+    CHECK(lims::entryProblem(unrounded, lims::CurrencyCode::USD, lims::CurrencyCode::EUR, one()).has_value());
 
     // JPY has no minor unit.
     std::vector<lims::PostingLine> fractionalYen{
@@ -154,22 +203,22 @@ TEST_CASE("ledger entries: an entry balances per transaction currency and in com
          .side = lims::PostingSide::Credit,
          .amount = money(1050),
          .companyAmount = money(1050)}};
-    CHECK(lims::entryProblem(fractionalYen, lims::CurrencyCode::JPY, lims::CurrencyCode::JPY).has_value());
+    CHECK(lims::entryProblem(fractionalYen, lims::CurrencyCode::JPY, lims::CurrencyCode::JPY, one()).has_value());
 }
 
 // Mutation: drop the negative-amount check; drop the zero-total check; drop the same-currency equality check.
 TEST_CASE("ledger entries: negative, empty and self-contradicting lines are refused", "[lims][ledger]") {
     std::vector<lims::PostingLine> negative{line("1200", lims::PostingSide::Debit, -1000),
                                             line("4000", lims::PostingSide::Credit, -1000)};
-    CHECK(lims::entryProblem(negative, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR).has_value());
+    CHECK(lims::entryProblem(negative, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR, one()).has_value());
 
     std::vector<lims::PostingLine> zero{line("1200", lims::PostingSide::Debit, 0),
                                         line("4000", lims::PostingSide::Credit, 0)};
-    CHECK(lims::entryProblem(zero, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR).has_value());
+    CHECK(lims::entryProblem(zero, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR, one()).has_value());
 
     std::vector<lims::PostingLine> blank{line("1200", lims::PostingSide::Debit, 1000),
                                          {.accountCode = "4000", .side = lims::PostingSide::Credit}};
-    CHECK(lims::entryProblem(blank, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR).has_value());
+    CHECK(lims::entryProblem(blank, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR, one()).has_value());
 
     // Same currency, so the company value must equal the amount; both sides still balance on their own.
     std::vector<lims::PostingLine> differing{
@@ -178,14 +227,16 @@ TEST_CASE("ledger entries: negative, empty and self-contradicting lines are refu
          .side = lims::PostingSide::Credit,
          .amount = money(1000),
          .companyAmount = money(900)}};
-    CHECK(lims::entryProblem(differing, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR).has_value());
+    CHECK(lims::entryProblem(differing, lims::CurrencyCode::EUR, lims::CurrencyCode::EUR, one()).has_value());
 
     // A line may carry zero in the transaction currency and a company value: an exchange-rounding line.
     std::vector<lims::PostingLine> rounding{
         {.accountCode = "1200", .side = lims::PostingSide::Debit, .amount = money(1000), .companyAmount = money(921)},
         {.accountCode = "4000", .side = lims::PostingSide::Credit, .amount = money(1000), .companyAmount = money(920)},
         {.accountCode = "6900", .side = lims::PostingSide::Credit, .amount = money(0), .companyAmount = money(1)}};
-    CHECK_FALSE(lims::entryProblem(rounding, lims::CurrencyCode::USD, lims::CurrencyCode::EUR).has_value());
+    // Both 10.00 USD lines sit exactly half a cent from 10.00 x 0.9205 = 9.205, on either side.
+    lims::Rate const rate{Rational{Numerator{920500}, Denominator{1000000}, DecimalPlaces{6}}};
+    CHECK_FALSE(lims::entryProblem(rounding, lims::CurrencyCode::USD, lims::CurrencyCode::EUR, rate).has_value());
 }
 
 // Mutation: let PostEntry update a posted entry (the second post succeeds).
@@ -559,4 +610,173 @@ TEST_CASE("LedgerModel over the full backend-mode matrix: a draft, its post and 
     auto const listed = awaitQt(ledger.execute(lims::ListEntries{.company = lims::test::seededCompany()}));
     REQUIRE(listed.entries.size() == 2U);
     CHECK(listed.entries[1].lines[0].side == lims::PostingSide::Credit);
+}
+
+// Mutations: skip the rate check in entryProblem; compare against the unrounded product only; let the zero-amount
+// exemption cover every line; treat a product that overflows as acceptable.
+TEST_CASE("ledger entries: a foreign value follows from its amount and the rate, to half a minor unit",
+          "[lims][ledger]") {
+    auto const check = [](std::vector<lims::PostingLine> const& lines, lims::CurrencyCode transaction,
+                          lims::CurrencyCode company,
+                          lims::Rate const& rate) { return lims::entryProblem(lines, transaction, company, rate); };
+    using lims::CurrencyCode;
+    using lims::PostingSide;
+    SECTION("USD 10.00 valued at EUR 0.01 is refused; the rate's value is accepted") {
+        auto const problem =
+            check({valued("1200", PostingSide::Debit, 1000, 1), valued("4000", PostingSide::Credit, 1000, 1)},
+                  CurrencyCode::USD, CurrencyCode::EUR, rateOf(920000));
+        REQUIRE(problem.has_value());
+        CHECK_THAT(*problem, Catch::Matchers::ContainsSubstring("at the entry's rate"));
+        CHECK_FALSE(
+            check({valued("1200", PostingSide::Debit, 1000, 920), valued("4000", PostingSide::Credit, 1000, 920)},
+                  CurrencyCode::USD, CurrencyCode::EUR, rateOf(920000))
+                .has_value());
+        // One cent off is more than half a cent.
+        CHECK(check({valued("1200", PostingSide::Debit, 1000, 921), valued("4000", PostingSide::Credit, 1000, 921)},
+                    CurrencyCode::USD, CurrencyCode::EUR, rateOf(920000))
+                  .has_value());
+    }
+    SECTION("a zero-amount line is the rounding line and is not checked against the rate") {
+        CHECK_FALSE(check({valued("1200", PostingSide::Debit, 1000, 921),
+                           valued("4000", PostingSide::Credit, 1000, 920), valued("6900", PostingSide::Credit, 0, 1)},
+                          CurrencyCode::USD, CurrencyCode::EUR, rateOf(920500))
+                        .has_value());
+    }
+    SECTION("JPY in the EUR company: whole yen, euro cents") {
+        // 1000 JPY x 0.0062 = 6.20 EUR.
+        CHECK_FALSE(check({valued("1200", PostingSide::Debit, 1000, 620, 0, 2),
+                           valued("4000", PostingSide::Credit, 1000, 620, 0, 2)},
+                          CurrencyCode::JPY, CurrencyCode::EUR, rateOf(6200))
+                        .has_value());
+        CHECK(check({valued("1200", PostingSide::Debit, 1000, 700, 0, 2),
+                     valued("4000", PostingSide::Credit, 1000, 700, 0, 2)},
+                    CurrencyCode::JPY, CurrencyCode::EUR, rateOf(6200))
+                  .has_value());
+    }
+    SECTION("EUR in the JPY company: euro cents, whole yen") {
+        // 10.00 EUR x 160 = 1600 JPY.
+        CHECK_FALSE(check({valued("1200", PostingSide::Debit, 1000, 1600, 2, 0),
+                           valued("4000", PostingSide::Credit, 1000, 1600, 2, 0)},
+                          CurrencyCode::EUR, CurrencyCode::JPY, rateOf(160000000))
+                        .has_value());
+        CHECK(check({valued("1200", PostingSide::Debit, 1000, 1601, 2, 0),
+                     valued("4000", PostingSide::Credit, 1000, 1601, 2, 0)},
+                    CurrencyCode::EUR, CurrencyCode::JPY, rateOf(160000000))
+                  .has_value());
+    }
+    SECTION("a product that does not fit is refused, not saturated") {
+        auto const huge =
+            lims::Amount{Rational{Numerator{4'000'000'000'000'000'000}, Denominator{1}, DecimalPlaces{2}}};
+        auto const problem =
+            check({{.accountCode = "1200", .side = PostingSide::Debit, .amount = huge, .companyAmount = money(100)},
+                   {.accountCode = "4000", .side = PostingSide::Credit, .amount = huge, .companyAmount = money(100)}},
+                  CurrencyCode::JPY, CurrencyCode::EUR, lims::Rate{Rational{3, DecimalPlaces{6}}});
+        REQUIRE(problem.has_value());
+        CHECK_THAT(*problem, Catch::Matchers::ContainsSubstring("too large to total exactly"));
+    }
+}
+
+// Mutations: mirror only the first line's side; swap amount and companyAmount while mirroring; rebuild the company
+// value from amount x rate.
+TEST_CASE("ledger entries: a reversal mirrors every line exactly, with the side flipped", "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const original = postedUsdEntry(ledger);
+    auto const reversal = ledger.execute(
+        lims::ReverseEntry{.entryId = original.id, .date = morph::time::Timestamp{lims::test::at(2026, 11, 20)}});
+    REQUIRE(reversal.lines.size() == original.lines.size());
+    REQUIRE(reversal.lines.size() == 4U);
+    CHECK(reversal.currency == lims::CurrencyCode::USD);
+    CHECK(*reversal.rate == *original.rate);
+    for (std::size_t index = 0; index < original.lines.size(); ++index) {
+        CAPTURE(index);
+        auto const& before = original.lines[index];
+        auto const& after = reversal.lines[index];
+        CHECK(after.accountCode == before.accountCode);
+        CHECK(after.side != before.side);
+        CHECK(*after.amount == *before.amount);
+        CHECK(*after.companyAmount == *before.companyAmount);
+    }
+    CHECK(*reversal.lines[0].companyAmount == *money(921));
+    CHECK(*reversal.lines[2].companyAmount == *money(1152));
+}
+
+// Mutations: remove the SqlTransaction from ReverseEntry; drop the guard on the reversed mark; drop the guard on
+// the post.
+TEST_CASE("ledger entries: a failed reversal leaves nothing behind, and a lost race is a Conflict", "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const original = postedUsdEntry(ledger);
+    auto const date = morph::time::Timestamp{lims::test::at(2026, 11, 20)};
+    auto const untouched = [&] {
+        CHECK(ledger.execute(lims::ListEntries{.company = lims::test::seededCompany()}).entries.size() == 1U);
+        CHECK_FALSE(ledger.execute(lims::GetEntry{.entryId = original.id}).reversedBy.hasValue());
+    };
+
+    SECTION("the reversal is written, then marking the original fails") {
+        execute(
+            "CREATE TRIGGER fail_mark BEFORE UPDATE OF reversed_by_id ON ledger_entries "
+            "BEGIN SELECT RAISE(ABORT, 'injected: the reversed mark never landed'); END");
+        CHECK_THROWS(ledger.execute(lims::ReverseEntry{.entryId = original.id, .date = date}));
+        execute("DROP TRIGGER fail_mark");
+        untouched();
+    }
+    SECTION("another reversal marks the original between the read and the mark") {
+        execute(
+            "CREATE TRIGGER other_reversal AFTER INSERT ON ledger_entries WHEN NEW.reverses_id IS NOT NULL "
+            "BEGIN UPDATE ledger_entries SET reversed_by_id = 999 WHERE id = NEW.reverses_id; END");
+        CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = original.id, .date = date}), lims::Conflict);
+        execute("DROP TRIGGER other_reversal");
+        untouched();
+    }
+    SECTION("a post that matches no draft row is a Conflict and posts nothing") {
+        auto const draft = accrual(ledger, date);
+        execute(
+            "CREATE TRIGGER already_posted BEFORE UPDATE ON ledger_entries "
+            "BEGIN SELECT RAISE(IGNORE); END");
+        CHECK_THROWS_AS(ledger.execute(lims::PostEntry{.entryId = draft.id}), lims::Conflict);
+        execute("DROP TRIGGER already_posted");
+        CHECK(ledger.execute(lims::GetEntry{.entryId = draft.id}).state == lims::EntryState::Draft);
+    }
+}
+
+// Mutations: map an unknown side to Debit; map a missing account to an empty code.
+TEST_CASE("ledger entries: a stored line with an unknown side or a missing account is refused on read",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const draft = accrual(ledger, morph::time::Timestamp{lims::test::at(2026, 11, 12)});
+    Lightweight::DataMapper mapper;
+    auto rows = mapper.Query<lims::db::EntryLineRecord>()
+                    .Where(::Lightweight::FieldNameOf<&lims::db::EntryLineRecord::entry>, "=", *draft.id)
+                    .All();
+    REQUIRE(rows.size() == 2U);
+    auto original = rows.front();
+    SECTION("a side that is neither debit nor credit") {
+        rows.front().side = 7;
+        mapper.Update(rows.front());
+        CHECK_THROWS_AS(ledger.execute(lims::GetEntry{.entryId = draft.id}), lims::ValidationError);
+    }
+    SECTION("an account that does not exist") {
+        rows.front().account = 424242;
+        mapper.Update(rows.front());
+        CHECK_THROWS_AS(ledger.execute(lims::GetEntry{.entryId = draft.id}), lims::ValidationError);
+    }
+    mapper.Update(original);
+    CHECK(ledger.execute(lims::GetEntry{.entryId = draft.id}).lines.size() == 2U);
+}
+
+TEST_CASE("ledger entries: SQLite foreign-key enforcement on the lims connection", "[lims][ledger]") {
+    DbFixture fixture;
+    Lightweight::SqlStatement statement;
+    auto const enforced = statement.ExecuteDirectScalar<int>("PRAGMA foreign_keys");
+    REQUIRE(enforced.has_value());
+    CAPTURE(*enforced);
+    CHECK(*enforced == 0);
 }

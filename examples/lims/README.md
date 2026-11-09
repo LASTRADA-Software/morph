@@ -880,6 +880,20 @@ supervisors of its company and to the principal it belongs to, not to every hold
   (`lab/src/db/schema.cpp`, migration `20261109000004`), under IMPLEMENTATION.md rule 4's escape tier. Upstream: a
   search of LASTRADA-Software/Lightweight's issues for "migration insert select" finds none for this; none was filed.
 
+- **A conditional UPDATE is the query builder, not the DataMapper.** The ledger changes an entry's state or its
+  reversed mark only where the row still holds what the action read (`state` is Draft; `reversed_by_id` is NULL), and
+  a statement that matches no row is a `Conflict`, so two callers acting on one read cannot both succeed.
+  `DataMapper::Update` writes by primary key alone and has no WHERE of its own, so `ledger_entries.cpp` builds the
+  statement with `Connection().Query(table).Update().Set(...).Where(...)` and counts the rows the cursor reports. That
+  is the typed query tier, not raw SQL. The race is simulated, not run concurrently: the tests make a trigger mark
+  the original between the read and the mark, which fails with the guard removed; the post guard's condition has no
+  such seam, so only its zero-row handling is tested.
+
+- **SQLite foreign keys are not enforced on the lims connection.** `PRAGMA foreign_keys` answers 0 there (measured by
+  a test), so the foreign keys the ledger migration declares (line to entry, line to account, entry to period) are
+  declared but not enforced. What keeps a line on its own company's chart is the company filter in the ledger's
+  account lookup, and a read of a line whose account is gone is refused rather than shown with an empty code.
+
 - **`ModelKey` rejected strong id types. Closed upstream.** `BRIDGE_MODEL_KEY`
   routes the key through `keyToString`, whose concept admitted only
   `std::integral` or `std::string`, while `IMPLEMENTATION.md` rule 3 mandates
