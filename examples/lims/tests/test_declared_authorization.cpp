@@ -216,9 +216,13 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
         CHECK(listed.contains(id));
     }
 
-    // Everything registered that changes data is in the list above: a new mutating action cannot slip past it.
+    // What this proves: every action of the three models that declares an effect other than None is in the list
+    // above, and the list holds nothing else but the effect-less actions named here. It does not prove that an
+    // action registered without effects is non-mutating; such an action is only caught by this list being written
+    // out by hand, which is why RegisterClient, the one effect-less writer, is named.
+    std::set<std::string_view> const effectless{"RegisterClient"};
     auto const& dispatcher = morph::model::detail::ActionDispatcher::instance();
-    std::size_t checked = 0;
+    std::set<std::string> withEffects;
     for (std::string_view const model : {"OrgModel", "SampleModel", "AnalysisCatalogModel"}) {
         for (auto const& id : dispatcher.actionsOf(model)) {
             auto const effects = morph::effects::effectsOf(id);
@@ -227,14 +231,17 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
                     return e.kind != morph::effects::Kind::None;
                 });
             if (mutates) {
-                CAPTURE(id);
-                CHECK(listed.contains(id));
-                ++checked;
+                withEffects.emplace(id);
             }
         }
     }
-    // RegisterClient writes a row but declares no effects, so only the list above covers it.
-    CHECK(checked == listed.size() - 1);
+    std::set<std::string> expected{listed.begin(), listed.end()};
+    for (auto const id : effectless) {
+        CAPTURE(id);
+        CHECK(listed.contains(id));
+        expected.erase(std::string{id});
+    }
+    CHECK(withEffects == expected);
 }
 
 TEST_CASE("declared authorization: the edge's table lists every declared role, and nothing else",

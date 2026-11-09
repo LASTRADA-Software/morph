@@ -768,6 +768,10 @@ the caller holds a role: a role at a company reaches the company and all its sit
 site and, through it, its company. Nobody, and an unauthenticated call, sees nothing. A company's creator is assigned
 `Supervisor` at it in the same transaction, since a company nobody holds a role in would be listed to nobody.
 
+`ListAnalyses`, `ListProjects` and `ListIgnitionTests` list unscoped reference data and are deliberately not
+filtered: an analysis, a project and an ignition test belong to no company or site, so there is no scope to filter
+by, and every authenticated caller needs them to enter a sample.
+
 Reading one record by id (`OpenSample`, `GetSample`, the per-sample lists) is not scope-filtered in Part A: those are
 not list queries, and an action that changes a record is authorized by its declaration (decision 25). Which records'
 *changes* reach a principal of another company is hypothesis 7, measured with billing.
