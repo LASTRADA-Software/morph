@@ -260,8 +260,8 @@ TEST_CASE("OrgModel over the full backend-mode matrix: a supervisor sets a value
     lims::test::grant("alice", lims::LimsRole::Supervisor);
     lims::test::grant("bob", lims::LimsRole::InvoiceApprover);
 
-    // One bridge, its session switched between the calls: the in-process modes share the calling thread's session, so
-    // two bridges would not keep alice and bob apart.
+    // One bridge, its session switched between settled calls: in the in-process modes BackendRig hands every client
+    // index the same bridge, so a second index would not keep alice and bob apart.
     BackendRig rig{mode, 1, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "alice"));
