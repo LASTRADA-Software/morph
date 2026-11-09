@@ -102,3 +102,25 @@ TEST_CASE("engine text: wall-clock and instant conversion", "[forms-engine][text
     CHECK_FALSE(engine::isIsoDate("2026-02-30"));
     CHECK_FALSE(engine::isIsoDate("2026-2-3"));
 }
+
+TEST_CASE("engine text: leading zeros are stripped down to one before the point", "[forms-engine][text]") {
+    CHECK(engine::stripLeadingZeros("0") == "0");
+    CHECK(engine::stripLeadingZeros("-0") == "-0");
+    CHECK(engine::stripLeadingZeros("0.5") == "0.5");
+    CHECK(engine::stripLeadingZeros("007") == "7");
+    CHECK(engine::stripLeadingZeros("-007.5") == "-7.5");
+}
+
+TEST_CASE("engine text: a negative fraction below one keeps its sign", "[forms-engine][text]") {
+    using std::strong_ordering;
+    CHECK(engine::compareDecimal("-0.5", "-0.4") == strong_ordering::less);
+    CHECK(engine::compareDecimal("-0.5", "0.1") == strong_ordering::less);
+}
+
+TEST_CASE("engine text: the last valid clock values and fractions parse", "[forms-engine][text]") {
+    CHECK(engine::parseWallClock("2026-07-05T23:59:59").has_value());
+    CHECK_FALSE(engine::parseWallClock("2026-07-05T10:60").has_value());
+    CHECK_FALSE(engine::parseWallClock("2026-07-05T10:00:60").has_value());
+    CHECK(engine::parseInstant("2026-07-20T09:00:00.999Z").has_value());
+    CHECK_FALSE(engine::parseInstant("2026-07-20T09:00:00+ab00").has_value());
+}
