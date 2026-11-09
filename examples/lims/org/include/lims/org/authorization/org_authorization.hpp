@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <string>
+
 #include "lims/org/authorization/declared.hpp"
 #include "lims/org/dto/company_dto.hpp"
 #include "lims/org/dto/limit_dto.hpp"
@@ -31,12 +33,20 @@ struct Authorization<CreateSite> {
     [[nodiscard]] static Scope scopeOf(CreateSite const& action) { return Scope{action.companyId}; }
 };
 
-/// @brief A role is assigned by a supervisor in the scope it is assigned in. `OrgModel` lets the first assignment
-///        through on a lab with no supervisor before it asks.
+/// @brief A role is assigned by a supervisor in the scope it is assigned in, and never to themselves: an approver's
+///        roles are set by someone else. `OrgModel` lets the first assignment through on a lab with no supervisor
+///        before it asks, which is the one self-assignment.
 template <>
 struct Authorization<AssignRole> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::Supervisor;
+    /// @brief A supervisor does not assign roles to themselves.
+    static constexpr bool notOnSelf = true;
+
+    /// @brief The principal receiving the role.
+    /// @param action The action.
+    /// @return Its principal.
+    [[nodiscard]] static std::string subjectOf(AssignRole const& action) { return action.principal; }
 
     /// @brief The company or site the payload names.
     /// @param action The action.
@@ -58,8 +68,17 @@ struct Authorization<RevokeRole> {
     [[nodiscard]] static Scope scopeOf(RevokeRole const& action);
 };
 
-/// @brief A value limit is set by a supervisor at its company.
+/// @brief A value limit is set by a supervisor at its company, and never on themselves: an approver's ceiling is set
+///        by someone else.
 template <>
-struct Authorization<SetValueLimit> : CompanyRule<SetValueLimit, LimsRole::Supervisor> {};
+struct Authorization<SetValueLimit> : CompanyRule<SetValueLimit, LimsRole::Supervisor> {
+    /// @brief A supervisor does not set their own limit.
+    static constexpr bool notOnSelf = true;
+
+    /// @brief The principal whose limit it is.
+    /// @param action The action.
+    /// @return Its principal.
+    [[nodiscard]] static std::string subjectOf(SetValueLimit const& action) { return action.principal; }
+};
 
 }  // namespace lims

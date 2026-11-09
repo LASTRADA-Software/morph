@@ -856,6 +856,22 @@ instead of saturating, over `Rational` values rather than `Quantity` ones, becau
 node per addition while `MORPH_QUANTITY_PROVENANCE` is 1 (the default). The ids billing refers to (client, sample,
 analysis, result) moved from lab to org, unchanged on the wire and in the journal.
 
+### 29. An approver's roles and ceiling are set by someone else, and a limit is confidential
+
+Separation of duties starts before an invoice: a principal who could grant themselves `InvoiceApprover` or raise
+their own value limit would hold a ceiling nobody else chose. `AssignRole` and `SetValueLimit` therefore refuse a
+caller who is the subject of the action, with `Forbidden`, after the role check and before any write. It is a declared
+rule beside the others (`notOnSelf` and `subjectOf` in `lims::Authorization`), judged by `requireAuthorized` in the
+model. The edge sees no payload, so it cannot judge it; the model's check is the authoritative one.
+
+Two self-assignments remain by design, and neither goes through the declared rule: the bootstrap `AssignRole` on a lab
+with no supervisor anywhere (decision 23), including `prepareLocal`'s appointment of the local user, and the
+appointment of a company's creator as its first supervisor by `CreateCompany` (decision 24).
+
+A value limit is one row per principal and company, kept by a unique index on `(principal, company_id)`;
+`SetValueLimit` updates the row when there is one and inserts otherwise. `ListValueLimits` returns a limit only to the
+supervisors of its company and to the principal it belongs to, not to every holder of a role there.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so

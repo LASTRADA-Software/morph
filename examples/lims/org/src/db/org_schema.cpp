@@ -58,4 +58,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20261110000001, "Create org_value_limits") {
         .RequiredColumn("set_by", Varchar(64))
         .RequiredColumn("set_at", Bigint());
 }
+LIGHTWEIGHT_SQL_MIGRATION(20261110000002, "One org_value_limits row per principal and company") {
+    plan.CreateUniqueIndex("idx_org_value_limits_principal_company", "org_value_limits", {"principal", "company_id"});
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

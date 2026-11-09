@@ -97,6 +97,48 @@ TEST_CASE("org roles: the first assignment bootstraps a lab with no supervisor; 
         lims::EmptyPrincipalError);
 }
 
+// Mutations: drop `notOnSelf` from Authorization<AssignRole> (alice grants herself InvoiceApprover); refuse the
+// bootstrap too (the first assignment is Forbidden); route CreateCompany's appointment through AssignRole.
+TEST_CASE("org roles: a supervisor does not assign themselves a role, except the bootstrap and a new company",
+          "[lims][org][roles]") {
+    DbFixture fixture;
+    lims::OrgModel org;
+    {
+        ScopedPrincipal const alice{"alice"};
+        auto const boot = org.execute(lims::AssignRole{.principal = "alice",
+                                                       .role = lims::LimsRole::Supervisor,
+                                                       .company = lims::test::seededCompany(),
+                                                       .site = {}});
+        CHECK(boot.principal == "alice");
+        CHECK_THROWS_AS(org.execute(lims::AssignRole{.principal = "alice",
+                                                     .role = lims::LimsRole::InvoiceApprover,
+                                                     .company = lims::test::seededCompany(),
+                                                     .site = {}}),
+                        lims::Forbidden);
+        CHECK_THROWS_AS(org.execute(lims::AssignRole{.principal = "alice",
+                                                     .role = lims::LimsRole::Accountant,
+                                                     .company = {},
+                                                     .site = lims::test::seededSite()}),
+                        lims::Forbidden);
+        auto const osaka = org.execute(lims::CreateCompany{
+            .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April});
+        auto const held = lims::OrgModel::rolesIn("alice", lims::Scope{osaka.id});
+        CHECK(std::ranges::find(held, lims::LimsRole::Supervisor) != held.end());
+        auto const everywhere = lims::OrgModel::rolesAnywhere("alice");
+        CHECK(std::ranges::find(everywhere, lims::LimsRole::InvoiceApprover) == everywhere.end());
+        org.execute(lims::AssignRole{.principal = "dave",
+                                     .role = lims::LimsRole::Supervisor,
+                                     .company = lims::test::seededCompany(),
+                                     .site = {}});
+    }
+    ScopedPrincipal const dave{"dave"};
+    CHECK(org.execute(lims::AssignRole{.principal = "alice",
+                                       .role = lims::LimsRole::InvoiceApprover,
+                                       .company = lims::test::seededCompany(),
+                                       .site = {}})
+              .principal == "alice");
+}
+
 // Mutation: accept both a company and a site (the assignment is created).
 TEST_CASE("org roles: an assignment names exactly one scope, and the scope exists", "[lims][org][roles]") {
     DbFixture fixture;

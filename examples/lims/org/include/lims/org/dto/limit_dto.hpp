@@ -52,7 +52,7 @@ struct ValueLimitView {
     ::morph::time::Timestamp setAt;
 };
 
-/// @brief Lists the value limits at the companies the caller can see.
+/// @brief Lists the value limits the caller may see: those at companies they supervise, and their own.
 struct ListValueLimits {
     /// @brief Always ready.
     /// @return `true`.

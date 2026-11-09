@@ -2,11 +2,13 @@
 //
 // Value limits: up to what amount a principal may approve at a company, in its base currency.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
 
 #include "lims/org/core/errors.hpp"
+#include "lims/org/db/org_entity.hpp"
 #include "lims/org/dto/limit_dto.hpp"
 #include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
@@ -121,4 +123,75 @@ TEST_CASE("value limits: a list shows only the limits at companies the caller ca
     CHECK_THROWS_AS(org.execute(lims::SetValueLimit{
                         .principal = "bob", .company = lims::test::seededCompany(), .limit = euros(1)}),
                     lims::Forbidden);
+}
+
+// Mutation: drop `notOnSelf` from Authorization<SetValueLimit> (alice sets her own limit).
+TEST_CASE("value limits: a supervisor does not set their own limit, another supervisor does", "[lims][limits]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    lims::test::grant("dave", lims::LimsRole::Supervisor);
+    lims::OrgModel org;
+    {
+        ScopedPrincipal const alice{"alice"};
+        CHECK_THROWS_AS(org.execute(lims::SetValueLimit{
+                            .principal = "alice", .company = lims::test::seededCompany(), .limit = euros(1'000'000)}),
+                        lims::Forbidden);
+        CHECK_FALSE(lims::OrgModel::valueLimit("alice", lims::test::seededCompany()).has_value());
+    }
+    ScopedPrincipal const dave{"dave"};
+    auto const set = org.execute(
+        lims::SetValueLimit{.principal = "alice", .company = lims::test::seededCompany(), .limit = euros(2000)});
+    CHECK(set.setBy == "dave");
+    CHECK(lims::OrgModel::valueLimit("alice", lims::test::seededCompany()) == Rational{2000, DecimalPlaces{2}});
+}
+
+// Mutation: drop the unique index (the table then accepts a second row for the pair); make SetValueLimit always
+// Create (the second set leaves two rows).
+TEST_CASE("value limits: a pair holds one row, which setting twice updates", "[lims][limits]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    auto const first = org.execute(
+        lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(500)});
+    auto const second = org.execute(
+        lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(900)});
+    CHECK(second.id == first.id);
+    auto const listed = org.execute(lims::ListValueLimits{});
+    REQUIRE(listed.limits.size() == 1U);
+    CHECK(*listed.limits.front().limit == Rational{900, DecimalPlaces{2}});
+
+    // The index, not the model, is what makes a second row impossible.
+    Lightweight::DataMapper mapper;
+    lims::db::ValueLimitRecord duplicate;
+    duplicate.principal = Lightweight::SqlAnsiString<64>{"bob"};
+    duplicate.company = static_cast<std::uint64_t>(*lims::test::seededCompany());
+    duplicate.setBy = Lightweight::SqlAnsiString<64>{"alice"};
+    CHECK_THROWS(mapper.Create(duplicate));
+}
+
+// Mutation: let ListValueLimits answer every role holder (carol, an approver, sees bob's limit).
+TEST_CASE("value limits: a limit is seen by the company's supervisors and the principal it belongs to",
+          "[lims][limits]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    lims::test::grant("bob", lims::LimsRole::InvoiceApprover);
+    lims::test::grant("carol", lims::LimsRole::InvoiceApprover);
+    lims::OrgModel org;
+    {
+        ScopedPrincipal const alice{"alice"};
+        org.execute(
+            lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(500)});
+        org.execute(
+            lims::SetValueLimit{.principal = "carol", .company = lims::test::seededCompany(), .limit = euros(700)});
+        CHECK(org.execute(lims::ListValueLimits{}).limits.size() == 2U);
+    }
+    {
+        ScopedPrincipal const bob{"bob"};
+        auto const own = org.execute(lims::ListValueLimits{});
+        REQUIRE(own.limits.size() == 1U);
+        CHECK(own.limits.front().principal == "bob");
+    }
+    ScopedPrincipal const nobody{"nobody"};
+    CHECK(org.execute(lims::ListValueLimits{}).limits.empty());
 }

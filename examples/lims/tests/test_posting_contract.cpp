@@ -7,7 +7,6 @@
 #include <morph/util/rational.hpp>
 #include <string>
 
-#include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
 #include "lims/posting/posting.hpp"
 
@@ -30,14 +29,17 @@ TEST_CASE("posting contract: a request round-trips through JSON with its zero-de
         .lines = {lims::PostingLine{.accountCode = "1200",
                                     .side = lims::PostingSide::Debit,
                                     .amount = lims::Amount{Rational{1100, DecimalPlaces{0}}},
-                                    .companyAmount = lims::Amount{Rational{1100, DecimalPlaces{0}}}},
+                                    .companyAmount = lims::Amount{Rational{7, DecimalPlaces{0}}}},
                   lims::PostingLine{.accountCode = "4000",
                                     .side = lims::PostingSide::Credit,
-                                    .amount = lims::Amount{Rational{1100, DecimalPlaces{0}}},
-                                    .companyAmount = lims::Amount{Rational{1100, DecimalPlaces{0}}}}},
+                                    .amount = lims::Amount{Rational{1200, DecimalPlaces{0}}},
+                                    .companyAmount = lims::Amount{Rational{8, DecimalPlaces{0}}}}},
     };
     auto const json = glz::write_json(request);
     REQUIRE(json.has_value());
+    // Each amount travels under its own name: a round trip alone would pass with the two names swapped on both sides.
+    CHECK(json->find(R"("amount":{"num":1100,)") != std::string::npos);
+    CHECK(json->find(R"("companyAmount":{"num":7,)") != std::string::npos);
     lims::PostingRequest decoded;
     REQUIRE_FALSE(glz::read_json(decoded, *json));
     REQUIRE(decoded.lines.size() == 2U);
@@ -52,9 +54,9 @@ TEST_CASE("posting contract: a request round-trips through JSON with its zero-de
         CAPTURE(i);
         CHECK(decoded.lines[i].accountCode == request.lines[i].accountCode);
         CHECK(decoded.lines[i].side == request.lines[i].side);
-        CHECK(*decoded.lines[i].amount == Rational{1100, DecimalPlaces{0}});
+        CHECK(*decoded.lines[i].amount == *request.lines[i].amount);
         CHECK((*decoded.lines[i].amount).getDecimalPlaces() == DecimalPlaces{0});
-        CHECK(*decoded.lines[i].companyAmount == Rational{1100, DecimalPlaces{0}});
+        CHECK(*decoded.lines[i].companyAmount == *request.lines[i].companyAmount);
         CHECK((*decoded.lines[i].companyAmount).getDecimalPlaces() == DecimalPlaces{0});
     }
 }

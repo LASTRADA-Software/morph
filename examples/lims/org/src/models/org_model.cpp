@@ -516,21 +516,24 @@ ValueLimitView OrgModel::execute(const SetValueLimit& action) {
     }
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    auto rows = mapper.Query<db::ValueLimitRecord>()
-                    .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::principal>, "=", action.principal)
-                    .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::company>, "=", *action.company)
-                    .All();
-    db::ValueLimitRecord row = rows.empty() ? db::ValueLimitRecord{} : rows.front();
+    // At most one row per (principal, company): the table's unique index makes a second one impossible, and the
+    // update below keeps the first.
+    auto existing = mapper.Query<db::ValueLimitRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::principal>, "=", action.principal)
+                        .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::company>, "=", *action.company)
+                        .First();
+    bool const exists = existing.has_value();
+    db::ValueLimitRecord row = exists ? std::move(*existing) : db::ValueLimitRecord{};
     row.principal = Lightweight::SqlAnsiString<64>{action.principal};
     row.company = static_cast<std::uint64_t>(*action.company);
     row.limitNum = limit.numerator;
     row.limitDen = limit.denominator;
     row.setBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
     row.setAt = nowMillis();
-    if (rows.empty()) {
-        mapper.Create(row);
-    } else {
+    if (exists) {
         mapper.Update(row);
+    } else {
+        mapper.Create(row);
     }
     sqlTxn.Commit();
     return toView(row, company->baseCurrency);
@@ -540,12 +543,15 @@ ValueLimitView OrgModel::execute(const SetValueLimit& action) {
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ListValueLimitsResult OrgModel::execute(const ListValueLimits& action) {
     static_cast<void>(action);
-    auto const visible = visibleCompanies(currentPrincipal());
+    // A limit is confidential: only the company's supervisors, who set it, and the principal it belongs to see it.
+    std::string const caller = currentPrincipal();
     Lightweight::DataMapper mapper;
     ListValueLimitsResult result;
     for (auto const& row : mapper.Query<db::ValueLimitRecord>().All()) {
         CompanyId const company{static_cast<std::int64_t>(row.company.Value())};
-        if (std::ranges::find(visible, company) == visible.end()) {
+        bool const own = !caller.empty() && row.principal.Value().ToStringView() == caller;
+        auto const held = rolesIn(caller, Scope{company});
+        if (!own && std::ranges::find(held, LimsRole::Supervisor) == held.end()) {
             continue;
         }
         auto const view = findCompany(company);
@@ -564,15 +570,15 @@ std::optional<::morph::math::Rational> OrgModel::valueLimit(std::string_view pri
         return std::nullopt;
     }
     Lightweight::DataMapper mapper;
-    auto const rows =
+    auto const row =
         mapper.Query<db::ValueLimitRecord>()
             .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::principal>, "=", std::string{principal})
             .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::company>, "=", *company)
-            .All();
-    if (rows.empty()) {
+            .First();
+    if (!row.has_value()) {
         return std::nullopt;
     }
-    return *toView(rows.front(), view->baseCurrency).limit;
+    return *toView(*row, view->baseCurrency).limit;
 }
 
 }  // namespace lims

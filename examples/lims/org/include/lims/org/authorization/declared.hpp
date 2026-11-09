@@ -46,7 +46,10 @@ namespace lims {
 /// - `static constexpr std::string_view separatedFrom` (the action id of the pair's first half),
 ///   `static constexpr std::string_view sameActorRefusal` (the refusal's words) and
 ///   `static std::optional<std::string> firstPerformerOf(Action const&)` (who performed the first half on the same
-///   subject) — a separation-of-duties pair: the principal may not be that performer.
+///   subject) — a separation-of-duties pair: the principal may not be that performer;
+/// - `static constexpr bool notOnSelf = true` and `static std::string subjectOf(Action const&)` — the principal the
+///   action is done to: the caller may not be that principal, so nobody sets their own limit or grants themselves a
+///   role.
 /// @tparam Action The action.
 template <typename Action>
 struct Authorization;
@@ -113,6 +116,14 @@ concept DeclaresSeparation = DeclaresRule<Action> && requires(Action const& acti
     { Authorization<Action>::firstPerformerOf(action) } -> std::convertible_to<std::optional<std::string>>;
 };
 
+/// @brief Whether @p Action refuses a caller who is its own subject.
+/// @tparam Action The action.
+template <typename Action>
+concept DeclaresNotOnSelf = DeclaresRule<Action> && requires(Action const& action) {
+    requires Authorization<Action>::notOnSelf;
+    { Authorization<Action>::subjectOf(action) } -> std::convertible_to<std::string>;
+};
+
 /// @brief A rule needing @p Role at the company the action's `company` field names: the shape most ERP actions have.
 /// @tparam Action An action with a `CompanyId company` member.
 /// @tparam Role The role.
@@ -132,6 +143,7 @@ enum class Verdict : std::uint8_t {
     Allowed,      ///< Every declared condition holds.
     MissingRole,  ///< The principal does not hold the role (any role, for a rule that accepts any) in the scope.
     SameActor,    ///< The principal performed the pair's first half on the same subject.
+    OnSelf,       ///< The principal is the subject of an action that may not be done to oneself.
     NoLimit,      ///< The action carries an amount and the principal has no limit in the scope.
     OverLimit,    ///< The amount is above the principal's limit in the scope.
 };
@@ -146,6 +158,8 @@ struct AuthorizationFacts {
     std::vector<LimsRole> held;
     /// @brief Who performed the pair's first half on the same subject; empty without a pair or a performer.
     std::optional<std::string> firstPerformer;
+    /// @brief The principal the action is done to; empty for an action that may be done to oneself.
+    std::optional<std::string> notOnSelfSubject;
     /// @brief The amount the action acts on; empty without a value limit.
     std::optional<::morph::math::Rational> amount;
     /// @brief The principal's limit in the scope; empty when they have none.
@@ -154,8 +168,8 @@ struct AuthorizationFacts {
 
 /// @brief Judges @p facts. Pure: the same facts always give the same verdict.
 ///
-/// The role is the first question, the pair the second, the limit the third, so a refusal names the first reason
-/// that applies.
+/// The role is the first question, the pair the second, self-application the third, the limit the fourth, so a refusal
+/// names the first reason that applies.
 /// @param facts The facts.
 /// @return The verdict.
 [[nodiscard]] Verdict authorizationVerdict(AuthorizationFacts const& facts);
@@ -202,6 +216,7 @@ void judge(Action const& action, std::optional<Scope> const& scope) {
                              .required = role,
                              .held = {},
                              .firstPerformer = std::nullopt,
+                             .notOnSelfSubject = std::nullopt,
                              .amount = std::nullopt,
                              .limit = std::nullopt};
     std::string where = "in any scope";
@@ -218,6 +233,9 @@ void judge(Action const& action, std::optional<Scope> const& scope) {
     if constexpr (DeclaresSeparation<Action>) {
         facts.firstPerformer = Rule::firstPerformerOf(action);
     }
+    if constexpr (DeclaresNotOnSelf<Action>) {
+        facts.notOnSelfSubject = Rule::subjectOf(action);
+    }
     std::string const actionType{::morph::model::ActionTraits<Action>::typeId()};
     Verdict const verdict = authorizationVerdict(facts);
     if (verdict == Verdict::Allowed) {
@@ -225,6 +243,9 @@ void judge(Action const& action, std::optional<Scope> const& scope) {
     }
     if (verdict == Verdict::MissingRole) {
         throw Forbidden{actionType + ": '" + principal + "' does not hold " + roleWords(role) + " " + where};
+    }
+    if (verdict == Verdict::OnSelf) {
+        throw Forbidden{actionType + ": '" + principal + "' may not do this to themselves"};
     }
     if (verdict == Verdict::NoLimit) {
         throw Forbidden{actionType + ": '" + principal + "' has no value limit " + where};

@@ -250,6 +250,48 @@ TEST_CASE("OrgModel over the full backend-mode matrix: assign, list and revoke a
     CHECK(lims::OrgModel::rolesAnywhere("bob").empty());
 }
 
+// Mutation: make Amount's wire form drop its decimal places (the listed limit comes back at the wrong scale); let
+// the edge and the model both accept bob (his limit is overwritten with 1).
+TEST_CASE("OrgModel over the full backend-mode matrix: a supervisor sets a value limit, a non-supervisor is refused",
+          "[lims][matrix][org][limits]") {
+    const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    lims::test::grant("bob", lims::LimsRole::InvoiceApprover);
+
+    // One bridge, its session switched between the calls: the in-process modes share the calling thread's session, so
+    // two bridges would not keep alice and bob apart.
+    BackendRig rig{mode, 1, makeAuthorizer()};
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "alice"));
+    auto org = rig.client<lims::OrgModel>(0);
+    const auto set = awaitQt(org.execute(
+        lims::SetValueLimit{.principal = "bob",
+                            .company = lims::test::seededCompany(),
+                            .limit = lims::Amount{morph::math::Rational{12345, morph::math::DecimalPlaces{2}}}}));
+    CHECK(set.principal == "bob");
+    CHECK(set.setBy == "alice");
+
+    const auto listed = awaitQt(org.execute(lims::ListValueLimits{})).limits;
+    REQUIRE(listed.size() == 1);
+    CHECK(listed.front().id == set.id);
+    CHECK(*listed.front().limit == morph::math::Rational{12345, morph::math::DecimalPlaces{2}});
+    CHECK((*listed.front().limit).getDecimalPlaces() == morph::math::DecimalPlaces{2});
+
+    rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "bob"));
+    // The socket server's edge refuses bob before the model sees the request; the in-process modes have no edge, so
+    // the model's own refusal answers.
+    const std::string refusal = mode == Mode::Socket ? "unauthorized" : "does not hold the supervisor role";
+    CHECK_THROWS_WITH(awaitQt(org.execute(lims::SetValueLimit{
+                          .principal = "bob",
+                          .company = lims::test::seededCompany(),
+                          .limit = lims::Amount{morph::math::Rational{1, morph::math::DecimalPlaces{2}}}})),
+                      Catch::Matchers::ContainsSubstring(refusal));
+    CHECK(lims::OrgModel::valueLimit("bob", lims::test::seededCompany()) ==
+          morph::math::Rational{12345, morph::math::DecimalPlaces{2}});
+}
+
 // The server answers an exception from the authorizer with an error reply carrying its text. The authorizer's role
 // lookup is a lambda of its own, so a message only that lambda throws can only have come from authorize(): the model
 // reads roles through OrgModel::rolesAnywhere and never sees it. Mutation: authorize() catches the exception and

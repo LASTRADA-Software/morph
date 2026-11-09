@@ -8,6 +8,7 @@
 #include <string>
 
 #include "clock.hpp"
+#include "lims/org/core/errors.hpp"
 
 /// @file
 /// The three things every model in this rung needs and morph does not

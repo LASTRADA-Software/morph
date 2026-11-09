@@ -14,6 +14,9 @@ Verdict authorizationVerdict(AuthorizationFacts const& facts) {
     if (facts.firstPerformer.has_value() && *facts.firstPerformer == facts.principal) {
         return Verdict::SameActor;
     }
+    if (facts.notOnSelfSubject.has_value() && *facts.notOnSelfSubject == facts.principal) {
+        return Verdict::OnSelf;
+    }
     if (facts.amount.has_value()) {
         if (!facts.limit.has_value()) {
             return Verdict::NoLimit;
