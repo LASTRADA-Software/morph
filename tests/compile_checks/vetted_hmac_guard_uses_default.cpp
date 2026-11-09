@@ -4,7 +4,7 @@
 // try_compile() block at the end of tests/CMakeLists.txt). Relies on
 // TokenVerifier's default `mac = hmacSha256` argument — must compile when
 // MORPH_REQUIRE_VETTED_HMAC is NOT defined, and must FAIL to compile when it
-// is (see docs/spec/security.md, "MAC-primitive recommended wiring").
+// is (see docs/spec/security.md, "Recommended production wiring").
 
 #include <morph/session/session_auth.hpp>
 

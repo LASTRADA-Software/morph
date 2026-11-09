@@ -121,8 +121,9 @@ struct ActionCall {
                          ::core::async::StopToken token, LocalDone done) = nullptr;
 
     /// @brief The stop source a Task handler's token comes from, or null for
-    ///        none. `Bridge::executeVia` sets one when an execute deadline is
-    ///        armed, and the deadline requests stop on it.
+    ///        none. The bridge sets one for a cancellable or deadline-armed
+    ///        execute and for a raw call, and `LocalBackend` creates one for
+    ///        every Task run it starts, so its destructor can stop it.
     std::shared_ptr<::core::async::StopSource> stopSource;
 
     /// @brief Session context attached to this call.
@@ -616,8 +617,8 @@ struct HandlerDestroyedError : std::runtime_error {
 };
 
 /// @brief Thrown to in-flight `Completion`s when a transport drops mid-call (e.g. a
-///        Qt WebSocket disconnect). The framework retries the call on reconnect if
-///        the backend supports it; otherwise the GUI's `.onError(...)` runs.
+///        Qt WebSocket disconnect). No backend re-sends the call: its
+///        `.onError(...)` runs, and the caller decides whether to retry.
 struct DisconnectedError : std::runtime_error {
     /// @brief Constructs the error with a canned diagnostic message.
     DisconnectedError() : std::runtime_error{"transport disconnected before completion resolved"} {}

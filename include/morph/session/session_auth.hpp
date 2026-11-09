@@ -384,8 +384,7 @@ public:
     /// Built with `MORPH_REQUIRE_VETTED_HMAC` defined: @p mac has **no
     /// default** here, so a call site that relied on the reference
     /// `hmacSha256` default fails to compile, forcing an explicit vetted
-    /// `MacFunction` injection. See `docs/spec/security.md` ("MAC-primitive
-    /// recommended wiring").
+    /// `MacFunction` injection. See `docs/spec/security.md` ("Recommended production wiring").
     /// @param secret Shared secret (same value the verifier uses).
     /// @param mac    MAC primitive (required — no default under this build option).
     ///               Stored and invoked for this issuer's whole lifetime, so
@@ -435,8 +434,7 @@ public:
     /// Built with `MORPH_REQUIRE_VETTED_HMAC` defined: @p mac has **no
     /// default** here, so a call site that relied on the reference
     /// `hmacSha256` default fails to compile, forcing an explicit vetted
-    /// `MacFunction` injection. See `docs/spec/security.md` ("MAC-primitive
-    /// recommended wiring").
+    /// `MacFunction` injection. See `docs/spec/security.md` ("Recommended production wiring").
     /// @param secret Shared secret (same value the issuer used).
     /// @param mac    MAC primitive (required — no default under this build option).
     ///               Stored and invoked for this verifier's whole lifetime, so
@@ -538,8 +536,7 @@ public:
     ///
     /// Built with `MORPH_REQUIRE_VETTED_HMAC` defined: @p mac has **no
     /// default**, so a call site that relied on the reference `hmacSha256`
-    /// default fails to compile. See `docs/spec/security.md` ("MAC-primitive
-    /// recommended wiring").
+    /// default fails to compile. See `docs/spec/security.md` ("Recommended production wiring").
     /// @param secret Shared secret used to verify tokens.
     /// @param mac    MAC primitive (required — no default under this build
     ///               option). Forwarded into this authorizer's `TokenVerifier`

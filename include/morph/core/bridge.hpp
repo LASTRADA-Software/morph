@@ -3074,7 +3074,7 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
             ::morph::async::Completion<std::string> completion{resultState, handler->guiExecutor()};
             try {
                 Action action = ::morph::model::ActionTraits<Action>::fromJson(bodyJson);
-                // Retag any Quantity fields to their declared precision so the stored
+                // Round any Quantity fields to their declared precision so the stored
                 // value matches the schema's advertised `x-decimalPlaces`, rather than
                 // silently keeping whatever runtime `dp` the client sent. No-op for
                 // actions with no Quantity members. See docs/spec/forms/forms.md.

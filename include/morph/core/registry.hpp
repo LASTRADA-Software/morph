@@ -822,7 +822,7 @@ private:
     static Action prepareAction(std::string_view payloadJson) {
         MORPH_ZONE("ActionDispatcher::prepareAction");
         auto action = ActionTraits<Action>::fromJson(payloadJson);
-        // Retag any Quantity fields to their declared precision so a
+        // Round any Quantity fields to their declared precision so a
         // hand-built wire payload matches the schema's advertised
         // x-decimalPlaces, exactly as the client bridge dispatch path
         // (ActionExecuteRegistry::registerAction, bridge.hpp) already does.
