@@ -30,10 +30,16 @@ namespace lims {
 
 /// @brief One action's declared authorization; an action with no specialisation declares none.
 ///
-/// A specialisation, beside the action's registration in the module that owns it, provides:
+/// A specialisation, beside the action's registration in the module that owns it, provides one of:
 /// - `static constexpr LimsRole role` — the role the action needs;
-/// - optionally `static Scope scopeOf(Action const&)` — the scope the action's payload names, read from its scope
-///   field; without it the role is needed in some scope, any. A role held at a company holds at its sites;
+/// - `static constexpr bool anyRole = true` — some role, whichever: the principal must hold at least one role in the
+///   scope, and the action does not care which;
+///
+/// and optionally:
+/// - `static Scope scopeOf(Action const&)` — the scope the action's payload names, read from its scope field; without
+///   it the role is needed in some scope, any. A role held at a company holds at its sites;
+/// - `static constexpr bool scopeFromModel = true` — the payload names no scope but the model knows it (the site of
+///   the sample the handler is attached to): the model then judges with `requireAuthorizedIn` and passes the scope;
 /// - optionally `static ::morph::math::Rational amountOf(Action const&)` and
 ///   `static std::optional<::morph::math::Rational> limitOf(std::string_view principal, Scope const&)` — a value
 ///   limit: the principal may act on amounts up to their limit in the scope, and on none without one;
@@ -45,12 +51,40 @@ namespace lims {
 template <typename Action>
 struct Authorization;
 
+/// @brief Whether @p Action declares a specific role.
+/// @tparam Action The action.
+template <typename Action>
+concept DeclaresRole = requires {
+    { Authorization<Action>::role } -> std::convertible_to<LimsRole>;
+};
+
+/// @brief Whether @p Action declares that some role, whichever, is enough.
+/// @tparam Action The action.
+template <typename Action>
+concept DeclaresAnyRole = requires { requires Authorization<Action>::anyRole; };
+
 /// @brief Whether @p Action declares a rule.
 /// @tparam Action The action.
 template <typename Action>
-concept DeclaresRule = requires {
-    { Authorization<Action>::role } -> std::convertible_to<LimsRole>;
-};
+concept DeclaresRule = DeclaresRole<Action> || DeclaresAnyRole<Action>;
+
+/// @brief Whether @p Action's rule leaves the scope to the model, which passes it to `requireAuthorizedIn`.
+/// @tparam Action The action.
+template <typename Action>
+concept DeclaresModelScope = DeclaresRule<Action> && requires { requires Authorization<Action>::scopeFromModel; };
+
+/// @brief The role @p Action declares.
+/// @tparam Action A declared action.
+/// @return The role; nothing for an action that accepts any role.
+template <typename Action>
+    requires DeclaresRule<Action>
+[[nodiscard]] constexpr std::optional<LimsRole> declaredRole() {
+    if constexpr (DeclaresRole<Action>) {
+        return Authorization<Action>::role;
+    } else {
+        return std::nullopt;
+    }
+}
 
 /// @brief Whether @p Action's rule names the scope its payload holds.
 /// @tparam Action The action.
@@ -82,7 +116,7 @@ concept DeclaresSeparation = DeclaresRule<Action> && requires(Action const& acti
 /// @brief What a declared rule decides.
 enum class Verdict : std::uint8_t {
     Allowed,      ///< Every declared condition holds.
-    MissingRole,  ///< The principal does not hold the role in the scope.
+    MissingRole,  ///< The principal does not hold the role (any role, for a rule that accepts any) in the scope.
     SameActor,    ///< The principal performed the pair's first half on the same subject.
     NoLimit,      ///< The action carries an amount and the principal has no limit in the scope.
     OverLimit,    ///< The amount is above the principal's limit in the scope.
@@ -92,8 +126,8 @@ enum class Verdict : std::uint8_t {
 struct AuthorizationFacts {
     /// @brief The authenticated principal.
     std::string principal;
-    /// @brief The role the action needs.
-    LimsRole required = LimsRole::Analyst;
+    /// @brief The role the action needs; empty when any role will do.
+    std::optional<LimsRole> required = LimsRole::Analyst;
     /// @brief The roles the principal holds in the scope (anywhere, for a rule without one).
     std::vector<LimsRole> held;
     /// @brief Who performed the pair's first half on the same subject; empty without a pair or a performer.
@@ -112,7 +146,15 @@ struct AuthorizationFacts {
 /// @return The verdict.
 [[nodiscard]] Verdict authorizationVerdict(AuthorizationFacts const& facts);
 
-/// @brief Throws `Forbidden` unless the authenticated principal holds @p Action's declared role in some scope.
+/// @brief The words a refusal uses for a required role.
+/// @param role The role; empty for any role.
+/// @return "the <role> role", or "any role".
+[[nodiscard]] inline std::string roleWords(std::optional<LimsRole> role) {
+    return role.has_value() ? "the " + std::string{roleName(*role)} + " role" : std::string{"any role"};
+}
+
+/// @brief Throws `Forbidden` unless the authenticated principal holds @p Action's declared role (any role, for a
+///        rule that accepts any) in some scope.
 ///
 /// Asked before the rows an action names are looked up, so a caller without the role learns nothing about which ids
 /// exist; `requireAuthorized` then judges the scope once the rows are known.
@@ -121,41 +163,40 @@ struct AuthorizationFacts {
 template <typename Action>
     requires DeclaresRule<Action>
 void requireRoleSomewhere() {
-    using Rule = Authorization<Action>;
     std::string const principal = ::morph::session::current()->principal;
     auto const held = OrgModel::rolesAnywhere(principal);
-    if (std::ranges::find(held, Rule::role) == held.end()) {
+    auto const role = declaredRole<Action>();
+    if (role.has_value() ? std::ranges::find(held, *role) == held.end() : held.empty()) {
         throw Forbidden{std::string{::morph::model::ActionTraits<Action>::typeId()} + ": '" + principal +
-                        "' does not hold the " + std::string{roleName(Rule::role)} + " role"};
+                        "' does not hold " + roleWords(role)};
     }
 }
 
-/// @brief Checks @p action against its declaration, as the authenticated principal.
-///
-/// Called by the model on every dispatch path, after the payload is validated and the rows it names are known to
-/// exist, so a refusal is about permission and never a disguised missing row.
+namespace detail {
+
+/// @brief Judges @p action against its declaration in @p scope, or in any scope when there is none.
 /// @tparam Action A declared action.
 /// @param action The action.
+/// @param scope The scope the rule is judged in; empty for a rule that needs the role in some scope.
 /// @throws Forbidden with the reason, in words, when the verdict is not `Allowed`.
 template <typename Action>
-    requires DeclaresRule<Action>
-void requireAuthorized(Action const& action) {
+void judge(Action const& action, std::optional<Scope> const& scope) {
     using Rule = Authorization<Action>;
     std::string const principal = ::morph::session::current()->principal;
+    auto const role = declaredRole<Action>();
     AuthorizationFacts facts{.principal = principal,
-                             .required = Rule::role,
+                             .required = role,
                              .held = {},
                              .firstPerformer = std::nullopt,
                              .amount = std::nullopt,
                              .limit = std::nullopt};
     std::string where = "in any scope";
-    if constexpr (DeclaresScope<Action>) {
-        Scope const scope = Rule::scopeOf(action);
-        facts.held = OrgModel::rolesIn(principal, scope);
-        where = "at " + scopeName(scope);
+    if (scope.has_value()) {
+        facts.held = OrgModel::rolesIn(principal, *scope);
+        where = "at " + scopeName(*scope);
         if constexpr (DeclaresValueLimit<Action>) {
             facts.amount = Rule::amountOf(action);
-            facts.limit = Rule::limitOf(principal, scope);
+            facts.limit = Rule::limitOf(principal, *scope);
         }
     } else {
         facts.held = OrgModel::rolesAnywhere(principal);
@@ -169,8 +210,7 @@ void requireAuthorized(Action const& action) {
         return;
     }
     if (verdict == Verdict::MissingRole) {
-        throw Forbidden{actionType + ": '" + principal + "' does not hold the " + std::string{roleName(Rule::role)} +
-                        " role " + where};
+        throw Forbidden{actionType + ": '" + principal + "' does not hold " + roleWords(role) + " " + where};
     }
     if (verdict == Verdict::NoLimit) {
         throw Forbidden{actionType + ": '" + principal + "' has no value limit " + where};
@@ -184,12 +224,45 @@ void requireAuthorized(Action const& action) {
     throw Forbidden{actionType + ": refused"};
 }
 
+}  // namespace detail
+
+/// @brief Checks @p action against its declaration, as the authenticated principal.
+///
+/// Called by the model on every dispatch path, after the payload is validated and, where the rule needs a row, before
+/// that row is looked up for anything but its scope, so a refusal is about permission and never a disguised missing
+/// row: an unknown scope holds no role, so it is refused as a missing role.
+/// @tparam Action A declared action whose scope the payload names, or that needs none.
+/// @param action The action.
+/// @throws Forbidden with the reason, in words, when the verdict is not `Allowed`.
+template <typename Action>
+    requires DeclaresRule<Action> && (!DeclaresModelScope<Action>)
+void requireAuthorized(Action const& action) {
+    if constexpr (DeclaresScope<Action>) {
+        detail::judge(action, std::optional<Scope>{Authorization<Action>::scopeOf(action)});
+    } else {
+        detail::judge(action, std::nullopt);
+    }
+}
+
+/// @brief Checks @p action against its declaration in @p scope, as the authenticated principal: for a rule whose scope
+///        the model knows and the payload does not carry.
+/// @tparam Action A declared action with `scopeFromModel`.
+/// @param action The action.
+/// @param scope The scope the model resolved; an empty scope when the row it comes from does not exist, which holds
+///        no role and is refused as a missing role.
+/// @throws Forbidden with the reason, in words, when the verdict is not `Allowed`.
+template <typename Action>
+    requires DeclaresModelScope<Action>
+void requireAuthorizedIn(Action const& action, Scope const& scope) {
+    detail::judge(action, std::optional<Scope>{scope});
+}
+
 /// @brief One declared role as the server edge can use it: by action id, with no payload.
 struct RoleRequirement {
     /// @brief The action id.
     std::string_view actionType;
-    /// @brief The role it needs, somewhere.
-    LimsRole role = LimsRole::Analyst;
+    /// @brief The role it needs, somewhere; empty when any role will do.
+    std::optional<LimsRole> role = LimsRole::Analyst;
 };
 
 /// @brief @p Action's declared role, for the edge's table.
@@ -199,7 +272,7 @@ template <typename Action>
     requires DeclaresRule<Action>
 [[nodiscard]] constexpr RoleRequirement requirementOf() {
     return RoleRequirement{.actionType = ::morph::model::ActionTraits<Action>::typeId(),
-                           .role = Authorization<Action>::role};
+                           .role = declaredRole<Action>()};
 }
 
 }  // namespace lims

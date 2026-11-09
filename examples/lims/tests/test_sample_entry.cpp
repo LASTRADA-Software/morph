@@ -16,7 +16,6 @@
 #include "testkit/db_fixture.hpp"
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
 using morph::math::Numerator;
@@ -57,7 +56,7 @@ void completeCopy(lims::SampleModel& model) {
 
 // Mutation: store the working copy on every section action (the second model loads the edited reference).
 TEST_CASE("sample entry: sections edit the working copy and only a save stores it", "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     ScopedPrincipal const alice{"alice"};
     lims::SampleModel model;
     completeCopy(model);
@@ -92,7 +91,7 @@ TEST_CASE("sample entry: sections edit the working copy and only a save stores i
 // Mutation: accept a copy without a project (the last refusal reads `none` and a sample is stored).
 TEST_CASE("sample entry: a save refuses an incomplete copy with a typed reason and stores nothing",
           "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     ScopedPrincipal const alice{"alice"};
     lims::SampleModel model;
     CHECK(model.execute(lims::SaveSample{}).error == lims::SaveError::noWorkingCopy);
@@ -115,7 +114,7 @@ TEST_CASE("sample entry: a save refuses an incomplete copy with a typed reason a
 
 // Mutation: compute the nominal as spike × factor (every nominal after the first is wrong).
 TEST_CASE("sample entry: the model computes the dilution series and its limits exactly", "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
     model.execute(lims::NewSample{});
     CHECK(model.execute(lims::GetDilutionSeries{}).rows.empty());
@@ -149,7 +148,7 @@ TEST_CASE("sample entry: the model computes the dilution series and its limits e
 
 // Mutation: clear both readings for either name (the nitrate reading is gone after clearing turbidity).
 TEST_CASE("sample entry: clearing an optional measurement removes only its reading", "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
     model.execute(lims::NewSample{});
     model.execute(lims::TurbiditySection{.ntu = lims::Turbidity{Rational{2, DecimalPlaces{2}}}});
@@ -161,7 +160,7 @@ TEST_CASE("sample entry: clearing an optional measurement removes only its readi
 }
 
 TEST_CASE("sample entry: a section without a working copy is refused", "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
     CHECK_THROWS_AS(model.execute(lims::GetHeader{}), lims::NotFound);
     CHECK_THROWS_AS(model.execute(lims::NitrateSection{.nitrate = mgL(1)}), lims::NotFound);
@@ -172,7 +171,7 @@ TEST_CASE("sample entry: a section without a working copy is refused", "[lims][s
 // Mutation: ignore the table query (the filter returns every project).
 TEST_CASE("sample entry: the project lookup is sorted, filtered and paged by the table engine",
           "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
     lims::ListProjects request;
     request.query.sort.push_back(
@@ -191,7 +190,7 @@ TEST_CASE("sample entry: the project lookup is sorted, filtered and paged by the
 
 // Mutation: delete without the state check (the received sample is deleted).
 TEST_CASE("sample entry: deleting withdraws a registration and refuses a received sample", "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     ScopedPrincipal const alice{"alice"};
     lims::SampleModel model;
     completeCopy(model);
@@ -213,7 +212,7 @@ TEST_CASE("sample entry: deleting withdraws a registration and refuses a receive
 // Mutations: drop the id check from LoadSample; let DeleteSample run on a working copy that was never saved.
 TEST_CASE("sample entry: loading names a sample, and a never-saved working copy cannot be deleted",
           "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::test::grant("alice", lims::LimsRole::Analyst);
     ScopedPrincipal const alice{"alice"};
     lims::SampleModel model;
@@ -225,7 +224,7 @@ TEST_CASE("sample entry: loading names a sample, and a never-saved working copy 
 // turbidity whichever optional measurement is named.
 TEST_CASE("sample entry: a save names a client that exists, and each optional measurement clears on its own",
           "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::test::grant("alice", lims::LimsRole::Analyst);
     ScopedPrincipal const alice{"alice"};
     lims::SampleModel model;

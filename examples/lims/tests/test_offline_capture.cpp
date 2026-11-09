@@ -37,7 +37,6 @@
 #endif
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
 using morph::math::Numerator;
@@ -144,7 +143,7 @@ void allowInserts() {
 // ── The write path: stamping and chaining ──────────────────────────────────
 
 TEST_CASE("A field outbox stamps each update with the version it was prepared against", "[lims][offline]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -172,7 +171,7 @@ TEST_CASE("A field outbox stamps each update with the version it was prepared ag
 
 TEST_CASE("A client's second offline edit chains onto its own first, not onto server state",
           "[lims][offline][self-conflict]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -204,7 +203,7 @@ TEST_CASE("A client's second offline edit chains onto its own first, not onto se
 }
 
 TEST_CASE("A client that does not chain flags its own second edit as a conflict", "[lims][offline][self-conflict]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -242,7 +241,7 @@ TEST_CASE("A client that does not chain flags its own second edit as a conflict"
 // ── The definition of done ─────────────────────────────────────────────────
 
 TEST_CASE("Two field clients, one sample: reconnect flags exactly the stale-base update", "[lims][offline][dod]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -290,7 +289,7 @@ TEST_CASE("Two field clients, one sample: reconnect flags exactly the stale-base
 // ── Resolution ─────────────────────────────────────────────────────────────
 
 TEST_CASE("Discarding a conflict closes it and leaves the server's value standing", "[lims][offline][resolution]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -331,7 +330,7 @@ TEST_CASE("Discarding a conflict closes it and leaves the server's value standin
 }
 
 TEST_CASE("Applying a conflict anyway rebases it onto the current version", "[lims][offline][resolution]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -370,7 +369,7 @@ TEST_CASE("Applying a conflict anyway rebases it onto the current version", "[li
 }
 
 TEST_CASE("Resolving needs a stated reason and a conflict that exists", "[lims][offline][resolution]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -384,7 +383,7 @@ TEST_CASE("Resolving needs a stated reason and a conflict that exists", "[lims][
 // ── Replay's own guards ────────────────────────────────────────────────────
 
 TEST_CASE("A queued update may only be replayed by the operator who captured it", "[lims][offline][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleId sampleId;
     lims::QueuedCapture queued;
     auto queue = std::make_shared<morph::offline::InMemoryOfflineQueue>(morph::ladder::testkit::storageOwner());
@@ -422,7 +421,7 @@ TEST_CASE("A queued update may only be replayed by the operator who captured it"
 }
 
 TEST_CASE("Redelivering an operation is skipped, not applied twice", "[lims][offline][idempotency]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -452,7 +451,7 @@ TEST_CASE("Redelivering an operation is skipped, not applied twice", "[lims][off
 
 TEST_CASE("A capture whose op-key record is lost is rolled back, not left half-applied",
           "[lims][offline][idempotency]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -490,7 +489,7 @@ TEST_CASE("A capture whose op-key record is lost is rolled back, not left half-a
 }
 
 TEST_CASE("A conflict is decided once: redelivering it does not raise a second flag", "[lims][offline][idempotency]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -515,7 +514,7 @@ TEST_CASE("A conflict is decided once: redelivering it does not raise a second f
 }
 
 TEST_CASE("An update for a sample that left the bench is flagged, with the specific reason", "[lims][offline]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -543,7 +542,7 @@ TEST_CASE("An update for a sample that left the bench is flagged, with the speci
 
 TEST_CASE("An undecodable queued payload is journaled and dropped, never left to block the queue",
           "[lims][offline][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -579,7 +578,7 @@ TEST_CASE("An undecodable queued payload is journaled and dropped, never left to
 }
 
 TEST_CASE("A model with no queue attached replays nothing and does not crash", "[lims][offline]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
     model.onBackendChanged();
@@ -587,7 +586,7 @@ TEST_CASE("A model with no queue attached replays nothing and does not crash", "
 }
 
 TEST_CASE("A malformed queued envelope is rejected by validate(), not stored", "[lims][offline]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal fiona{"fiona"};
     lims::SampleModel model;
 
@@ -615,7 +614,7 @@ TEST_CASE("A malformed queued envelope is rejected by validate(), not stored", "
 }
 
 TEST_CASE("Replay is journaled: applied and flagged updates both name their operator", "[lims][offline][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -673,7 +672,7 @@ namespace {
 }  // namespace
 
 TEST_CASE("The definition-of-done flow holds on the durable queue, across a restart", "[lims][offline][dod][sqlite]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 
@@ -727,7 +726,7 @@ TEST_CASE("The definition-of-done flow holds on the durable queue, across a rest
 
 TEST_CASE("The durable queue dedups a re-enqueued operation where the in-memory one does not",
           "[lims][offline][sqlite][finding]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     Lab lab;
 

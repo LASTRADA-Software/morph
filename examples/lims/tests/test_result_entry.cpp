@@ -26,7 +26,6 @@
 #include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
 using morph::math::Numerator;
@@ -325,7 +324,7 @@ TEST_CASE("The four result states survive the offline queue's opaque payload", "
 // ── Capture through the model ──────────────────────────────────────────────
 
 TEST_CASE("A measured result stores its exact value against its analysis version", "[lims][result]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -351,7 +350,7 @@ TEST_CASE("A measured result stores its exact value against its analysis version
 }
 
 TEST_CASE("The three no-number results are stored and read back distinguishably", "[lims][result]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -389,7 +388,7 @@ TEST_CASE("The three no-number results are stored and read back distinguishably"
 }
 
 TEST_CASE("An over-precise reading is rejected, not silently retagged", "[lims][result][precision]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -419,7 +418,7 @@ TEST_CASE("An over-precise reading is rejected, not silently retagged", "[lims][
 }
 
 TEST_CASE("An unknown qualifier code is refused by the model too", "[lims][result]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -435,7 +434,7 @@ TEST_CASE("An unknown qualifier code is refused by the model too", "[lims][resul
 }
 
 TEST_CASE("A concentration action cannot be captured against a non-concentration analysis", "[lims][result][units]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -453,7 +452,7 @@ TEST_CASE("A concentration action cannot be captured against a non-concentration
 }
 
 TEST_CASE("Results can only be captured while a sample is in progress", "[lims][result][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -500,7 +499,7 @@ TEST_CASE("Results can only be captured while a sample is in progress", "[lims][
 }
 
 TEST_CASE("Capturing a result moves the sample's base version", "[lims][result][offline]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -520,7 +519,7 @@ TEST_CASE("Capturing a result moves the sample's base version", "[lims][result][
 
 TEST_CASE("Re-capturing one analysis version replaces its answer, and the journal keeps both",
           "[lims][result][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     lims::AnalysisCatalogModel catalog;
@@ -554,7 +553,7 @@ TEST_CASE("Re-capturing one analysis version replaces its answer, and the journa
 }
 
 TEST_CASE("A result stays bound to the version it was captured under", "[lims][result][versioning]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -585,7 +584,7 @@ TEST_CASE("A result stays bound to the version it was captured under", "[lims][r
 }
 
 TEST_CASE("Capturing with no principal is refused and journals nothing", "[lims][result][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -608,7 +607,7 @@ TEST_CASE("Capturing with no principal is refused and journals nothing", "[lims]
 }
 
 TEST_CASE("The qualifier picklist is served, and matches the codes the model accepts", "[lims][result][forms]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
 
     const auto options = model.execute(lims::ListResultQualifiers{});
@@ -623,7 +622,7 @@ TEST_CASE("The qualifier picklist is served, and matches the codes the model acc
 }
 
 TEST_CASE("Listing or capturing against an unattached handler is NotFound", "[lims][result]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -636,7 +635,7 @@ TEST_CASE("Listing or capturing against an unattached handler is NotFound", "[li
 }
 
 TEST_CASE("Capturing against an analysis version that does not exist is NotFound", "[lims][result]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -648,7 +647,7 @@ TEST_CASE("Capturing against an analysis version that does not exist is NotFound
 
 TEST_CASE("Both halves of the sum engaged is refused by the model, not just by validate()",
           "[lims][result][encoding]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -671,7 +670,7 @@ TEST_CASE("Both halves of the sum engaged is refused by the model, not just by v
 }
 
 TEST_CASE("A version declaring an impossible precision cannot be captured against", "[lims][result][precision]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
     sampleAtWork(model);

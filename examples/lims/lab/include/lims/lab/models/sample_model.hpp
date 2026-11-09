@@ -57,6 +57,7 @@ public:
     /// @return The new sample's full state.
     /// @throws ValidationError if the action is not well-formed.
     /// @throws NotFound if the named client does not exist.
+    /// @throws Forbidden if the caller holds no role at the site the action names (a role at its company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const RegisterSample& action);
 
@@ -83,6 +84,7 @@ public:
     /// @param action Carries no fields of its own.
     /// @return The sample's state after the transition.
     /// @throws IllegalTransition if the sample is not `Registered`.
+    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const ReceiveSample& action);
 
@@ -90,6 +92,7 @@ public:
     /// @param action Carries no fields of its own.
     /// @return The sample's state after the transition.
     /// @throws IllegalTransition if the sample is not `Received`.
+    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const StartWork& action);
 
@@ -97,6 +100,7 @@ public:
     /// @param action Carries no fields of its own.
     /// @return The sample's state after the transition.
     /// @throws IllegalTransition if the sample is not `InProgress`.
+    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const SubmitForVerification& action);
 
@@ -105,6 +109,7 @@ public:
     /// @return The sample's state after the transition.
     /// @throws ValidationError if no reason is given.
     /// @throws IllegalTransition if the sample is not `ToBeVerified`.
+    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const ReturnForRework& action);
 
@@ -112,6 +117,7 @@ public:
     /// @param action Carries no fields of its own.
     /// @return The sample's state after the transition.
     /// @throws IllegalTransition if the sample is not `ToBeVerified`.
+    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const PublishSample& action);
 
@@ -120,6 +126,7 @@ public:
     /// @return The sample's state after the transition.
     /// @throws ValidationError if no reason is given.
     /// @throws IllegalTransition if the sample has already been worked.
+    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const RejectSample& action);
 
@@ -141,6 +148,7 @@ public:
     ///         value carries more precision than the version declares.
     /// @throws NotFound if the analysis version does not exist.
     /// @throws IllegalTransition if the sample is not `InProgress`.
+    /// @throws Forbidden if the caller holds no role at the attached sample's site (a role at its company counts).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     ResultView execute(const CaptureConcentration& action);
 
@@ -311,7 +319,8 @@ public:
     /// @param action The queued update, with the base version it assumed.
     /// @return What replay did, and the conflict id if it flagged one.
     /// @throws ValidationError if the envelope is not well-formed.
-    /// @throws Forbidden if `capturedBy` is not the authenticated principal.
+    /// @throws Forbidden if `capturedBy` is not the authenticated principal, or that operator holds no role at the
+    /// sample's site now.
     /// @throws NotFound if the sample or the analysis version does not exist.
     /// @throws EmptyPrincipalError if no principal is authenticated.
     ReplayCaptureResult execute(const QueuedCapture& action);
@@ -380,6 +389,12 @@ private:
     /// @return The sample's state after the transition.
     template <typename Action>
     SampleView transition(const Action& action, SampleState target);
+
+    /// @brief The attached sample's site as a scope, for the declared authorization check.
+    /// @return Its site; an empty site when the sample has no row or no site, which holds no role, so the caller is
+    ///         refused as a missing role before anything else is looked up.
+    /// @throws NotFound if this handler is not attached: there is no id to leak, so the caller is told.
+    [[nodiscard]] Scope attachedSiteScope() const;
 
     /// @brief Loads the attached sample and returns its view.
     /// @return The attached sample's full state.

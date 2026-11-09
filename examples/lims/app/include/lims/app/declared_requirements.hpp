@@ -17,59 +17,55 @@ namespace lims::app {
 
 /// @brief The actions that change data and deliberately declare no role: any authenticated principal may run them.
 ///
+/// The ignition-test actions are open because an ignition test belongs to no site: there is no scope to judge a role
+/// in.
+///
 /// Listing an action here is a decision that it is open, made in one place. An action that changes data is either in
-/// `declaredRequirements()` or here; the declared-authorization suite fails for a mutating action of the org, sample
-/// or analysis-catalog model that is in neither, and for an id here that is also declared.
+/// `declaredRequirements()` or here; the declared-authorization suite fails for a mutating action of the org, sample,
+/// analysis-catalog or ignition model that is in neither, and for an id here that is also declared.
 /// @return The action ids.
-[[nodiscard]] inline std::array<std::string_view, 23> const& openMutatingActions() {
-    static constexpr std::array<std::string_view, 23> open{
-        "DefineAnalysis",
-        "ReviseAnalysis",
-        "RegisterClient",
-        "RegisterSample",
-        "ReceiveSample",
-        "StartWork",
-        "SubmitForVerification",
-        "ReturnForRework",
-        "PublishSample",
-        "RejectSample",
-        "CaptureConcentration",
-        "QueuedCapture",
-        "ResolveConflict",
-        "NewSample",
-        "LoadSample",
-        "SaveSample",
-        "DeleteSample",
-        "HeaderSection",
-        "SamplingSection",
-        "TurbiditySection",
-        "NitrateSection",
-        "ClearOptionalMeasurement",
+[[nodiscard]] inline std::array<std::string_view, 17> const& openMutatingActions() {
+    static constexpr std::array<std::string_view, 17> open{
+        "DefineAnalysis",  "ReviseAnalysis",       "RegisterClient",     "ResolveConflict",
+        "NewSample",       "LoadSample",           "SaveSample",         "DeleteSample",
+        "HeaderSection",   "SamplingSection",      "TurbiditySection",   "NitrateSection",
+        "AddIgnitionTest", "RecordIgnitionValues", "DeleteIgnitionTest", "ClearOptionalMeasurement",
         "SelectProject",
     };
     return open;
 }
 
-/// @brief Every action a module declares a role for.
+/// @brief Every action a module declares a role, or some role, for.
 /// @return The table.
-[[nodiscard]] inline std::array<RoleRequirement, 5> const& declaredRequirements() {
-    static constexpr std::array<RoleRequirement, 5> requirements{
-        requirementOf<VerifyResult>(), requirementOf<CreateCompany>(), requirementOf<CreateSite>(),
-        requirementOf<AssignRole>(),   requirementOf<RevokeRole>(),
+[[nodiscard]] inline std::array<RoleRequirement, 14> const& declaredRequirements() {
+    static constexpr std::array<RoleRequirement, 14> requirements{
+        requirementOf<VerifyResult>(),         requirementOf<CreateCompany>(), requirementOf<CreateSite>(),
+        requirementOf<AssignRole>(),           requirementOf<RevokeRole>(),    requirementOf<RegisterSample>(),
+        requirementOf<ReceiveSample>(),        requirementOf<StartWork>(),     requirementOf<SubmitForVerification>(),
+        requirementOf<ReturnForRework>(),      requirementOf<PublishSample>(), requirementOf<RejectSample>(),
+        requirementOf<CaptureConcentration>(), requirementOf<QueuedCapture>(),
     };
     return requirements;
 }
 
-/// @brief The role @p actionType declares.
+/// @brief The requirement @p actionType declares.
 /// @param actionType The action id.
-/// @return The role, or nothing for an action that declares none.
-[[nodiscard]] inline std::optional<LimsRole> requiredRole(std::string_view actionType) {
+/// @return Its requirement, or nothing for an action that declares none.
+[[nodiscard]] inline std::optional<RoleRequirement> requirementFor(std::string_view actionType) {
     for (RoleRequirement const& requirement : declaredRequirements()) {
         if (requirement.actionType == actionType) {
-            return requirement.role;
+            return requirement;
         }
     }
     return std::nullopt;
+}
+
+/// @brief The specific role @p actionType declares.
+/// @param actionType The action id.
+/// @return The role, or nothing for an action that declares none or accepts any role.
+[[nodiscard]] inline std::optional<LimsRole> requiredRole(std::string_view actionType) {
+    auto const requirement = requirementFor(actionType);
+    return requirement.has_value() ? requirement->role : std::nullopt;
 }
 
 }  // namespace lims::app

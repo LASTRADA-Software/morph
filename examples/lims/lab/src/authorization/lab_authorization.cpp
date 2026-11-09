@@ -26,6 +26,16 @@ namespace {
 
 }  // namespace
 
+Scope siteScopeOfSample(SampleId sample) {
+    if (!sample.hasValue()) {
+        return Scope{SiteId{}};
+    }
+    Lightweight::DataMapper mapper;
+    auto const samples =
+        mapper.Query<db::SampleRecord>().Where(::Lightweight::FieldNameOf<&db::SampleRecord::id>, "=", *sample).All();
+    return samples.empty() ? Scope{SiteId{}} : Scope{SiteId::fromOptional(samples.front().siteId.Value())};
+}
+
 Scope Authorization<VerifyResult>::scopeOf(VerifyResult const& action) {
     Lightweight::DataMapper mapper;
     auto const results = resultRows(mapper, action.resultId);

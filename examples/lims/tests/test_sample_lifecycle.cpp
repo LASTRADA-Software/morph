@@ -24,7 +24,6 @@
 #include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 
 namespace {
 
@@ -101,7 +100,7 @@ TEST_CASE("Published and Rejected are terminal", "[lims][sample][lifecycle]") {
 }
 
 TEST_CASE("A registered sample starts at Registered, version 1", "[lims][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -115,7 +114,7 @@ TEST_CASE("A registered sample starts at Registered, version 1", "[lims][sample]
 
 TEST_CASE("The happy path walks registered -> published, bumping the base version each step",
           "[lims][sample][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -145,7 +144,7 @@ TEST_CASE("The happy path walks registered -> published, bumping the base versio
 }
 
 TEST_CASE("An illegal transition is refused and changes nothing", "[lims][sample][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -161,7 +160,7 @@ TEST_CASE("An illegal transition is refused and changes nothing", "[lims][sample
 }
 
 TEST_CASE("A published sample refuses every further transition", "[lims][sample][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -181,7 +180,7 @@ TEST_CASE("A published sample refuses every further transition", "[lims][sample]
 
 TEST_CASE("A sample can be rejected at registration or at receipt, but not after work started",
           "[lims][sample][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
 
     {
@@ -207,7 +206,7 @@ TEST_CASE("A sample can be rejected at registration or at receipt, but not after
 }
 
 TEST_CASE("Returning a sample for rework needs a stated reason", "[lims][sample][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -222,7 +221,7 @@ TEST_CASE("Returning a sample for rework needs a stated reason", "[lims][sample]
 }
 
 TEST_CASE("A mutating transition with no principal is refused and journals nothing", "[lims][sample][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
@@ -245,7 +244,7 @@ TEST_CASE("A mutating transition with no principal is refused and journals nothi
 }
 
 TEST_CASE("A successful transition is journaled against the sample, naming its author", "[lims][sample][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
@@ -273,7 +272,9 @@ TEST_CASE("A successful transition is journaled against the sample, naming its a
 }
 
 TEST_CASE("A refused transition is journaled as a failure, naming who tried", "[lims][sample][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
+    // An analyst at the site, so the refusal measured is the lifecycle's and not the authorization's.
+    lims::test::grant("mallory", lims::LimsRole::Analyst);
     const ScopedPrincipal mallory{"mallory"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
@@ -295,7 +296,7 @@ TEST_CASE("A refused transition is journaled as a failure, naming who tried", "[
 }
 
 TEST_CASE("Two handlers attached to the same sample see each other's transitions", "[lims][sample][shared]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
 
     lims::SampleModel office;
@@ -312,7 +313,7 @@ TEST_CASE("Two handlers attached to the same sample see each other's transitions
 }
 
 TEST_CASE("An unattached handler refuses to read or transition anything", "[lims][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -321,7 +322,7 @@ TEST_CASE("An unattached handler refuses to read or transition anything", "[lims
 }
 
 TEST_CASE("Opening or registering against something that does not exist is NotFound", "[lims][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -334,7 +335,7 @@ TEST_CASE("Opening or registering against something that does not exist is NotFo
 }
 
 TEST_CASE("Registering a sample or a client requires a principal and well-formed input", "[lims][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
 
     CHECK_THROWS_AS(model.execute(lims::RegisterClient{.name = "Waterworks Ltd"}), lims::EmptyPrincipalError);
@@ -350,7 +351,7 @@ TEST_CASE("Registering a sample or a client requires a principal and well-formed
 // ═════════════════════════════════════════════════════════════════════════
 // SampleModel's primary key
 //
-// No DbFixture below this line: `ActionKeyTraits<A>::key()` is a pure
+// No fixture below this line: `ActionKeyTraits<A>::key()` is a pure
 // function over the action's own fields, and that is the point -- key
 // extraction runs inside `BridgeHandler::execute()` before `SampleModel`'s
 // own `validate()` ever sees the action, so it is the first and only place a

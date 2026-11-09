@@ -6,7 +6,9 @@
 namespace lims {
 
 Verdict authorizationVerdict(AuthorizationFacts const& facts) {
-    if (std::ranges::find(facts.held, facts.required) == facts.held.end()) {
+    bool const holds = facts.required.has_value() ? std::ranges::find(facts.held, *facts.required) != facts.held.end()
+                                                  : !facts.held.empty();
+    if (!holds) {
         return Verdict::MissingRole;
     }
     if (facts.firstPerformer.has_value() && *facts.firstPerformer == facts.principal) {

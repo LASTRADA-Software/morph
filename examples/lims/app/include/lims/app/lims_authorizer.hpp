@@ -120,8 +120,8 @@ public:
         }
         // The edge sees no payload, so it asks whether the principal holds the declared role anywhere; the scope, a
         // value limit and a separation-of-duties pair are checked by the model, which has the payload.
-        if (auto const role = ::lims::app::requiredRole(actionType)) {
-            return holds(*principal, *role);
+        if (auto const requirement = ::lims::app::requirementFor(actionType)) {
+            return requirement->role.has_value() ? holds(*principal, *requirement->role) : holdsAny(*principal);
         }
         return true;
     }
@@ -139,6 +139,14 @@ private:
         }
         const auto held = _roles(principal);
         return std::ranges::find(held, role) != held.end();
+    }
+
+    /// @brief Whether @p principal currently holds any role at all.
+    /// @param principal The authenticated principal.
+    /// @return `true` when the lookup reports at least one role.
+    [[nodiscard]] bool holdsAny(const std::string& principal) const {
+        // Fails closed like `holds`.
+        return _roles && !_roles(principal).empty();
     }
 
     RoleLookup _roles;

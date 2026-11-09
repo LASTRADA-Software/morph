@@ -11,12 +11,16 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_range.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/effects.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
@@ -34,6 +38,7 @@
 #include "lims/lab/authorization/lab_authorization.hpp"
 #include "lims/lab/db/lims_entity.hpp"
 #include "lims/lab/models/analysis_catalog_model.hpp"
+#include "lims/lab/models/ignition_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/org/authorization/declared.hpp"
 #include "lims/org/core/errors.hpp"
@@ -45,6 +50,8 @@
 #include "testkit/pump.hpp"
 
 using lims::test::ScopedPrincipal;
+using morph::bridge::AllowShared;
+using morph::bridge::BridgeHandler;
 using morph::ladder::testkit::awaitQt;
 using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
@@ -117,6 +124,143 @@ struct TwoSites {
     return TwoSites{.fieldLab = fieldLab.id, .sample = sample.id, .result = result.id};
 }
 
+/// @brief A second company with its own site, and a principal who works only there.
+struct Rival {
+    lims::CompanyId company;
+    lims::SiteId site;
+};
+
+/// @brief Creates the rival company as alice, who becomes its supervisor, and appoints `eve` an analyst at it.
+/// @return The rival company and its site.
+[[nodiscard]] Rival rivalWithEve() {
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    auto const company = org.execute(lims::CreateCompany{
+        .name = "Rival Labs", .baseCurrency = lims::CurrencyCode::EUR, .fiscalYearStart = lims::Month::January});
+    auto const site = org.execute(lims::CreateSite{.companyId = company.id, .name = "Rival bench"});
+    org.execute(lims::AssignRole{
+        .principal = "eve", .role = lims::LimsRole::Analyst, .company = company.id, .site = lims::SiteId{}});
+    return Rival{.company = company.id, .site = site.id};
+}
+
+/// @brief A sample at the seeded site, the client it belongs to and the analysis version a reading can name.
+struct Bench {
+    lims::ClientId client;
+    lims::SampleId sample;
+    lims::AnalysisVersionId analysisVersion;
+};
+
+/// @brief Registers a sample at the seeded site as alice, an analyst at the seeded company, and walks it to @p state.
+/// @param state The state to leave it in: Registered, Received, InProgress or ToBeVerified.
+/// @return The bench.
+[[nodiscard]] Bench benchIn(lims::SampleState state) {
+    lims::test::grant("alice", lims::LimsRole::Analyst);
+    ScopedPrincipal const alice{"alice"};
+    lims::AnalysisCatalogModel catalog;
+    auto const nitrate =
+        catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
+    lims::SampleModel bench;
+    auto const client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
+    auto const sample = bench.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
+    if (state != lims::SampleState::Registered) {
+        bench.execute(lims::ReceiveSample{});
+    }
+    if (state == lims::SampleState::InProgress || state == lims::SampleState::ToBeVerified) {
+        bench.execute(lims::StartWork{});
+    }
+    if (state == lims::SampleState::ToBeVerified) {
+        bench.execute(lims::SubmitForVerification{});
+    }
+    return Bench{.client = client.clientId, .sample = sample.id, .analysisVersion = nitrate.versionId};
+}
+
+/// @brief A reading of the nitrate version.
+/// @param bench The bench.
+/// @return The capture.
+[[nodiscard]] lims::CaptureConcentration reading(Bench const& bench) {
+    return lims::CaptureConcentration{
+        .analysisVersionId = bench.analysisVersion,
+        .value = lims::Concentration{morph::math::Rational{morph::math::Numerator{12}, morph::math::Denominator{5},
+                                                           morph::math::DecimalPlaces{3}}}};
+}
+
+/// @brief One lab write, as the principal currently in scope, on a handler attached to the bench's sample.
+struct LabWrite {
+    /// @brief The action's id.
+    std::string_view name;
+    /// @brief The state the sample is in when the write is attempted.
+    lims::SampleState from;
+    /// @brief Performs the write.
+    std::function<void(lims::SampleModel&, Bench const&, std::string const&)> run;
+};
+
+/// @brief Every write on a sample, one per action: the registration, each lifecycle edge, a capture and a replay.
+/// @return The table.
+[[nodiscard]] std::vector<LabWrite> labWrites() {
+    using lims::SampleState;
+    return {
+        {"RegisterSample", SampleState::Registered,
+         [](lims::SampleModel& model, Bench const& bench, std::string const&) {
+             model.execute(lims::RegisterSample{
+                 .siteId = lims::test::seededSite(), .clientId = bench.client, .reference = "WW-2"});
+         }},
+        {"ReceiveSample", SampleState::Registered,
+         [](lims::SampleModel& model, Bench const&, std::string const&) { model.execute(lims::ReceiveSample{}); }},
+        {"StartWork", SampleState::Received,
+         [](lims::SampleModel& model, Bench const&, std::string const&) { model.execute(lims::StartWork{}); }},
+        {"SubmitForVerification", SampleState::InProgress,
+         [](lims::SampleModel& model, Bench const&, std::string const&) {
+             model.execute(lims::SubmitForVerification{});
+         }},
+        {"ReturnForRework", SampleState::ToBeVerified,
+         [](lims::SampleModel& model, Bench const&, std::string const&) {
+             model.execute(lims::ReturnForRework{.reason = "recheck"});
+         }},
+        {"PublishSample", SampleState::ToBeVerified,
+         [](lims::SampleModel& model, Bench const&, std::string const&) { model.execute(lims::PublishSample{}); }},
+        {"RejectSample", SampleState::Registered,
+         [](lims::SampleModel& model, Bench const&, std::string const&) {
+             model.execute(lims::RejectSample{.reason = "leaked"});
+         }},
+        {"CaptureConcentration", SampleState::InProgress,
+         [](lims::SampleModel& model, Bench const& bench, std::string const&) { model.execute(reading(bench)); }},
+        {"QueuedCapture", SampleState::InProgress,
+         [](lims::SampleModel& model, Bench const& bench, std::string const& who) {
+             model.execute(lims::QueuedCapture{.sampleId = bench.sample,
+                                               .baseVersion = lims::SampleVersion{3},
+                                               .capturedBy = who,
+                                               .operationKey = lims::OperationKey{"op-" + who},
+                                               .capture = reading(bench)});
+         }},
+    };
+}
+
+/// @brief What the sample tables hold, to show a refused write changed nothing.
+/// @return Each sample's id, state and version, and the number of results.
+[[nodiscard]] std::vector<std::int64_t> sampleTables() {
+    Lightweight::DataMapper mapper;
+    std::vector<std::int64_t> snapshot;
+    for (auto const& row : mapper.Query<lims::db::SampleRecord>().All()) {
+        snapshot.push_back(static_cast<std::int64_t>(row.id.Value()));
+        snapshot.push_back(row.state.Value());
+        snapshot.push_back(row.version.Value());
+    }
+    snapshot.push_back(static_cast<std::int64_t>(mapper.Query<lims::db::ResultRecord>().All().size()));
+    return snapshot;
+}
+
+/// @brief Attaches a fresh handler to the bench's sample, as the principal in scope, and runs @p write.
+/// @param write The write.
+/// @param bench The bench.
+/// @param who The principal in scope.
+void runWrite(LabWrite const& write, Bench const& bench, std::string const& who) {
+    lims::SampleModel model;
+    model.execute(lims::OpenSample{.sampleId = bench.sample});
+    write.run(model, bench, who);
+}
+
 }  // namespace
 
 // ── The verdict, with no database ──────────────────────────────────────────
@@ -160,7 +304,9 @@ TEST_CASE("declared authorization: lab declares capture and verify as a pair", "
     STATIC_REQUIRE(lims::DeclaresScope<lims::VerifyResult>);
     STATIC_REQUIRE(lims::DeclaresSeparation<lims::VerifyResult>);
     STATIC_REQUIRE_FALSE(lims::DeclaresValueLimit<lims::VerifyResult>);
-    STATIC_REQUIRE_FALSE(lims::DeclaresRule<lims::CaptureConcentration>);
+    STATIC_REQUIRE(lims::DeclaresAnyRole<lims::CaptureConcentration>);
+    STATIC_REQUIRE_FALSE(lims::DeclaresRole<lims::CaptureConcentration>);
+    STATIC_REQUIRE_FALSE(lims::DeclaresSeparation<lims::CaptureConcentration>);
     CHECK(Rule::role == lims::LimsRole::Verifier);
     CHECK(Rule::separatedFrom == "CaptureConcentration");
     CHECK(Rule::separatedFrom == morph::model::ActionTraits<lims::CaptureConcentration>::typeId());
@@ -169,8 +315,8 @@ TEST_CASE("declared authorization: lab declares capture and verify as a pair", "
 // Mutations: leave a declared action out of declaredRequirements() (its edge check is lost); leave a mutating action
 // out of both the table and openMutatingActions().
 TEST_CASE("declared authorization: every mutating action is declared or deliberately open", "[lims][authorization]") {
-    // Every mutating action of the org, sample and analysis-catalog models. The dispatcher check below fails when a
-    // registered mutating action is missing from this list.
+    // Every mutating action of the org, sample, analysis-catalog and ignition models. The dispatcher check below fails
+    // when a registered mutating action is missing from this list.
     using Mutating =
         std::tuple<lims::CreateCompany, lims::CreateSite, lims::AssignRole, lims::RevokeRole, lims::DefineAnalysis,
                    lims::ReviseAnalysis, lims::RegisterClient, lims::RegisterSample, lims::ReceiveSample,
@@ -178,7 +324,8 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
                    lims::RejectSample, lims::CaptureConcentration, lims::QueuedCapture, lims::ResolveConflict,
                    lims::VerifyResult, lims::NewSample, lims::LoadSample, lims::SaveSample, lims::DeleteSample,
                    lims::HeaderSection, lims::SamplingSection, lims::TurbiditySection, lims::NitrateSection,
-                   lims::ClearOptionalMeasurement, lims::SelectProject>;
+                   lims::ClearOptionalMeasurement, lims::SelectProject, lims::AddIgnitionTest,
+                   lims::RecordIgnitionValues, lims::DeleteIgnitionTest>;
     std::set<std::string_view> listed;
     std::set<std::string_view> declared;
     std::apply(
@@ -216,14 +363,14 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
         CHECK(listed.contains(actionId));
     }
 
-    // What this proves: every action of the three models that declares an effect other than None is in the list
+    // What this proves: every action of the four models that declares an effect other than None is in the list
     // above, and the list holds nothing else but the effect-less actions named here. It does not prove that an
     // action registered without effects is non-mutating; such an action is only caught by this list being written
     // out by hand, which is why RegisterClient, the one effect-less writer, is named.
     std::set<std::string_view> const effectless{"RegisterClient"};
     auto const& dispatcher = morph::model::detail::ActionDispatcher::instance();
     std::set<std::string> withEffects;
-    for (std::string_view const model : {"OrgModel", "SampleModel", "AnalysisCatalogModel"}) {
+    for (std::string_view const model : {"OrgModel", "SampleModel", "AnalysisCatalogModel", "IgnitionModel"}) {
         for (auto const& actionId : dispatcher.actionsOf(model)) {
             auto const effects = morph::effects::effectsOf(actionId);
             bool const mutates =
@@ -251,6 +398,8 @@ TEST_CASE("declared authorization: the edge's table lists every declared role, a
     CHECK(lims::app::requiredRole("CreateSite") == lims::LimsRole::Supervisor);
     CHECK(lims::app::requiredRole("AssignRole") == lims::LimsRole::Supervisor);
     CHECK(lims::app::requiredRole("RevokeRole") == lims::LimsRole::Supervisor);
+    // Some role, whichever: declared, but no specific role.
+    CHECK(lims::app::requirementFor("CaptureConcentration").has_value());
     CHECK_FALSE(lims::app::requiredRole("CaptureConcentration").has_value());
     CHECK_FALSE(lims::app::requiredRole("GetSample").has_value());
 }
@@ -403,6 +552,120 @@ TEST_CASE("declared authorization: a role is assigned and revoked only by a supe
             .principal = "erin", .role = lims::LimsRole::Analyst, .company = lims::test::seededCompany(), .site = {}}),
         lims::Forbidden);
     CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = dave.id}), lims::Forbidden);
+}
+
+// ── Lab writes are scoped to the sample's site ─────────────────────────────
+
+// Mutations: drop the requirement from one write (eve, an analyst of another company, performs it and the tables
+// change); check the role anywhere instead of at the site (eve's role at her own company's site satisfies it).
+TEST_CASE("declared authorization: a principal of another company is refused every write on a sample",
+          "[lims][authorization][lab]") {
+    auto const writes = labWrites();
+    auto const index = GENERATE_COPY(Catch::Generators::range(std::size_t{0}, writes.size()));
+    auto const& write = writes[index];
+    CAPTURE(write.name);
+    DbFixture fixture;
+    auto const rival = rivalWithEve();
+    REQUIRE(rival.company != lims::test::seededCompany());
+    auto const bench = benchIn(write.from);
+    auto const before = sampleTables();
+
+    ScopedPrincipal const eve{"eve"};
+    CHECK_THROWS_WITH(runWrite(write, bench, "eve"),
+                      Catch::Matchers::ContainsSubstring("eve' does not hold any role at site"));
+    CHECK(sampleTables() == before);
+}
+
+// Mutation: check the role at the company only (ann, an analyst at the site, is refused); check the site only (cara,
+// an analyst at the company, is refused).
+TEST_CASE("declared authorization: a role at the sample's site or at its company allows every write on it",
+          "[lims][authorization][lab]") {
+    auto const writes = labWrites();
+    auto const index = GENERATE_COPY(Catch::Generators::range(std::size_t{0}, writes.size()));
+    auto const& write = writes[index];
+    auto const holder = GENERATE(std::pair{"ann", false}, std::pair{"cara", true});
+    CAPTURE(write.name, holder.first);
+    DbFixture fixture;
+    auto const bench = benchIn(write.from);
+    lims::test::grant(
+        holder.first, lims::LimsRole::Analyst,
+        holder.second ? lims::Scope{lims::test::seededCompany()} : lims::Scope{lims::test::seededSite()});
+
+    ScopedPrincipal const principal{holder.first};
+    CHECK_NOTHROW(runWrite(write, bench, holder.first));
+}
+
+// Mutation: look the sample up before asking for the role (eve learns that sample 9999 does not exist).
+TEST_CASE("declared authorization: a caller without a role at the site is refused before the row is looked up",
+          "[lims][authorization][lab]") {
+    DbFixture fixture;
+    auto const bench = benchIn(lims::SampleState::InProgress);
+    static_cast<void>(rivalWithEve());
+    ScopedPrincipal const eve{"eve"};
+    lims::SampleModel model;
+    CHECK_THROWS_AS(model.execute(lims::RegisterSample{
+                        .siteId = lims::SiteId{999}, .clientId = bench.client, .reference = "WW-9"}),
+                    lims::Forbidden);
+    CHECK_THROWS_AS(model.execute(lims::QueuedCapture{.sampleId = lims::SampleId{9999},
+                                                      .baseVersion = lims::SampleVersion{1},
+                                                      .capturedBy = "eve",
+                                                      .operationKey = lims::OperationKey{"op-ghost"},
+                                                      .capture = reading(bench)}),
+                    lims::Forbidden);
+}
+
+// The replay runs as the operator who captured the reading, so the check is about that operator when the queue
+// reaches the server: an operator who has since lost the role is refused.
+// Mutation: skip the check on QueuedCapture (fiona, whose role was revoked, replays).
+TEST_CASE("declared authorization: a queued capture is judged on the operator's role at replay time",
+          "[lims][authorization][lab]") {
+    DbFixture fixture;
+    auto const bench = benchIn(lims::SampleState::InProgress);
+    auto const assignment = lims::test::grant("fiona", lims::LimsRole::Analyst);
+    {
+        ScopedPrincipal const alice{"alice"};
+        lims::OrgModel org;
+        lims::test::grant("alice", lims::LimsRole::Supervisor);
+        org.execute(lims::RevokeRole{.assignmentId = assignment.id});
+    }
+    ScopedPrincipal const fiona{"fiona"};
+    lims::SampleModel model;
+    CHECK_THROWS_WITH(model.execute(lims::QueuedCapture{.sampleId = bench.sample,
+                                                        .baseVersion = lims::SampleVersion{3},
+                                                        .capturedBy = "fiona",
+                                                        .operationKey = lims::OperationKey{"op-late"},
+                                                        .capture = reading(bench)}),
+                      Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+}
+
+// Mutation: drop the requirement from RegisterSample or ReceiveSample (eve's call is recorded in that mode). The
+// edge lets eve through, as she holds a role somewhere; only the model, which sees the site, refuses her.
+TEST_CASE("declared authorization: the model refuses a write at another company's site on every backend",
+          "[lims][authorization][lab][matrix]") {
+    auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    DbFixture fixture;
+    static_cast<void>(rivalWithEve());
+    auto const bench = benchIn(lims::SampleState::Registered);
+    auto const before = sampleTables();
+
+    morph::session::TokenIssuer const issuer{std::string{kSecret}, morph::session::hmacSha256};
+    BackendRig rig{mode, 1,
+                   std::make_shared<lims::auth::LimsAuthorizer>(std::string{kSecret}, [](std::string_view principal) {
+                       return lims::OrgModel::rolesAnywhere(principal);
+                   })};
+    rig.bridge(0).setDefaultSession(signedAs(issuer, "eve"));
+
+    auto registrar = rig.client<lims::SampleModel>(0);
+    CHECK_THROWS_WITH(awaitQt(registrar.execute(lims::RegisterSample{
+                          .siteId = lims::test::seededSite(), .clientId = bench.client, .reference = "WW-2"})),
+                      Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+
+    BridgeHandler<lims::SampleModel, AllowShared> handler{rig.bridge(0), rig.executor()};
+    awaitQt(handler.execute(lims::OpenSample{.sampleId = bench.sample}));
+    CHECK_THROWS_WITH(awaitQt(handler.execute(lims::ReceiveSample{})),
+                      Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+    CHECK(sampleTables() == before);
 }
 
 // ── Hypothesis 6 ───────────────────────────────────────────────────────────

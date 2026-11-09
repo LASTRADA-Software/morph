@@ -64,9 +64,9 @@ TEST_CASE("lab: a sample is registered at a site, and its view names the site", 
     CHECK(reader.execute(lims::OpenSample{.sampleId = sample.id}).siteId == fieldLab.id);
 }
 
-// Mutation: drop the site lookup (a sample is registered at site 999).
+// Mutation: drop the site's requirement (a sample is registered at site 999, where nobody holds a role).
 TEST_CASE("lab: registering at no site, or at one that does not exist, is refused", "[lims][org][sites]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     ScopedPrincipal const alice{"alice"};
     lims::SampleModel bench;
     auto const client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
@@ -75,7 +75,7 @@ TEST_CASE("lab: registering at no site, or at one that does not exist, is refuse
         lims::ValidationError);
     CHECK_THROWS_AS(bench.execute(lims::RegisterSample{
                         .siteId = lims::SiteId{999}, .clientId = client.clientId, .reference = "WW-1"}),
-                    lims::NotFound);
+                    lims::Forbidden);
 }
 
 // Mutation: skip the noSite check (the save without a site stores a sample).

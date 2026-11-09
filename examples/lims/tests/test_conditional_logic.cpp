@@ -466,7 +466,7 @@ TEST_CASE("An unrecognised rule kind fails closed, and defers rather than blocks
 // ── Clear-on-hide, decided ─────────────────────────────────────────────────
 
 TEST_CASE("A hidden field's draft value still travels, and the server acts on it", "[lims][forms][parity][d8]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -499,7 +499,7 @@ TEST_CASE("A hidden field's draft value still travels, and the server acts on it
 }
 
 TEST_CASE("A declared dilution is applied exactly", "[lims][forms][dilution]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;

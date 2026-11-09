@@ -39,7 +39,6 @@ using morph::client::LocalApp;
 using morph::client::LocalSetup;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
-using morph::ladder::testkit::DbFixture;
 using morph::ui::ParamMap;
 using morph::ui::Value;
 
@@ -82,7 +81,7 @@ TEST_CASE("lims_bundle_loads_without_warnings", "[lims-screens]") {
 // (start is enabled while the sample is only registered).
 TEST_CASE("lims screens: the lifecycle screen opens its sample and allows the transition its state allows",
           "[lims-screens]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     std::int64_t const sampleId = registeredSample();
     ScreenHarness harness{limsApp(), std::string{lims::screens::kLifecycle}, RigMode::Local, sampleParams(sampleId),
                           LocalSetup{.db = {}, .user = "tech"}};
@@ -108,7 +107,7 @@ TEST_CASE("lims screens: the lifecycle screen opens its sample and allows the tr
 }
 
 TEST_CASE("lims screens: the results screen opens on its sample", "[lims-screens]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     std::int64_t const sampleId = registeredSample();
     ScreenHarness harness{limsApp(), std::string{lims::screens::kResults}, RigMode::Local, sampleParams(sampleId),
                           LocalSetup{.db = {}, .user = "tech"}};
@@ -123,7 +122,7 @@ TEST_CASE("lims screens: the results screen opens on its sample", "[lims-screens
 // Mutation: navigate nowhere after a sample registers (the lifecycle screen never mounts).
 TEST_CASE("lims screens: registration registers a client and a sample, then opens the sample's lifecycle",
           "[lims-screens]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::test::grant("tech", lims::LimsRole::Analyst);
     ScreenHarness harness{
         limsApp(), std::string{lims::screens::kRegister}, RigMode::Local, {}, LocalSetup{.db = {}, .user = "tech"}};
@@ -158,7 +157,7 @@ TEST_CASE("lims screens: registration registers a client and a sample, then open
 
 // Mutation: show nothing for a refused open (the error text stays empty).
 TEST_CASE("lims screens: a model's refusal reaches the screen as its own message", "[lims-screens]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     ScreenHarness harness{limsApp(), std::string{lims::screens::kLifecycle}, RigMode::Local, sampleParams(424242),
                           LocalSetup{.db = {}, .user = "tech"}};
     REQUIRE(harness.waitFor([&harness] {
@@ -170,7 +169,7 @@ TEST_CASE("lims screens: a model's refusal reaches the screen as its own message
 
 // Mutation: list a result's value as a double (12.5, not 12.500).
 TEST_CASE("lims screens: a captured result is listed with its exact decimal", "[lims-screens]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     std::int64_t sampleId = 0;
     {
         lims::test::ScopedPrincipal const principal{"tech"};
@@ -210,7 +209,7 @@ TEST_CASE("lims screens: a captured result is listed with its exact decimal", "[
 // Mutation: keep the login screen non-public (nothing is listed before sign-in), or skip the token (registration's
 // calls are refused).
 TEST_CASE("lims screens: signing in to a server opens sample registration", "[lims-screens]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     LocalApp app = limsApp();
     app.setUp = [](LocalSetup const&) { lims::screens::prepareLocal(); };
     // The secret prepareLocal's issuer signs with, which the simulated server verifies, with lims' own role lookup.
@@ -235,7 +234,7 @@ TEST_CASE("lims screens: signing in to a server opens sample registration", "[li
 // Mutations: keep the model's product out of the computed field (the preview stays empty), or ignore the dilution in
 // it (the diluted reading previews undiluted).
 TEST_CASE("lims screens: the results screen previews the reported concentration while it is typed", "[lims-screens]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     std::int64_t sampleId = 0;
     {
         lims::test::ScopedPrincipal const principal{"tech"};
@@ -286,7 +285,7 @@ TEST_CASE("lims screens: the results screen previews the reported concentration 
 // Mutation: drop `changes<ResultView>` from `CaptureConcentration`'s effects (the row keeps 12.500, since nothing else
 // refetches the list after a row's capture).
 TEST_CASE("lims screens: a row's re-capture shows its new value through the capture's effects", "[lims-screens]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     std::int64_t sampleId = 0;
     {
         lims::test::ScopedPrincipal const principal{"tech"};

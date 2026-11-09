@@ -12,6 +12,7 @@
 #include "lims/org/db/org_entity.hpp"
 #include "lims/org/dto/role_dto.hpp"
 #include "lims/org/models/org_model.hpp"
+#include "testkit/db_fixture.hpp"
 
 /// @file
 /// The scaffolding every lims test needs: a scoped authenticated principal.
@@ -80,5 +81,20 @@ inline lims::RoleAssignmentView grant(std::string principal, lims::LimsRole role
                                         .company = company != nullptr ? *company : lims::CompanyId{},
                                         .site = company != nullptr ? lims::SiteId{} : std::get<lims::SiteId>(scope)});
 }
+
+/// @brief A fresh database in which the lab's bench staff, `alice`, `fiona`, `gerard` and `tech`, are analysts at the
+///        seeded company, which holds at every one of its sites.
+///
+/// Every write on a sample needs some role at the sample's site, so a test that registers, transitions or captures as
+/// one of them needs these grants as setup. A test about what a principal without a role may do uses a plain
+/// `DbFixture`.
+class LabFixture : public ::morph::ladder::testkit::DbFixture {
+public:
+    LabFixture() {
+        for (std::string const staff : {"alice", "fiona", "gerard", "tech"}) {
+            static_cast<void>(grant(staff, lims::LimsRole::Analyst));
+        }
+    }
+};
 
 }  // namespace lims::test

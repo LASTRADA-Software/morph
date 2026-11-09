@@ -34,7 +34,6 @@
 #include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
 using morph::math::Numerator;
@@ -92,7 +91,7 @@ struct ReadyToVerify {
 // ── Four eyes ──────────────────────────────────────────────────────────────
 
 TEST_CASE("Verifying needs the verifier role", "[lims][audit][verification]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
 
@@ -123,7 +122,7 @@ TEST_CASE("Verifying needs the verifier role", "[lims][audit][verification]") {
 }
 
 TEST_CASE("A verifier cannot verify their own reading, however senior", "[lims][audit][verification]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
 
@@ -138,7 +137,7 @@ TEST_CASE("A verifier cannot verify their own reading, however senior", "[lims][
 }
 
 TEST_CASE("A result is verified once, while the sample is awaiting verification", "[lims][audit][verification]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
     lims::test::grant("bob", lims::LimsRole::Verifier);
@@ -157,7 +156,7 @@ TEST_CASE("A result is verified once, while the sample is awaiting verification"
 }
 
 TEST_CASE("A sample cannot be published while any of its results is unverified", "[lims][audit][verification]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
 
@@ -214,9 +213,11 @@ TEST_CASE("The authorizer gates the role-requiring actions and nothing else", "[
     CHECK(authorizer.authorize(alice, "OrgModel", "RevokeRole"));
     CHECK_FALSE(authorizer.authorize(bob, "OrgModel", "RevokeRole"));
 
-    // Everything else needs only a valid token — capturing a reading is an
-    // everyday act, not a privileged one.
-    CHECK(authorizer.authorize(carol, "SampleModel", "CaptureConcentration"));
+    // Capturing a reading needs some role, whichever: bob holds one, carol holds none.
+    CHECK(authorizer.authorize(bob, "SampleModel", "CaptureConcentration"));
+    CHECK_FALSE(authorizer.authorize(carol, "SampleModel", "CaptureConcentration"));
+
+    // Everything else needs only a valid token.
     CHECK(authorizer.authorize(carol, "SampleModel", "GetSample"));
 
     // An unsigned or forged session is refused outright, before any role
@@ -251,7 +252,7 @@ TEST_CASE("An authorizer with no role source fails closed", "[lims][audit][autho
 }
 
 TEST_CASE("The model re-checks the role the authorizer already checked", "[lims][audit][authorizer]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
 
@@ -268,7 +269,7 @@ TEST_CASE("The model re-checks the role the authorizer already checked", "[lims]
 // ── The audit trail ────────────────────────────────────────────────────────
 
 TEST_CASE("Every state the sample was ever in is reconstructible from the journal alone", "[lims][audit][dod]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
@@ -328,7 +329,7 @@ TEST_CASE("Every state the sample was ever in is reconstructible from the journa
 }
 
 TEST_CASE("A refused attempt appears in the trail, marked refused", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
@@ -354,7 +355,7 @@ TEST_CASE("A refused attempt appears in the trail, marked refused", "[lims][audi
 }
 
 TEST_CASE("An entry this build cannot interpret is surfaced, never silently dropped", "[lims][audit][finding]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
@@ -417,7 +418,7 @@ TEST_CASE("An entry this build cannot interpret is surfaced, never silently drop
 
 TEST_CASE("A renamed payload field decodes to a default, silently -- the payload-evolution gap",
           "[lims][audit][finding]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
@@ -452,7 +453,7 @@ TEST_CASE("A renamed payload field decodes to a default, silently -- the payload
 }
 
 TEST_CASE("A verification appears in the sample's own audit trail", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
@@ -484,7 +485,7 @@ TEST_CASE("A verification appears in the sample's own audit trail", "[lims][audi
 }
 
 TEST_CASE("A refused verification appears in the trail, marked refused", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
@@ -508,7 +509,7 @@ TEST_CASE("A refused verification appears in the trail, marked refused", "[lims]
 }
 
 TEST_CASE("Offline replay and conflict resolution both reach the sample's trail", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
@@ -569,7 +570,7 @@ TEST_CASE("Offline replay and conflict resolution both reach the sample's trail"
 }
 
 TEST_CASE("A verification is refused unless the sample is awaiting verification", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
     lims::test::grant("bob", lims::LimsRole::Verifier);
@@ -584,7 +585,7 @@ TEST_CASE("A verification is refused unless the sample is awaiting verification"
 }
 
 TEST_CASE("The audit and verification listings need an attached handler", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -593,7 +594,7 @@ TEST_CASE("The audit and verification listings need an attached handler", "[lims
 }
 
 TEST_CASE("Every refused action kind is named in the trail, not lumped as unreadable", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
@@ -638,7 +639,7 @@ TEST_CASE("Every refused action kind is named in the trail, not lumped as unread
 }
 
 TEST_CASE("Listing conflicts needs an attached handler", "[lims][audit][offline]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
     CHECK_THROWS_AS(model.execute(lims::ListConflicts{}), lims::NotFound);

@@ -49,7 +49,6 @@
 #include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 using morph::model::payloadFingerprint;
 using morph::model::payloadShapeString;
 
@@ -162,7 +161,7 @@ TEST_CASE("replay() refuses a RegisterSample entry stamped by a build whose clie
           "[lims][journal][payload_shape]") {
     // A real recorded entry, not a hand-built one: this also pins that
     // SelfJournal stamps the fingerprint this build computes.
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 

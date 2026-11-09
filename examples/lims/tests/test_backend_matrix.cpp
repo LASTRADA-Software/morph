@@ -101,7 +101,7 @@ constexpr std::string_view kSecret = "lims-matrix-test-secret-at-least-32-bytes"
 TEST_CASE("SampleModel over the full backend-mode matrix: register, attach, transition, capture", "[lims][matrix]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
 
     BackendRig rig{mode, 1, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
@@ -152,7 +152,7 @@ TEST_CASE("SampleModel over the full backend-mode matrix: register, attach, tran
 TEST_CASE("A payload-keyed OpenSample attaches a fresh handler in every mode", "[lims][matrix]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
 
     BackendRig rig{mode, 1, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
@@ -256,7 +256,7 @@ TEST_CASE("OrgModel over the full backend-mode matrix: assign, list and revoke a
 // returns true (the request reaches the model, which refuses bob with its own message, and the check fails).
 TEST_CASE("A role lookup that throws inside authorize() fails the request cleanly and the server keeps serving",
           "[lims][matrix][org][roles][socket-only]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::test::grant("alice", lims::LimsRole::Supervisor);
     lims::test::grant("bob", lims::LimsRole::Verifier);
 
@@ -291,7 +291,7 @@ TEST_CASE("Two connections attached to one sample share the instance", "[lims][m
     // Socket mode only: it is the only mode with a server-side shared-instance
     // directory, which is the thing under test here rather than mere
     // cross-handler sharing inside one process.
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     BackendRig rig{Mode::Socket, 2, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "alice"));
@@ -324,7 +324,7 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
     // `onBackendChanged()` drain cannot carry a session.
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
 
     BackendRig rig{mode, 1, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
@@ -371,7 +371,9 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
 }
 
 TEST_CASE("A queued capture replayed as the wrong operator is refused over the wire too", "[lims][matrix][offline]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
+    // Mallory holds a role, so the operator check is what refuses the replay, not the role check in front of it.
+    lims::test::grant("mallory", lims::LimsRole::Analyst);
     BackendRig rig{Mode::Socket, 1, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     // The bridge is authenticated as *mallory*, and the queued item claims
@@ -398,7 +400,8 @@ TEST_CASE("A queued capture replayed as the wrong operator is refused over the w
         outbox.enqueue(atWork.id, lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
                                                              .value = lims::Concentration{exact(12, 5, 3)}});
 
-    CHECK_THROWS(awaitQt(handler.execute(queued)));
+    CHECK_THROWS_WITH(awaitQt(handler.execute(queued)),
+                      Catch::Matchers::ContainsSubstring("replay must run as the capturing operator"));
     CHECK(awaitQt(handler.execute(lims::ListResults{})).results.empty());
 }
 
@@ -422,7 +425,7 @@ TEST_CASE("onBackendChanged fires on switchBackend, and fails closed with no ses
     // exactly what the README calls disqualifying. But it does mean the
     // framework's own replay seam cannot carry an authenticated replay, which
     // is why §7's supported path is the re-dispatch above.
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
 
     // The model drains the queue on its strand, synchronously, so the queue
     // belongs to the one thread the new backend runs its models on.

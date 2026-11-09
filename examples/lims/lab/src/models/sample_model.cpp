@@ -210,6 +210,9 @@ SampleView SampleModel::execute(const RegisterSample& action) {
     if (!action.validate()) {
         throw ValidationError{"RegisterSample: a site, a client and a reference are required"};
     }
+    // Before the site is looked up: a site that does not exist holds no role, so a caller without one learns
+    // nothing about which sites exist.
+    requireAuthorized(action);
     if (!OrgModel::findSite(action.siteId)) {
         throw NotFound{"RegisterSample: no such site"};
     }
@@ -293,6 +296,13 @@ SampleView SampleModel::execute(const PublishSample& action) { return transition
 
 SampleView SampleModel::execute(const RejectSample& action) { return transition(action, SampleState::Rejected); }
 
+Scope SampleModel::attachedSiteScope() const {
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
+    return siteScopeOfSample(SampleId{*_sampleId});
+}
+
 SampleView SampleModel::loadAttached() const {
     if (!_sampleId.has_value()) {
         throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
@@ -328,6 +338,7 @@ SampleView SampleModel::transition(const Action& action, SampleState target) {
             throw ValidationError{std::string{::morph::model::ActionTraits<Action>::typeId()} +
                                   ": the action is not well-formed"};
         }
+        requireAuthorizedIn(action, attachedSiteScope());
         const auto before = loadAttached();
         if (!isLegalTransition(before.state, target)) {
             throw IllegalTransition{std::string{"a "} + std::string{stateName(before.state)} +
@@ -566,6 +577,7 @@ ResultView SampleModel::execute(const CaptureConcentration& action) {
         throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
     }
     try {
+        requireAuthorizedIn(action, attachedSiteScope());
         auto view = applyCapture(SampleId{*_sampleId}, action, ::morph::session::current()->principal);
         _journal.recordSuccess<SampleModel>(action, view, nowMillis());
         return view;
@@ -619,6 +631,9 @@ ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
             throw Forbidden{"QueuedCapture: replay must run as the capturing operator ('" + action.capturedBy +
                             "'), not '" + principal + "'"};
         }
+
+        // The operator must hold some role at the sample's site now, at replay time, not when the reading was taken.
+        requireAuthorized(action);
 
         // At-most-once, enforced here because the queue is documented not to
         // enforce it -- and because the shipped queues disagree about whether
