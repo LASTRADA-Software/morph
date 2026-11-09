@@ -215,9 +215,9 @@ lims is built from modules, each its own library with its own include directory 
 
 | Module | Holds | Links |
 |---|---|---|
-| `org/` (shared) | the error set, the model support every module uses, sign-in, and companies and sites | nothing in lims |
+| `org/` (shared) | the error set, the model support every module uses, sign-in, companies and sites, role assignments, and declared authorization | nothing in lims |
 | `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
-| `app/` | the server edge's `LimsAuthorizer` | every module |
+| `app/` | the server edge's `LimsAuthorizer`, and the tables it reads: `declaredRequirements` and `openMutatingActions` | every module |
 
 The server (`src/server/`), the screens (`screens/`) and the suites (`tests/`) belong to the app and link every
 module. A module that includes another module's header (other than a shared one) does not compile; the
@@ -686,6 +686,17 @@ record name, table and migration they had: the split changed where code lives, n
 unchanged apart from their include lines. `posting`, the second shared module the design names, is added with the
 first module that posts.
 
+The boundary is deliberately a header boundary and not a data boundary. Four couplings are accepted and stated here
+so they are not mistaken for leaks:
+
+- lab's schema uses org's `SiteRecord` table name for the foreign key from `lims_samples.site_id`, because a foreign
+  key names its target table and org owns the table;
+- the one-time role migration writes `org_role_assignments` by raw SQL from lab's migrations, because it moves lab's
+  own `lims_operators` rows into org's table and Lightweight's builder cannot copy rows;
+- org's `db/` headers are on every module's include path, since a module that names an org table needs its record;
+- migrations from different modules are ordered by their global timestamps, so a new module's migrations must carry
+  timestamps after those of every migration they depend on.
+
 ### 22. Companies and sites live in org, and every sample is at a site
 
 A company has a base currency and a fiscal-year start; a site belongs to one company. The first org migration seeds
@@ -753,8 +764,19 @@ module's declarations (`lims::app::declaredRequirements`). A caller who holds th
 row the action names is looked up, as decision 23 requires of role assignments.
 
 `CreateCompany` declares `Supervisor` in any scope, because a new company has no scope yet, and is refused while no
-supervisor exists anywhere, so the bootstrap `AssignRole` stays the first administrative act. `CreateSite` declares
-`Supervisor` at the site's company.
+supervisor exists anywhere, so the bootstrap `AssignRole` stays the first administrative act. A supervisor at only a
+site may therefore create a company; that is intended, since the rule is "a Supervisor somewhere". `CreateSite`
+declares `Supervisor` at the site's company.
+
+Every write on a sample declares that the caller holds some role, whichever, at the sample's site (a role at the
+site's company counts): `RegisterSample` at the site its payload names, the lifecycle transitions and
+`CaptureConcentration` at the site of the sample the handler is attached to, and `QueuedCapture` at the site of the
+sample it names. A principal of another company is refused on all of them. `QueuedCapture` replays as the operator who
+captured the reading (decision 13), so the check applies to that operator at replay time: an operator who has lost
+their role at the site is refused when the queue reaches the server, whatever role they held when they took the
+reading. The check runs before the site or sample is looked up, so a caller without a role at the named site gets
+`Forbidden` whether or not it exists. `ResolveConflict` and the sample-entry actions remain open, listed in
+`lims::app::openMutatingActions`; ignition tests are open because they belong to no site (decision 22).
 
 **Hypothesis 6 (authorization cannot see the payload) is confirmed for this instance.**
 `IAuthorizer::authorize(ctx, modelType, actionType)` decides before the payload is decoded: its signature
@@ -777,8 +799,8 @@ designed against both, and otherwise the guarantee is recorded as domain logic t
 `ListSamples`, `ListCompanies`, `ListSites`, `ListRoleAssignments` and `ListUsers` answer only records in scopes where
 the caller holds a role: a role at a company reaches the company and all its sites, a role at a site reaches that
 site and, through it, its company, including the company's own role assignments, so a site's staff can see who
-supervises their company. Nobody, and an unauthenticated call, sees nothing. A company's creator is assigned
-`Supervisor` at it in the same transaction, since a company nobody holds a role in would be listed to nobody.
+supervises their company. A principal with no role, and an unauthenticated call, sees nothing. A company's creator is
+assigned `Supervisor` at it in the same transaction, since a company nobody holds a role in would be listed to nobody.
 
 `ListAnalyses`, `ListProjects` and `ListIgnitionTests` list unscoped reference data and are deliberately not
 filtered: an analysis, a project and an ignition test belong to no company or site, so there is no scope to filter
@@ -792,10 +814,12 @@ not list queries, and an action that changes a record is authorized by its decla
 role changes which samples a principal sees, so `AssignRole` changes the rows `ListSamples` answers. But `AssignRole`
 belongs to `org`, which cannot name lab's `SampleView`, and a second `BRIDGE_REGISTER_EFFECTS` for the same action
 from `app` is refused as "declares different effects in two registrations". So a screen listing samples does not
-refresh when its viewer's roles change; it refreshes on the next sample change or reload. Inferred from reading
-`include/morph/core/effects.hpp` (`addEffects`, the two-declarations check); not reproduced on a screen, because no
-Part A screen lists samples. A second module needing the same (billing's lines on a role change) makes it a framework
-gap to file against `include/morph`.
+refresh when its viewer's roles change; it refreshes on the next sample change or reload. Registering `SampleView` as
+derived from the role-assignment record would give the same refresh, but the registry refuses a derived record that has
+a key (`include/morph/core/effects.hpp`, the "is derived from other records but has a key" check), and `SampleView`
+has one. Inferred from reading `include/morph/core/effects.hpp` (`addEffects`, the two-declarations check, and the
+derived-record check); not reproduced on a screen, because no Part A screen lists samples. A second module needing the
+same (billing's lines on a role change) makes it a framework gap to file against `include/morph`.
 
 ### 27. The organisation is administered from two screens
 

@@ -241,6 +241,27 @@ for _rung in "${RUNG_TEST_EXES[@]}"; do
             SOURCES+=("${_module_include%/include}/src")
         fi
     done
+    # The list is read from one line, so a MODULES list wrapped across lines would silently drop its tail from the
+    # report. A rung that declares MODULES must have every examples/<rung>/<m>/include directory parsed from it.
+    if [ -f "examples/${_rung}/CMakeLists.txt" ] &&
+        grep -Eq '(^|[[:space:]])MODULES([[:space:]]|$)' "examples/${_rung}/CMakeLists.txt"; then
+        for _include_dir in examples/"${_rung}"/*/include; do
+            [ -d "$_include_dir" ] || continue
+            _dir_module="${_include_dir#examples/"${_rung}"/}"
+            _dir_module="${_dir_module%/include}"
+            _parsed=0
+            for _module in "${_modules[@]}"; do
+                if [ "$_module" = "$_dir_module" ]; then
+                    _parsed=1
+                fi
+            done
+            if [ "$_parsed" -eq 0 ]; then
+                echo "coverage.sh: examples/${_rung}/${_dir_module}/include exists but '${_dir_module}' was not read" \
+                    "from examples/${_rung}/CMakeLists.txt's MODULES line; keep the MODULES list on one line" >&2
+                exit 1
+            fi
+        done
+    fi
 done
 
 # examples/common/testkit/ mixes real, reusable test-support headers

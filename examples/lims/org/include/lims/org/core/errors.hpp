@@ -27,11 +27,13 @@ public:
     explicit Forbidden(std::string message) : LimsError{std::move(message)} {}
 };
 
-/// @brief Thrown when an action collides with a decision already taken —
-///        resolving a conflict that somebody else has already resolved.
+/// @brief Thrown when an action collides with something already there —
+///        resolving a conflict that somebody else has already resolved, or
+///        creating a company or site under a name that is taken.
 ///
 /// Distinct from `IllegalTransition`, which is about the sample's lifecycle:
-/// this one is about a *record* that has already reached a terminal state.
+/// this one is about a *record* that has already reached a terminal state, or
+/// a uniqueness the action would break.
 class Conflict : public LimsError {
 public:
     explicit Conflict(std::string message) : LimsError{std::move(message)} {}
