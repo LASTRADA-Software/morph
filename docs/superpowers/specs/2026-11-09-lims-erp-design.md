@@ -20,7 +20,8 @@ on one side by two questions, both of which must be answered yes before anything
    to say that a lims module counts as a consumer and that the second module's need promotes.
 
 So a guarantee confirmed once is recorded as confirmed and built in lims; its second instance is built against a
-framework seam designed for both. The design is built so that every hypothesis below has two instances (§ Expected
+framework seam designed for both. The design is built so that every hypothesis below has two instances, except
+hypothesis 4, which has one: approval escalation is a deadline the approval rule reads, not scheduled work (§ Expected
 strain points).
 
 ## Size
@@ -35,7 +36,7 @@ larger than bank. Counted as registered models and actions, excluding tests and 
 | Screens | 4 | ~18 | 6 |
 | Modules | 1 | 5 | 1 |
 
-The plan fixes the numbers; the scope below is already cut to the smallest set that gives every hypothesis two
+The plan fixes the numbers; the scope below is already cut to the smallest set that gives every hypothesis its
 instances, because `AGENTS.md` measured scaffolding outgrowing the library six to one, and features that only repeat an
 instance already covered add scaffolding and find nothing.
 
@@ -226,7 +227,7 @@ is called done.
 | 1 | **No atomic work across models.** Each `execute` takes its own pooled connection and commits alone, models are not ordered against each other, and an awaiting handler holds its own model's gate; there is no way to commit billing's state change and ledger's entry together. Gap-free numbering is part of it: a number assigned in billing's transaction is gap-free only if the entry commits with it. | invoice posting; goods receipt | `IMPLEMENTATION.md` rule 4, `core/backend.md`, `core/coroutines.md`, `LADDER.md` | Both postings expressed with existing seams, and a failure injected between the halves leaves no partial state and no hole in either series |
 | 2 | **Delivering events to a model consumer needs hand-rolled code per consumer.** `OutboxRelay` delivers at least once to an `IActionLog` sink, and `IReplayLedger` dedups by op id; neither delivers to another model. | analysis published → billable line; result captured → consumption | `journal/journal.md`, `offline/offline.md` | Both consumers receive each event exactly once in effect, across a restart, with only wiring code in `lims/app` and no per-consumer delivery loop or cursor |
 | 3 | **No lease that reaches a model.** `IEnvelopeService::connectionClosed` and shared-instance attach counts exist, but no hook tells a model that the connection holding its lease closed. | draft invoice edit lease; lot reservation | `core/remote.hpp`, `core/shared_instances.md` | Both leases lapse on disconnect through an existing hook, without a timer of the model's own |
-| 4 | **No periodic trigger and no resume after restart.** The internal-client and submit → poll patterns in `LADDER.md` cover a job someone starts; `TimeoutScheduler` is a detail type; nothing starts work on a schedule or resumes it after a restart. | billing run; approval escalation | `LADDER.md`, `core/timeout_scheduler.hpp` | Both scheduled and resumable with public primitives and no per-module scheduler |
+| 4 | **No periodic trigger and no resume after restart.** The internal-client and submit → poll patterns in `LADDER.md` cover a job someone starts; `TimeoutScheduler` is a detail type; nothing starts work on a schedule or resumes it after a restart. | billing run. Approval escalation is not an instance: the hypothesis is mis-framed for it, since escalation is a deadline the approval rule reads when an approver acts or lists, so nothing starts at the deadline or resumes after a restart; what it leaves is an effects question — an approvals inbox is not told when a deadline passes | `LADDER.md`, `core/timeout_scheduler.hpp` | The billing run scheduled and resumable with public primitives and no per-module scheduler |
 | 5 | **No long-running approval state.** `forms::flows` are wizards inside one session; approvals last days, across principals, with limits, deadlines and escalation. | invoice approval; requisition approval | `forms/workflows_navigation.md` | Both lifecycles expressed as ordinary actions sharing no code but the declared authorization |
 | 6 | **Authorization cannot see the payload.** `IAuthorizer::authorize(ctx, modelType, actionType)` decides before the payload is decoded, so a scope, a value limit or a separation-of-duties rule can only be checked inside each model, by hand. | lab's capture and verify; billing's create and approve; procurement's limits | `session/session.hpp` (`authorize`); lims decision 16 | A declared form of rule checked once by the framework for every module, or shown to be domain logic the models must own |
 | 7 | **Effects leak at row and company granularity.** `fanOut` re-authorizes each watcher, but at model and action level only, and `record::privateKeys` hides keys from non-writers; a principal of company A can still learn that company B's record changed. | invoices; stock | `core/remote.hpp` (`fanOut`), `core/records.hpp` | A company-B change reaching no company-A connection, in a two-company remote test |
@@ -281,7 +282,7 @@ other systems; WebAssembly for lims; high availability and clustering of the ser
 | Module cooperation | Outbox events for reactions; an atomic step for posting | They are different guarantees; conflating them would hide hypothesis 1 or serialize everything. |
 | Database | One SQLite file, tables prefixed per module | Makes a cross-model transaction physically possible, so a gap found is morph's. |
 | Promotion | Mechanism, and needed by two lims modules | `AGENTS.md`'s second-place signal, with modules as the places; `IMPLEMENTATION.md` amended to match. |
-| Scope | Smallest set that gives every hypothesis two instances | Features that repeat a covered instance add scaffolding and find nothing. |
+| Scope | Smallest set that gives every hypothesis its instances (two each, one for hypothesis 4) | Features that repeat a covered instance add scaffolding and find nothing. |
 | Money | `Quantity` over `Rational`, poster rounds half-up per line with an explicit rounding line, one zero-decimal currency | Tests morph's exactness claim; the ledger stays a validator that never adjusts. |
 | Reservation | Per sample | Keeps decision 19; cross-sample atomicity, its reopen condition, is not needed. |
 | Order | Org first, beginning with a behaviour-free split | Every later record and action carries a scope; the split proves the move changed nothing. |

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give lims a double-entry ledger and the billing that feeds it — Part B of `docs/superpowers/specs/2026-11-09-lims-erp-design.md` — and, on the way, build the first instance of hypotheses 1, 2, 3, 4, 5, 7 and 8 and the second instance of hypothesis 6 with morph as it stands, each with a test that measures the outcome and a README resolved decision that records it.
+**Goal:** Give lims a double-entry ledger and the billing that feeds it — Part B of `docs/superpowers/specs/2026-11-09-lims-erp-design.md` — and, on the way, build the first instance of hypotheses 1, 2, 3, 4, 5, 7 and 8 and the second instance of hypothesis 6 with morph as it stands, each with a test that measures the outcome and a README resolved decision that records it. Approval escalation, which the design listed as hypothesis 4's second instance, is measured and recorded as mis-framed (Task 12).
 
-**Architecture:** Two new feature modules and one new shared module join `org`, `lab` and `app`: `posting` (shared; the `PostingRequest`/`PostingResult` contract only), `ledger` (accounts, periods, journal entries, exchange rates, reports; knows nothing of invoices) and `billing` (settings, clients, price lists, billable lines, invoices, the edit lease, the billing run; builds a `PostingRequest` and hands it to a port the app installs). `lab` writes an outbox row in `PublishSample`'s transaction; the app relays it with `morph::journal::OutboxRelay` into billing's idempotent consumer. Every cross-module call — posting, the dated rate, the event — is wired in `app`, the only module that sees every other. Money is `morph::units::Quantity<ErpUnit::money, 2>` over `morph::math::Rational`, with the currency a `CurrencyCode` field beside it; posters round half-up per line and add an explicit rounding line; the ledger validates and never rounds.
+**Architecture:** Two new feature modules and one new shared module join `org`, `lab` and `app`: `posting` (shared; the `PostingRequest`/`PostingResult` contract only), `ledger` (accounts, periods, journal entries, exchange rates, reports; knows nothing of invoices) and `billing` (settings, clients, price lists, billable lines, invoices, the edit lease, the billing run; builds a `PostingRequest` and hands it to a port the app installs). `lab` writes an outbox row in `PublishSample`'s transaction; the app relays it with `morph::journal::OutboxRelay` into billing's idempotent consumer action. Every cross-module call — the event, the billing schedule, the dated rate, posting — is wired in `app`, the only module that sees every other, and runs as a dispatch: an internal client (`lims::app::InternalClient`, a `Bridge` over `SimulatedRemoteBackend` into the server's own `RemoteServer`) under a service principal, so it is authorized, journaled and fanned out like a user's call. Posting is measured two ways (Task 14): the ledger half dispatched, and the ledger half sharing billing's transaction. Money is `morph::units::Quantity<ErpUnit::money, 2>` over `morph::math::Rational`, with the currency a `CurrencyCode` field beside it; posters round half-up per line and add an explicit rounding line; the ledger validates and never rounds.
 
 **Tech Stack:** C++23, CMake ≥ 3.25 (Ninja), morph (header-only), LASTRADA Lightweight ORM over SQLite, glaze, Catch2, Qt 6 (Core; `QTimer` in the server), morph ui/1 authoring API (`morph/ui/author.hpp`).
 
@@ -19,17 +19,18 @@ Copied from the design (`docs/superpowers/specs/2026-11-09-lims-erp-design.md`),
 - **Shared database (design):** "All modules use one SQLite file through the Lightweight ORM (`IMPLEMENTATION.md` rule 4), with table names prefixed per module. No module reads another's tables."
 - **Ledger (design, verbatim):** "Chart of accounts per company: asset, liability, equity, revenue and expense accounts, each with a code and a name. A journal entry has a date, a period, a source reference supplied by the poster, and two or more lines, each with an account, a side (debit or credit), an amount in transaction currency and its value in company currency. **Balancing.** An entry must sum to zero per transaction currency and in company currency, checked before commit. The ledger never rounds or auto-balances. Company-currency values are rounded by the **poster**, half-up to the company currency's decimals, line by line; where that leaves a company-currency difference, the poster adds an explicit exchange-rounding line to the company's configured rounding account. The ledger refuses any entry that still does not balance. Entries are immutable once posted. A correction is a reversal entry that names the original. Periods are monthly and open, closing or closed. Posting into a closed period is refused. Closing verifies that no draft entries remain and freezes the period's balances. Exchange rates are dated, per currency pair, entered by hand; a posting uses the rate valid on its date. Reports: trial balance, account ledger, balance per account as of a date. Money is `morph::units::Quantity` over `morph::math::Rational`, never integer minor units. One company currency is zero-decimal (JPY), so that case is always exercised."
 - **Billing (design, verbatim):** "Price lists per company, versioned with effective dates: a price per analysis definition, optionally overridden per client. `lab.AnalysisPublished` creates a billable line at the price valid on the publishing date. A redelivered event bills nothing twice. An invoice collects one client's billable lines, in the client's currency. Lifecycle: draft → submitted → approved → posted. Approval is four-eyes and limited by the approver's value limit; an approval not acted on within its deadline escalates to a company-scoped approver. While one clerk edits a draft invoice, it is leased to them: a second clerk sees who holds it, and the lease lapses when the holder's connection closes or after a timeout. Posting assigns a **gap-free number** per company and fiscal year (`INV-2026-000123`). A posting that fails leaves no hole in the series and no partial state. Tax: one flat rate per company, computed on the invoice total and rounded half-up to the currency's decimals. No tax engine. The **billing run** is scheduled: on a configured day each month it drafts invoices for every client with unbilled lines. Its progress is visible while it runs, and a run interrupted by a restart resumes rather than duplicating invoices."
-- **Out of scope (design):** "PDF and print-file rendering; a tax engine and statutory reports; payments, credit notes and supplier invoices; … bank and payment integration; electronic invoicing". Part D's screens are not built here; Task 9 adds one functional panel because a measurement needs a real screen.
+- **Out of scope (design):** "PDF and print-file rendering; a tax engine and statutory reports; payments, credit notes and supplier invoices; … bank and payment integration; electronic invoicing". Part D's screens are not built here; Task 12's measurement mounts a one-screen bundle of its own, so no lims screen changes.
 - **Hypotheses Part B measures (design table, verbatim columns "Hypothesis" / "Refuted by"):**
   1. "**No atomic work across models.** Each `execute` takes its own pooled connection and commits alone, models are not ordered against each other, and an awaiting handler holds its own model's gate; there is no way to commit billing's state change and ledger's entry together. Gap-free numbering is part of it: a number assigned in billing's transaction is gap-free only if the entry commits with it." / "Both postings expressed with existing seams, and a failure injected between the halves leaves no partial state and no hole in either series". Part B builds instance 1 (invoice posting).
   2. "**Delivering events to a model consumer needs hand-rolled code per consumer.** `OutboxRelay` delivers at least once to an `IActionLog` sink, and `IReplayLedger` dedups by op id; neither delivers to another model." / "Both consumers receive each event exactly once in effect, across a restart, with only wiring code in `lims/app` and no per-consumer delivery loop or cursor". Instance 1: analysis published → billable line.
   3. "**No lease that reaches a model.** `IEnvelopeService::connectionClosed` and shared-instance attach counts exist, but no hook tells a model that the connection holding its lease closed." / "Both leases lapse on disconnect through an existing hook, without a timer of the model's own". Instance 1: draft invoice edit lease.
-  4. "**No periodic trigger and no resume after restart.** … `TimeoutScheduler` is a detail type; nothing starts work on a schedule or resumes it after a restart." / "Both scheduled and resumable with public primitives and no per-module scheduler". Instances: billing run; approval escalation — **both are in Part B** (see Task 12).
+  4. "**No periodic trigger and no resume after restart.** … `TimeoutScheduler` is a detail type; nothing starts work on a schedule or resumes it after a restart." / "The billing run scheduled and resumable with public primitives and no per-module scheduler". Instance: the billing run. Approval escalation, the design's second candidate, is a deadline the approval rule reads, so nothing is scheduled for it; Task 12 measures that, records hypothesis 4 as mis-framed for escalation, and the design's row says so.
   5. "**No long-running approval state.** `forms::flows` are wizards inside one session; approvals last days, across principals, with limits, deadlines and escalation." / "Both lifecycles expressed as ordinary actions sharing no code but the declared authorization". Instance 1: invoice approval.
-  6. "**Authorization cannot see the payload.** `IAuthorizer::authorize(ctx, modelType, actionType)` decides before the payload is decoded, so a scope, a value limit or a separation-of-duties rule can only be checked inside each model, by hand." / "A declared form of rule checked once by the framework for every module, or shown to be domain logic the models must own". Part A built instance 1 (README decision 25); Part B builds instance 2 (billing's create/approve pair and the approver's value limit) and then designs the seam or dispositions it (Task 16).
+  6. "**Authorization cannot see the payload.** `IAuthorizer::authorize(ctx, modelType, actionType)` decides before the payload is decoded, so a scope, a value limit or a separation-of-duties rule can only be checked inside each model, by hand." / "A declared form of rule checked once by the framework for every module, or shown to be domain logic the models must own". Part A built instance 1 (README decision 25); Part B builds instance 2 (billing's create/approve pair and the approver's value limit) and then designs the seam or dispositions it (Tasks 17–19).
   7. "**Effects leak at row and company granularity.** `fanOut` re-authorizes each watcher, but at model and action level only, and `record::privateKeys` hides keys from non-writers; a principal of company A can still learn that company B's record changed." / "A company-B change reaching no company-A connection, in a two-company remote test". Instance 1: invoices.
   8. "**Money at ERP magnitude and with runtime currency.** `Rational` saturates and logs unless `checked*` is used; a `Quantity` unit is a compile-time tag, and `UnitTraits::convert` takes no date, so a currency known only from the record and a dated rate do not fit `Quantity`." / "A trial balance over 10⁷ lines of up to 10⁹ minor units each (totals within int64) summing exactly, with an over-range sum refused rather than saturated; and runtime currencies handled with `Quantity` as it stands". Instance 1: trial balance; the invoice half of instance 2 (orders are Part C).
 - **How a hypothesis task is built (user, for this plan):** each hypothesis task builds its first instance in lims with existing morph seams, plus a test that measures the outcome (confirmed / refuted / mis-framed), and records it as a README resolved decision. A framework seam is designed only when a second instance needs the same hand-rolled guarantee. A measuring test asserts the behaviour it measured; if the assertion that pins the outcome fails, the outcome is the other one — change the assertion to what was measured and use the README text for that outcome, never weaken the test until it passes.
+- **No cross-module work bypasses dispatch (user, for this plan; `examples/LADDER.md`, "Background jobs"):** the event consumer, the billing schedule and the ledger half of posting run as internal clients — a `Bridge` over `SimulatedRemoteBackend{server}` into the same `RemoteServer` a socket client reaches, under a service principal in the reserved `system:` namespace with a token the server mints — so each call is authorized, journaled and fanned out like a user's. Nothing outside the test support uses `morph::session::detail::ScopedContext`; bookmarks' and bank's servers decline it for the same reason. Where an internal client genuinely cannot do a job, the task records exactly why and files the missing seam against `include/morph` (Task 11 Step 9).
 - **Rule 1 (IMPLEMENTATION.md):** "All business logic, all invariants, and all persistence access live in plain, single-threaded model classes with typed actions." "Models must re-check their own preconditions and authorization (`Context::principal`) — the schema's `required` and the client gates are UX, not security." "Action failures are thrown as the app's typed error set."
 - **Rule 2 (IMPLEMENTATION.md):** "Screens never say what to refresh. Every action that changes data declares its effects with `BRIDGE_REGISTER_EFFECTS` beside its registration, over records registered with `BRIDGE_REGISTER_RECORD` … The rung's bundle loads with no refusal and no warning." Work through `docs/KEEPING-SCREENS-CURRENT.md`'s checklist for every new or changed action.
 - **Rule 3 (IMPLEMENTATION.md):** "The only plain type permitted in an action/result field is `std::string`"; "Entity identity: A per-entity strong id type … exposing `hasValue()`"; "Closed sets of states/options: `enum class` **with a `glz::meta`/`glz::enumerate` specialisation**". "Forbidden in any DTO field: `int`, `int64_t`, `double`, `float`, `bool`, raw enums." Numbers in DTOs are `Quantity` (`Amount`, `Rate`, `Count` from Task 1); dates are `morph::time::Timestamp`.
@@ -51,7 +52,7 @@ The ladder build directory is the `linux-everything` preset's (`build/linux-ever
 - Screen suite: `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock env QT_QPA_PLATFORM=offscreen timeout 300 build/linux-everything/ladder_lims_screen_tests`
 - Everything labelled for the rung: `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock ctest --test-dir build/linux-everything -j6 -L ladder-lims --output-on-failure`
 
-A Catch2 tag or name after the binary narrows a run, e.g. `… ladder_lims_tests "[ledger]"`. Task 16, if it changes `include/morph`, also builds and runs the framework suite: `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock cmake --build build/linux-everything --target morph_tests -j10` and `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock timeout 300 build/linux-everything/tests/morph_tests "[guard]"` (the target and path are the framework suite's in `tests/CMakeLists.txt`; if they differ there, use what that file names).
+A Catch2 tag or name after the binary narrows a run, e.g. `… ladder_lims_tests "[ledger]"`. Task 18, which changes `include/morph`, also builds and runs the framework suite: `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock cmake --build build/linux-everything --target morph_tests -j10` and `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock timeout 300 build/linux-everything/tests/morph_tests "[guard]"` (the target and path are the framework suite's in `tests/CMakeLists.txt`; if they differ there, use what that file names).
 
 ## Conventions every task uses
 
@@ -65,13 +66,14 @@ Read once; the tasks rely on them without restating them.
 - **Registration** is at the bottom of the model header, in `// NOLINTBEGIN(misc-const-correctness)` / `// NOLINTEND`, as `org_model.hpp` does: `BRIDGE_REGISTER_MODEL`, then per action `BRIDGE_REGISTER_ACTION` (reads with `::morph::model::Loggable::No`) and, for a mutating one, `BRIDGE_REGISTER_EFFECTS` directly under it. Records are registered beside their view type with `BRIDGE_REGISTER_RECORD(Type, "<Module>_<Name>")`.
 - **Tables** are prefixed per module (`org_`, `ledger_`, `billing_`; lab keeps `lims_`). Migration ids for Part B are `202611100000NN`, numbered in the order the tasks add them, so they apply after every Part A migration.
 - **Each module header tree** that holds Lightweight records carries the one-key `.clang-tidy` that `org/include/.clang-tidy` holds (the `TableName` exemption), copied verbatim with "org" replaced by the module's name.
-- **Tests** are `examples/lims/tests/test_<topic>.cpp`, tagged `[lims][<topic>]`, start with `DbFixture fixture;`, and set principals with `lims::test::ScopedPrincipal` and roles with `lims::test::grant` (`tests/lims_test_support.hpp`). A test that needs a fixed instant uses `morph::ladder::ScopedClockOverride` (`examples/common/clock.hpp`).
+- **Tests** are `examples/lims/tests/test_<topic>.cpp`, tagged `[lims][<topic>]`, start with `DbFixture fixture;`, and set principals with `lims::test::ScopedPrincipal` and roles with `lims::test::grant` (`tests/lims_test_support.hpp`). A test that needs a fixed instant uses `morph::ladder::ScopedClockOverride` (`examples/common/clock.hpp`). A test that needs a server uses `morph::ladder::testkit::BackendRig` in `Mode::Socket`: `rig.server()` for an internal client, `rig.connect()` for a connection opened on the server in process that registers, executes, watches and closes (Task 9 extends the rig). `lims::test::relayLabEvents()` (Task 9) runs one relay pass through an internal client, as the server does.
 
 ## File structure after Part B
 
 ```
 examples/lims/
-  CMakeLists.txt                     MODULES org posting lab ledger billing app; SHARED_MODULES org posting; probes
+  CMakeLists.txt                     MODULES org posting lab ledger billing app; SHARED_MODULES org posting;
+                                     USES lab:org ledger:org,posting billing:org,posting; probes
   org/include/lims/org/core/         references.hpp (ClientId, SampleId, AnalysisId, ResultId), money.hpp
   org/include/lims/org/dto/          limit_dto.hpp
   posting/include/lims/posting/      posting.hpp                      (INTERFACE module: DTOs only)
@@ -91,19 +93,23 @@ examples/lims/
   billing/include/lims/billing/models/ price_list_model.hpp, invoice_model.hpp, invoice_edit_model.hpp, billing_run_model.hpp
   billing/include/lims/billing/authorization/ billing_authorization.hpp
   billing/src/{core,db,models,authorization}/…
-  app/include/lims/app/              declared_requirements.hpp, lims_authorizer.hpp, event_wiring.hpp, ledger_wiring.hpp, billing_scheduler.hpp
-  app/src/                           event_wiring.cpp, ledger_wiring.cpp, billing_scheduler.cpp
-  src/server/main.cpp                + the ledger port, the event relay and the billing schedule on one QTimer
-  screens/lims_screens.cpp           lifecycle screen gains its sample's billable lines (Task 9)
+  app/include/lims/app/              declared_requirements.hpp, lims_authorizer.hpp, service_principals.hpp, internal_client.hpp,
+                                     event_wiring.hpp, ledger_wiring.hpp, billing_scheduler.hpp
+  app/src/                           internal_client.cpp, event_wiring.cpp, ledger_wiring.cpp, billing_scheduler.cpp
+  src/server/main.cpp                + three internal clients, the ledger port, and the event relay and billing schedule on
+                                       QTimers that post to one background thread
   tests/                             test_money, test_posting_contract, test_value_limits, test_ledger_chart, test_ledger_entries,
                                      test_ledger_reports, test_price_lists, test_domain_events, test_invoices, test_billing_run,
-                                     test_invoice_approval, test_invoice_lease, test_invoice_posting, test_two_company_effects,
-                                     lims_server_rig.hpp
-  tests/compile_checks/              + posting_includes_lab, lab_includes_posting, ledger_includes_lab, billing_includes_ledger,
-                                       ledger_includes_billing
+                                     test_invoice_approval, test_invoice_lease, test_invoice_posting, test_cross_module_effects,
+                                     test_two_company_effects
+  tests/compile_checks/              + posting_includes_lab, lab_includes_posting, app_includes_posting, ledger_includes_lab,
+                                       billing_includes_ledger, ledger_includes_billing, cross_module_effects_probe
+  screens/tests/                     + test_lims_approval_inbox.cpp (a one-screen bundle of its own; no lims screen changes)
+examples/common/testkit/             backend_rig.hpp: rig.server(), rig.connect(); server_connection.hpp
+cmake/morph_add_rung.cmake           USES <module>:<shared>,…; the `stress` label for "Stress: " cases
 ```
 
-Module dependency after Part B: `org` → nothing; `posting` → `org`; `lab`, `ledger`, `billing` → `org`, `posting`; `app` → every module.
+Module dependency after Part B: `org` → nothing; `posting` → `org`; `lab` → `org`; `ledger`, `billing` → `org`, `posting`; `app` → every module.
 
 ---
 
@@ -118,6 +124,15 @@ Module dependency after Part B: `org` → nothing; `posting` → `org`; `lab`, `
 - Produces: `enum class lims::ErpUnit { money, rate, count }`; `lims::Amount = Quantity<ErpUnit::money, 2>`; `lims::Rate = Quantity<ErpUnit::rate, 6>`; `lims::Count = Quantity<ErpUnit::count, 0>`; `constexpr std::uint32_t lims::decimalsOf(CurrencyCode)`; `constexpr std::string_view lims::currencyName(CurrencyCode)`; `bool lims::fitsCurrency(Rational const&, CurrencyCode)`; `Rational lims::roundToCurrency(Rational const&, CurrencyCode)` (throws `OutOfRange`); `class lims::ExactSum { bool add(Rational const&); Rational total() const; }`; `class lims::OutOfRange : LimsError`; `lims::ClientId`, `lims::SampleId`, `lims::AnalysisId`, `lims::ResultId` now in `lims/org/core/references.hpp`, with their wire and shape tags unchanged.
 
 Billing names a lab client, sample, result and analysis; it cannot include lab. The four ids move to org, unchanged in name, wire form and shape tag, so every journal entry that carries one still decodes.
+
+- [ ] **Step 0: Record Part B's base commit**
+
+Task 12 measures what Part B added since it began, so the start is written down once, before the first change:
+
+```bash
+cd /home/yaraslau/repo/morph
+git rev-parse HEAD > /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_base.txt
+```
 
 - [ ] **Step 1: Write the failing test**
 
@@ -485,12 +500,14 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 ### Task 2: The `posting` shared module
 
 **Files:**
-- Create: `examples/lims/posting/include/lims/posting/posting.hpp`, `examples/lims/tests/test_posting_contract.cpp`, `examples/lims/tests/compile_checks/posting_includes_lab.cpp`, `examples/lims/tests/compile_checks/lab_includes_posting.cpp`
-- Modify: `examples/lims/CMakeLists.txt`, `examples/lims/README.md` (Modules table)
+- Create: `examples/lims/posting/include/lims/posting/posting.hpp`, `examples/lims/tests/test_posting_contract.cpp`, `examples/lims/tests/compile_checks/posting_includes_lab.cpp`, `examples/lims/tests/compile_checks/lab_includes_posting.cpp`, `examples/lims/tests/compile_checks/app_includes_posting.cpp`
+- Modify: `cmake/morph_add_rung.cmake` (`USES`), `examples/lims/CMakeLists.txt`, `examples/lims/README.md` (Modules table)
 
 **Interfaces:**
 - Consumes: `lims::Amount`, `lims::Rate`, `lims::CompanyId`, `lims::CurrencyCode`, `morph::time::Timestamp`.
-- Produces: `lims::JournalEntryId`; `enum class lims::PostingSide { Debit, Credit }`; `struct lims::PostingLine { std::string accountCode; PostingSide side; Amount amount; Amount companyAmount; }`; `struct lims::PostingRequest { CompanyId company; Timestamp date; std::string sourceKey; std::string sourceReference; CurrencyCode currency; Rate rate; std::vector<PostingLine> lines; }`; `struct lims::PostingResult { JournalEntryId entryId; }`; the CMake target `ladder_lims_posting` (INTERFACE).
+- Produces: `lims::JournalEntryId`; `enum class lims::PostingSide { Debit, Credit }`; `struct lims::PostingLine { std::string accountCode; PostingSide side; Amount amount; Amount companyAmount; }`; `struct lims::PostingRequest { CompanyId company; Timestamp date; std::string sourceKey; std::string sourceReference; CurrencyCode currency; Rate rate; std::vector<PostingLine> lines; }`; `struct lims::PostingResult { JournalEntryId entryId; }`; the CMake target `ladder_lims_posting` (INTERFACE); `morph_add_rung(... USES <module>:<shared>[,<shared>...])`.
+
+A feature module links the shared modules it declares it uses, and no other: lab posts nothing and records no posting, so it does not link `posting` (the design's dependency rule: "links `lims/org` and, where it posts or records postings, `lims/posting`"). `USES` is how a rung says which, per module; without it every feature module links every shared module, as before, so no other rung changes.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -644,7 +661,64 @@ struct glz::meta<lims::PostingSide> {
 };
 ```
 
-- [ ] **Step 4: Add the module to the rung and probe its boundary**
+- [ ] **Step 4: Teach `morph_add_rung` per-module uses, add the module, and probe its boundary**
+
+In `cmake/morph_add_rung.cmake`, change the link-rule paragraph of the header comment to:
+
+```cmake
+# Link rules, which make including another module's header a compile error:
+#   - a shared module links the shared modules named before it in SHARED_MODULES, and nothing else of the rung;
+#   - APP_MODULE links every other module;
+#   - every other module links the shared modules USES names for it (USES <module>:<shared>[,<shared>...]), or,
+#     when the rung gives no USES, every shared module. Once USES is given it must name every such module, so a
+#     module added later cannot fall back to linking everything unseen.
+```
+
+add `USES` to `multiValueArgs` (`set(multiValueArgs MODULES SHARED_MODULES USES)`), and, inside `if(RUNG_MODULES)` after the loop that checks each shared module is in `MODULES`:
+
+```cmake
+        foreach(_use IN LISTS RUNG_USES)
+            if(NOT _use MATCHES "^([A-Za-z0-9_]+):([A-Za-z0-9_,]+)$")
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES entry '${_use}' is not "
+                                    "<module>:<shared>[,<shared>...]")
+            endif()
+            set(_user "${CMAKE_MATCH_1}")
+            string(REPLACE "," ";" _used "${CMAKE_MATCH_2}")
+            if(NOT _user IN_LIST RUNG_MODULES OR _user IN_LIST RUNG_SHARED_MODULES OR _user STREQUAL RUNG_APP_MODULE)
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES names ${_user}, which is not a feature "
+                                    "module of MODULES")
+            endif()
+            if(DEFINED _uses_${_user})
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES names ${_user} twice")
+            endif()
+            foreach(_shared IN LISTS _used)
+                if(NOT _shared IN_LIST RUNG_SHARED_MODULES)
+                    message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): ${_user} uses ${_shared}, which is not in "
+                                        "SHARED_MODULES")
+                endif()
+            endforeach()
+            set(_uses_${_user} ${_used})
+        endforeach()
+        if(RUNG_USES)
+            foreach(_module IN LISTS RUNG_MODULES)
+                if(NOT _module IN_LIST RUNG_SHARED_MODULES AND NOT _module STREQUAL RUNG_APP_MODULE
+                   AND NOT DEFINED _uses_${_module})
+                    message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES is given but names nothing for "
+                                        "${_module}")
+                endif()
+            endforeach()
+        endif()
+```
+
+Change `elseif(RUNG_SHARED_MODULES OR RUNG_APP_MODULE)` to `elseif(RUNG_SHARED_MODULES OR RUNG_APP_MODULE OR RUNG_USES)` and its message to "SHARED_MODULES, USES and APP_MODULE need MODULES". In the per-module link loop, replace the final `else()` branch with:
+
+```cmake
+            elseif(RUNG_USES)
+                set(_deps ${_uses_${_module}})
+            else()
+                set(_deps ${RUNG_SHARED_MODULES})
+            endif()
+```
 
 In `examples/lims/CMakeLists.txt`, change the call to:
 
@@ -652,6 +726,7 @@ In `examples/lims/CMakeLists.txt`, change the call to:
 morph_add_rung(NAME lims
     MODULES org posting lab app
     SHARED_MODULES org posting
+    USES lab:org
     APP_MODULE app)
 ```
 
@@ -659,7 +734,8 @@ and, below the three existing `_lims_boundary_probe` lines, add:
 
 ```cmake
     _lims_boundary_probe(posting_includes_lab posting fail lims/lab/models/sample_model.hpp)
-    _lims_boundary_probe(lab_includes_posting lab pass lims/posting/posting.hpp)
+    _lims_boundary_probe(lab_includes_posting lab fail lims/posting/posting.hpp)
+    _lims_boundary_probe(app_includes_posting app pass lims/posting/posting.hpp)
 ```
 
 Create `examples/lims/tests/compile_checks/posting_includes_lab.cpp`:
@@ -674,14 +750,27 @@ Create `examples/lims/tests/compile_checks/posting_includes_lab.cpp`:
 #endif
 ```
 
-and `examples/lims/tests/compile_checks/lab_includes_posting.cpp`:
+`examples/lims/tests/compile_checks/lab_includes_posting.cpp`:
 
 ```cpp
 // SPDX-License-Identifier: Apache-2.0
 //
-// The control for posting_includes_lab: compiled as part of lims/lab, it includes the posting contract and must
-// build, which shows a feature module reaches the second shared module. Outside its test the macro is undefined and
-// this is empty.
+// Compiled as part of lims/lab, it includes the posting contract and must fail to build: lab posts nothing, so its
+// USES names org alone and posting is not on its include path. Outside its test the macro is undefined and this is
+// empty.
+#ifdef LIMS_MODULE_BOUNDARY_PROBE
+#include <lims/posting/posting.hpp>
+#endif
+```
+
+and `examples/lims/tests/compile_checks/app_includes_posting.cpp`:
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+//
+// The control for lab_includes_posting: compiled as part of lims/app, which links every module, it includes the
+// posting contract and must build, which shows the probe's header path is right and the refusal above is the link
+// rule's. Outside its test the macro is undefined and this is empty.
 #ifdef LIMS_MODULE_BOUNDARY_PROBE
 #include <lims/posting/posting.hpp>
 #endif
@@ -689,16 +778,17 @@ and `examples/lims/tests/compile_checks/lab_includes_posting.cpp`:
 
 - [ ] **Step 5: Build and run**
 
-Run: Configure, Build lims, Model suite `"[posting]"`, then Everything labelled for the rung. Expected: the two posting cases pass; `lims.module_boundary.posting_includes_lab` and `lims.module_boundary.lab_includes_posting` pass; nothing else changes.
+Run: Configure, Build lims, Model suite `"[posting]"`, then Everything labelled for the rung. Expected: the two posting cases pass; `lims.module_boundary.posting_includes_lab`, `lims.module_boundary.lab_includes_posting` and `lims.module_boundary.app_includes_posting` pass; nothing else changes. Control the new rule once: change `USES lab:org` to `USES lab:org,posting`, reconfigure, and see `lims.module_boundary.lab_includes_posting` fail (the header now builds); restore it. Then misspell it `USES lab:orgg` and see the configure stop with "lab uses orgg, which is not in SHARED_MODULES"; restore it.
 
 - [ ] **Step 6: Update the Modules table and commit**
 
-In `examples/lims/README.md`'s "Modules" table add the row `` | `posting/` (shared) | the posting contract: `PostingRequest` and `PostingResult`, DTOs only | `org` | `` after `org/`, and change `lab/`'s "Links" cell to `` `org`, `posting` ``.
+In `examples/lims/README.md`'s "Modules" table add the row `` | `posting/` (shared) | the posting contract: `PostingRequest` and `PostingResult`, DTOs only | `org` | `` after `org/`, and leave `lab/`'s "Links" cell `` `org` ``.
 
 ```bash
 cd /home/yaraslau/repo/morph
-git add examples/lims/posting examples/lims/CMakeLists.txt examples/lims/tests/compile_checks/posting_includes_lab.cpp \
-        examples/lims/tests/compile_checks/lab_includes_posting.cpp examples/lims/tests/test_posting_contract.cpp \
+git add cmake/morph_add_rung.cmake examples/lims/posting examples/lims/CMakeLists.txt \
+        examples/lims/tests/compile_checks/posting_includes_lab.cpp examples/lims/tests/compile_checks/lab_includes_posting.cpp \
+        examples/lims/tests/compile_checks/app_includes_posting.cpp examples/lims/tests/test_posting_contract.cpp \
         examples/lims/README.md
 git commit -m "Add lims's posting contract as a shared module
 
@@ -2105,7 +2195,7 @@ PeriodView LedgerModel::execute(const BeginClosePeriod& action) {
 
 - [ ] **Step 7: Build the module, probe its boundary, declare its rules**
 
-In `examples/lims/CMakeLists.txt` set `MODULES org posting lab ledger app` and add `_lims_boundary_probe(ledger_includes_lab ledger fail lims/lab/models/sample_model.hpp)`. Create `tests/compile_checks/ledger_includes_lab.cpp` in `posting_includes_lab.cpp`'s shape, its comment reading "Compiled as part of lims/ledger, it includes lab's header and must fail to build: the ledger knows no other feature module." In `declared_requirements.hpp` raise the array by three and add `requirementOf<CreateAccount>()`, `requirementOf<OpenPeriod>()`, `requirementOf<BeginClosePeriod>()` (include `lims/ledger/authorization/ledger_authorization.hpp`). In the coverage case add the three actions to `Mutating` and `"LedgerModel"` to the model list the dispatcher check walks. Add a `ledger/` row to the README's Modules table: `` | `ledger/` | accounts, periods, journal entries, exchange rates and the reports | `org`, `posting` | ``.
+In `examples/lims/CMakeLists.txt` set `MODULES org posting lab ledger app` and `USES lab:org ledger:org,posting`, and add `_lims_boundary_probe(ledger_includes_lab ledger fail lims/lab/models/sample_model.hpp)`. Create `tests/compile_checks/ledger_includes_lab.cpp` in `posting_includes_lab.cpp`'s shape, its comment reading "Compiled as part of lims/ledger, it includes lab's header and must fail to build: the ledger knows no other feature module." In `declared_requirements.hpp` raise the array by three and add `requirementOf<CreateAccount>()`, `requirementOf<OpenPeriod>()`, `requirementOf<BeginClosePeriod>()` (include `lims/ledger/authorization/ledger_authorization.hpp`). In the coverage case add the three actions to `Mutating` and `"LedgerModel"` to the model list the dispatcher check walks. Add a `ledger/` row to the README's Modules table: `` | `ledger/` | accounts, periods, journal entries, exchange rates and the reports | `org`, `posting` | ``.
 
 - [ ] **Step 8: Build and run**
 
@@ -2125,17 +2215,17 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 
 ---
 
-### Task 5: Ledger — journal entries, balancing, reversal, recording a posting, closing a period
+### Task 5: Ledger — journal entries, balancing and reversal
 
 **Files:**
 - Create: `examples/lims/ledger/include/lims/ledger/core/balance.hpp`, `examples/lims/ledger/src/core/balance.cpp`, `examples/lims/ledger/include/lims/ledger/dto/entry_dto.hpp`, `examples/lims/ledger/src/models/ledger_entries.cpp`, `examples/lims/tests/test_ledger_entries.cpp`
-- Modify: `ledger_entity.hpp` (four records), `ledger_schema.cpp` (migration), `ledger_model.hpp` (actions, `record`), `ledger_authorization.hpp`/`.cpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`
+- Modify: `ledger_entity.hpp` (two records), `ledger_schema.cpp` (migration), `ledger_model.hpp` (five actions), `ledger_authorization.hpp`/`.cpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`
 
 **Interfaces:**
-- Consumes: `PostingRequest`, `PostingLine`, `PostingResult`, `ExactSum`, `fitsCurrency`, `calendarMonthOf`, `monthStartMillis`, `morph::offline::IReplayLedger`.
-- Produces: `std::optional<std::string> lims::entryProblem(std::span<PostingLine const> lines, CurrencyCode transaction, CurrencyCode company)`; `struct JournalEntryView { JournalEntryId id; CompanyId company; PeriodId period; Timestamp date; EntryState state; std::string sourceKey; std::string sourceReference; std::string memo; CurrencyCode currency; Rate rate; JournalEntryId reverses; JournalEntryId reversedBy; std::vector<PostingLine> lines; std::string createdBy; std::string postedBy; }`; actions `CreateDraftEntry { CompanyId company; Timestamp date; std::string memo; CurrencyCode currency; Rate rate; std::vector<PostingLine> lines; }`, `PostEntry { JournalEntryId entryId; }`, `ReverseEntry { JournalEntryId entryId; Timestamp date; }`, `GetEntry { JournalEntryId entryId; }`, `ListEntries { CompanyId company; }` → `ListEntriesResult`, `ClosePeriod { PeriodId periodId; }` → `PeriodView`; `static PostingResult LedgerModel::record(PostingRequest const& request)` (not an action); record `Ledger_Entry`.
+- Consumes: `PostingLine`, `ExactSum`, `fitsCurrency`, `calendarMonthOf`, `monthStartMillis`.
+- Produces: `std::optional<std::string> lims::entryProblem(std::span<PostingLine const> lines, CurrencyCode transaction, CurrencyCode company)`; `struct JournalEntryView { JournalEntryId id; CompanyId company; PeriodId period; Timestamp date; EntryState state; std::string sourceKey; std::string sourceReference; std::string memo; CurrencyCode currency; Rate rate; JournalEntryId reverses; JournalEntryId reversedBy; std::vector<PostingLine> lines; std::string createdBy; std::string postedBy; }`; actions `CreateDraftEntry { CompanyId company; Timestamp date; std::string memo; CurrencyCode currency; Rate rate; std::vector<PostingLine> lines; }`, `PostEntry { JournalEntryId entryId; }`, `ReverseEntry { JournalEntryId entryId; Timestamp date; }`, `GetEntry { JournalEntryId entryId; }`, `ListEntries { CompanyId company; }` → `ListEntriesResult`; record `Ledger_Entry`; in `ledger_entries.cpp`'s anonymous namespace the helpers Task 6 builds on (`loadEntry`, `toView`, `periodOf`, `requireRecordable`, `accountIds`, `writeEntry`, `headerFor`, `requireBalanced`, `companyCurrency`, `amountOf`).
 
-`record()` is deliberately not a registered action. A posting is a fact another module's document produces, and only the app's port (Task 14) hands it over; a client that could send `RecordPosting` could put any entry in the books under an invoice's name. The ledger records each `sourceKey` once per company through an `IReplayLedger` over `ledger_posting_sources`, written in the entry's own transaction, so a poster that retries gets the first entry back.
+An entry carries one transaction currency: every line's `amount` is in it, and `entryProblem` balances it and the company currency. That is narrower than the design's "sum to zero per transaction currency", which allows an entry mixing several; Task 7's decision 29 records why.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2145,6 +2235,7 @@ Create `examples/lims/tests/test_ledger_entries.cpp`:
 // SPDX-License-Identifier: Apache-2.0
 //
 // Journal entries: balanced per currency and in company currency, never rounded by the ledger, immutable once posted,
+// corrected by reversal.
 // corrected by reversal; a posting recorded once per source key; a period closed only without drafts.
 
 #include <catch2/catch_test_macros.hpp>
@@ -2209,21 +2300,6 @@ lims::PeriodView books() {
     }
     return ledger.execute(lims::OpenPeriod{.company = lims::test::seededCompany(),
                                            .month = morph::time::Timestamp{lims::test::at(2026, 11, 1)}});
-}
-
-/// @brief A posting of @p minor from receivables to revenue on 10 November 2026.
-/// @param key The source key.
-/// @param minor The amount.
-/// @return The request.
-[[nodiscard]] lims::PostingRequest posting(std::string key, std::int64_t minor) {
-    return lims::PostingRequest{
-        .company = lims::test::seededCompany(),
-        .date = morph::time::Timestamp{lims::test::at(2026, 11, 10)},
-        .sourceKey = key,
-        .sourceReference = key,
-        .currency = lims::CurrencyCode::EUR,
-        .rate = one(),
-        .lines = {line("1200", lims::PostingSide::Debit, minor), line("4000", lims::PostingSide::Credit, minor)}};
 }
 
 }  // namespace
@@ -2302,62 +2378,6 @@ TEST_CASE("ledger entries: a draft is posted once and is then immutable; a corre
                     lims::Conflict);
 }
 
-// Mutation: drop the replay-ledger lookup from record (the retried posting makes a second entry).
-TEST_CASE("ledger entries: a posting is recorded once per source key, and a retry answers the first entry",
-          "[lims][ledger]") {
-    DbFixture fixture;
-    books();
-    auto const first = lims::LedgerModel::record(posting("billing.invoice:1", 11900));
-    auto const retried = lims::LedgerModel::record(posting("billing.invoice:1", 11900));
-    CHECK(retried.entryId == first.entryId);
-    ScopedPrincipal const alice{"alice"};
-    CHECK(lims::LedgerModel{}.execute(lims::ListEntries{.company = lims::test::seededCompany()}).entries.size() ==
-          1U);
-    CHECK_THROWS_AS(lims::LedgerModel::record(posting("billing.invoice:2", 0)), lims::ValidationError);
-    auto unknown = posting("billing.invoice:3", 100);
-    unknown.lines[0].accountCode = "9999";
-    CHECK_THROWS_AS(lims::LedgerModel::record(unknown), lims::NotFound);
-    auto noPeriod = posting("billing.invoice:4", 100);
-    noPeriod.date = morph::time::Timestamp{lims::test::at(2026, 12, 1)};
-    CHECK_THROWS_AS(lims::LedgerModel::record(noPeriod), lims::NotFound);
-}
-
-// Mutation: skip the draft check in ClosePeriod (the period closes with a draft in it).
-TEST_CASE("ledger entries: a period closes only without drafts, and nothing is recorded in it afterwards",
-          "[lims][ledger]") {
-    DbFixture fixture;
-    auto const november = books();
-    lims::LedgerModel::record(posting("billing.invoice:1", 1000));
-    ScopedPrincipal const alice{"alice"};
-    lims::LedgerModel ledger;
-    auto const draft = ledger.execute(lims::CreateDraftEntry{
-        .company = lims::test::seededCompany(),
-        .date = morph::time::Timestamp{lims::test::at(2026, 11, 12)},
-        .memo = "accrual",
-        .currency = lims::CurrencyCode::EUR,
-        .rate = one(),
-        .lines = {line("6900", lims::PostingSide::Debit, 500), line("2200", lims::PostingSide::Credit, 500)}});
-    ledger.execute(lims::BeginClosePeriod{.periodId = november.id});
-    // Closing: no new drafts, postings still recorded.
-    CHECK_THROWS_AS(ledger.execute(lims::CreateDraftEntry{
-                        .company = lims::test::seededCompany(),
-                        .date = morph::time::Timestamp{lims::test::at(2026, 11, 13)},
-                        .memo = "late",
-                        .currency = lims::CurrencyCode::EUR,
-                        .rate = one(),
-                        .lines = {line("6900", lims::PostingSide::Debit, 1), line("2200", lims::PostingSide::Credit, 1)}}),
-                    lims::Conflict);
-    lims::LedgerModel::record(posting("billing.invoice:2", 2000));
-    CHECK_THROWS_WITH(ledger.execute(lims::ClosePeriod{.periodId = november.id}),
-                      Catch::Matchers::ContainsSubstring("draft"));
-    ledger.execute(lims::PostEntry{.entryId = draft.id});
-    auto const closed = ledger.execute(lims::ClosePeriod{.periodId = november.id});
-    CHECK(closed.state == lims::PeriodState::Closed);
-    CHECK_THROWS_AS(lims::LedgerModel::record(posting("billing.invoice:3", 3000)), lims::Conflict);
-    CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = draft.id,
-                                                      .date = morph::time::Timestamp{lims::test::at(2026, 11, 30)}}),
-                    lims::Conflict);
-}
 ```
 
 - [ ] **Step 2: Run it and see it fail**
@@ -2584,16 +2604,6 @@ struct ListEntriesResult {
     std::vector<JournalEntryView> entries;
 };
 
-/// @brief `Closing → Closed`: freezes the period's balances. Refused while a draft remains in it.
-struct ClosePeriod {
-    /// @brief The period.
-    PeriodId periodId;
-
-    /// @brief Whether a period is named.
-    /// @return `true` when it is.
-    [[nodiscard]] bool validate() const noexcept { return periodId.hasValue(); }
-};
-
 }  // namespace lims
 
 BRIDGE_REGISTER_RECORD(lims::JournalEntryView, "Ledger_Entry")
@@ -2639,29 +2649,9 @@ struct EntryLineRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"company_den"}> companyDen{1};       // 8
 };
 
-/// @brief A poster's source key, recorded once per company with the entry it produced.
-struct PostingSourceRecord {
-    static constexpr std::string_view TableName = "ledger_posting_sources";
-    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"scope"}> scope;                             // 1
-    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"source_key"}> sourceKey;                   // 2
-    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"entry"}> entry;                             // 3
-};
-
-/// @brief One account's frozen totals in one closed period, in company currency.
-struct PeriodBalanceRecord {
-    static constexpr std::string_view TableName = "ledger_period_balances";
-    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::BelongsTo<&PeriodRecord::id, Light::SqlRealName{"period_id"}> period;                           // 1
-    Light::BelongsTo<&AccountRecord::id, Light::SqlRealName{"account_id"}> account;                        // 2
-    Light::Field<std::int64_t, Light::SqlRealName{"debit_num"}> debitNum{0};                               // 3
-    Light::Field<std::int64_t, Light::SqlRealName{"debit_den"}> debitDen{1};                               // 4
-    Light::Field<std::int64_t, Light::SqlRealName{"credit_num"}> creditNum{0};                             // 5
-    Light::Field<std::int64_t, Light::SqlRealName{"credit_den"}> creditDen{1};                             // 6
-};
 ```
 
-Append to `ledger_schema.cpp`'s NOLINT block:
+Append to `ledger_schema.cpp`'s NOLINT block the migration below. It also creates the two tables Task 6 maps (`ledger_posting_sources`, `ledger_period_balances`), so Part B's migration ids stay in task order; Task 6 adds their records.
 
 ```cpp
 LIGHTWEIGHT_SQL_MIGRATION(20261110000003, "Create ledger_entries, their lines, posting sources and period balances") {
@@ -2722,20 +2712,6 @@ In `ledger_model.hpp` include `lims/ledger/dto/entry_dto.hpp` and `lims/posting/
     JournalEntryView execute(const ReverseEntry& action);
     JournalEntryView execute(const GetEntry& action);
     ListEntriesResult execute(const ListEntries& action);
-    PeriodView execute(const ClosePeriod& action);
-
-    /// @brief Records a poster's request as a posted entry, once per company and source key.
-    ///
-    /// Not an action: postings reach the ledger only from a module's document, through the app's wiring. Checks
-    /// what a hand-made entry is checked for, and that the request's rate is the ledger's rate on its date (one when
-    /// the currencies are the same).
-    /// @param request The request.
-    /// @return The entry; the first one recorded under the request's key when it is repeated.
-    /// @throws ValidationError if the request is malformed, does not balance, or names a rate other than the dated
-    ///         one.
-    /// @throws NotFound if the company, the period of its date or an account does not exist.
-    /// @throws Conflict if the period is closed.
-    [[nodiscard]] static PostingResult record(PostingRequest const& request);
 ```
 
 Registrations, inside the NOLINT block:
@@ -2749,8 +2725,6 @@ BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ReverseEntry, "ReverseEntry")
 BRIDGE_REGISTER_EFFECTS(lims::ReverseEntry, ::morph::effects::changes<lims::JournalEntryView>)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::GetEntry, "GetEntry", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListEntries, "ListEntries", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ClosePeriod, "ClosePeriod")
-BRIDGE_REGISTER_EFFECTS(lims::ClosePeriod, ::morph::effects::updates<lims::PeriodView>)
 ```
 
 `ReverseEntry` returns the reversal and changes the original's `reversedBy`, so it declares `changes<JournalEntryView>` (rows the reply does not carry change), not `updates`.
@@ -2785,18 +2759,6 @@ struct Authorization<ReverseEntry> {
     /// @return It; an empty company when there is no such entry.
     [[nodiscard]] static Scope scopeOf(ReverseEntry const& action);
 };
-
-/// @brief A period is closed by an accountant at its company.
-template <>
-struct Authorization<ClosePeriod> {
-    /// @brief The role.
-    static constexpr LimsRole role = LimsRole::Accountant;
-
-    /// @brief The company of the period the payload names.
-    /// @param action The action.
-    /// @return It; an empty company when there is no such period.
-    [[nodiscard]] static Scope scopeOf(ClosePeriod const& action);
-};
 ```
 
 and in `ledger_authorization.cpp`, beside `periodCompany`:
@@ -2817,7 +2779,7 @@ and in `ledger_authorization.cpp`, beside `periodCompany`:
 }
 ```
 
-with `Authorization<PostEntry>::scopeOf` and `Authorization<ReverseEntry>::scopeOf` returning `entryCompany(action.entryId)` and `Authorization<ClosePeriod>::scopeOf` returning `periodCompany(action.periodId)`. Add the four to `declaredRequirements()` and the coverage tuple.
+with `Authorization<PostEntry>::scopeOf` and `Authorization<ReverseEntry>::scopeOf` returning `entryCompany(action.entryId)`. Add the three to `declaredRequirements()` and the coverage tuple.
 
 - [ ] **Step 6: Implement entries**
 
@@ -2829,8 +2791,6 @@ Create `examples/lims/ledger/src/models/ledger_entries.cpp`:
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
 #include <cstdint>
-#include <map>
-#include <morph/offline/replay_ledger.hpp>
 #include <morph/session/session.hpp>
 #include <optional>
 #include <string>
@@ -2857,45 +2817,6 @@ using ::morph::math::Rational;
 
 constexpr int kMaxEntryState = static_cast<int>(EntryState::Posted);
 constexpr int kMaxCurrencyCode = static_cast<int>(CurrencyCode::JPY);
-
-/// @brief The posting sources of one company, as an `IReplayLedger` over `ledger_posting_sources`.
-///
-/// Constructed over the caller's open mapper for one `record()`, so a source key is recorded in the same transaction
-/// as the entry it produced. Response-replay: the payload is the entry's id, which a repeated request answers.
-class PostingSources final : public ::morph::offline::IReplayLedger {
-public:
-    /// @param mapper The caller's mapper. Borrowed: it must outlive this instance.
-    explicit PostingSources(Lightweight::DataMapper& mapper) : _mapper{mapper} {}
-
-protected:
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
-    [[nodiscard]] std::optional<std::string> doLookup(std::string_view scope, std::string_view opId) const override {
-        auto const rows = _mapper.Query<db::PostingSourceRecord>()
-                              .Where(::Lightweight::FieldNameOf<&db::PostingSourceRecord::scope>, "=",
-                                     std::string{scope})
-                              .Where(::Lightweight::FieldNameOf<&db::PostingSourceRecord::sourceKey>, "=",
-                                     std::string{opId})
-                              .All();
-        if (rows.empty()) {
-            return std::nullopt;
-        }
-        return std::string{rows.front().entry.Value().ToStringView()};
-    }
-
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
-    void doRecord(std::string_view scope, std::string_view opId, std::string payload) override {
-        db::PostingSourceRecord row;
-        row.scope = Lightweight::SqlAnsiString<32>{std::string{scope}};
-        row.sourceKey = Lightweight::SqlAnsiString<128>{std::string{opId}};
-        row.entry = Lightweight::SqlAnsiString<32>{payload};
-        _mapper.Create(row);
-    }
-
-private:
-    // Borrowed for one record(); never reseated.
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
-    Lightweight::DataMapper& _mapper;
-};
 
 /// @brief @p num / @p den at @p currency's decimals.
 /// @param num The numerator.
@@ -3221,6 +3142,258 @@ ListEntriesResult LedgerModel::execute(const ListEntries& action) {
     return result;
 }
 
+}  // namespace lims
+```
+
+- [ ] **Step 7: Build and run**
+
+Run: Build lims, Model suite `"[ledger]"`, Model suite `"[authorization]"`. Expected: all pass. Run the two mutations named in `test_ledger_entries.cpp` and restore each.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /home/yaraslau/repo/morph
+git add examples/lims/ledger examples/lims/tests examples/lims/app/include/lims/app/declared_requirements.hpp
+git commit -m "Add lims journal entries: balanced, unrounded, immutable once posted, corrected by reversal
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
+```
+
+---
+### Task 6: Ledger — recording a posting once per source key, and closing a period
+
+**Files:**
+- Modify: `ledger_entity.hpp` (`PostingSourceRecord`, `PeriodBalanceRecord`), `entry_dto.hpp` (`ClosePeriod`), `ledger_model.hpp` (`ClosePeriod`, `record`, `rateOn`), `ledger_entries.cpp`, `ledger_authorization.hpp`/`.cpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `examples/lims/tests/test_ledger_entries.cpp`
+
+**Interfaces:**
+- Consumes: `PostingRequest`, `PostingResult`, `morph::offline::IReplayLedger`, Task 5's helpers in `ledger_entries.cpp`.
+- Produces: `ClosePeriod { PeriodId periodId; }` → `PeriodView`; `static PostingResult LedgerModel::record(PostingRequest const& request)` (not an action); `static std::optional<Rational> LedgerModel::rateOn(CompanyId, CurrencyCode, CurrencyCode, Timestamp const&)` (declared here, stubbed until Task 7).
+
+`record()` is not a registered action in this task: it is the ledger's whole half of a posting — validation, the rate check and the write — in a transaction of its own. How a poster's request reaches it is what Task 14 measures: as `RecordPosting`, an action only a service principal holding the service role at the company may send, and through a poster's own transaction. Either way the ledger records each `sourceKey` once per company through an `IReplayLedger` over `ledger_posting_sources`, written in the entry's own transaction, so a poster that retries gets the first entry back.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `examples/lims/tests/test_ledger_entries.cpp`:
+
+```cpp
+namespace {
+
+/// @brief A posting of @p minor from receivables to revenue on 10 November 2026.
+/// @param key The source key.
+/// @param minor The amount.
+/// @return The request.
+[[nodiscard]] lims::PostingRequest posting(std::string key, std::int64_t minor) {
+    return lims::PostingRequest{
+        .company = lims::test::seededCompany(),
+        .date = morph::time::Timestamp{lims::test::at(2026, 11, 10)},
+        .sourceKey = key,
+        .sourceReference = key,
+        .currency = lims::CurrencyCode::EUR,
+        .rate = one(),
+        .lines = {line("1200", lims::PostingSide::Debit, minor), line("4000", lims::PostingSide::Credit, minor)}};
+}
+
+}  // namespace
+
+// Mutation: drop the replay-ledger lookup from record (the retried posting makes a second entry).
+TEST_CASE("ledger entries: a posting is recorded once per source key, and a retry answers the first entry",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    auto const first = lims::LedgerModel::record(posting("billing.invoice:1", 11900));
+    auto const retried = lims::LedgerModel::record(posting("billing.invoice:1", 11900));
+    CHECK(retried.entryId == first.entryId);
+    ScopedPrincipal const alice{"alice"};
+    CHECK(lims::LedgerModel{}.execute(lims::ListEntries{.company = lims::test::seededCompany()}).entries.size() ==
+          1U);
+    CHECK_THROWS_AS(lims::LedgerModel::record(posting("billing.invoice:2", 0)), lims::ValidationError);
+    auto unknown = posting("billing.invoice:3", 100);
+    unknown.lines[0].accountCode = "9999";
+    CHECK_THROWS_AS(lims::LedgerModel::record(unknown), lims::NotFound);
+    auto noPeriod = posting("billing.invoice:4", 100);
+    noPeriod.date = morph::time::Timestamp{lims::test::at(2026, 12, 1)};
+    CHECK_THROWS_AS(lims::LedgerModel::record(noPeriod), lims::NotFound);
+}
+
+// Mutation: skip the draft check in ClosePeriod (the period closes with a draft in it).
+TEST_CASE("ledger entries: a period closes only without drafts, and nothing is recorded in it afterwards",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    auto const november = books();
+    lims::LedgerModel::record(posting("billing.invoice:1", 1000));
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const draft = ledger.execute(lims::CreateDraftEntry{
+        .company = lims::test::seededCompany(),
+        .date = morph::time::Timestamp{lims::test::at(2026, 11, 12)},
+        .memo = "accrual",
+        .currency = lims::CurrencyCode::EUR,
+        .rate = one(),
+        .lines = {line("6900", lims::PostingSide::Debit, 500), line("2200", lims::PostingSide::Credit, 500)}});
+    ledger.execute(lims::BeginClosePeriod{.periodId = november.id});
+    // Closing: no new drafts, postings still recorded.
+    CHECK_THROWS_AS(ledger.execute(lims::CreateDraftEntry{
+                        .company = lims::test::seededCompany(),
+                        .date = morph::time::Timestamp{lims::test::at(2026, 11, 13)},
+                        .memo = "late",
+                        .currency = lims::CurrencyCode::EUR,
+                        .rate = one(),
+                        .lines = {line("6900", lims::PostingSide::Debit, 1), line("2200", lims::PostingSide::Credit, 1)}}),
+                    lims::Conflict);
+    lims::LedgerModel::record(posting("billing.invoice:2", 2000));
+    CHECK_THROWS_WITH(ledger.execute(lims::ClosePeriod{.periodId = november.id}),
+                      Catch::Matchers::ContainsSubstring("draft"));
+    ledger.execute(lims::PostEntry{.entryId = draft.id});
+    auto const closed = ledger.execute(lims::ClosePeriod{.periodId = november.id});
+    CHECK(closed.state == lims::PeriodState::Closed);
+    CHECK_THROWS_AS(lims::LedgerModel::record(posting("billing.invoice:3", 3000)), lims::Conflict);
+    CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = draft.id,
+                                                      .date = morph::time::Timestamp{lims::test::at(2026, 11, 30)}}),
+                    lims::Conflict);
+}
+```
+
+- [ ] **Step 2: Run it and see it fail**
+
+Run: Build lims. Expected: compile error, `lims::LedgerModel::record` and `lims::ClosePeriod` are not declared.
+
+- [ ] **Step 3: DTO and records**
+
+In `entry_dto.hpp`, before the closing `}  // namespace lims`, add:
+
+```cpp
+/// @brief `Closing → Closed`: freezes the period's balances. Refused while a draft remains in it.
+struct ClosePeriod {
+    /// @brief The period.
+    PeriodId periodId;
+
+    /// @brief Whether a period is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return periodId.hasValue(); }
+};
+```
+
+Append to `ledger_entity.hpp`:
+
+```cpp
+/// @brief A poster's source key, recorded once per company with the entry it produced.
+struct PostingSourceRecord {
+    static constexpr std::string_view TableName = "ledger_posting_sources";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"scope"}> scope;                             // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"source_key"}> sourceKey;                   // 2
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"entry"}> entry;                             // 3
+};
+
+/// @brief One account's frozen totals in one closed period, in company currency.
+struct PeriodBalanceRecord {
+    static constexpr std::string_view TableName = "ledger_period_balances";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&PeriodRecord::id, Light::SqlRealName{"period_id"}> period;                           // 1
+    Light::BelongsTo<&AccountRecord::id, Light::SqlRealName{"account_id"}> account;                        // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"debit_num"}> debitNum{0};                               // 3
+    Light::Field<std::int64_t, Light::SqlRealName{"debit_den"}> debitDen{1};                               // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"credit_num"}> creditNum{0};                             // 5
+    Light::Field<std::int64_t, Light::SqlRealName{"credit_den"}> creditDen{1};                             // 6
+};
+```
+
+- [ ] **Step 4: Declare the model's new surface and rules**
+
+In `ledger_model.hpp` add (Doxygen as in Task 5: `@param action`, `@return`, `NotFound` for a missing period, `IllegalTransition` for a period not closing, `Conflict` while a draft remains, `Forbidden`, `EmptyPrincipalError`):
+
+```cpp
+    PeriodView execute(const ClosePeriod& action);
+
+    /// @brief Records a poster's request as a posted entry, once per company and source key.
+    ///
+    /// Not itself an action: postings reach it only from a module's document, through the app's wiring. Checks
+    /// what a hand-made entry is checked for, and that the request's rate is the ledger's rate on its date (one when
+    /// the currencies are the same).
+    /// @param request The request.
+    /// @return The entry; the first one recorded under the request's key when it is repeated.
+    /// @throws ValidationError if the request is malformed, does not balance, or names a rate other than the dated
+    ///         one.
+    /// @throws NotFound if the company, the period of its date or an account does not exist.
+    /// @throws Conflict if the period is closed.
+    [[nodiscard]] static PostingResult record(PostingRequest const& request);
+```
+
+Registrations, inside the NOLINT block:
+
+```cpp
+BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ClosePeriod, "ClosePeriod")
+BRIDGE_REGISTER_EFFECTS(lims::ClosePeriod, ::morph::effects::updates<lims::PeriodView>)
+```
+
+In `ledger_authorization.hpp`:
+
+```cpp
+/// @brief A period is closed by an accountant at its company.
+template <>
+struct Authorization<ClosePeriod> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::Accountant;
+
+    /// @brief The company of the period the payload names.
+    /// @param action The action.
+    /// @return It; an empty company when there is no such period.
+    [[nodiscard]] static Scope scopeOf(ClosePeriod const& action);
+};
+```
+
+with `Authorization<ClosePeriod>::scopeOf` returning `periodCompany(action.periodId)`. Add it to `declaredRequirements()` and the coverage tuple.
+
+- [ ] **Step 5: Implement recording and closing**
+
+In `ledger_entries.cpp` add `#include <map>` and `#include <morph/offline/replay_ledger.hpp>`, add `PostingSources` to the anonymous namespace after `kMaxCurrencyCode`:
+
+```cpp
+/// @brief The posting sources of one company, as an `IReplayLedger` over `ledger_posting_sources`.
+///
+/// Constructed over the caller's open mapper for one `record()`, so a source key is recorded in the same transaction
+/// as the entry it produced. Response-replay: the payload is the entry's id, which a repeated request answers.
+class PostingSources final : public ::morph::offline::IReplayLedger {
+public:
+    /// @param mapper The caller's mapper. Borrowed: it must outlive this instance.
+    explicit PostingSources(Lightweight::DataMapper& mapper) : _mapper{mapper} {}
+
+protected:
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
+    [[nodiscard]] std::optional<std::string> doLookup(std::string_view scope, std::string_view opId) const override {
+        auto const rows = _mapper.Query<db::PostingSourceRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::PostingSourceRecord::scope>, "=",
+                                     std::string{scope})
+                              .Where(::Lightweight::FieldNameOf<&db::PostingSourceRecord::sourceKey>, "=",
+                                     std::string{opId})
+                              .All();
+        if (rows.empty()) {
+            return std::nullopt;
+        }
+        return std::string{rows.front().entry.Value().ToStringView()};
+    }
+
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
+    void doRecord(std::string_view scope, std::string_view opId, std::string payload) override {
+        db::PostingSourceRecord row;
+        row.scope = Lightweight::SqlAnsiString<32>{std::string{scope}};
+        row.sourceKey = Lightweight::SqlAnsiString<128>{std::string{opId}};
+        row.entry = Lightweight::SqlAnsiString<32>{payload};
+        _mapper.Create(row);
+    }
+
+private:
+    // Borrowed for one record(); never reseated.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
+    Lightweight::DataMapper& _mapper;
+};
+
+```
+
+and append, before the file's closing `}  // namespace lims`:
+
+```cpp
 PeriodView LedgerModel::execute(const ClosePeriod& action) {
     requirePrincipal();
     if (!action.validate()) {
@@ -3323,10 +3496,9 @@ PostingResult LedgerModel::record(PostingRequest const& request) {
     return PostingResult{.entryId = JournalEntryId{id}};
 }
 
-}  // namespace lims
 ```
 
-`record` calls `rateOn`, the dated rate Task 6 stores. Declare it in `ledger_model.hpp` now, with the Doxygen Task 6 Step 4 gives it, and define it for this task at the end of `ledger_entries.cpp` as the ledger with no rates yet answers:
+`record` calls `rateOn`, the dated rate Task 7 stores. Declare it in `ledger_model.hpp` now, with the Doxygen Task 7 Step 4 gives it, and define it for this task at the end of `ledger_entries.cpp` as the ledger with no rates yet answers:
 
 ```cpp
 std::optional<::morph::math::Rational> LedgerModel::rateOn(CompanyId /*company*/, CurrencyCode /*from*/,
@@ -3335,31 +3507,31 @@ std::optional<::morph::math::Rational> LedgerModel::rateOn(CompanyId /*company*/
 }
 ```
 
-Task 6 deletes this definition and adds the real one beside the rate table, so a foreign-currency posting is refused until then; this task's tests post in the company's own currency only.
+Task 7 deletes this definition and adds the real one beside the rate table, so a foreign-currency posting is refused until then; this task's tests post in the company's own currency only.
 
 The `"posting"` author on a recorded entry names the poster's channel; the person who caused the posting is the poster's own record (the invoice's `postedBy`, Task 14).
 
-- [ ] **Step 7: Build and run**
+- [ ] **Step 6: Build and run**
 
-Run: Build lims, Model suite `"[ledger]"`, Model suite `"[authorization]"`. Expected: all pass. Run the four mutations named in `test_ledger_entries.cpp` and restore each.
+Run: Build lims, Model suite `"[ledger]"`, Model suite `"[authorization]"`. Expected: all pass. Run the two mutations this task added to `test_ledger_entries.cpp` and restore each.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 cd /home/yaraslau/repo/morph
 git add examples/lims/ledger examples/lims/tests examples/lims/app/include/lims/app/declared_requirements.hpp
-git commit -m "Add lims journal entries: balanced, unrounded, reversed, recorded once per source
+git commit -m "Record lims postings once per source key and close ledger periods without drafts
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 ```
 
 ---
-### Task 6: Ledger — exchange rates, the reports, and money at ERP magnitude (hypothesis 8, first instance)
+### Task 7: Ledger — exchange rates, the reports, and money at ERP magnitude (hypothesis 8, first instance)
 
 **Files:**
 - Create: `examples/lims/ledger/include/lims/ledger/dto/rate_dto.hpp`, `examples/lims/ledger/include/lims/ledger/dto/report_dto.hpp`, `examples/lims/ledger/include/lims/ledger/models/ledger_report_model.hpp`, `examples/lims/ledger/src/models/ledger_rates.cpp`, `examples/lims/ledger/src/models/ledger_report_model.cpp`, `examples/lims/tests/test_ledger_reports.cpp`
-- Modify: `ledger_entity.hpp` (`ExchangeRateRecord`), `ledger_schema.cpp`, `ledger_model.hpp` (rate actions, `rateOn`'s Doxygen), `ledger_entries.cpp` (delete the interim `rateOn`), `ledger_authorization.hpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `examples/lims/README.md` (decision 29)
+- Modify: `cmake/morph_add_rung.cmake` (the `stress` label), `.github/workflows/ci.yml` (coverage excludes `stress`), `ledger_entity.hpp` (`ExchangeRateRecord`), `ledger_schema.cpp`, `ledger_model.hpp` (rate actions, `rateOn`'s Doxygen), `ledger_entries.cpp` (delete the interim `rateOn`), `ledger_authorization.hpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `examples/lims/README.md` (decision 29)
 
 **Interfaces:**
 - Consumes: `ExactSum`, `OutOfRange`, `EntryRecord`, `EntryLineRecord`, `AccountRecord`, `LedgerModel::record`.
@@ -3537,8 +3709,9 @@ TEST_CASE("ledger reports: trial balance, account balance and account ledger agr
 // Hypothesis 8, first half. The summation every report uses, at the magnitude the design names: 10^7 lines of up to
 // 10^9 minor units (a total of at most 10^16 minor units, inside int64), and an over-range total.
 // Mutation: make ExactSum::add use operator+ (the over-range case reports a clamped total and add() returns true).
-TEST_CASE("Hypothesis 8: ten million lines of up to 10^9 minor units total exactly, and an over-range total is refused",
-          "[lims][ledger][h8]") {
+TEST_CASE("Stress: Hypothesis 8: ten million lines of up to 10^9 minor units total exactly, and an over-range total is "
+          "refused",
+          "[lims][ledger][h8][stress]") {
     constexpr std::int64_t kLines = 10'000'000;
     constexpr std::uint64_t kMaxMinor = 1'000'000'000;
     lims::ExactSum sum;
@@ -3833,13 +4006,26 @@ TrialBalanceView LedgerReportModel::execute(const TrialBalance& action) {
 
 and `AccountBalance` (the account's debit and credit totals to `asOf`, `balance = checkedSub(debit, credit)` — `OutOfRange` when it does not fit) and `AccountLedger` (the account's lines from `from` to `to`, each with the running `balance` debit-positive, starting from the balance before `from`) in the same file, built from `postedLines`, `accountOf`, `addExact` and `asAmount` as `TrialBalance` is. An invisible company answers an empty view. `AccountType` read from a row is range-checked as `ledger_model.cpp` does; reuse that check by moving `toView(db::AccountRecord)`'s range test into a free `accountTypeOf(int)` in `ledger_entity.hpp`'s namespace if both files need it.
 
-- [ ] **Step 6: Build and run, and record the measured time**
+- [ ] **Step 6: Label the ten-million-line case `stress`**
+
+The repository's convention for a long-running case is the ctest label `stress`, which CI's ladder legs leave out with `ctest -L ladder -LE stress`. A ladder case's labels come from `catch_discover_tests` uniformly, and the one per-case label it already gets is `journey`, from a post-pass keyed on the name's `Journey: ` prefix; `Stress: ` is keyed the same way. In `cmake/morph_add_rung.cmake`, in the generated `ladder_${_rung}_tests_journey_label.cmake` content, add after the `Journey: ` branch:
+
+```cmake
+    elseif(_ladder_test MATCHES \"Stress: \")
+        set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder-${_rung};stress\")
+```
+
+so the block reads `if(... \"Journey: \") ... elseif(... \"Stress: \") ... endif()`, extend the comment above it to say that a `Stress: ` case gets `stress` the same way, and widen the configure-time guard's regex to `TEST_CASE\\(\"(Journey|Stress): [^\"]*;` with its message naming the prefix it found. In `.github/workflows/ci.yml`'s coverage step (`LLVM_PROFILE_FILE=… ctest --preset clang-coverage`), add `-LE stress`, since coverage instruments the summation loop ten million times and measures nothing it would not measure once.
+
+Run: Configure, then `ctest --test-dir build/linux-everything -L stress -N` and `ctest --test-dir build/linux-everything -L ladder-lims -N | tail -1`. Expected: the first lists exactly `lims.Stress: Hypothesis 8: …`; the second's count includes it, so the rung's own run and the plan's "Everything labelled for the rung" still measure it. Control: rename the case without the `Stress: ` prefix, reconfigure, and see `-L stress -N` list nothing; restore it. The case runs in every local `ctest -L ladder-lims` and in a direct run of the binary; CI's ladder legs leave it out, as they do every `stress` case.
+
+- [ ] **Step 7: Build and run, and record the measured time**
 
 Run: Build lims, Model suite `"[ledger]"`. Expected: all pass. The `WARN` line prints the measured summation time; copy it into decision 29. Run the four mutations named in the file and restore each. Then run Everything labelled for the rung.
 
-- [ ] **Step 7: Record decision 29 in the README**
+- [ ] **Step 8: Record decision 29 in the README**
 
-Append, filling the two bracketed measurements from Step 6's output (the `WARN` line and the clamped value):
+Append, filling the two bracketed measurements from Step 7's output (the `WARN` line and the clamped value):
 
 ```markdown
 ### 29. The ledger validates and never rounds, and its totals are exact or refused (hypothesis 8, first instance)
@@ -3847,10 +4033,10 @@ Append, filling the two bracketed measurements from Step 6's output (the `WARN` 
 A journal entry is recorded only if it has two or more lines whose debits equal their credits in the transaction
 currency and in company currency, each amount a whole number of its currency's minor units (`lims::entryProblem`).
 The ledger rounds nothing: a poster converts and rounds, half-up, line by line, and adds an explicit rounding line
-where that leaves a difference. A posting reaches the ledger only through `LedgerModel::record`, which is not an
-action — no client can post an entry under a document's name — and is recorded once per company and source key
-through an `IReplayLedger` over `ledger_posting_sources`, in the entry's own transaction, so a retry answers the first
-entry. Entries are immutable once posted; a correction is a posted reversal naming the original. A period is open,
+where that leaves a difference. A posting is a poster's document reaching the ledger through the app's wiring
+(decision 37), never a client's hand-made entry under a document's name, and is recorded once per company and source
+key through an `IReplayLedger` over `ledger_posting_sources`, in the entry's own transaction, so a retry answers the
+first entry. Entries are immutable once posted; a correction is a posted reversal naming the original. A period is open,
 closing (no new drafts; postings and posting of existing drafts continue) or closed (nothing more is recorded; each
 account's totals are frozen in `ledger_period_balances`), and closes only with no draft left in it. An exchange rate
 is entered per company and currency pair from a date; the rate on a date is the latest one starting on or before it,
@@ -3863,14 +4049,21 @@ holds: `operator+` on the same values saturates to [measured clamp] and reports 
 every total in lims using `ExactSum`, which reports and models do by construction and nothing in morph enforces. Not
 measured: a report over 10⁷ rows in the database — the rows are loaded into memory, which is hypothesis 10's subject
 in Part C.
+
+**One transaction currency per entry.** An entry carries one transaction currency, and balances in it and in company currency. The design allows an entry to
+"sum to zero per transaction currency", which admits one entry mixing several; lims's posters each post one document
+in one currency (an invoice in its client's, a receipt in its supplier's), and a single currency per entry keeps the
+rate one fact of the entry rather than one per line, so `PostingRequest` carries one `currency` and one `rate` and
+`entryProblem` checks that one. A document in several currencies would post one entry per currency; nothing in Parts
+B and C produces one.
 ```
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 cd /home/yaraslau/repo/morph
-git add examples/lims/ledger examples/lims/tests examples/lims/app/include/lims/app/declared_requirements.hpp \
-        examples/lims/README.md
+git add cmake/morph_add_rung.cmake .github/workflows/ci.yml examples/lims/ledger examples/lims/tests \
+        examples/lims/app/include/lims/app/declared_requirements.hpp examples/lims/README.md
 git commit -m "Add lims exchange rates and ledger reports, and measure exact totals at ERP magnitude
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -3879,7 +4072,7 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 
 ---
 
-### Task 7: Billing — the module, settings, billing clients and price lists
+### Task 8: Billing — the module, settings, billing clients and price lists
 
 **Files:**
 - Create: `examples/lims/billing/include/.clang-tidy`, `examples/lims/billing/include/lims/billing/core/types.hpp`, `examples/lims/billing/include/lims/billing/dto/settings_dto.hpp`, `examples/lims/billing/include/lims/billing/dto/price_dto.hpp`, `examples/lims/billing/include/lims/billing/db/billing_entity.hpp`, `examples/lims/billing/include/lims/billing/models/price_list_model.hpp`, `examples/lims/billing/include/lims/billing/authorization/billing_authorization.hpp`, `examples/lims/billing/src/db/billing_schema.cpp`, `examples/lims/billing/src/models/price_list_model.cpp`, `examples/lims/billing/src/authorization/billing_authorization.cpp`, `examples/lims/tests/test_price_lists.cpp`, `examples/lims/tests/compile_checks/billing_includes_ledger.cpp`, `examples/lims/tests/compile_checks/ledger_includes_billing.cpp`
@@ -4149,7 +4342,7 @@ The remaining actions follow the conventions' action and list shapes; lists filt
 
 - [ ] **Step 5: The module, its probes, its rules in the edge table**
 
-`examples/lims/CMakeLists.txt`: `MODULES org posting lab ledger billing app`; add `_lims_boundary_probe(billing_includes_ledger billing fail lims/ledger/models/ledger_model.hpp)` and `_lims_boundary_probe(ledger_includes_billing ledger fail lims/billing/models/price_list_model.hpp)`, with the two probe files in Task 2's shape (comments: "billing reaches the ledger only through the posting contract and the app's port" / "the ledger knows nothing of invoices"). Add the four declared actions to `declaredRequirements()` and the coverage tuple, `"PriceListModel"` to its model list, and a `billing/` row to the README's Modules table: `` | `billing/` | billing settings, clients, price lists, billable lines, invoices, the edit lease, billing runs | `org`, `posting` | ``.
+`examples/lims/CMakeLists.txt`: `MODULES org posting lab ledger billing app` and `USES lab:org ledger:org,posting billing:org,posting`; add `_lims_boundary_probe(billing_includes_ledger billing fail lims/ledger/models/ledger_model.hpp)` and `_lims_boundary_probe(ledger_includes_billing ledger fail lims/billing/models/price_list_model.hpp)`, with the two probe files in Task 2's shape (comments: "billing reaches the ledger only through the posting contract and the app's port" / "the ledger knows nothing of invoices"). Add the four declared actions to `declaredRequirements()` and the coverage tuple, `"PriceListModel"` to its model list, and a `billing/` row to the README's Modules table: `` | `billing/` | billing settings, clients, price lists, billable lines, invoices, the edit lease, billing runs | `org`, `posting` | ``.
 
 - [ ] **Step 6: Build and run**
 
@@ -4183,21 +4376,554 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 ```
 
 ---
-### Task 8: Domain events — `lab.AnalysisPublished` becomes a billable line (hypothesis 2, first instance)
+### Task 9: Domain events — `lab.AnalysisPublished` becomes a billable line (hypothesis 2, first instance)
 
 **Files:**
-- Create: `examples/lims/lab/include/lims/lab/events/lab_events.hpp`, `examples/lims/lab/include/lims/lab/events/lab_outbox_store.hpp`, `examples/lims/lab/src/events/lab_events.cpp`, `examples/lims/billing/include/lims/billing/dto/line_dto.hpp`, `examples/lims/billing/include/lims/billing/models/invoice_model.hpp`, `examples/lims/billing/src/models/invoice_model.cpp`, `examples/lims/app/include/lims/app/event_wiring.hpp`, `examples/lims/app/src/event_wiring.cpp`, `examples/lims/tests/billing_test_support.hpp`, `examples/lims/tests/test_domain_events.cpp`
-- Modify: `examples/lims/lab/include/lims/lab/db/lims_entity.hpp` (`LabOutboxRecord`), `examples/lims/lab/src/db/schema.cpp` (migration), `examples/lims/lab/src/models/sample_model.cpp` (`writeState`), `billing_entity.hpp` (`BillableLineRecord`, `ConsumedEventRecord`), `billing_schema.cpp`, `examples/lims/src/server/main.cpp` (the relay on a timer), `examples/lims/README.md` (decision 31)
+- Create: `examples/common/testkit/server_connection.hpp`, `examples/lims/app/include/lims/app/service_principals.hpp`, `examples/lims/app/include/lims/app/internal_client.hpp`, `examples/lims/app/src/internal_client.cpp`, `examples/lims/lab/include/lims/lab/events/lab_events.hpp`, `examples/lims/lab/include/lims/lab/events/lab_outbox_store.hpp`, `examples/lims/lab/src/events/lab_events.cpp`, `examples/lims/billing/include/lims/billing/dto/line_dto.hpp`, `examples/lims/billing/include/lims/billing/models/invoice_model.hpp`, `examples/lims/billing/src/models/invoice_model.cpp`, `examples/lims/app/include/lims/app/event_wiring.hpp`, `examples/lims/app/src/event_wiring.cpp`, `examples/lims/tests/billing_test_support.hpp`, `examples/lims/tests/test_domain_events.cpp`
+- Modify: `examples/common/testkit/backend_rig.hpp` (`server()`, `connect()`, the events hello), `examples/common/testkit/test_backend_rig.cpp`, `examples/lims/org/include/lims/org/dto/role_dto.hpp` (`Service`), `examples/lims/org/src/models/org_model.cpp` (`kMaxRole`), `examples/lims/org/include/lims/org/core/model_support.hpp` (`isServicePrincipal`, `requireServicePrincipal`), `examples/lims/org/src/models/auth_model.cpp` (its reserved-namespace check uses `isServicePrincipal`), `examples/lims/lab/include/lims/lab/db/lims_entity.hpp` (`LabOutboxRecord`), `examples/lims/lab/src/db/schema.cpp` (migration), `examples/lims/lab/src/models/sample_model.cpp` (`writeState`), `billing_entity.hpp` (`BillableLineRecord`, `ConsumedEventRecord`), `billing_schema.cpp`, `billing_authorization.hpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `examples/lims/src/server/main.cpp` (the events client and the relay on a timer), `examples/lims/README.md` (decision 31)
 
 **Interfaces:**
-- Consumes: `morph::journal::OutboxRelay`, `morph::journal::LogEntry`, `morph::journal::IActionLog`, `morph::offline::IReplayLedger`, `PriceListModel::priceOn`, `OrgModel::findSite`.
-- Produces: `struct lims::AnalysisPublished { ResultId result; SampleId sample; AnalysisId analysis; ClientId client; SiteId site; Timestamp publishedAt; }`; `inline constexpr std::string_view lims::kAnalysisPublished = "lab.AnalysisPublished"`; `std::vector<morph::journal::LogEntry> lims::drainLabOutbox()`; `void lims::markLabOutboxRelayed(std::span<morph::journal::LogEntry const>)`; `void lims::writeAnalysisPublished(Lightweight::DataMapper&, db::SampleRecord const&, std::string const& principal)` (lab-internal); `struct lims::BillableEvent { std::string eventId; ResultId result; SampleId sample; AnalysisId analysis; ClientId client; SiteId site; CompanyId company; Timestamp publishedAt; }`; `BillableLineView { BillableLineId id; CompanyId company; SiteId site; ClientId client; SampleId sample; ResultId result; AnalysisId analysis; Timestamp publishedAt; BillableLineState state; Amount amount; CurrencyCode currency; InvoiceId invoice; std::string eventId; }`; `ListBillableLines { CompanyId company; ClientId client; SampleId sample; }` → `ListBillableLinesResult`; `static BillableLineView InvoiceModel::consume(BillableEvent const&)`; model `lims::InvoiceModel` (`"InvoiceModel"`); record `Billing_Line`; `class lims::app::BillingEventSink final : public morph::journal::IActionLog`; `std::size_t lims::app::relayLabEvents()`; test helpers `lims::test::LabFixture { ClientId client; AnalysisId nitrate; SampleId sample; std::vector<ResultId> results; }`, `LabFixture lims::test::readyToPublish(std::string reference = "WW-1")`, `LabFixture lims::test::publishedSample(std::string reference = "WW-1")`, `void lims::test::billingFor(ClientId, CurrencyCode = EUR)`.
+- Consumes: `morph::journal::OutboxRelay`, `morph::journal::LogEntry`, `morph::journal::IActionLog`, `morph::offline::IReplayLedger`, `morph::backend::RemoteServer`, `morph::backend::SimulatedRemoteBackend`, `morph::bridge::Bridge`, `morph::bridge::BridgeHandler`, `morph::async::Completion<T>::makeSettleable`, `morph::session::TokenIssuer`, `PriceListModel::priceOn`, `OrgModel::findSite`, `OrgModel::rolesIn`.
+- Produces: in the testkit, `morph::ladder::testkit::EventsHello`, `class morph::ladder::testkit::ServerConnection { registerModel; execute; watch; changes; heardOf; eventually; close; }`, `RemoteServer& BackendRig::server()`, `std::unique_ptr<ServerConnection> BackendRig::connect()` (`Mode::Socket` only); `LimsRole::Service`; `bool lims::isServicePrincipal(std::string_view)`, `void lims::requireServicePrincipal(std::string_view action)`; `lims::app::kEventsPrincipal`, `kSchedulePrincipal`, `kPostingPrincipal`; `class lims::app::InternalClient { InternalClient(RemoteServer&, std::string_view secret, std::string principal); Completion<R> dispatch<Model>(Action); R call<Model>(Action); }`; `struct lims::AnalysisPublished { ResultId result; SampleId sample; AnalysisId analysis; ClientId client; SiteId site; Timestamp publishedAt; }`; `inline constexpr std::string_view lims::kAnalysisPublished = "lab.AnalysisPublished"`; `std::vector<morph::journal::LogEntry> lims::drainLabOutbox()`; `void lims::markLabOutboxRelayed(std::span<morph::journal::LogEntry const>)`; `void lims::writeAnalysisPublished(Lightweight::DataMapper&, db::SampleRecord const&, std::string const& principal)` (lab-internal); `RecordBillableLine { std::string eventId; ResultId result; SampleId sample; AnalysisId analysis; ClientId client; SiteId site; Timestamp publishedAt; }` → `BillableLineView { BillableLineId id; CompanyId company; SiteId site; ClientId client; SampleId sample; ResultId result; AnalysisId analysis; Timestamp publishedAt; BillableLineState state; Amount amount; CurrencyCode currency; InvoiceId invoice; std::string eventId; }`; `ListBillableLines { CompanyId company; ClientId client; SampleId sample; }` → `ListBillableLinesResult`; model `lims::InvoiceModel` (`"InvoiceModel"`); record `Billing_Line`; `class lims::app::BillingEventSink final : public morph::journal::IActionLog { explicit BillingEventSink(InternalClient&); }`; `std::size_t lims::app::relayLabEvents(InternalClient&)`; test helpers `lims::test::LabFixture { ClientId client; AnalysisId nitrate; SampleId sample; std::vector<ResultId> results; }`, `LabFixture lims::test::readyToPublish(std::string reference = "WW-1")`, `LabFixture lims::test::publishedSample(std::string reference = "WW-1")`, `void lims::test::billingFor(ClientId, CurrencyCode = EUR)`, `lims::test::kServiceSecret`, `void lims::test::grantService(std::string const&, Scope = seeded company)`, `std::size_t lims::test::relayLabEvents()`.
 
-The event id is `lab.AnalysisPublished:<result id>:<sample version after publishing>`: one event per published result, and a redelivery carries the same id. The payload is `AnalysisPublished` as JSON; billing never sees that type — the app decodes it and hands billing its own `BillableEvent`, so neither module includes the other.
+The event id is `lab.AnalysisPublished:<result id>:<sample version after publishing>`: one event per published result, and a redelivery carries the same id. The payload is `AnalysisPublished` as JSON; billing never sees that type — the app decodes it and sends billing its own `RecordBillableLine`, so neither module includes the other.
+
+Billing's consumer is an action, `RecordBillableLine`, and the relay reaches it the way a socket client would: `lims::app::InternalClient` is a `Bridge` over `SimulatedRemoteBackend` into the server's own `RemoteServer`, under `system:events` with a token the server mints from its own secret (`examples/LADDER.md`, "Background jobs"; bookmarks' metadata worker is the same shape). So the line is written inside a dispatch — authorized by the edge and by the declared rule, journaled, its effects fanned out to watchers — and nothing installs a session by hand. A `system:` principal is one no sign-in yields (`LimsLogin` refuses the namespace), and it holds `LimsRole::Service` at a company like any role, through `AssignRole`; `RecordBillableLine` asks for both, so a person given the role still cannot send it.
 
 A line whose client is not registered for billing at the sample's company, or for which no price is in force, is recorded `Unpriced` with no amount, not refused: a consumer that refuses an event stops the relay at that event, and every later event waits behind it (measured below).
 
-- [ ] **Step 1: The shared test fixture**
+- [ ] **Step 1: A rig connection that closes on its own, and the rig's server**
+
+The lims suites need what `BackendRig` does not yet give: one connection closed while others stay, and the events each received — Task 13's lease lapse, Task 15's and Task 16's fan-out, Task 11's progress. The rig is extended here, in the testkit every rung shares, rather than a raw-server rig copied into lims.
+
+Create `examples/common/testkit/server_connection.hpp`:
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <future>
+#include <glaze/glaze.hpp>
+#include <memory>
+#include <morph/core/connection_writer.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/session/session.hpp>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <utility>
+#include <vector>
+
+/// @file
+/// A connection opened on a `RemoteServer` in process, as a socket server opens one for a client: it registers
+/// models, executes, watches records and closes, and keeps every event the server writes to it. `BackendRig::connect`
+/// hands these out in `Mode::Socket`, so a test can close one connection while others stay and see what each was
+/// told.
+
+namespace morph::ladder::testkit {
+
+/// @brief Negotiates server-sent events for the connection its kind arrives on, as the UI service's `ui-hello` does.
+class EventsHello final : public ::morph::backend::IEnvelopeService {
+public:
+    using IEnvelopeService::handle;
+
+    /// @brief The kind it serves.
+    static constexpr std::string_view kKind = "testkit-events-hello";
+
+    /// @brief Whether it serves @p kind.
+    /// @param kind The envelope's kind.
+    /// @return `true` for `testkit-events-hello`.
+    [[nodiscard]] bool serves(std::string_view kind) const override { return kind == kKind; }
+
+    /// @brief Answers `ok`.
+    /// @param request The envelope.
+    /// @return The reply.
+    [[nodiscard]] std::string handle(::morph::wire::Envelope const& request,
+                                     ::morph::session::IAuthorizer const& /*authorizer*/) override {
+        return ::morph::wire::encode(::morph::wire::makeOk(request.callId));
+    }
+
+    /// @brief Answers `ok` and records that the connection takes events.
+    /// @param request The envelope.
+    /// @param authorizer The authorizer.
+    /// @param facts The connection's facts.
+    /// @return The reply.
+    [[nodiscard]] std::string handle(::morph::wire::Envelope const& request,
+                                     ::morph::session::IAuthorizer const& authorizer,
+                                     ::morph::backend::ConnectionFacts& facts) override {
+        facts.events = true;
+        return handle(request, authorizer);
+    }
+};
+
+/// @brief One connection on a server, opened in process, and every event the server sent it.
+///
+/// Destroy it before the rig that made it: the server it holds runs on the rig's workers.
+class ServerConnection {
+public:
+    /// @brief Opens a connection on @p server that takes events.
+    /// @param server The server; its config must serve `EventsHello`, as `BackendRig`'s does.
+    explicit ServerConnection(std::shared_ptr<::morph::backend::RemoteServer> server)
+        : _server{std::move(server)}, _sent{std::make_shared<Sent>()}, _cid{_server->openConnection()} {
+        _server->setConnectionWriter(_cid, {.write = [sent = _sent](std::string message) {
+                                                std::scoped_lock const lock{sent->mutex};
+                                                sent->messages.push_back(std::move(message));
+                                            },
+                                            .backlog = [] { return std::size_t{0}; }});
+        ::morph::wire::Envelope hello;
+        hello.kind = std::string{EventsHello::kKind};
+        hello.callId = nextCall();
+        static_cast<void>(_server->handleInline(::morph::wire::encode(hello), _cid));
+    }
+
+    ~ServerConnection() { close(); }
+    ServerConnection(ServerConnection const&) = delete;
+    ServerConnection& operator=(ServerConnection const&) = delete;
+    ServerConnection(ServerConnection&&) = delete;
+    ServerConnection& operator=(ServerConnection&&) = delete;
+
+    /// @brief Registers a private instance of @p typeId on this connection.
+    /// @param typeId The model's registered id.
+    /// @param session Who registers it.
+    /// @return The instance id; 0 when the server refused.
+    std::uint64_t registerModel(std::string_view typeId, ::morph::session::Context const& session) {
+        ::morph::wire::Envelope env;
+        env.kind = "register";
+        env.callId = nextCall();
+        env.typeId = std::string{typeId};
+        env.session = session;
+        return request(std::move(env)).modelId;
+    }
+
+    /// @brief Executes @p actionType with @p body on instance @p modelId of @p modelType.
+    /// @param modelId The instance `registerModel` gave.
+    /// @param modelType The model's registered id.
+    /// @param actionType The action's registered id.
+    /// @param body The action as JSON.
+    /// @param session Who executes it.
+    /// @return The reply envelope (`ok` or `err`).
+    ::morph::wire::Envelope execute(std::uint64_t modelId, std::string_view modelType, std::string_view actionType,
+                                    std::string body, ::morph::session::Context const& session) {
+        ::morph::wire::Envelope env;
+        env.kind = "execute";
+        env.callId = nextCall();
+        env.modelId = modelId;
+        env.modelType = std::string{modelType};
+        env.actionType = std::string{actionType};
+        env.body = std::move(body);
+        env.session = session;
+        return request(std::move(env));
+    }
+
+    /// @brief Adds @p records to this connection's watch set.
+    /// @param records Record wire names.
+    /// @param session Who watches.
+    /// @return The reply.
+    ::morph::wire::Envelope watch(std::vector<std::string> records, ::morph::session::Context const& session) {
+        ::morph::wire::Envelope env;
+        env.kind = std::string{::morph::wire::kWatchKind};
+        env.callId = nextCall();
+        env.session = session;
+        env.body = glz::write_json(::morph::wire::WatchBody{.records = std::move(records), .instances = {}, .replace = false})
+                       .value_or(std::string{});
+        return ::morph::wire::decode(_server->handleInline(::morph::wire::encode(env), _cid));
+    }
+
+    /// @brief Every `changes` event the server sent this connection, decoded, in order.
+    /// @return The bodies.
+    [[nodiscard]] std::vector<::morph::wire::ChangesBody> changes() const {
+        std::vector<std::string> messages;
+        {
+            std::scoped_lock const lock{_sent->mutex};
+            messages = _sent->messages;
+        }
+        std::vector<::morph::wire::ChangesBody> bodies;
+        for (auto const& message : messages) {
+            auto const env = ::morph::wire::decode(message);
+            if (env.kind != ::morph::wire::kEventKind) {
+                continue;
+            }
+            ::morph::wire::EventBody event;
+            if (glz::read_json(event, env.body) || event.topic != ::morph::wire::kChangesTopic) {
+                continue;
+            }
+            if (auto body = ::morph::wire::readChangesBody(event.payload.str)) {
+                bodies.push_back(std::move(*body));
+            }
+        }
+        return bodies;
+    }
+
+    /// @brief Whether any `changes` event sent so far names @p record.
+    /// @param record A record wire name.
+    /// @return `true` when one does.
+    [[nodiscard]] bool heardOf(std::string_view record) const {
+        for (auto const& body : changes()) {
+            for (auto const& change : body.records) {
+                if (change.record == record) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// @brief Polls @p pred until it holds or @p budget passes.
+    /// @tparam Pred A callable returning `bool`.
+    /// @param pred The condition.
+    /// @param budget How long to wait.
+    /// @return Whether it held.
+    template <class Pred>
+    [[nodiscard]] static bool eventually(Pred pred, std::chrono::milliseconds budget = std::chrono::milliseconds{3000}) {
+        auto const deadline = std::chrono::steady_clock::now() + budget;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (pred()) {
+                return true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds{10});
+        }
+        return pred();
+    }
+
+    /// @brief Closes the connection, as the transport does when its socket goes. Idempotent.
+    void close() {
+        if (!_closed.exchange(true)) {
+            _server->closeConnection(_cid);
+        }
+    }
+
+private:
+    struct Sent {
+        std::mutex mutex;
+        std::vector<std::string> messages;
+    };
+
+    [[nodiscard]] std::uint64_t nextCall() { return ++_callId; }
+
+    ::morph::wire::Envelope request(::morph::wire::Envelope env) {
+        auto promise = std::make_shared<std::promise<std::string>>();
+        auto answer = promise->get_future();
+        _server->handle(::morph::wire::encode(env),
+                        [promise](std::string reply) { promise->set_value(std::move(reply)); }, _cid);
+        return ::morph::wire::decode(answer.get());
+    }
+
+    std::shared_ptr<::morph::backend::RemoteServer> _server;
+    std::shared_ptr<Sent> _sent;
+    ::morph::backend::ConnectionId _cid;
+    std::uint64_t _callId = 0;
+    std::atomic<bool> _closed{false};
+};
+
+}  // namespace morph::ladder::testkit
+```
+
+The shapes are read from `tests/test_push_watch.cpp` (its `Rig`, `FanHello`, `executeOn`) and `include/morph/core/remote.hpp`; the field names `ConnectionWriter::write`/`backlog`, `ConnectionFacts::events` and `Envelope::modelId` are from those headers. Not verified by reading: that `register` is authorised by `LimsAuthorizer` without a role (its `authorizeRegister` is `IAuthorizer`'s default) — if `register` answers `err "unauthorized"`, read `session.hpp`'s `authorizeRegister` and give `LimsAuthorizer` the override `SigningAuthorizer` needs.
+
+In `examples/common/testkit/backend_rig.hpp`, include `"testkit/server_connection.hpp"` and `<morph/core/remote.hpp>`'s `ServerConfig`. In `Mode::Socket`, build the server with a config that serves `EventsHello`:
+
+```cpp
+            case Mode::Socket: {
+                _workerPool = std::make_unique<::morph::exec::ThreadPoolExecutor>(4);
+                ::morph::backend::ServerConfig config;
+                // Lets a connection from connect() take events; a socket client never sends its kind.
+                config.services.push_back(std::make_shared<EventsHello>());
+                if (authorizer) {
+                    _server = std::make_shared<::morph::backend::RemoteServer>(*_workerPool, authorizer, config);
+                } else {
+                    _server = std::make_shared<::morph::backend::RemoteServer>(*_workerPool, config);
+                }
+```
+
+(the rest of the case unchanged), and add, after `url()`:
+
+```cpp
+    /// @brief The server the rig's clients reach, for an internal client of the application under test.
+    /// @return The server, owned by this rig.
+    /// @throws std::logic_error in `Local`/`LocalSingleThread`, which run no server.
+    [[nodiscard]] ::morph::backend::RemoteServer& server() {
+        if (_mode != Mode::Socket) {
+            throw std::logic_error("BackendRig::server: only Mode::Socket runs a server");
+        }
+        return *_server;
+    }
+
+    /// @brief Opens a connection on the rig's server in process: one a test can close while the others stay, and
+    ///        that keeps what the server sent it.
+    /// @return The connection; destroy it before this rig.
+    /// @throws std::logic_error in `Local`/`LocalSingleThread`, which run no server.
+    [[nodiscard]] std::unique_ptr<ServerConnection> connect() {
+        if (_mode != Mode::Socket) {
+            throw std::logic_error("BackendRig::connect: only Mode::Socket runs a server");
+        }
+        return std::make_unique<ServerConnection>(_server);
+    }
+```
+
+In `examples/common/testkit/test_backend_rig.cpp` add:
+
+```cpp
+// Mutation: drop EventsHello from the Socket-mode config (the watch is answered, but the connection takes no events,
+// which the lims fan-out cases then fail on).
+TEST_CASE("BackendRig: connect() opens a closable connection on the Socket-mode server", "[testkit][rig]") {
+    morph::ladder::testkit::BackendRig rig{morph::ladder::testkit::Mode::Socket, 0};
+    auto first = rig.connect();
+    auto second = rig.connect();
+    CHECK(first->watch({}, {}).kind == "ok");
+    first->close();
+    first->close();  // idempotent
+    CHECK(second->watch({}, {}).kind == "ok");
+    CHECK_NOTHROW(rig.server());
+    morph::ladder::testkit::BackendRig local{morph::ladder::testkit::Mode::Local, 1};
+    CHECK_THROWS_AS(local.connect(), std::logic_error);
+    CHECK_THROWS_AS(local.server(), std::logic_error);
+}
+```
+
+Run: `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock cmake --build build/linux-everything --target ladder_common_tests -j10`, then `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock ctest --test-dir build/linux-everything -L ladder-0 --output-on-failure`. Expected: the new case and every existing testkit case pass; the rungs' Socket-mode suites are unchanged by the added service.
+
+- [ ] **Step 2: Service principals, the service role, and the internal client**
+
+Append `Service` to `LimsRole` in `role_dto.hpp` (`Service, ///< May run one module's reaction to another's, or a scheduled job: held only by the server's own `system:` principals.`), its `roleName` case `"service"`, the enumerator to the `glz::enumerate`, and set `kMaxRole` in `org_model.cpp` to `static_cast<int>(LimsRole::Service)`. In `org/core/model_support.hpp` add:
+
+```cpp
+/// @brief The principal namespace reserved for the server's own clients; no sign-in yields a principal in it.
+inline constexpr std::string_view kServicePrincipalPrefix = "system:";
+
+/// @brief Whether @p principal is one of the server's own clients.
+/// @param principal The principal.
+/// @return `true` for `system:<name>` with a non-empty name.
+[[nodiscard]] inline bool isServicePrincipal(std::string_view principal) noexcept {
+    return principal.starts_with(kServicePrincipalPrefix) && principal.size() > kServicePrincipalPrefix.size();
+}
+
+/// @brief Throws `Forbidden` unless the authenticated principal is one of the server's own clients.
+/// @param action The action, for the refusal.
+/// @throws Forbidden when it is not.
+inline void requireServicePrincipal(std::string_view action) {
+    if (!isServicePrincipal(currentPrincipal())) {
+        throw Forbidden{std::string{action} + ": only the server's own clients send it"};
+    }
+}
+```
+
+and make `auth_model.cpp`'s reserved-namespace check call `isServicePrincipal` (deleting its own `kServicePrincipalPrefix`). Add `LimsRole::Service` to `test_value_limits.cpp`'s naming case: `CHECK(lims::roleName(lims::LimsRole::Service) == "service");`.
+
+Create `examples/lims/app/include/lims/app/service_principals.hpp`:
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <string_view>
+
+/// @file
+/// The server's own clients. Each acts through `InternalClient` as a principal in the reserved `system:` namespace,
+/// which no sign-in yields, and holds `LimsRole::Service` at each company it acts for, assigned like any role
+/// (`AssignRole`, the administration screen); the server grants itself nothing.
+
+namespace lims::app {
+
+/// @brief Relays lab's events into billing.
+inline constexpr std::string_view kEventsPrincipal = "system:events";
+
+/// @brief Runs the billing schedule.
+inline constexpr std::string_view kSchedulePrincipal = "system:billing-schedule";
+
+/// @brief Records billing's postings in the ledger.
+inline constexpr std::string_view kPostingPrincipal = "system:posting";
+
+}  // namespace lims::app
+```
+
+Create `examples/lims/app/include/lims/app/internal_client.hpp`:
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <exception>
+#include <functional>
+#include <future>
+#include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/completion.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
+
+/// @file
+/// The server's own client: background work dispatches through the same `RemoteServer` a socket client reaches,
+/// under a service principal whose token the server mints, so it is authorized, journaled and fanned out like a
+/// user's call (`examples/LADDER.md`, "Background jobs").
+
+namespace lims::app {
+
+/// @brief A `Bridge` over `SimulatedRemoteBackend` into a server, acting as one service principal.
+///
+/// The bridge belongs to a one-thread executor of its own, where every call is issued and settled, so `call` may
+/// block any other thread — a relay pass, a schedule tick — without blocking the thread that delivers its answer.
+/// `call` must not be made on that executor; a Task handler awaits `dispatch` instead.
+class InternalClient {
+public:
+    /// @brief A client of @p server acting as @p principal.
+    /// @param server The server. Borrowed: it must outlive this client.
+    /// @param secret The token secret the server's authorizer verifies with.
+    /// @param principal A principal in the reserved `system:` namespace.
+    /// @throws ValidationError if @p principal is not a service principal.
+    InternalClient(::morph::backend::RemoteServer& server, std::string_view secret, std::string principal);
+
+    /// @brief Releases the bridge on its own executor. Every `dispatch` must have settled.
+    ~InternalClient();
+    InternalClient(InternalClient const&) = delete;
+    InternalClient& operator=(InternalClient const&) = delete;
+    InternalClient(InternalClient&&) = delete;
+    InternalClient& operator=(InternalClient&&) = delete;
+
+    /// @brief Dispatches @p action on a fresh instance of @p Model.
+    /// @tparam Model The model.
+    /// @tparam Action The action.
+    /// @param action The action.
+    /// @return Its result, settled on this client's executor; `co_await` it from a Task handler.
+    template <typename Model, typename Action>
+    [[nodiscard]] ::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result> dispatch(
+        Action action);
+
+    /// @brief Dispatches @p action on a fresh instance of @p Model and waits for its result.
+    /// @tparam Model The model.
+    /// @tparam Action The action.
+    /// @param action The action.
+    /// @return Its result.
+    /// @throws std::exception the server's refusal or the action's failure.
+    template <typename Model, typename Action>
+    typename ::morph::model::ActionTraits<Action>::Result call(Action action);
+
+    /// @brief The principal it acts as.
+    /// @return It.
+    [[nodiscard]] std::string const& principal() const noexcept { return _principal; }
+
+private:
+    /// @brief Runs @p task on the bridge's executor and waits for it.
+    void onOwner(std::function<void()> const& task);
+
+    std::string _principal;
+    ::morph::exec::ThreadPoolExecutor _owner{1};
+    std::optional<::morph::bridge::Bridge> _bridge;
+};
+
+template <typename Model, typename Action>
+::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result> InternalClient::dispatch(
+    Action action) {
+    using Result = typename ::morph::model::ActionTraits<Action>::Result;
+    auto [completion, promise] = ::morph::async::Completion<Result>::makeSettleable(&_owner);
+    auto settle = std::make_shared<typename ::morph::async::Completion<Result>::Promise>(std::move(promise));
+    _owner.post([this, settle, action = std::move(action)]() mutable {
+        try {
+            // The handler is kept alive by its call's callbacks: execute() returns before the server has run the
+            // action, and a handler destroyed here would deregister its instance under the pending call.
+            auto handler = std::make_shared<::morph::bridge::BridgeHandler<Model>>(*_bridge, &_owner);
+            handler->execute(std::move(action))
+                .then([settle, handler](Result result) { settle->resolve(std::move(result)); })
+                .onError([settle, handler](std::exception_ptr const& error) { settle->reject(error); });
+        } catch (...) {
+            settle->reject(std::current_exception());
+        }
+    });
+    return std::move(completion);
+}
+
+template <typename Model, typename Action>
+typename ::morph::model::ActionTraits<Action>::Result InternalClient::call(Action action) {
+    using Result = typename ::morph::model::ActionTraits<Action>::Result;
+    auto settled = std::make_shared<std::promise<Result>>();
+    auto answer = settled->get_future();
+    _owner.post([this, settled, action = std::move(action)]() mutable {
+        try {
+            auto handler = std::make_shared<::morph::bridge::BridgeHandler<Model>>(*_bridge, &_owner);
+            handler->execute(std::move(action))
+                .then([settled, handler](Result result) { settled->set_value(std::move(result)); })
+                .onError([settled, handler](std::exception_ptr const& error) { settled->set_exception(error); });
+        } catch (...) {
+            settled->set_exception(std::current_exception());
+        }
+    });
+    return answer.get();
+}
+
+}  // namespace lims::app
+```
+
+and `examples/lims/app/src/internal_client.cpp`:
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+#include "lims/app/internal_client.hpp"
+
+#include <cstdint>
+#include <morph/session/session_auth.hpp>
+
+#include "lims/org/core/errors.hpp"
+#include "lims/org/core/model_support.hpp"
+
+namespace lims::app {
+
+namespace {
+
+/// @brief When a service token expires: 2100-01-01. The server mints it at start-up and never re-issues it.
+constexpr std::int64_t kServiceTokenExpiresAtMs = 4102444800000;
+
+}  // namespace
+
+InternalClient::InternalClient(::morph::backend::RemoteServer& server, std::string_view secret, std::string principal)
+    : _principal{std::move(principal)} {
+    if (!isServicePrincipal(_principal)) {
+        throw ValidationError{"InternalClient: '" + _principal + "' is not in the reserved 'system:' namespace"};
+    }
+    // Minted here, not through LimsLogin, which refuses the reserved namespace: that refusal is what keeps a client
+    // from obtaining this authority. The secret is the authorizer's, so the token verifies like a user's.
+    ::morph::session::TokenIssuer const issuer{std::string{secret}, ::morph::session::hmacSha256};
+    ::morph::session::Context session;
+    session.principal = _principal;
+    session.token = issuer.issue(::morph::session::SessionToken{
+        .principal = _principal, .issuedAtMs = 0, .expiresAtMs = kServiceTokenExpiresAtMs, .roles = {}});
+    onOwner([this, &server, &session] {
+        _bridge.emplace(std::make_unique<::morph::backend::SimulatedRemoteBackend>(server), _owner);
+        _bridge->setDefaultSession(session);
+    });
+}
+
+InternalClient::~InternalClient() {
+    onOwner([this] { _bridge.reset(); });
+}
+
+void InternalClient::onOwner(std::function<void()> const& task) {
+    std::promise<void> done;
+    auto finished = done.get_future();
+    _owner.post([&task, &done] {
+        try {
+            task();
+            done.set_value();
+        } catch (...) {
+            done.set_exception(std::current_exception());
+        }
+    });
+    finished.get();
+}
+
+}  // namespace lims::app
+```
+
+`Completion<T>::makeSettleable` and `Promise::resolve`/`reject` are `include/morph/core/completion.hpp`'s ("Settleable promise seam"); the `Bridge(std::unique_ptr<IBackend>, IExecutor&)` construction and `setDefaultSession` are bookmarks' `App`'s. If a debug build's owner check refuses a one-thread `ThreadPoolExecutor` as a bridge owner, read `docs/spec/core/executor.md` for the serial executor it names for an owner off the GUI thread and use that; record which in decision 31.
+
+- [ ] **Step 3: The shared test fixture**
 
 Create `examples/lims/tests/billing_test_support.hpp`:
 
@@ -4205,14 +4931,21 @@ Create `examples/lims/tests/billing_test_support.hpp`:
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <algorithm>
+#include <cstddef>
 #include <morph/util/rational.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 
+#include "lims/app/event_wiring.hpp"
+#include "lims/app/internal_client.hpp"
+#include "lims/app/service_principals.hpp"
 #include "lims/billing/models/price_list_model.hpp"
 #include "lims/lab/models/analysis_catalog_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
 #include "lims_test_support.hpp"
+#include "testkit/backend_rig.hpp"
 
 /// @file
 /// A sample with verified results, ready to publish or published, and a client set up to be billed: what every
@@ -4305,12 +5038,36 @@ inline void billingFor(ClientId client, CurrencyCode currency = CurrencyCode::EU
     }
 }
 
+/// @brief The secret the test servers' authorizer and the service tokens share.
+inline constexpr std::string_view kServiceSecret = "lims-service-test-secret-at-least-32-bytes";
+
+/// @brief Gives @p principal the service role in @p scope, unless it holds it there already.
+/// @param principal A service principal.
+/// @param scope The scope; the seeded company by default.
+inline void grantService(std::string const& principal, Scope scope = Scope{seededCompany()}) {
+    auto const held = OrgModel::rolesIn(principal, scope);
+    if (std::ranges::find(held, LimsRole::Service) == held.end()) {
+        grant(principal, LimsRole::Service, scope);
+    }
+}
+
+/// @brief One relay pass over lab's outbox into billing, as the server runs it: through an internal client of a
+///        server of its own, as the events principal, which this gives the service role at the seeded company.
+/// @return How many events were relayed.
+/// @throws std::exception from billing's consumer, as `lims::app::relayLabEvents` does.
+inline std::size_t relayLabEvents() {
+    grantService(std::string{app::kEventsPrincipal});
+    ::morph::ladder::testkit::BackendRig rig{::morph::ladder::testkit::Mode::Socket, 0, limsAuthorizer(kServiceSecret)};
+    app::InternalClient events{rig.server(), kServiceSecret, std::string{app::kEventsPrincipal}};
+    return app::relayLabEvents(events);
+}
+
 }  // namespace lims::test
 ```
 
 If `CaptureConcentration`'s result type names its id other than `.id`, or `SampleModel` requires the capture on an `OpenSample`-attached handler, follow `test_declared_authorization.cpp`'s `twoSites()`, which this mirrors.
 
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 4: Write the failing test**
 
 Create `examples/lims/tests/test_domain_events.cpp`:
 
@@ -4324,16 +5081,20 @@ Create `examples/lims/tests/test_domain_events.cpp`:
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <memory>
 #include <morph/journal/outbox.hpp>
+#include <morph/session/session_auth.hpp>
 #include <span>
 #include <stdexcept>
 #include <string>
 
 #include "billing_test_support.hpp"
 #include "lims/app/event_wiring.hpp"
+#include "lims/app/internal_client.hpp"
 #include "lims/billing/models/invoice_model.hpp"
 #include "lims/lab/db/lims_entity.hpp"
 #include "lims/lab/events/lab_events.hpp"
+#include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
 
 using lims::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -4383,8 +5144,8 @@ TEST_CASE("domain events: a refused publish writes no outbox row", "[lims][event
     CHECK(lims::drainLabOutbox().empty());
 }
 
-// Hypothesis 2. Mutation: drop the replay-ledger lookup from InvoiceModel::consume (the redelivered batch bills the
-// result twice).
+// Hypothesis 2. Mutation: drop the replay-ledger lookup from InvoiceModel's RecordBillableLine (the redelivered batch
+// bills the result twice).
 TEST_CASE("Hypothesis 2: an event bills once, across a relay that dies before marking it and a restart",
           "[lims][events][h2]") {
     DbFixture fixture;
@@ -4393,12 +5154,17 @@ TEST_CASE("Hypothesis 2: an event bills once, across a relay that dies before ma
 
     // A relay that delivers and then dies before it marks the batch: what a crash between the two looks like.
     {
+        lims::test::grantService(std::string{lims::app::kEventsPrincipal});
+        morph::ladder::testkit::BackendRig rig{morph::ladder::testkit::Mode::Socket, 0,
+                                               lims::test::limsAuthorizer(lims::test::kServiceSecret)};
+        lims::app::InternalClient events{rig.server(), lims::test::kServiceSecret,
+                                         std::string{lims::app::kEventsPrincipal}};
         morph::journal::OutboxRelay dying;
         dying.drainOutbox = [] { return lims::drainLabOutbox(); };
         dying.markRelayed = [](std::span<morph::journal::LogEntry const> /*rows*/) {
             throw std::runtime_error{"process killed before marking the batch"};
         };
-        dying.sink = std::make_shared<lims::app::BillingEventSink>();
+        dying.sink = std::make_shared<lims::app::BillingEventSink>(events);
         CHECK_THROWS_WITH(dying.relay(), Catch::Matchers::ContainsSubstring("process killed"));
     }
     auto const afterCrash = linesOf(lab.sample);
@@ -4408,18 +5174,18 @@ TEST_CASE("Hypothesis 2: an event bills once, across a relay that dies before ma
     CHECK(lims::drainLabOutbox().size() == 1U);
 
     // The restart: a fresh relay over the same database redelivers the event, and billing recognises it.
-    CHECK(lims::app::relayLabEvents() == 1U);
+    CHECK(lims::test::relayLabEvents() == 1U);
     auto const afterRestart = linesOf(lab.sample);
     REQUIRE(afterRestart.size() == 1U);
     CHECK(afterRestart[0].id == afterCrash[0].id);
     CHECK(lims::drainLabOutbox().empty());
-    CHECK(lims::app::relayLabEvents() == 0U);
+    CHECK(lims::test::relayLabEvents() == 0U);
 }
 
 TEST_CASE("domain events: a line with no price in force is recorded unpriced, not refused", "[lims][events]") {
     DbFixture fixture;
     auto const lab = lims::test::publishedSample();
-    CHECK(lims::app::relayLabEvents() == 1U);
+    CHECK(lims::test::relayLabEvents() == 1U);
     lims::test::grant("bea", lims::LimsRole::BillingClerk);
     auto const lines = linesOf(lab.sample);
     REQUIRE(lines.size() == 1U);
@@ -4442,19 +5208,42 @@ TEST_CASE("Hypothesis 2: an event the consumer refuses holds back every event af
     }
     auto const lab = lims::test::publishedSample();
     lims::test::billingFor(lab.client);
-    CHECK_THROWS(lims::app::relayLabEvents());
+    CHECK_THROWS(lims::test::relayLabEvents());
     CHECK(lims::drainLabOutbox().size() == 2U);
+    CHECK(linesOf(lab.sample).empty());
+}
+
+// Mutation: drop requireServicePrincipal from RecordBillableLine (bea's line is recorded).
+TEST_CASE("domain events: a billable line is recorded only by the server's own client", "[lims][events]") {
+    DbFixture fixture;
+    auto const lab = lims::test::publishedSample();
+    lims::test::billingFor(lab.client);
+    lims::test::grantService("bea");  // even holding the role, a person is not the event relay
+    morph::ladder::testkit::BackendRig rig{morph::ladder::testkit::Mode::Socket, 1,
+                                           lims::test::limsAuthorizer(lims::test::kServiceSecret)};
+    morph::session::TokenIssuer const issuer{std::string{lims::test::kServiceSecret}, morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "bea"));
+    auto invoices = rig.client<lims::InvoiceModel>(0);
+    CHECK_THROWS_WITH(morph::ladder::testkit::awaitQt(invoices.execute(lims::RecordBillableLine{
+                          .eventId = "lab.AnalysisPublished:1:9",
+                          .result = lims::ResultId{1},
+                          .sample = lab.sample,
+                          .analysis = lab.nitrate,
+                          .client = lab.client,
+                          .site = lims::test::seededSite(),
+                          .publishedAt = morph::time::Timestamp{lims::test::at(2026, 11, 10)}})),
+                      Catch::Matchers::ContainsSubstring("only the server's own clients"));
     CHECK(linesOf(lab.sample).empty());
 }
 ```
 
-The poison event has no site, so the app cannot find its company and the consumer refuses it (`ValidationError` from `BillingEventSink::append`). `OutboxRelay::relay` appends in drain order and rethrows, so the good event behind it is never delivered and nothing is marked; the drained order is by outbox id, which puts the poison first.
+The poison event has no site, so it fails `RecordBillableLine::validate()` and the dispatch is refused with `ValidationError`, which `BillingEventSink::append` rethrows. `OutboxRelay::relay` appends in drain order and rethrows, so the good event behind it is never delivered and nothing is marked; the drained order is by outbox id, which puts the poison first.
 
-- [ ] **Step 3: Run it and see it fail**
+- [ ] **Step 5: Run it and see it fail**
 
 Run: Build lims. Expected: compile error, `lims/app/event_wiring.hpp` not found.
 
-- [ ] **Step 4: Lab writes the event with the fact**
+- [ ] **Step 6: Lab writes the event with the fact**
 
 In `lims_entity.hpp` add:
 
@@ -4666,9 +5455,9 @@ In `sample_model.cpp`'s `SampleModel::writeState`, before `sqlTxn.Commit();`, ad
 
 with `#include "lims/lab/events/lab_outbox_store.hpp"`.
 
-- [ ] **Step 5: Billing's lines and its consumer**
+- [ ] **Step 7: Billing's lines and its consumer action**
 
-Create `examples/lims/billing/include/lims/billing/dto/line_dto.hpp` with `BillableEvent` (documented "What billing is told when a result is published; not an action — only the app's event wiring hands one over"), `BillableLineView`, `ListBillableLines` (`validate()` always `true`; an empty filter field matches every line) and `ListBillableLinesResult`, and `BRIDGE_REGISTER_RECORD(lims::BillableLineView, "Billing_Line")`.
+Create `examples/lims/billing/include/lims/billing/dto/line_dto.hpp` with `RecordBillableLine` (documented "Bills one published result: what lab's `lab.AnalysisPublished` becomes in billing. Sent only by the app's event relay, as a service principal; a redelivered event id answers the line it made"; `validate()` requires an event id of at most 128 bytes and every id and the date), `BillableLineView`, `ListBillableLines` (`validate()` always `true`; an empty filter field matches every line) and `ListBillableLinesResult`, and `BRIDGE_REGISTER_RECORD(lims::BillableLineView, "Billing_Line")`.
 
 Append to `billing_entity.hpp`:
 
@@ -4711,16 +5500,36 @@ Create `invoice_model.hpp`: `class InvoiceModel` with `ListBillableLinesResult e
 ```cpp
     /// @brief Turns a published result into a billable line, once per event id.
     ///
-    /// Not an action: only the app's event wiring calls it. Priced at the price in force on the publishing date
-    /// (`PriceListModel::priceOn`); recorded `Unpriced` with no amount when there is none. The event id is recorded
-    /// in the line's own transaction through an `IReplayLedger`, so a redelivered event answers the line it made.
-    /// @param event The event.
+    /// Priced at the price in force on the publishing date (`PriceListModel::priceOn`); recorded `Unpriced` with no
+    /// amount when there is none. The event id is recorded in the line's own transaction through an
+    /// `IReplayLedger`, so a redelivered event answers the line it made.
+    /// @param action The event, as billing is told it.
     /// @return The line.
-    /// @throws ValidationError if the event names no event id, company, site, client, sample, result or analysis.
-    [[nodiscard]] static BillableLineView consume(BillableEvent const& event);
+    /// @throws ValidationError if the event names no event id, site, client, sample, result, analysis or date.
+    /// @throws Forbidden if the caller is not one of the server's own clients holding the service role at the
+    ///         site's company.
+    /// @throws NotFound if the site does not exist.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    BillableLineView execute(const RecordBillableLine& action);
 ```
 
-registered `BRIDGE_REGISTER_MODEL(lims::InvoiceModel, "InvoiceModel")` and `BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListBillableLines, "ListBillableLines", ::morph::model::Loggable::No)`.
+registered `BRIDGE_REGISTER_MODEL(lims::InvoiceModel, "InvoiceModel")`, `BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::RecordBillableLine, "RecordBillableLine")` with `BRIDGE_REGISTER_EFFECTS(lims::RecordBillableLine, ::morph::effects::changes<lims::BillableLineView>)`, and `BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListBillableLines, "ListBillableLines", ::morph::model::Loggable::No)`. In `billing_authorization.hpp`:
+
+```cpp
+/// @brief A billable line is recorded by a service principal holding the service role at the site's company.
+template <>
+struct Authorization<RecordBillableLine> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::Service;
+
+    /// @brief The site the published sample belongs to.
+    /// @param action The action.
+    /// @return It.
+    [[nodiscard]] static Scope scopeOf(RecordBillableLine const& action) { return Scope{action.site}; }
+};
+```
+
+and add it to `declaredRequirements()` (raising the array) and the coverage tuple, `"InvoiceModel"` to its model list.
 
 In `invoice_model.cpp`:
 
@@ -4759,7 +5568,7 @@ protected:
     }
 
 private:
-    // Borrowed for one consume(); never reseated.
+    // Borrowed for one RecordBillableLine; never reseated.
     // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
     Lightweight::DataMapper& _mapper;
 };
@@ -4769,28 +5578,35 @@ constexpr std::string_view kLineEvents = "billing.lines";
 
 }  // namespace
 
-BillableLineView InvoiceModel::consume(BillableEvent const& event) {
-    if (event.eventId.empty() || event.eventId.size() > 128 || !event.company.hasValue() || !event.site.hasValue() ||
-        !event.client.hasValue() || !event.sample.hasValue() || !event.result.hasValue() ||
-        !event.analysis.hasValue() || !event.publishedAt.hasValue()) {
-        throw ValidationError{"consume: event '" + event.eventId + "' does not name everything a line needs"};
+BillableLineView InvoiceModel::execute(const RecordBillableLine& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"RecordBillableLine: event '" + action.eventId + "' does not name everything a line needs"};
     }
-    auto const price = PriceListModel::priceOn(event.company, event.client, event.analysis, event.publishedAt);
+    requireServicePrincipal("RecordBillableLine");
+    requireRoleSomewhere<RecordBillableLine>();
+    auto const site = OrgModel::findSite(action.site);
+    if (!site.has_value()) {
+        throw NotFound{"RecordBillableLine: site " + std::to_string(*action.site) + " does not exist"};
+    }
+    requireAuthorized(action);
+    CompanyId const company = site->companyId;
+    auto const price = PriceListModel::priceOn(company, action.client, action.analysis, action.publishedAt);
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     ConsumedEvents consumed{mapper};
-    if (auto const line = consumed.lookup(kLineEvents, event.eventId)) {
+    if (auto const line = consumed.lookup(kLineEvents, action.eventId)) {
         return lineView(mapper, std::stoll(*line));
     }
     db::BillableLineRecord row;
-    row.companyId = *event.company;
-    row.siteId = *event.site;
-    row.clientId = *event.client;
-    row.sampleId = *event.sample;
-    row.resultId = *event.result;
-    row.analysisId = *event.analysis;
-    row.publishedAt = millisOf(event.publishedAt);
-    row.eventId = Lightweight::SqlAnsiString<128>{event.eventId};
+    row.companyId = *company;
+    row.siteId = *action.site;
+    row.clientId = *action.client;
+    row.sampleId = *action.sample;
+    row.resultId = *action.result;
+    row.analysisId = *action.analysis;
+    row.publishedAt = millisOf(action.publishedAt);
+    row.eventId = Lightweight::SqlAnsiString<128>{action.eventId};
     if (price.has_value()) {
         row.state = static_cast<int>(BillableLineState::Unbilled);
         row.amountNum = (*price->amount).numerator;
@@ -4800,7 +5616,7 @@ BillableLineView InvoiceModel::consume(BillableEvent const& event) {
         row.state = static_cast<int>(BillableLineState::Unpriced);
     }
     mapper.Create(row);
-    consumed.record(kLineEvents, event.eventId, std::to_string(row.id.Value()));
+    consumed.record(kLineEvents, action.eventId, std::to_string(row.id.Value()));
     sqlTxn.Commit();
     return lineView(mapper, static_cast<std::int64_t>(row.id.Value()));
 }
@@ -4808,7 +5624,7 @@ BillableLineView InvoiceModel::consume(BillableEvent const& event) {
 
 `lineView(mapper, id)` (anonymous namespace) loads the row and maps it, range-checking `state` and `currency` as Task 4's `toView` does and building `amount` only when both optionals are engaged. `ListBillableLines` answers the lines of the companies the caller can see, filtered by each engaged field of the query, sorted by id.
 
-- [ ] **Step 6: The app's wiring**
+- [ ] **Step 8: The app's wiring**
 
 Create `examples/lims/app/include/lims/app/event_wiring.hpp`:
 
@@ -4822,23 +5638,30 @@ Create `examples/lims/app/include/lims/app/event_wiring.hpp`:
 #include <string_view>
 #include <vector>
 
+#include "lims/app/internal_client.hpp"
+
 /// @file
-/// The one place lab's events meet billing: a journal sink that hands each `lab.AnalysisPublished` to billing's
-/// consumer, and one relay pass over lab's outbox into it.
+/// The one place lab's events meet billing: a journal sink that dispatches each `lab.AnalysisPublished` to billing's
+/// consumer action through an internal client, and one relay pass over lab's outbox into it.
 
 namespace lims::app {
 
 /// @brief A `morph::journal::IActionLog` that delivers lab's events to billing instead of storing them.
 ///
-/// `OutboxRelay` delivers to an action log; billing is a model. This adapter is what joins them: it decodes lab's
-/// event, finds the company of its site, and calls `InvoiceModel::consume`. Delivery is at least once (the relay's
-/// contract) and billing's consumer makes it once in effect.
+/// `OutboxRelay` delivers to an action log; billing's consumer is an action. This adapter joins them: it decodes lab's
+/// event and dispatches `RecordBillableLine` through the internal client, waiting for its answer, so the relay marks
+/// a batch only once billing has committed every line in it. Delivery is at least once (the relay's contract) and
+/// billing's consumer makes it once in effect.
 class BillingEventSink final : public ::morph::journal::IActionLog {
 public:
+    /// @brief A sink dispatching through @p client.
+    /// @param client The events principal's client. Borrowed: it must outlive this sink.
+    explicit BillingEventSink(InternalClient& client) : _client{client} {}
+
     /// @brief Delivers @p entry to billing.
     /// @param entry An entry `drainLabOutbox` produced.
-    /// @throws ValidationError if the entry is not a `lab.AnalysisPublished` billing can bill: an unknown type, a
-    ///         payload that does not decode, or a site that does not exist.
+    /// @throws ValidationError if the entry is not a `lab.AnalysisPublished` or its payload does not decode.
+    /// @throws std::exception billing's refusal of the line.
     void append(::morph::journal::LogEntry entry) override;
 
     /// @brief Nothing to flush: every `append` committed before it returned.
@@ -4850,14 +5673,18 @@ public:
     [[nodiscard]] std::vector<::morph::journal::LogEntry> entries(std::string_view entityKey = {}) const override;
 
 private:
+    // Borrowed for the sink's life; never reseated.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
+    InternalClient& _client;
     mutable std::mutex _mutex;
     std::vector<::morph::journal::LogEntry> _delivered;
 };
 
 /// @brief One relay pass: every event in lab's outbox to billing, then marked relayed.
+/// @param client The events principal's client.
 /// @return How many events were relayed.
 /// @throws std::exception from billing's consumer; the batch is then left unmarked and the next pass retries it.
-std::size_t relayLabEvents();
+std::size_t relayLabEvents(InternalClient& client);
 
 }  // namespace lims::app
 ```
@@ -4876,7 +5703,6 @@ Create `examples/lims/app/src/event_wiring.cpp`:
 #include "lims/billing/models/invoice_model.hpp"
 #include "lims/lab/events/lab_events.hpp"
 #include "lims/org/core/errors.hpp"
-#include "lims/org/models/org_model.hpp"
 
 namespace lims::app {
 
@@ -4888,18 +5714,13 @@ void BillingEventSink::append(::morph::journal::LogEntry entry) {
     if (auto const error = glz::read<glz::opts{.error_on_unknown_keys = false}>(published, entry.payload)) {
         throw ValidationError{"event " + entry.idempotencyKey + " does not decode"};
     }
-    auto const site = OrgModel::findSite(published.site);
-    if (!site.has_value()) {
-        throw ValidationError{"event " + entry.idempotencyKey + " names a site that does not exist"};
-    }
-    static_cast<void>(InvoiceModel::consume(BillableEvent{.eventId = entry.idempotencyKey,
-                                                          .result = published.result,
-                                                          .sample = published.sample,
-                                                          .analysis = published.analysis,
-                                                          .client = published.client,
-                                                          .site = published.site,
-                                                          .company = site->companyId,
-                                                          .publishedAt = published.publishedAt}));
+    static_cast<void>(_client.call<InvoiceModel>(RecordBillableLine{.eventId = entry.idempotencyKey,
+                                                                    .result = published.result,
+                                                                    .sample = published.sample,
+                                                                    .analysis = published.analysis,
+                                                                    .client = published.client,
+                                                                    .site = published.site,
+                                                                    .publishedAt = published.publishedAt}));
     std::scoped_lock const lock{_mutex};
     _delivered.push_back(std::move(entry));
 }
@@ -4915,11 +5736,11 @@ std::vector<::morph::journal::LogEntry> BillingEventSink::entries(std::string_vi
     return matching;
 }
 
-std::size_t relayLabEvents() {
+std::size_t relayLabEvents(InternalClient& client) {
     ::morph::journal::OutboxRelay relay;
     relay.drainOutbox = [] { return drainLabOutbox(); };
     relay.markRelayed = [](std::span<::morph::journal::LogEntry const> rows) { markLabOutboxRelayed(rows); };
-    relay.sink = std::make_shared<BillingEventSink>();
+    relay.sink = std::make_shared<BillingEventSink>(client);
     return relay.relay().relayed;
 }
 
@@ -4928,233 +5749,85 @@ std::size_t relayLabEvents() {
 
 If `glz::read` with that option spelling does not compile against the pinned glaze, use `glz::read_json(published, entry.payload)` — lab writes the payload, so it has no unknown keys.
 
-In `src/server/main.cpp`, after the server is listening, relay on a timer (include `<QTimer>` and `"lims/app/event_wiring.hpp"`):
+In `src/server/main.cpp` (include `<QTimer>`, `<morph/core/executor.hpp>`, `"lims/app/event_wiring.hpp"`, `"lims/app/internal_client.hpp"` and `"lims/app/service_principals.hpp"`), after the server is listening:
 
 ```cpp
+        // The server's own clients, and one thread their blocking passes run on: a relay pass waits for billing's
+        // answers, and waiting on the Qt thread would stall every socket this server serves.
+        lims::app::InternalClient events{*server, secret, std::string{lims::app::kEventsPrincipal}};
+        morph::exec::ThreadPoolExecutor background{1};
         // Lab's events reach billing through this relay; a pass that fails is logged and retried on the next tick,
         // since the batch stays unmarked.
         QTimer relayTimer;
-        QObject::connect(&relayTimer, &QTimer::timeout, [] {
-            try {
-                static_cast<void>(lims::app::relayLabEvents());
-            } catch (std::exception const& error) {
-                std::cerr << "lims-server: event relay: " << error.what() << '\n';
-            }
+        QObject::connect(&relayTimer, &QTimer::timeout, [&background, &events] {
+            background.post([&events] {
+                try {
+                    static_cast<void>(lims::app::relayLabEvents(events));
+                } catch (std::exception const& error) {
+                    std::cerr << "lims-server: event relay: " << error.what() << '\n';
+                }
+            });
         });
         relayTimer.start(1000);
 ```
 
-- [ ] **Step 7: Build, run, and measure what each consumer needed**
+The declaration order is the teardown order in reverse: the timer stops first, `background` joins its thread, then the client releases its bridge before `server` goes. Add to the file's environment comment: "The server's own clients act as `system:events` (and, from Tasks 11 and 14, `system:billing-schedule` and `system:posting`); each needs `LimsRole::Service` at every company it serves, assigned by a supervisor like any role."
 
-Run: Build lims, Model suite `"[events]"`, then Everything labelled for the rung. Expected: the five cases pass, existing suites unchanged. Run the h2 mutation and restore it. Then measure the code a consumer needed, and keep the output for decision 31:
+- [ ] **Step 9: Build, run, and measure hypothesis 2 against its criterion**
+
+The criterion, stated before measuring, is the design's refutation condition: hypothesis 2 is **refuted** if the consumer receives each event exactly once in effect across a restart, with only wiring code in `lims/app` and no per-consumer delivery loop or cursor. `OutboxRelay` is the delivery loop and lab's outbox rows are the cursor, so the expected outcome is refuted unless the measurement shows otherwise. Billing's consumer action and its idempotency ledger are the consumer itself — the design requires consumers to be idempotent by event id — not delivery code.
+
+Run: Build lims, Model suite `"[events]"`, then Everything labelled for the rung. Expected: the six cases pass, existing suites unchanged. Run the h2 mutation and the `requireServicePrincipal` mutation and restore them. Then read what the consumer needed, and keep the output for decision 31:
 
 ```bash
 cd /home/yaraslau/repo/morph
-wc -l examples/lims/app/src/event_wiring.cpp examples/lims/app/include/lims/app/event_wiring.hpp
-awk '/class ConsumedEvents/,/^};/' examples/lims/billing/src/models/invoice_model.cpp | wc -l
-awk '/^std::vector<::morph::journal::LogEntry> drainLabOutbox/,/^}/' examples/lims/lab/src/events/lab_events.cpp | wc -l
+grep -nE '\b(for|while)\b' examples/lims/app/src/event_wiring.cpp
+grep -rniE 'cursor|last_?(event|id)|position|offset' examples/lims/app examples/lims/billing/src examples/lims/billing/include
+grep -n 'OutboxRelay' examples/lims/app/src/event_wiring.cpp
+wc -l examples/lims/app/include/lims/app/internal_client.hpp examples/lims/app/src/internal_client.cpp
 ```
 
-- [ ] **Step 8: Record decision 31**
+Expected: the only loop in `event_wiring.cpp` is `entries()`'s filter over what was delivered (the `IActionLog` read API, not delivery); no cursor, last-delivered id or position anywhere in app or billing; `OutboxRelay` drives the pass. The last line is the internal client's cost, which Tasks 11 and 14 reuse unchanged.
 
-Append to the README, filling in the measured line counts:
+- [ ] **Step 10: Record decision 31**
+
+Append to the README the text for the outcome Step 9 measured. Refuted (the expected outcome):
 
 ```markdown
-### 31. Lab's events reach billing through an outbox, morph's relay and an adapter per consumer (hypothesis 2, first instance)
+### 31. Lab's events reach billing through an outbox, morph's relay and a dispatched consumer (hypothesis 2, first instance)
 
 `PublishSample` writes one `lab.AnalysisPublished` row per result into `lims_outbox`, in the transaction that
 publishes, with the event id `lab.AnalysisPublished:<result>:<sample version>`. `lims::app::relayLabEvents` runs one
 `morph::journal::OutboxRelay` pass: `drainOutbox` and `markRelayed` are lab's, and the sink is
-`lims::app::BillingEventSink`, which decodes the event, finds its site's company and calls `InvoiceModel::consume`.
+`lims::app::BillingEventSink`, which decodes the event and dispatches `RecordBillableLine` through
+`lims::app::InternalClient` — a `Bridge` over `SimulatedRemoteBackend` into the server's own `RemoteServer`, as
+`system:events`, with a token the server mints — so the line is written inside a dispatch: authorized by the edge and
+by its declared rule (the service role at the site's company, and a `system:` principal), journaled, and fanned out.
 Billing records each event id in `billing_consumed_events` through an `IReplayLedger`, in the line's transaction, so
 a redelivery answers the line it made. A result with no price in force is billed `Unpriced` rather than refused. The
-server relays once a second on a `QTimer`.
+server relays once a second, on a background thread a `QTimer` posts to.
 
-**Hypothesis 2 is confirmed for this instance.** Measured in `tests/test_domain_events.cpp`: a relay that delivers and
-dies before marking leaves one line and the event still in the outbox; a fresh relay redelivers it and billing answers
-the same line, so the event bills once in effect across the crash and the restart. The delivery loop is morph's
-(`OutboxRelay`), and the cursor is the outbox's own rows, but each consumer needed code of its own that is not wiring:
-an `IActionLog` that is not a log, because the relay delivers only to an action log ([measured] lines in
-`app/src/event_wiring.cpp` and its header), and an `IReplayLedger` over a table of its own ([measured] lines), because
-the ledger's storage is per consumer by design. Lab's side needed a drain and a mark of its own ([measured] lines) as
-bookmarks' outbox did. A consumer that refuses an event stops the relay at it: `OutboxRelay` delivers a batch in
-order and marks it only whole, so every later event waits behind a poison one — measured in the same file. Inventory's
-consumer of `lab.ResultCaptured` in Part C is the second instance; if it needs the same adapter and ledger, they are
-the framework seam to design.
+**Hypothesis 2 is refuted for this instance.** The criterion, set before measuring, was the design's: each event
+received exactly once in effect across a restart, with only wiring code in `lims/app` and no per-consumer delivery
+loop or cursor. Measured in `tests/test_domain_events.cpp`: a relay that delivers and dies before marking leaves one
+line and the event still in the outbox; a fresh relay redelivers it and billing answers the same line. The delivery
+loop is `OutboxRelay`'s, the cursor is the outbox's own rows, and what `lims/app` holds for this consumer is wiring: a
+sink that decodes and dispatches, and the relay's configuration. The internal client is [measured] lines in
+`app/` and is shared by every background job. A consumer that refuses an event stops the relay at it: `OutboxRelay`
+delivers a batch in order and marks it only whole, so every later event waits behind a poison one — measured in the
+same file, and the reason billing records an unpriced line rather than refusing it. Inventory's consumer of
+`lab.ResultCaptured` in Part C is the second instance.
 ```
 
-- [ ] **Step 9: Commit**
+Confirmed instead (a loop or cursor of the consumer's own was needed, or a redelivery billed twice): replace the bold paragraph with "**Hypothesis 2 is confirmed for this instance.** The criterion, set before measuring, was the design's: [as above]. Measured in `tests/test_domain_events.cpp`: [what failed — the loop or cursor the consumer needed, with the file and lines Step 9 printed, or the double line]." Mis-framed instead (delivery held with wiring alone, but for a reason the hypothesis does not name — for instance only because the consumer is an action dispatched like a user's, which no part of `OutboxRelay` or `IReplayLedger` provides): "**Hypothesis 2 is mis-framed for this instance.** [What carried delivery, and why the hypothesis's premise does not describe it.]"
+
+- [ ] **Step 11: Commit**
 
 ```bash
 cd /home/yaraslau/repo/morph
-git add examples/lims/lab examples/lims/billing examples/lims/app examples/lims/src/server/main.cpp \
-        examples/lims/tests examples/lims/README.md
-git commit -m "Bill each published lims result once, through lab's outbox and morph's relay
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
-```
-
----
-
-### Task 9: Does billing's reaction to lab reach a screen? (the cross-module effects candidate)
-
-**Files:**
-- Create: `examples/lims/screens/tests/test_lims_billing_effects.cpp`
-- Modify: `examples/lims/screens/lims_screens.cpp` (the lifecycle screen gains its sample's billable lines), `examples/lims/README.md` (decision 32)
-
-**Interfaces:**
-- Consumes: `InvoiceModel`, `ListBillableLines`, `lims::app::relayLabEvents`, `lims::test::readyToPublish`, `lims::test::billingFor`, `ScreenHarness`.
-- Produces: on `lims.lifecycle`, the text `billableCount` (`"<n> billable lines"`) and the button `refreshBilling`; a measured verdict on README decision 26's finding.
-
-README decision 26 inferred from reading `include/morph/core/effects.hpp` that a module's action cannot declare effects on another module's records, so a screen showing billing's lines does not refresh when a lab action makes one; it was never reproduced, because no Part A screen showed the other module's records. This task puts billing's lines on the sample's own screen — the lifecycle screen, where a published sample's charges belong — publishes from it, and measures. Rebase before editing `lims_screens.cpp`; another session may be changing `screens/`.
-
-- [ ] **Step 1: Write the test**
-
-Create `examples/lims/screens/tests/test_lims_billing_effects.cpp`:
-
-```cpp
-// SPDX-License-Identifier: Apache-2.0
-//
-// The cross-module effects question on a real screen: the lifecycle screen shows its sample's billable lines; a
-// publish made on it creates a line in billing, through lab's event; does the screen show it?
-
-#include <catch2/catch_message.hpp>
-#include <catch2/catch_test_macros.hpp>
-#include <chrono>
-#include <string>
-#include <testkit/db_fixture.hpp>
-#include <testkit/screen_harness.hpp>
-
-#include "billing_test_support.hpp"
-#include "lims/app/event_wiring.hpp"
-#include "lims/billing/models/invoice_model.hpp"
-#include "lims_screens.hpp"
-
-namespace {
-
-using morph::client::LocalApp;
-using morph::client::LocalSetup;
-using morph::examples::testing::RigMode;
-using morph::examples::testing::ScreenHarness;
-using morph::ladder::testkit::DbFixture;
-using morph::ui::ParamMap;
-using morph::ui::Value;
-
-LocalApp limsApp() { return LocalApp{.name = "lims", .bundle = &lims::screens::bundle, .setUp = {}}; }
-
-}  // namespace
-
-// The measured outcome: the line exists in billing, and the screen does not show it until it is refetched.
-// If the CHECK_FALSE below fails, the candidate is refuted: the screen refreshed by itself.
-TEST_CASE("lims billing effects: a line billing makes from a publish does not reach the screen that published",
-          "[lims-screens][billing]") {
-    DbFixture fixture;
-    auto const lab = lims::test::readyToPublish();
-    lims::test::billingFor(lab.client);
-    // alice publishes from the screen; a billing role at the seeded company lets her list its lines (decision 26).
-    lims::test::grant("alice", lims::LimsRole::BillingClerk);
-    ScreenHarness harness{limsApp(), std::string{lims::screens::kLifecycle}, RigMode::Local,
-                          ParamMap{{"sampleId", Value{*lab.sample}}}, LocalSetup{.db = {}, .user = "alice"}};
-    REQUIRE(harness.waitForText("billableCount", "0 billable lines"));
-
-    harness.click("publish");
-    REQUIRE(harness.waitFor([&harness] {
-        auto const header = harness.text("header");
-        return header && header->find("Published") != std::string::npos;
-    }));
-    // What the server's timer does once a second.
-    REQUIRE(lims::app::relayLabEvents() == 1U);
-    {
-        lims::test::ScopedPrincipal const alice{"alice"};
-        REQUIRE(lims::InvoiceModel{}.execute(lims::ListBillableLines{.company = {}, .client = {}, .sample = lab.sample})
-                    .lines.size() == 1U);
-    }
-
-    bool const refreshedByItself = harness.waitFor(
-        [&harness] { return harness.text("billableCount") == std::optional<std::string>{"1 billable lines"}; },
-        std::chrono::milliseconds{1500});
-    CHECK_FALSE(refreshedByItself);
-
-    // The control: the same panel shows the line once it is asked again, so the panel can show it.
-    harness.click("refreshBilling");
-    CHECK(harness.waitForText("billableCount", "1 billable lines"));
-    for (auto const& problem : harness.problems()) {
-        UNSCOPED_INFO(problem);
-    }
-    CHECK(harness.problems().empty());
-}
-```
-
-- [ ] **Step 2: Give the lifecycle screen its sample's billable lines**
-
-In `examples/lims/screens/lims_screens.cpp` add `#include "lims/billing/dto/line_dto.hpp"` and `#include "lims/billing/models/invoice_model.hpp"`. In `lifecycleScreen()`, after `auto const view = current.value();`:
-
-```cpp
-        // What the sample has been billed. Billing makes these lines when the sample is published, through lab's
-        // event; this screen refreshes them from declared effects only.
-        auto const billing = screen.model<InvoiceModel>("billing");
-        auto const lines = screen.query<ListBillableLines>("billableLines", billing,
-                                                           {{&ListBillableLines::sample, sampleId}});
-        auto const lineRows = lines.value().at(&ListBillableLinesResult::lines);
-```
-
-and add a last child to the returned `ui::column`, after the `error` text:
-
-```cpp
-             ui::panel({ui::text({.text = ui::format("{0} billable lines", {ui::count(lineRows)})})
-                            .testId("billableCount"),
-                        ui::button({.label = "Refresh billing", .onClick = ui::refetch(lines)})
-                            .testId("refreshBilling")},
-                       {.title = ui::t("lims.lifecycle.billing", "Billing"), .padding = 2})
-```
-
-Add `lines.error()` to the `failure` coalesce. The `Body` initializer follows the mutation `open`'s `.body = {{&OpenSample::sampleId, sampleId}}`; if `query`'s third parameter does not accept that braced form, write `ui::Body<ListBillableLines>{{&ListBillableLines::sample, sampleId}}`.
-
-- [ ] **Step 3: Build and run**
-
-Run: Build lims, then Screen suite `"[billing]"`, then the whole Screen suite (the bundle must still load without warnings: `lims_bundle_loads_without_warnings`). Expected (inferred from decision 26's reading): the case passes — the line exists, the panel stays at 0 until refetched. If `CHECK_FALSE(refreshedByItself)` fails, the candidate is refuted: change it to `CHECK(refreshedByItself)` and use the refuted text in Step 4.
-
-- [ ] **Step 4: Record decision 32, and file the framework gap if confirmed**
-
-Append to the README (the confirmed text; if refuted, replace the bold paragraph with "**Refuted.** The screen showed the line without a refetch: [what carried it, from reading the harness's event path]" and file nothing):
-
-```markdown
-### 32. A module's reaction to another module's action does not reach the screen
-
-The sample lifecycle screen shows what billing has made of its sample (`ListBillableLines` through `InvoiceModel`).
-Publishing from that screen makes a billable line, through lab's event and billing's consumer (decision 31).
-
-**Confirmed: the line does not reach the screen until it is refetched.** Measured in
-`screens/tests/test_lims_billing_effects.cpp`: after the publish and a relay pass, billing holds the line and the
-panel still shows none; its refresh button shows it. `PublishSample` declares lab's effects only, and cannot declare
-billing's `Billing_Line` (lab does not include billing, and a second declaration from `app` is refused as
-"declares different effects in two registrations", `include/morph/core/effects.hpp`); and billing's consumer is not an
-action, so nothing derives its changes. This is the second place decision 26's finding appears — org's role changes
-not reaching lab's sample list was the first — so it is filed against `include/morph` as a missing framework seam: a
-way for the code that composes modules to state that one module's action, or a consumer it runs, changes another
-module's records.
-```
-
-If confirmed, file the issue. Collect the real output first:
-
-```bash
-cd /home/yaraslau/repo/morph
-flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock \
-  env QT_QPA_PLATFORM=offscreen timeout 300 build/linux-everything/ladder_lims_screen_tests "[billing]" -s 2>&1 \
-  | tail -40 > /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_effects_output.txt
-gh label list --limit 100 | grep -i 'area'
-```
-
-Then `gh issue create` with title "Effects: no way to declare that one module's action changes another module's records", labels `enhancement` and the `area:` label `gh label list` shows for core/effects (no `triage:` label), and a body containing: what was measured and on which commit (`git rev-parse HEAD`), the test's name and the output file's relevant lines, the two places (org→lab inferred in decision 26, billing←lab measured here), what was not verified (the remote path: a second connection watching `Billing_Line` while a third publishes — the server derives changes from the executed action's declared effects, so it is inferred to behave the same), and what would close it (a declared cross-module effect, or a consumer's changes fanned out, reaching this screen without a refetch).
-
-- [ ] **Step 5: Commit**
-
-```bash
-cd /home/yaraslau/repo/morph
-git add examples/lims/screens/lims_screens.cpp examples/lims/screens/tests/test_lims_billing_effects.cpp \
-        examples/lims/README.md
-git commit -m "Measure whether billing's reaction to a publish reaches the lims lifecycle screen
+git add examples/common/testkit examples/lims/org examples/lims/lab examples/lims/billing examples/lims/app \
+        examples/lims/src/server/main.cpp examples/lims/tests examples/lims/README.md
+git commit -m "Bill each published lims result once, through lab's outbox, morph's relay and a dispatched consumer
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
@@ -5165,7 +5838,7 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 
 **Files:**
 - Create: `examples/lims/billing/include/lims/billing/dto/invoice_dto.hpp`, `examples/lims/billing/include/lims/billing/core/invoice_math.hpp`, `examples/lims/billing/src/core/invoice_math.cpp`, `examples/lims/billing/include/lims/billing/db/billing_store.hpp`, `examples/lims/billing/src/models/invoice_drafts.cpp`, `examples/lims/tests/test_invoices.cpp`
-- Modify: `billing_entity.hpp` (`InvoiceRecord`), `billing_schema.cpp`, `invoice_model.hpp`, `billing_authorization.hpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `examples/lims/README.md` (decision 33)
+- Modify: `billing_entity.hpp` (`InvoiceRecord`), `billing_schema.cpp`, `invoice_model.hpp`, `billing_authorization.hpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `examples/lims/README.md` (decision 32)
 
 **Interfaces:**
 - Consumes: `BillableLineRecord`, `PriceListModel::billingClient`, `PriceListModel::settingsOf`, `roundToCurrency`, `ExactSum`.
@@ -5183,6 +5856,7 @@ Create `examples/lims/tests/test_invoices.cpp`:
 // Draft invoices and their totals, and the invoice half of hypothesis 8's second instance: the currency is the
 // record's, not the type's.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <morph/forms/forms.hpp>
@@ -5193,7 +5867,9 @@ Create `examples/lims/tests/test_invoices.cpp`:
 #include "billing_test_support.hpp"
 #include "lims/app/event_wiring.hpp"
 #include "lims/billing/core/invoice_math.hpp"
+#include "lims/billing/db/billing_entity.hpp"
 #include "lims/billing/models/invoice_model.hpp"
+#include "lims/org/core/calendar.hpp"
 #include "testkit/db_fixture.hpp"
 
 using lims::test::ScopedPrincipal;
@@ -5250,7 +5926,7 @@ TEST_CASE("invoices: a draft collects one client's unbilled lines at one site, i
     settings(exact(19, 100, 6));
     auto const lab = lims::test::publishedSample();
     lims::test::billingFor(lab.client);
-    lims::app::relayLabEvents();
+    lims::test::relayLabEvents();
     ScopedPrincipal const bea{"bea"};
     lims::InvoiceModel invoices;
     auto const draft = invoices.execute(
@@ -5274,17 +5950,50 @@ TEST_CASE("invoices: a company without billing settings cannot invoice", "[lims]
     DbFixture fixture;
     auto const lab = lims::test::publishedSample();
     lims::test::billingFor(lab.client);
-    lims::app::relayLabEvents();
+    lims::test::relayLabEvents();
     ScopedPrincipal const bea{"bea"};
     CHECK_THROWS_WITH(lims::InvoiceModel{}.execute(lims::CreateInvoice{
                           .company = lims::test::seededCompany(), .site = lims::test::seededSite(), .client = lab.client}),
                       Catch::Matchers::ContainsSubstring("billing settings"));
 }
 
-// Hypothesis 8, the invoice half of instance 2: the currency is known only from the record.
-TEST_CASE("Hypothesis 8: an amount's currency is a field the type does not see", "[lims][billing][h8]") {
-    // The type adds a yen amount to a euro amount without complaint: both are the one money unit.
-    STATIC_REQUIRE(requires(lims::Amount yen, lims::Amount euro) { yen + euro; });
+// Hypothesis 8, the invoice half of instance 2: the currency is known only from the record, so the model keeps it.
+// Mutation: drop the currency check from draftInvoice (the yen line joins the euro invoice; the refusal check fails).
+TEST_CASE("Hypothesis 8: an amount's currency is a field the type does not see, so the model keeps currencies apart",
+          "[lims][billing][h8]") {
+    DbFixture fixture;
+    settings(exact(19, 100, 6));
+    auto const lab = lims::test::publishedSample();
+    lims::test::billingFor(lab.client);
+    lims::test::relayLabEvents();
+    // A second unbilled line of the same client at the same site, priced in yen: what a price list in another
+    // currency would leave behind. Written below the model, since no action makes one.
+    {
+        Lightweight::DataMapper mapper;
+        lims::db::BillableLineRecord yen;
+        yen.companyId = *lims::test::seededCompany();
+        yen.siteId = *lims::test::seededSite();
+        yen.clientId = *lab.client;
+        yen.sampleId = *lab.sample;
+        yen.resultId = 9001;
+        yen.analysisId = *lab.nitrate;
+        yen.publishedAt = lims::millisOf(morph::time::Timestamp{lims::test::at(2026, 11, 10)});
+        yen.state = static_cast<int>(lims::BillableLineState::Unbilled);
+        yen.amountNum = 4000;
+        yen.amountDen = 1;
+        yen.currency = static_cast<int>(lims::CurrencyCode::JPY);
+        yen.eventId = Lightweight::SqlAnsiString<128>{"test:yen:1"};
+        mapper.Create(yen);
+    }
+    // Both amounts are `lims::Amount`, the one money unit, so nothing in the type refuses 40 euros beside 4000 yen;
+    // the model does.
+    {
+        ScopedPrincipal const bea{"bea"};
+        CHECK_THROWS_WITH(lims::InvoiceModel{}.execute(lims::CreateInvoice{.company = lims::test::seededCompany(),
+                                                                           .site = lims::test::seededSite(),
+                                                                           .client = lab.client}),
+                          Catch::Matchers::ContainsSubstring("is in JPY"));
+    }
     // The schema a JPY price list's price form is served with advertises two decimals, because the declared
     // precision is the type's; the model refuses fractional yen (test_price_lists.cpp) where the form allows it.
     std::string const schema = morph::forms::schemaJson<lims::SetPrice>();
@@ -5341,7 +6050,7 @@ InvoiceTotals invoiceTotals(std::span<::morph::math::Rational const> lineAmounts
 
 Create `invoice_dto.hpp` with `InvoiceView` and the three actions from Interfaces; `CreateInvoice::validate()` requires the three ids and `explicitSubmit = true`; `GetInvoice` requires its id; `ListInvoices` its company. `BRIDGE_REGISTER_RECORD(lims::InvoiceView, "Billing_Invoice")`.
 
-`InvoiceRecord` (`billing_invoices`): `id`; `company_id`, `site_id`, `client_id` (`std::int64_t`); `currency`, `state` (`int`); `number` `SqlAnsiString<32>`; `net_num`/`_den`, `tax_num`/`_den`, `gross_num`/`_den`; `reference` `SqlAnsiString<128>`; `created_by`, `submitted_by`, `approved_by`, `posted_by` `SqlAnsiString<64>`; `created_at`, `submitted_at`, `deadline_at` `std::int64_t`; `entry_id` `std::optional<std::int64_t>`. Migration `20261110000008 "Create billing_invoices"`.
+`InvoiceRecord` (`billing_invoices`): `id`; `company_id`, `site_id`, `client_id` (`std::int64_t`); `currency`, `state` (`int`); `number` `SqlAnsiString<32>`; `net_num`/`_den`, `tax_num`/`_den`, `gross_num`/`_den`; `reference` `SqlAnsiString<128>`; `created_by`, `submitted_by`, `approved_by`, `posted_by` `SqlAnsiString<64>`; `created_at`, `submitted_at`, `deadline_at` `std::int64_t`; `gross_company_num`/`_den` `std::optional<std::int64_t>` (the gross in the company's currency, set at submission: Tasks 12 and 14); `entry_id` `std::optional<std::int64_t>`. Migration `20261110000008 "Create billing_invoices"`.
 
 Create `billing_store.hpp` (`#include <Lightweight/DataMapper/DataMapper.hpp>`; billing-internal, never included by a model header) declaring `draftInvoice` and `invoiceView` with Doxygen:
 
@@ -5368,28 +6077,28 @@ Create `billing_store.hpp` (`#include <Lightweight/DataMapper/DataMapper.hpp>`; 
 [[nodiscard]] InvoiceView invoiceView(Lightweight::DataMapper& mapper, std::int64_t invoiceId);
 ```
 
-Implement both in `invoice_drafts.cpp`. `draftInvoice`: read `PriceListModel::settingsOf(company)` (`NotFound` "company N has no billing settings") and `PriceListModel::billingClient(client, company)` (`NotFound`); select the `Unbilled` lines with that company, site and client; none → `std::nullopt`; every line's currency must equal the client's, else `ValidationError` naming the line (the type cannot keep currencies apart, so the model does); `invoiceTotals` over their amounts at the settings' tax rate; create the `InvoiceRecord` (state `Draft`, `created_by`, `created_at = nowMillis()`), then set each line `Invoiced` with its `invoice_id`. `invoiceView` maps the row (range-checking `state` and `currency`), loads its lines by `invoice_id`, and sets `level = deadline_at > 0 && nowMillis() >= deadline_at ? ApprovalLevel::Company : ApprovalLevel::Site`. `InvoiceModel::execute(CreateInvoice)`: the conventions' action shape, then `draftInvoice` inside one transaction; `std::nullopt` → `Conflict` "client N has no unbilled lines at site M". `GetInvoice` answers `NotFound` for an invoice of a company the caller cannot see; `ListInvoices` answers the visible company's invoices by id.
+Implement both in `invoice_drafts.cpp`. `draftInvoice`: read `PriceListModel::settingsOf(company)` (`NotFound` "company N has no billing settings") and `PriceListModel::billingClient(client, company)` (`NotFound`); select the `Unbilled` lines with that company, site and client; none → `std::nullopt`; every line's currency must equal the client's, else `ValidationError` "line N is in <currency>; client M is billed in <currency>" (the type cannot keep currencies apart, so the model does); `invoiceTotals` over their amounts at the settings' tax rate; create the `InvoiceRecord` (state `Draft`, `created_by`, `created_at = nowMillis()`), then set each line `Invoiced` with its `invoice_id`. `invoiceView` maps the row (range-checking `state` and `currency`), loads its lines by `invoice_id`, and sets `level = deadline_at > 0 && nowMillis() >= deadline_at ? ApprovalLevel::Company : ApprovalLevel::Site`. `InvoiceModel::execute(CreateInvoice)`: the conventions' action shape, then `draftInvoice` inside one transaction; `std::nullopt` → `Conflict` "client N has no unbilled lines at site M". `GetInvoice` answers `NotFound` for an invoice of a company the caller cannot see; `ListInvoices` answers the visible company's invoices by id.
 
 Declare `template <> struct Authorization<CreateInvoice> : CompanyRule<CreateInvoice, LimsRole::BillingClerk> {};`, register `"CreateInvoice"` with `BRIDGE_REGISTER_EFFECTS(lims::CreateInvoice, ::morph::effects::changes<lims::InvoiceView>, ::morph::effects::changes<lims::BillableLineView>)`, `"GetInvoice"` and `"ListInvoices"` as reads, add `CreateInvoice` to the edge table and the coverage tuple, `"InvoiceModel"` to its model list.
 
 - [ ] **Step 5: Build and run**
 
-Run: Build lims, Model suite `"[invoices]"`, Model suite `"[h8]"`, Model suite `"[authorization]"`. Expected: all pass. Run the two mutations named in the file and restore them.
+Run: Build lims, Model suite `"[invoices]"`, Model suite `"[h8]"`, Model suite `"[authorization]"`. Expected: all pass. Run the three mutations named in the file and restore them.
 
-- [ ] **Step 6: Record decision 33**
+- [ ] **Step 6: Record decision 32**
 
 ```markdown
-### 33. An invoice is one client's lines at one site, in the client's currency; the type does not know which (hypothesis 8, invoice half of instance 2)
+### 32. An invoice is one client's lines at one site, in the client's currency; the type does not know which (hypothesis 8, invoice half of instance 2)
 
 `CreateInvoice` collects every unbilled line of a client at a site and marks them invoiced; tax is the company's flat
 rate on the net total, rounded half-up once, and the gross is net plus tax. The site is the invoice's because its
-approval is judged there (decision 35).
+approval is judged there (decision 34).
 
 **Hypothesis 8's runtime-currency half is confirmed for invoices.** Measured in `tests/test_invoices.cpp`: with the
-currency known only from the record, the amount is a `Quantity` over the one money unit, so the type adds yen to
-euros (`STATIC_REQUIRE`), and the served schema of a JPY price's form still advertises `x-decimalPlaces: 2` — the
-declared precision is the type's. What keeps currencies apart is model code: `draftInvoice` refuses a line in another
-currency and `fitsCurrency` refuses fractional yen. `Quantity` holds the amount exactly; it cannot hold its currency.
+currency known only from the record, the amount is a `Quantity` over the one money unit, so a yen line among a euro
+client's lines is refused by `draftInvoice`, not by the type, and the served schema of a JPY price's form still
+advertises `x-decimalPlaces: 2` — the declared precision is the type's. What keeps currencies apart is model code:
+`draftInvoice` refuses a line in another currency and `fitsCurrency` refuses fractional yen. `Quantity` holds the amount exactly; it cannot hold its currency.
 Purchase orders in a supplier's currency (Part C) are the second instance; a form that follows a record's currency is
 Part D's (`morph::forms::InstanceConstraints` serves per-instance decimals and is the existing seam to try there).
 ```
@@ -5412,13 +6121,15 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 
 **Files:**
 - Create: `examples/lims/billing/include/lims/billing/core/fault_hook.hpp`, `examples/lims/billing/src/core/fault_hook.cpp`, `examples/lims/billing/include/lims/billing/dto/run_dto.hpp`, `examples/lims/billing/include/lims/billing/models/billing_run_model.hpp`, `examples/lims/billing/src/models/billing_run_model.cpp`, `examples/lims/app/include/lims/app/billing_scheduler.hpp`, `examples/lims/app/src/billing_scheduler.cpp`, `examples/lims/tests/test_billing_run.cpp`
-- Modify: `billing_entity.hpp` (`BillingRunRecord`, `BillingRunItemRecord`), `billing_schema.cpp`, `invoice_drafts.cpp` (a fault point), `billing_authorization.hpp`/`.cpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `src/server/main.cpp`, `examples/lims/README.md` (decision 34)
+- Modify: `billing_entity.hpp` (`BillingRunRecord`, `BillingRunItemRecord`), `billing_schema.cpp`, `invoice_drafts.cpp` (a fault point), `billing_authorization.hpp`/`.cpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `src/server/main.cpp`, `examples/lims/README.md` (decision 33)
 
 **Interfaces:**
-- Consumes: `draftInvoice`, `PriceListModel::settingsOf`, `dayOfMonth`, `monthLabel`, `morph::session::detail::ScopedContext`.
-- Produces: `void lims::setFaultHook(std::function<void(std::string_view)>)`, `void lims::faultPoint(std::string_view)`; `StartBillingRun { CompanyId company; }` → `BillingRunView { BillingRunId id; CompanyId company; std::string label; BillingRunState state; Count total; Count done; Timestamp startedAt; std::string startedBy; }`; `AdvanceBillingRun { BillingRunId runId; Count batch; }` → `BillingRunView`; `ListBillingRuns { CompanyId company; }` → `ListBillingRunsResult`; statics `BillingRunModel::dueCompanies(Timestamp const& now) -> std::vector<CompanyId>` and `BillingRunModel::runningRuns() -> std::vector<BillingRunId>`; model `lims::BillingRunModel` (`"BillingRunModel"`); record `Billing_Run`; `class lims::app::BillingScheduler { explicit BillingScheduler(std::string principal); void tick(Timestamp const& now); }`.
+- Consumes: `draftInvoice`, `PriceListModel::settingsOf`, `dayOfMonth`, `monthLabel`, `OrgModel::rolesIn`, `lims::app::InternalClient`, `lims::app::kSchedulePrincipal`, `requireServicePrincipal`, `BackendRig::connect`.
+- Produces: `void lims::setFaultHook(std::function<void(std::string_view)>)`, `void lims::faultPoint(std::string_view)`; `StartBillingRun { CompanyId company; }` → `BillingRunView { BillingRunId id; CompanyId company; std::string label; BillingRunState state; Count total; Count done; Timestamp startedAt; std::string startedBy; }`; `AdvanceBillingRun { BillingRunId runId; Count batch; }` → `BillingRunView`; `RunBillingSchedule { Count batch; }` → `BillingScheduleResult { std::vector<BillingRunView> runs; }`; `ListBillingRuns { CompanyId company; }` → `ListBillingRunsResult`; model `lims::BillingRunModel` (`"BillingRunModel"`); record `Billing_Run`; `class lims::app::BillingScheduler { BillingScheduler(InternalClient&, Count batch); BillingScheduleResult tick(); }`.
 
 A run belongs to a company and a calendar month (`label`, `YYYY-MM`): at most one per pair. Starting it writes one item per (client, site) with unbilled lines — the run's cursor. Advancing drafts one item's invoice and marks the item done in one transaction, so an interruption anywhere leaves each item either wholly done or wholly pending, and a resumed run drafts only what is pending. Progress is `done` of `total`.
+
+The schedule is one action, `RunBillingSchedule`, dispatched by the app through an internal client as `system:billing-schedule`: each tick starts the run of every company due and served, then advances every unfinished run by one batch. One batch per tick, each tick a dispatch, is what makes progress observable: every tick's `changes<BillingRunView>` reaches a watching clerk, and the run's `done` moves between ticks rather than jumping to the end inside one call. The schedule acts only for companies where its principal holds `LimsRole::Service`, so what it may do is in the role assignments.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5427,12 +6138,14 @@ Create `examples/lims/tests/test_billing_run.cpp`:
 ```cpp
 // SPDX-License-Identifier: Apache-2.0
 //
-// Hypothesis 4, first instance: the billing run starts on its day, shows its progress, and a run interrupted
-// mid-way resumes on the next tick without drafting any invoice twice.
+// Hypothesis 4, first instance: the billing run starts on its day, advances one batch per scheduled tick so its
+// progress is seen, and a run interrupted mid-way resumes on the next tick without drafting any invoice twice. The
+// schedule dispatches through an internal client, as the server's does.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <map>
+#include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <stdexcept>
 #include <string>
@@ -5440,10 +6153,12 @@ Create `examples/lims/tests/test_billing_run.cpp`:
 #include "billing_test_support.hpp"
 #include "clock.hpp"
 #include "lims/app/billing_scheduler.hpp"
-#include "lims/app/event_wiring.hpp"
+#include "lims/app/internal_client.hpp"
+#include "lims/app/service_principals.hpp"
 #include "lims/billing/core/fault_hook.hpp"
 #include "lims/billing/models/billing_run_model.hpp"
 #include "lims/billing/models/invoice_model.hpp"
+#include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 
 using lims::test::ScopedPrincipal;
@@ -5465,7 +6180,7 @@ struct FaultHookGuard {
 };
 
 /// @brief Three clients, each with one published, billable result at the seeded site; billing settings with billing
-///        day 25; the scheduler principal a billing clerk. The lines are relayed.
+///        day 25; the schedule principal holding the service role at the seeded company. The lines are relayed.
 void threeClientsToBill() {
     lims::test::grant("sam", lims::LimsRole::Supervisor);
     {
@@ -5484,9 +6199,20 @@ void threeClientsToBill() {
         auto const lab = lims::test::publishedSample(reference);
         lims::test::billingFor(lab.client);
     }
-    lims::app::relayLabEvents();
-    lims::test::grant("lims-scheduler", lims::LimsRole::BillingClerk);
+    lims::test::relayLabEvents();
+    lims::test::grantService(std::string{lims::app::kSchedulePrincipal});
 }
+
+/// @brief A server of the case's own and the schedule's client on it, as the server process holds them.
+struct ScheduleServer {
+    morph::ladder::testkit::BackendRig rig{morph::ladder::testkit::Mode::Socket, 0,
+                                           lims::test::limsAuthorizer(lims::test::kServiceSecret)};
+    lims::app::InternalClient client{rig.server(), lims::test::kServiceSecret,
+                                     std::string{lims::app::kSchedulePrincipal}};
+};
+
+/// @brief A batch of @p items.
+[[nodiscard]] lims::Count batchOf(std::int64_t items) { return lims::Count{Rational{items, DecimalPlaces{0}}}; }
 
 /// @brief The company's runs, as bea sees them.
 [[nodiscard]] std::vector<lims::BillingRunView> runs() {
@@ -5507,42 +6233,85 @@ void threeClientsToBill() {
 
 }  // namespace
 
-// Mutation: let dueCompanies ignore an existing run for the month (the second tick starts a second run, and
-// StartBillingRun refuses it with Conflict, which tick() propagates).
+// Mutation: let dueCompanies ignore an existing run for the month (the later tick starts a second run, refused with
+// Conflict, which the tick reports).
 TEST_CASE("Hypothesis 4: the billing run starts on its day of the month, once", "[lims][billing][run][h4]") {
     DbFixture fixture;
     threeClientsToBill();
-    lims::app::BillingScheduler scheduler{"lims-scheduler"};
+    ScheduleServer server;
+    lims::app::BillingScheduler scheduler{server.client, batchOf(50)};
     {
         ScopedClockOverride const clock{lims::test::at(2026, 11, 24)};
-        scheduler.tick(morph::time::Timestamp{lims::test::at(2026, 11, 24)});
+        CHECK(scheduler.tick().runs.empty());
         CHECK(runs().empty());
     }
-    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
-    scheduler.tick(morph::time::Timestamp{lims::test::at(2026, 11, 25)});
-    REQUIRE(runs().size() == 1U);
-    CHECK(runs()[0].label == "2026-11");
-    CHECK(runs()[0].state == lims::BillingRunState::Finished);
-    scheduler.tick(morph::time::Timestamp{lims::test::at(2026, 11, 25, 15)});
+    {
+        ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+        static_cast<void>(scheduler.tick());
+        REQUIRE(runs().size() == 1U);
+        CHECK(runs()[0].label == "2026-11");
+        CHECK(runs()[0].state == lims::BillingRunState::Finished);
+        CHECK(runs()[0].startedBy == lims::app::kSchedulePrincipal);
+    }
+    ScopedClockOverride const later{lims::test::at(2026, 11, 25, 15)};
+    static_cast<void>(scheduler.tick());
     CHECK(runs().size() == 1U);
     CHECK(invoicesPerClient().size() == 3U);
 }
 
-TEST_CASE("billing run: progress is visible item by item", "[lims][billing][run]") {
+// Mutation: advance every running run to its end in one tick (the first tick answers 3 done, and the watcher hears
+// one change instead of three).
+TEST_CASE("billing run: each tick advances one batch, and a watching clerk sees the progress change",
+          "[lims][billing][run]") {
     DbFixture fixture;
     threeClientsToBill();
     ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
-    ScopedPrincipal const scheduler{"lims-scheduler"};
+    ScheduleServer server;
+    morph::session::TokenIssuer const issuer{std::string{lims::test::kServiceSecret}, morph::session::hmacSha256};
+    auto const watcher = server.rig.connect();
+    REQUIRE(watcher->watch({"Billing_Run"}, lims::test::signedAs(issuer, "bea")).kind == "ok");
+    lims::app::BillingScheduler scheduler{server.client, batchOf(1)};
+    std::size_t heard = 0;
+    for (std::int64_t done = 1; done <= 3; ++done) {
+        CAPTURE(done);
+        auto const ticked = scheduler.tick();
+        REQUIRE(ticked.runs.size() == 1U);
+        CHECK(*ticked.runs[0].done == Rational{done, DecimalPlaces{0}});
+        CHECK(*ticked.runs[0].total == Rational{3, DecimalPlaces{0}});
+        CHECK(morph::ladder::testkit::ServerConnection::eventually(
+            [&] { return watcher->changes().size() > heard && watcher->heardOf("Billing_Run"); }));
+        heard = watcher->changes().size();
+    }
+    CHECK(runs()[0].state == lims::BillingRunState::Finished);
+}
+
+TEST_CASE("billing run: a clerk starts and advances a run by hand, item by item", "[lims][billing][run]") {
+    DbFixture fixture;
+    threeClientsToBill();
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    ScopedPrincipal const bea{"bea"};
     lims::BillingRunModel model;
     auto run = model.execute(lims::StartBillingRun{.company = lims::test::seededCompany()});
     CHECK(*run.total == Rational{3, DecimalPlaces{0}});
     CHECK(*run.done == Rational{0, DecimalPlaces{0}});
-    run = model.execute(lims::AdvanceBillingRun{.runId = run.id, .batch = lims::Count{Rational{1, DecimalPlaces{0}}}});
+    run = model.execute(lims::AdvanceBillingRun{.runId = run.id, .batch = batchOf(1)});
     CHECK(*run.done == Rational{1, DecimalPlaces{0}});
     CHECK(run.state == lims::BillingRunState::Running);
-    run = model.execute(lims::AdvanceBillingRun{.runId = run.id, .batch = lims::Count{Rational{5, DecimalPlaces{0}}}});
+    run = model.execute(lims::AdvanceBillingRun{.runId = run.id, .batch = batchOf(5)});
     CHECK(run.state == lims::BillingRunState::Finished);
     CHECK_THROWS_AS(model.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}), lims::Conflict);
+}
+
+// Mutation: drop requireServicePrincipal from RunBillingSchedule (bea's tick starts the run).
+TEST_CASE("billing run: only the server's own client runs the schedule", "[lims][billing][run]") {
+    DbFixture fixture;
+    threeClientsToBill();
+    lims::test::grantService("bea");
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    ScopedPrincipal const bea{"bea"};
+    CHECK_THROWS_WITH(lims::BillingRunModel{}.execute(lims::RunBillingSchedule{.batch = batchOf(50)}),
+                      Catch::Matchers::ContainsSubstring("only the server's own clients"));
+    CHECK(runs().empty());
 }
 
 // Hypothesis 4. Mutation: draft the item's invoice and mark the item done in two transactions (the interrupted
@@ -5561,19 +6330,21 @@ TEST_CASE("Hypothesis 4: a run interrupted mid-way resumes and drafts each clien
         }
     });
     {
-        lims::app::BillingScheduler scheduler{"lims-scheduler"};
-        CHECK_THROWS_WITH(scheduler.tick(morph::time::Timestamp{lims::test::at(2026, 11, 25)}),
-                          Catch::Matchers::ContainsSubstring("server stopped"));
+        ScheduleServer server;
+        lims::app::BillingScheduler scheduler{server.client, batchOf(50)};
+        CHECK_THROWS_WITH(scheduler.tick(), Catch::Matchers::ContainsSubstring("server stopped"));
     }
     REQUIRE(runs().size() == 1U);
     CHECK(runs()[0].state == lims::BillingRunState::Running);
     CHECK(*runs()[0].done == Rational{1, DecimalPlaces{0}});
     CHECK(invoicesPerClient().size() == 1U);
 
-    // The restart: the hook is gone, a new scheduler ticks, the run resumes where it stood.
+    // The restart: the hook is gone, a new server and scheduler tick, and the run resumes where it stood.
     lims::setFaultHook({});
-    lims::app::BillingScheduler restarted{"lims-scheduler"};
-    restarted.tick(morph::time::Timestamp{lims::test::at(2026, 11, 25, 10)});
+    ScheduleServer restarted;
+    lims::app::BillingScheduler scheduler{restarted.client, batchOf(50)};
+    ScopedClockOverride const later{lims::test::at(2026, 11, 25, 10)};
+    static_cast<void>(scheduler.tick());
     REQUIRE(runs().size() == 1U);
     CHECK(runs()[0].state == lims::BillingRunState::Finished);
     CHECK(*runs()[0].done == Rational{3, DecimalPlaces{0}});
@@ -5625,44 +6396,41 @@ In `draftInvoice`, after the invoice row is created and its lines are marked, ca
 
 - [ ] **Step 4: Runs — DTOs, records, model**
 
-`run_dto.hpp`: the structs from Interfaces; `StartBillingRun::validate()` requires the company; `AdvanceBillingRun::validate()` the run and a batch; `BRIDGE_REGISTER_RECORD(lims::BillingRunView, "Billing_Run")`.
+`run_dto.hpp`: the structs from Interfaces; `StartBillingRun::validate()` requires the company; `AdvanceBillingRun::validate()` the run and a batch; `RunBillingSchedule::validate()` a batch (documented "One tick of the billing schedule: starts the run of every company due whose service role the caller holds, then advances every unfinished run of those companies by one batch. Sent only by the app's schedule, as a service principal."); `BillingScheduleResult` (documented "The runs the tick advanced, as they stand after it"); `BRIDGE_REGISTER_RECORD(lims::BillingRunView, "Billing_Run")`.
 
 Records: `BillingRunRecord` (`billing_runs`: `id`, `company_id`, `label` `SqlAnsiString<7>`, `state` int, `started_at`, `started_by` `SqlAnsiString<64>`) and `BillingRunItemRecord` (`billing_run_items`: `id`, `BelongsTo<&BillingRunRecord::id> run_id`, `client_id`, `site_id`, `state` int — 0 pending, 1 done — and `invoice_id` `std::optional<std::int64_t>`). Migration `20261110000009 "Create billing_runs and billing_run_items"`.
 
-`billing_run_model.cpp`:
+`billing_run_model.cpp` — the run's two steps once, in the anonymous namespace, and the three actions over them:
 
 ```cpp
-BillingRunView BillingRunModel::execute(const StartBillingRun& action) {
-    requirePrincipal();
-    if (!action.validate()) {
-        throw ValidationError{"StartBillingRun: a company is required"};
-    }
-    requireRoleSomewhere<StartBillingRun>();
-    if (!PriceListModel::settingsOf(action.company).has_value()) {
-        throw NotFound{"StartBillingRun: company " + std::to_string(*action.company) + " has no billing settings"};
-    }
-    requireAuthorized(action);
+namespace {
+
+/// @brief A batch's size as a whole number of items.
+[[nodiscard]] std::int64_t itemsIn(Count const& batch) { return (*batch).numerator / (*batch).denominator; }
+
+/// @brief Starts @p company's run for the month of now, in the caller's transaction: the run and one pending item per
+///        client and site with unbilled lines.
+/// @return The run's id.
+/// @throws Conflict if the company already ran this month.
+std::int64_t startRun(Lightweight::DataMapper& mapper, CompanyId company, std::string const& author) {
     std::string const label = monthLabel(calendarMonthOf(::morph::ladder::now()));
-    Lightweight::DataMapper mapper;
-    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     if (!mapper.Query<db::BillingRunRecord>()
-             .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::companyId>, "=", *action.company)
+             .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::companyId>, "=", *company)
              .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::label>, "=", label)
              .All()
              .empty()) {
-        throw Conflict{"StartBillingRun: company " + std::to_string(*action.company) + " already ran " + label};
+        throw Conflict{"company " + std::to_string(*company) + " already ran " + label};
     }
     db::BillingRunRecord run;
-    run.companyId = *action.company;
+    run.companyId = *company;
     run.label = Lightweight::SqlAnsiString<7>{label};
     run.state = static_cast<int>(BillingRunState::Running);
     run.startedAt = nowMillis();
-    run.startedBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
+    run.startedBy = Lightweight::SqlAnsiString<64>{author};
     mapper.Create(run);
     std::set<std::pair<std::int64_t, std::int64_t>> pairs;
     for (auto const& line : mapper.Query<db::BillableLineRecord>()
-                                .Where(::Lightweight::FieldNameOf<&db::BillableLineRecord::companyId>, "=",
-                                       *action.company)
+                                .Where(::Lightweight::FieldNameOf<&db::BillableLineRecord::companyId>, "=", *company)
                                 .Where(::Lightweight::FieldNameOf<&db::BillableLineRecord::state>, "=",
                                        static_cast<int>(BillableLineState::Unbilled))
                                 .All()) {
@@ -5675,32 +6443,17 @@ BillingRunView BillingRunModel::execute(const StartBillingRun& action) {
         item.siteId = site;
         mapper.Create(item);
     }
-    sqlTxn.Commit();
-    return runView(mapper, static_cast<std::int64_t>(run.id.Value()));
+    return static_cast<std::int64_t>(run.id.Value());
 }
 
-BillingRunView BillingRunModel::execute(const AdvanceBillingRun& action) {
-    requirePrincipal();
-    if (!action.validate() || (*action.batch).numerator < 1) {
-        throw ValidationError{"AdvanceBillingRun: a run and a batch of at least one are required"};
-    }
-    requireRoleSomewhere<AdvanceBillingRun>();
-    Lightweight::DataMapper mapper;
-    auto runs = mapper.Query<db::BillingRunRecord>()
-                    .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::id>, "=", *action.runId)
-                    .All();
-    if (runs.empty()) {
-        throw NotFound{"AdvanceBillingRun: run " + std::to_string(*action.runId) + " does not exist"};
-    }
-    requireAuthorized(action);
-    std::string const author = ::morph::session::current()->principal;
-    CompanyId const company{runs.front().companyId.Value()};
-    std::int64_t remaining = (*action.batch).numerator / (*action.batch).denominator;
+/// @brief Drafts up to @p items pending items of run @p runId, and finishes the run when none is left.
+void advanceRun(Lightweight::DataMapper& mapper, std::int64_t runId, CompanyId company, std::int64_t items,
+                std::string const& author) {
     for (auto item : mapper.Query<db::BillingRunItemRecord>()
-                         .Where(::Lightweight::FieldNameOf<&db::BillingRunItemRecord::run>, "=", *action.runId)
+                         .Where(::Lightweight::FieldNameOf<&db::BillingRunItemRecord::run>, "=", runId)
                          .Where(::Lightweight::FieldNameOf<&db::BillingRunItemRecord::state>, "=", 0)
                          .All()) {
-        if (remaining-- == 0) {
+        if (items-- == 0) {
             break;
         }
         // The item's invoice and the item's being done are one fact: a run resumed after a failure here drafts
@@ -5714,20 +6467,93 @@ BillingRunView BillingRunModel::execute(const AdvanceBillingRun& action) {
         sqlTxn.Commit();
     }
     bool const pending = !mapper.Query<db::BillingRunItemRecord>()
-                              .Where(::Lightweight::FieldNameOf<&db::BillingRunItemRecord::run>, "=", *action.runId)
+                              .Where(::Lightweight::FieldNameOf<&db::BillingRunItemRecord::run>, "=", runId)
                               .Where(::Lightweight::FieldNameOf<&db::BillingRunItemRecord::state>, "=", 0)
                               .All()
                               .empty();
     if (!pending) {
-        auto& run = runs.front();
-        run.state = static_cast<int>(BillingRunState::Finished);
-        mapper.Update(run);
+        auto runs = mapper.Query<db::BillingRunRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::id>, "=", runId)
+                        .All();
+        runs.front().state = static_cast<int>(BillingRunState::Finished);
+        mapper.Update(runs.front());
     }
+}
+
+}  // namespace
+
+BillingRunView BillingRunModel::execute(const StartBillingRun& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"StartBillingRun: a company is required"};
+    }
+    requireRoleSomewhere<StartBillingRun>();
+    if (!PriceListModel::settingsOf(action.company).has_value()) {
+        throw NotFound{"StartBillingRun: company " + std::to_string(*action.company) + " has no billing settings"};
+    }
+    requireAuthorized(action);
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    std::int64_t const id = startRun(mapper, action.company, ::morph::session::current()->principal);
+    sqlTxn.Commit();
+    return runView(mapper, id);
+}
+
+BillingRunView BillingRunModel::execute(const AdvanceBillingRun& action) {
+    requirePrincipal();
+    if (!action.validate() || itemsIn(action.batch) < 1) {
+        throw ValidationError{"AdvanceBillingRun: a run and a batch of at least one are required"};
+    }
+    requireRoleSomewhere<AdvanceBillingRun>();
+    Lightweight::DataMapper mapper;
+    auto const runs = mapper.Query<db::BillingRunRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::id>, "=", *action.runId)
+                          .All();
+    if (runs.empty()) {
+        throw NotFound{"AdvanceBillingRun: run " + std::to_string(*action.runId) + " does not exist"};
+    }
+    requireAuthorized(action);
+    advanceRun(mapper, *action.runId, CompanyId{runs.front().companyId.Value()}, itemsIn(action.batch),
+               ::morph::session::current()->principal);
     return runView(mapper, *action.runId);
+}
+
+BillingScheduleResult BillingRunModel::execute(const RunBillingSchedule& action) {
+    requirePrincipal();
+    if (!action.validate() || itemsIn(action.batch) < 1) {
+        throw ValidationError{"RunBillingSchedule: a batch of at least one is required"};
+    }
+    requireServicePrincipal("RunBillingSchedule");
+    requireRoleSomewhere<RunBillingSchedule>();
+    requireAuthorized(action);
+    std::string const principal = ::morph::session::current()->principal;
+    // The schedule acts only where its principal holds the service role, so the role assignments say what it may do.
+    auto const serves = [&principal](CompanyId company) {
+        auto const held = OrgModel::rolesIn(principal, Scope{company});
+        return std::ranges::find(held, LimsRole::Service) != held.end();
+    };
+    Lightweight::DataMapper mapper;
+    for (CompanyId const company : dueCompanies(mapper, ::morph::ladder::now())) {
+        if (serves(company)) {
+            Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+            static_cast<void>(startRun(mapper, company, principal));
+            sqlTxn.Commit();
+        }
+    }
+    BillingScheduleResult result;
+    for (auto const& run : runningRuns(mapper)) {
+        CompanyId const company{run.companyId.Value()};
+        if (serves(company)) {
+            auto const id = static_cast<std::int64_t>(run.id.Value());
+            advanceRun(mapper, id, company, itemsIn(action.batch), principal);
+            result.runs.push_back(runView(mapper, id));
+        }
+    }
+    return result;
 }
 ```
 
-`runView(mapper, id)` (anonymous namespace) maps the run with `total` = its items and `done` = its done items, as `Count`s. `dueCompanies(now)`: every company with billing settings whose `billing_day <= dayOfMonth(now)` and no run labelled `monthLabel(calendarMonthOf(now))`. `runningRuns()`: every run in `Running`. `ListBillingRuns` is the conventions' list. Header Doxygen as Task 4's (each `@throws`, including `NotFound` for a company without settings and `Conflict` for a second run in a month). Registrations: `"StartBillingRun"` and `"AdvanceBillingRun"` with `BRIDGE_REGISTER_EFFECTS(…, ::morph::effects::changes<lims::BillingRunView>, ::morph::effects::changes<lims::InvoiceView>, ::morph::effects::changes<lims::BillableLineView>)`, `"ListBillingRuns"` as a read. Rules: `Authorization<StartBillingRun> : CompanyRule<StartBillingRun, LimsRole::BillingClerk>`, and `Authorization<AdvanceBillingRun>` with `role = BillingClerk` and `scopeOf` reading the run's company in `billing_authorization.cpp`. Add both to the edge table and the coverage tuple, `"BillingRunModel"` to its model list.
+`runView(mapper, id)`, `dueCompanies(mapper, now)` and `runningRuns(mapper)` are in the anonymous namespace too: `runView` maps the run with `total` = its items and `done` = its done items, as `Count`s; `dueCompanies` answers every company with billing settings whose `billing_day <= dayOfMonth(now)` and no run labelled `monthLabel(calendarMonthOf(now))`; `runningRuns` every `BillingRunRecord` in `Running`. `ListBillingRuns` is the conventions' list. Header Doxygen as Task 4's (each `@throws`, including `NotFound` for a company without settings, `Conflict` for a second run in a month, and for `RunBillingSchedule` `Forbidden` "only the server's own clients send it"). Registrations: `"StartBillingRun"`, `"AdvanceBillingRun"` and `"RunBillingSchedule"`, each with `BRIDGE_REGISTER_EFFECTS(…, ::morph::effects::changes<lims::BillingRunView>, ::morph::effects::changes<lims::InvoiceView>, ::morph::effects::changes<lims::BillableLineView>)`; `"ListBillingRuns"` as a read. Rules: `Authorization<StartBillingRun> : CompanyRule<StartBillingRun, LimsRole::BillingClerk>`; `Authorization<AdvanceBillingRun>` with `role = BillingClerk` and `scopeOf` reading the run's company in `billing_authorization.cpp`; `Authorization<RunBillingSchedule>` with `role = LimsRole::Service` and no scope (it spans companies; `serves` above judges each). Add the three to the edge table and the coverage tuple, `"BillingRunModel"` to its model list.
 
 - [ ] **Step 5: The scheduler, in the app**
 
@@ -5737,30 +6563,38 @@ Create `examples/lims/app/include/lims/app/billing_scheduler.hpp`:
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/util/datetime.hpp>
-#include <string>
+#include <morph/util/rational.hpp>
+
+#include "lims/app/internal_client.hpp"
+#include "lims/billing/dto/run_dto.hpp"
+#include "lims/org/core/money.hpp"
 
 /// @file
-/// The billing schedule: on each tick, start the run of every company whose billing day has come, and advance every
-/// run that is not finished. The server ticks it once at start-up, which resumes a run a restart interrupted, and
-/// once a minute after.
+/// The billing schedule: each tick is one dispatched `RunBillingSchedule`, as the schedule principal. The server
+/// ticks it once at start-up, which resumes a run a restart interrupted, and every ten seconds after.
 
 namespace lims::app {
 
-/// @brief Starts and advances billing runs, as a service principal.
+/// @brief Ticks billing's schedule through an internal client.
 class BillingScheduler {
 public:
-    /// @param principal The principal runs are started and advanced as; it needs the billing-clerk role at each
-    ///        company, granted like anyone's, so what the schedule may do is in the role assignments.
-    explicit BillingScheduler(std::string principal) : _principal{std::move(principal)} {}
+    /// @brief A schedule dispatching through @p client.
+    /// @param client The schedule principal's client. Borrowed: it must outlive this scheduler.
+    /// @param batch How many items one tick drafts per run.
+    explicit BillingScheduler(InternalClient& client,
+                              Count batch = Count{::morph::math::Rational{50, ::morph::math::DecimalPlaces{0}}})
+        : _client{client}, _batch{std::move(batch)} {}
 
-    /// @brief One pass of the schedule at @p now.
-    /// @param now The instant; companies whose billing day is on or before its day of the month are due.
-    /// @throws std::exception from a run; runs after the failing one wait for the next tick.
-    void tick(::morph::time::Timestamp const& now);
+    /// @brief One tick: starts each due company's run and advances each unfinished run by one batch.
+    /// @return The runs it advanced.
+    /// @throws std::exception the dispatch's refusal or failure; what committed stays, and the next tick resumes.
+    BillingScheduleResult tick();
 
 private:
-    std::string _principal;
+    // Borrowed for the scheduler's life; never reseated.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
+    InternalClient& _client;
+    Count _batch;
 };
 
 }  // namespace lims::app
@@ -5772,148 +6606,324 @@ and `billing_scheduler.cpp`:
 // SPDX-License-Identifier: Apache-2.0
 #include "lims/app/billing_scheduler.hpp"
 
-#include <morph/session/session.hpp>
-#include <morph/util/rational.hpp>
-
 #include "lims/billing/models/billing_run_model.hpp"
 
 namespace lims::app {
 
-void BillingScheduler::tick(::morph::time::Timestamp const& now) {
-    // morph has no public way to act as a principal outside a dispatch, so the schedule installs the session the
-    // models read through session::detail, as the lims tests do.
-    ::morph::session::Context ctx;
-    ctx.principal = _principal;
-    ::morph::session::detail::ScopedContext const scope{ctx};
-    BillingRunModel runs;
-    for (CompanyId const company : BillingRunModel::dueCompanies(now)) {
-        static_cast<void>(runs.execute(StartBillingRun{.company = company}));
-    }
-    Count const batch{::morph::math::Rational{50, ::morph::math::DecimalPlaces{0}}};
-    for (BillingRunId const run : BillingRunModel::runningRuns()) {
-        while (runs.execute(AdvanceBillingRun{.runId = run, .batch = batch}).state == BillingRunState::Running) {
-        }
-    }
+BillingScheduleResult BillingScheduler::tick() {
+    return _client.call<BillingRunModel>(RunBillingSchedule{.batch = _batch});
 }
 
 }  // namespace lims::app
 ```
 
-In `src/server/main.cpp` (include `"lims/app/billing_scheduler.hpp"` and `"clock.hpp"`), after the relay timer:
+- [ ] **Step 6: The server ticks it**
+
+In `src/server/main.cpp` (include `"lims/app/billing_scheduler.hpp"`), declare the schedule's client and scheduler beside `events`, above `background`, so `background` joins before either goes:
 
 ```cpp
-        // The billing schedule: once now, which resumes a run a restart interrupted, then once a minute.
-        lims::app::BillingScheduler scheduler{environment("LIMS_SCHEDULER_PRINCIPAL", "lims-scheduler")};
-        auto const tickSchedule = [&scheduler] {
-            try {
-                scheduler.tick(morph::ladder::now());
-            } catch (std::exception const& error) {
-                std::cerr << "lims-server: billing schedule: " << error.what() << '\n';
-            }
+        lims::app::InternalClient schedule{*server, secret, std::string{lims::app::kSchedulePrincipal}};
+        lims::app::BillingScheduler scheduler{schedule};
+```
+
+and after the relay timer:
+
+```cpp
+        // The billing schedule: once now, which resumes a run a restart interrupted, then every ten seconds, one batch
+        // per run per tick.
+        auto const tickSchedule = [&background, &scheduler] {
+            background.post([&scheduler] {
+                try {
+                    static_cast<void>(scheduler.tick());
+                } catch (std::exception const& error) {
+                    std::cerr << "lims-server: billing schedule: " << error.what() << '\n';
+                }
+            });
         };
         tickSchedule();
         QTimer scheduleTimer;
         QObject::connect(&scheduleTimer, &QTimer::timeout, tickSchedule);
-        scheduleTimer.start(60'000);
+        scheduleTimer.start(10'000);
 ```
 
-and add `LIMS_SCHEDULER_PRINCIPAL (default lims-scheduler)` to the file's environment comment.
+- [ ] **Step 7: Build and run**
 
-- [ ] **Step 6: Build and run**
+Run: Build lims, Model suite `"[run]"`, Model suite `"[authorization]"`, Everything labelled for the rung. Expected: all pass. Run the four mutations named in the file and restore them.
 
-Run: Build lims, Model suite `"[run]"`, Model suite `"[authorization]"`, Everything labelled for the rung. Expected: all pass. Run the two mutations and restore them.
+- [ ] **Step 8: Measure what the internal client cost, and whether it could do the job**
 
-- [ ] **Step 7: Record decision 34**
+```bash
+cd /home/yaraslau/repo/morph
+wc -l examples/lims/app/include/lims/app/billing_scheduler.hpp examples/lims/app/src/billing_scheduler.cpp
+git diff --stat "$(cat /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_base.txt)" -- examples/lims/src/server/main.cpp
+grep -rn 'ScopedContext' examples/lims --include='*.cpp' --include='*.hpp' | grep -v '/tests/'
+```
+
+Keep the output for decision 33. Expected: the scheduler is a handful of lines over `InternalClient` (Task 9's, unchanged); `main.cpp` gains a client, a scheduler and a timer; the last command prints nothing — no lims code outside the tests installs a session by hand.
+
+If the internal client genuinely could not run the schedule — a dispatch it cannot make, a principal the edge cannot admit, a result it cannot wait for — record exactly why in decision 33, with the failing output, and file the missing seam, since bookmarks' and bank's servers already decline `morph::session::detail::ScopedContext` (`examples/bookmarks/src/server/main.cpp`, `examples/bank/src/server/main.cpp`) and lims would be the third place. First `gh label list --limit 100 | grep -i 'area'` and pick the `area:` label for sessions (`area: session` at the time of writing). Write the body to `/tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_rev_scoped_context_issue.md`: the verification status (what was measured, on `git rev-parse HEAD`, what was not); the real output of the failing case; the three places, with the comment in each server that declines `ScopedContext`; and what would close it (a public way to run a model action as a principal outside a dispatch, or an internal client that does the job). Then:
+
+```bash
+cd /home/yaraslau/repo/morph
+gh issue create --title "No public way to run a model action as a principal outside a dispatch" \
+  --label enhancement --label "area: session" \
+  --body-file /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_rev_scoped_context_issue.md
+```
+
+No `triage:` label. If the internal client did the job, file nothing.
+
+- [ ] **Step 9: Record decision 33**
+
+The confirmed text (the expected outcome, since the trigger and the tick action are lims's own):
 
 ```markdown
-### 34. The billing run is a cursor in billing's tables, driven by a timer in the server (hypothesis 4, first instance)
+### 33. The billing run is a cursor in billing's tables, ticked through an internal client by a timer in the server (hypothesis 4, first instance)
 
 A run belongs to a company and a month; starting it records one item per client and site with unbilled lines, and
 advancing it drafts one item's invoice and marks the item done in one transaction. A run interrupted anywhere leaves
 every item wholly done or wholly pending, and resuming drafts only what is pending, so no invoice is drafted twice.
-Progress is the run's done items of its total. `lims::app::BillingScheduler::tick` starts every company's run on or
-after its billing day and advances every unfinished run; the server ticks it at start-up and once a minute, as the
-principal `LIMS_SCHEDULER_PRINCIPAL` names, which holds the billing-clerk role like any clerk.
+Progress is the run's done items of its total. The schedule is one action, `RunBillingSchedule`: it starts every
+due company's run and advances every unfinished run by one batch. `lims::app::BillingScheduler` dispatches it through
+an internal client as `system:billing-schedule`, which acts only where it holds the service role; the server ticks
+it at start-up and every ten seconds, so each tick's change to `Billing_Run` reaches a watching clerk.
 
 **Hypothesis 4 is confirmed for this instance.** Measured in `tests/test_billing_run.cpp`: the run starts on its day
-and once; a run failed after its first invoice shows 1 of 3 done, and a fresh scheduler after the "restart" finishes
-it with one invoice per client. None of it used a morph primitive for the schedule or the resume: the trigger is a
-`QTimer` in the server, the resume is a cursor table of billing's own, and the schedule acts as its principal through
-`morph::session::detail::ScopedContext`, a detail type, because nothing public runs a model action as a principal
-outside a dispatch. `TimeoutScheduler`, the one timer morph has, is `morph::async::detail`. Approval escalation is the
-second instance (decision 35).
+and once; each tick advances one batch, and a clerk watching `Billing_Run` is told after each; a run failed after its
+first invoice shows 1 of 3 done, and a fresh server and scheduler after the "restart" finish it with one invoice per
+client. The dispatch is public (an internal client, [measured] lines over Task 9's), but nothing in morph starts work
+on a schedule or resumes it: the trigger is a `QTimer` in the server, the resume is a cursor table of billing's own,
+and the tick is billing's own action, a scheduler per module. `TimeoutScheduler`, the one timer morph has, is a
+detail type. Approval escalation, the design's second candidate, is not scheduled work (decision 34), so this is the
+one instance Part B has.
 ```
 
-- [ ] **Step 8: Commit**
+If the internal client could not do it, add after the bold paragraph: "The internal client could not [what], measured as [output]; the missing seam is filed against `include/morph`." If the schedule ran with public morph primitives and no scheduler of billing's own, use instead: "**Hypothesis 4 is refuted for this instance.** [Which public primitives started and resumed it.]"
+
+- [ ] **Step 10: Commit**
 
 ```bash
 cd /home/yaraslau/repo/morph
 git add examples/lims/billing examples/lims/app examples/lims/src/server/main.cpp examples/lims/tests \
         examples/lims/README.md
-git commit -m "Schedule the lims billing run and resume it after a restart without duplicate invoices
+git commit -m "Schedule the lims billing run through an internal client, one batch per tick, resumable after a restart
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 ```
 
 ---
-### Task 12: Invoice approval — four eyes, value limits, a deadline that escalates (hypotheses 5 and 6, and 4's second instance)
+### Task 12: Invoice approval — four eyes, value limits, a deadline that escalates (hypotheses 5 and 6; escalation measured against hypothesis 4)
 
 **Files:**
-- Create: `examples/lims/billing/include/lims/billing/core/ledger_port.hpp`, `examples/lims/billing/src/core/ledger_port.cpp`, `examples/lims/billing/src/models/invoice_approval.cpp`, `examples/lims/tests/test_invoice_approval.cpp`
-- Modify: `invoice_dto.hpp` (four actions), `invoice_model.hpp`, `billing_authorization.hpp`/`.cpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `examples/lims/README.md` (decisions 35 and 36)
+- Create: `examples/lims/billing/src/models/invoice_approval.cpp`, `examples/lims/tests/test_invoice_approval.cpp`, `examples/lims/screens/tests/test_lims_approval_inbox.cpp`
+- Modify: `examples/lims/org/include/lims/org/authorization/declared.hpp` (several separation pairs per action, `authorizationFactsOf`), `invoice_dto.hpp` (three actions), `invoice_model.hpp`, `billing_authorization.hpp`/`.cpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `billing_test_support.hpp` (`dispatchAs`, `approvalSetUp`, `draftedInvoice`, `submit`), `examples/lims/README.md` (decisions 34 and 35)
 
 **Interfaces:**
-- Consumes: `Authorization`, `requireAuthorized`, `authorizationVerdict`, `AuthorizationFacts`, `OrgModel::rolesIn`, `OrgModel::valueLimit`, `OrgModel::findSite`, `OrgModel::findCompany`, `PriceListModel::settingsOf`, `invoiceView`, `roundToCurrency`, and the ledger's dated rate through `lims::ledgerPort().rateOn` (declared here, wired in Task 14; until then `ledgerPort().rateOn` is empty and a foreign-currency invoice cannot be approved — see Step 4).
-- Produces: `SubmitInvoice { InvoiceId invoiceId; }`, `ApproveInvoice { InvoiceId invoiceId; }`, `ReturnInvoice { InvoiceId invoiceId; }` → `InvoiceView`; `ListPendingApprovals {}` → `ListInvoicesResult`; `Authorization<ApproveInvoice>` with `role = InvoiceApprover`, `scopeOf` (the invoice's site before its deadline, its company after), `amountOf` (gross in company currency), `limitOf` (the principal's value limit at the scope's company), `separatedFrom = typeId<CreateInvoice>`, `sameActorRefusal`, `firstPerformerOf` (the invoice's creator); `Authorization<ReturnInvoice>` (role and scope only); `Authorization<SubmitInvoice>` (billing clerk at the invoice's company); `lims::LedgerPort { std::function<PostingResult(PostingRequest const&)> post; std::function<std::optional<Rational>(CompanyId, CurrencyCode, CurrencyCode, Timestamp const&)> rateOn; }`, `void lims::setLedgerPort(LedgerPort)`, `LedgerPort const& lims::ledgerPort()` in `billing/core/ledger_port.hpp`.
+- Consumes: `Authorization`, `requireAuthorized`, `authorizationVerdict`, `AuthorizationFacts`, `OrgModel::rolesIn`, `OrgModel::valueLimit`, `OrgModel::findSite`, `OrgModel::findCompany`, `PriceListModel::settingsOf`, `invoiceView`, `RunBillingSchedule`, `ScreenHarness`.
+- Produces: `SubmitInvoice { InvoiceId invoiceId; }`, `ApproveInvoice { InvoiceId invoiceId; }` → `InvoiceView`; `ListPendingApprovals {}` → `ListInvoicesResult`; in `declared.hpp`, `struct lims::SeparatedFrom { std::string_view action; std::string_view refusal; }`, `concept lims::DeclaresSeparations` (`static constexpr std::array<SeparatedFrom, N> separations` and `static std::array<std::optional<std::string>, N> firstPerformersOf(Action const&)`), `struct lims::JudgedFacts { AuthorizationFacts facts; std::string where; std::string sameActorRefusal; }` and `JudgedFacts lims::authorizationFactsOf<Action>(Action const&, std::string const& principal)`; `Authorization<ApproveInvoice>` with `role = InvoiceApprover`, `scopeOf` (the invoice's site before its deadline, its company after), `amountOf` (gross in company currency, as submission recorded it), `limitOf` (the principal's value limit at the scope's company), `separations` (`CreateInvoice`, `SubmitInvoice`) and `firstPerformersOf` (the invoice's creator and submitter); `Authorization<SubmitInvoice>` (billing clerk at the invoice's company); test helpers `R lims::test::dispatchAs<Model>(std::string const& principal, Action)`, `LabFixture lims::test::approvalSetUp()`, `InvoiceView lims::test::draftedInvoice()`, `void lims::test::submit(InvoiceView const&)`.
 
-Lifecycle: `Draft → Submitted` (a billing clerk; the deadline is now plus the company's approval hours), `Submitted → Approved` (an invoice approver who did not create it, whose value limit covers its gross in company currency, holding the role at the invoice's site — or, once the deadline has passed, at its company), `Submitted → Draft` (`ReturnInvoice`, by an approver who could approve it, limit aside). Escalation is the deadline the rule reads: nothing runs at the deadline, the scope the rule asks for changes, and `ListPendingApprovals` shows an invoice to whoever could approve it now.
+Lifecycle: `Draft → Submitted` (a billing clerk; the deadline is now plus the company's approval hours; the gross in company currency is recorded), `Submitted → Approved` (an invoice approver who neither created nor submitted it, whose value limit covers its gross in company currency, holding the role at the invoice's site — or, once the deadline has passed, at its company). The design's lifecycle is draft → submitted → approved → posted and names no way back, so there is no return-to-draft action. Escalation is the deadline the rule reads: nothing runs at the deadline, the scope the rule asks for changes, and `ListPendingApprovals` shows an invoice to whoever could approve it now.
 
-- [ ] **Step 1: The ledger port (billing's half; the app fills it in Task 14)**
+Two separation pairs guard approval. `CreateInvoice` ↔ `ApproveInvoice` is the design's "one principal may not both create and approve one invoice"; `SubmitInvoice` ↔ `ApproveInvoice` keeps four eyes on an invoice the billing run drafted, whose creator is the schedule's service principal, so that the clerk who submits it is not also the one who approves it. Part A's declaration holds one pair; `declared.hpp` grows a form for several, and lab's single pair keeps its form.
 
-Create `examples/lims/billing/include/lims/billing/core/ledger_port.hpp`:
+A foreign-currency invoice's value in company currency needs the ledger's dated rate, which billing reaches only from Task 14 on: until then `SubmitInvoice` refuses one ("invoice N is in USD and no rate values it in EUR"), and this task's cases are in the company's currency.
+
+- [ ] **Step 1: Several separation pairs per action, and the facts a rule is judged on**
+
+In `examples/lims/org/include/lims/org/authorization/declared.hpp` (include `<array>` and `<cstddef>`), after `DeclaresSeparation`:
 
 ```cpp
-// SPDX-License-Identifier: Apache-2.0
-#pragma once
-
-#include <functional>
-#include <morph/util/datetime.hpp>
-#include <morph/util/rational.hpp>
-#include <optional>
-
-#include "lims/posting/posting.hpp"
-
-/// @file
-/// What billing needs of the ledger, without including it: posting a request, and the dated rate between two
-/// currencies. The app installs both at start-up, before the first dispatch, and never changes them after.
-
-namespace lims {
-
-/// @brief The ledger as billing reaches it.
-struct LedgerPort {
-    /// @brief Records a posting; answers its entry, or throws the ledger's refusal.
-    std::function<PostingResult(PostingRequest const&)> post;
-    /// @brief The rate from the first currency to the second valid on a date at a company, or nothing.
-    std::function<std::optional<::morph::math::Rational>(CompanyId, CurrencyCode, CurrencyCode,
-                                                         ::morph::time::Timestamp const&)>
-        rateOn;
+/// @brief One separation-of-duties pair of an action with several: the first half's action id and the refusal.
+struct SeparatedFrom {
+    /// @brief The first half's registered action id.
+    std::string_view action;
+    /// @brief What the refusal says after the principal's name, such as "created this invoice and cannot also
+    ///        approve it".
+    std::string_view refusal;
 };
 
-/// @brief Installs @p port. Called once at start-up (and by tests), before any billing action runs.
-/// @param port The port.
-void setLedgerPort(LedgerPort port);
+/// @brief Whether @p Action declares several separation-of-duties pairs: `separations`, and `firstPerformersOf`
+///        answering who performed each pair's first half on the same subject, in the same order.
+/// @tparam Action The action type.
+template <typename Action>
+concept DeclaresSeparations = DeclaresRule<Action> && requires(Action const& action) {
+    { Authorization<Action>::separations.size() } -> std::convertible_to<std::size_t>;
+    { Authorization<Action>::firstPerformersOf(action)[0] } -> std::convertible_to<std::optional<std::string>>;
+};
 
-/// @brief The installed port; both members empty until one is installed.
-/// @return It.
-[[nodiscard]] LedgerPort const& ledgerPort();
-
-}  // namespace lims
+/// @brief A rule's facts for one action and principal, with where it was judged and the words a same-actor refusal
+///        uses.
+struct JudgedFacts {
+    /// @brief The facts.
+    AuthorizationFacts facts;
+    /// @brief The scope, in words: "at company 2", or "in any scope".
+    std::string where;
+    /// @brief The refusal's words when the verdict is `SameActor`; empty without a pair.
+    std::string sameActorRefusal;
+};
 ```
 
-and `billing/src/core/ledger_port.cpp` holding it in a function-local static.
+Replace the body of `requireAuthorized` with a call to a new `authorizationFactsOf`, which holds what its body built, so the pending list (Step 6) judges by the same facts:
 
-- [ ] **Step 2: Write the failing test**
+```cpp
+/// @brief Gathers what @p Action's rule judges @p principal on, from the declaration and the payload.
+/// @tparam Action A declared action.
+/// @param action The action.
+/// @param principal The principal.
+/// @return The facts, where they were judged, and a same-actor refusal's words.
+template <typename Action>
+    requires DeclaresRule<Action>
+[[nodiscard]] JudgedFacts authorizationFactsOf(Action const& action, std::string const& principal) {
+    using Rule = Authorization<Action>;
+    JudgedFacts judged{.facts = AuthorizationFacts{.principal = principal,
+                                                   .required = Rule::role,
+                                                   .held = {},
+                                                   .firstPerformer = std::nullopt,
+                                                   .amount = std::nullopt,
+                                                   .limit = std::nullopt},
+                       .where = "in any scope",
+                       .sameActorRefusal = {}};
+    if constexpr (DeclaresScope<Action>) {
+        Scope const scope = Rule::scopeOf(action);
+        judged.facts.held = OrgModel::rolesIn(principal, scope);
+        judged.where = "at " + scopeName(scope);
+        if constexpr (DeclaresValueLimit<Action>) {
+            judged.facts.amount = Rule::amountOf(action);
+            judged.facts.limit = Rule::limitOf(principal, scope);
+        }
+    } else {
+        judged.facts.held = OrgModel::rolesAnywhere(principal);
+    }
+    if constexpr (DeclaresSeparation<Action>) {
+        judged.facts.firstPerformer = Rule::firstPerformerOf(action);
+        judged.sameActorRefusal = std::string{Rule::sameActorRefusal};
+    } else if constexpr (DeclaresSeparations<Action>) {
+        auto const performers = Rule::firstPerformersOf(action);
+        for (std::size_t pair = 0; pair < performers.size(); ++pair) {
+            if (performers[pair] == principal) {
+                judged.facts.firstPerformer = performers[pair];
+                judged.sameActorRefusal = std::string{Rule::separations[pair].refusal};
+                break;
+            }
+        }
+    }
+    return judged;
+}
+
+template <typename Action>
+    requires DeclaresRule<Action>
+void requireAuthorized(Action const& action) {
+    using Rule = Authorization<Action>;
+    std::string const principal = ::morph::session::current()->principal;
+    auto const judged = authorizationFactsOf(action, principal);
+    std::string const actionType{::morph::model::ActionTraits<Action>::typeId()};
+    Verdict const verdict = authorizationVerdict(judged.facts);
+    if (verdict == Verdict::Allowed) {
+        return;
+    }
+    if (verdict == Verdict::MissingRole) {
+        throw Forbidden{actionType + ": '" + principal + "' does not hold the " + std::string{roleName(Rule::role)} +
+                        " role " + judged.where};
+    }
+    if (verdict == Verdict::NoLimit) {
+        throw Forbidden{actionType + ": '" + principal + "' has no value limit " + judged.where};
+    }
+    if (verdict == Verdict::OverLimit) {
+        throw Forbidden{actionType + ": the amount is above '" + principal + "''s value limit " + judged.where};
+    }
+    if (!judged.sameActorRefusal.empty()) {
+        throw Forbidden{actionType + ": '" + principal + "' " + judged.sameActorRefusal};
+    }
+    throw Forbidden{actionType + ": refused"};
+}
+```
+
+`requireAuthorized` keeps its Doxygen; `authorizationFactsOf` and the new types are documented above. Extend the file's declaration comment with the several-pairs form. Run Model suite `"[authorization]"` and `"[verification]"` once: lab's single pair must refuse as before.
+
+- [ ] **Step 2: The shared approval fixtures**
+
+Append to `billing_test_support.hpp` (include `<morph/session/session_auth.hpp>`, `"clock.hpp"`, `"lims/billing/models/invoice_model.hpp"`, `"lims/org/dto/limit_dto.hpp"`, `"lims/org/models/org_model.hpp"` and `"testkit/pump.hpp"`):
+
+```cpp
+/// @brief Runs @p action on a fresh @p Model as @p principal through an in-process bridge, as a client's call runs.
+///
+/// A handler that is a coroutine (a Task handler) is only built by a direct `execute`; a dispatch drives it, so a
+/// suite sends such an action this way.
+/// @tparam Model The model.
+/// @tparam Action The action.
+/// @param principal Who sends it.
+/// @param action The action.
+/// @return Its result.
+/// @throws std::exception the action's failure.
+template <typename Model, typename Action>
+auto dispatchAs(std::string const& principal, Action action) {
+    ::morph::ladder::testkit::BackendRig rig{::morph::ladder::testkit::Mode::Local, 1};
+    ::morph::session::TokenIssuer const issuer{std::string{kServiceSecret}, ::morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(signedAs(issuer, principal));
+    auto handler = rig.client<Model>(0);
+    return ::morph::ladder::testkit::awaitQt(handler.execute(std::move(action)));
+}
+
+/// @brief Billing settings for the seeded company (19 % tax, 48 approval hours, billing day 25), value limits —
+///        paula 100 and tom 10 as approvers at the seeded site, carl 1000 and bea 1000 as approvers at the company —
+///        and one published, relayed sample of a client billed in EUR. Set at 09:00 on 10 November 2026.
+/// @return The sample.
+inline LabFixture approvalSetUp() {
+    ::morph::ladder::ScopedClockOverride const clock{at(2026, 11, 10)};
+    grant("sam", LimsRole::Supervisor);
+    {
+        ScopedPrincipal const sam{"sam"};
+        PriceListModel{}.execute(SetBillingSettings{
+            .company = seededCompany(),
+            .receivableAccount = "1200",
+            .revenueAccount = "4000",
+            .taxAccount = "2200",
+            .roundingAccount = "6900",
+            .taxRate = Rate{::morph::math::Rational{::morph::math::Numerator{19}, ::morph::math::Denominator{100},
+                                                    ::morph::math::DecimalPlaces{6}}},
+            .approvalHours = Count{::morph::math::Rational{48, ::morph::math::DecimalPlaces{0}}},
+            .billingDay = Count{::morph::math::Rational{25, ::morph::math::DecimalPlaces{0}}}});
+        OrgModel org;
+        auto const limit = [&org](std::string principal, std::int64_t units) {
+            org.execute(SetValueLimit{.principal = std::move(principal),
+                                      .company = seededCompany(),
+                                      .limit = Amount{::morph::math::Rational{units, ::morph::math::DecimalPlaces{2}}}});
+        };
+        limit("paula", 100);
+        limit("carl", 1000);
+        limit("tom", 10);
+        limit("bea", 1000);
+    }
+    grant("paula", LimsRole::InvoiceApprover, Scope{seededSite()});
+    grant("tom", LimsRole::InvoiceApprover, Scope{seededSite()});
+    grant("carl", LimsRole::InvoiceApprover);
+    grant("bea", LimsRole::InvoiceApprover);
+    auto lab = publishedSample();
+    billingFor(lab.client);
+    relayLabEvents();
+    return lab;
+}
+
+/// @brief `approvalSetUp`, and the client's invoice drafted by bea at the seeded site (gross 47.60).
+/// @return The invoice.
+inline InvoiceView draftedInvoice() {
+    auto const lab = approvalSetUp();
+    ::morph::ladder::ScopedClockOverride const clock{at(2026, 11, 10)};
+    ScopedPrincipal const bea{"bea"};
+    return InvoiceModel{}.execute(CreateInvoice{.company = seededCompany(), .site = seededSite(), .client = lab.client});
+}
+
+/// @brief Submits @p invoice as bea at 09:00 on 10 November, dispatched as a client sends it.
+/// @param invoice The invoice.
+inline void submit(InvoiceView const& invoice) {
+    ::morph::ladder::ScopedClockOverride const clock{at(2026, 11, 10)};
+    static_cast<void>(dispatchAs<InvoiceModel>("bea", SubmitInvoice{.invoiceId = invoice.id}));
+}
+```
+
+`submit` and the new cases dispatch `SubmitInvoice` rather than call it, because Task 14 makes its handler a coroutine that awaits the ledger's rate; dispatched, the cases do not change then.
+
+- [ ] **Step 3: Write the failing tests**
 
 Create `examples/lims/tests/test_invoice_approval.cpp`:
 
@@ -5921,9 +6931,9 @@ Create `examples/lims/tests/test_invoice_approval.cpp`:
 // SPDX-License-Identifier: Apache-2.0
 //
 // Invoice approval. Hypothesis 5: an approval that lasts days and passes between principals is ordinary actions and
-// the declared authorization. Hypothesis 6, second instance: billing's create/approve pair and the approver's value
-// limit, which the server edge cannot see. Hypothesis 4, second instance: escalation at a deadline, with nothing
-// scheduled.
+// the declared authorization. Hypothesis 6, second instance: billing's create/approve and submit/approve pairs and the
+// approver's value limit, which the server edge cannot see. Escalation at a deadline, which the design listed as
+// hypothesis 4's second instance, with nothing scheduled.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -5935,7 +6945,8 @@ Create `examples/lims/tests/test_invoice_approval.cpp`:
 
 #include "billing_test_support.hpp"
 #include "clock.hpp"
-#include "lims/app/event_wiring.hpp"
+#include "lims/app/service_principals.hpp"
+#include "lims/billing/models/billing_run_model.hpp"
 #include "lims/billing/models/invoice_model.hpp"
 #include "lims/org/dto/limit_dto.hpp"
 #include "testkit/backend_rig.hpp"
@@ -5955,62 +6966,13 @@ namespace {
 
 constexpr std::string_view kSecret = "lims-invoice-approval-test-secret-32-bytes";
 
-/// @brief A drafted EUR invoice at the seeded site for one published sample (gross 47.60), created by bea, with
-///        48 approval hours. paula approves at the seeded site with a limit of 100; carl approves at the company with
-///        a limit of 1000; tom approves at the site with a limit of 10; bea is also an approver with a limit of
-///        1000 at the company. Created at 09:00 on 10 November 2026.
-/// @return The invoice.
-lims::InvoiceView draftedInvoice() {
-    ScopedClockOverride const clock{lims::test::at(2026, 11, 10)};
-    lims::test::grant("sam", lims::LimsRole::Supervisor);
-    {
-        ScopedPrincipal const sam{"sam"};
-        lims::PriceListModel{}.execute(lims::SetBillingSettings{
-            .company = lims::test::seededCompany(),
-            .receivableAccount = "1200",
-            .revenueAccount = "4000",
-            .taxAccount = "2200",
-            .roundingAccount = "6900",
-            .taxRate = lims::Rate{Rational{morph::math::Numerator{19}, morph::math::Denominator{100}, DecimalPlaces{6}}},
-            .approvalHours = lims::Count{Rational{48, DecimalPlaces{0}}},
-            .billingDay = lims::Count{Rational{25, DecimalPlaces{0}}}});
-        lims::OrgModel org;
-        auto const limit = [&org](std::string principal, std::int64_t units) {
-            org.execute(lims::SetValueLimit{.principal = std::move(principal),
-                                            .company = lims::test::seededCompany(),
-                                            .limit = lims::Amount{Rational{units, DecimalPlaces{2}}}});
-        };
-        limit("paula", 100);
-        limit("carl", 1000);
-        limit("tom", 10);
-        limit("bea", 1000);
-    }
-    lims::test::grant("paula", lims::LimsRole::InvoiceApprover, lims::Scope{lims::test::seededSite()});
-    lims::test::grant("tom", lims::LimsRole::InvoiceApprover, lims::Scope{lims::test::seededSite()});
-    lims::test::grant("carl", lims::LimsRole::InvoiceApprover);
-    lims::test::grant("bea", lims::LimsRole::InvoiceApprover);
-    auto const lab = lims::test::publishedSample();
-    lims::test::billingFor(lab.client);
-    lims::app::relayLabEvents();
-    ScopedPrincipal const bea{"bea"};
-    return lims::InvoiceModel{}.execute(
-        lims::CreateInvoice{.company = lims::test::seededCompany(), .site = lims::test::seededSite(), .client = lab.client});
-}
-
-/// @brief Submits @p invoice as bea at 09:00 on 10 November.
-void submit(lims::InvoiceView const& invoice) {
-    ScopedClockOverride const clock{lims::test::at(2026, 11, 10)};
-    ScopedPrincipal const bea{"bea"};
-    lims::InvoiceModel{}.execute(lims::SubmitInvoice{.invoiceId = invoice.id});
-}
-
 }  // namespace
 
 // Mutation: drop the separation-of-duties members from Authorization<ApproveInvoice> (bea approves her own invoice).
 TEST_CASE("invoice approval: four eyes and a value limit, judged in the model", "[lims][billing][approval]") {
     DbFixture fixture;
-    auto const invoice = draftedInvoice();
-    submit(invoice);
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
     ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
     lims::InvoiceModel invoices;
     {
@@ -6034,13 +6996,15 @@ TEST_CASE("invoice approval: four eyes and a value limit, judged in the model", 
     CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
 }
 
-// Hypothesis 4, second instance. Mutation: judge the scope at the site whatever the time (paula still approves after
-// the deadline, and carl's pending list stays as it was).
-TEST_CASE("Hypothesis 4: an approval past its deadline escalates to a company-scoped approver, with nothing scheduled",
+// Escalation, which the design listed as hypothesis 4's second instance: nothing is scheduled. Mutation: judge the
+// scope at the site whatever the time (paula still approves after the deadline, and carl's pending list stays as it
+// was).
+TEST_CASE("Hypothesis 4 (mis-framed for escalation): an approval past its deadline goes to a company-scoped approver, "
+          "with nothing scheduled",
           "[lims][billing][approval][h4]") {
     DbFixture fixture;
-    auto const invoice = draftedInvoice();
-    submit(invoice);
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
     lims::InvoiceModel invoices;
     auto const pendingFor = [&invoices](std::string principal) {
         ScopedPrincipal const as{std::move(principal)};
@@ -6075,7 +7039,7 @@ TEST_CASE("Hypothesis 5: an approval lasts across days, principals and restarts 
     auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
-    auto const invoice = draftedInvoice();
+    auto const invoice = lims::test::draftedInvoice();
     morph::session::TokenIssuer const issuer{std::string{kSecret}, morph::session::hmacSha256};
     {
         ScopedClockOverride const monday{lims::test::at(2026, 11, 10)};
@@ -6103,8 +7067,8 @@ TEST_CASE("Hypothesis 6: the edge lets an invoice's creator through to approve i
     auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
-    auto const invoice = draftedInvoice();
-    submit(invoice);
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
     morph::session::TokenIssuer const issuer{std::string{kSecret}, morph::session::hmacSha256};
     auto const authorizer = lims::test::limsAuthorizer(kSecret);
     CHECK(authorizer->authorize(lims::test::signedAs(issuer, "bea"), "InvoiceModel", "ApproveInvoice"));
@@ -6120,29 +7084,137 @@ TEST_CASE("Hypothesis 6: the edge lets an invoice's creator through to approve i
                       Catch::Matchers::ContainsSubstring("value limit"));
 }
 
-TEST_CASE("invoice approval: an approver returns an invoice to draft, and a draft is submitted again",
+
+// Mutation: drop the SubmitInvoice pair from Authorization<ApproveInvoice> (bea approves the invoice she submitted).
+TEST_CASE("invoice approval: an invoice the billing run drafted still needs a second person to approve it",
           "[lims][billing][approval]") {
     DbFixture fixture;
-    auto const invoice = draftedInvoice();
-    submit(invoice);
-    ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+    auto const lab = lims::test::approvalSetUp();
+    lims::test::grantService(std::string{lims::app::kSchedulePrincipal});
+    lims::InvoiceId id;
+    {
+        // What one schedule tick does for this company, called as its principal; Task 11 measures the dispatch.
+        ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+        ScopedPrincipal const schedule{std::string{lims::app::kSchedulePrincipal}};
+        static_cast<void>(lims::BillingRunModel{}.execute(
+            lims::RunBillingSchedule{.batch = lims::Count{Rational{50, DecimalPlaces{0}}}}));
+        auto const drafted =
+            lims::InvoiceModel{}.execute(lims::ListInvoices{.company = lims::test::seededCompany()}).invoices;
+        REQUIRE(drafted.size() == 1U);
+        CHECK(drafted[0].createdBy == lims::app::kSchedulePrincipal);
+        CHECK(drafted[0].client == lab.client);
+        id = drafted[0].id;
+    }
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25, 10)};
+    static_cast<void>(lims::test::dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = id}));
     lims::InvoiceModel invoices;
     {
-        ScopedPrincipal const tom{"tom"};  // over his limit, but returning needs none
-        CHECK(invoices.execute(lims::ReturnInvoice{.invoiceId = invoice.id}).state == lims::InvoiceState::Draft);
+        ScopedPrincipal const bea{"bea"};
+        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = id}),
+                          Catch::Matchers::ContainsSubstring("submitted this invoice"));
     }
-    ScopedPrincipal const bea{"bea"};
-    auto const again = invoices.execute(lims::SubmitInvoice{.invoiceId = invoice.id});
-    CHECK(again.state == lims::InvoiceState::Submitted);
-    CHECK(again.approvalDeadline == morph::time::Timestamp{lims::test::at(2026, 11, 13)});
+    ScopedPrincipal const carl{"carl"};
+    auto const approved = invoices.execute(lims::ApproveInvoice{.invoiceId = id});
+    CHECK(approved.state == lims::InvoiceState::Approved);
+    CHECK(approved.submittedBy == "bea");
+    CHECK(approved.approvedBy == "carl");
 }
 ```
 
-- [ ] **Step 3: Run it and see it fail**
+Create `examples/lims/screens/tests/test_lims_approval_inbox.cpp`, a one-screen bundle of its own so no lims screen changes:
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+//
+// Escalation is a deadline the approval rule reads, and no action runs when it passes (decision 34). What that leaves
+// on a screen: an approver's inbox is not told.
+
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <expected>
+#include <memory>
+#include <morph/ui/author.hpp>
+#include <morph/ui/service.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <testkit/db_fixture.hpp>
+#include <testkit/screen_harness.hpp>
+
+#include "billing_test_support.hpp"
+#include "clock.hpp"
+#include "lims/billing/models/invoice_model.hpp"
+
+namespace {
+
+namespace ui = morph::ui;
+using morph::examples::testing::RigMode;
+using morph::examples::testing::ScreenHarness;
+using morph::ladder::ScopedClockOverride;
+using morph::ladder::testkit::DbFixture;
+
+constexpr std::string_view kInbox = "test.approvalInbox";
+
+/// @brief A bundle of one screen: the caller's pending approvals, counted, and a button that asks again.
+/// @return The bundle, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> inboxBundle() {
+    ui::ScreenRegistry screens;
+    auto registered = screens.add(ui::screen(std::string{kInbox}, [](ui::Scope& screen) {
+        auto const invoices = screen.model<lims::InvoiceModel>("invoices");
+        auto const pending = screen.query<lims::ListPendingApprovals>("pending", invoices);
+        auto const rows = pending.value().at(&lims::ListInvoicesResult::invoices);
+        return ui::column({ui::text({.text = ui::format("{0} pending", {ui::count(rows)})}).testId("pendingCount"),
+                           ui::button({.label = "Refresh", .onClick = ui::refetch(pending)}).testId("refresh")});
+    }));
+    if (!registered) {
+        return std::unexpected(registered.error());
+    }
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "lims-approval-inbox-test", .version = "1.0"}, screens.catalog()};
+    ui::CatalogEntry entry;
+    entry.id = std::string{kInbox};
+    entry.title = "Approvals";
+    if (auto added = served.addScreen(std::move(entry), (*registered)->text); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
+}  // namespace
+
+// The expected outcome: past the deadline, paula's inbox still lists the invoice she can no longer approve, until it
+// asks again. If the CHECK_FALSE fails, something told the inbox: record what in decision 34.
+TEST_CASE("approval inbox: a site approver's inbox is not told when an approval's deadline passes",
+          "[lims-screens][billing][h4]") {
+    DbFixture fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
+    std::optional<ScopedClockOverride> clock;
+    clock.emplace(lims::test::at(2026, 11, 12, 8));
+    ScreenHarness harness{morph::client::LocalApp{.name = "lims-approval-inbox", .bundle = &inboxBundle, .setUp = {}},
+                          std::string{kInbox}, RigMode::Local, {}, morph::client::LocalSetup{.db = {}, .user = "paula"}};
+    REQUIRE(harness.waitForText("pendingCount", "1 pending"));
+
+    clock.reset();
+    clock.emplace(lims::test::at(2026, 11, 12, 10));  // the deadline was 09:00
+    bool const told = harness.waitFor(
+        [&harness] { return harness.text("pendingCount") == std::optional<std::string>{"0 pending"}; },
+        std::chrono::milliseconds{1500});
+    CHECK_FALSE(told);
+
+    // The control: asked again, the same panel shows the escalation, so the panel can show it.
+    harness.click("refresh");
+    CHECK(harness.waitForText("pendingCount", "0 pending"));
+    CHECK(harness.problems().empty());
+}
+```
+
+The bundle follows `lims_screens.cpp`'s `bundle()` (`ScreenRegistry`, `UiRegistry`, `addScreen`, `build`); if `screen.query` without a body or `ui::refetch` is spelled differently in `include/morph/ui/author.hpp`, use that header's spelling. `ScopedClockOverride` is process-wide (`examples/common/clock.hpp`), so the model calls the harness makes on its own threads read it.
+
+- [ ] **Step 4: Run them and see them fail**
 
 Run: Build lims. Expected: compile error, `lims::SubmitInvoice` is not declared.
 
-- [ ] **Step 4: The rules**
+- [ ] **Step 5: The rules**
 
 In `billing_authorization.hpp`:
 
@@ -6159,30 +7231,31 @@ struct Authorization<SubmitInvoice> {
     [[nodiscard]] static Scope scopeOf(SubmitInvoice const& action);
 };
 
-/// @brief An invoice is approved by an invoice approver who did not create it and whose value limit covers it: at
-///        the invoice's site while its approval is within its deadline, at its company after. The scope moving
-///        from site to company at the deadline is the escalation.
+/// @brief An invoice is approved by an invoice approver who neither created nor submitted it and whose value limit
+///        covers it: at the invoice's site while its approval is within its deadline, at its company after. The
+///        scope moving from site to company at the deadline is the escalation.
 template <>
 struct Authorization<ApproveInvoice> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::InvoiceApprover;
 
-    /// @brief The pair's first half: the registered id of `CreateInvoice`.
-    static constexpr std::string_view separatedFrom = ::morph::model::ActionTraits<CreateInvoice>::typeId();
-
-    /// @brief The refusal when the approver created the invoice.
-    static constexpr std::string_view sameActorRefusal = "created this invoice and cannot also approve it";
+    /// @brief The pairs: whoever created the invoice, and whoever submitted it, may not also approve it.
+    static constexpr std::array<SeparatedFrom, 2> separations{{
+        {.action = ::morph::model::ActionTraits<CreateInvoice>::typeId(),
+         .refusal = "created this invoice and cannot also approve it"},
+        {.action = ::morph::model::ActionTraits<SubmitInvoice>::typeId(),
+         .refusal = "submitted this invoice and cannot also approve it"},
+    }};
 
     /// @brief The invoice's site before its deadline, its company from the deadline on.
     /// @param action The action.
     /// @return The scope; an empty company when there is no such invoice.
     [[nodiscard]] static Scope scopeOf(ApproveInvoice const& action);
 
-    /// @brief The invoice's gross in its company's currency: converted at the rate on its submission date and rounded
-    ///        half-up when the currencies differ.
+    /// @brief The invoice's gross in its company's currency, as its submission recorded it.
     /// @param action The action.
     /// @return The amount; zero when there is no such invoice.
-    /// @throws ValidationError when the currencies differ and no rate is valid on the submission date.
+    /// @throws ValidationError when the submission recorded no company-currency gross.
     [[nodiscard]] static ::morph::math::Rational amountOf(ApproveInvoice const& action);
 
     /// @brief @p principal's value limit at the company of @p scope.
@@ -6192,22 +7265,10 @@ struct Authorization<ApproveInvoice> {
     [[nodiscard]] static std::optional<::morph::math::Rational> limitOf(std::string_view principal,
                                                                        Scope const& scope);
 
-    /// @brief Who created the invoice.
+    /// @brief Who created the invoice and who submitted it, in `separations`' order.
     /// @param action The action.
-    /// @return The creator; empty when there is no such invoice.
-    [[nodiscard]] static std::optional<std::string> firstPerformerOf(ApproveInvoice const& action);
-};
-
-/// @brief An invoice is returned to draft by an invoice approver in the scope its approval is judged in.
-template <>
-struct Authorization<ReturnInvoice> {
-    /// @brief The role.
-    static constexpr LimsRole role = LimsRole::InvoiceApprover;
-
-    /// @brief As `Authorization<ApproveInvoice>::scopeOf`.
-    /// @param action The action.
-    /// @return The scope.
-    [[nodiscard]] static Scope scopeOf(ReturnInvoice const& action);
+    /// @return The two; each empty when there is no such invoice or no submission.
+    [[nodiscard]] static std::array<std::optional<std::string>, 2> firstPerformersOf(ApproveInvoice const& action);
 };
 ```
 
@@ -6228,34 +7289,19 @@ In `billing_authorization.cpp`, beside a helper `invoiceRow(InvoiceId) -> std::o
 
 Scope Authorization<ApproveInvoice>::scopeOf(ApproveInvoice const& action) { return approvalScope(action.invoiceId); }
 
-Scope Authorization<ReturnInvoice>::scopeOf(ReturnInvoice const& action) { return approvalScope(action.invoiceId); }
-
 ::morph::math::Rational Authorization<ApproveInvoice>::amountOf(ApproveInvoice const& action) {
     auto const row = invoiceRow(action.invoiceId);
     if (!row.has_value()) {
         return ::morph::math::Rational{0, ::morph::math::DecimalPlaces{0}};
     }
-    CompanyId const company{row->companyId.Value()};
-    auto const currency = static_cast<CurrencyCode>(row->currency.Value());
-    auto const base = OrgModel::findCompany(company)->baseCurrency;
-    ::morph::math::Rational const gross{::morph::math::Numerator{row->grossNum.Value()},
-                                        ::morph::math::Denominator{row->grossDen.Value()},
-                                        ::morph::math::DecimalPlaces{decimalsOf(currency)}};
-    if (currency == base) {
-        return gross;
+    if (!row->grossCompanyNum.Value().has_value() || !row->grossCompanyDen.Value().has_value()) {
+        throw ValidationError{"ApproveInvoice: invoice " + std::to_string(*action.invoiceId) +
+                              " has no value in its company's currency"};
     }
-    auto const& port = ledgerPort();
-    auto const rate = port.rateOn ? port.rateOn(company, currency, base, timestampFromMillis(row->submittedAt.Value()))
-                                  : std::nullopt;
-    if (!rate.has_value()) {
-        throw ValidationError{"ApproveInvoice: no " + std::string{currencyName(currency)} + "/" +
-                              std::string{currencyName(base)} + " rate on the invoice's submission date"};
-    }
-    auto const converted = ::morph::math::checkedMul(gross, *rate);
-    if (!converted.has_value()) {
-        throw OutOfRange{"ApproveInvoice: the invoice's gross is too large to convert exactly"};
-    }
-    return roundToCurrency(*converted, base);
+    auto const base = OrgModel::findCompany(CompanyId{row->companyId.Value()})->baseCurrency;
+    return ::morph::math::Rational{::morph::math::Numerator{*row->grossCompanyNum.Value()},
+                                   ::morph::math::Denominator{*row->grossCompanyDen.Value()},
+                                   ::morph::math::DecimalPlaces{decimalsOf(base)}};
 }
 
 std::optional<::morph::math::Rational> Authorization<ApproveInvoice>::limitOf(std::string_view principal,
@@ -6267,18 +7313,23 @@ std::optional<::morph::math::Rational> Authorization<ApproveInvoice>::limitOf(st
     return site.has_value() ? OrgModel::valueLimit(principal, site->companyId) : std::nullopt;
 }
 
-std::optional<std::string> Authorization<ApproveInvoice>::firstPerformerOf(ApproveInvoice const& action) {
+std::array<std::optional<std::string>, 2> Authorization<ApproveInvoice>::firstPerformersOf(
+    ApproveInvoice const& action) {
     auto const row = invoiceRow(action.invoiceId);
-    return row.has_value() ? std::optional<std::string>{std::string{row->createdBy.Value().ToStringView()}}
-                           : std::nullopt;
+    if (!row.has_value()) {
+        return {std::nullopt, std::nullopt};
+    }
+    std::string submitter{row->submittedBy.Value().ToStringView()};
+    return {std::optional<std::string>{std::string{row->createdBy.Value().ToStringView()}},
+            submitter.empty() ? std::nullopt : std::optional<std::string>{std::move(submitter)}};
 }
 ```
 
-and `Authorization<SubmitInvoice>::scopeOf` returning the invoice's company. Put `SubmitInvoice`, `ApproveInvoice` and `ReturnInvoice` in the edge table and the coverage tuple.
+and `Authorization<SubmitInvoice>::scopeOf` returning the invoice's company. Put `SubmitInvoice` and `ApproveInvoice` in the edge table and the coverage tuple.
 
-- [ ] **Step 5: The actions**
+- [ ] **Step 6: The actions**
 
-Add the DTOs (`validate()` requires the id; `ListPendingApprovals::validate()` is `true`) and register in `invoice_model.hpp`: `"SubmitInvoice"`, `"ApproveInvoice"`, `"ReturnInvoice"`, each `BRIDGE_REGISTER_EFFECTS(…, ::morph::effects::updates<lims::InvoiceView>)`; `"ListPendingApprovals"` a read. Create `invoice_approval.cpp`:
+Add the DTOs (`validate()` requires the id; `ListPendingApprovals::validate()` is `true`) and register in `invoice_model.hpp`: `"SubmitInvoice"` and `"ApproveInvoice"`, each `BRIDGE_REGISTER_EFFECTS(…, ::morph::effects::updates<lims::InvoiceView>)`; `"ListPendingApprovals"` a read. Create `invoice_approval.cpp`:
 
 ```cpp
 InvoiceView InvoiceModel::execute(const SubmitInvoice& action) {
@@ -6294,13 +7345,24 @@ InvoiceView InvoiceModel::execute(const SubmitInvoice& action) {
     if (row.state.Value() != static_cast<int>(InvoiceState::Draft)) {
         throw IllegalTransition{"SubmitInvoice: only a draft is submitted"};
     }
-    auto const settings = PriceListModel::settingsOf(CompanyId{row.companyId.Value()});
+    CompanyId const company{row.companyId.Value()};
+    auto const currency = static_cast<CurrencyCode>(row.currency.Value());
+    auto const base = OrgModel::findCompany(company)->baseCurrency;
+    if (currency != base) {
+        throw ValidationError{"SubmitInvoice: invoice " + std::to_string(*action.invoiceId) + " is in " +
+                              std::string{currencyName(currency)} + " and no rate values it in " +
+                              std::string{currencyName(base)}};
+    }
+    auto const settings = PriceListModel::settingsOf(company);
     std::int64_t const hours = (*settings->approvalHours).numerator / (*settings->approvalHours).denominator;
     std::int64_t const now = nowMillis();
     row.state = static_cast<int>(InvoiceState::Submitted);
     row.submittedBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
     row.submittedAt = now;
     row.deadlineAt = now + hours * 3'600'000;
+    // The value the approver's limit is judged against, in the company's currency.
+    row.grossCompanyNum = row.grossNum.Value();
+    row.grossCompanyDen = row.grossDen.Value();
     mapper.Update(row);
     sqlTxn.Commit();
     return invoiceView(mapper, static_cast<std::int64_t>(row.id.Value()));
@@ -6327,7 +7389,7 @@ InvoiceView InvoiceModel::execute(const ApproveInvoice& action) {
 }
 ```
 
-`ReturnInvoice` is `ApproveInvoice`'s shape setting `state = Draft` and clearing `submitted_by`, `submitted_at`, `deadline_at`. The state check comes before `requireAuthorized` in approval so that approving an approved invoice is an `IllegalTransition` for everyone, not a refusal that names who created it. `invoiceRecord(mapper, id, where)` (anonymous namespace) loads the row or throws `NotFound`. `ListPendingApprovals`:
+The state check comes before `requireAuthorized` in approval so that approving an approved invoice is an `IllegalTransition` for everyone, not a refusal that names who created it. `invoiceRecord(mapper, id, where)` (anonymous namespace) loads the row or throws `NotFound`. `ListPendingApprovals`:
 
 ```cpp
 // An action handler: the registry calls it on the instance, like every other.
@@ -6345,92 +7407,98 @@ ListInvoicesResult InvoiceModel::execute(const ListPendingApprovals& action) {
                                       static_cast<int>(InvoiceState::Submitted))
                                .All()) {
         ApproveInvoice const approve{.invoiceId = InvoiceId{static_cast<std::int64_t>(row.id.Value())}};
-        using Rule = Authorization<ApproveInvoice>;
-        Scope const scope = Rule::scopeOf(approve);
-        AuthorizationFacts facts{.principal = principal,
-                                 .required = Rule::role,
-                                 .held = OrgModel::rolesIn(principal, scope),
-                                 .firstPerformer = Rule::firstPerformerOf(approve),
-                                 .amount = std::nullopt,
-                                 .limit = Rule::limitOf(principal, scope)};
         try {
-            facts.amount = Rule::amountOf(approve);
+            if (authorizationVerdict(authorizationFactsOf(approve, principal).facts) == Verdict::Allowed) {
+                result.invoices.push_back(invoiceView(mapper, static_cast<std::int64_t>(row.id.Value())));
+            }
         } catch (ValidationError const&) {
-            continue;  // no rate yet: nobody can approve it, so it is nobody's to act on
-        }
-        if (authorizationVerdict(facts) == Verdict::Allowed) {
-            result.invoices.push_back(invoiceView(mapper, static_cast<std::int64_t>(row.id.Value())));
+            continue;  // no company-currency value: nobody can approve it, so it is nobody's to act on
         }
     }
     return result;
 }
 ```
 
-The pending list asks the same declared rule `ApproveInvoice` is judged by; it is the one place the rule is evaluated without the action, and `authorizationVerdict` is what makes that a call rather than a copy.
+The pending list asks the same declared rule `ApproveInvoice` is judged by, through the same `authorizationFactsOf`; it is the one place the rule is evaluated without the action.
 
-- [ ] **Step 6: Build and run**
+- [ ] **Step 7: Build and run**
 
-Run: Build lims, Model suite `"[approval]"`, Model suite `"[authorization]"`. Expected: all pass, the h5 and h6 cases in all three modes. Run the four mutations named in the file and restore each.
+Run: Build lims, Model suite `"[approval]"`, Model suite `"[authorization]"`, then Screen suite `"[h4]"`. Expected: all pass, the h5 and h6 cases in all three modes; the inbox case passes as written (expected, inferred from the effects being derived from executed actions only: no action runs at a deadline). Run the five mutations named in `test_invoice_approval.cpp` and restore each. If the inbox case's `CHECK_FALSE(told)` fails, something told the inbox: change it to `CHECK(told)`, find what in the harness's event path, and use the refuted text in Step 9.
 
-- [ ] **Step 7: Measure the second instance of hypothesis 6 as code**
+- [ ] **Step 8: Measure the second instance of hypothesis 6 as code**
 
-Record what the second instance needed that the first already had, for Task 16:
+Record what the second instance needed that the first already had, for Task 17, over the range since Part B began (Task 1 Step 0 wrote the base):
 
 ```bash
 cd /home/yaraslau/repo/morph
+base=$(cat /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_base.txt)
 grep -rn 'requireAuthorized(action)' examples/lims/*/src | wc -l
 grep -rn 'requireRoleSomewhere<' examples/lims/*/src | wc -l
 grep -c 'requirementOf<' examples/lims/app/include/lims/app/declared_requirements.hpp
 grep -n 'std::tuple<' -A12 examples/lims/tests/test_declared_authorization.cpp | head -20
-git diff --stat HEAD~12 -- examples/lims/billing/include/lims/billing/authorization examples/lims/billing/src/authorization
+git diff --stat "$base" -- examples/lims/billing/include/lims/billing/authorization examples/lims/billing/src/authorization \
+    examples/lims/org/include/lims/org/authorization/declared.hpp
 ```
 
 Keep the output in `/tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_h6_measure.txt`.
 
-- [ ] **Step 8: Record decisions 35 and 36**
+- [ ] **Step 9: Record decisions 34 and 35**
+
+The design's hypothesis-4 row names the billing run as the one instance and says why escalation is not one; decision 34 records the measurement behind it. Append, with the inbox paragraph for the outcome Step 7 measured:
 
 ```markdown
-### 35. Invoice approval is ordinary actions on the invoice's row, and escalation is its deadline (hypotheses 5 and 4)
+### 34. Invoice approval is ordinary actions on the invoice's row, and escalation is its deadline (hypothesis 5; hypothesis 4 mis-framed for escalation)
 
-`SubmitInvoice`, `ApproveInvoice` and `ReturnInvoice` move an invoice between draft, submitted and approved; the
-state, who submitted and approved it, and the approval deadline are columns of its row. The deadline is the submission
-time plus the company's approval hours. Before it, the approver's role is judged at the invoice's site (a role at the
-company holds there too); from it, only at the company: an approver at the site no longer can, and
-`ListPendingApprovals` shows the invoice to whoever could approve it now, through the same declared rule.
+`SubmitInvoice` and `ApproveInvoice` move an invoice from draft to submitted to approved; the state, who submitted and
+approved it, the approval deadline and the gross in company currency are columns of its row. The deadline is the
+submission time plus the company's approval hours. Before it, the approver's role is judged at the invoice's site (a
+role at the company holds there too); from it, only at the company: an approver at the site no longer can, and
+`ListPendingApprovals` shows the invoice to whoever could approve it now, through the same declared rule. The design's
+lifecycle names no way back from submitted, so there is none.
 
 **Hypothesis 5 is refuted for this instance.** Measured in `tests/test_invoice_approval.cpp`: an invoice submitted
 by one principal on one rig is approved by another a day later on a new rig, in `Local`, `LocalSingleThread` and
 `Socket` mode; four eyes and the value limit hold. The lifecycle needed no state outside the row and no code shared
 with lab's verification but the declared authorization (`lims::Authorization`, `requireAuthorized`,
-`authorizationVerdict`). Requisition approval in Part C is the second instance.
+`authorizationFactsOf`, `authorizationVerdict`). Requisition approval in Part C is the second instance.
 
-**Hypothesis 4's second instance needed no scheduled work.** Escalation is a deadline the rule reads when an approver
-acts or lists, so nothing has to run at the deadline: measured in the same file with the clock before and after it.
-What is inferred, not measured: a screen listing pending approvals is not told when the deadline passes, since no
-action ran and no effect was declared; it shows the escalation on its next fetch. So the scheduled work hypothesis 4
-names occurred once in Part B (the billing run, decision 34) and no framework seam is designed from it; Part C's
-requisition escalation is expected to take this shape, and its stock jobs are out of the design's scope.
+**Hypothesis 4 is mis-framed for escalation.** The design listed approval escalation as hypothesis 4's second
+instance, but escalation is not scheduled work: it is a deadline the rule reads when an approver acts or lists, so
+nothing has to start at the deadline or resume after a restart. Measured in the same file with the clock before and
+after the deadline. The one consequence is an effects question, not a scheduling one, measured in
+`screens/tests/test_lims_approval_inbox.cpp`: a site approver's inbox, mounted before the deadline, still lists the
+invoice after it, and shows the escalation only when it asks again, because no action ran and so no effect was
+declared or fanned out. Hypothesis 4 therefore has one instance in this design, the billing run (decision 33), and
+the design's row says so. Part C's requisition escalation is expected to take this shape.
+```
 
-### 36. Billing's create/approve pair and the approver's value limit are declared, and checked in the model (hypothesis 6, second instance)
+If the inbox was told, replace the measured sentence with "a site approver's inbox, mounted before the deadline, dropped the invoice after it without asking again: [what told it]".
+
+```markdown
+### 35. Billing's approval pairs and the approver's value limit are declared, and checked in the model (hypothesis 6, second instance)
 
 `Authorization<ApproveInvoice>` declares the invoice approver role in a scope its payload's invoice decides (site or,
-past the deadline, company), a value limit (the invoice's gross in company currency against the approver's limit at
-that company, `SetValueLimit`), and a separation-of-duties pair with `CreateInvoice`.
+past the deadline, company), a value limit (the invoice's gross in company currency, recorded at submission, against
+the approver's limit at that company, `SetValueLimit`), and two separation-of-duties pairs: with `CreateInvoice`, and
+with `SubmitInvoice`, so an invoice the billing run drafted — its creator the schedule's service principal — still
+needs a second person. `lims/org/authorization/declared.hpp` holds a form for several pairs beside lab's single one.
 
 **Hypothesis 6 is confirmed for its second instance.** Measured in `tests/test_invoice_approval.cpp`:
 `LimsAuthorizer` allows both the invoice's creator and an approver over their limit (it sees the principal, the model
-and the action), and the model refuses both, in every mode. The same hand-rolled guarantee recurred: each declared
-action's handler calls `requireRoleSomewhere` and `requireAuthorized` itself ([measured] calls across lab, org, ledger
-and billing), the edge's table restates every declaration by hand ([measured] entries), and the coverage test lists
-every mutating action by hand because nothing enumerates a model's actions publicly. Task 16 decides the seam.
+and the action), and the model refuses both, in every mode; the clerk who submitted a run-drafted invoice is refused
+too. The same hand-rolled guarantee recurred: each declared action's handler calls `requireRoleSomewhere` and
+`requireAuthorized` itself ([measured] calls across lab, org, ledger and billing), the edge's table restates every
+declaration by hand ([measured] entries), and the coverage test lists every mutating action by hand because nothing
+enumerates a model's actions publicly. Task 17 decides the seam.
 ```
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 cd /home/yaraslau/repo/morph
-git add examples/lims/billing examples/lims/tests examples/lims/app/include/lims/app/declared_requirements.hpp \
-        examples/lims/README.md
+git add examples/lims/org/include/lims/org/authorization/declared.hpp examples/lims/billing examples/lims/tests \
+        examples/lims/screens/tests/test_lims_approval_inbox.cpp \
+        examples/lims/app/include/lims/app/declared_requirements.hpp examples/lims/README.md
 git commit -m "Approve lims invoices with four eyes, value limits and deadline escalation
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -6438,207 +7506,21 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 ```
 
 ---
-
-### Task 13: The draft invoice's edit lease, and its lapse on disconnect (hypothesis 3, first instance)
+### Task 13: The draft invoice's edit lease, its release, and its lapse on disconnect (hypothesis 3, first instance)
 
 **Files:**
-- Create: `examples/lims/billing/include/lims/billing/dto/lease_dto.hpp`, `examples/lims/billing/include/lims/billing/models/invoice_edit_model.hpp`, `examples/lims/billing/src/models/invoice_edit_model.cpp`, `examples/lims/tests/lims_server_rig.hpp`, `examples/lims/tests/test_invoice_lease.cpp`
-- Modify: `billing_entity.hpp` (`InvoiceLeaseRecord`), `billing_schema.cpp`, `invoice_model.hpp` (`GetInvoiceLease`), `billing_authorization.hpp`/`.cpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `examples/lims/README.md` (decision 37)
+- Create: `examples/lims/billing/include/lims/billing/dto/lease_dto.hpp`, `examples/lims/billing/include/lims/billing/models/invoice_edit_model.hpp`, `examples/lims/billing/src/models/invoice_edit_model.cpp`, `examples/lims/tests/test_invoice_lease.cpp`
+- Modify: `billing_entity.hpp` (`InvoiceLeaseRecord`), `billing_schema.cpp`, `invoice_model.hpp` (`GetInvoiceLease`), `billing_authorization.hpp`/`.cpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `examples/lims/README.md` (decision 36)
 
 **Interfaces:**
-- Consumes: `invoiceView`, `morph::backend::RemoteServer` (`openConnection`, `setConnectionWriter`, `handle(msg, reply, cid)`, `handleInline(msg, cid)`, `closeConnection`), `morph::backend::IEnvelopeService`, `morph::backend::ConnectionFacts`, `morph::wire::Envelope`, `morph::wire::WatchBody`, `morph::wire::kWatchKind`.
-- Produces: `LeaseInvoice { InvoiceId invoiceId; }` → `InvoiceLeaseView { InvoiceId invoice; std::string holder; Timestamp expiresAt; }`; `ReleaseInvoice {}` → `InvoiceLeaseView`; `RemoveInvoiceLine { BillableLineId line; }` → `InvoiceView`; `SetInvoiceReference { std::string reference; }` → `InvoiceView`; `GetInvoiceLease { InvoiceId invoiceId; }` (on `InvoiceModel`) → `InvoiceLeaseView` (empty holder when free); model `lims::InvoiceEditModel` (`"InvoiceEditModel"`, one private instance per editor); record `Billing_Lease` (keyed by `invoice`); `class lims::test::ServerRig` in `tests/lims_server_rig.hpp`.
+- Consumes: `invoiceView`, `BackendRig::connect`, `ServerConnection` (Task 9), `lims::test::signedAs`.
+- Produces: `LeaseInvoice { InvoiceId invoiceId; }` → `InvoiceLeaseView { InvoiceId invoice; std::string holder; Timestamp expiresAt; }`; `ReleaseInvoice {}` → `InvoiceLeaseView`; `RemoveInvoiceLine { BillableLineId line; }` → `InvoiceView`; `SetInvoiceReference { std::string reference; }` → `InvoiceView`; `GetInvoiceLease { InvoiceId invoiceId; }` (on `InvoiceModel`) → `InvoiceLeaseView` (empty holder when free); model `lims::InvoiceEditModel` (`"InvoiceEditModel"`, one private instance per editor); record `Billing_Lease` (keyed by `invoice`).
 
-A lease is a row: the invoice, the holder, a token naming the editing instance, and an expiry fifteen minutes after the last edit. `LeaseInvoice` takes a free or expired lease, or renews its own; another holder's live lease is refused in words naming them. Each edit requires the instance's own live lease and renews it. When the instance is destroyed — its screen unmounts locally, or the server reclaims it when its connection closes — it deletes its lease by token. Expiry needs no timer: an expired lease is free to the next `LeaseInvoice`.
+A lease is a row: the invoice, the holder, a token naming the editing instance, and an expiry fifteen minutes after the last edit. `LeaseInvoice` takes a free or expired lease, or renews its own; another holder's live lease is refused in words naming them. Each edit requires the instance's own live lease and renews it. When the instance is destroyed — its screen unmounts locally, or the server reclaims it when its connection closes — it deletes its lease by token. Expiry needs no timer: an expired lease is free to the next `LeaseInvoice`. The edits are the invoice editor's (`examples/lims/design/mockups/21-InvoiceEditor.dc.html`: a "Remove" per line, and the client reference), so a lease has something to guard; `ReleaseInvoice` is what the editor's "Close" sends, and its declared effect is what a second clerk's "Tell me when it's free" waits on.
 
-- [ ] **Step 1: The server rig**
+- [ ] **Step 1: Write the failing test**
 
-Create `examples/lims/tests/lims_server_rig.hpp`:
-
-```cpp
-// SPDX-License-Identifier: Apache-2.0
-#pragma once
-
-#include <chrono>
-#include <cstdint>
-#include <future>
-#include <map>
-#include <memory>
-#include <morph/core/connection_writer.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/core/wire.hpp>
-#include <morph/session/session_auth.hpp>
-#include <mutex>
-#include <string>
-#include <string_view>
-#include <thread>
-#include <utility>
-#include <vector>
-
-#include "lims_test_support.hpp"
-
-/// @file
-/// A lims server driven envelope by envelope: connections that open, register models, execute, watch records and
-/// close, with every event the server writes to each kept. What a test of disconnects and fan-out needs that
-/// `BackendRig` does not give: closing one connection while others stay, and the events each received.
-
-namespace lims::test {
-
-/// @brief Negotiates server-sent events for the connection its kind arrives on, as the UI service's `ui-hello` does.
-class EventsHello final : public ::morph::backend::IEnvelopeService {
-public:
-    using IEnvelopeService::handle;
-
-    /// @brief The kind it serves.
-    static constexpr std::string_view kKind = "lims-test-hello";
-
-    /// @brief Whether it serves @p kind.
-    /// @param kind The envelope's kind.
-    /// @return `true` for `lims-test-hello`.
-    [[nodiscard]] bool serves(std::string_view kind) const override { return kind == kKind; }
-
-    /// @brief Answers `ok`.
-    /// @param request The envelope.
-    /// @return The reply.
-    [[nodiscard]] std::string handle(::morph::wire::Envelope const& request,
-                                     ::morph::session::IAuthorizer const& /*authorizer*/) override {
-        return ::morph::wire::encode(::morph::wire::makeOk(request.callId));
-    }
-
-    /// @brief Answers `ok` and records that the connection takes events.
-    /// @param request The envelope.
-    /// @param authorizer The authorizer.
-    /// @param facts The connection's facts.
-    /// @return The reply.
-    [[nodiscard]] std::string handle(::morph::wire::Envelope const& request,
-                                     ::morph::session::IAuthorizer const& authorizer,
-                                     ::morph::backend::ConnectionFacts& facts) override {
-        facts.events = true;
-        return handle(request, authorizer);
-    }
-};
-
-/// @brief One lims server, its connections and what each was sent.
-class ServerRig {
-public:
-    /// @param secret The token secret the server's `LimsAuthorizer` verifies with.
-    explicit ServerRig(std::string_view secret)
-        : _issuer{std::string{secret}, ::morph::session::hmacSha256}, _server{[&] {
-              ::morph::backend::ServerConfig config;
-              config.services.push_back(std::make_shared<EventsHello>());
-              config.coalesceWindow = std::chrono::milliseconds{0};
-              return std::make_shared<::morph::backend::RemoteServer>(_pool, limsAuthorizer(secret), config);
-          }()} {}
-
-    /// @brief Opens a connection that takes events and keeps what it is sent.
-    /// @return The connection.
-    ::morph::backend::ConnectionId open() {
-        auto const cid = _server->openConnection();
-        _server->setConnectionWriter(cid, {.write = [this, cid](std::string message) {
-                                               std::scoped_lock const lock{_mutex};
-                                               _sent[cid].push_back(std::move(message));
-                                           },
-                                           .backlog = [] { return std::size_t{0}; }});
-        ::morph::wire::Envelope hello;
-        hello.kind = std::string{EventsHello::kKind};
-        hello.callId = next();
-        static_cast<void>(_server->handleInline(::morph::wire::encode(hello), cid));
-        return cid;
-    }
-
-    /// @brief Registers a private instance of @p typeId on @p cid as @p principal.
-    /// @return The instance id.
-    std::uint64_t registerModel(::morph::backend::ConnectionId cid, std::string_view typeId,
-                                std::string const& principal) {
-        ::morph::wire::Envelope env;
-        env.kind = "register";
-        env.callId = next();
-        env.typeId = std::string{typeId};
-        env.session = signedAs(_issuer, principal);
-        auto const reply = request(cid, std::move(env));
-        return reply.modelId;
-    }
-
-    /// @brief Executes @p actionType with @p body on instance @p modelId of @p modelType, on @p cid, as @p principal.
-    /// @return The reply envelope (`ok` or `err`).
-    ::morph::wire::Envelope execute(::morph::backend::ConnectionId cid, std::uint64_t modelId,
-                                    std::string_view modelType, std::string_view actionType, std::string body,
-                                    std::string const& principal) {
-        ::morph::wire::Envelope env;
-        env.kind = "execute";
-        env.callId = next();
-        env.modelId = modelId;
-        env.modelType = std::string{modelType};
-        env.actionType = std::string{actionType};
-        env.body = std::move(body);
-        env.session = signedAs(_issuer, principal);
-        return request(cid, std::move(env));
-    }
-
-    /// @brief Watches @p records on @p cid as @p principal.
-    /// @return The reply.
-    ::morph::wire::Envelope watch(::morph::backend::ConnectionId cid, std::vector<std::string> records,
-                                  std::string const& principal) {
-        ::morph::wire::Envelope env;
-        env.kind = std::string{::morph::wire::kWatchKind};
-        env.callId = next();
-        env.session = signedAs(_issuer, principal);
-        env.body = glz::write_json(::morph::wire::WatchBody{.records = std::move(records), .instances = {}, .replace = false})
-                       .value_or(std::string{});
-        return ::morph::wire::decode(_server->handleInline(::morph::wire::encode(env), cid));
-    }
-
-    /// @brief Everything the server wrote to @p cid that was not a reply: its events.
-    /// @return The encoded envelopes.
-    [[nodiscard]] std::vector<std::string> sent(::morph::backend::ConnectionId cid) const {
-        std::scoped_lock const lock{_mutex};
-        auto const found = _sent.find(cid);
-        return found == _sent.end() ? std::vector<std::string>{} : found->second;
-    }
-
-    /// @brief Closes @p cid, as the transport does when the socket goes.
-    void close(::morph::backend::ConnectionId cid) { _server->closeConnection(cid); }
-
-    /// @brief Polls @p pred until it holds or @p budget passes.
-    /// @return Whether it held.
-    template <class Pred>
-    [[nodiscard]] static bool eventually(Pred pred, std::chrono::milliseconds budget = std::chrono::milliseconds{3000}) {
-        auto const deadline = std::chrono::steady_clock::now() + budget;
-        while (std::chrono::steady_clock::now() < deadline) {
-            if (pred()) {
-                return true;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds{10});
-        }
-        return pred();
-    }
-
-private:
-    [[nodiscard]] std::uint64_t next() { return ++_callId; }
-
-    ::morph::wire::Envelope request(::morph::backend::ConnectionId cid, ::morph::wire::Envelope env) {
-        auto promise = std::make_shared<std::promise<std::string>>();
-        auto answer = promise->get_future();
-        _server->handle(::morph::wire::encode(env), [promise](std::string reply) { promise->set_value(std::move(reply)); },
-                        cid);
-        return ::morph::wire::decode(answer.get());
-    }
-
-    ::morph::exec::ThreadPoolExecutor _pool{4};
-    ::morph::session::TokenIssuer _issuer;
-    std::shared_ptr<::morph::backend::RemoteServer> _server;
-    mutable std::mutex _mutex;
-    std::map<::morph::backend::ConnectionId, std::vector<std::string>> _sent;
-    std::uint64_t _callId = 0;
-};
-
-}  // namespace lims::test
-```
-
-The shapes used here are read from `tests/test_push_watch.cpp` (its `Rig`, `FanHello`, `executeOn`) and `include/morph/core/remote.hpp`; the field names `ServerConfig::coalesceWindow`, `ConnectionWriter::write`/`backlog`, `ConnectionFacts::events` and `Envelope::modelId` are from those headers. Not verified by reading: that `register` is authorised by `LimsAuthorizer` without a role (its `authorizeRegister` is `IAuthorizer`'s default) — if `register` answers `err "unauthorized"`, read `session.hpp`'s `authorizeRegister` and give `LimsAuthorizer` the override `SigningAuthorizer` needs. `_pool` is declared before `_server` so the server goes first.
-
-- [ ] **Step 2: Write the failing test**
+The connections come from `BackendRig::connect()` (Task 9), which closes one connection while others stay and keeps what each was sent.
 
 Create `examples/lims/tests/test_invoice_lease.cpp`:
 
@@ -6646,26 +7528,31 @@ Create `examples/lims/tests/test_invoice_lease.cpp`:
 // SPDX-License-Identifier: Apache-2.0
 //
 // Hypothesis 3, first instance: a draft invoice is leased to the clerk editing it; a second clerk is told who holds
-// it; the lease lapses after a timeout and when the holder's connection closes.
+// it; the lease lapses after a timeout and when the holder's connection closes; a release reaches a second clerk's
+// connection, and the lapse is measured for the same.
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <chrono>
 #include <glaze/glaze.hpp>
+#include <morph/session/session_auth.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
 
 #include "billing_test_support.hpp"
 #include "clock.hpp"
-#include "lims/app/event_wiring.hpp"
 #include "lims/billing/models/invoice_edit_model.hpp"
 #include "lims/billing/models/invoice_model.hpp"
-#include "lims_server_rig.hpp"
+#include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 
 using lims::test::ScopedPrincipal;
 using morph::ladder::ScopedClockOverride;
+using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
+using morph::ladder::testkit::Mode;
+using morph::ladder::testkit::ServerConnection;
 
 namespace {
 
@@ -6689,7 +7576,7 @@ lims::InvoiceView draft() {
     }
     auto const lab = lims::test::publishedSample();
     lims::test::billingFor(lab.client);
-    lims::app::relayLabEvents();
+    lims::test::relayLabEvents();
     lims::test::grant("alice", lims::LimsRole::BillingClerk);
     lims::test::grant("bob", lims::LimsRole::BillingClerk);
     ScopedPrincipal const alice{"alice"};
@@ -6701,6 +7588,14 @@ lims::InvoiceView draft() {
 [[nodiscard]] std::string holderOf(lims::InvoiceId invoice) {
     ScopedPrincipal const bob{"bob"};
     return lims::InvoiceModel{}.execute(lims::GetInvoiceLease{.invoiceId = invoice}).holder;
+}
+
+/// @brief Who a session says @p principal is, signed with the case's secret.
+/// @param principal The principal.
+/// @return The session.
+[[nodiscard]] morph::session::Context as(std::string const& principal) {
+    morph::session::TokenIssuer const issuer{std::string{kSecret}, morph::session::hmacSha256};
+    return lims::test::signedAs(issuer, principal);
 }
 
 }  // namespace
@@ -6744,36 +7639,61 @@ TEST_CASE("invoice lease: an editor that goes away releases its lease", "[lims][
     CHECK(holderOf(invoice.id).empty());
 }
 
+// Mutation: declare ReleaseInvoice with no effect (bob's connection hears nothing when alice lets go).
+TEST_CASE("invoice lease: a release reaches a second clerk's connection", "[lims][billing][lease]") {
+    DbFixture fixture;
+    auto const invoice = draft();
+    BackendRig rig{Mode::Socket, 0, lims::test::limsAuthorizer(kSecret)};
+    auto const lease = glz::write_json(lims::LeaseInvoice{.invoiceId = invoice.id}).value_or(std::string{});
+    auto const alice = rig.connect();
+    auto const bob = rig.connect();
+    auto const aliceEditor = alice->registerModel("InvoiceEditModel", as("alice"));
+    REQUIRE(alice->execute(aliceEditor, "InvoiceEditModel", "LeaseInvoice", lease, as("alice")).kind == "ok");
+    REQUIRE(bob->watch({"Billing_Lease"}, as("bob")).kind == "ok");
+    auto const before = bob->changes().size();
+
+    REQUIRE(alice->execute(aliceEditor, "InvoiceEditModel", "ReleaseInvoice", "{}", as("alice")).kind == "ok");
+    CHECK(ServerConnection::eventually([&] { return bob->changes().size() > before && bob->heardOf("Billing_Lease"); }));
+    CHECK(holderOf(invoice.id).empty());
+}
+
 // Hypothesis 3. Mutation: remove the release from ~InvoiceEditModel (bob's lease is refused until the timeout).
 TEST_CASE("Hypothesis 3: the lease lapses when the holder's connection closes", "[lims][billing][lease][h3]") {
     DbFixture fixture;
     auto const invoice = draft();
-    lims::test::ServerRig rig{kSecret};
-    auto const body = glz::write_json(lims::LeaseInvoice{.invoiceId = invoice.id}).value_or(std::string{});
-    auto const aliceConnection = rig.open();
-    auto const aliceEditor = rig.registerModel(aliceConnection, "InvoiceEditModel", "alice");
-    REQUIRE(rig.execute(aliceConnection, aliceEditor, "InvoiceEditModel", "LeaseInvoice", body, "alice").kind == "ok");
+    BackendRig rig{Mode::Socket, 0, lims::test::limsAuthorizer(kSecret)};
+    auto const lease = glz::write_json(lims::LeaseInvoice{.invoiceId = invoice.id}).value_or(std::string{});
+    auto const alice = rig.connect();
+    auto const aliceEditor = alice->registerModel("InvoiceEditModel", as("alice"));
+    REQUIRE(alice->execute(aliceEditor, "InvoiceEditModel", "LeaseInvoice", lease, as("alice")).kind == "ok");
 
-    auto const bobConnection = rig.open();
-    auto const bobEditor = rig.registerModel(bobConnection, "InvoiceEditModel", "bob");
-    auto const refused = rig.execute(bobConnection, bobEditor, "InvoiceEditModel", "LeaseInvoice", body, "bob");
+    auto const bob = rig.connect();
+    REQUIRE(bob->watch({"Billing_Lease"}, as("bob")).kind == "ok");
+    auto const bobEditor = bob->registerModel("InvoiceEditModel", as("bob"));
+    auto const refused = bob->execute(bobEditor, "InvoiceEditModel", "LeaseInvoice", lease, as("bob"));
     CHECK(refused.kind == "err");
     CHECK_THAT(refused.message, Catch::Matchers::ContainsSubstring("being edited by 'alice'"));
+    auto const heardBefore = bob->changes().size();
 
-    rig.close(aliceConnection);
-    bool const lapsed = lims::test::ServerRig::eventually([&] {
-        return rig.execute(bobConnection, bobEditor, "InvoiceEditModel", "LeaseInvoice", body, "bob").kind == "ok";
-    });
+    alice->close();
+    // What bob's connection is told of the lapse itself, before bob acts: the lapse runs no action, so the expected
+    // outcome is nothing. If this CHECK_FALSE fails, the lapse was told: record what carried it in decision 36.
+    bool const toldOfLapse =
+        ServerConnection::eventually([&] { return bob->changes().size() > heardBefore; }, std::chrono::milliseconds{1000});
+    CHECK_FALSE(toldOfLapse);
+
+    bool const lapsed = ServerConnection::eventually(
+        [&] { return bob->execute(bobEditor, "InvoiceEditModel", "LeaseInvoice", lease, as("bob")).kind == "ok"; });
     CHECK(lapsed);
     CHECK(holderOf(invoice.id) == "bob");
 }
 ```
 
-- [ ] **Step 3: Run it and see it fail**
+- [ ] **Step 2: Run it and see it fail**
 
 Run: Build lims. Expected: compile error, `lims/billing/models/invoice_edit_model.hpp` not found.
 
-- [ ] **Step 4: The lease**
+- [ ] **Step 3: The lease**
 
 `lease_dto.hpp`: the structs from Interfaces (`LeaseInvoice` requires its id; `RemoveInvoiceLine` its line; `SetInvoiceReference` a reference of at most 128 bytes; `ReleaseInvoice` always ready); `BRIDGE_REGISTER_RECORD(lims::InvoiceLeaseView, "Billing_Lease", ::morph::record::key<&lims::InvoiceLeaseView::invoice>)`. `InvoiceLeaseRecord` (`billing_invoice_leases`: `id`, `invoice_id`, `holder` `SqlAnsiString<64>`, `token` `SqlAnsiString<32>`, `expires_at`), migration `20261110000010 "Create billing_invoice_leases"`.
 
@@ -6910,21 +7830,23 @@ InvoiceLeaseView InvoiceEditModel::execute(const LeaseInvoice& action) {
 
 The edits share one helper, `requireOwnLease(mapper, invoiceId)`: the lease row of the invoice must carry this instance's token and be unexpired, else `Conflict` "this editor does not hold invoice N's lease"; it then sets `expires_at` to now plus fifteen minutes. `RemoveInvoiceLine` finds the line's invoice, requires the lease, sets the line `Unbilled` with no invoice, recomputes the invoice's totals with `invoiceTotals` and the settings' tax rate, and answers `invoiceView`. `ReleaseInvoice` deletes this token's row and clears `_invoice`. Declare `Authorization<LeaseInvoice>` (billing clerk at the invoice's company, `scopeOf` reading the invoice) and add it to the edge table and the coverage tuple; the edits are refused without this instance's lease, which only `LeaseInvoice` grants, so they declare no role of their own — list `"RemoveInvoiceLine"`, `"SetInvoiceReference"` and `"ReleaseInvoice"` in `openMutatingActions()` (raising its size) with that reason in its doc comment, and add the three to the coverage tuple.
 
-- [ ] **Step 5: Build and run**
+- [ ] **Step 4: Build and run**
 
-Run: Build lims, Model suite `"[lease]"`, Model suite `"[authorization]"`. Expected (the h3 case inferred from `RemoteServer::closeConnection`'s documentation: "A *private* instance … is erased outright"): all pass. If `CHECK(lapsed)` fails, the destructor did not run on close, or ran without a database connection: the hypothesis is confirmed instead — change the check to `CHECK_FALSE(lapsed)`, assert that bob's lease succeeds only after the clock passes the expiry, and use the confirmed text in Step 6. Run the two mutations and restore them.
+Run: Build lims, Model suite `"[lease]"`, Model suite `"[authorization]"`. Expected (the h3 lapse inferred from `RemoteServer::closeConnection`'s documentation: "A *private* instance … is erased outright"; the release's event from its declared `changes<InvoiceLeaseView>`; the lapse's silence from effects being derived from executed actions only): all pass. If `CHECK(lapsed)` fails, the destructor did not run on close, or ran without a database connection: the hypothesis is confirmed instead — change the check to `CHECK_FALSE(lapsed)`, assert that bob's lease succeeds only after the clock passes the expiry, and use the confirmed text in Step 5. If `CHECK_FALSE(toldOfLapse)` fails, the lapse reached bob's connection: change it to `CHECK(toldOfLapse)`, read from the `changes` body what carried it, and say so in Step 5's text. Run the three mutations and restore them.
 
-- [ ] **Step 6: Record decision 37**
+- [ ] **Step 5: Record decision 36**
 
-The refuted text (the measured outcome if Step 5 passed as written):
+The refuted text (the measured outcome if Step 4 passed as written):
 
 ```markdown
-### 37. A draft invoice is leased to its editor, and the lease lapses with the editor's instance (hypothesis 3, first instance)
+### 36. A draft invoice is leased to its editor, and the lease lapses with the editor's instance (hypothesis 3, first instance)
 
 `InvoiceEditModel` is one private instance per editor. `LeaseInvoice` writes a lease row — the invoice, the holder,
 the instance's token, an expiry fifteen minutes after the last edit — and refuses another editor's live lease in words
-naming its holder; `GetInvoiceLease` shows the holder to anyone. Each edit requires the instance's own live lease and
-renews it. An expired lease is free to the next `LeaseInvoice`, so the timeout needs no timer.
+naming its holder; `GetInvoiceLease` shows the holder to anyone. Each edit (removing a line, setting the client
+reference) requires the instance's own live lease and renews it. An expired lease is free to the next
+`LeaseInvoice`, so the timeout needs no timer. `ReleaseInvoice` declares `changes<InvoiceLeaseView>`, so a second
+clerk watching `Billing_Lease` is told when the holder lets go — measured on a second connection.
 
 **Hypothesis 3 is refuted for this instance, through an existing hook that is not a lease hook.** Measured in
 `tests/test_invoice_lease.cpp` over a real `RemoteServer`: closing the holder's connection frees the lease, and the
@@ -6932,43 +7854,295 @@ second clerk takes it without waiting for the timeout. The hook is the instance'
 erases a private instance, and `~InvoiceEditModel` deletes its lease by token. What that costs, stated plainly: the
 release does database work in a destructor, on whatever thread drops the last reference (the server strand when a
 connection closes), and a failure there can only be logged; a crash that kills the process releases nothing, and the
-timeout is then the only lapse. Lot reservation in Part C is the second instance.
+timeout is then the only lapse. And the lapse is not told: a second clerk watching `Billing_Lease` hears of a release
+but not of a lapse on disconnect, because the destructor is not an action and nothing derives a change from it —
+measured on the same second connection; the clerk learns of it only by asking. Lot reservation in Part C is the second
+instance.
 ```
 
-If confirmed instead: "**Hypothesis 3 is confirmed for this instance.** Measured in `tests/test_invoice_lease.cpp`: closing the holder's connection [what was observed]; the lease lapsed only at its timeout. No hook told the model that its connection closed."
+If confirmed instead: "**Hypothesis 3 is confirmed for this instance.** Measured in `tests/test_invoice_lease.cpp`: closing the holder's connection [what was observed]; the lease lapsed only at its timeout. No hook told the model that its connection closed." If the lapse was told, replace "And the lapse is not told: … asking." with what carried it.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 cd /home/yaraslau/repo/morph
 git add examples/lims/billing examples/lims/tests examples/lims/app/include/lims/app/declared_requirements.hpp \
         examples/lims/README.md
-git commit -m "Lease lims draft invoices to their editor and measure the lapse on disconnect
+git commit -m "Lease lims draft invoices to their editor and measure the release and the lapse on a second connection
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 ```
 
 ---
-### Task 14: Posting an invoice — two commits in sequence, under failure injection (hypothesis 1, first instance)
+### Task 14: Posting an invoice — two commits in sequence, or one shared transaction, under failure injection (hypothesis 1, first instance)
 
 **Files:**
-- Create: `examples/lims/ledger/include/lims/ledger/db/ledger_store.hpp`, `examples/lims/billing/src/models/invoice_posting.cpp`, `examples/lims/app/include/lims/app/ledger_wiring.hpp`, `examples/lims/app/src/ledger_wiring.cpp`, `examples/lims/tests/test_invoice_posting.cpp`
-- Modify: `ledger_entries.cpp` (`record` over `recordPostingIn`), `invoice_math.hpp`/`.cpp` (`postingFor`), `billing_store.hpp`, `invoice_drafts.cpp` (`assignNumberAndPost`), `billing_entity.hpp` (`NumberSeriesRecord`), `billing_schema.cpp`, `invoice_dto.hpp` (`PostInvoice`), `invoice_model.hpp`, `billing_authorization.hpp`/`.cpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `billing_test_support.hpp` (`books`, `billingSettings`, `approvedInvoice`), `src/server/main.cpp`, `examples/lims/README.md` (decision 38)
+- Create: `examples/lims/ledger/include/lims/ledger/db/ledger_store.hpp`, `examples/lims/billing/include/lims/billing/core/ledger_port.hpp`, `examples/lims/billing/src/core/ledger_port.cpp`, `examples/lims/billing/src/models/invoice_posting.cpp`, `examples/lims/app/include/lims/app/ledger_wiring.hpp`, `examples/lims/app/src/ledger_wiring.cpp`, `examples/lims/tests/test_invoice_posting.cpp`
+- Modify: `posting.hpp` (`RateQuery`, `RateAnswer`), `entry_dto.hpp` (`RecordPosting`), `rate_dto.hpp` (`GetRateOn`), `ledger_model.hpp`, `ledger_entries.cpp` (`record` over `recordPostingIn`; `RecordPosting`), `ledger_rates.cpp` (`GetRateOn`), `ledger_authorization.hpp`, `invoice_math.hpp`/`.cpp` (`postingFor`), `billing_store.hpp`, `invoice_drafts.cpp` (`assignNumberAndPost`), `billing_entity.hpp` (`NumberSeriesRecord`), `billing_schema.cpp`, `invoice_dto.hpp` (`PostInvoice`), `invoice_model.hpp` (`SubmitInvoice` and `PostInvoice` as Task handlers), `invoice_approval.cpp` (`SubmitInvoice` values a foreign-currency invoice), `billing_authorization.hpp`/`.cpp`, `declared_requirements.hpp`, `test_declared_authorization.cpp`, `billing_test_support.hpp` (`books`, `billingSettings`, `approvedInvoice`, `PostingRig`), `src/server/main.cpp`, `examples/lims/README.md` (decision 37)
 
 **Interfaces:**
-- Consumes: `LedgerPort`, `ledgerPort()`, `LedgerModel::record`, `LedgerModel::rateOn`, `fiscalYearOf`, `roundToCurrency`, `faultPoint`.
-- Produces: `PostingResult lims::recordPostingIn(Lightweight::DataMapper&, PostingRequest const&)` (ledger-internal, in `ledger/db/ledger_store.hpp`; `record` is it inside its own transaction); `struct lims::InvoiceToPost { CompanyId company; CurrencyCode companyCurrency; CurrencyCode currency; Rational rate; Timestamp date; std::string sourceKey; std::string sourceReference; Rational net; Rational tax; Rational gross; std::string receivableAccount; std::string revenueAccount; std::string taxAccount; std::string roundingAccount; }`; `PostingRequest lims::postingFor(InvoiceToPost const&)`; `std::string lims::assignNumberAndPost(Lightweight::DataMapper&, std::int64_t invoiceId, JournalEntryId entry, std::string const& author)` (billing-internal); `PostInvoice { InvoiceId invoiceId; }` → `InvoiceView`; `void lims::app::installLedgerPort()`; test helpers `lims::test::books()`, `lims::test::billingSettings()`, `lims::InvoiceView lims::test::approvedInvoice(std::string reference = "WW-1")`.
+- Consumes: `LedgerModel::record`, `LedgerModel::rateOn`, `lims::app::InternalClient::dispatch`, `lims::app::kPostingPrincipal`, `fiscalYearOf`, `roundToCurrency`, `faultPoint`, `BackendRig::connect`, `dispatchAs`.
+- Produces: `struct lims::RateQuery { CompanyId company; CurrencyCode from; CurrencyCode to; Timestamp on; }`, `struct lims::RateAnswer { Rate rate; }` (in `posting.hpp`); `RecordPosting { PostingRequest request; }` → `PostingResult` and `GetRateOn { RateQuery query; }` → `RateAnswer` on `LedgerModel`; `PostingResult lims::recordPostingIn(Lightweight::DataMapper&, PostingRequest const&)` (ledger-internal, in `ledger/db/ledger_store.hpp`; `record` is it inside its own transaction); `enum class lims::PostingMode { Dispatched, SharedTransaction }`; `struct lims::LedgerPort { PostingMode mode; std::function<Completion<PostingResult>(PostingRequest)> post; std::function<PostingResult(Lightweight::DataMapper&, PostingRequest const&)> postIn; std::function<Completion<RateAnswer>(RateQuery)> rateOn; }`, `void lims::setLedgerPort(LedgerPort)`, `LedgerPort const& lims::ledgerPort()`; `struct lims::InvoiceToPost { CompanyId company; CurrencyCode companyCurrency; CurrencyCode currency; Rational rate; Timestamp date; std::string sourceKey; std::string sourceReference; Rational net; Rational tax; Rational gross; std::string receivableAccount; std::string revenueAccount; std::string taxAccount; std::string roundingAccount; }`; `PostingRequest lims::postingFor(InvoiceToPost const&)`; `std::string lims::assignNumberAndPost(Lightweight::DataMapper&, std::int64_t invoiceId, PostingResult const& entry, std::string const& author)` (billing-internal); `PostInvoice { InvoiceId invoiceId; }` → `InvoiceView`; `void lims::app::installLedgerPort(InternalClient&, PostingMode)`; test helpers `lims::test::books()`, `lims::test::billingSettings()`, `InvoiceView lims::test::approvedInvoice(std::string reference = "WW-1", CurrencyCode = EUR)`, `class lims::test::PostingRig`.
 
-The posting is the design's "two calls in sequence": the ledger records the entry and commits (its source key is `billing.invoice:<id>`, recorded once); then billing assigns the next number of the company's fiscal-year series, marks the invoice posted with the entry's id, and commits. The number is assigned in the second commit, so a failure before it leaves no hole in the series; what it can leave is an entry for an invoice that is not posted — the partial state hypothesis 1 predicts. A retry converges: the ledger answers the entry it recorded, and billing commits. A last case runs both halves in one SQLite transaction below the models, to show the gap is morph's, not the database's.
+The posting is the design's "two calls in sequence", measured two ways, because the reason it commits twice is the way the ledger's half is reached, and that is what hypothesis 1 is about:
 
-- [ ] **Step 1: The fixtures**
+- **Dispatched** (`PostingMode::Dispatched`): the ledger's half is a real ledger action, `RecordPosting`, dispatched by the app's internal client as `system:posting`, which holds `LimsRole::Service` at the company — so it is authorized by the edge and by its declared rule, journaled like any action, and its `changes<JournalEntryView>` reaches watchers. `PostInvoice` is a Task handler that awaits it; the ledger commits alone (its source key is `billing.invoice:<id>`, recorded once), then billing assigns the next number of the company's fiscal-year series, marks the invoice posted and commits.
+- **One shared transaction** (`PostingMode::SharedTransaction`): the ledger's half is `recordPostingIn`, called by the port with billing's own open mapper inside billing's transaction. Both halves commit once, with seams that exist — the design's refutation condition, on its letter. What it gives up is measured: the ledger's write is no ledger action, so no `Ledger_Entry` change reaches a watching connection, no ledger rule authorizes it, and no ledger journal entry records it.
 
-Append to `billing_test_support.hpp`:
+The number is assigned in billing's commit either way, so a failure before it leaves no hole in the series; the fiscal year is the entry's date's, so a retry that converges on an entry recorded before a year boundary numbers it in that entry's year. The dated rate is a ledger read, `GetRateOn`, dispatched the same way; `SubmitInvoice` becomes a Task handler that awaits it to value a foreign-currency invoice in company currency, which Task 12 could not.
+
+- [ ] **Step 1: The contract's rate, the ledger's actions, and the ledger's half below its model**
+
+Append to `posting.hpp`, before its closing namespace:
+
+```cpp
+/// @brief What a poster asks the ledger before it converts: the rate from one currency to another valid on a date.
+struct RateQuery {
+    /// @brief The company whose rates are asked.
+    CompanyId company;
+    /// @brief The currency converted from.
+    CurrencyCode from = CurrencyCode::EUR;
+    /// @brief The currency converted to.
+    CurrencyCode to = CurrencyCode::EUR;
+    /// @brief The date the rate must be valid on.
+    ::morph::time::Timestamp on;
+};
+
+/// @brief The ledger's answer to a `RateQuery`.
+struct RateAnswer {
+    /// @brief Units of `to` per unit of `from`; empty when no rate is valid on the date.
+    Rate rate;
+};
+```
+
+and give `PostingResult` the entry's date, so a poster that retries learns which period and fiscal year the entry it converged on is in:
+
+```cpp
+/// @brief What the ledger recorded.
+struct PostingResult {
+    /// @brief The journal entry.
+    JournalEntryId entryId;
+    /// @brief Its date: the request's, or, for a repeated key, the first request's.
+    ::morph::time::Timestamp date;
+};
+```
+
+In `test_posting_contract.cpp`, change the result case to `PostingResult const result{.entryId = lims::JournalEntryId{9}, .date = {}};` and `CHECK_THAT(*json, Catch::Matchers::ContainsSubstring(R"("entryId":9)"));` (include `<catch2/matchers/catch_matchers_string.hpp>`).
+
+Create `ledger_store.hpp`:
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <Lightweight/DataMapper/DataMapper.hpp>
+
+#include "lims/posting/posting.hpp"
+
+/// @file
+/// Recording a posting through a caller's open mapper. Ledger-internal: `LedgerModel::record` is it inside a
+/// transaction of its own, and the app's port hands it billing's mapper for the shared-transaction posting.
+
+namespace lims {
+
+/// @brief Records @p request as a posted entry through @p mapper, once per company and source key; the caller
+///        commits.
+/// @param mapper The caller's mapper, inside its transaction.
+/// @param request The request.
+/// @return The entry and its date; the first one recorded under the request's key when it is repeated.
+/// @throws ValidationError, NotFound, Conflict as `LedgerModel::record` documents.
+[[nodiscard]] PostingResult recordPostingIn(Lightweight::DataMapper& mapper, PostingRequest const& request);
+
+}  // namespace lims
+```
+
+In `ledger_entries.cpp`, move `record`'s body into `recordPostingIn(mapper, request)` — the validation, the rate check, and everything from `PostingSources sources{mapper};` to `sources.record(...)` — with a repeated key answering the first entry's id and date:
+
+```cpp
+    if (auto const known = sources.lookup(scope, request.sourceKey)) {
+        auto const first = loadEntry(mapper, std::stoll(*known));
+        return PostingResult{.entryId = JournalEntryId{std::stoll(*known)},
+                             .date = timestampFromMillis(first->header.dateMs.Value())};
+    }
+```
+
+and a new one answering `PostingResult{.entryId = JournalEntryId{id}, .date = request.date}`; then make `record`:
+
+```cpp
+PostingResult LedgerModel::record(PostingRequest const& request) {
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto const result = recordPostingIn(mapper, request);
+    sqlTxn.Commit();
+    return result;
+}
+```
+
+The ledger's two actions. In `entry_dto.hpp`:
+
+```cpp
+/// @brief The ledger's half of a posting, as an action: records the request once per company and source key. Sent
+///        only by the app's posting client, as a service principal.
+struct RecordPosting {
+    /// @brief The request.
+    PostingRequest request;
+
+    /// @brief Whether a company and a source key are named.
+    /// @return `true` when they are.
+    [[nodiscard]] bool validate() const noexcept { return request.company.hasValue() && !request.sourceKey.empty(); }
+};
+```
+
+and in `rate_dto.hpp`:
+
+```cpp
+/// @brief Reads the rate valid on a date, as a poster asks it.
+struct GetRateOn {
+    /// @brief The question.
+    RateQuery query;
+
+    /// @brief Whether a company and a date are named.
+    /// @return `true` when they are.
+    [[nodiscard]] bool validate() const noexcept { return query.company.hasValue() && query.on.hasValue(); }
+};
+```
+
+`LedgerModel` gains `PostingResult execute(const RecordPosting& action);` (Doxygen: `ValidationError`, `NotFound`, `Conflict` as `record`; `Forbidden` "only the server's own clients send it" and for a principal without the service role at the request's company; `EmptyPrincipalError`) and `RateAnswer execute(const GetRateOn& action);` (an empty rate for a company the caller cannot see, or no rate on the date):
+
+```cpp
+PostingResult LedgerModel::execute(const RecordPosting& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"RecordPosting: a company and a source key are required"};
+    }
+    requireServicePrincipal("RecordPosting");
+    requireRoleSomewhere<RecordPosting>();
+    requireAuthorized(action);
+    return record(action.request);
+}
+```
+
+```cpp
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+RateAnswer LedgerModel::execute(const GetRateOn& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetRateOn: a company and a date are required"};
+    }
+    auto const visibleCompanies = OrgModel::visibleCompanies(currentPrincipal());
+    if (std::ranges::find(visibleCompanies, action.query.company) == visibleCompanies.end()) {
+        return RateAnswer{};
+    }
+    auto const rate = rateOn(action.query.company, action.query.from, action.query.to, action.query.on);
+    return rate.has_value() ? RateAnswer{.rate = Rate{*rate}} : RateAnswer{};
+}
+```
+
+(`RecordPosting` in `ledger_entries.cpp`, `GetRateOn` in `ledger_rates.cpp`.) Register `BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::RecordPosting, "RecordPosting")` with `BRIDGE_REGISTER_EFFECTS(lims::RecordPosting, ::morph::effects::changes<lims::JournalEntryView>)`, and `BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::GetRateOn, "GetRateOn", ::morph::model::Loggable::No)`. In `ledger_authorization.hpp`:
+
+```cpp
+/// @brief A posting is recorded by a service principal holding the service role at its company.
+template <>
+struct Authorization<RecordPosting> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::Service;
+
+    /// @brief The request's company.
+    /// @param action The action.
+    /// @return It.
+    [[nodiscard]] static Scope scopeOf(RecordPosting const& action) { return Scope{action.request.company}; }
+};
+```
+
+and add `RecordPosting` to the edge table and the coverage tuple.
+
+- [ ] **Step 2: Billing's port to the ledger**
+
+Create `examples/lims/billing/include/lims/billing/core/ledger_port.hpp`:
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <cstdint>
+#include <functional>
+#include <morph/core/completion.hpp>
+
+#include "lims/posting/posting.hpp"
+
+/// @file
+/// What billing needs of the ledger, without including it: posting a request, and the dated rate. The app installs
+/// the port at start-up, before the first dispatch; billing-internal, since it names the ORM.
+
+namespace lims {
+
+/// @brief How a posting reaches the ledger.
+enum class PostingMode : std::uint8_t {
+    Dispatched,         ///< As the ledger's own action, dispatched by the app; it commits alone, before billing.
+    SharedTransaction,  ///< Through billing's open mapper, in billing's transaction; both halves commit once.
+};
+
+/// @brief The ledger as billing reaches it.
+struct LedgerPort {
+    /// @brief Which of `post` and `postIn` `PostInvoice` uses.
+    PostingMode mode = PostingMode::Dispatched;
+    /// @brief Records a posting as the ledger's action; settles with its entry, or the ledger's refusal.
+    std::function<::morph::async::Completion<PostingResult>(PostingRequest)> post;
+    /// @brief Records a posting through the caller's open mapper, in the caller's transaction.
+    std::function<PostingResult(Lightweight::DataMapper&, PostingRequest const&)> postIn;
+    /// @brief The rate valid on a date; settles with an empty rate when there is none.
+    std::function<::morph::async::Completion<RateAnswer>(RateQuery)> rateOn;
+};
+
+/// @brief Installs @p port. Called once at start-up (and by tests), before any billing action runs.
+/// @param port The port; an empty one uninstalls.
+void setLedgerPort(LedgerPort port);
+
+/// @brief The installed port; its members empty until one is installed.
+/// @return It.
+[[nodiscard]] LedgerPort const& ledgerPort();
+
+}  // namespace lims
+```
+
+and `billing/src/core/ledger_port.cpp` holding it in a function-local static. Create `examples/lims/app/include/lims/app/ledger_wiring.hpp` declaring `void installLedgerPort(InternalClient& posting, PostingMode mode);` ("Gives billing the ledger: `RecordPosting` and `GetRateOn` dispatched through @p posting, and `recordPostingIn` for the shared transaction. Called once at start-up, before the first dispatch. @param posting The posting principal's client; it must outlive the port. @param mode Which way `PostInvoice` posts.") and `ledger_wiring.cpp`:
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+#include "lims/app/ledger_wiring.hpp"
+
+#include "lims/billing/core/ledger_port.hpp"
+#include "lims/ledger/db/ledger_store.hpp"
+#include "lims/ledger/models/ledger_model.hpp"
+
+namespace lims::app {
+
+void installLedgerPort(InternalClient& posting, PostingMode mode) {
+    setLedgerPort(LedgerPort{
+        .mode = mode,
+        .post = [&posting](PostingRequest request) {
+            return posting.dispatch<LedgerModel>(RecordPosting{.request = std::move(request)});
+        },
+        .postIn = [](Lightweight::DataMapper& mapper, PostingRequest const& request) {
+            return recordPostingIn(mapper, request);
+        },
+        .rateOn = [&posting](RateQuery query) {
+            return posting.dispatch<LedgerModel>(GetRateOn{.query = std::move(query)});
+        }});
+}
+
+}  // namespace lims::app
+```
+
+- [ ] **Step 3: The fixtures**
+
+Append to `billing_test_support.hpp` (include `"lims/app/ledger_wiring.hpp"`, `"lims/billing/core/ledger_port.hpp"` and `"lims/ledger/models/ledger_model.hpp"`):
 
 ```cpp
 /// @brief The seeded company's books: accounts 1200, 2200, 4000, 6900 and November 2026 open, made by `acc`, an
-///        accountant there; and the ledger port wired as the server wires it.
+///        accountant there.
 inline void books() {
     grant("acc", LimsRole::Accountant);
     ScopedPrincipal const acc{"acc"};
@@ -6979,7 +8153,6 @@ inline void books() {
         ledger.execute(CreateAccount{.company = seededCompany(), .code = code, .name = "Account " + code, .type = type});
     }
     ledger.execute(OpenPeriod{.company = seededCompany(), .month = ::morph::time::Timestamp{at(2026, 11, 1)}});
-    app::installLedgerPort();
 }
 
 /// @brief The seeded company's billing settings, 19 % tax, 48 approval hours, billing day 25, set by `sam`.
@@ -6998,11 +8171,60 @@ inline void billingSettings() {
         .billingDay = Count{::morph::math::Rational{25, ::morph::math::DecimalPlaces{0}}}});
 }
 
-/// @brief An approved EUR invoice for one published sample: drafted and submitted by `bea`, approved by `carl`, an
-///        approver at the company with a limit of 1000. Needs `billingSettings()` first.
+/// @brief Whether the posting principal holds the service role a `PostingRig` installs it with.
+enum class PostingRole : std::uint8_t {
+    Granted,   ///< `system:posting` holds `LimsRole::Service` at the seeded company.
+    Withheld,  ///< It holds no role: the ledger's rule has nothing to allow.
+};
+
+/// @brief A server, the posting principal's client on it and the ledger port installed over them, as the server
+///        process wires them; two socket clients for the clerks. The port is uninstalled when it goes.
+class PostingRig {
+public:
+    /// @brief Installs the port in @p mode.
+    /// @param mode Which way `PostInvoice` posts.
+    /// @param role Whether the posting principal holds the service role.
+    explicit PostingRig(PostingMode mode, PostingRole role = PostingRole::Granted) {
+        if (role == PostingRole::Granted) {
+            grantService(std::string{app::kPostingPrincipal});
+        }
+        app::installLedgerPort(_client, mode);
+    }
+    ~PostingRig() { setLedgerPort({}); }
+    PostingRig(PostingRig const&) = delete;
+    PostingRig& operator=(PostingRig const&) = delete;
+    PostingRig(PostingRig&&) = delete;
+    PostingRig& operator=(PostingRig&&) = delete;
+
+    /// @brief The server and its clients.
+    /// @return The rig.
+    [[nodiscard]] ::morph::ladder::testkit::BackendRig& rig() noexcept { return _rig; }
+
+    /// @brief Posts @p invoice as @p principal over socket client @p index, as a clerk's screen sends it.
+    /// @param invoice The invoice.
+    /// @param principal Who posts it.
+    /// @param index The socket client.
+    /// @return The posted invoice.
+    /// @throws std::exception the posting's refusal or failure.
+    InvoiceView post(InvoiceView const& invoice, std::string const& principal = "bea", std::size_t index = 0) {
+        ::morph::session::TokenIssuer const issuer{std::string{kServiceSecret}, ::morph::session::hmacSha256};
+        _rig.bridge(index).setDefaultSession(signedAs(issuer, principal));
+        auto clerk = _rig.client<InvoiceModel>(index);
+        return ::morph::ladder::testkit::awaitQt(clerk.execute(PostInvoice{.invoiceId = invoice.id}));
+    }
+
+private:
+    ::morph::ladder::testkit::BackendRig _rig{::morph::ladder::testkit::Mode::Socket, 2, limsAuthorizer(kServiceSecret)};
+    app::InternalClient _client{_rig.server(), kServiceSecret, std::string{app::kPostingPrincipal}};
+};
+
+/// @brief An approved invoice for one published sample in @p currency: drafted and submitted by `bea`, approved by
+///        `carl`, an approver at the company with a limit of 1000. Needs `billingSettings()` first, and a
+///        `PostingRig` when @p currency is not the company's.
 /// @param reference The sample's reference, distinct per invoice.
+/// @param currency The client's currency.
 /// @return The invoice.
-inline InvoiceView approvedInvoice(std::string reference = "WW-1") {
+inline InvoiceView approvedInvoice(std::string reference = "WW-1", CurrencyCode currency = CurrencyCode::EUR) {
     {
         ScopedPrincipal const sam{"sam"};
         OrgModel{}.execute(SetValueLimit{.principal = "carl", .company = seededCompany(),
@@ -7010,66 +8232,67 @@ inline InvoiceView approvedInvoice(std::string reference = "WW-1") {
     }
     grant("carl", LimsRole::InvoiceApprover);
     auto const lab = publishedSample(std::move(reference));
-    billingFor(lab.client);
-    app::relayLabEvents();
+    billingFor(lab.client, currency);
+    relayLabEvents();
     InvoiceId id;
     {
         ScopedPrincipal const bea{"bea"};
-        InvoiceModel invoices;
-        id = invoices.execute(CreateInvoice{.company = seededCompany(), .site = seededSite(), .client = lab.client}).id;
-        invoices.execute(SubmitInvoice{.invoiceId = id});
+        id = InvoiceModel{}.execute(CreateInvoice{.company = seededCompany(), .site = seededSite(), .client = lab.client}).id;
     }
+    static_cast<void>(dispatchAs<InvoiceModel>("bea", SubmitInvoice{.invoiceId = id}));
     ScopedPrincipal const carl{"carl"};
     return InvoiceModel{}.execute(ApproveInvoice{.invoiceId = id});
 }
 ```
 
-(add the includes: `lims/ledger/models/ledger_model.hpp`, `lims/billing/models/invoice_model.hpp`, `lims/org/dto/limit_dto.hpp`, `lims/app/event_wiring.hpp`, `lims/app/ledger_wiring.hpp`).
+`grant("carl", …)` twice in one case (two `approvedInvoice` calls) must not conflict; if Part A's `grant` refuses a repeated assignment, guard it as `grantService` does.
 
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 4: Write the failing test**
 
 Create `examples/lims/tests/test_invoice_posting.cpp`:
 
 ```cpp
 // SPDX-License-Identifier: Apache-2.0
 //
-// Hypothesis 1, first instance: posting an invoice is billing's state change and the ledger's entry, committed by
-// two calls in sequence. A failure injected between them; a ledger refusal; numbers under concurrent posting; and the
-// same two halves in one SQLite transaction, below the models.
+// Hypothesis 1, first instance: posting an invoice is billing's state change and the ledger's entry. Measured two
+// ways — the ledger's half dispatched as its own action (two commits in sequence), and the ledger's half sharing
+// billing's transaction (one commit) — each under a failure injected between the halves, and each for what it keeps
+// of the ledger's authorization, effects and journal.
 
-#include <Lightweight/DataMapper/DataMapper.hpp>
-#include <Lightweight/SqlTransaction.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <algorithm>
+#include <chrono>
+#include <memory>
+#include <morph/journal/action_log.hpp>
 #include <morph/session/session_auth.hpp>
+#include <mutex>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "billing_test_support.hpp"
 #include "clock.hpp"
 #include "lims/billing/core/fault_hook.hpp"
 #include "lims/billing/core/invoice_math.hpp"
-#include "lims/billing/db/billing_store.hpp"
-#include "lims/ledger/db/ledger_store.hpp"
+#include "lims/ledger/core/balance.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
-#include "testkit/pump.hpp"
 
+using lims::PostingMode;
 using lims::test::ScopedPrincipal;
 using morph::ladder::ScopedClockOverride;
-using morph::ladder::testkit::awaitQt;
-using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
-using morph::ladder::testkit::Mode;
+using morph::ladder::testkit::ServerConnection;
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
 using morph::math::Numerator;
 using morph::math::Rational;
 
 namespace {
-
-constexpr std::string_view kSecret = "lims-invoice-posting-test-secret-at-least";
 
 struct FaultHookGuard {
     FaultHookGuard() = default;
@@ -7080,20 +8303,65 @@ struct FaultHookGuard {
     ~FaultHookGuard() { lims::setFaultHook({}); }
 };
 
+/// @brief An action log that keeps what it is given: whose actions were journaled.
+class Recorder final : public morph::journal::IActionLog {
+public:
+    void append(morph::journal::LogEntry entry) override {
+        std::scoped_lock const lock{_mutex};
+        _entries.push_back(std::move(entry));
+    }
+    void flush() override {}
+    [[nodiscard]] std::vector<morph::journal::LogEntry> entries(std::string_view entityKey = {}) const override {
+        std::scoped_lock const lock{_mutex};
+        std::vector<morph::journal::LogEntry> matching;
+        for (auto const& entry : _entries) {
+            if (entityKey.empty() || entry.entityKey == entityKey) {
+                matching.push_back(entry);
+            }
+        }
+        return matching;
+    }
+    /// @brief Whether @p modelType journaled @p actionType.
+    [[nodiscard]] bool holds(std::string_view modelType, std::string_view actionType) const {
+        return std::ranges::any_of(entries(), [&](morph::journal::LogEntry const& entry) {
+            return entry.modelType == modelType && entry.actionType == actionType;
+        });
+    }
+
+private:
+    mutable std::mutex _mutex;
+    std::vector<morph::journal::LogEntry> _entries;
+};
+
 /// @brief The seeded company's entries, as acc sees them.
 [[nodiscard]] std::vector<lims::JournalEntryView> entries() {
     ScopedPrincipal const acc{"acc"};
     return lims::LedgerModel{}.execute(lims::ListEntries{.company = lims::test::seededCompany()}).entries;
 }
 
-/// @brief Posts @p invoice as bea.
-lims::InvoiceView post(lims::InvoiceView const& invoice) {
+/// @brief @p invoice as bea sees it now.
+[[nodiscard]] lims::InvoiceView current(lims::InvoiceView const& invoice) {
     ScopedPrincipal const bea{"bea"};
-    return lims::InvoiceModel{}.execute(lims::PostInvoice{.invoiceId = invoice.id});
+    return lims::InvoiceModel{}.execute(lims::GetInvoice{.invoiceId = invoice.id});
+}
+
+/// @brief A session for @p principal, signed with the rig's secret.
+[[nodiscard]] morph::session::Context as(std::string const& principal) {
+    morph::session::TokenIssuer const issuer{std::string{lims::test::kServiceSecret}, morph::session::hmacSha256};
+    return lims::test::signedAs(issuer, principal);
 }
 
 [[nodiscard]] Rational exact(std::int64_t num, std::int64_t den, std::uint32_t places) {
     return Rational{Numerator{num}, Denominator{den}, DecimalPlaces{places}};
+}
+
+/// @brief Fails the posting at @p point for as long as it lives.
+void failAt(std::string const& point) {
+    lims::setFaultHook([point](std::string_view at) {
+        if (at == point) {
+            throw std::runtime_error{"server stopped while posting"};
+        }
+    });
 }
 
 }  // namespace
@@ -7134,29 +8402,65 @@ TEST_CASE("invoice posting: the poster rounds each line half-up and books the di
     CHECK(lims::postingFor(same).lines.size() == 3U);
 }
 
+// Mutation: round the company values to the transaction currency's decimals (the yen values keep cents, and the
+// entry is refused for them).
+TEST_CASE("invoice posting: a EUR invoice posted into a JPY company rounds to whole yen and books the yen difference",
+          "[lims][billing][posting]") {
+    lims::InvoiceToPost const eur{.company = lims::CompanyId{2},
+                                  .companyCurrency = lims::CurrencyCode::JPY,
+                                  .currency = lims::CurrencyCode::EUR,
+                                  .rate = exact(15001, 100, 6),
+                                  .date = morph::time::Timestamp{lims::test::at(2026, 11, 20)},
+                                  .sourceKey = "billing.invoice:11",
+                                  .sourceReference = "invoice 11",
+                                  .net = exact(1005, 100, 2),
+                                  .tax = exact(191, 100, 2),
+                                  .gross = exact(1196, 100, 2),
+                                  .receivableAccount = "1200",
+                                  .revenueAccount = "4000",
+                                  .taxAccount = "2200",
+                                  .roundingAccount = "6900"};
+    auto const request = lims::postingFor(eur);
+    REQUIRE(request.lines.size() == 4U);
+    // 11.96 × 150.01 = 1794.1196 → 1794; 10.05 × 150.01 = 1507.6005 → 1508; 1.91 × 150.01 = 286.5191 → 287;
+    // 1794 − 1795 = −1 yen, booked to the rounding account on the debit side, with no euro amount.
+    CHECK(*request.lines[0].companyAmount == exact(1794, 1, 0));
+    CHECK(*request.lines[1].companyAmount == exact(1508, 1, 0));
+    CHECK(*request.lines[2].companyAmount == exact(287, 1, 0));
+    CHECK(request.lines[3].accountCode == "6900");
+    CHECK(request.lines[3].side == lims::PostingSide::Debit);
+    CHECK((*request.lines[3].amount).isZero());
+    CHECK(*request.lines[3].companyAmount == exact(1, 1, 0));
+    CHECK_FALSE(lims::entryProblem(request.lines, lims::CurrencyCode::EUR, lims::CurrencyCode::JPY).has_value());
+}
+
 // Mutation: skip the series update in assignNumberAndPost (the second invoice is numbered 000001 too).
 TEST_CASE("invoice posting: an approved invoice gets the next number of its company's fiscal year, and its entry",
           "[lims][billing][posting]") {
+    auto const mode = GENERATE(PostingMode::Dispatched, PostingMode::SharedTransaction);
+    CAPTURE(mode);
     DbFixture fixture;
     ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
     lims::test::books();
     lims::test::billingSettings();
+    lims::test::PostingRig posting{mode};
     auto const first = lims::test::approvedInvoice("WW-1");
     auto const second = lims::test::approvedInvoice("WW-2");
-    auto const posted = post(first);
+    auto const posted = posting.post(first);
     CHECK(posted.state == lims::InvoiceState::Posted);
     CHECK(posted.number == "INV-2026-000001");
     CHECK(posted.postedBy == "bea");
     REQUIRE(entries().size() == 1U);
     CHECK(entries()[0].id == posted.entry);
     CHECK(entries()[0].sourceKey == "billing.invoice:" + std::to_string(*first.id));
-    CHECK(post(second).number == "INV-2026-000002");
-    CHECK_THROWS_AS(post(first), lims::IllegalTransition);
+    CHECK(posting.post(second).number == "INV-2026-000002");
+    CHECK_THROWS_AS(posting.post(first), std::exception);
 }
 
-// Hypothesis 1. Mutation: assign the number before calling the ledger (the failure leaves INV-2026-000001 assigned
-// to an invoice with no entry, and the retry's number check fails).
-TEST_CASE("Hypothesis 1: a failure between the ledger's commit and billing's leaves an entry for an unposted invoice",
+// Hypothesis 1, two commits in sequence. Mutation: assign the number before the ledger's half (the failure leaves
+// INV-2026-000001 assigned to an invoice with no entry, and the retry's number check fails).
+TEST_CASE("Hypothesis 1: dispatched, a failure between the ledger's commit and billing's leaves an entry for an "
+          "unposted invoice, and no hole",
           "[lims][billing][posting][h1]") {
     auto const point = GENERATE(std::string{"post.afterLedger"}, std::string{"post.beforeCommit"});
     CAPTURE(point);
@@ -7164,40 +8468,159 @@ TEST_CASE("Hypothesis 1: a failure between the ledger's commit and billing's lea
     ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
     lims::test::books();
     lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::Dispatched};
     auto const invoice = lims::test::approvedInvoice();
     FaultHookGuard const guard;
-    lims::setFaultHook([&point](std::string_view at) {
-        if (at == point) {
-            throw std::runtime_error{"server stopped while posting"};
-        }
-    });
-    CHECK_THROWS_WITH(post(invoice), Catch::Matchers::ContainsSubstring("server stopped"));
+    failAt(point);
+    CHECK_THROWS_WITH(posting.post(invoice), Catch::Matchers::ContainsSubstring("server stopped"));
 
     // The partial state: the ledger holds the entry, billing does not hold the posting.
     REQUIRE(entries().size() == 1U);
     CHECK(entries()[0].sourceKey == "billing.invoice:" + std::to_string(*invoice.id));
-    {
-        ScopedPrincipal const bea{"bea"};
-        auto const now = lims::InvoiceModel{}.execute(lims::GetInvoice{.invoiceId = invoice.id});
-        CHECK(now.state == lims::InvoiceState::Approved);
-        CHECK(now.number.empty());
-        CHECK_FALSE(now.entry.hasValue());
-    }
+    CHECK(current(invoice).state == lims::InvoiceState::Approved);
+    CHECK(current(invoice).number.empty());
+    CHECK_FALSE(current(invoice).entry.hasValue());
 
     // No hole: the number was never assigned. A retry converges on the one entry.
     lims::setFaultHook({});
-    auto const retried = post(invoice);
+    auto const retried = posting.post(invoice);
     CHECK(retried.number == "INV-2026-000001");
     REQUIRE(entries().size() == 1U);
     CHECK(retried.entry == entries()[0].id);
 }
 
-TEST_CASE("invoice posting: a posting the ledger refuses changes nothing in billing and leaves no hole",
-          "[lims][billing][posting]") {
+// Hypothesis 1, one shared transaction. Mutation: commit billing's mapper before the fault point (the entry survives
+// the failure).
+TEST_CASE("Hypothesis 1: in one shared transaction, a failure between the halves leaves no partial state and no hole",
+          "[lims][billing][posting][h1]") {
+    auto const point = GENERATE(std::string{"post.afterLedger"}, std::string{"post.beforeCommit"});
+    CAPTURE(point);
     DbFixture fixture;
     ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
     lims::test::books();
     lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::SharedTransaction};
+    auto const invoice = lims::test::approvedInvoice();
+    FaultHookGuard const guard;
+    failAt(point);
+    CHECK_THROWS_WITH(posting.post(invoice), Catch::Matchers::ContainsSubstring("server stopped"));
+    CHECK(entries().empty());
+    CHECK(current(invoice).state == lims::InvoiceState::Approved);
+    CHECK(current(invoice).number.empty());
+
+    lims::setFaultHook({});
+    auto const retried = posting.post(invoice);
+    CHECK(retried.number == "INV-2026-000001");
+    REQUIRE(entries().size() == 1U);
+    CHECK(retried.entry == entries()[0].id);
+}
+
+// What each way keeps of the ledger's own action: its authorization, its effect on a watching connection, its journal
+// entry. The control is billing's own effect, which both keep. Mutation: declare RecordPosting with no effect (the
+// dispatched case's Ledger_Entry check fails).
+TEST_CASE("Hypothesis 1: what the shared transaction gives up of the ledger's action", "[lims][billing][posting][h1]") {
+    auto const mode = GENERATE(PostingMode::Dispatched, PostingMode::SharedTransaction);
+    CAPTURE(mode);
+    bool const dispatched = mode == PostingMode::Dispatched;
+    DbFixture fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    lims::test::billingSettings();
+
+    // Authorization, first, while the posting principal holds no role: the ledger's rule refuses — if it runs.
+    {
+        lims::test::PostingRig withheld{mode, lims::test::PostingRole::Withheld};
+        auto const invoice = lims::test::approvedInvoice("WW-1");
+        if (dispatched) {
+            CHECK_THROWS(withheld.post(invoice));
+            CHECK(entries().empty());
+        } else {
+            CHECK(withheld.post(invoice).state == lims::InvoiceState::Posted);
+            CHECK(entries().size() == 1U);
+        }
+    }
+
+    // Effects and journal: an accountant watching the ledger, a clerk watching invoices, every action journaled.
+    auto const journal = std::make_shared<Recorder>();
+    morph::journal::ScopedActionLog const log{journal};
+    lims::test::PostingRig posting{mode};
+    auto const invoice = lims::test::approvedInvoice("WW-2");
+    auto const accountant = posting.rig().connect();
+    auto const clerk = posting.rig().connect();
+    REQUIRE(accountant->watch({"Ledger_Entry"}, as("acc")).kind == "ok");
+    REQUIRE(clerk->watch({"Billing_Invoice"}, as("bea")).kind == "ok");
+    static_cast<void>(posting.post(invoice));
+    CHECK(ServerConnection::eventually([&] { return clerk->heardOf("Billing_Invoice"); }));
+    bool const ledgerHeard =
+        ServerConnection::eventually([&] { return accountant->heardOf("Ledger_Entry"); }, std::chrono::milliseconds{1500});
+    CHECK(ledgerHeard == dispatched);
+    CHECK(journal->holds("InvoiceModel", "PostInvoice"));
+    CHECK(journal->holds("LedgerModel", "RecordPosting") == dispatched);
+}
+
+// Mutation: number by the fiscal year of now() rather than of the entry's date (the retry on 2 January numbers
+// INV-2027-000001).
+TEST_CASE("invoice posting: a retry numbers the invoice in the fiscal year of the entry it converges on",
+          "[lims][billing][posting]") {
+    DbFixture fixture;
+    lims::test::books();
+    {
+        ScopedPrincipal const acc{"acc"};
+        lims::LedgerModel{}.execute(lims::OpenPeriod{.company = lims::test::seededCompany(),
+                                                     .month = morph::time::Timestamp{lims::test::at(2026, 12, 1)}});
+    }
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::Dispatched};
+    lims::InvoiceView invoice;
+    {
+        ScopedClockOverride const newYearsEve{lims::test::at(2026, 12, 31)};
+        invoice = lims::test::approvedInvoice();
+        FaultHookGuard const guard;
+        failAt("post.afterLedger");
+        CHECK_THROWS(posting.post(invoice));
+    }
+    ScopedClockOverride const january{lims::test::at(2027, 1, 2)};
+    auto const retried = posting.post(invoice);
+    CHECK(retried.number == "INV-2026-000001");
+    CHECK(entries()[0].date == morph::time::Timestamp{lims::test::at(2026, 12, 31)});
+}
+
+// Mutation: value a foreign-currency invoice at one in SubmitInvoice (carl's limit is judged against 47.60, not 43.79,
+// and the entry's company values are refused).
+TEST_CASE("invoice posting: a USD invoice is valued and posted at the ledger's dated rate", "[lims][billing][posting]") {
+    DbFixture fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    {
+        ScopedPrincipal const acc{"acc"};
+        lims::LedgerModel{}.execute(lims::SetExchangeRate{.company = lims::test::seededCompany(),
+                                                          .from = lims::CurrencyCode::USD,
+                                                          .to = lims::CurrencyCode::EUR,
+                                                          .validFrom = morph::time::Timestamp{lims::test::at(2026, 11, 1)},
+                                                          .rate = lims::Rate{exact(92, 100, 6)}});
+    }
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::Dispatched};
+    auto const invoice = lims::test::approvedInvoice("WW-1", lims::CurrencyCode::USD);
+    auto const posted = posting.post(invoice);
+    REQUIRE(entries().size() == 1U);
+    auto const entry = entries()[0];
+    CHECK(entry.id == posted.entry);
+    CHECK(entry.currency == lims::CurrencyCode::USD);
+    // 47.60 × 0.92 = 43.792 → 43.79; 40.00 × 0.92 = 36.80; 7.60 × 0.92 = 6.992 → 6.99; no rounding line.
+    REQUIRE(entry.lines.size() == 3U);
+    CHECK(*entry.lines[0].companyAmount == exact(4379, 100, 2));
+}
+
+TEST_CASE("invoice posting: a posting the ledger refuses changes nothing in billing and leaves no hole",
+          "[lims][billing][posting]") {
+    auto const mode = GENERATE(PostingMode::Dispatched, PostingMode::SharedTransaction);
+    CAPTURE(mode);
+    DbFixture fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{mode};
     auto const invoice = lims::test::approvedInvoice();
     {
         ScopedPrincipal const acc{"acc"};
@@ -7206,7 +8629,7 @@ TEST_CASE("invoice posting: a posting the ledger refuses changes nothing in bill
         ledger.execute(lims::BeginClosePeriod{.periodId = november.id});
         ledger.execute(lims::ClosePeriod{.periodId = november.id});
     }
-    CHECK_THROWS_AS(post(invoice), lims::Conflict);
+    CHECK_THROWS_WITH(posting.post(invoice), Catch::Matchers::ContainsSubstring("closed"));
     CHECK(entries().empty());
     {
         ScopedPrincipal const acc{"acc"};
@@ -7214,7 +8637,7 @@ TEST_CASE("invoice posting: a posting the ledger refuses changes nothing in bill
                                                      .month = morph::time::Timestamp{lims::test::at(2026, 12, 1)}});
     }
     ScopedClockOverride const december{lims::test::at(2026, 12, 2)};
-    CHECK(post(invoice).number == "INV-2026-000001");
+    CHECK(posting.post(invoice).number == "INV-2026-000001");
 }
 
 // Mutation: read the series' next number outside the posting's transaction (two concurrent posts take the same
@@ -7224,114 +8647,29 @@ TEST_CASE("invoice posting: two clerks posting at once get consecutive numbers",
     ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
     lims::test::books();
     lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::Dispatched};
     auto const first = lims::test::approvedInvoice("WW-1");
     auto const second = lims::test::approvedInvoice("WW-2");
     lims::test::grant("bob", lims::LimsRole::BillingClerk);
-    morph::session::TokenIssuer const issuer{std::string{kSecret}, morph::session::hmacSha256};
-    BackendRig rig{Mode::Socket, 2, lims::test::limsAuthorizer(kSecret)};
-    rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "bea"));
-    rig.bridge(1).setDefaultSession(lims::test::signedAs(issuer, "bob"));
-    auto bea = rig.client<lims::InvoiceModel>(0);
-    auto bob = rig.client<lims::InvoiceModel>(1);
+    posting.rig().bridge(0).setDefaultSession(as("bea"));
+    posting.rig().bridge(1).setDefaultSession(as("bob"));
+    auto bea = posting.rig().client<lims::InvoiceModel>(0);
+    auto bob = posting.rig().client<lims::InvoiceModel>(1);
     auto beaPosting = bea.execute(lims::PostInvoice{.invoiceId = first.id});
     auto bobPosting = bob.execute(lims::PostInvoice{.invoiceId = second.id});
-    std::set<std::string> const numbers{awaitQt(std::move(beaPosting)).number, awaitQt(std::move(bobPosting)).number};
+    std::set<std::string> const numbers{morph::ladder::testkit::awaitQt(std::move(beaPosting)).number,
+                                        morph::ladder::testkit::awaitQt(std::move(bobPosting)).number};
     CHECK(numbers == std::set<std::string>{"INV-2026-000001", "INV-2026-000002"});
 }
-
-// What one SQLite transaction does with both halves, below the models: the database can make them one fact.
-TEST_CASE("Hypothesis 1: one database transaction holds both halves, when both are called below their models",
-          "[lims][billing][posting][h1]") {
-    DbFixture fixture;
-    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
-    lims::test::books();
-    lims::test::billingSettings();
-    auto const invoice = lims::test::approvedInvoice();
-    lims::InvoiceToPost const toPost{.company = lims::test::seededCompany(),
-                                     .companyCurrency = lims::CurrencyCode::EUR,
-                                     .currency = lims::CurrencyCode::EUR,
-                                     .rate = exact(1, 1, 6),
-                                     .date = morph::time::Timestamp{lims::test::at(2026, 11, 20)},
-                                     .sourceKey = "billing.invoice:" + std::to_string(*invoice.id),
-                                     .sourceReference = "invoice " + std::to_string(*invoice.id),
-                                     .net = *invoice.net,
-                                     .tax = *invoice.tax,
-                                     .gross = *invoice.gross,
-                                     .receivableAccount = "1200",
-                                     .revenueAccount = "4000",
-                                     .taxAccount = "2200",
-                                     .roundingAccount = "6900"};
-    {
-        Lightweight::DataMapper mapper;
-        Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-        auto const posted = lims::recordPostingIn(mapper, lims::postingFor(toPost));
-        static_cast<void>(lims::assignNumberAndPost(mapper, *invoice.id, posted.entryId, "bea"));
-        // Dropped without Commit(): the failure between the halves.
-    }
-    CHECK(entries().empty());
-    {
-        ScopedPrincipal const bea{"bea"};
-        CHECK(lims::InvoiceModel{}.execute(lims::GetInvoice{.invoiceId = invoice.id}).number.empty());
-    }
-    {
-        Lightweight::DataMapper mapper;
-        Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-        auto const posted = lims::recordPostingIn(mapper, lims::postingFor(toPost));
-        CHECK(lims::assignNumberAndPost(mapper, *invoice.id, posted.entryId, "bea") == "INV-2026-000001");
-        sqlTxn.Commit();
-    }
-    CHECK(entries().size() == 1U);
-}
 ```
 
-Add `#include <catch2/generators/catch_generators.hpp>` for `GENERATE`.
+Every case posts through `PostingRig::post`, a socket client of the rig's server, because `PostInvoice` is a Task handler and only a dispatch drives one, and because the effects case needs the posting on the server its watchers are on. The fiscal-year case assumes the seeded company's fiscal year starts in January; if Part A seeds another start, use the last day before it and the second day of it instead.
 
-- [ ] **Step 3: Run it and see it fail**
+- [ ] **Step 5: Run it and see it fail**
 
-Run: Build lims. Expected: compile error, `lims/ledger/db/ledger_store.hpp` not found.
+Run: Build lims. Expected: compile error, `lims/billing/core/ledger_port.hpp` not found.
 
-- [ ] **Step 4: The ledger's half below its model**
-
-Create `ledger_store.hpp`:
-
-```cpp
-// SPDX-License-Identifier: Apache-2.0
-#pragma once
-
-#include <Lightweight/DataMapper/DataMapper.hpp>
-
-#include "lims/posting/posting.hpp"
-
-/// @file
-/// Recording a posting through a caller's open mapper. Ledger-internal: `LedgerModel::record` is it inside a
-/// transaction of its own, and the hypothesis 1 suite calls it to put both halves of a posting in one transaction.
-
-namespace lims {
-
-/// @brief Records @p request as a posted entry through @p mapper, once per company and source key; the caller
-///        commits.
-/// @param mapper The caller's mapper, inside its transaction.
-/// @param request The request.
-/// @return The entry; the first one recorded under the request's key when it is repeated.
-/// @throws ValidationError, NotFound, Conflict as `LedgerModel::record` documents.
-[[nodiscard]] PostingResult recordPostingIn(Lightweight::DataMapper& mapper, PostingRequest const& request);
-
-}  // namespace lims
-```
-
-In `ledger_entries.cpp`, move `record`'s body after its validation into `recordPostingIn(mapper, request)` (everything from `PostingSources sources{mapper};` to `sources.record(...)`, returning the result; the validation and the rate check move with it, since the probe calls it directly), and make `record`:
-
-```cpp
-PostingResult LedgerModel::record(PostingRequest const& request) {
-    Lightweight::DataMapper mapper;
-    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    auto const result = recordPostingIn(mapper, request);
-    sqlTxn.Commit();
-    return result;
-}
-```
-
-- [ ] **Step 5: Billing's half, the mapping, the action**
+- [ ] **Step 6: Billing's half, the mapping, the actions**
 
 `postingFor` in `invoice_math.cpp`:
 
@@ -7379,7 +8717,7 @@ PostingRequest postingFor(InvoiceToPost const& invoice) {
 `NumberSeriesRecord` (`billing_number_series`: `id`, `company_id`, `fiscal_year` `std::int64_t`, `next_number` `std::int64_t`), migration `20261110000011 "Create billing_number_series"`. `assignNumberAndPost` in `invoice_drafts.cpp`:
 
 ```cpp
-std::string assignNumberAndPost(Lightweight::DataMapper& mapper, std::int64_t invoiceId, JournalEntryId entry,
+std::string assignNumberAndPost(Lightweight::DataMapper& mapper, std::int64_t invoiceId, PostingResult const& entry,
                                 std::string const& author) {
     auto invoices = mapper.Query<db::InvoiceRecord>()
                         .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::id>, "=", invoiceId)
@@ -7392,10 +8730,12 @@ std::string assignNumberAndPost(Lightweight::DataMapper& mapper, std::int64_t in
     // series: a second posting waits for it instead of reading the same next number.
     invoice.state = static_cast<int>(InvoiceState::Posted);
     invoice.postedBy = Lightweight::SqlAnsiString<64>{author};
-    invoice.entryId = *entry;
+    invoice.entryId = *entry.entryId;
     mapper.Update(invoice);
     CompanyId const company{invoice.companyId.Value()};
-    auto const fiscalYear = fiscalYearOf(::morph::ladder::now(), OrgModel::findCompany(company)->fiscalYearStart);
+    // The entry's date, not the clock: a retry converges on the entry the first attempt recorded, which may lie in
+    // the fiscal year before the retry's.
+    auto const fiscalYear = fiscalYearOf(entry.date, OrgModel::findCompany(company)->fiscalYearStart);
     auto series = mapper.Query<db::NumberSeriesRecord>()
                       .Where(::Lightweight::FieldNameOf<&db::NumberSeriesRecord::companyId>, "=", *company)
                       .Where(::Lightweight::FieldNameOf<&db::NumberSeriesRecord::fiscalYear>, "=",
@@ -7419,25 +8759,28 @@ std::string assignNumberAndPost(Lightweight::DataMapper& mapper, std::int64_t in
 }
 ```
 
-Not verified by reading: whether Lightweight opens SQLite transactions `DEFERRED` with a busy timeout. If the concurrency case fails with "database is locked", read `examples/common/testkit/db_busy_fixture.hpp` and `docs/LIGHTWEIGHT-CONSTRAINTS.md` for what the ladder already knows about SQLite locking, and record the outcome in decision 38 as a measured finding (the two posts then serialise only by retrying, which is the model's to do).
+Not verified by reading: whether Lightweight opens SQLite transactions `DEFERRED` with a busy timeout. If the concurrency case fails with "database is locked", read `examples/common/testkit/db_busy_fixture.hpp` and `docs/LIGHTWEIGHT-CONSTRAINTS.md` for what the ladder already knows about SQLite locking, and record the outcome in decision 37 as a measured finding (the two posts then serialise only by retrying, which is the model's to do).
 
-`InvoiceModel::execute(const PostInvoice&)` in `invoice_posting.cpp`:
+`InvoiceModel`'s `SubmitInvoice` and `PostInvoice` handlers are Task handlers (`core::async::Task<InvoiceView> execute(SubmitInvoice action);`, `core::async::Task<InvoiceView> execute(PostInvoice action);`, `#include <core/async/Task.hpp>`, as `examples/bank/include/bank/models/budget_model.hpp` declares one): each may await the ledger, and an awaiting handler holds only its own instance's gate (`docs/spec/core/coroutines.md`, "Not re-entrant: the action gate"), so awaiting a `LedgerModel` action deadlocks nothing. `PostInvoice` in `invoice_posting.cpp`:
 
 ```cpp
-InvoiceView InvoiceModel::execute(const PostInvoice& action) {
+core::async::Task<InvoiceView> InvoiceModel::execute(PostInvoice action) {
     requirePrincipal();
     if (!action.validate()) {
         throw ValidationError{"PostInvoice: an invoice is required"};
     }
     requireRoleSomewhere<PostInvoice>();
-    Lightweight::DataMapper mapper;
-    auto const invoice = invoiceView(mapper, *action.invoiceId);
+    InvoiceView invoice;
+    {
+        Lightweight::DataMapper mapper;
+        invoice = invoiceView(mapper, *action.invoiceId);
+    }
     requireAuthorized(action);
     if (invoice.state != InvoiceState::Approved) {
         throw IllegalTransition{"PostInvoice: only an approved invoice is posted"};
     }
     auto const& port = ledgerPort();
-    if (!port.post || !port.rateOn) {
+    if (!port.post || !port.postIn || !port.rateOn) {
         throw ValidationError{"PostInvoice: no ledger is wired to post to"};
     }
     auto const company = OrgModel::findCompany(invoice.company);
@@ -7445,105 +8788,406 @@ InvoiceView InvoiceModel::execute(const PostInvoice& action) {
     auto const now = ::morph::ladder::now();
     ::morph::math::Rational rate{1, ::morph::math::DecimalPlaces{6}};
     if (invoice.currency != company->baseCurrency) {
-        auto const dated = port.rateOn(invoice.company, invoice.currency, company->baseCurrency, now);
-        if (!dated.has_value()) {
-            throw ValidationError{"PostInvoice: no rate for the invoice's currency today"};
+        auto const dated = co_await port.rateOn(
+            RateQuery{.company = invoice.company, .from = invoice.currency, .to = company->baseCurrency, .on = now});
+        if (!dated.rate.hasValue()) {
+            throw ValidationError{"PostInvoice: no " + std::string{currencyName(invoice.currency)} + "/" +
+                                  std::string{currencyName(company->baseCurrency)} + " rate today"};
         }
-        rate = *dated;
+        rate = *dated.rate;
     }
-    // The first call: the ledger records the entry and commits alone.
-    PostingResult const posted = port.post(postingFor(InvoiceToPost{
-        .company = invoice.company,
-        .companyCurrency = company->baseCurrency,
-        .currency = invoice.currency,
-        .rate = rate,
-        .date = now,
-        .sourceKey = "billing.invoice:" + std::to_string(*invoice.id),
-        .sourceReference = "invoice " + std::to_string(*invoice.id),
-        .net = *invoice.net,
-        .tax = *invoice.tax,
-        .gross = *invoice.gross,
-        .receivableAccount = settings->receivableAccount,
-        .revenueAccount = settings->revenueAccount,
-        .taxAccount = settings->taxAccount,
-        .roundingAccount = settings->roundingAccount}));
+    PostingRequest request = postingFor(InvoiceToPost{.company = invoice.company,
+                                                      .companyCurrency = company->baseCurrency,
+                                                      .currency = invoice.currency,
+                                                      .rate = rate,
+                                                      .date = now,
+                                                      .sourceKey = "billing.invoice:" + std::to_string(*invoice.id),
+                                                      .sourceReference = "invoice " + std::to_string(*invoice.id),
+                                                      .net = *invoice.net,
+                                                      .tax = *invoice.tax,
+                                                      .gross = *invoice.gross,
+                                                      .receivableAccount = settings->receivableAccount,
+                                                      .revenueAccount = settings->revenueAccount,
+                                                      .taxAccount = settings->taxAccount,
+                                                      .roundingAccount = settings->roundingAccount});
+    std::string const author = ::morph::session::current()->principal;
+    if (port.mode == PostingMode::SharedTransaction) {
+        // One transaction: the ledger's entry is written through billing's own mapper and commits with the number.
+        Lightweight::DataMapper mapper;
+        Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+        PostingResult const posted = port.postIn(mapper, request);
+        faultPoint("post.afterLedger");
+        static_cast<void>(assignNumberAndPost(mapper, *invoice.id, posted, author));
+        sqlTxn.Commit();
+        co_return invoiceView(mapper, *invoice.id);
+    }
+    // The first commit: the ledger records the entry as its own action.
+    PostingResult const posted = co_await port.post(std::move(request));
     faultPoint("post.afterLedger");
-    // The second call: billing numbers and posts the invoice and commits alone. Between the two, an entry exists
-    // for an invoice that is not posted; that window is what hypothesis 1 names.
+    // The second commit: billing numbers and posts the invoice. Between the two, an entry exists for an invoice that
+    // is not posted; that window is what hypothesis 1 names.
+    Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    static_cast<void>(assignNumberAndPost(mapper, *invoice.id, posted.entryId, ::morph::session::current()->principal));
+    static_cast<void>(assignNumberAndPost(mapper, *invoice.id, posted, author));
     sqlTxn.Commit();
-    return invoiceView(mapper, *invoice.id);
+    co_return invoiceView(mapper, *invoice.id);
 }
 ```
 
-Register `"PostInvoice"` with `BRIDGE_REGISTER_EFFECTS(lims::PostInvoice, ::morph::effects::updates<lims::InvoiceView>)` — the entry it makes in the ledger is the ledger's `Ledger_Entry`, which billing cannot name (decision 32's gap, a third place). Declare `Authorization<PostInvoice>` (billing clerk at the invoice's company), add it to the edge table and the coverage tuple.
+In `invoice_approval.cpp`, `SubmitInvoice` becomes a Task handler that values a foreign-currency invoice at the ledger's rate on the submission date instead of refusing it: it reads the row in a scope of its own; when the currencies differ it `co_await`s `ledgerPort().rateOn(RateQuery{company, currency, base, now})`, refuses with Task 12's words when no port is installed or no rate is valid, and converts the gross with `checkedMul` (`OutOfRange` when it does not fit) and `roundToCurrency(·, base)`; then, in a new mapper and transaction, it re-reads the row, refuses unless it is still a draft (another instance may have submitted it while this one awaited), and writes what Task 12 wrote with `gross_company` set to the converted value. Its same-currency path awaits nothing.
 
-- [ ] **Step 6: The app's port**
+Register `"PostInvoice"` with `BRIDGE_REGISTER_EFFECTS(lims::PostInvoice, ::morph::effects::updates<lims::InvoiceView>)` — the entry the shared transaction makes in the ledger is the ledger's `Ledger_Entry`, which billing cannot name (Task 15 measures that). Declare `Authorization<PostInvoice>` (billing clerk at the invoice's company), add it to the edge table and the coverage tuple.
 
-`ledger_wiring.hpp` declares `void installLedgerPort();` ("Gives billing the ledger: posting through `LedgerModel::record`, rates through `LedgerModel::rateOn`. Called once at start-up, before the first dispatch.") and `ledger_wiring.cpp`:
+- [ ] **Step 7: The server's posting client**
+
+In `src/server/main.cpp` (include `"lims/app/ledger_wiring.hpp"` and `"lims/billing/core/ledger_port.hpp"`), beside `events` and `schedule`, above `background`:
 
 ```cpp
-void installLedgerPort() {
-    setLedgerPort(LedgerPort{
-        .post = [](PostingRequest const& request) { return LedgerModel::record(request); },
-        .rateOn = [](CompanyId company, CurrencyCode from, CurrencyCode to, ::morph::time::Timestamp const& on) {
-            return LedgerModel::rateOn(company, from, to, on);
-        }});
-}
+        lims::app::InternalClient posting{*server, secret, std::string{lims::app::kPostingPrincipal}};
+        // The posting mode decision 37 names.
+        lims::app::installLedgerPort(posting, lims::PostingMode::Dispatched);
 ```
 
-In `src/server/main.cpp`, call `lims::app::installLedgerPort();` right after `lims::db::setup(...)`.
+and, after `QCoreApplication::exec()` returns, `lims::setLedgerPort({});` before the clients go.
 
-- [ ] **Step 7: Build and run**
+- [ ] **Step 8: Build and run**
 
-Run: Build lims, Model suite `"[posting]"`, Everything labelled for the rung. Expected: all pass. Run the four mutations and restore each.
+Run: Build lims, Model suite `"[posting]"`, Model suite `"[approval]"` (its cases now dispatch a Task handler), Everything labelled for the rung. Expected: all pass. Run the nine mutations named in the file and restore each. Then read the measured outcome off the three `[h1]` cases and write it down before Step 9:
 
-- [ ] **Step 8: Record decision 38**
+- (a) dispatched: does a failure between the halves leave an entry for an unposted invoice? (expected: yes) Does it leave a hole? (expected: no)
+- (b) shared transaction: does a failure leave any partial state or a hole? (expected: no to both)
+- (b) gives up: is `Ledger_Entry` heard on a watching connection? (expected: no) Does the ledger's rule refuse without the service role? (expected: no — the posting succeeds) Does the journal hold a `LedgerModel` `RecordPosting`? (expected: no; and if (a)'s journal check also fails, lims's models are not journaled by dispatch, so the journal is not something (b) gives up: change that check to `CHECK_FALSE(... )` for both modes and drop the journal from decision 37's costs.)
+
+- [ ] **Step 9: Record decision 37**
+
+Choose the bold paragraph by what Step 8 wrote down, and keep the server's `installLedgerPort` mode as the paragraph says:
+
+- **Refuted** — (b) left no partial state and no hole, and gave up none of the three: the server installs `PostingMode::SharedTransaction`.
+- **Confirmed, with the workaround's cost** — (b) left no partial state and no hole but gave up at least one of the three (the expected outcome): the server keeps `PostingMode::Dispatched`.
+- **Mis-framed** — (b) left partial state or a hole too, or (a) left none: the server keeps `PostingMode::Dispatched`, and the paragraph says what the gap is instead.
 
 ```markdown
-### 38. Posting an invoice is two commits in sequence, and the window between them is real (hypothesis 1, first instance)
+### 37. Posting an invoice: two commits in sequence keep each module's action; one transaction gives the ledger's up (hypothesis 1, first instance)
 
 `PostInvoice` builds the invoice's `PostingRequest` (`lims::postingFor`: receivable debit, revenue and tax credits,
-each converted at the dated rate and rounded half-up on its own, and a line to the company's rounding account for the
-difference) and hands it to the ledger through the port the app installs (`lims::app::installLedgerPort`). The ledger
-records it once per source key and commits. Then billing assigns the next number of the company's fiscal-year series
-(`INV-<fiscal year>-<six digits>`, the fiscal year named by the calendar year it begins in), marks the invoice posted
-with its entry, and commits. The number is assigned in billing's commit, so no failure leaves a hole in the series.
+each converted at the ledger's dated rate and rounded half-up on its own, and a line to the company's rounding account
+for the difference, whole yen in a yen company) and hands it to the ledger through the port the app installs
+(`lims::app::installLedgerPort`). Billing then assigns the next number of the company's fiscal-year series
+(`INV-<fiscal year>-<six digits>`, the fiscal year of the entry's date, named by the calendar year it begins in),
+marks the invoice posted with its entry, and commits. The number is assigned in billing's commit, so no failure leaves
+a hole in the series. The port reaches the ledger one of two ways, and both were measured in
+`tests/test_invoice_posting.cpp`. Dispatched, the ledger's half is `RecordPosting`, the ledger's own action, sent by
+the app's internal client as `system:posting`: it is authorized by its declared rule (the service role at the
+company), journaled, and its `Ledger_Entry` change reaches a watching accountant — and it commits alone, so a failure
+before billing's commit leaves the ledger holding an entry for an invoice that is approved, unnumbered and unposted,
+which a retry converges (the ledger answers the entry it recorded). In one shared transaction, the port writes the
+entry through billing's own mapper (`recordPostingIn`) and both halves commit once: a failure anywhere leaves nothing,
+and no hole. The server posts [Dispatched | SharedTransaction].
 
-**Hypothesis 1 is confirmed for this instance.** Measured in `tests/test_invoice_posting.cpp`: a failure injected
-after the ledger's commit, or inside billing's transaction before its commit, leaves the ledger holding an entry for
-an invoice that is approved, unnumbered and unposted — the partial state the design calls a ledger defect. A retry
-converges (the ledger answers the entry it recorded; billing numbers and posts), and two clerks posting at once get
-consecutive numbers. The same two halves called below their models, through one `Lightweight::DataMapper` and one
-`SqlTransaction`, commit together or not at all: the database can make them one fact, and what cannot is morph's
-`execute` — each model action takes its own connection and commits alone, and nothing composes two models' actions
-into one transaction while keeping each model's authorization, effects and journal. Goods receipt in Part C is the
-second instance, and the framework seam is designed against both.
+[One of:]
+
+**Hypothesis 1 is confirmed, with the workaround's cost.** The database can make the two halves one fact, and lims
+did, with seams that exist — which is the design's refutation condition on its letter. But only by not running the
+ledger's half as the ledger's action: in the shared transaction no `Ledger_Entry` change reached the watching
+accountant, the ledger's rule never ran (the posting succeeded with the posting principal holding no role), and the
+journal holds no ledger entry for it [drop any of the three Step 8 did not measure as lost]. With the ledger's half as
+its action, the window is real. What morph lacks is a way to run two models' actions as one fact while keeping each
+one's authorization, effects and journal. The server keeps the dispatched posting, whose window converges on retry,
+until that seam exists. Goods receipt in Part C is the second instance, and the seam is designed against both.
+
+**Hypothesis 1 is refuted for this instance.** One shared transaction made the two halves one fact with seams that
+exist, and gave up nothing measured: [what carried the effect, the authorization and the journal]. The server posts
+in one transaction.
+
+**Hypothesis 1 is mis-framed for this instance.** [What Step 8 measured that the hypothesis does not describe: the
+shared transaction still left partial state or a hole, because …; or the dispatched posting left no window, because …]
+The gap is [what it is].
 ```
 
-- [ ] **Step 9: Commit**
+Keep the one paragraph that applies, fill its brackets from Step 8, and set the server's mode to match.
+
+- [ ] **Step 10: Commit**
 
 ```bash
 cd /home/yaraslau/repo/morph
-git add examples/lims/ledger examples/lims/billing examples/lims/app examples/lims/src/server/main.cpp \
-        examples/lims/tests examples/lims/README.md
-git commit -m "Post lims invoices to the ledger in two commits and measure the window between them
+git add examples/lims/posting examples/lims/ledger examples/lims/billing examples/lims/app \
+        examples/lims/src/server/main.cpp examples/lims/tests examples/lims/README.md
+git commit -m "Post lims invoices dispatched and in one transaction, and measure what each keeps and leaves
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 ```
 
 ---
+### Task 15: Does one module's write reach another module's watcher? (the cross-module effects candidate)
 
-### Task 15: Does a company-B change reach a company-A connection? (hypothesis 7, first instance)
+**Files:**
+- Create: `examples/lims/tests/test_cross_module_effects.cpp`, `examples/lims/tests/compile_checks/cross_module_effects_probe.cpp`
+- Modify: `examples/lims/CMakeLists.txt` (the probe's two executables and their tests), `examples/lims/README.md` (decision 38)
+
+**Interfaces:**
+- Consumes: `PostInvoice` in `PostingMode::SharedTransaction` (Task 14), `PostingRig`, `RecordBillableLine`, `lims::app::relayLabEvents`, `InternalClient`, `BackendRig::connect`, `morph::effects::actionsHolding`, `morph::model::EffectsRegistrationError`.
+- Produces: a measured verdict, cause by cause, on README decision 26's finding; the issue, if confirmed.
+
+README decision 26 inferred from reading `include/morph/core/effects.hpp` that a module's action cannot declare effects on another module's records, so a screen showing one module's records is not refreshed when another module's action changes them; it was never reproduced. Two different causes hide in that sentence, and each is measured on its own:
+
+- **(i) An action cannot declare the cross-module effect.** The clean case is `PostInvoice` in one shared transaction (Task 14): billing's action writes a `Ledger_Entry` inside itself, and billing cannot name the ledger's record — it does not include the ledger (the `billing_includes_ledger` probe), and the composing code, which sees both, cannot add the declaration either: a second `BRIDGE_REGISTER_EFFECTS` for the same action makes the whole effects configuration refuse to resolve ("declares different effects in two registrations", `include/morph/core/effects.hpp`).
+- **(ii) A write outside any action derives no changes.** The relay-made billing line is the case: the same `RecordBillableLine` body writes the same row whether it is dispatched through the events client or run in process outside any dispatch; only the first is an executed action the server derives changes from.
+
+- [ ] **Step 1: The declaration probe**
+
+Create `examples/lims/tests/compile_checks/cross_module_effects_probe.cpp`:
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+//
+// Built twice, linked with every lims module. With LIMS_PROBE_DECLARES_LEDGER_EFFECT it adds, from the composing
+// code, the declaration billing cannot make: PostInvoice changes the ledger's Ledger_Entry. Either way it reads the
+// effects registry once and prints whether the configuration resolved.
+
+#include <iostream>
+#include <morph/core/effects.hpp>
+
+#include "lims/billing/models/invoice_model.hpp"
+#include "lims/ledger/dto/entry_dto.hpp"
+
+#ifdef LIMS_PROBE_DECLARES_LEDGER_EFFECT
+// NOLINTBEGIN(misc-const-correctness)
+BRIDGE_REGISTER_EFFECTS(lims::PostInvoice, ::morph::effects::updates<lims::InvoiceView>,
+                        ::morph::effects::changes<lims::JournalEntryView>)
+// NOLINTEND(misc-const-correctness)
+#endif
+
+int main() {
+    try {
+        static_cast<void>(::morph::effects::actionsHolding("Billing_Invoice"));
+        std::cout << "effects resolved\n";
+        return 0;
+    } catch (::morph::model::EffectsRegistrationError const& error) {
+        std::cout << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+In `examples/lims/CMakeLists.txt`, inside the `if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)` block, after the boundary probes:
+
+```cmake
+    # The composing code declaring one module's action's effect on another module's record: the probe adds a second
+    # effects registration for PostInvoice and must be refused; the control, without it, must resolve.
+    foreach(_variant IN ITEMS refused control)
+        add_executable(lims_cross_module_effects_${_variant} tests/compile_checks/cross_module_effects_probe.cpp)
+        target_link_libraries(lims_cross_module_effects_${_variant} PRIVATE ladder_lims_lib)
+        set_target_properties(lims_cross_module_effects_${_variant} PROPERTIES EXPORT_COMPILE_COMMANDS OFF)
+        add_test(NAME lims.cross_module_effects.${_variant} COMMAND lims_cross_module_effects_${_variant})
+    endforeach()
+    target_compile_definitions(lims_cross_module_effects_refused PRIVATE LIMS_PROBE_DECLARES_LEDGER_EFFECT=1)
+    set_tests_properties(lims.cross_module_effects.refused PROPERTIES LABELS ladder-lims
+        PASS_REGULAR_EXPRESSION "declares different effects in two registrations")
+    set_tests_properties(lims.cross_module_effects.control PROPERTIES LABELS ladder-lims
+        PASS_REGULAR_EXPRESSION "effects resolved")
+```
+
+`PASS_REGULAR_EXPRESSION` judges the output, not the exit code, so the refused variant passes by printing the refusal. If `ladder_lims_lib`'s whole-archive links need Qt's runtime path on this platform, copy the `DL_PATHS`/`ENVIRONMENT` the rung's test executables get in `cmake/morph_add_rung.cmake`.
+
+- [ ] **Step 2: Write the connection test**
+
+Create `examples/lims/tests/test_cross_module_effects.cpp`:
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+//
+// The cross-module effects question, cause by cause, on watching connections: (i) billing's PostInvoice writes the
+// ledger's Ledger_Entry inside itself and cannot declare it; (ii) the relay's billing line reaches a watcher when its
+// write is a dispatched action, and not when the same write runs outside any dispatch.
+
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <glaze/glaze.hpp>
+#include <morph/session/session_auth.hpp>
+#include <string>
+
+#include "billing_test_support.hpp"
+#include "clock.hpp"
+#include "lims/app/event_wiring.hpp"
+#include "lims/app/internal_client.hpp"
+#include "lims/app/service_principals.hpp"
+#include "lims/billing/models/invoice_model.hpp"
+#include "lims/ledger/models/ledger_model.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_fixture.hpp"
+
+using lims::test::ScopedPrincipal;
+using morph::ladder::ScopedClockOverride;
+using morph::ladder::testkit::BackendRig;
+using morph::ladder::testkit::DbFixture;
+using morph::ladder::testkit::Mode;
+using morph::ladder::testkit::ServerConnection;
+
+namespace {
+
+/// @brief A session for @p principal, signed with the test servers' secret.
+[[nodiscard]] morph::session::Context as(std::string const& principal) {
+    morph::session::TokenIssuer const issuer{std::string{lims::test::kServiceSecret}, morph::session::hmacSha256};
+    return lims::test::signedAs(issuer, principal);
+}
+
+}  // namespace
+
+// Cause (i). The control is the ledger's own action on the same connection, which it hears.
+TEST_CASE("cross-module effects (i): billing's write of a ledger entry inside its own action reaches no ledger "
+          "watcher",
+          "[lims][effects]") {
+    DbFixture fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{lims::PostingMode::SharedTransaction};
+    auto const invoice = lims::test::approvedInvoice();
+    auto const accountant = posting.rig().connect();
+    REQUIRE(accountant->watch({"Ledger_Entry"}, as("acc")).kind == "ok");
+
+    auto const posted = posting.post(invoice);
+    REQUIRE(posted.state == lims::InvoiceState::Posted);
+    bool const heard = ServerConnection::eventually([&] { return accountant->heardOf("Ledger_Entry"); },
+                                                    std::chrono::milliseconds{1500});
+    CHECK_FALSE(heard);
+
+    // The control: the ledger's own action, dispatched on the same server, is heard on the same connection.
+    auto const ledger = accountant->registerModel("LedgerModel", as("acc"));
+    auto const draft = glz::write_json(lims::CreateDraftEntry{
+                                           .company = lims::test::seededCompany(),
+                                           .date = morph::time::Timestamp{lims::test::at(2026, 11, 20)},
+                                           .memo = "control",
+                                           .currency = lims::CurrencyCode::EUR,
+                                           .rate = lims::Rate{morph::math::Rational{1, morph::math::DecimalPlaces{6}}},
+                                           .lines = {lims::PostingLine{.accountCode = "6900",
+                                                                       .side = lims::PostingSide::Debit,
+                                                                       .amount = lims::Amount{morph::math::Rational{
+                                                                           1, morph::math::DecimalPlaces{2}}},
+                                                                       .companyAmount = lims::Amount{morph::math::Rational{
+                                                                           1, morph::math::DecimalPlaces{2}}}},
+                                                     lims::PostingLine{.accountCode = "2200",
+                                                                       .side = lims::PostingSide::Credit,
+                                                                       .amount = lims::Amount{morph::math::Rational{
+                                                                           1, morph::math::DecimalPlaces{2}}},
+                                                                       .companyAmount = lims::Amount{morph::math::Rational{
+                                                                           1, morph::math::DecimalPlaces{2}}}}}})
+                           .value_or(std::string{});
+    REQUIRE(accountant->execute(ledger, "LedgerModel", "CreateDraftEntry", draft, as("acc")).kind == "ok");
+    CHECK(ServerConnection::eventually([&] { return accountant->heardOf("Ledger_Entry"); }));
+}
+
+// Cause (ii). Mutation: declare RecordBillableLine with no effect (the dispatched line is not heard either).
+TEST_CASE("cross-module effects (ii): the relay's billing line reaches a watcher as a dispatched action, and not "
+          "when the same write runs outside one",
+          "[lims][effects]") {
+    DbFixture fixture;
+    auto const lab = lims::test::publishedSample();
+    lims::test::billingFor(lab.client);
+    lims::test::grantService(std::string{lims::app::kEventsPrincipal});
+    BackendRig rig{Mode::Socket, 0, lims::test::limsAuthorizer(lims::test::kServiceSecret)};
+    auto const watcher = rig.connect();
+    REQUIRE(watcher->watch({"Billing_Line"}, as("bea")).kind == "ok");
+
+    // Outside any dispatch: the consumer's body, run in process as the events principal, writes the line.
+    {
+        ScopedPrincipal const events{std::string{lims::app::kEventsPrincipal}};
+        static_cast<void>(lims::InvoiceModel{}.execute(lims::RecordBillableLine{
+            .eventId = "test:outside:1",
+            .result = lims::ResultId{9001},
+            .sample = lab.sample,
+            .analysis = lab.nitrate,
+            .client = lab.client,
+            .site = lims::test::seededSite(),
+            .publishedAt = morph::time::Timestamp{lims::test::at(2026, 11, 10)}}));
+    }
+    bool const heardOutside = ServerConnection::eventually([&] { return watcher->heardOf("Billing_Line"); },
+                                                           std::chrono::milliseconds{1500});
+    CHECK_FALSE(heardOutside);
+
+    // Dispatched: the relay, through the events client on the same server.
+    lims::app::InternalClient events{rig.server(), lims::test::kServiceSecret, std::string{lims::app::kEventsPrincipal}};
+    REQUIRE(lims::app::relayLabEvents(events) == 1U);
+    CHECK(ServerConnection::eventually([&] { return watcher->heardOf("Billing_Line"); }));
+}
+```
+
+- [ ] **Step 3: Build and run**
+
+Run: Configure, Build lims (and `--target lims_cross_module_effects_refused lims_cross_module_effects_control`), then `ctest --test-dir build/linux-everything -R 'lims\.cross_module_effects' --output-on-failure` under the lock, and Model suite `"[effects]"`. Expected (inferred from `effects.hpp` and from the server deriving changes only from executed actions' declared effects): both probes pass — the refused variant prints the refusal, the control resolves; case (i)'s `CHECK_FALSE(heard)` holds and its control is heard; case (ii)'s outside write is not heard and the dispatched one is. Run the mutation and restore it. Keep the outputs:
+
+```bash
+cd /home/yaraslau/repo/morph
+flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock \
+  build/linux-everything/examples/lims/lims_cross_module_effects_refused \
+  > /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_effects_output.txt 2>&1
+flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock \
+  timeout 300 build/linux-everything/examples/lims/ladder_lims_tests "[effects]" -s 2>&1 | tail -60 \
+  >> /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_effects_output.txt
+```
+
+(The executables' path is the rung's build directory; use `find build/linux-everything -name 'lims_cross_module_effects_refused'` if it differs.) If a measurement comes out the other way, change its check to what was measured and use that cause's other text in Step 4.
+
+- [ ] **Step 4: Record decision 38, and file what is a framework gap**
+
+Append to the README, keeping for each cause the sentence its measurement chose:
+
+```markdown
+### 38. One module's write reaches another module's watcher only as that module's own dispatched action
+
+Two causes, measured apart in `tests/test_cross_module_effects.cpp` and by the `lims.cross_module_effects.*` probes.
+
+**(i) An action cannot declare an effect on another module's record — confirmed.** `PostInvoice` posting in one
+shared transaction (decision 37) writes the ledger's `Ledger_Entry` inside billing's action; an accountant watching
+`Ledger_Entry` is not told, while the ledger's own `CreateDraftEntry` on the same connection is heard. Billing cannot
+name the ledger's record (it does not include the ledger), and the composing code, which sees both, cannot add the
+declaration: a second `BRIDGE_REGISTER_EFFECTS` for `PostInvoice` makes the effects configuration refuse to resolve,
+"action `PostInvoice` declares different effects in two registrations". [Or, refuted: what carried the change.]
+
+**(ii) A write outside any action derives no changes — confirmed, and not a gap.** `RecordBillableLine` run in process
+outside any dispatch writes the line and no watcher of `Billing_Line` is told; the same write dispatched through the
+events client is heard. Changes are derived from executed actions by design, and the internal client is how a
+reaction becomes one (decision 31). [Or, if the dispatched line was not heard either: "— confirmed, and a gap: even
+dispatched through the server's own client, the line reached no watcher: [output]".]
+
+This is the second place decision 26's finding appears — org's role changes not reaching lab's sample list was the
+first — so cause (i) is filed against `include/morph` as a missing framework seam: a way for the code that composes
+modules to state that one module's action changes another module's records.
+```
+
+If (i) is confirmed, file the issue. Pick the label first (`gh label list --limit 100 | grep -i 'area'`; `area: core` covers `core/effects.hpp`), write the body to `/tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_effects_issue.md`, and run:
+
+```bash
+cd /home/yaraslau/repo/morph
+gh issue create --title "Effects: no way to declare that one module's action changes another module's records" \
+  --label enhancement --label "area: core" \
+  --body-file /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_effects_issue.md
+```
+
+The body names each cause separately, each with its evidence and status: cause (i) — reproduced, on `git rev-parse HEAD`, by `lims.cross_module_effects.refused` (its output line) and the (i) case (its `-s` lines from the output file); cause (ii) — included only if the dispatched line was not heard either, with that output, and otherwise stated as measured and not a gap (changes derive from executed actions; an internal client makes a reaction one); the two places (org→lab inferred in decision 26, billing→ledger measured here); what was not verified (a screen over these records rather than a raw connection — the screen's refresh is driven by the same `changes` events, so it is inferred to behave the same); and what would close it (a declared cross-module effect reaching the (i) case's watcher without a refetch). No `triage:` label.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /home/yaraslau/repo/morph
+git add examples/lims/CMakeLists.txt examples/lims/tests/compile_checks/cross_module_effects_probe.cpp \
+        examples/lims/tests/test_cross_module_effects.cpp examples/lims/README.md
+git commit -m "Measure apart why one lims module's write does or does not reach another module's watcher
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
+```
+
+---
+### Task 16: Does a company-B change reach a company-A connection? (hypothesis 7, first instance)
 
 **Files:**
 - Create: `examples/lims/tests/test_two_company_effects.cpp`
 - Modify: `examples/lims/README.md` (decision 39)
 
 **Interfaces:**
-- Consumes: `lims::test::ServerRig`, `InvoiceModel::consume`, `CreateInvoice`, `PriceListModel`, `OrgModel`.
+- Consumes: `BackendRig::connect`, `ServerConnection`, `RecordBillableLine`, `CreateInvoice`, `PriceListModel`, `OrgModel`, `lims::test::grantService`.
 - Produces: a measured verdict on hypothesis 7 for invoices.
 
 - [ ] **Step 1: Write the test**
@@ -7558,18 +9202,24 @@ Create `examples/lims/tests/test_two_company_effects.cpp`:
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <glaze/glaze.hpp>
+#include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
 #include <string_view>
 
 #include "billing_test_support.hpp"
+#include "lims/app/service_principals.hpp"
 #include "lims/billing/models/invoice_model.hpp"
-#include "lims_server_rig.hpp"
+#include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 
 using lims::test::ScopedPrincipal;
+using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
+using morph::ladder::testkit::Mode;
+using morph::ladder::testkit::ServerConnection;
 using morph::math::DecimalPlaces;
 using morph::math::Rational;
 
@@ -7577,11 +9227,10 @@ namespace {
 
 constexpr std::string_view kSecret = "lims-two-company-effects-secret-at-least-32";
 
-/// @brief Whether any event sent to a connection names @p record.
-[[nodiscard]] bool names(std::vector<std::string> const& sent, std::string_view record) {
-    return std::ranges::any_of(sent, [record](std::string const& message) {
-        return message.find(std::string{"\""} + std::string{record} + "\"") != std::string::npos;
-    });
+/// @brief A session for @p principal, signed with the case's secret.
+[[nodiscard]] morph::session::Context as(std::string const& principal) {
+    morph::session::TokenIssuer const issuer{std::string{kSecret}, morph::session::hmacSha256};
+    return lims::test::signedAs(issuer, principal);
 }
 
 /// @brief A company with one site, billing settings, a JPY billing client 1 and one unbilled line at its site, all
@@ -7613,14 +9262,18 @@ std::pair<lims::CompanyId, lims::SiteId> osaka() {
                                                            .validFrom = morph::time::Timestamp{lims::test::at(2026, 1, 1, 0)}});
     prices.execute(lims::SetPrice{
         .priceList = list.id, .analysis = lims::AnalysisId{1}, .client = {}, .amount = lims::Amount{Rational{4000, DecimalPlaces{0}}}});
-    static_cast<void>(lims::InvoiceModel::consume(lims::BillableEvent{.eventId = "test:osaka:1",
-                                                                      .result = lims::ResultId{901},
-                                                                      .sample = lims::SampleId{901},
-                                                                      .analysis = lims::AnalysisId{1},
-                                                                      .client = lims::ClientId{1},
-                                                                      .site = site.id,
-                                                                      .company = company.id,
-                                                                      .publishedAt = morph::time::Timestamp{lims::test::at(2026, 11, 10)}}));
+    // The unbilled line company B invoices: written as the relay writes one, called in process, since this case
+    // measures the invoice's fan-out, not the relay's.
+    lims::test::grantService(std::string{lims::app::kEventsPrincipal}, lims::Scope{company.id});
+    ScopedPrincipal const events{std::string{lims::app::kEventsPrincipal}};
+    static_cast<void>(lims::InvoiceModel{}.execute(lims::RecordBillableLine{
+        .eventId = "test:osaka:1",
+        .result = lims::ResultId{901},
+        .sample = lims::SampleId{901},
+        .analysis = lims::AnalysisId{1},
+        .client = lims::ClientId{1},
+        .site = site.id,
+        .publishedAt = morph::time::Timestamp{lims::test::at(2026, 11, 10)}}));
     return {company.id, site.id};
 }
 
@@ -7632,32 +9285,32 @@ TEST_CASE("Hypothesis 7: a company-B invoice change reaches a company-A connecti
     DbFixture fixture;
     auto const [companyB, siteB] = osaka();
     lims::test::grant("alice", lims::LimsRole::BillingClerk);  // company A, the seeded company
-    lims::test::ServerRig rig{kSecret};
-    auto const alice = rig.open();
-    auto const olga = rig.open();
-    auto const aliceModel = rig.registerModel(alice, "InvoiceModel", "alice");
-    auto const olgaModel = rig.registerModel(olga, "InvoiceModel", "olga");
-    REQUIRE(rig.watch(alice, {"Billing_Invoice"}, "alice").kind == "ok");
-    REQUIRE(rig.watch(olga, {"Billing_Invoice"}, "olga").kind == "ok");
-    static_cast<void>(aliceModel);
+    BackendRig rig{Mode::Socket, 0, lims::test::limsAuthorizer(kSecret)};
+    auto const alice = rig.connect();
+    auto const olga = rig.connect();
+    auto const olgaModel = olga->registerModel("InvoiceModel", as("olga"));
+    REQUIRE(alice->watch({"Billing_Invoice"}, as("alice")).kind == "ok");
+    REQUIRE(olga->watch({"Billing_Invoice"}, as("olga")).kind == "ok");
 
     auto const body = glz::write_json(lims::CreateInvoice{.company = companyB, .site = siteB, .client = lims::ClientId{1}})
                           .value_or(std::string{});
-    auto const created = rig.execute(olga, olgaModel, "InvoiceModel", "CreateInvoice", body, "olga");
+    auto const created = olga->execute(olgaModel, "InvoiceModel", "CreateInvoice", body, as("olga"));
     REQUIRE(created.kind == "ok");
 
     // The control: the writer's own connection hears of it, so the watch and the fan-out work.
-    REQUIRE(lims::test::ServerRig::eventually([&] { return names(rig.sent(olga), "Billing_Invoice"); }));
-    bool const leaked = lims::test::ServerRig::eventually([&] { return names(rig.sent(alice), "Billing_Invoice"); },
-                                                          std::chrono::milliseconds{1000});
-    for (auto const& message : rig.sent(alice)) {
-        UNSCOPED_INFO("sent to company A: " << message);
+    REQUIRE(ServerConnection::eventually([&] { return olga->heardOf("Billing_Invoice"); }));
+    bool const leaked = ServerConnection::eventually([&] { return alice->heardOf("Billing_Invoice"); },
+                                                     std::chrono::milliseconds{1000});
+    for (auto const& sent : alice->changes()) {
+        for (auto const& change : sent.records) {
+            UNSCOPED_INFO("sent to company A: " << change.record << (change.keys ? " with keys" : " as a whole"));
+        }
     }
     CHECK(leaked);
 }
 ```
 
-The `UNSCOPED_INFO` lines print what company A was sent when the case fails; run it once with `-s` to see them when it passes, for decision 39 (whether the event carries company B's invoice key).
+The `UNSCOPED_INFO` lines print what company A was sent when the case fails; run it once with `-s` to see them when it passes, for decision 39 (whether the event carries company B's invoice key). The connections come from `BackendRig::connect()` (Task 9).
 
 - [ ] **Step 2: Run it**
 
@@ -7687,30 +9340,53 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 ```
 
 ---
-### Task 16: Hypothesis 6's second instance — design the framework seam, or disposition the rule as domain logic
+### Task 17: Hypothesis 6's second instance — decide from the measurement, then specify the seam and have it reviewed, or disposition the rule
 
 **Files (seam branch):**
-- Create: `docs/spec/core/action_guards.md`, `include/morph/core/action_guard.hpp`, `tests/test_action_guard.cpp`
-- Modify: `include/morph/core/registry.hpp` (`runHandler`, the Task runner, `ActionEntry`, `actionFacts`), `include/morph/core/bridge.hpp` (`localOp`, `localTaskOp`), `tests/CMakeLists.txt` (the new test file, if the suite lists its sources), `docs/spec/README.md` (the spec's index line), `docs/spec/core/registry.md` and `docs/spec/core/bridge.md` (the guard's place in each path), `examples/IMPLEMENTATION.md` (rule 1), `examples/lims/org/include/lims/org/authorization/declared.hpp` (the lims guard), every lims model `.cpp` that calls `requireRoleSomewhere`/`requireAuthorized` (the calls go), `examples/lims/app/include/lims/app/declared_requirements.hpp` and `lims_authorizer.hpp` (the edge table goes), `examples/lims/app/src/billing_scheduler.cpp`, the lims suites that call a declared action's `execute` directly to test a refusal, `examples/lims/tests/test_declared_authorization.cpp` (coverage by enumeration), `examples/lims/README.md` (decision 40, and decision 25's last paragraph)
+- Create: `docs/spec/core/action_guards.md`
+- Modify: `docs/spec/README.md` (the spec's index line), `docs/spec/core/registry.md` and `docs/spec/core/bridge.md` (the guard's place in each path)
 
 **Files (disposition branch):** `examples/lims/README.md` (decision 40) only.
 
-**Interfaces (seam branch):**
-- Consumes: `morph::model::detail::ActionDispatcher::prepareAction`, `runHandler`, `Bridge`'s `localOp`/`localTaskOp`, `ActionValidator`, `lims::requireRoleSomewhere`, `lims::requireAuthorized`, `lims::DeclaresRule`.
-- Produces: `template <typename Action> struct morph::model::ActionGuard;` (customisation point: `static void check(Action const&)`), `template <typename Action> concept morph::model::Guarded`, `template <typename Action> void morph::model::detail::guardAction(Action const&)`, `template <typename Model, typename Action> ActionTraits<Action>::Result morph::model::executeChecked(Model&, Action const&)` (validate, guard, execute — for a caller that runs a model directly), `struct morph::model::ActionFact { std::string actionType; bool guarded; }` and `std::vector<ActionFact> morph::model::actionFacts(std::string_view modelType)`; in lims, one constrained specialisation `template <typename Action> requires lims::DeclaresRule<Action> struct morph::model::ActionGuard<Action>`.
+**Interfaces:**
+- Consumes: decision 35, `/tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_h6_measure.txt`, `include/morph/core/registry.hpp`, `include/morph/core/bridge.hpp`, `include/morph/session/session.hpp`, `lims/org/authorization/declared.hpp`.
+- Produces: the reviewed spec of `morph::model::ActionGuard` (seam branch), which Tasks 18 and 19 implement; or decision 40's disposition, after which Tasks 18 and 19 are not done.
+
+This task, Task 18 and Task 19 are conditional on the measured recurrence: the seam is designed only if Task 12's measurement shows the same hand-rolled guarantee in a second module.
 
 - [ ] **Step 1: Decide from what was measured**
 
-Read decision 36 and `/tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_h6_measure.txt`. The seam branch applies when both hold: (a) every declared action's handler calls `requireRoleSomewhere` and `requireAuthorized` itself, in four modules, so a forgotten call is an unguarded action that compiles and passes every test that does not name it; (b) the edge restates every declaration in `declaredRequirements()` because `IAuthorizer::authorize` sees no payload and nothing enumerates a model's actions. Both are mechanism — bookmarks or a CRM would need a check that runs after decoding on every dispatch path unchanged — and both are now needed by two modules (lab's pair, billing's pair and limit). The roles, scopes, limits and pairs stay lims's: the framework runs a declared check, it does not know what the check decides. If (a) or (b) does not hold, take the disposition branch (Step 9) and skip Steps 2–8.
+Read decision 35 and `/tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/plan_b_h6_measure.txt`. The seam branch applies when both hold: (a) every declared action's handler calls `requireRoleSomewhere` and `requireAuthorized` itself, in four modules, so a forgotten call is an unguarded action that compiles and passes every test that does not name it; (b) the edge restates every declaration in `declaredRequirements()` because `IAuthorizer::authorize` sees no payload and nothing enumerates a model's actions. Both are mechanism — bookmarks or a CRM would need a check that runs after decoding on every dispatch path unchanged — and both are now needed by two modules (lab's pair, billing's pair and limit). The roles, scopes, limits and pairs stay lims's: the framework runs a declared check, it does not know what the check decides. If (a) or (b) does not hold, take the disposition branch (Step 2) and skip the rest of this task and Tasks 18 and 19.
 
-- [ ] **Step 2: Write the spec**
+- [ ] **Step 2: Disposition branch only — record decision 40 and commit**
+
+```markdown
+### 40. Declared authorization stays domain logic each model calls (hypothesis 6, resolved)
+
+[The reasons from Step 1 or the review: which of the two conditions did not hold, or why a framework check cannot run
+it without knowing the domain.] The rules, the scope lookup and the call in each handler stay lims's; the edge keeps
+its table. **Hypothesis 6 is resolved as domain logic the models must own.**
+```
+
+```bash
+cd /home/yaraslau/repo/morph
+git add examples/lims/README.md
+git commit -m "Record lims declared authorization as domain logic
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
+```
+
+Then stop: Tasks 18 and 19 are not done.
+
+- [ ] **Step 3: Seam branch — write the spec**
 
 Create `docs/spec/core/action_guards.md`. It states, in present tense and without history (`AGENTS.md`):
 
 - **What a guard is.** A check an application declares per action type, by specialising `morph::model::ActionGuard<Action>` with `static void check(Action const&)`. The framework runs it on every dispatch path, on the decoded action, after the gates `prepareAction` applies (`reconcileDeclaredPrecision`, `enforceQuantityBounds`, `recomputeAll`, `ActionValidator<Action>::ready`) and before `Model::execute`. A guard that throws refuses the action; the exception is the execute's failure and is journaled as `Outcome::Failed` when the action is loggable, exactly as a throw from `execute` is, because a refused attempt is audit-worthy (lims decision 4).
 - **Where it runs.** `ActionDispatcher`'s `runHandler` and its Task runner (the server path, so every remote topology); `Bridge`'s `localOp` and `localTaskOp` (the in-process path). `session::current()` is the execute's session on both, so a guard reads the principal the model would. On the server it runs on the model's strand, so it may read the model's store as `execute` would.
 - **Why not `IAuthorizer`.** `authorize(ctx, modelType, actionType)` decides before the payload is decoded and is shared by every model; a guard is per action, sees the payload, and runs where the model runs. The authorizer keeps authentication and model-level gates; a guard is what reads the payload.
-- **Direct calls.** Calling `model.execute(action)` directly runs no guard. `morph::model::executeChecked(model, action)` runs the validator, the guard and `execute` in that order, for server-side code that runs a model outside a dispatch (a scheduler) and for unit tests of the guard's outcome. `IMPLEMENTATION.md` rule 1's "models must re-check their own authorization" is met by a guard declared beside the action.
+- **Direct calls.** Calling `model.execute(action)` directly runs no guard. `morph::model::executeChecked(model, action)` runs the validator, the guard and `execute` in that order, for a caller that holds a model directly — a unit test of a guard's outcome, or code that runs a model in process; lims's background work dispatches through internal clients, so the guard runs on its path like any client's. `IMPLEMENTATION.md` rule 1's "models must re-check their own authorization" is met by a guard declared beside the action.
 - **Enumeration.** `morph::model::actionFacts(modelType)` lists a registered model's actions with whether each is guarded, so an application can prove every mutating action is guarded or deliberately open without listing them by hand.
 - **What it does not do.** It does not order guards against each other, compose checks across models, or know roles, scopes, limits or pairs.
 - **Its two consumers.** lims's lab (capture/verify pair) and billing (create/approve pair with a value limit), both through one constrained specialisation over `lims::DeclaresRule`.
@@ -7718,11 +9394,37 @@ Create `docs/spec/core/action_guards.md`. It states, in present tense and withou
 
 Add the file to `docs/spec/README.md`'s index, and one paragraph each to `docs/spec/core/registry.md` (the server path) and `docs/spec/core/bridge.md` (the local path) pointing to it.
 
-- [ ] **Step 3: One independent review**
 
-Dispatch one review subagent on the default model (not Fable), giving it `docs/spec/core/action_guards.md`, `include/morph/core/registry.hpp`, `include/morph/core/bridge.hpp`, `include/morph/session/session.hpp`, and lims's `org/include/lims/org/authorization/declared.hpp` and README decisions 25 and 36 — the code and the evidence, not this plan's conclusion. Ask it whether the seam is mechanism, whether the two call sites cover every dispatch path (it should look for a third), whether journaling a refusal is right — lims decision 4 journals refused transitions but not unauthenticated attempts, and the lims guard's `requirePrincipal` would now throw inside the journaled `try` — and what the spec leaves undecided. Address every finding in the spec before Step 4; if it shows the rule is domain logic that cannot be run by the framework without knowing the domain, take the disposition branch instead and record its reasoning there.
+- [ ] **Step 4: One independent review**
 
-- [ ] **Step 4: Write the failing framework test**
+Dispatch one review subagent on the default model (not Fable), giving it `docs/spec/core/action_guards.md`, `include/morph/core/registry.hpp`, `include/morph/core/bridge.hpp`, `include/morph/session/session.hpp`, and lims's `org/include/lims/org/authorization/declared.hpp` and README decisions 25 and 35 — the code and the evidence, not this plan's conclusion. Ask it whether the seam is mechanism, whether the two call sites cover every dispatch path (it should look for a third), whether journaling a refusal is right — lims decision 4 journals refused transitions but not unauthenticated attempts, and the lims guard's `requirePrincipal` would now throw inside the journaled `try` — and what the spec leaves undecided. Address every finding in the spec before Task 18; if it shows the rule is domain logic that cannot be run by the framework without knowing the domain, take the disposition branch instead (Step 2) and record its reasoning there.
+
+- [ ] **Step 5: Commit the reviewed spec**
+
+```bash
+cd /home/yaraslau/repo/morph
+git add docs/spec/core/action_guards.md docs/spec/README.md docs/spec/core/registry.md docs/spec/core/bridge.md
+git commit -m "Specify morph action guards: a declared per-action check run on every dispatch path
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
+```
+
+---
+
+### Task 18: The action guard in `include/morph`, with its tests (seam branch of Task 17)
+
+**Files:**
+- Create: `include/morph/core/action_guard.hpp`, `tests/test_action_guard.cpp`
+- Modify: `include/morph/core/registry.hpp` (`runHandler`, the Task runner, `ActionEntry`, `actionFacts`), `include/morph/core/bridge.hpp` (`localOp`, `localTaskOp`), `tests/CMakeLists.txt` (the new test file, if the suite lists its sources)
+
+**Interfaces:**
+- Consumes: the spec Task 17 committed, `morph::model::detail::ActionDispatcher::prepareAction`, `runHandler`, `Bridge`'s `localOp`/`localTaskOp`, `ActionValidator`.
+- Produces: `template <typename Action> struct morph::model::ActionGuard;` (customisation point: `static void check(Action const&)`), `template <typename Action> concept morph::model::Guarded`, `template <typename Action> void morph::model::detail::guardAction(Action const&)`, `template <typename Model, typename Action> ActionTraits<Action>::Result morph::model::executeChecked(Model&, Action const&)` (validate, guard, execute — for a caller that runs a model directly), `struct morph::model::ActionFact { std::string actionType; bool guarded; }` and `std::vector<ActionFact> morph::model::actionFacts(std::string_view modelType)`.
+
+Done only on Task 17's seam branch. No lims file changes here; Task 19 moves lims onto the guard.
+
+- [ ] **Step 1: Write the failing framework test**
 
 Create `tests/test_action_guard.cpp`:
 
@@ -7836,7 +9538,7 @@ TEST_CASE("action guard: a model's actions are listed with whether each is guard
 
 The helpers `morph::testing::await`, `MainThreadExecutor` and the `SimulatedRemoteBackend` construction are the framework suite's (`tests/test_support.hpp`, `tests/test_push_watch.cpp`); read `test_support.hpp` and use its spelling for awaiting a `Completion` on an owner executor where it differs from `await(owner, …)`.
 
-- [ ] **Step 5: Implement the seam**
+- [ ] **Step 2: Implement the seam**
 
 Create `include/morph/core/action_guard.hpp`:
 
@@ -7925,11 +9627,38 @@ struct ActionFact {
 
 In `registry.hpp`: give `ActionEntry` a `bool guarded = false;` set in `registerAction<Model, Action>` from `Guarded<Action>` (forward-declare `ActionGuard`/`Guarded` there, or include the guard header's declarations from a small `detail/action_guard_fwd.hpp`, whichever keeps `registry.hpp` free of a cycle); in `runHandler` call `detail::guardAction(action);` as the first statement inside the `try` around `model.execute(action)` (so a refusal is journaled as a failure), and the same in the Task runner; define `actionFacts` over `ActionDispatcher::instance()`'s entries for the model, inline in `action_guard.hpp` (the dispatcher already answers `actionsOf(modelId)`; add `bool guardedAction(modelId, actionId) const`). In `bridge.hpp`'s `localOp` and `localTaskOp`, call `::morph::model::detail::guardAction(actionRef);` right after the `ActionValidator<Action>::ready` check, inside the same `try`. Doxygen every new public symbol (`@tparam`, `@param`, `@return`, `@throws`) and run the docs build from `AGENTS.md`'s CI notes on the changed headers: `cmake -S . -B build -G Ninja -DMORPH_BUILD_DOCUMENTATION=ON -DMORPH_BUILD_TESTS=OFF -DMORPH_BUILD_EXAMPLES=OFF` then `cmake --build build --target doc`, both under the build lock.
 
-- [ ] **Step 6: Run the framework test**
+- [ ] **Step 3: Run the framework test**
 
 Run: the framework suite commands from "Build and test commands" (`morph_tests`, `"[guard]"`). Expected: the four cases pass. Run the two mutations named in the file and restore each (touch the restored header: a restored file keeps its old mtime and ninja keeps the mutant). Then build and run the whole framework suite once, and a GCC sweep of `registry.hpp`/`bridge.hpp` through `tests/test_action_guard.cpp` (`g++ -std=c++23 -fsyntax-only` with the suite's include flags from `build/linux-everything/compile_commands.json`), since local builds are clang.
 
-- [ ] **Step 7: lims adopts it**
+- [ ] **Step 4: Commit**
+
+```bash
+cd /home/yaraslau/repo/morph
+git add include/morph/core/action_guard.hpp include/morph/core/registry.hpp include/morph/core/bridge.hpp \
+        tests/test_action_guard.cpp tests/CMakeLists.txt
+git commit -m "Run a declared action guard on every dispatch path, before Model::execute
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
+```
+
+If a defect in `include/morph` turned up on the way (a third dispatch path the guard missed, say), file it per `AGENTS.md` with its real output; the seam itself, built in this branch, is not a defect and is not filed.
+
+---
+
+### Task 19: lims moves onto the action guard (seam branch of Task 17)
+
+**Files:**
+- Modify: `examples/IMPLEMENTATION.md` (rule 1), `examples/lims/org/include/lims/org/authorization/declared.hpp` (the lims guard), every lims model `.cpp` that calls `requireRoleSomewhere`/`requireAuthorized` (the calls go), `examples/lims/app/include/lims/app/declared_requirements.hpp` and `lims_authorizer.hpp` (the edge table goes), the lims suites that call a declared action's `execute` directly to test a refusal, `examples/lims/tests/test_declared_authorization.cpp` (coverage by enumeration), `examples/lims/README.md` (decision 40, and decision 25's last paragraph)
+
+**Interfaces:**
+- Consumes: `morph::model::ActionGuard`, `morph::model::executeChecked`, `morph::model::actionFacts` (Task 18), `lims::requireRoleSomewhere`, `lims::requireAuthorized`, `lims::DeclaresRule`.
+- Produces: in lims, one constrained specialisation `template <typename Action> requires lims::DeclaresRule<Action> struct morph::model::ActionGuard<Action>`.
+
+Done only on Task 17's seam branch, after Task 18. The handlers' own `requireServicePrincipal` checks stay: they are not part of a declared rule, and the internal clients dispatch, so the guard runs on their path too.
+
+- [ ] **Step 1: lims adopts the guard**
 
 In `declared.hpp`, after `requireAuthorized`, add:
 
@@ -7957,60 +9686,45 @@ namespace lims {
 (include `<morph/core/action_guard.hpp>`). Then:
 
 - Delete every `requireRoleSomewhere<…>()` and `requireAuthorized(action)` call from the lims model sources (`org_model.cpp`, `sample_model.cpp`, `ledger_*.cpp`, `price_list_model.cpp`, `invoice_*.cpp`, `billing_run_model.cpp`, `invoice_edit_model.cpp`). Where a handler looked a row up between the two calls to answer `NotFound`, the guard now runs first: a missing row gives an empty scope and the refusal "does not hold the … role at no company/site". Keep each handler's own `NotFound` after the guard, and change the Part A and Part B cases that expected `NotFound` from a caller who holds the role somewhere but names a missing row to expect `Forbidden` — list each changed case in decision 40, since README decision 23 promised `NotFound` there.
-- In every suite, a direct `model.execute(action)` of a declared action whose case checks a refusal or relies on the rule becomes `morph::model::executeChecked(model, action)`. Find them with `grep -rn 'execute(lims::\(VerifyResult\|CreateCompany\|CreateSite\|AssignRole\|RevokeRole\|SetValueLimit\|Create\|Open\|Post\|Reverse\|Close\|Begin\|Set\|Register\|Submit\|Approve\|Return\|Lease\|Start\|Advance\)' examples/lims/tests examples/lims/screens/tests`. `lims::test::grant` uses `OrgModel` directly for the bootstrap; make it use `executeChecked` too, so the bootstrap carve-out is exercised as it is dispatched.
-- `BillingScheduler::tick` calls `morph::model::executeChecked(runs, …)`.
+- In every suite, a direct `model.execute(action)` of a declared action whose case checks a refusal or relies on the rule becomes `morph::model::executeChecked(model, action)`. Find them with `grep -rn 'execute(lims::\(VerifyResult\|CreateCompany\|CreateSite\|AssignRole\|RevokeRole\|SetValueLimit\|Create\|Open\|Post\|Reverse\|Close\|Begin\|Set\|Register\|Submit\|Approve\|Lease\|Start\|Advance\|Record\|Run\)' examples/lims/tests examples/lims/screens/tests`. `lims::test::grant` uses `OrgModel` directly for the bootstrap; make it use `executeChecked` too, so the bootstrap carve-out is exercised as it is dispatched.
 - Delete `declaredRequirements()` and `requiredRole()` from `declared_requirements.hpp`, and the role branch from `LimsAuthorizer::authorize` (the guard runs on the server's dispatch path, with the payload; the authorizer authenticates). Keep `openMutatingActions()`.
 - Rewrite the coverage case in `test_declared_authorization.cpp` over `morph::model::actionFacts` for every lims model: each action with an effect other than `None` is guarded or in `openMutatingActions()`, never both, and every id in `openMutatingActions()` is a registered action. The `Mutating` tuple goes.
 - In `examples/IMPLEMENTATION.md` rule 1, after "Models must re-check their own preconditions and authorization (`Context::principal`) — the schema's `required` and the client gates are UX, not security.", add: "An authorization rule that reads the payload is declared as a `morph::model::ActionGuard` beside the action, which the framework runs on every dispatch path; a direct caller uses `morph::model::executeChecked`."
 
-- [ ] **Step 8: Run everything**
+
+- [ ] **Step 2: Run everything**
 
 Run: Configure, Build lims, Everything labelled for the rung, the Screen suite, and the framework suite. Expected: all pass, the Hypothesis 6 cases of both instances included (the edge no longer allows-then-the-model-refuses: the guard refuses on the server path; change those two cases to assert the refusal reaches the client in every mode, and that `LimsAuthorizer::authorize` alone no longer gates by role). Run the mutation "remove `lims::requireAuthorized(action)` from the lims `ActionGuard`" once and see the verification, approval and value-limit cases fail across lab, org, ledger and billing; restore it.
 
-- [ ] **Step 9: Record decision 40 (either branch) and commit**
-
-Seam branch:
+- [ ] **Step 3: Record decision 40 and commit**
 
 ```markdown
 ### 40. Declared authorization is a framework action guard (hypothesis 6, resolved)
 
 `morph::model::ActionGuard<Action>` (`docs/spec/core/action_guards.md`) is a check the framework runs on the decoded
 action on every dispatch path, after its validator and before `execute`. lims declares one constrained guard for every
-action with a `lims::Authorization` rule, so lab's capture/verify pair, billing's create/approve pair and value limit,
+action with a `lims::Authorization` rule, so lab's capture/verify pair, billing's approval pairs and value limit,
 and every scoped role are checked once, by the framework, for every module; no handler calls the check, and the edge
-no longer keeps a table of roles. The rules themselves stay lims's. A caller that names a row that does not exist, and
-holds the role somewhere, is now refused in words rather than told the row is missing, because the guard runs before
+keeps no table of roles. The rules themselves stay lims's. A caller that names a row that does not exist, and
+holds the role somewhere, is refused in words rather than told the row is missing, because the guard runs before
 the handler looks the row up; the cases that changed are [list]. Coverage of "every mutating action is guarded or
 deliberately open" is proved by enumerating `morph::model::actionFacts`, not by a list kept by hand. **Hypothesis 6
 is resolved by the seam:** a declared rule that sees the payload is checked once by the framework for every module.
 ```
 
-and change the last paragraph of decision 25 to: "This was instance 1 of 2; with billing's pair and limit as the second, the check became the framework's action guard (decision 40)."
-
-Disposition branch:
-
-```markdown
-### 40. Declared authorization stays domain logic each model calls (hypothesis 6, resolved)
-
-[The reasons from Step 1 or the review: which of the two conditions did not hold, or why a framework check cannot run
-it without knowing the domain.] The rules, the scope lookup and the call in each handler stay lims's; the edge keeps
-its table. **Hypothesis 6 is resolved as domain logic the models must own.**
-```
+and change the last paragraph of decision 25 to: "This is instance 1 of 2; with billing's approval pairs and value limit as the second, the check is the framework's action guard (decision 40)."
 
 ```bash
 cd /home/yaraslau/repo/morph
-git add docs/spec include/morph tests examples/IMPLEMENTATION.md examples/lims
-git commit -m "Run declared authorization as a framework action guard on every dispatch path
+git add examples/IMPLEMENTATION.md examples/lims
+git commit -m "Move lims declared authorization onto the framework action guard
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 ```
 
-(For the disposition branch, commit only the README with "Record lims declared authorization as domain logic".) If the seam changed `include/morph`, file nothing: a seam built in the same branch is not a defect. If a defect in `include/morph` turned up on the way (a third dispatch path the guard missed, say), file it per `AGENTS.md` with its real output.
-
 ---
-
-### Task 17: Part B's definition of done, measured
+### Task 20: Part B's definition of done, measured
 
 **Files:**
 - Modify: `examples/lims/README.md` (Status, "What to implement", Modules), `codecov.yml` (the lims component's paths and target), `examples/LADDER.md` (lims's size, if it states one)
@@ -8027,11 +9741,11 @@ flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfa
 flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock ctest --test-dir build/linux-everything -j6 -L ladder-lims --output-on-failure
 bash scripts/check_ctest_name_collisions.sh build/linux-everything
 ```
-Expected: `100% tests passed`, the eight `lims.module_boundary.*` tests among them; no duplicate test names.
+Expected: `100% tests passed`, the nine `lims.module_boundary.*` tests and the two `lims.cross_module_effects.*` tests among them; no duplicate test names.
 
 - [ ] **Step 2: Every hypothesis Part B touched has a recorded outcome**
 
-Run: `grep -n '^### \(2[89]\|3[0-9]\|40\)\.' examples/lims/README.md` and `grep -n 'Hypothesis [0-9] is \|hypothesis [0-9].*\(confirmed\|refuted\|resolved\)' examples/lims/README.md`. Expected: decisions 28–40, and an outcome sentence for hypotheses 1 (38), 2 (31), 3 (37), 4 (34, 35), 5 (35), 6 (36, 40), 7 (39) and 8 (29, 33), plus decision 32's verdict on the cross-module effects finding and, if confirmed, the issue's number in the session's notes (not in the README: `AGENTS.md`). Every `[measured]` slot in those decisions is filled with the number its step printed.
+Run: `grep -n '^### \(2[89]\|3[0-9]\|40\)\.' examples/lims/README.md` and `grep -n 'Hypothesis [0-9] is \|hypothesis [0-9].*\(confirmed\|refuted\|resolved\|mis-framed\)' examples/lims/README.md`. Expected: decisions 28–40, and an outcome sentence for hypotheses 1 (37), 2 (31), 3 (36), 4 (33, and mis-framed for escalation in 34), 5 (34), 6 (35, 40), 7 (39) and 8 (29, 32), plus decision 38's verdict on the cross-module effects finding, cause by cause, and the numbers of any issue filed (Task 15's, and Task 11's if it filed one) in the session's notes (not in the README: `AGENTS.md`). Every `[measured]` slot in those decisions is filled with the number its step printed.
 
 - [ ] **Step 3: Every module follows the rules**
 
@@ -8042,8 +9756,9 @@ grep -rn 'sqlite3_\|"SELECT \|"INSERT \|"UPDATE \|"DELETE ' examples/lims/{ledge
 grep -rnE '^\s+(int|bool|double|float|std::int64_t|std::uint64_t) [a-z][A-Za-z]*( =|\{|;)' examples/lims/{ledger,billing,posting}/include/lims/*/dto/ examples/lims/posting/include
 grep -rn 'BRIDGE_REGISTER_ACTION' examples/lims/{ledger,billing}/include | wc -l
 grep -rn 'BRIDGE_REGISTER_EFFECTS' examples/lims/{ledger,billing}/include | wc -l
+grep -rn 'ScopedContext' examples/lims --include='*.cpp' --include='*.hpp' | grep -v '/tests/'
 ```
-Expected: no raw SQL and no `sqlite3_` call (rule 4; a sanctioned raw statement, if Task 8 needed one, has its README finding line); no plain numeric or `bool` DTO field (rule 3); and every mutating action registered with effects (the coverage case in `test_declared_authorization.cpp` is the proof; the counts are for the size table).
+Expected: no raw SQL and no `sqlite3_` call (rule 4; a sanctioned raw statement, if Task 9 needed one, has its README finding line); no plain numeric or `bool` DTO field (rule 3); every mutating action registered with effects (the coverage case in `test_declared_authorization.cpp` is the proof; the counts are for the size table); and no session installed by hand outside the tests — every cross-module job dispatches through an internal client.
 
 - [ ] **Step 4: Size**
 
@@ -8062,7 +9777,7 @@ Follow the memory note `coverage-local-repro.md` (`scripts/coverage.sh` over the
 
 - [ ] **Step 6: Update the README and commit**
 
-In `examples/lims/README.md`: the "What to implement" model sentence names `LedgerModel` and `LedgerReportModel` in ledger, `PriceListModel`, `InvoiceModel`, `InvoiceEditModel` and `BillingRunModel` in billing; the Modules table has the `posting`, `ledger` and `billing` rows and `app`'s row reads "the server edge's `LimsAuthorizer`, the event relay, the ledger port and the billing schedule"; and the Status paragraph adds: "Part B of the ERP design is built: the posting contract, the ledger (accounts, periods, entries, rates, reports) and billing (prices, billable lines from lab's events, invoices with approval, the edit lease, posting, the billing run) (decisions 28–40). Models [n], actions [n], screens [n]." Then:
+In `examples/lims/README.md`: the "What to implement" model sentence names `LedgerModel` and `LedgerReportModel` in ledger, `PriceListModel`, `InvoiceModel`, `InvoiceEditModel` and `BillingRunModel` in billing; the Modules table has the `posting`, `ledger` and `billing` rows and `app`'s row reads "the server edge's `LimsAuthorizer`, the server's own clients (`InternalClient`), the event relay, the ledger port and the billing schedule"; and the Status paragraph adds: "Part B of the ERP design is built: the posting contract, the ledger (accounts, periods, entries, rates, reports) and billing (prices, billable lines from lab's events, invoices with approval, the edit lease, posting, the billing run) (decisions 28–40). Models [n], actions [n], screens [n]." Then:
 
 ```bash
 cd /home/yaraslau/repo/morph
@@ -8079,6 +9794,7 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 
 Not tasks; what the next plans start from.
 
-- **Part C's second instances** meet the first instances recorded here: goods receipt (hypothesis 1, decision 38 — the framework seam for atomic work across models is designed against both postings before goods receipt is called done), `lab.ResultCaptured` → consumption (hypothesis 2, decision 31 — if inventory needs the same `IActionLog` adapter and its own `IReplayLedger`, that is the seam), lot reservation (hypothesis 3, decision 37), requisition approval and escalation (hypotheses 5 and 4, decision 35), purchase orders in a supplier's currency (hypothesis 8, decision 33), stock effects across companies (hypothesis 7, decision 39).
-- **The cross-module effects gap** (decision 32) recurs a third time in Task 14 (`PostInvoice` cannot declare the ledger's `Ledger_Entry`); it is filed against `include/morph` and every Part C reaction will meet it.
-- **Part D** builds the billing and ledger screens against their mockups; the lifecycle screen's billing panel (Task 9) is a functional panel, rebuilt there. A JPY price's form advertising two decimals (decision 33) and a pending-approvals list not told when a deadline passes (decision 35) are Part D's to meet.
+- **Part C's second instances** meet the first instances recorded here: goods receipt (hypothesis 1, decision 37 — measured the same two ways; if hypothesis 1 is confirmed, the framework seam for atomic work across models is designed against both postings before goods receipt is called done), `lab.ResultCaptured` → consumption (hypothesis 2, decision 31 — a second consumer dispatched through its own sink and consumer action over the same relay), lot reservation (hypothesis 3, decision 36), requisition approval (hypothesis 5, decision 34; its escalation is a deadline the rule reads, which decision 34 records as not hypothesis 4's), purchase orders in a supplier's currency (hypothesis 8, decision 32), stock effects across companies (hypothesis 7, decision 39).
+- **The internal client** (`lims::app::InternalClient`, Task 9) is how every Part C background job and cross-module reaction dispatches; nothing installs a session by hand.
+- **The cross-module effects gap** (decision 38, cause (i)) is filed against `include/morph` if confirmed; every Part C action that writes another module's records inside itself meets it.
+- **Part D** builds the billing and ledger screens against their mockups. A JPY price's form advertising two decimals (decision 32), an approvals inbox not told when a deadline passes (decision 34), and a lease's lapse on disconnect not told to a waiting clerk (decision 36) are Part D's to meet.
