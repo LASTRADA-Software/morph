@@ -33,6 +33,7 @@
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -248,35 +249,34 @@ TEST_CASE("OrgModel over the full backend-mode matrix: assign, list and revoke a
     CHECK(lims::OrgModel::rolesAnywhere("bob").empty());
 }
 
-// The server answers an exception from the authorizer with an error reply carrying its text. Mutation: let the role
-// lookup skip a corrupt row (bob is refused as unauthorised instead, and the message check fails).
+// The server answers an exception from the authorizer with an error reply carrying its text. The authorizer's role
+// lookup is a lambda of its own, so a message only that lambda throws can only have come from authorize(): the model
+// reads roles through OrgModel::rolesAnywhere and never sees it. Mutation: authorize() catches the exception and
+// returns true (the request reaches the model, which refuses bob with its own message, and the check fails).
 TEST_CASE("A role lookup that throws inside authorize() fails the request cleanly and the server keeps serving",
           "[lims][matrix][org][roles][socket-only]") {
     DbFixture fixture;
     lims::test::grant("alice", lims::LimsRole::Supervisor);
     lims::test::grant("bob", lims::LimsRole::Verifier);
-    {
-        Lightweight::DataMapper mapper;
-        auto rows =
-            mapper.Query<lims::db::RoleAssignmentRecord>()
-                .Where(Lightweight::FieldNameOf<&lims::db::RoleAssignmentRecord::principal>, "=", std::string{"bob"})
-                .All();
-        REQUIRE(rows.size() == 1);
-        rows.front().role = 99;
-        mapper.Update(rows.front());
-    }
 
-    BackendRig rig{Mode::Socket, 2, makeAuthorizer()};
+    auto authorizer = std::make_shared<lims::auth::LimsAuthorizer>(
+        std::string{kSecret}, [](std::string_view principal) -> std::vector<lims::LimsRole> {
+            if (principal == "bob") {
+                throw std::runtime_error{"authorizer lookup failed for bob"};
+            }
+            return lims::OrgModel::rolesAnywhere(principal);
+        });
+    BackendRig rig{Mode::Socket, 2, authorizer};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "bob"));
     rig.bridge(1).setDefaultSession(tokenContextFor(issuer, "alice"));
 
-    // bob's role-gated request makes the server read his corrupt row inside authorize().
+    // bob's role-gated request makes the server run the lookup inside authorize().
     auto asBob = rig.client<lims::OrgModel>(0);
     CHECK_THROWS_WITH(
         awaitQt(asBob.execute(lims::AssignRole{
             .principal = "bob", .role = lims::LimsRole::Analyst, .company = lims::test::seededCompany(), .site = {}})),
-        Catch::Matchers::ContainsSubstring("stores a role outside its range"));
+        Catch::Matchers::ContainsSubstring("authorizer lookup failed for bob"));
 
     // The same connection and another one both keep being served.
     CHECK(awaitQt(asBob.execute(lims::ListCompanies{})).companies.size() == 1);

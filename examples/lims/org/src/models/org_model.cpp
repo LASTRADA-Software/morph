@@ -320,20 +320,29 @@ RevokeRoleResult OrgModel::execute(const RevokeRole& action) {
     }
     auto const view = toView(rows.front());
     requireSupervisorIn(view.scopeKind == ScopeKind::Company ? Scope{view.company} : Scope{view.site});
-    // Only a company's own supervisors can administer it, so only they are counted: a supervisor at one of its sites
-    // cannot assign at the company, and another company's supervisor cannot assign here.
-    if (view.role == LimsRole::Supervisor && view.scopeKind == ScopeKind::Company) {
-        auto const supervisorsHere = std::ranges::count_if(
+    if (view.role == LimsRole::Supervisor) {
+        // Only a company's own supervisors can administer it, so only they are counted: a supervisor at one of its
+        // sites cannot assign at the company, and another company's supervisor cannot assign here.
+        if (view.scopeKind == ScopeKind::Company &&
             mapper.Query<db::RoleAssignmentRecord>()
-                .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::role>, "=",
-                       static_cast<int>(LimsRole::Supervisor))
-                .All(),
-            [&](db::RoleAssignmentRecord const& row) {
-                return scopeKindOf(row) == ScopeKind::Company && row.scopeId.Value() == *view.company;
-            });
-        if (supervisorsHere == 1) {
+                    .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::role>, "=",
+                           static_cast<int>(LimsRole::Supervisor))
+                    .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::scopeKind>, "=",
+                           static_cast<int>(ScopeKind::Company))
+                    .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::scopeId>, "=", *view.company)
+                    .All()
+                    .size() == 1) {
             throw Conflict{"RevokeRole: the last supervisor assignment of company " + std::to_string(*view.company) +
                            " cannot be revoked"};
+        }
+        // Whatever its scope, the last supervisor assignment of all stays: with none left the bootstrap carve-out
+        // would admit whoever acts next.
+        if (mapper.Query<db::RoleAssignmentRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::role>, "=",
+                       static_cast<int>(LimsRole::Supervisor))
+                .All()
+                .size() == 1) {
+            throw Conflict{"RevokeRole: the last supervisor assignment cannot be revoked"};
         }
     }
     mapper.Delete(rows.front());

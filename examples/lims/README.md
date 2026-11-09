@@ -726,6 +726,8 @@ sites does not count: a site role cannot administer the company scope, so it wou
 empty all the same.
 
 The bootstrap carve-out is the only rule that looks across companies: it applies while no `Supervisor` exists anywhere.
+`RevokeRole` therefore also refuses to remove the last `Supervisor` assignment anywhere, whatever its scope: revoking
+it would reopen the bootstrap carve-out to whoever acted next.
 
 ## Findings raised by this rung
 

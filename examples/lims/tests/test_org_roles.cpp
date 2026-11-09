@@ -354,6 +354,53 @@ TEST_CASE("org roles: a company's last supervisor cannot be revoked, whoever els
     CHECK_FALSE(holds(lims::OrgModel::rolesIn("alice", lims::Scope{osaka.id}), lims::LimsRole::Supervisor));
 }
 
+// Mutation: count only company-scope supervisors in the "anywhere" rule (the bootstrap at the site is revoked and
+// the next caller bootstraps again).
+TEST_CASE("org roles: the last supervisor anywhere cannot be revoked, even one scoped to a site",
+          "[lims][org][roles]") {
+    DbFixture fixture;
+    lims::OrgModel org;
+    ScopedPrincipal const alice{"alice"};
+    auto const atSite = org.execute(lims::AssignRole{
+        .principal = "alice", .role = lims::LimsRole::Supervisor, .company = {}, .site = lims::test::seededSite()});
+    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = atSite.id}), lims::Conflict);
+    CHECK(lims::OrgModel::supervisorExists());
+
+    // A second supervisor, anywhere, makes the first one's revoke legitimate.
+    org.execute(lims::AssignRole{
+        .principal = "bob", .role = lims::LimsRole::Supervisor, .company = {}, .site = lims::test::seededSite()});
+    CHECK(org.execute(lims::RevokeRole{.assignmentId = atSite.id}).assignmentId == atSite.id);
+}
+
+// Mutation: decode every supervisor row's scope kind (the corrupt row at Osaka makes the revoke at the seeded
+// company throw).
+TEST_CASE("org roles: a corrupt supervisor row at another company does not block a revoke here",
+          "[lims][org][roles]") {
+    DbFixture fixture;
+    lims::OrgModel org;
+    ScopedPrincipal const alice{"alice"};
+    org.execute(lims::AssignRole{
+        .principal = "alice", .role = lims::LimsRole::Supervisor, .company = lims::test::seededCompany(), .site = {}});
+    auto const dave = org.execute(lims::AssignRole{
+        .principal = "dave", .role = lims::LimsRole::Supervisor, .company = lims::test::seededCompany(), .site = {}});
+    // erin founds the second company, so the corrupt row is hers and no lookup of alice's roles reads it.
+    auto const osaka = [&] {
+        ScopedPrincipal const asErin{"erin"};
+        return org.execute(lims::CreateCompany{
+            .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April});
+    }();
+    {
+        Lightweight::DataMapper mapper;
+        auto rows = mapper.Query<lims::db::RoleAssignmentRecord>()
+                        .Where(Lightweight::FieldNameOf<&lims::db::RoleAssignmentRecord::scopeId>, "=", *osaka.id)
+                        .All();
+        REQUIRE(rows.size() == 1);
+        rows.front().scopeKind = 99;
+        mapper.Update(rows.front());
+    }
+    CHECK(org.execute(lims::RevokeRole{.assignmentId = dave.id}).assignmentId == dave.id);
+}
+
 // Mutations: look the scope up before the permission check (mallory gets NotFound); check permission only when the
 // scope exists (the same); refuse a supervisor's unknown scope with Forbidden instead (alice gets Forbidden).
 TEST_CASE("org roles: a caller who supervises nowhere cannot tell which scopes and assignments exist",
