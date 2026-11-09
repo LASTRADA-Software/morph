@@ -325,3 +325,36 @@ TEST_CASE("WizardSession: a failed submission from Next stays on the step", "[fo
     CHECK_FALSE(stack.wizard->stepDone(1));
     CHECK(stack.wizard->current() == 1);
 }
+
+TEST_CASE("WizardModel: a malformed second step is named by its own index", "[forms-engine][wizard]") {
+    auto const model = WizardModel::fromSchema("W", R"({"w-steps":[{"action":"A"},{"title":"no action"}]})");
+    REQUIRE_FALSE(model.has_value());
+    CHECK(model.error().path == "w-steps[1]");
+}
+
+TEST_CASE("WizardSession: a step that failed after Next does not advance when it later succeeds",
+          "[forms-engine][wizard]") {
+    Harness harness;
+    harness.server.replyWith([](Call const&) -> std::optional<std::string> { return std::nullopt; });
+    auto const explicitFirst = [](std::string_view action) -> std::optional<std::string> {
+        if (action == "StepA") {
+            return R"({"properties":{"label":{"type":"string"}},"required":["label"],"x-submitMode":"explicit"})";
+        }
+        return R"({"properties":{"note":{"type":"string"}},"required":["note"],"x-submitMode":"explicit"})";
+    };
+    WizardSession wizard{harness.rt, wizardModel(R"({"w-steps":[{"action":"StepA"},{"action":"StepB"}]})"),
+                         explicitFirst, harness.server.submitter(), harness.server.fetcher()};
+    harness.settle();
+    harness.type(wizard.step(0), "label", "x");
+    wizard.next();
+    harness.settle();
+    harness.server.rejectSubmit(0, "refused");
+    harness.settle();
+    REQUIRE(wizard.current() == 0);
+    wizard.step(0).submit();
+    harness.settle();
+    harness.server.resolveSubmit(1, R"({"ok":true})");
+    harness.settle();
+    CHECK(wizard.stepDone(0));
+    CHECK(wizard.current() == 0);
+}
