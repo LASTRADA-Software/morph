@@ -179,7 +179,9 @@ TEST_CASE("visibility: a company-scoped role reaches nothing in another company"
         CHECK(idsOf(model.execute(lims::ListSites{}).sites) ==
               std::vector<lims::SiteId>{lims::test::seededSite(), org.fieldLab});
         CHECK(idsOf(bench.execute(lims::ListSamples{}).rows) == std::vector<lims::SampleId>{org.atMain, org.atField});
-        for (auto const& assignment : model.execute(lims::ListRoleAssignments{}).assignments) {
+        auto const assignments = model.execute(lims::ListRoleAssignments{}).assignments;
+        REQUIRE_FALSE(assignments.empty());
+        for (auto const& assignment : assignments) {
             CHECK(assignment.company != org.osaka);
             CHECK(assignment.site != org.osakaLab);
         }

@@ -765,7 +765,8 @@ designed against both, and otherwise the guarantee is recorded as domain logic t
 
 `ListSamples`, `ListCompanies`, `ListSites`, `ListRoleAssignments` and `ListUsers` answer only records in scopes where
 the caller holds a role: a role at a company reaches the company and all its sites, a role at a site reaches that
-site and, through it, its company. Nobody, and an unauthenticated call, sees nothing. A company's creator is assigned
+site and, through it, its company, including the company's own role assignments, so a site's staff can see who
+supervises their company. Nobody, and an unauthenticated call, sees nothing. A company's creator is assigned
 `Supervisor` at it in the same transaction, since a company nobody holds a role in would be listed to nobody.
 
 `ListAnalyses`, `ListProjects` and `ListIgnitionTests` list unscoped reference data and are deliberately not
