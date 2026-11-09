@@ -13,6 +13,7 @@ namespace lims {
 
 LIMS_DEFINE_STRONG_ID(AccountId);
 LIMS_DEFINE_STRONG_ID(PeriodId);
+LIMS_DEFINE_STRONG_ID(ExchangeRateId);
 
 /// @brief What an account records.
 enum class AccountType : std::uint8_t {
@@ -40,8 +41,10 @@ enum class EntryState : std::uint8_t {
 
 LIMS_DEFINE_STRONG_ID_WIRE(AccountId);
 LIMS_DEFINE_STRONG_ID_WIRE(PeriodId);
+LIMS_DEFINE_STRONG_ID_WIRE(ExchangeRateId);
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(AccountId, "lims.accountId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(PeriodId, "lims.periodId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(ExchangeRateId, "lims.exchangeRateId");
 
 /// @brief Reflects `AccountType` as its enumerator name.
 template <>

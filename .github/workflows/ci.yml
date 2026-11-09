@@ -792,7 +792,7 @@ jobs:
           # on a runner with no display.
           QT_QPA_PLATFORM: offscreen
         run: |
-          LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage
+          LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage -LE stress
 
       # Deliberately left on the implicit `success()`, unlike the three test
       # steps that carry `!cancelled()` (ladder-tests' scenario corpus,

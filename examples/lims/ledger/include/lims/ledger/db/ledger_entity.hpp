@@ -4,7 +4,11 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
+
+#include "lims/ledger/core/types.hpp"
+#include "lims/org/core/errors.hpp"
 
 /// @file
 /// The ledger's tables, prefixed `ledger_`. Companies are org's: a company id is stored as a plain column, since no
@@ -93,5 +97,33 @@ struct PeriodBalanceRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"credit_num"}> creditNum{0};                             // 5
     Light::Field<std::int64_t, Light::SqlRealName{"credit_den"}> creditDen{1};                             // 6
 };
+
+/// @brief One dated rate of one currency pair for one company.
+struct ExchangeRateRecord {
+    static constexpr std::string_view TableName = "ledger_exchange_rates";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 1
+    /// @brief `CurrencyCode` of the transaction currency as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"from_currency"}> fromCurrency{0};  // 2
+    /// @brief `CurrencyCode` of the company-side currency as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"to_currency"}> toCurrency{0};  // 3
+    /// @brief The first instant the rate applies, in epoch milliseconds.
+    Light::Field<std::int64_t, Light::SqlRealName{"valid_from_ms"}> validFromMs{0};  // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"rate_num"}> rateNum{1};           // 5
+    Light::Field<std::int64_t, Light::SqlRealName{"rate_den"}> rateDen{1};           // 6
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"set_by"}> setBy;      // 7
+};
+
+/// @brief The account type a row stores.
+/// @param row The row.
+/// @return Its type.
+/// @throws ValidationError if the row stores a type outside its enumeration.
+[[nodiscard]] inline AccountType accountTypeOf(AccountRecord const& row) {
+    int const type = row.type.Value();
+    if (type < 0 || type > static_cast<int>(AccountType::Expense)) {
+        throw ValidationError{"account " + std::to_string(row.id.Value()) + " stores a type outside its range"};
+    }
+    return static_cast<AccountType>(type);
+}
 
 }  // namespace lims::db

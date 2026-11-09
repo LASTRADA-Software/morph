@@ -73,4 +73,19 @@ LIGHTWEIGHT_SQL_MIGRATION(20261110000004, "Create ledger_entries, their lines, p
     plan.CreateUniqueIndex("idx_ledger_period_balances_period_account", "ledger_period_balances",
                            {"period_id", "account_id"});
 }
+LIGHTWEIGHT_SQL_MIGRATION(20261110000005, "Create ledger_exchange_rates") {
+    plan.CreateTableIfNotExists("ledger_exchange_rates")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("from_currency", Integer())
+        .RequiredColumn("to_currency", Integer())
+        .RequiredColumn("valid_from_ms", Bigint())
+        .RequiredColumn("rate_num", Bigint())
+        .RequiredColumn("rate_den", Bigint())
+        .RequiredColumn("set_by", Varchar(64));
+    // One rate per company, currency pair and start instant: the unique index is what makes "the rate valid on a
+    // date" a single answer.
+    plan.CreateUniqueIndex("idx_ledger_exchange_rates_pair_start", "ledger_exchange_rates",
+                           {"company_id", "from_currency", "to_currency", "valid_from_ms"});
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

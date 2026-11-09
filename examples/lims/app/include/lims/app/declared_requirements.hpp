@@ -36,17 +36,34 @@ namespace lims::app {
 
 /// @brief Every action a module declares a role, or some role, for.
 /// @return The table.
-[[nodiscard]] inline std::array<RoleRequirement, 25> const& declaredRequirements() {
-    static constexpr std::array<RoleRequirement, 25> requirements{
-        requirementOf<VerifyResult>(),         requirementOf<CreateCompany>(), requirementOf<CreateSite>(),
-        requirementOf<AssignRole>(),           requirementOf<RevokeRole>(),    requirementOf<RegisterSample>(),
-        requirementOf<ReceiveSample>(),        requirementOf<StartWork>(),     requirementOf<SubmitForVerification>(),
-        requirementOf<ReturnForRework>(),      requirementOf<PublishSample>(), requirementOf<RejectSample>(),
-        requirementOf<CaptureConcentration>(), requirementOf<QueuedCapture>(), requirementOf<ResolveConflict>(),
-        requirementOf<SaveSample>(),           requirementOf<DeleteSample>(),  requirementOf<SetValueLimit>(),
-        requirementOf<CreateAccount>(),        requirementOf<OpenPeriod>(),    requirementOf<BeginClosePeriod>(),
-        requirementOf<CreateDraftEntry>(),     requirementOf<PostEntry>(),     requirementOf<ReverseEntry>(),
+[[nodiscard]] inline std::array<RoleRequirement, 26> const& declaredRequirements() {
+    static constexpr std::array<RoleRequirement, 26> requirements{
+        requirementOf<VerifyResult>(),
+        requirementOf<CreateCompany>(),
+        requirementOf<CreateSite>(),
+        requirementOf<AssignRole>(),
+        requirementOf<RevokeRole>(),
+        requirementOf<RegisterSample>(),
+        requirementOf<ReceiveSample>(),
+        requirementOf<StartWork>(),
+        requirementOf<SubmitForVerification>(),
+        requirementOf<ReturnForRework>(),
+        requirementOf<PublishSample>(),
+        requirementOf<RejectSample>(),
+        requirementOf<CaptureConcentration>(),
+        requirementOf<QueuedCapture>(),
+        requirementOf<ResolveConflict>(),
+        requirementOf<SaveSample>(),
+        requirementOf<DeleteSample>(),
+        requirementOf<SetValueLimit>(),
+        requirementOf<CreateAccount>(),
+        requirementOf<OpenPeriod>(),
+        requirementOf<BeginClosePeriod>(),
+        requirementOf<CreateDraftEntry>(),
+        requirementOf<PostEntry>(),
+        requirementOf<ReverseEntry>(),
         requirementOf<ClosePeriod>(),
+        requirementOf<SetExchangeRate>(),
     };
     return requirements;
 }

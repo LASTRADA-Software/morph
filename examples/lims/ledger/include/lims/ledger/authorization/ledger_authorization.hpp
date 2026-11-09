@@ -3,6 +3,7 @@
 
 #include "lims/ledger/dto/account_dto.hpp"
 #include "lims/ledger/dto/entry_dto.hpp"
+#include "lims/ledger/dto/rate_dto.hpp"
 #include "lims/ledger/models/ledger_model.hpp"
 #include "lims/org/authorization/declared.hpp"
 
@@ -70,5 +71,9 @@ struct Authorization<ReverseEntry> {
     /// @return It; an empty company when there is no such entry.
     [[nodiscard]] static Scope scopeOf(ReverseEntry const& action);
 };
+
+/// @brief A rate is entered by an accountant at its company.
+template <>
+struct Authorization<SetExchangeRate> : CompanyRule<SetExchangeRate, LimsRole::Accountant> {};
 
 }  // namespace lims

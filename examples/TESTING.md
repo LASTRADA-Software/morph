@@ -434,7 +434,10 @@ Open framework facts every WASM client must respect (verified):
   screen_tests,render_smoke,tests}` with `catch_discover_tests` + ctest labels
   (`ladder`, `ladder-<rung>` — Catch2's own tags like `[stress]`/`[tsan]`
   are not translated into ctest labels anywhere in this repo; select on
-  them with `ctest -R` against the test name instead), a `TEST_PREFIX` of
+  them with `ctest -R` against the test name instead. The exception is the
+  name prefix: a `TEST_CASE` named `Journey: …` also gets `journey` and one
+  named `Stress: …` also gets `stress`, which CI's ladder and coverage legs
+  exclude with `-LE stress`), a `TEST_PREFIX` of
   `<rung>.` on every discovered ctest name (a ctest name is global to the
   build tree, so without the prefix two rungs sharing a `TEST_CASE` name give
   `ctest -L ladder-<rung>` another rung's cases as well as its own;

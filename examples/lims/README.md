@@ -218,7 +218,7 @@ lims is built from modules, each its own library with its own include directory 
 | `org/` (shared) | the error set, the model support every module uses, sign-in, companies and sites, role assignments, and declared authorization | nothing in lims |
 | `posting/` (shared) | the posting contract: `PostingRequest` and `PostingResult`, DTOs only | `org` |
 | `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
-| `ledger/` | the chart of accounts, the monthly periods and the journal entries (balanced, unrounded, immutable once posted, corrected by reversal; postings recorded once per source key; a closed period freezes its balances) | `org`, `posting` |
+| `ledger/` | the chart of accounts, the monthly periods and the journal entries (balanced, unrounded, immutable once posted, corrected by reversal; postings recorded once per source key; a closed period freezes its balances; dated exchange rates; the trial balance, account balance and account ledger reports) | `org`, `posting` |
 | `app/` | the server edge's `LimsAuthorizer`, and the tables it reads: `declaredRequirements` and `openMutatingActions` | every module |
 
 The server (`src/server/`), the screens (`screens/`) and the suites (`tests/`) belong to the app and link every
@@ -872,6 +872,53 @@ appointment of a company's creator as its first supervisor by `CreateCompany` (d
 A value limit is one row per principal and company, kept by a unique index on `(principal, company_id)`;
 `SetValueLimit` updates the row when there is one and inserts otherwise. `ListValueLimits` returns a limit only to the
 supervisors of its company and to the principal it belongs to, not to every holder of a role there.
+
+### 30. The ledger validates and never rounds, and its totals are exact or refused (hypothesis 8, first instance)
+
+A journal entry is recorded only if it has two or more lines whose debits equal their credits in the transaction
+currency and in company currency, each amount a whole number of its currency's minor units (`lims::entryProblem`).
+The ledger rounds nothing: a poster converts and rounds, half-up, line by line, and adds an explicit rounding line
+where that leaves a difference. A posting is recorded once per company and source key through an `IReplayLedger` over
+`ledger_posting_sources`, in the entry's own transaction, so a retry answers the first entry. Entries are immutable
+once posted; a correction is a posted reversal naming the original. A period is open, closing (no new drafts;
+postings and posting of existing drafts continue) or closed (nothing more is recorded; each account's totals are
+frozen in `ledger_period_balances`), and closes only with no draft left in it. An exchange rate is entered per
+company and currency pair from an instant (a unique index keeps one rate per pair and instant); the rate on a date is
+the latest one starting on or before it, and a foreign-currency posting must state exactly that rate.
+
+The reports (`LedgerReportModel`: trial balance, account balance as of an instant, account ledger over a range) total
+posted entries only, in company currency, with `ExactSum`. A closed period that lies wholly inside the range
+contributes its frozen per-account totals instead of its lines; a period the range ends inside is totalled from its
+lines. A total, a balance or a running balance that does not fit `int64` is `OutOfRange`.
+
+**Hypothesis 8, first half (magnitude): refuted for the summation.** Measured by `Stress: Hypothesis 8: ...` in
+`tests/test_ledger_reports.cpp`, on the `linux-everything` Release build (clang), one run:
+
+- 10^7 lines of pseudo-random size up to 10^9 minor units each (total 4,708,027,407,079,500 minor units, inside
+  `int64`) summed through `lims::ExactSum` (`checkedAdd`) in 780 ms; every `add` reported success and the total equals
+  the independently accumulated `int64` sum exactly.
+- Two values of 5 * 10^18 under `ExactSum`: the first `add` succeeds, the second returns `false` and leaves the total
+  unchanged.
+- The same two values under `operator+` answer `9223372036854775807/1` (`INT64_MAX`) with no signal to the caller: the
+  hypothesis' premise about `Rational` is true, so exactness depends on every lims total using `ExactSum`, which the
+  reports and the ledger do and which nothing in morph enforces.
+- A trial balance over two such postings throws `OutOfRange` instead of answering a number, both when one account's
+  total does not fit and when every account fits and the company's total does not; the same holds for an account
+  balance and for an account ledger's running balance.
+
+Measured over the summation only. Not measured: a report over 10^7 rows in the database (the reports load the posted
+entries of a company into memory, line by line, so that case is hypothesis 10's subject in Part C); the cost of the
+reports themselves, which is a query per entry. Inferred, not measured: that the 780 ms holds on another machine.
+
+Because the case runs 10^7 iterations it is named `Stress: ` and so carries the ctest label `stress`: a local
+`ctest -L ladder-lims` and a direct run of the binary include it; CI's ladder legs and its coverage leg leave it out.
+
+**One transaction currency per entry.** An entry carries one transaction currency, and balances in it and in company
+currency. The design allows an entry to "sum to zero per transaction currency", which admits one entry mixing
+several; lims's posters each post one document in one currency (an invoice in its client's, a receipt in its
+supplier's), and a single currency per entry keeps the rate one fact of the entry rather than one per line, so
+`PostingRequest` carries one `currency` and one `rate` and `entryProblem` checks that one. A document in several
+currencies would post one entry per currency; nothing in Parts B and C produces one.
 
 ## Findings raised by this rung
 

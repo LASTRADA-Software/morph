@@ -18,7 +18,6 @@ namespace lims {
 
 namespace {
 
-constexpr int kMaxAccountType = static_cast<int>(AccountType::Expense);
 constexpr int kMaxPeriodState = static_cast<int>(PeriodState::Closed);
 
 /// @brief Maps an account row to its view.
@@ -26,16 +25,12 @@ constexpr int kMaxPeriodState = static_cast<int>(PeriodState::Closed);
 /// @return The view.
 /// @throws ValidationError if the row stores a type outside its enumeration.
 [[nodiscard]] AccountView toView(db::AccountRecord const& row) {
-    int const type = row.type.Value();
-    if (type < 0 || type > kMaxAccountType) {
-        throw ValidationError{"account " + std::to_string(row.id.Value()) + " stores a type outside its range"};
-    }
     return AccountView{
         .id = AccountId{static_cast<std::int64_t>(row.id.Value())},
         .company = CompanyId{row.companyId.Value()},
         .code = std::string{row.code.Value().ToStringView()},
         .name = std::string{row.name.Value().ToStringView()},
-        .type = static_cast<AccountType>(type),
+        .type = db::accountTypeOf(row),
     };
 }
 

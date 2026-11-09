@@ -1092,7 +1092,7 @@ TEST_CASE("ledger entries: a posting that is malformed, unbalanced or unplaceabl
     auto noPeriod = posting("billing.invoice:7", 100);
     noPeriod.date = morph::time::Timestamp{lims::test::at(2026, 12, 1)};
     CHECK_THROWS_AS(lims::LedgerModel::record(noPeriod), lims::NotFound);
-    // A foreign-currency posting needs a ledger rate for its date; the ledger holds none yet.
+    // A foreign-currency posting needs a ledger rate for its date; the ledger holds none for the pair.
     lims::PostingRequest usd = posting("billing.invoice:8", 100);
     usd.currency = lims::CurrencyCode::USD;
     usd.rate = rateOf(920000);

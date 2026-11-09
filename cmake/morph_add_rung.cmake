@@ -444,13 +444,13 @@ function(morph_add_rung)
                 # under-selects without saying so.
                 PROPERTIES LABELS ladder-${_rung} TIMEOUT 120 RESOURCE_LOCK morph_ladder_test_db
             )
-            # `journey` still needs a post-pass: it applies to some cases and
-            # not others, which catch_discover_tests' uniform PROPERTIES cannot
-            # express. It therefore inherits the flattening limitation
-            # described above — a journey case whose name contained a `;` would
-            # keep its rung label but never gain `journey`. Rather than let
-            # that go quiet, it is rejected at configure time by the guard
-            # below.
+            # `journey` and `stress` still need a post-pass: each applies to
+            # some cases and not others, which catch_discover_tests' uniform
+            # PROPERTIES cannot express. They therefore inherit the
+            # flattening limitation described above — a case whose name
+            # contained a `;` would keep its rung label but never gain
+            # `journey` or `stress`. Rather than let that go quiet, it is
+            # rejected at configure time by the guard below.
             #
             # set_tests_properties *appends* to LABELS rather than replacing
             # them -- the same append that let two same-named ctest entries
@@ -462,12 +462,13 @@ function(morph_add_rung)
             # CTest has.
             foreach(_journey_src IN LISTS _test_sources)
                 file(STRINGS "${_journey_src}" _bad_journey_names
-                     REGEX "TEST_CASE\\(\"Journey: [^\"]*;")
+                     REGEX "TEST_CASE\\(\"(Journey|Stress): [^\"]*;")
                 if(_bad_journey_names)
                     message(FATAL_ERROR
-                        "morph_add_rung(${_rung}): a \"Journey: \" TEST_CASE name contains a "
-                        "semicolon. CMake cannot round-trip that through Catch2's discovered "
-                        "test list, so the case would silently never gain its `journey` label. "
+                        "morph_add_rung(${_rung}): a \"Journey: \" or \"Stress: \" TEST_CASE name "
+                        "contains a semicolon. CMake cannot round-trip that through Catch2's "
+                        "discovered test list, so the case would silently never gain its "
+                        "`journey` or `stress` label. "
                         "Rename it.\n  File: ${_journey_src}\n  Name: ${_bad_journey_names}")
                 endif()
             endforeach()
@@ -477,9 +478,13 @@ function(morph_add_rung)
     # End-to-end user journeys carry an extra `journey` label so they can be
     # selected (ctest -L journey) or excluded the way `stress` is. Keyed off
     # the test name's own \"Journey: \" prefix rather than a separate source
-    # list, so adding a journey needs no CMake edit.
+    # list, so adding a journey needs no CMake edit. A long-running case named
+    # \"Stress: ...\" gets `stress` the same way, which CI's ladder legs
+    # (ctest -L ladder -LE stress) and its coverage leg leave out.
     if(_ladder_test MATCHES \"Journey: \")
         set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder-${_rung};journey\")
+    elseif(_ladder_test MATCHES \"Stress: \")
+        set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder-${_rung};stress\")
     endif()
 endforeach()
 "

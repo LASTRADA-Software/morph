@@ -658,10 +658,4 @@ PostingResult LedgerModel::record(PostingRequest const& request) {
     }
 }
 
-std::optional<::morph::math::Rational> LedgerModel::rateOn(CompanyId /*company*/, CurrencyCode /*from*/,
-                                                           CurrencyCode /*to*/,
-                                                           ::morph::time::Timestamp const& /*on*/) {
-    return std::nullopt;
-}
-
 }  // namespace lims

@@ -10,6 +10,7 @@
 
 #include "lims/ledger/dto/account_dto.hpp"
 #include "lims/ledger/dto/entry_dto.hpp"
+#include "lims/ledger/dto/rate_dto.hpp"
 #include "lims/posting/posting.hpp"
 
 /// @file
@@ -115,6 +116,22 @@ public:
     /// @throws EmptyPrincipalError if no principal is authenticated.
     PeriodView execute(const ClosePeriod& action);
 
+    /// @brief Enters a rate for a currency pair, valid from an instant.
+    /// @param action The company, pair, start and rate.
+    /// @return The rate.
+    /// @throws ValidationError if the request is malformed, the rate is not positive or the currencies are the same.
+    /// @throws NotFound if the company does not exist.
+    /// @throws Conflict if the pair already has a rate from that instant.
+    /// @throws Forbidden if the caller is not an accountant at the company.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    ExchangeRateView execute(const SetExchangeRate& action);
+
+    /// @brief Lists a company's rates, when the caller can see the company.
+    /// @param action The company.
+    /// @return Its rates by pair then start; none for a company the caller cannot see.
+    /// @throws ValidationError if no company is named, or a row holds a currency outside its enumeration.
+    ListExchangeRatesResult execute(const ListExchangeRates& action);
+
     /// @brief Reads one entry, when the caller can see its company.
     /// @param action The entry.
     /// @return The entry.
@@ -148,16 +165,15 @@ public:
     /// @throws Conflict if the period is closed, or if the source key is already recorded for a different request.
     [[nodiscard]] static PostingResult record(PostingRequest const& request);
 
-    /// @brief The ledger's rate for converting @p from into @p to on a date.
-    /// @param company The company whose rates apply.
-    /// @param from The transaction currency.
-    /// @param to The company's currency.
-    /// @param on The date.
-    /// @return Company-currency units per transaction-currency unit; nothing when the ledger holds no rate valid on
-    ///         the date.
+    /// @brief The rate from @p from to @p target valid on @p date: the one with the latest start not after it.
+    /// @param company The company whose rates are asked.
+    /// @param from The source currency.
+    /// @param target The target currency.
+    /// @param date The date.
+    /// @return Units of @p target per unit of @p from; nothing when no rate is valid yet.
     [[nodiscard]] static std::optional<::morph::math::Rational> rateOn(CompanyId company, CurrencyCode from,
-                                                                       CurrencyCode to,
-                                                                       ::morph::time::Timestamp const& on);
+                                                                       CurrencyCode target,
+                                                                       ::morph::time::Timestamp const& date);
 };
 
 }  // namespace lims
@@ -181,6 +197,9 @@ BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ReverseEntry, "ReverseEntry")
 BRIDGE_REGISTER_EFFECTS(lims::ReverseEntry, ::morph::effects::changes<lims::JournalEntryView>)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ClosePeriod, "ClosePeriod")
 BRIDGE_REGISTER_EFFECTS(lims::ClosePeriod, ::morph::effects::updates<lims::PeriodView>)
+BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::SetExchangeRate, "SetExchangeRate")
+BRIDGE_REGISTER_EFFECTS(lims::SetExchangeRate, ::morph::effects::changes<lims::ExchangeRateView>)
+BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListExchangeRates, "ListExchangeRates", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::GetEntry, "GetEntry", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListEntries, "ListEntries", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
