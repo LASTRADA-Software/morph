@@ -141,9 +141,11 @@ fit the palette, that is a finding, not a license for `int64_t`.
 Each rung defines its unit system once (`<rung>/include/<rung>/units.hpp`,
 modelled on `examples/forms/lab_units.hpp`): the enum, `UnitTraits`
 metadata, the consteval algebra, and the exact entry-unit relations. Money
-is a unit system too (currency units with per-currency `dp` — respecting
-the `DecimalPlaces >= 1` floor and the documented JPY/KRW convention in
-`docs/spec/util/quantity_type.md`).
+is a unit system too. Where the type fixes the currency, a unit per currency
+declares its decimals, and zero is legal (`docs/spec/util/quantity_type.md`:
+`Dec == 0` is what a zero-decimal currency such as JPY declares). Where the
+currency is known only from the record, as in lims, one money unit carries
+the amount and the currency is a field beside it (lims decision 28).
 
 Every action declares `validate()` (via `allRequiredEngaged` +
 domain checks) and carries `fieldMetadata`/`formRules` where the form needs

@@ -39,6 +39,15 @@ public:
     explicit Conflict(std::string message) : LimsError{std::move(message)} {}
 };
 
+/// @brief Thrown when an amount, a sum or a rounded value is outside what the books can hold exactly.
+///
+/// The ledger refuses rather than saturates: a balance clamped to the largest representable value is a wrong
+/// balance that looks plausible.
+class OutOfRange : public LimsError {
+public:
+    explicit OutOfRange(std::string message) : LimsError{std::move(message)} {}
+};
+
 /// @brief Thrown when a sample is asked to make a transition its current
 ///        state does not allow.
 ///

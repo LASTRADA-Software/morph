@@ -11,16 +11,13 @@
 #include <optional>
 #include <string_view>
 
+#include "lims/org/core/references.hpp"
 #include "lims/org/core/strong_id.hpp"
 #include "lims/org/core/types.hpp"
 
 namespace lims {
 
-LIMS_DEFINE_STRONG_ID(ClientId);
-LIMS_DEFINE_STRONG_ID(SampleId);
-LIMS_DEFINE_STRONG_ID(AnalysisId);
 LIMS_DEFINE_STRONG_ID(AnalysisVersionId);
-LIMS_DEFINE_STRONG_ID(ResultId);
 LIMS_DEFINE_STRONG_ID(WorksheetId);
 LIMS_DEFINE_STRONG_ID(VerificationId);
 LIMS_DEFINE_STRONG_ID(ConflictId);
@@ -71,20 +68,12 @@ enum class LimsUnit : std::uint8_t {
 
 }  // namespace lims
 
-LIMS_DEFINE_STRONG_ID_WIRE(ClientId);
-LIMS_DEFINE_STRONG_ID_WIRE(SampleId);
-LIMS_DEFINE_STRONG_ID_WIRE(AnalysisId);
 LIMS_DEFINE_STRONG_ID_WIRE(AnalysisVersionId);
-LIMS_DEFINE_STRONG_ID_WIRE(ResultId);
 LIMS_DEFINE_STRONG_ID_WIRE(WorksheetId);
 LIMS_DEFINE_STRONG_ID_WIRE(VerificationId);
 LIMS_DEFINE_STRONG_ID_WIRE(ConflictId);
 
-LIMS_DEFINE_STRONG_ID_SHAPE_TAG(ClientId, "lims.clientId");
-LIMS_DEFINE_STRONG_ID_SHAPE_TAG(SampleId, "lims.sampleId");
-LIMS_DEFINE_STRONG_ID_SHAPE_TAG(AnalysisId, "lims.analysisId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(AnalysisVersionId, "lims.analysisVersionId");
-LIMS_DEFINE_STRONG_ID_SHAPE_TAG(ResultId, "lims.resultId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(WorksheetId, "lims.worksheetId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(VerificationId, "lims.verificationId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(ConflictId, "lims.conflictId");

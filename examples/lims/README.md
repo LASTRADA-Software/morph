@@ -843,6 +843,18 @@ refresh. A user is a principal holding an assignment: lims keeps no user store, 
 A refused revoke (the last supervisor's) shows its reason in words. The screens are functional, not finished; the
 production GUI rebuilds them against the org mockups.
 
+### 28. Money is one unit whose currency is a field beside it
+
+An amount is `lims::Amount`, a `Quantity` over the single `ErpUnit::money` unit and an exact `Rational`, and its
+currency is a `CurrencyCode` field on the same record. A unit per currency would let the type refuse adding yen to
+euros, but a `Quantity`'s unit is a template argument, and the currency of a price list, an invoice or a ledger line
+is known only from its row. So the models check what the type cannot: amounts they combine share a currency, and an
+amount fits its currency's minor unit (JPY has none). Posters round with `lims::roundToCurrency`, half away from zero
+— half-up for the positive amounts they round. Totals are summed with `lims::ExactSum`, which refuses an overflow
+instead of saturating, over `Rational` values rather than `Quantity` ones, because a `Quantity` records a provenance
+node per addition. The ids billing refers to (client, sample, analysis, result) moved from lab to org, unchanged on
+the wire and in the journal.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so
