@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/forms/engine/field_model.hpp>
@@ -11,8 +12,10 @@
 #include <morph/forms/forms.hpp>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 // File-scope, not anonymous-namespaced: glaze's reflection needs linkage.
@@ -351,4 +354,124 @@ TEST_CASE("FormModel: forAction reads a registered action's own schema, as fromS
         CHECK(typed.fields()[i].required == runtime->fields()[i].required);
     }
     CHECK(typed.find("guests")->kind == FieldKind::Integer);
+}
+
+namespace {
+
+/// An action whose only property holds an object (or collection row) nested @p levels deep.
+[[nodiscard]] std::string nestedSchema(int levels, bool collections) {
+    std::string inner = R"({"type":"string"})";
+    for (int level = 0; level < levels; ++level) {
+        std::string const object = R"({"type":"object","properties":{"c":)" + inner + "}}";
+        inner = collections ? R"({"type":"array","items":)" + object + "}" : object;
+    }
+    return R"({"properties":{"c":)" + inner + "}}";
+}
+
+/// How many nested levels were described before the model stopped and kept the rest as text.
+[[nodiscard]] int describedLevels(FormModel const& described) {
+    int levels = 0;
+    FieldSpec const* current = &described.fields().front();
+    while ((current->kind == FieldKind::Object || current->kind == FieldKind::ObjectArray) && !current->truncated) {
+        ++levels;
+        current = &current->children.front();
+    }
+    return levels;
+}
+
+}  // namespace
+
+TEST_CASE("FormModel: nesting stops at the depth limit, in objects and in collections", "[forms-engine][model]") {
+    int const objects = describedLevels(model("Deep", nestedSchema(8, false)));
+    int const collections = describedLevels(model("DeepRows", nestedSchema(8, true)));
+    CHECK(std::cmp_equal(objects, morph::forms::kMaxNestingDepth));
+    CHECK(collections == objects);
+    CHECK(describedLevels(model("Shallow", nestedSchema(2, false))) == 2);
+    CHECK(describedLevels(model("ShallowRows", nestedSchema(2, true))) == 2);
+}
+
+TEST_CASE("FormModel: an element past a span throws, and the last one does not", "[forms-engine][model]") {
+    std::vector<int> const items{1, 2};
+    CHECK(morph::forms::detail::engine::elementAt(std::span<int const>{items}, 1) == 2);
+    CHECK_THROWS_AS(morph::forms::detail::engine::elementAt(std::span<int const>{items}, 2), std::out_of_range);
+}
+
+TEST_CASE("FormModel: x-order defaults to the front, and a unit keeps its display and unicode",
+          "[forms-engine][model]") {
+    FormModel const ordered = model("Ordered", R"({"properties":{
+      "b":{"type":"integer","x-order":10},"a":{"type":"integer"}}})");
+    CHECK(names(ordered.fields()) == "a,b");
+    FormModel const unit = model("Unit", R"({"properties":{
+      "m":{"type":["object","null"],"x-decimalPlaces":2,"ExtUnits":{"unitAscii":"kg","unitUnicode":""},
+        "x-unitAlternatives":[{"id":"g","display":"gram","decimals":1,"num":1,"den":1000},
+                              {"id":"mg","decimals":0,"num":1,"den":1000000}]}}})");
+    FieldSpec const& mass = unit.fields().front();
+    CHECK(mass.unit == "kg");
+    REQUIRE(mass.units.size() == 3);
+    CHECK(mass.units[1].display == "gram");
+    CHECK(mass.units[2].display == "mg");
+    FormModel const unicode = model("Unicode", R"({"properties":{
+      "m":{"type":["object","null"],"x-decimalPlaces":2,"ExtUnits":{"unitAscii":"ug","unitUnicode":"\u00b5g"}}}})");
+    CHECK(unicode.fields().front().unit == "\xC2\xB5g");
+}
+
+TEST_CASE("FormModel: a slider needs the widget and both bounds; bytes need a string; exact bounds need digits",
+          "[forms-engine][model]") {
+    FormModel const probe = model("Probe", R"({"properties":{
+      "plain":{"type":"integer","x-min":0,"x-max":10},
+      "half":{"type":"integer","x-widget":"slider","x-min":0},
+      "other":{"type":"integer","x-widget":"slider","x-max":10},
+      "blob":{"type":"integer","contentEncoding":"base64"},
+      "exact":{"type":"integer","x-exactMinimum":"abc","x-exactMaximum":"1x"}}})");
+    CHECK(probe.find("plain")->kind == FieldKind::Integer);
+    CHECK(probe.find("half")->kind == FieldKind::Integer);
+    CHECK(probe.find("other")->kind == FieldKind::Integer);
+    CHECK_FALSE(probe.find("blob")->bytes);
+    CHECK_FALSE(probe.find("exact")->exactMinimum.has_value());
+    CHECK_FALSE(probe.find("exact")->exactMaximum.has_value());
+}
+
+TEST_CASE("FormModel: a malformed second rule is reported at its own index", "[forms-engine][model]") {
+    auto const parsed = FormModel::fromSchema("A", R"({"properties":{"a":{"type":"string"}},
+          "x-rules":[{"kind":"engaged","fields":["a"]},{"kind":"not"}]})");
+    REQUIRE_FALSE(parsed.has_value());
+    CHECK(parsed.error().path == "x-rules[1]");
+}
+
+TEST_CASE("FormModel: a section past the declared groups falls into the implicit one", "[forms-engine][model]") {
+    FormModel const layout = model("Layout", R"({"properties":{
+      "a":{"type":"integer","x-order":0,"x-section":0},"b":{"type":"integer","x-order":1,"x-section":1}},
+      "x-layout":{"groups":[{"title":"One","kind":"section","fields":["a"]}]}})");
+    REQUIRE(layout.groups().size() == 2);
+    CHECK(layout.groups()[1].implicit);
+    CHECK(layout.groups()[1].fields == std::vector<std::string>{"b"});
+    FormModel const full = model("Full", R"({"properties":{"a":{"type":"integer","x-order":0,"x-section":0}},
+      "x-layout":{"groups":[{"title":"One","kind":"section","fields":["a"]}]}})");
+    CHECK(full.groups().size() == 1);
+}
+
+TEST_CASE("FormModel: a branch that holds no constants is not an enum", "[forms-engine][model]") {
+    FormModel const probe = model("Probe", R"({"properties":{
+      "mixed":{"type":"string","oneOf":[{"const":"A"},{"oneOf":[]}]},
+      "odd":{"type":"string","anyOf":5}}})");
+    CHECK(probe.find("mixed")->kind == FieldKind::Text);
+    CHECK(probe.find("odd")->kind == FieldKind::Text);
+}
+
+TEST_CASE("SchemaReader: counts read as unsigned or signed only inside the range each can hold",
+          "[forms-engine][model]") {
+    using morph::forms::detail::engine::SchemaReader;
+    auto const read = [](std::string_view literal) {
+        static std::deque<morph::forms::detail::engine::Json> keep;
+        auto parsed = morph::forms::detail::engine::parseJson(literal);
+        REQUIRE(parsed.has_value());
+        keep.push_back(*std::move(parsed));
+        return &keep.back();
+    };
+    CHECK(SchemaReader::unsignedOf(read("-0")) == 0U);
+    CHECK(SchemaReader::unsignedOf(read("0.0")) == 0U);
+    CHECK_FALSE(SchemaReader::unsignedOf(read("1.8e19")).has_value());
+    CHECK_FALSE(SchemaReader::unsignedOf(read("-1")).has_value());
+    CHECK(SchemaReader::signedOf(read("9.1e18")).has_value());
+    CHECK_FALSE(SchemaReader::signedOf(read("9.2e18")).has_value());
 }
