@@ -206,9 +206,9 @@ lims is built from modules, each its own library with its own include directory 
 
 | Module | Holds | Links |
 |---|---|---|
-| `org/` (shared) | the error set, the model support every module uses, sign-in, companies, sites, role assignments and the declared-authorization evaluator | nothing in lims |
+| `org/` (shared) | the error set, the model support every module uses, and sign-in | nothing in lims |
 | `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
-| `app/` | the server edge's `LimsAuthorizer` and the table of declared role requirements | every module |
+| `app/` | the server edge's `LimsAuthorizer` | every module |
 
 The server (`src/server/`), the screens (`screens/`) and the suites (`tests/`) belong to the app and link every
 module. A module that includes another module's header (other than a shared one) does not compile; the
@@ -636,8 +636,8 @@ process over a local database (`--db`, default `lims.db`).
 
 ### 20. Model coverage is 98.96%, and measuring it found a real defect (§ coverage gate)
 
-`codecov.yml` gains a `lims` component scoped to `examples/lims/lab/src/models/**`
-and `examples/lims/lab/include/lims/lab/models/**` — the paths
+`codecov.yml` gains a `lims` component scoped to the model paths of the lab and org modules
+(`examples/lims/{lab,org}/src/models/**` and `examples/lims/{lab,org}/include/lims/{lab,org}/models/**`) — the paths
 `examples/IMPLEMENTATION.md` rule 5's bar actually names — with a 97% target,
 a margin below the measured 855/864 = 98.96% ceiling.
 

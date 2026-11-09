@@ -26,9 +26,9 @@
 #include <morph/util/rational.hpp>
 #include <string>
 
-#include "lims/org/core/errors.hpp"
 #include "lims/lab/models/analysis_catalog_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
+#include "lims/org/core/errors.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 

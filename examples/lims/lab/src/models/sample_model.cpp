@@ -11,10 +11,10 @@
 #include <utility>
 #include <vector>
 
-#include "lims/org/core/errors.hpp"
-#include "lims/org/core/model_support.hpp"
 #include "lims/lab/db/lims_entity.hpp"
 #include "lims/lab/dto/analysis_dto.hpp"
+#include "lims/org/core/errors.hpp"
+#include "lims/org/core/model_support.hpp"
 
 namespace lims {
 

@@ -17,13 +17,15 @@
 #
 # A rung built from modules passes MODULES <m>... (and SHARED_MODULES, APP_MODULE). Then each module is its own
 # library, ladder_<rung>_<m>, built from <m>/src/**/*.cpp with <m>/include as its include directory (an INTERFACE
-# library when it has no sources), and ladder_<rung>_lib is an INTERFACE target that links every module whole-archive.
+# library when it has no sources), and ladder_<rung>_lib is an INTERFACE target that links every module.
 # Link rules, which make including another module's header a compile error:
 #   - a shared module links the shared modules named before it in SHARED_MODULES, and nothing else of the rung;
 #   - APP_MODULE links every other module;
 #   - every other module links the shared modules only.
-# Every module link uses WHOLE_ARCHIVE, the feature ladder_<rung>_lib needs for the schema translation units' static
-# registration; one library may carry only one link feature in a link, so all of its links use the same one.
+# A module with sources is a STATIC library and is linked WHOLE_ARCHIVE, which keeps the schema translation units'
+# static registration; a module without sources (an INTERFACE library) has no archive and is linked plain, as is the
+# INTERFACE ladder_<rung>_lib. _morph_rung_has_archive is the one test that picks between the two, so every link
+# of one library to a given module uses the same link feature.
 # src/server/, screens/ and tests/ stay at the rung's root and link ladder_<rung>_lib, as for any other rung.
 #
 # Every ctest case discovered from ladder_<rung>_tests is registered under the
@@ -166,10 +168,8 @@ function(morph_add_rung)
         add_library(ladder_${_rung}_lib INTERFACE)
         add_library(morph::ladder_${_rung}_lib ALIAS ladder_${_rung}_lib)
         foreach(_module IN LISTS RUNG_MODULES)
-            if(TARGET ladder_${_rung}_${_module})
-                get_target_property(_module_type ladder_${_rung}_${_module} TYPE)
-            endif()
-            if(_module_type STREQUAL "STATIC_LIBRARY")
+            _morph_rung_has_archive(_has_archive ladder_${_rung}_${_module})
+            if(_has_archive)
                 target_link_libraries(ladder_${_rung}_lib INTERFACE
                     "$<LINK_LIBRARY:WHOLE_ARCHIVE,ladder_${_rung}_${_module}>")
             else()
@@ -455,6 +455,17 @@ endforeach()
     endif()
 endfunction()
 
+# ── _morph_rung_has_archive: does a rung library have an archive to link whole? ──
+# True for a STATIC library; an INTERFACE library has no archive and a link feature cannot apply to it.
+function(_morph_rung_has_archive _out _target)
+    get_target_property(_type ${_target} TYPE)
+    if(_type STREQUAL "STATIC_LIBRARY")
+        set(${_out} TRUE PARENT_SCOPE)
+    else()
+        set(${_out} FALSE PARENT_SCOPE)
+    endif()
+endfunction()
+
 # ── ladder_<rung>_<module>: one module of a rung built from MODULES ──────────
 # Built from <module>/src/**/*.cpp with <module>/include as its only own include directory, and linked whole-archive
 # to @p _deps, the modules the link rules in morph_add_rung's header allow it. A module with no sources is an
@@ -487,8 +498,8 @@ function(_morph_rung_module_library _rung _dir _module _deps)
     target_compile_features(${_target} ${_scope} cxx_std_23)
     foreach(_dep IN LISTS _deps)
         # An INTERFACE module has no archive to whole-link; linking it plain still carries its own links on.
-        file(GLOB_RECURSE _dep_sources CONFIGURE_DEPENDS "${_dir}/${_dep}/src/*.cpp")
-        if(_dep_sources)
+        _morph_rung_has_archive(_has_archive ladder_${_rung}_${_dep})
+        if(_has_archive)
             target_link_libraries(${_target} ${_scope} "$<LINK_LIBRARY:WHOLE_ARCHIVE,ladder_${_rung}_${_dep}>")
         else()
             target_link_libraries(${_target} ${_scope} ladder_${_rung}_${_dep})
@@ -599,8 +610,8 @@ endfunction()
 # ladder_<rung>_lib, to which a link feature cannot apply: it is linked plain, and its own links whole-archive the
 # modules' static libraries.
 function(_morph_rung_lib_link_spec _out _rung)
-    get_target_property(_type ladder_${_rung}_lib TYPE)
-    if(_type STREQUAL "INTERFACE_LIBRARY")
+    _morph_rung_has_archive(_has_archive ladder_${_rung}_lib)
+    if(NOT _has_archive)
         set(${_out} "morph::ladder_${_rung}_lib" PARENT_SCOPE)
     else()
         set(${_out} "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph::ladder_${_rung}_lib>" PARENT_SCOPE)

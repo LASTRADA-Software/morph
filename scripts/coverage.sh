@@ -227,8 +227,14 @@ for _rung in "${RUNG_TEST_EXES[@]}"; do
         fi
     done
     # A rung built from modules (morph_add_rung's MODULES) keeps each module's include/ and src/ in
-    # examples/<rung>/<module>/.
-    for _module_include in "examples/${_rung}"/*/include; do
+    # examples/<rung>/<module>/. Other subdirectories holding an include/ (bank's memory/) are not modules.
+    _modules=()
+    if [ -f "examples/${_rung}/CMakeLists.txt" ]; then
+        read -r -a _modules < <(sed -n 's/^[[:space:]]*MODULES[[:space:]]\{1,\}\(.*[^[:space:])]\)[[:space:])]*$/\1/p' \
+            "examples/${_rung}/CMakeLists.txt" | head -n1) || true
+    fi
+    for _module in "${_modules[@]}"; do
+        _module_include="examples/${_rung}/${_module}/include"
         [ -d "$_module_include" ] || continue
         SOURCES+=("$_module_include")
         if [ -d "${_module_include%/include}/src" ]; then

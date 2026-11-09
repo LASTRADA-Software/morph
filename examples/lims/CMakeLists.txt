@@ -14,7 +14,12 @@ morph_add_rung(NAME lims
 # A module's include path holds its own headers and the shared modules' only. Each probe compiles one include as part
 # of one module, and its test builds it: a probe that crosses the boundary must fail with the compiler naming the
 # header, and the control must build, which shows the probes compile through the module's real include path.
-if(MORPH_BUILD_TESTS AND TARGET ladder_lims_lab)
+if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
+    # morph_add_rung creates ladder_lims_lab on every non-Emscripten build; without it the probes would vanish while
+    # `ctest -L ladder-lims` stays green.
+    if(NOT TARGET ladder_lims_lab)
+        message(FATAL_ERROR "lims: ladder_lims_lab does not exist, so the module-boundary probes cannot be registered")
+    endif()
     function(_lims_boundary_probe _name _module _expect _header)
         set(_target lims_boundary_${_name})
         add_library(${_target} OBJECT EXCLUDE_FROM_ALL "${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_checks/${_name}.cpp")

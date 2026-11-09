@@ -26,8 +26,8 @@
 #include "lims/lab/dto/result_dto.hpp"
 #include "lims/lab/dto/sample_dto.hpp"
 #include "lims/lab/models/analysis_catalog_model.hpp"
-#include "lims/org/models/auth_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
+#include "lims/org/models/auth_model.hpp"
 #include "lims_screens.hpp"
 #include "lims_test_support.hpp"
 

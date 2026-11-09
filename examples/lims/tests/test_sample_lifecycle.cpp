@@ -17,8 +17,8 @@
 #include <utility>
 #include <vector>
 
-#include "lims/org/core/errors.hpp"
 #include "lims/lab/models/sample_model.hpp"
+#include "lims/org/core/errors.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/storage_owner.hpp"

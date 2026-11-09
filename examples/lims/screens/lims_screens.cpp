@@ -16,7 +16,6 @@
 #include <vector>
 
 #include "lims/lab/dto/analysis_dto.hpp"
-#include "lims/org/dto/auth_dto.hpp"
 #include "lims/lab/dto/ignition_dto.hpp"
 #include "lims/lab/dto/offline_dto.hpp"
 #include "lims/lab/dto/result_dto.hpp"
@@ -24,9 +23,10 @@
 #include "lims/lab/dto/sample_entry_dto.hpp"
 #include "lims/lab/dto/verification_dto.hpp"
 #include "lims/lab/models/analysis_catalog_model.hpp"
-#include "lims/org/models/auth_model.hpp"
 #include "lims/lab/models/ignition_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
+#include "lims/org/dto/auth_dto.hpp"
+#include "lims/org/models/auth_model.hpp"
 
 namespace lims::screens {
 

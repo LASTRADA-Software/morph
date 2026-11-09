@@ -76,7 +76,7 @@
 # std::string_view TableName` declarations are under this directory, all nine
 # in lims/lab/db/lims_entity.hpp. Each is reported by clang-tidy 22.1.8 without
 # this file and clean with it, measured through clang-tidy-diff.py over a
-# real one-line edit. The other subdirectories (auth/, core/, dto/, models/,
+# real one-line edit. The other subdirectories (core/, dto/, models/,
 # offline/) are in reach and contain no `TableName`; the ignore has nothing
 # to do there and does nothing.
 #

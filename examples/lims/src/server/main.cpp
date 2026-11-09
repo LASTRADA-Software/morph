@@ -32,9 +32,9 @@
 
 #include "lims/app/lims_authorizer.hpp"
 #include "lims/lab/db/database.hpp"
-#include "lims/org/models/auth_model.hpp"
 #include "lims/lab/models/ignition_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
+#include "lims/org/models/auth_model.hpp"
 
 namespace {
 
