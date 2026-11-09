@@ -3,7 +3,7 @@
 # Vetted-HMAC adapter examples: libsodium and OpenSSL implementations of the
 # MacFunction seam (include/morph/session/session_auth.hpp), each a drop-in
 # replacement for the reference morph::session::hmacSha256. See
-# docs/spec/security.md ("MAC-primitive recommended wiring"). Both adapters
+# docs/spec/security.md ("Recommended production wiring"). Both adapters
 # are optional and off unless the corresponding library is available *and*
 # its sub-option is ON — the default morph build stays free of crypto
 # dependencies. Enabled overall via -DMORPH_BUILD_HMAC_EXAMPLES=ON.

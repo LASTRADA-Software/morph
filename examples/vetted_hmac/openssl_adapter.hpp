@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Example adapter: wires OpenSSL's HMAC(EVP_sha256(), ...) into morph's
-// MacFunction seam (see docs/spec/security.md, "MAC-primitive recommended
+// MacFunction seam (see docs/spec/security.md, "Recommended production
 // wiring"). Copy this file (and link OpenSSL::Crypto) into a production
 // deployment that wants a vetted HMAC-SHA256 instead of the self-contained
 // reference implementation `morph::session::hmacSha256`.

@@ -46,6 +46,8 @@ after the fact.
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 - [Usage example](#usage-example)
+- [Payload shape tag](#payload-shape-tag)
+- [Lifetime annotations](#lifetime-annotations)
 - [Cross-references](#cross-references)
 - [Limitations](#limitations)
 - [Out of scope](#out-of-scope)
@@ -121,7 +123,7 @@ decimal formatter, so the reconciled value is the one the form was already
 showing), a `math::RoundingMode` parameter opts into banker's rounding, a value
 already representable at the target scale is untouched apart from its tag, and
 an out-of-envelope scale-up saturates and logs rather than overflowing. See
-[rational.md](rational.md#roundtodecimalplaces--the-one-helper-that-stays-in-the-domain).
+[rational.md](rational.md#roundtodecimalplaces--rounding-that-stays-in-the-domain).
 
 **Max-propagation, precisely.** During a calculation the actual precision of a
 result is the **maximum `DecimalPlaces` among the engaged (non-empty) operands** —
@@ -276,14 +278,13 @@ no field's *declared* precision is consulted at print time.
 division** of the canonical `numerator/denominator`: the integer part is
 `|numerator| / denominator`, and each fractional digit is the next digit of the
 exact quotient, carrying the exact integer remainder forward. Nothing is routed
-through `Rational::toDouble` or `std::formatter<double>`, so the display no
-longer inherits floating-point error. Two cases the old double path got wrong
-now render correctly: large exact integers beyond the 2^53 double mantissa
+through `Rational::toDouble` or `std::formatter<double>`, so the display
+inherits no floating-point error. Two cases a `double` path gets wrong render
+correctly here: large exact integers beyond the 2^53 double mantissa
 (`9007199254740993` prints as itself, not `…992`), and long non-terminating
-quotients (`1/3` at 18 places prints eighteen `3`s, not `…315`). The wire and
-journal codecs were already exact (they serialise the int64 `num`/`den`/`dp`
-directly); this change brings **display** to the same exactness the rest of the
-type already had.
+quotients (`1/3` at 18 places prints eighteen `3`s, not `…315`). Display is as
+exact as the wire and journal codecs, which serialise the int64
+`num`/`den`/`dp` directly.
 
 **Rounding rule.** A non-terminating quotient (or one whose denominator does not
 divide `10^DecimalPlaces`) is rounded **half away from zero** at the runtime
@@ -327,10 +328,8 @@ unit separately — a table carrying the unit in its column header, a
 right-aligned suffix, an editable field whose adjacent label carries the unit —
 asks for the two halves independently (`toDecimalString(q)` and
 `unitMeta().display`) instead of concatenating them and chopping the suffix back
-off. Without it the *only* public renderer of the exact decimal was `toString`,
-so a caller wanting the number alone had to undo a join the paragraph above
-specifies — correct today, and silently wrong the day a separator or a
-locale-aware layout is introduced between the halves.
+off. Undoing that join would be correct only as long as nothing — a separator,
+a locale-aware layout — ever sits between the halves.
 
 `toDecimalString` is also what a caller reaches for instead of formatting the
 payload directly: `std::format("{}", *q.value())` prints a `num/den` *fraction*,
@@ -530,12 +529,11 @@ so a caller emits them verbatim), in this fixed order:
 
 ### The rendering is bounded; the derivation is not
 
-Depth is unbounded (see *Provenance*), and for a while `equation()` rendered
-whatever depth it was handed: a 100,000-iteration running total produced four
-lines whose first is **500,001 characters** of `0 + c1 + c1 + …`, built in
-58.8 s (clang 22.1.8, `-O1` under ASan+UBSan). That is not an explanation of
-anything, and a caller printing it emits a single half-megabyte line. So
-`equation()` takes a **step limit**:
+Depth is unbounded (see *Provenance*). Rendered in full, a 100,000-iteration
+running total produces four lines whose first is **500,001 characters** of
+`0 + c1 + c1 + …`, built in 58.8 s (clang 22.1.8, `-O1` under ASan+UBSan). That
+is not an explanation of anything, and a caller printing it emits a single
+half-megabyte line. So `equation()` takes a **step limit**:
 
 ```cpp
 std::vector<std::string> equation(std::size_t maxSteps = kDefaultEquationSteps) const;
@@ -766,8 +764,7 @@ struct morph::units::UnitTraits<Unit> {
 - **`QuantityBounds { Rational min; Rational max; }`** — an inclusive range.
 - **`HasUnitBounds<E>`** — `true` when `UnitTraits<E>` declares `bounds(E)`.
   A unit enum with no `bounds()` declares none: every value its precision
-  allows is accepted, byte-for-byte the same as before this feature existed
-  — this is an opt-in check, not a new default restriction.
+  allows is accepted. The check is opt-in, not a default restriction.
 - **`withinDeclaredBounds()`** — `true` when the payload is empty (an
   unengaged field has nothing to be out of bounds), when the unit declares no
   `bounds()`, or when the engaged value satisfies `min <= value <= max`.
@@ -850,18 +847,17 @@ The framework inverts the ratio for the reverse direction:
 `fromTo` must be **strictly positive** (numerator > 0 and denominator > 0), and
 `from` / `to` must be distinct units.
 
-**Positivity is now a compile-time guard, not just a caller contract.** Every
+**Positivity is a compile-time guard, not just a caller contract.** Every
 `relations` array is consumed by the `consteval` `detail::conversionRatio`
 breadth-first search, which calls `detail::requirePositiveRatio(fromTo)` on each
 edge it touches (both the forward `fromTo` and, via `detail::reciprocal`, the
 reverse). `requirePositiveRatio` is `consteval` and `throw`s on a non-positive
 ratio, so a zero or negative `fromTo` is a **compile error** at the
-relation-consuming call site rather than silent runtime corruption. This is the
-fix for the old failure mode: a zero `fromTo` used to make the reverse direction
-(`reciprocal`, a bare numerator/denominator swap) produce a degenerate `den:0`
+relation-consuming call site. Unguarded, a zero `fromTo` would make the reverse
+direction (`reciprocal`, a bare numerator/denominator swap) a degenerate `den:0`
 ratio — which `Rational` clamps to `1` — silently corrupting conversions and
-leaking `den:0` into `x-unitAlternatives`; a negative ratio silently flipped the
-conversion direction. Both are now rejected before the program can be built.
+leaking `den:0` into `x-unitAlternatives`, and a negative ratio would silently
+flip the conversion direction.
 
 `from == to` is separately excluded from *use* by the `SameEnumDistinct`
 constraint on `convert`; a self-edge in `relations` is still not rejected at
@@ -1318,7 +1314,7 @@ does `detail::nodeValue()`'s `ASTNode&` in the provenance renderer. See [concurr
 - **[`rational.md`](rational.md)** — the payload type, and the one to read
   first for anything about values, precision, or overflow. `Quantity` inherits
   *all* of its numeric behaviour from `Rational`: the `int64` overflow envelope
-  (silent UB in the no-error-channel operators), the `DecimalPlaces` precision
+  (saturation, logged, in the operators without an error channel), the `DecimalPlaces` precision
   tag and its `std::max` propagation, the half-away-from-zero rounding of
   `fromFloat` (via `llround`) that `Quantity::fromDouble` relies on. The decimal
   formatter (`formatRationalDecimal`) is a separate exact-integer long division
@@ -1414,5 +1410,5 @@ deliberately not attempted):
 
 - Serializing history on the wire — only the `Rational` payload travels.
 - Auto-deriving conversions the application hasn't declared — a pair is
-  convertible only when a `UnitRelation` entry exists or a user-provided
-  `convert(From, To&)` overload exists for it.
+  convertible only when a `UnitRelation` path connects it or the application's
+  `UnitTraits<E>::convert` static names it.

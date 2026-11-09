@@ -37,15 +37,15 @@ GUI / call site
        │
        ▼  Bridge::executeVia<Model, Action>(binding, action, cbExec)
        │
-       ▼  IBackend::execute(ModelId, ActionCall, cbExec)
+       ▼  IBackend::executeInto(ModelId, ActionCall, cbExec, BridgeSink)
        │
   ┌─────┴─────┐
-  │  Local    │  Remote (SimulatedRemoteBackend, QtWebSocketBackend)
+  │  Local    │  Remote (SimulatedRemoteBackend, QtWebSocketBackend, SocketBackend)
   └───────────┘
 ```
 
 A `Bridge` owns one active backend at a time and tracks all `HandlerBinding`
-instances. On `switchBackend()` it re-registers every live binding on the new
+instances. On `switchBackend()` it re-binds every live binding on the new
 backend. `BridgeHandler<Model>` wraps one binding with an RAII lifecycle: it
 registers on construction, deregisters on destruction.
 
@@ -133,8 +133,8 @@ backend. Returns the `shared_ptr<HandlerBinding>`. An overload accepts a
 pre-built binding (for dependency injection, custom `contextKey`, or custom
 factory captures). Both issue the bind through `IBackend::bindModel` with the
 owner as the delivery executor and return without waiting: a backend that
-settles before returning (`LocalBackend`, `SimulatedRemoteBackend`, a
-blocking-configured `QtWebSocketBackend`) has bound the binding by then;
+settles before returning (`LocalBackend`, `SimulatedRemoteBackend`) has bound
+the binding by then;
 otherwise the binding comes back with a bind in flight and every call made
 through it is held until the bind settles. See
 [Registration readiness](#registration-readiness--the-bind-rule).
@@ -153,7 +153,7 @@ serialiser, the deserialiser, and a `localOp` that, on
 inputs (`morph::forms::recomputeAll`, [forms.md](../forms/forms.md), a no-op
 for actions with no `computedFields`) — the authoritative recompute for
 `LocalBackend`, mirroring `ActionDispatcher::registerAction`'s runner
-(`registry.md`) for remote topologies — then enforces
+([registry.md](registry.md)) for remote topologies — then enforces
 `morph::model::ActionValidator<Action>::ready(action)` — throwing
 `morph::model::ValidationError` (which resolves the `Completion` through
 `onError`) when it returns `false` — then calls `Model::execute(*action)` and
@@ -180,7 +180,7 @@ which backend ends up installed at runtime.** Only `LocalBackend::execute`
 ever actually calls `call.localOp`; every remote backend ignores it entirely.
 But the function itself is still compiled into the instantiation, so a build
 that only ever installs a remote backend still forces the linker to resolve
-`Model::execute` — see `registry.md`, "`MORPH_CLIENT_ONLY`". When
+`Model::execute` — see [registry.md, "`MORPH_CLIENT_ONLY`"](registry.md#morph_client_only--suppressing-model-owning-registrars). When
 `MORPH_CLIENT_ONLY` is defined, `localOp`'s body is replaced with a
 `std::logic_error` throw instead of the block described below, so nothing in
 the compiled program references `Model::execute`'s definition. Reaching that
@@ -191,9 +191,8 @@ Otherwise (the default, non-`MORPH_CLIENT_ONLY` build), `Model::execute(*action)
 itself — and nothing else — is wrapped in a `try`/`catch (const std::exception&)`:
 on a throw it records `outcome = Outcome::Failed` (`error = exc.what()`,
 `result` empty) for loggable actions and rethrows unchanged, so the exception
-still resolves the `Completion` through `onError` exactly as before — the
-journal entry is a side effect of the attempt, not a change to error
-propagation. Serialising the result and recording `outcome = Outcome::Succeeded`
+still resolves the `Completion` through `onError` — the journal entry is a side
+effect of the attempt, not a change to error propagation. Serialising the result and recording `outcome = Outcome::Succeeded`
 run after that `try`, because by then the mutation has committed: a sink whose
 `append` throws, or a result that will not serialise, resolves the `Completion`
 through `onError` with `morph::model::ActionRecordingError` rather than being
@@ -207,23 +206,23 @@ the full field/replay semantics.
 
 ### `BridgeSink` — the typed state the backend settles
 
-`executeVia` used to create **two** completions per dispatch: the typed one it
-hands the caller, and the erased `Completion<std::shared_ptr<void>>` the backend
-produced, with a `.then`/`.onError` pair forwarding one into the other. The
-forwarding cost six heap allocations — the erased `CompletionState`, the two
-closures, their two handler vectors, and one of the two posted settle tasks.
+A dispatch needs one completion state, not two. Taking the backend's erased
+`Completion<std::shared_ptr<void>>` and forwarding it into the caller's typed
+one with a `.then`/`.onError` pair would cost six more heap allocations per
+call — the erased `CompletionState`, the two closures, their two handler
+vectors, and a second posted settle task.
 
 `detail::BridgeSink<R>` is both halves at once: it derives from
 `async::detail::CompletionState<R>` (so it *is* the caller's typed state) and
 from `async::detail::ISettleSink` (so the backend settles it directly, through
 [`IBackend::executeInto`](backend.md#executeinto--settling-the-callers-own-completion)).
-One allocation replaces six. Measured on a `Ping{int}` → `Pong{int}` local
-round trip, clang 22.1.8 Release, twelve runs each, every run identical:
-**14.06 → 8.06 allocations per call, 1158.7 → 814.7 bytes**. The schema-driven
-`executeJson` path, which runs through the same function, falls **21.07 →
-15.06**.
+Measured on a `Ping{int}` → `Pong{int}` local round trip, clang 22.1.8 Release,
+twelve runs each, every run identical: **8.06 allocations per call, 814.7
+bytes**, against 14.06 and 1158.7 with the forwarding pair. The schema-driven
+`executeJson` path, which runs through the same function, takes 15.06 against
+21.07.
 
-Everything the forwarding block did is a method on that class:
+Everything the forwarding would have done is a method on that class:
 
 | Invariant | Where it lives |
 |---|---|
@@ -296,8 +295,8 @@ no-op. Otherwise the switch commits:
 - finally the calls each binding held are drained.
 
 Every backend in the tree settles a bind before returning except a
-`SynchronousBackendAdapter`, a `SocketBackend` and an async-configured
-`QtWebSocketBackend`; over those the switch is all-or-nothing only for the
+`SynchronousBackendAdapter`, a `SocketBackend` and a `QtWebSocketBackend`,
+which settle it when the reply arrives; over those the switch is all-or-nothing only for the
 binds that had settled when it committed.
 
 It has two overloads:
@@ -313,7 +312,7 @@ It has two overloads:
   and is preferred over the `shared_ptr<IBackend>` overload; a non-template
   `unique_ptr<IBackend>` overload would tie with it (both are one
   equally-ranked user-defined conversion from `unique_ptr<Backend>`), making
-  every existing call site ambiguous. It converts to a `shared_ptr` and
+  every such call site ambiguous. It converts to a `shared_ptr` and
   delegates to the overload above.
 
 **`onBackendChanged()` runs on the model's strand.** `notifyBackendChanged()`
@@ -493,11 +492,10 @@ body:
 - **Validator enforcement.** `ActionValidator<Action>::ready(action)` is checked;
   if it returns `false` the executor throws `std::invalid_argument` and the
   completion resolves through `onError` (a proper error reply upstream) — the
-  handler is never invoked with an invalid action. This closes a gap where the
-  request/reply path skipped the readiness/validity check the dispatch paths
-  perform. `ActionValidator::ready`
-  auto-detects a `bool validate() const` member and defaults to `true`, so
-  actions without a validator dispatch exactly as before (backward compatible).
+  handler is never invoked with an invalid action, so this path checks what the
+  other dispatch paths check. `ActionValidator::ready` auto-detects a
+  `bool validate() const` member and defaults to `true`, so an action without a
+  validator is never refused here.
 
 **`unsubscribe<R>()`** removes this handler's callback for result type `R`.
 
@@ -580,7 +578,7 @@ continuation, on the path `bench.alloc_budget` gates.
   action names nor creates and promotes an instance for a result-keyed one.
   `executeRaw` runs on the instance the binding holds, and one sent before any
   attach is rejected as not bound. A keyed action goes through `executeRawOn`
-  with the key the caller already has (the UI document's `instance`, spec 5 §5).
+  with the key the caller already has (the UI document's `instance`).
   `attach` alone is not enough: it is issued, not awaited, and a refused attach
   leaves the binding on its previous instance.
 - **The key is matched exactly.** It must be the canonical encoding
@@ -680,10 +678,9 @@ reduce to the `KeyView` body for the reason `PairKeyHash`'s do — a lookup hash
 that disagreed with the stored hash would miss the bucket and report a
 registered action as unknown, with no diagnostic anywhere.
 
-`BridgeHandler::executeJson` also stopped copying
-`ModelTraits<Model>::typeId()` into a `std::string` to pass it. That was the
-same allocation, on the same call, for the same reason; the traits accessor is
-a `constexpr std::string_view` over a string literal, so it is passed through.
+`BridgeHandler::executeJson` does not copy `ModelTraits<Model>::typeId()` into a
+`std::string` to pass it either: the traits accessor is a
+`constexpr std::string_view` over a string literal, so it is passed through.
 
 **Measured** with `morph_bench_alloc`'s `executeJson` census
 (clang 22.1.8 / libstdc++ 16.2.1, Release, 200 round trips, 50 warm-up
@@ -692,15 +689,15 @@ excluded), for a model and action whose ids both exceed libstdc++'s
 
 | | ids past SSO | ids inside SSO |
 | --- | --- | --- |
-| before | 24.07 allocations per call | 21.06 |
-| after | 21.07 | 21.06 |
+| building a `Key` and copying the type id | 24.07 allocations per call | 21.06 |
+| `KeyView` probe, type id passed through | 21.07 | 21.06 |
 
-Three allocations per user action for long ids — the `Key`'s two plus
-`executeJson`'s own — and none for short ones, which is why the census reports
-both sides rather than averaging them. The figure is a whole round trip, codec
-included, because this registry cannot be probed on its own: it dispatches
-whatever it finds. The gap between the two columns is what the ctest gate
-`bench.alloc_budget` watches, via `--id-length-budget`.
+Building the key costs three allocations per user action for long ids — the
+`Key`'s two plus `executeJson`'s own copy — and none for short ones, which is
+why the census reports both sides rather than averaging them. The figure is a
+whole round trip, codec included, because this registry cannot be probed on its
+own: it dispatches whatever it finds. The gap between the two columns is what
+the ctest gate `bench.alloc_budget` watches, via `--id-length-budget`.
 
 ### Why the key carries the sharing policy
 
@@ -729,9 +726,10 @@ is one extra closure per registered action at static-init time, not per call.
 
 **`execute<Sharing>(modelId, actionId, handler, bodyJson)`** looks up the
 executor and invokes it. The executor `static_cast`s the `void*` back to
-`BridgeHandler<Model, Sharing>*`, deserializes the JSON body, reconciles
-Quantity fields to their declared precision, enforces
-`ActionValidator<Action>::ready` (throwing `std::invalid_argument` on failure),
+`BridgeHandler<Model, Sharing>*`, deserializes the JSON body, applies the four
+normalisations listed under [`BridgeHandler<Model>`](#bridgehandlermodel)
+(precision reconciliation, bounds, computed-field recompute, and
+`ActionValidator<Action>::ready`, throwing `std::invalid_argument` on failure),
 calls `handler->execute<Action>()`, and serializes the result back to JSON.
 Throws `std::runtime_error` if no executor is registered for the key — which
 includes a correctly registered action requested with a sharing tag other than
@@ -813,7 +811,7 @@ existing subscriber.
 
 - **Scope is the instance, not the model type.** A subscription is matched at
   publish time by comparing the binding's *current* instance, so re-pointing a
-  handler ([`attach`](#bridgehandlermodel-sharing)) moves its subscriptions with
+  handler ([`attach`](#bridgehandlermodel)) moves its subscriptions with
   it. A handler with no primary hears only its own results, because nothing else
   is attached to what it holds.
 - **One callback per `(handler, R)`.** Subscribing again replaces the previous
@@ -841,10 +839,11 @@ existing subscriber.
   subscriptions are narrower than instance sharing: an instance really is shared
   across clients ([shared_instances.md](shared_instances.md)), but a result
   produced by *another client* on that instance does not reach this client's
-  subscribers — there is no server-initiated frame, and both transports would
-  need an unsolicited-message path to carry one. Two typed handlers in one process
-  see each other's work; two clients do not, and must re-read to notice a
-  change.
+  subscribers. Two typed handlers in one process see each other's work; two
+  clients do not. What crosses the wire is a different, coarser signal: a
+  client that watches the instance receives a `changes` event naming it
+  ([backend.md, "Watches"](backend.md#watches)) and re-reads, rather than the
+  `R` itself.
 
 
 ## Thread safety — one owner
@@ -1032,12 +1031,12 @@ means.
 | Decision | Choice | Why |
 |---|---|---|
 | Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — the handler (`BridgeHandler` or `RawHandler`) holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. |
-| Threading | **One owner, given at construction; every verb owner-only, asserted in debug builds** | Every consumer already called its `Bridge` from one thread, and the free-threaded contract cost a lock per runtime-settable field, a lifetime gate for teardown on any thread, and a registration handoff for replies that settle on a thread the bridge does not own. Handing the owner to `bindModel`/`promoteModel` as the delivery executor, and having backends post reconnects to it, makes every one of those a task on the owner instead. Teardown follows: handlers before the bridge, on the owner. |
+| Threading | **One owner, given at construction; every verb owner-only, asserted in debug builds** | Consumers call their `Bridge` from one thread, and a free-threaded contract would cost a lock per runtime-settable field, a lifetime gate for teardown on any thread, and a registration handoff for replies that settle on a thread the bridge does not own. Handing the owner to `bindModel`/`promoteModel` as the delivery executor, and having backends post reconnects to it, makes every one of those a task on the owner instead. Teardown follows: handlers before the bridge, on the owner. |
 | Registration | **Asynchronous, with no policy: the bind rule** | A handler can be constructed inside a running action, off the owner, so its registration has to be posted; once it can be, every bind can be a `Completion` delivered on the owner. A backend that settles before returning keeps the synchronous feel — a `LocalBackend` handler is bound when its constructor returns — and the caller never has to gate a first dispatch on readiness, because `execute` is held until the bind settles. |
 | Reconnect handler | **Posted to the owner; liveness guard + weak-backend guard + stale check; cleared in `~Bridge`** | `IBackend::setReconnectHandler` takes the executor the handler is posted to, and the bridge passes its owner, so the re-bind is an ordinary owner task. The handler checks the bridge's `CallbackToken`, then that the backend that reconnected is still the active one; a reconnect of a backend switched away from is ignored. `~Bridge` and `switchBackend` clear the outgoing backend's handler. |
 | Subscription keying | **On the result type, and against the binding rather than an instance id** | A subscriber is a renderer: it cares about the state it draws, not about which of several actions produced it, so a new action yielding the same type never breaks it. Storing against the binding makes a subscription follow a re-pointed handler, which is what "tell me about the account I am looking at" requires. |
 | Action readiness | **`ActionValidator<Action>::ready(snapshot)`** | Framework-agnostic validation — each action struct defines its own required-field semantics. The bridge never interprets action fields. |
-| Local-path validation enforcement | **`localOp` checks `ActionValidator<Action>::ready` before `Model::execute`** | Closes the gap where an `Action` built by hand and dispatched via `BridgeHandler::execute<Action>()` (without a client-side gate) reached the model unvalidated; mirrors `ActionDispatcher::registerAction`'s server-side runner (`registry.md`). Backward compatible: `ready()` defaults to `true` for actions with no validator. |
+| Local-path validation enforcement | **`localOp` checks `ActionValidator<Action>::ready` before `Model::execute`** | An `Action` built by hand and dispatched via `BridgeHandler::execute<Action>()` (without a client-side gate) must not reach the model unvalidated; mirrors `ActionDispatcher::registerAction`'s server-side runner ([registry.md](registry.md)). `ready()` defaults to `true` for actions with no validator, so they are unaffected. |
 | Subscription keys | **`string_view` into static storage** | `ActionTraits::typeId()` returns `constexpr` string literals with static duration. The `unordered_map` holds non-owning keys; no allocation, no lifetime issues. |
 | `executeJson` | **Separate registry, not a vtable** | The action type is unknown at the call site. A flat `unordered_map` keyed on registered ids lets any translation unit register its actions without central registration or RTTI. |
 | Executor keying | **`(modelId, actionId, typeid(Sharing))` — one executor per sharing policy** | The executor is the only place a typed handler is recovered from a `void*`, and `BridgeHandler<M, NoSharing>` / `BridgeHandler<M, AllowShared>` are unrelated types. A single `NoSharing`-only executor handed a shared handler would `static_cast` to the wrong instantiation, so its `kShared` — which gates a payload-/result-keyed action's attach-or-promote step — would answer for the wrong one and that step would silently never run. No runtime type information survives to check it by then, so the key carries the distinction instead: two entries per action, built from one generic-lambda template so they cannot diverge, and `execute` templated on `Sharing` so each call site selects its own. Costs one closure per registered action at static-init time, not per call. |
@@ -1074,7 +1073,7 @@ means.
   "unknown action for executeJson" for an action that *is* registered, because
   no executor was ever filed under its `type_index`. A concept constraining
   `Sharing` to the two tags would make that a compile error instead; none
-  exists today.
+  exists.
 
 ## Lifetime annotations
 

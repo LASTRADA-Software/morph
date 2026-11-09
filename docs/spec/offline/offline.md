@@ -30,15 +30,18 @@ All types live in `morph::offline`.
 - [NetworkMonitor](#networkmonitor)
 - [NetworkMonitor callback constraint](#networkmonitor-callback-constraint)
 - [Offline queue](#offline-queue)
+  - [`IReplayLedger`: the replay-consumer half](#ireplayledger-the-replay-consumer-half)
   - [One owner](#one-owner)
 - [Ownership: who enqueues](#ownership-who-enqueues)
 - [SyncWorker](#syncworker)
+- [Consistency model](#consistency-model)
 - [Conflict resolution on replay](#conflict-resolution-on-replay)
 - [ReconnectCoordinator](#reconnectcoordinator)
 - [End-to-end integration](#end-to-end-integration)
 - [Failure modes](#failure-modes)
 - [Limitations](#limitations)
 - [Design decisions](#design-decisions)
+- [Lifetime annotations](#lifetime-annotations)
 - [Cross-references](#cross-references)
 
 ## NetworkMonitor
@@ -100,25 +103,27 @@ Consequences:
   blindness and 30s of stalled connections. A probe that needs a slow check
   (a TCP connect, an HTTP round trip) should start it elsewhere and report the
   last result it has.
-- **Running the coordinator or `SyncWorker` inline is a mistake.** A
-  `ReconnectCoordinator::onOnline()` can spin for up to
-  `maxAttempts * retryDelay` (≈20s at defaults) of retry-and-sleep, and a
-  `SyncWorker::run()` executes arbitrarily long replay work. Doing either
-  directly inside a callback runs *seconds of retry loop on the I/O loop*,
-  which is exactly the thread that is supposed to be watching the network and
-  carrying the connection being retried.
+- **The reconnect sequence must not run on the loop.** A reconnect can spin
+  for up to `maxAttempts * retryDelay` (≈20s at defaults) of retry-and-sleep,
+  and a replay executes arbitrarily long work. Running either *inside* a
+  callback — calling the `Deps` steps or `bridge.switchBackend(...)` directly,
+  or giving the coordinator the I/O loop as its executor — runs *seconds of
+  retry loop on the I/O loop*, which is exactly the thread that is supposed to
+  be watching the network and carrying the connection being retried.
 - **The safe shape is: set an atomic, or post to an executor, and return.**
   The callback should do O(1) work — flip a flag, `post()` a lambda onto a
-  worker executor — and let the heavy sequencing run elsewhere. This is why
-  `ReconnectCoordinator::onOnline()`/`onOffline()` are documented as
-  "posted onto a worker executor by the host, not called on the I/O loop."
+  worker executor — and let the heavy sequencing run elsewhere.
+  `ReconnectCoordinator::onOnline()`/`onOffline()` and `SyncWorker::run()`
+  have that shape themselves: each only posts to its owner and returns, so a
+  callback may call them directly as long as that owner is a worker executor,
+  not the I/O loop (see [End-to-end integration](#end-to-end-integration)).
 
 Calling `stop()`, or destroying the monitor, from within the probe or a
 callback is supported — the timer holds the monitor's loop-side state until the
 callback returns — but it is still code running on the loop and must not block
 first.
 
-See `concurrency_and_lifetimes.md` for the framework-wide rule that
+See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md) for the framework-wide rule that
 notification callbacks marshal work off the thread that raised them.
 
 ## Offline queue
@@ -190,7 +195,7 @@ it, and a host must pick one:
 
 1. **Mutually exclusive replay** — drive replay through exactly one path (the
    `SyncWorker` queue path *or* the journal replay), never both over the same
-   ops. This is the existing guidance (see
+   ops. This is the default guidance (see
    [Conflict resolution on replay](#conflict-resolution-on-replay) and the
    journal cross-reference) and needs no key.
 2. **Shared idempotency key** — if both paths can replay the same ops, every
@@ -198,10 +203,10 @@ it, and a host must pick one:
    `idempotencyKey`, and the replay consumer must dedup on it (apply a key once,
    skip repeats). The framework provides the *field*, and (below)
    `IReplayLedger` for the *mechanism*; wiring either into a specific
-   replay/flush path is still the host's responsibility (that logic lives in
+   replay/flush path is the host's responsibility (that logic lives in
    `sync_worker.hpp` and the app's journal-replay code, not in the queue).
 
-### `IReplayLedger`: the promoted replay-consumer half
+### `IReplayLedger`: the replay-consumer half
 
 The two paragraphs above define the *contract* — dedup on a shared key. The
 mechanism is `morph::offline::IReplayLedger`
@@ -214,8 +219,21 @@ import path is the ladder's consumer):
 struct IReplayLedger {
     std::optional<std::string> lookup(std::string_view scope, std::string_view opId) const;
     void record(std::string_view scope, std::string_view opId, std::string payload);
+    // For a caller off the ledger's owner: looks up there, answers on replyExec.
+    Completion<std::optional<std::string>> lookup(IExecutor& replyExec, std::string_view scope,
+                                                  std::string_view opId) const;
+protected:
+    virtual std::optional<std::string> doLookup(std::string_view scope, std::string_view opId) const = 0;
+    virtual void doRecord(std::string_view scope, std::string_view opId, std::string payload) = 0;
+    virtual Completion<std::optional<std::string>> askLookup(IExecutor&, std::string scope,
+                                                             std::string opId) const;  // default: answers here
 };
 ```
+
+The public verbs are non-virtual and refuse an empty `opId` before reaching the
+protected hooks, so an implementation cannot get that rule wrong.
+`InMemoryReplayLedger(IExecutor& owner)` is the framework's own implementation,
+owned like the queues ([One owner](#one-owner)).
 
 `lookup()` engaged means "already decided"; the string is whatever `record()`
 stored, empty for a skip-only caller that only cares about the hit. Both an
@@ -225,13 +243,12 @@ it is never reported as decided, in every conforming implementation, because
 an empty id is not an identity.
 
 **Why `include/morph` supplies the interface but never the table.**
-`grep -rl Lightweight include/morph/` returns nothing — the framework has no
-SQL dependency to open a connection with. Every existing occurrence stores its
-ledger row in the *same database and the same transaction* as the write it
-guards, so the check-then-set commits atomically with the operation's effect;
-a morph-owned store opening its own connection would break exactly that
-atomicity — a defect that has shipped in two rungs when the ledger was written
-by hand. So the table, the connection, and the transaction stay
+The framework has no SQL dependency (it uses no Lightweight API) to open a
+connection with. A host's ledger stores its row in the *same database and the
+same transaction* as the write it guards, so the check-then-set commits
+atomically with the operation's effect; a morph-owned store opening its own
+connection would break exactly that atomicity — the defect a hand-written
+ledger on a separate connection has. So the table, the connection, and the transaction stay
 app-side, per rung — a concrete `IReplayLedger` is constructed over the
 model's *already-open* mapper/transaction (see `BookmarksReplayLedger` in
 `examples/bookmarks/src/models/bookmark_model.cpp` for the reference shape —
@@ -259,11 +276,10 @@ re-litigated per rung.
 
 **`InMemoryReplayLedger` materialises its key on every lookup, on purpose.**
 Its `doLookup` builds two `std::string`s from its `string_view` parameters only
-to probe a `std::map<std::pair<std::string, std::string>, std::string>`. A transparent comparator would remove both. It is left in place
-because the class has no shipping caller: `InMemoryReplayLedger` is
-constructed in exactly one file in this tree
-(`tests/test_replay_ledger.cpp`), and the one production
-`IReplayLedger::lookup()` call site
+to probe a `std::map<std::pair<std::string, std::string>, std::string>`. A
+transparent comparator would remove both. It is left in place because the class
+has no shipping caller: `InMemoryReplayLedger` is constructed only by tests, and
+the one production `IReplayLedger::lookup()` call site
 (`examples/bookmarks/src/models/bookmark_model.cpp`, once per
 `ImportBookmarks`) runs against `BookmarksReplayLedger`, whose `doLookup` is a
 SQL round-trip. Measured with clang 22 `-O2`, counting `operator new`, 2e6
@@ -282,12 +298,12 @@ while offline; `SyncWorker` drains and replays them on reconnect.
 | Member | Signature | Notes |
 |---|---|---|
 | `enqueue` | `uint64_t enqueue(std::string payload)` | Appends payload with no idempotency key. Returns a stable (queue-local) id. |
-| `enqueue` | `uint64_t enqueue(std::string payload, std::string idempotencyKey)` | Appends payload carrying the dedup key (stored on `QueueItem::idempotencyKey`). Virtual with a default that delegates to the one-arg `enqueue` then stamps the key via the protected `setIdempotencyKey`, so existing implementations keep working; the key is dropped by an implementation with no per-item storage that overrides neither. |
+| `enqueue` | `uint64_t enqueue(std::string payload, std::string idempotencyKey)` | Appends payload carrying the dedup key (stored on `QueueItem::idempotencyKey`). Virtual with a default that delegates to the one-arg `enqueue` then stamps the key via the protected `setIdempotencyKey`, so an implementation need override only the one-arg form; the key is dropped by an implementation with no per-item storage that overrides neither. |
 | `drain` | `std::vector<QueueItem> drain()` | Returns all pending items in enqueue order, without removing them. Safe to call multiple times — items survive between `drain()` and the corresponding `markDone()`. |
 | `markDone` | `void markDone(uint64_t itemId)` | Removes the item identified by `itemId`. No-op if not found. |
 | `setAttempts` | `void setAttempts(uint64_t itemId, Attempts attempts)` | Persists an updated attempt count for an item. **Public** (unlike `setIdempotencyKey`) because `SyncWorker` calls it from outside the queue after every failed replay. Default no-op; `InMemoryOfflineQueue` overrides it to update the in-deque item. A queue that overrides it to store the count durably makes `SyncWorker`'s retry budget survive a process restart. The count is an `Attempts`, not a bare `uint32_t` — see "`Attempts`: why the count has its own type" below. |
 | `size` | `std::size_t size() const` | Number of pending items, without removing them. Default calls `drain().size()` — correct but O(n) and allocates a full snapshot to answer a size query; every shipped implementation overrides it with a direct count. |
-| `maxDepth` | `std::optional<std::size_t> maxDepth() const` | The capacity `enqueue()` enforces, or `std::nullopt` if unbounded. Default: `std::nullopt` — preserves current behavior for any `IOfflineQueue` subclass written before this method existed. |
+| `maxDepth` | `std::optional<std::size_t> maxDepth() const` | The capacity `enqueue()` enforces, or `std::nullopt` if unbounded. Default: `std::nullopt`, so an implementation that does not override it is unbounded. |
 | `setIdempotencyKey` (protected) | `void setIdempotencyKey(uint64_t itemId, std::string key)` | Hook the default two-arg `enqueue` uses to stamp the key onto an already-enqueued item. Default no-op; `InMemoryOfflineQueue` records the key directly instead. **A conflicting non-empty key is skipped, never raised** — an implementation that deduplicates leaves the item unkeyed rather than failing, because the default `enqueue` has already inserted by the time it stamps, so the row exists either way and an exception could not undo it. That path therefore yields an extra *unkeyed* item, not a dedup hit; a caller wanting dedup uses the virtual two-arg `enqueue` (see below). |
 
 `drain()` is `const` — it takes a snapshot and mutates nothing, so `size()`'s
@@ -339,13 +355,12 @@ over that same executor. The application's
 `enqueue` on the GUI thread and the worker's drain are then tasks of one
 thread, and the queue needs no lock.
 
-**The fsync and the SQLite statements are where they were.** Each
-`FileOfflineQueue` mutation still appends its line and fsyncs before
-returning on the owner, and each `SqliteOfflineQueue` write is still its own
-committed statement; the owner runs them one at a time.
-The constructors — the file replay and compaction, the SQLite schema and
-pragmas, the containing directory's fsync — run on the constructing thread
-before the queue is shared, unchanged.
+**Durability is per mutation, on the owner.** Each `FileOfflineQueue`
+mutation appends its line and fsyncs before returning on the owner, and each
+`SqliteOfflineQueue` write is its own committed statement; the owner runs them
+one at a time. The constructors — the file replay and compaction, the SQLite
+schema and pragmas, the containing directory's fsync — run on the constructing
+thread before the queue is shared.
 
 **Teardown.** A queue keeps its state in a `std::shared_ptr` every posted task
 holds, so it can be destroyed on any thread; a `markDone` posted before then
@@ -354,12 +369,12 @@ that holds it. The owner must outlive the queue and run what it posted.
 
 ### `Attempts`: why the count has its own type
 
-`setAttempts(uint64_t itemId, uint32_t attempts)` was two adjacent, mutually
-convertible unsigned integers, and `bugprone-easily-swappable-parameters` said
-so at every implementation — which meant every implementor, in this tree and
-out of it, hand-wrote a suppression for a hazard they did not choose. That is
-the framework exporting its lint bill to its consumers, and the suppression
-left the hazard in place.
+With two adjacent, mutually convertible unsigned integers —
+`setAttempts(uint64_t itemId, uint32_t attempts)` —
+`bugprone-easily-swappable-parameters` fires at every implementation, so every
+implementor, in this tree and out of it, would hand-write a suppression for a
+hazard they did not choose. That is the framework exporting its lint bill to
+its consumers, and the suppression leaves the hazard in place.
 
 The hazard is not theoretical, and it is **silent in both directions**:
 `setAttempts()` on an unknown id is a documented no-op
@@ -373,16 +388,15 @@ poison payload that replays forever.
 about it:
 
 - **Implicit from a narrow integer**, so `setAttempts(id, 3)` and
-  `setAttempts(id, counter)` read exactly as before and no call site in the
-  tree changed.
+  `setAttempts(id, counter)` read naturally at the call site.
 - **Not constructible from a 64-bit integer**, which is what a `QueueItem::id`
   is. `setAttempts(attempts, itemId)` therefore does not compile.
 - A genuinely 64-bit count is still expressible, with the narrowing visible at
   the call site: `setAttempts(id, static_cast<std::uint32_t>(count))`.
 
 `QueueItem::attempts` stays a plain `uint32_t`: it is a struct field, reached
-by name, with no adjacent same-typed field to transpose it with. The hazard was
-in the *parameter list*, and that is where the type went.
+by name, with no adjacent same-typed field to transpose it with. The hazard is
+in the *parameter list*, and that is where the type is.
 
 Two `static_assert`s below `IOfflineQueue` hold the property in place, and they
 are written as a pair on purpose: one asserts the transposed call is **not**
@@ -400,9 +414,8 @@ That is a property of those three stores, not of the type: `uint64_t` neither
 promises monotonicity nor rules out an id minted from a GUID, a content hash,
 or a sharded sequence, and a store that reuses the id of a removed row does not
 order correctly either. An implementation over such a store carries its own
-insertion sequence and orders on that. This is written down because an
-ORM-backed queue is the first implementation for which the ordering is a
-*choice* rather than the only option available; the ordering is asserted by
+insertion sequence and orders on that. For an ORM-backed queue the ordering is
+a *choice* rather than the only option available; the ordering is asserted by
 `tests/offline_queue_conformance.hpp`, so getting it wrong fails there rather
 than in production.
 
@@ -449,7 +462,7 @@ Per-implementation notes:
 - **`InMemoryOfflineQueue`** checks capacity on its owner, before the deque
   `push_back`. It has no idempotency-key dedup at all, so there is
   no dedup-hit-vs-capacity ordering question here.
-- **`FileOfflineQueue`** runs its existing keyed-dedup scan *first*; the
+- **`FileOfflineQueue`** runs its keyed-dedup scan *first*; the
   capacity check sits after it, before `appendPut`. A dedup hit (a re-enqueue
   of an already-pending key) therefore always succeeds and returns the
   existing id, even on a full queue — it inserts nothing new, so there is
@@ -505,10 +518,10 @@ each rewrite explicitly, as a trailing `"done"` record for the mark itself
 (emitted only when it exceeds every surviving id, so it can never delete a row a
 `"put"` line above just restored). Recording it as a `"done"` needs no reader
 change: `load()` already raises the mark for every id it reads, and erasing an
-absent id is a no-op. Without it the mark regressed to the highest *surviving*
-id on the second restart — enqueue 1 and 2, `markDone(2)`, restart (compacts to
-just id 1), restart again, and the next `enqueue()` reissued id 2, the id of a
-completed and acknowledged item. Mutations also raise rather than swallow I/O
+absent id is a no-op. Without it the mark would regress to the highest
+*surviving* id on the second restart — enqueue 1 and 2, `markDone(2)`, restart
+(compacts to just id 1), restart again, and the next `enqueue()` would reissue
+id 2, the id of a completed and acknowledged item. Mutations also raise rather than swallow I/O
 failures: a short write or a failed `fflush`/`fsync` throws, since every
 mutation is documented as a committed transaction by the time the call returns.
 
@@ -523,8 +536,8 @@ The rollback is wired to **all three** failure points, not only the short
 `fwrite`. A queue record is a few hundred bytes, far under `BUFSIZ`, so `fwrite`
 is a `memcpy` into the stdio buffer and returns the full count even on a full
 disk; the `write(2)` that actually fails happens inside the following `fflush`.
-Wired to the short-write branch alone, the rollback never ran for the *common*
-manifestation of `ENOSPC`. `writeLine` records the offset before writing and
+Wired to the short-write branch alone, the rollback would never run for the
+*common* manifestation of `ENOSPC`. `writeLine` records the offset before writing and
 rolls back on a short `fwrite`, a failed `fflush`, or a failed `fsync` alike —
 the last of those because a mutation is documented as committed once the call
 returns, so a caller told the enqueue failed must not find it replayed after a
@@ -535,7 +548,7 @@ nothing if that flush fails; it also clamps to the file's real size, so it can
 only ever shrink. `docs/spec/core/file_io_ops.md` has the full reasoning —
 briefly, `ftell` on a buffered stream runs ahead of the on-disk size, and
 `resize_file` **grows** a file when asked for an offset beyond its end, so a
-naive rollback padded the queue with NUL bytes instead of trimming it.
+naive rollback would pad the queue with NUL bytes instead of trimming it.
 
 **A rollback that could not truncate ends the handle's life.** `writeLine`
 latches `rollBackShortWrite`'s `RollBack::torn` result and throws from every
@@ -653,7 +666,7 @@ WAL and can lose only the most recent commits — something this queue's
 at-least-once delivery plus `idempotencyKey` dedup already absorb. `FULL` is
 available (`Synchronous::full`) and costs roughly **18x per mutation**
 (measured: ~0.08 ms to ~1.44 ms, NVMe/btrfs, SQLite 3.53.4). Every mutation here
-is its own commit and `SyncWorker::relay()` calls `markDone`/`setAttempts` once
+is its own commit and `SyncWorker::run()` calls `markDone`/`setAttempts` once
 per drained item, so a 200-item drain goes from ~16 ms to ~290 ms — all of it
 on the queue's owner, where it also holds up the producer's `enqueue()`.
 
@@ -681,7 +694,7 @@ Construction also **fsyncs the containing directory** once, after
 `_path` (and, once WAL took, its `-wal`/`-shm` siblings) if absent; SQLite's own
 fsyncs cover those files' *contents*, never the directory entries naming them.
 Same split as the file-backed queues: unsupported warns, a genuine failure
-throws. The optional third `morph::core::FileIoOps` parameter exists to reach
+throws. The optional `morph::core::FileIoOps` parameter (after `maxDepth`) exists to reach
 that branch from a test and is used for `syncPath` **only** — every other SQLite
 interaction goes through the C API directly.
 
@@ -689,7 +702,7 @@ interaction goes through the C API directly.
 rather than derived from the constructor's `path`. `:memory:`, `""` and the
 `file::memory:` URI spellings open no file at all and have an empty
 `parent_path()`, which `FileIoOps::syncPath` resolves to `"."` — so deriving it
-from `path` fsynced the *process's current working directory* and reported the
+from `path` would fsync the *process's current working directory* and report the
 result as this queue's: a warning naming a database that is not on disk wherever
 a directory fsync is unsupported, and a refusal to construct an in-memory queue
 at all wherever that fsync genuinely fails. `sqlite3_db_filename` reports an
@@ -768,7 +781,7 @@ that finding's outcome, not an argument that the rule is wrong.
 
 **Why a model cannot host it.** `enqueue()` is the write path's last act before
 the wire, taken precisely when the wire is unavailable. In the canonical wiring
-this file and `ARCHITECTURE.md` both show, the client keeps an in-process
+this file and [ARCHITECTURE.md](../../ARCHITECTURE.md) both show, the client keeps an in-process
 `LocalBackend`, so a client-side model does exist and could in principle own
 the decision. On a **remote deployment** — models behind a server, reached over
 a `Bridge` — it does not: the one machine that must decide "queue this instead
@@ -845,9 +858,9 @@ strand, so it never has to post into that strand to wait for a drain.
 
 | Member | Signature | Notes |
 |---|---|---|
-| `ReplayOutcome` | `enum class { Succeeded, Rejected, Undelivered }` | What one replay achieved. `Undelivered` charges nothing (see below); `Rejected` is what `false` has always meant. |
+| `ReplayOutcome` | `enum class { Succeeded, Rejected, Undelivered }` | What one replay achieved. `Undelivered` charges nothing (see below); `Rejected` is what a `ReplayFunction`'s `false` maps to. |
 | `DetailedReplayFunction` | `std::function<ReplayOutcome(const std::string&)>` | The three-outcome replay callable. The only form that can report `Undelivered`. |
-| `ReplayFunction` | `std::function<bool(const std::string&)>` | Two-outcome callable, unchanged. `true` → `Succeeded`, `false` → `Rejected`. Throwing is treated as `Rejected`. |
+| `ReplayFunction` | `std::function<bool(const std::string&)>` | Two-outcome callable. `true` → `Succeeded`, `false` → `Rejected`. Throwing is treated as `Rejected`. |
 | `DeadLetterSink` | `std::function<void(const QueueItem&)>` | Invoked with the exhausted item, just before it is removed, when an item hits the retry cap. Optional — default unset. |
 | ctor | `SyncWorker(exec::IExecutor& owner, IOfflineQueue&, ReplayFunction, DeadLetterSink = nullptr)` | References the owner, the queue and the replay callable; the sink is an optional last argument. `owner` must run one task at a time. A drain `run()` posts refers to the worker, so the worker must outlive it: destroy the worker once every `run()` has settled, or after its owner is closed. |
 | ctor | `SyncWorker(exec::IExecutor& owner, IOfflineQueue&, DetailedReplayFunction, DeadLetterSink = nullptr)` | Same, taking the three-outcome callable. The two overloads are unambiguous — `ReplayOutcome` is a scoped enum, so neither return type implicitly converts to the other. The boolean overload adapts into this one, so the drain implements a single contract. |
@@ -861,8 +874,7 @@ strand, so it never has to post into that strand to wait for a drain.
   in-memory count, so a queue that persists `attempts` (via `setAttempts()`)
   makes the budget survive a process restart; a queue that leaves
   `setAttempts()` as the default no-op keeps the count purely in-memory
-  (the original behavior — it resets whenever a fresh `SyncWorker` is
-  constructed).
+  (it resets whenever a fresh `SyncWorker` is constructed).
 - **Only a *delivered* failure spends an attempt.** `ReplayOutcome::Undelivered`
   leaves the item queued with its count untouched — the in-memory map and
   `setAttempts()` are both skipped, because a durable budget advanced on one
@@ -892,7 +904,7 @@ strand, so it never has to post into that strand to wait for a drain.
   `DeadLetterSink` is set, it receives the exhausted `QueueItem` (payload,
   idempotencyKey, final `attempts` count) instead of the default log line; if
   unset, the item is logged at `morph::log::LogLevel::error` (the payload
-  appears in the log line) — the original behavior, unchanged. A throwing sink
+  appears in the log line). A throwing sink
   is caught and logged; the item is still removed.
 - Items that succeed implicitly reset their attempt counter (they are removed).
 - There are intentionally no public knobs on the retry cap itself — the
@@ -929,8 +941,9 @@ more.
 3. **No cross-client visibility without a re-read.** `subscribe<R>` fans out
    only to handlers on the same `Bridge` (one client process), so a result
    another client produced does not reach this client's subscribers — it is
-   observed on this client's next read. See the README's "Instance
-   subscriptions are best-effort and in-process". A `ui::Session` with a
+   observed on this client's next read. See
+   [GETTING-STARTED.md](../../GETTING-STARTED.md), "Instance subscriptions are
+   best-effort and in-process". A `ui::Session` with a
    `watcher` is the exception at the UI layer: the server tells it which
    records changed, and it re-reads them itself (`docs/spec/ui/interpreter.md`,
    the query cache). A replayed write's effects reach that cache the same way,
@@ -949,8 +962,9 @@ idempotent (see `idempotencyKey` above) and re-reading once a replay completes.
 `SyncWorker` nor `ReconnectCoordinator` knows what a payload means, so neither
 can detect that a queued write was superseded by a change the backend accepted
 while the client was offline. `SyncWorker`'s `ReplayFunction` sees only a
-`const std::string&` and returns a `bool` — it has no channel to say "delivered,
-but the server had a newer version" or "discarded as stale." **Conflict
+`const std::string&` and returns a `bool` (or, as a `DetailedReplayFunction`, a
+delivery `ReplayOutcome`) — it has no channel to say "delivered, but the server
+had a newer version" or "discarded as stale." **Conflict
 detection and merge/discard are the model's responsibility**, and the seam the
 framework provides for them is `Model::onBackendChanged()`, not `SyncWorker`.
 
@@ -1057,7 +1071,7 @@ I/O and owns no thread: it owns a strand over the executor it is given — the
 |---|---|
 | `Reconnected` | Backend reopened, made active, context bound. Replay is invoked only if `shouldContinue()` still holds at that point — `Reconnected` can be returned without replaying. |
 | `GaveUp` | Exhausted `maxAttempts` without a successful reconnect; stayed offline. |
-| `Aborted` | `shouldContinue()` returned false before any reconnect attempt. |
+| `Aborted` | `shouldContinue()` returned false (or threw) at the start of an attempt, before a reconnect succeeded. |
 
 ### `ReconnectCoordinatorConfig`
 
@@ -1087,7 +1101,7 @@ I/O and owns no thread: it owns a strand over the executor it is given — the
 | `activateLocal` | `void()` | Switch the active backend to the local/offline one. Called by `onOffline()`. |
 | `bindContext` | `void()` | Rebind per-connection/per-session context to the active backend. Called after every `activate*` step. Must not throw. |
 | `replay` | `void()` | Replay the offline queue against the now-active primary. Typically calls `run()` on a `SyncWorker` owned by `strand()`, which then drains before `replay` returns. Called last in `onOnline()`. |
-| `shouldContinue` | `bool()` | Return `false` to abort the current `onOnline()` early (e.g. monitor reports offline mid-retry). Polled before each attempt and once more before replay. |
+| `shouldContinue` | `bool()` | Return `false` to abort the current `onOnline()` early (e.g. monitor reports offline mid-retry). Polled before each attempt and once more before replay. Throwing → `false`. |
 | `sleep` | `void(std::chrono::milliseconds)` | Sleep between failed attempts. Tests substitute a no-op/counter; hosts wire to `std::this_thread::sleep_for`. |
 
 #### Ordering guarantees (the reason this class exists)
@@ -1195,24 +1209,24 @@ enqueues](#ownership-who-enqueues)) before `replay` returns.
 
 ### Reconciling with ARCHITECTURE.md's direct wiring
 
-`ARCHITECTURE.md` shows a simpler wiring where the callbacks call
-`bridge.switchBackend(...)` directly:
+`ARCHITECTURE.md` shows a simpler wiring where the callbacks post
+`bridge.switchBackend(...)` to the bridge's owner:
 
 ```cpp
 morph::offline::NetworkMonitor monitor{
     myTcpProbe,
-    [&] { bridge.switchBackend(std::make_unique<LocalBackend>(localPool)); },
-    [&] { bridge.switchBackend(std::make_unique<SimulatedRemoteBackend>(server)); }
+    [&] { gui.post([&] { bridge.switchBackend(std::make_unique<LocalBackend>(localPool)); }); },
+    [&] { gui.post([&] { bridge.switchBackend(std::make_unique<SimulatedRemoteBackend>(server)); }); }
 };
 ```
 
 Both are legitimate; they are different points on a spectrum:
 
 - **Direct `switchBackend` — the minimal path.** No retry, no ordered
-  replay, no abort-on-flap. `switchBackend` is a bounded mutex operation (it is
-  not a seconds-long retry loop), so calling it inline on the I/O loop is
-  acceptable *as a minimal demo*. It does not replay a queue and has no
-  `shouldContinue` guard.
+  replay, no abort-on-flap. `switchBackend` belongs to the bridge's owner
+  executor, so the monitor's callbacks, which run on the I/O loop, post the
+  switch to that owner rather than calling it inline. It does not replay a queue
+  and has no `shouldContinue` guard.
 - **`ReconnectCoordinator` — the ordered, tested path.** Use it when reconnect
   can *fail and need retries*, when replay must run strictly *after* activate +
   bind, and when a mid-retry flap-back-offline must abort cleanly. This is the
@@ -1231,9 +1245,10 @@ bugs — they are consequences of the deliberately minimal contracts.
 
 ### No head-of-line blocking in replay
 
-`SyncWorker::run()` does **not** stop at the first failing item. When
-`_replay` returns `false` (or throws) it increments that item's attempt counter
-and *continues to the next item*, replaying and `markDone`-ing later items that
+`SyncWorker::run()` does **not** stop at the first failing item. When the
+replay reports `Rejected` (a `false` return, or a throw) it increments that
+item's attempt counter — `Undelivered` leaves it untouched — and in either case
+*continues to the next item*, replaying and `markDone`-ing later items that
 succeed. Therefore **"enqueue order is preserved" holds only when every item
 succeeds.** If item #2 fails and item #3 succeeds, #3 is delivered and removed
 while #2 stays queued for a later `run()` — the backend sees #3 before a
@@ -1254,7 +1269,7 @@ simulate a restart in tests), but it does not survive the *process* exiting.
 `setAttempts()`'s default is a no-op, so a queue that does not override it
 always reports `attempts == 0` on `drain()`, and `SyncWorker`'s in-memory
 count is the only thing tracking retries — it resets whenever a fresh
-`SyncWorker` is constructed, exactly as before this hook existed.
+`SyncWorker` is constructed.
 `FileOfflineQueue` and `SqliteOfflineQueue` both override `setAttempts()` to
 write the count to disk, so the retry budget — and therefore dead-lettering —
 genuinely survives a process restart when either is used as the
@@ -1272,8 +1287,8 @@ decide whether the queue is drained will be wrong in this window.
 
 ### First offline report is delayed, and `onOnline` never fires at startup
 
-`NetworkMonitor::run()` `wait_for`s `probeInterval` *before* the first probe, so
-the first probe is at `t = probeInterval`, and `failureThreshold` consecutive
+`NetworkMonitor`'s constructor arms the probe timer `probeInterval` from now,
+so the first probe is at `t = probeInterval`, and `failureThreshold` consecutive
 failures are needed to flip offline. **The earliest an `onOffline` can fire is
 `probeInterval * failureThreshold`** — ≈15s at defaults (5s × 3). An app that is
 offline from the very start still reports online for that whole window.
@@ -1303,7 +1318,7 @@ snapshot.
 
 ## Limitations
 
-Honest boundaries of what ships today:
+Honest boundaries of the design:
 
 - **Opaque `std::string` payload discards the typed-codec machinery.** The rest
   of morph moves typed actions through the wire codec (`wire.md`); the offline
@@ -1334,8 +1349,8 @@ Honest boundaries of what ships today:
   receives the exhausted `QueueItem` (payload, idempotencyKey, final
   `attempts` count) instead of the default log line, so it can persist,
   forward, or re-enqueue the item into a separate dead-letter queue of its
-  own. With no sink set, the original log-only behavior is unchanged (written
-  to `morph::log` at error level; if the log sink drops it, it is gone).
+  own. With no sink set, the item is only logged (to `morph::log` at error
+  level; if the log sink drops it, it is gone).
   Either way, morph ships no concrete dead-letter store — the sink is the
   seam, not a built-in queue.
 - **Null `Deps` are not rejected at construction** (see Failure modes) — a
@@ -1355,17 +1370,17 @@ Honest boundaries of what ships today:
 | Queue interface | **Minimal virtual interface (`IOfflineQueue`)** | Lets callers swap in SQLite, file-backed, or test queues without framework changes. |
 | `drain` is non-destructive | **Items survive between `drain()` and `markDone()`** | Crash safety: a crash after `drain()` but before `markDone()` does not lose items. |
 | SyncWorker retry count | **Hard-coded at 5, no public knob** | The framework guarantees obvious, safe defaults; apps that need different math wrap or replace `SyncWorker`. |
-| `QueueItem::attempts` / `setAttempts()` | **Opt-in durable retry count, no-op default** | Lets a durable queue make `SyncWorker`'s retry budget survive a restart without changing `InMemoryOfflineQueue`'s or existing `SyncWorker` call sites' behavior. |
-| `DeadLetterSink` | **Optional third constructor arg, replaces (not augments) the log line** | Gives a host a programmatic hand-off for a poisoned item; a throwing sink is caught and logged, the item is still removed — consistent with the framework's swallow-and-continue policy. |
+| `QueueItem::attempts` / `setAttempts()` | **Opt-in durable retry count, no-op default** | Lets a durable queue make `SyncWorker`'s retry budget survive a restart, while a queue with nowhere to persist the count need not implement anything. |
+| `DeadLetterSink` | **Optional last constructor arg, replaces (not augments) the log line** | Gives a host a programmatic hand-off for a poisoned item; a throwing sink is caught and logged, the item is still removed — consistent with the framework's swallow-and-continue policy. |
 | Two shipped durable queues, split by dependency | **`FileOfflineQueue` in the default target; `SqliteOfflineQueue` opt-in** | A host that cannot add a SQLite dependency still gets restart-durability for free; a host that wants indexed dedup and can accept the dependency opts in via `MORPH_BUILD_OFFLINE_SQLITE`. |
-| Idempotency-key dedup strengthened in `SqliteOfflineQueue` only | **Partial unique index on non-empty `idempotency_key`** | The base `IOfflineQueue` contract only stores the key; the SQLite reference implementation additionally enforces insert-time dedup as a deliberate strengthening, not a contract change — `FileOfflineQueue` mirrors the same dedup behavior (linear scan) for parity, but neither is required by the interface. |
+| Idempotency-key dedup strengthened in the durable queues, not the interface | **Partial unique index on non-empty `idempotency_key` (SQLite); linear scan over pending items (file)** | The base `IOfflineQueue` contract only stores the key; both durable reference implementations additionally enforce enqueue-time dedup as a deliberate strengthening, not a contract change, with identical semantics (see [`idempotencyKey`: deduping against the journal](#idempotencykey-deduping-against-the-journal)). `InMemoryOfflineQueue` does not dedup. |
 | SyncWorker thread safety | **One owner; `run()` posts to it** | Two callers never overlap and neither blocks; the coordinator's `replay` step, already on the owner, drains inline. |
 | Reconnect retry loop | **One task on an offline strand over an executor the host gives it** | The host owns the executor; the coordinator is pure orchestration with no hidden threads, and posting its own sequences keeps them off the I/O loop that calls it. |
 | Reconnect step ordering | **Explicit in the `onOnline()` body** | The strict order (reconnect → activate → bind → replay) is the class's reason to exist — callers should never have to get it right themselves. |
 | `onOnline()` / `onOffline()` serialised | **Same strand** | Prevents a race where a concurrent `onOffline()` replays into a local backend during an in-progress `onOnline()`. |
 | `shouldContinue` re-checked before replay | **Second poll after bind** | The backend may have gone away during `activatePrimary()` / `bindContext()` — never replay into a backend that just became unreachable. |
 | No sleep after final attempt | **`retryDelay` skipped on last iteration** | Wasting 2s after we already know we're giving up serves no purpose. |
-| Conflict resolution lives in the model | **`SyncWorker` has no conflict hook; models reconcile in `onBackendChanged()`** | The framework cannot know whether a payload was superseded — only the domain model can. Keeping `SyncWorker`'s contract a plain `bool` avoids baking a conflict model into the framework; hosts that need merge/discard drain the queue inside `onBackendChanged()` instead (see [Conflict resolution on replay](#conflict-resolution-on-replay)). |
+| Conflict resolution lives in the model | **`SyncWorker` has no conflict hook; models reconcile in `onBackendChanged()`** | The framework cannot know whether a payload was superseded — only the domain model can. Keeping `SyncWorker`'s contract a delivery outcome (`bool`, or `ReplayOutcome`) avoids baking a conflict model into the framework; hosts that need merge/discard drain the queue inside `onBackendChanged()` instead (see [Conflict resolution on replay](#conflict-resolution-on-replay)). |
 
 ## Lifetime annotations
 
@@ -1383,7 +1398,7 @@ the worker's owner) for that object's whole life. See [concurrency_and_lifetimes
 
 ## Cross-references
 
-- **`bridge.md`** — `Bridge::switchBackend` is the mechanism the coordinator's
+- **[bridge.md](../core/bridge.md)** — `Bridge::switchBackend` is the mechanism the coordinator's
   `activatePrimary`/`activateLocal` dependencies drive (re-registers live
   handlers on the new backend, fires `onBackendChanged`). ARCHITECTURE.md's
   minimal wiring calls `switchBackend` straight from the monitor callback; see
@@ -1392,7 +1407,7 @@ the worker's owner) for that object's whole life. See [concurrency_and_lifetimes
   model-driven replay path in [Conflict resolution on replay](#conflict-resolution-on-replay)
   — a model can `drain()` the shared `IOfflineQueue` there and reconcile each
   item, instead of (not in addition to) using `SyncWorker`.
-- **`journal.md`** — the action log is a permanent, append-only audit/replay
+- **[journal.md](../journal/journal.md)** — the action log is a permanent, append-only audit/replay
   trail; `IOfflineQueue` is transient (holds pending writes, deletes them on
   delivery). The two are distinct: the journal's ordering is authoritative and
   entries already in a sink are never removed by the framework (append-only),
@@ -1406,21 +1421,21 @@ the worker's owner) for that object's whole life. See [concurrency_and_lifetimes
   `docs/spec/journal/journal.md`); the two differ in that `FileOfflineQueue`
   also tombstones and reuses no id, since (unlike the append-only action log)
   its rows are removed and its retry counts are mutated in place.
-- **`concurrency_and_lifetimes.md`** — the framework-wide rule that notification
+- **[concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md)** — the framework-wide rule that notification
   callbacks marshal work off the raising thread (the reason
   [NetworkMonitor callbacks must only post](#networkmonitor-callback-constraint)),
   plus the monitor's teardown/`stop()`-from-callback contract.
-- **`error_handling.md`** — how a failed `execute()` surfaces to the application
+- **[error_handling.md](../error_handling.md)** — how a failed `execute()` surfaces to the application
   (the signal that drives [enqueue-on-failure](#ownership-who-enqueues)), and
   the framework's swallow-and-treat-as-failure policy that this file mirrors in
   `safeProbe`, `SyncWorker`'s replay `try/catch`, `SyncWorker`'s
   `DeadLetterSink` `try/catch`, and the coordinator's
   `callTryReconnect`/`callShouldContinue`.
-- **`observability.md`** — `SyncWorker::run()`'s `queueDepth` gauge and
+- **[observability.md](../core/observability.md)** — `SyncWorker::run()`'s `queueDepth` gauge and
   `ReconnectCoordinator::onOnline()`'s `reconnectAttempts`/`reconnectOutcome`
   counters, fed through the same injectable `morph::observe` seam
   `RemoteServer`/`LocalBackend` use.
-- **`testing_strategy.md`** — the soak test (`tests/soak/test_soak_reconnect_churn.cpp`)
+- **[testing_strategy.md](../testing_strategy.md)** — the soak test (`tests/soak/test_soak_reconnect_churn.cpp`)
   that drives this exact `NetworkMonitor` → `ReconnectCoordinator` → `SyncWorker`
   pipeline through hundreds of offline/online flaps and asserts the queue
   always fully drains and every reconnect attempt succeeds.

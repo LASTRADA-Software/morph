@@ -59,7 +59,7 @@ application. Be explicit about the boundary:
   timeouts are the transport's job. The shipped Qt transport *does* offer TLS
   (see below), but a transport that does not is plaintext. Run `RemoteServer`
   behind a transport that provides TLS.
-  There **is** now one wire-layer bound: `wire::decode` rejects any envelope
+  There **is** one wire-layer bound: `wire::decode` rejects any envelope
   whose serialized form exceeds `wire::kMaxEnvelopeBytes` (8 MiB) before parsing
   (see [wire.md](core/wire.md) — "Parsing guarantees and hardening"). This caps the
   peak allocation and parse cost of a single message — including deeply-nested
@@ -72,14 +72,14 @@ application. Be explicit about the boundary:
 - **Authentication of the transport peer.** A bearer token proves the caller
   holds a validly-signed token; it does not bind the token to a connection.
   Without transport-level TLS a stolen token can be replayed.
-- **`register` authorization and opaque ids are both opt-in, defaulting to
-  today's permissive behaviour.** The `register` envelope is gated by the
+- **`register` authorization is opt-in, defaulting to permissive
+  behaviour.** The `register` envelope is gated by the
   optional `IAuthorizer::authorizeRegister` hook (see
   [The register-authorization hook](#the-register-authorization-hook-authorizeregister)
   below), consulted after authentication and before the instance is created;
   its **default allows everything**, so an unconfigured server still lets any
-  client that can send envelopes create model instances. Model ids are no
-  longer sequential — `RemoteServer` assigns them via a keyed 64-bit Feistel
+  client that can send envelopes create model instances. Model ids are not
+  sequential — `RemoteServer` assigns them via a keyed 64-bit Feistel
   permutation over an internal counter (see [backend.md](core/backend.md),
   `RemoteServer`'s `detail::OpaqueIdGenerator`) — but opaque ids are
   defence-in-depth, not authorization: a caller who independently learns a
@@ -94,8 +94,8 @@ application. Be explicit about the boundary:
   single-trust-domain server: it is not a hardened multi-tenant
   public-internet server *unless* you install an authorizer that overrides
   `authorizeRegister` and `authorizeInstance`.
-- **Local-path authorization.** `LocalBackend::execute` installs the session
-  context but never calls the authorizer (the authorizer is a remote-only gate,
+- **Local-path authorization.** `LocalBackend` installs the session
+  context around each action but never calls the authorizer (the authorizer is a remote-only gate,
   `remote.hpp` `dispatchExecute` is the sole call site). Security-critical checks
   must be enforced inside the model so they hold in both modes.
 
@@ -342,7 +342,7 @@ depend on this:
   itself: its `admit` reads the clock once.
 - **Authorize-only / allow-all authorizers.** An authorizer that admits calls
   but never authenticates (a custom authorize-only policy, or the default
-  `AllowAllAuthorizer` whose `authenticate` inherits the `nullopt` default) now
+  `AllowAllAuthorizer` whose `authenticate` inherits the `nullopt` default)
   results in an empty principal at the model. This preserves the
   "authentication is optional" contract — the call still dispatches — while
   ensuring an unauthenticated principal is never presented to model code as
@@ -502,10 +502,11 @@ builds no form for its actions, and the explorer lists the model as "not describ
 ## The per-instance ownership hook (`authorizeInstance`)
 
 `authorize` sees only the model **type**, so it cannot answer "may this caller
-touch *this instance*?". Because model instances on a `RemoteServer` are
-addressable by guessable sequential ids, without an instance check any
-authenticated caller can `execute`/`deregister` against an id it did not create
-— a cross-tenant targeting gap. `IAuthorizer` closes it with an optional third
+touch *this instance*?". Model instances on a `RemoteServer` are addressed by
+id, and an id can leak (see [Opaque model ids](#opaque-model-ids)), so without
+an instance check any authenticated caller that learns an id can
+`execute`/`deregister` against an instance it did not create — a cross-tenant
+targeting gap. `IAuthorizer` closes it with an optional third
 method:
 
 ```cpp
@@ -548,11 +549,11 @@ method:
   the same `ok` an unknown or finished call gets, so a cancel cannot probe for
   other callers' calls. See [wire.md](core/wire.md#cancelling-a-call).
 
-### Backward compatibility
+### Defaults
 
 The **default `authorizeInstance` returns `true`**, so an authorizer that does
 not override it — including `AllowAllAuthorizer` and a plain `SigningAuthorizer`
-— imposes no per-instance restriction and the server behaves exactly as before.
+— imposes no per-instance restriction.
 A deployer opts into enforcement by overriding the hook, typically comparing the
 recorded owner against the authenticated caller:
 
@@ -591,8 +592,8 @@ exists; neither can answer "may this caller create one at all?".
 
 On every `register` envelope, in order:
 
-1. Reject an empty `typeId` (`err "register requires a typeId"`) — unchanged,
-   checked before any authorization.
+1. Reject an empty `typeId` (`err "register requires a typeId"`), checked
+   before any authorization.
 2. **Authenticate.** `_authorizer->authenticate(env.session)` runs and its
    result is stamped onto `env.session.principal` — a verified value
    overwrites it, `nullopt` clears it — exactly as `dispatchExecute` does for
@@ -602,7 +603,7 @@ On every `register` envelope, in order:
    `err "unauthorized"` (with the request's `callId`) and **no instance is
    created** — `ModelRegistryFactory::create` never runs.
 4. Only on `true` does the server construct the instance and record
-   `env.session.principal` (already verified) as its owner, exactly as before.
+   `env.session.principal` (already verified) as its owner.
 
 `handleInline` — the synchronous control path `SimulatedRemoteBackend` uses for
 `register` — runs through the same `dispatchMessage` code path, so the gate
@@ -629,18 +630,18 @@ struct TenantAuthorizer : morph::session::SigningAuthorizer {
 };
 ```
 
-### Backward compatibility
+### Defaults
 
 The default returns `true`. `AllowAllAuthorizer` and a plain `SigningAuthorizer`
 (neither overrides `authorizeRegister`) impose no register restriction, so an
-unconfigured server registers any known model type exactly as before. Register
+unconfigured server registers any known model type. Register
 over the **local** path is unaffected — there is no authorizer on
 `LocalBackend`; its factory closure constructs the instance directly.
 
 ## Opaque model ids
 
-`RemoteServer` no longer assigns model ids from a bare sequential counter.
-Each id is now the result of running an internal monotonic counter through
+`RemoteServer` does not hand out its internal counter as model ids. Each id is
+the result of running that monotonic counter through
 `morph::backend::detail::OpaqueIdGenerator` — a 4-round Feistel network over
 the 64-bit space, keyed once at construction from `std::random_device` (see
 [backend.md](core/backend.md) for the construction). Two properties matter:
@@ -691,9 +692,8 @@ because it needs no Qt gets none of it.
   intended way to protect bearer tokens against capture and replay.
 - **The server binds to loopback by default, and refuses silent plaintext
   exposure.** `QtWebSocketServerConfig::bindAddress` defaults to
-  `QHostAddress::LocalHost` (unchanged from before). Exposing the server beyond
-  localhost means changing `bindAddress` — and `listen()` now guards that
-  change: binding a non-loopback address with no TLS configuration and
+  `QHostAddress::LocalHost`. Exposing the server beyond localhost means
+  changing `bindAddress` — and `listen()` guards that change: binding a non-loopback address with no TLS configuration and
   `allowPlaintextExposure` left at its default `false` makes `listen()` return
   `false` and log at `morph::log::LogLevel::error` instead of silently starting
   a plaintext, off-host-reachable server. Passing a TLS configuration, or
@@ -736,17 +736,18 @@ transport above is not a matter of degree:
   this transport can satisfy the "use TLS and verify the peer" item in the
   checklist below — that item needs the Qt transport, or a TLS-terminating
   proxy in front of `SocketServer`.
-- **There are no transport-level resource limits.** `SocketServerConfig` has
-  exactly one field (`backlog`). There is no connection cap, no per-frame size
-  limit beyond the wire layer's own `kMaxEnvelopeBytes`, no message rate limit,
-  and no handshake or idle timeout — the four things `QtWebSocketServerConfig`
-  offers. An unauthenticated peer can therefore hold connections open, and open
-  as many as the process has descriptors for. `RemoteServer::LimitPolicy` still
-  applies (it sits above the transport), so `executeTimeout`, `maxLiveModels`
-  and `maxInFlightExecutes` are available here; the connection-level limits are
-  not. `SocketBackendConfig`'s `connectTimeout`/`handshakeTimeout`/`sendTimeout`
-  are not a counter-example: they bound the *client's* own I/O loop against a
-  stalled server, and give a `SocketServer` nothing against a stalled client.
+- **Transport-level resource limits are few.** `SocketServerConfig` holds the
+  listen `backlog`, a `handshakeTimeout` (default 10 s) bounding the Upgrade
+  handshake, and a `sendTimeout` (default 30 s) that closes a peer which stops
+  reading. There is no connection cap, no per-frame size limit beyond the wire
+  layer's own `kMaxEnvelopeBytes`, no message rate limit and no idle timeout. An
+  unauthenticated peer that completes the handshake can therefore hold
+  connections open, and open as many as the process has descriptors for.
+  `RemoteServer::LimitPolicy` still applies (it sits above the transport), so
+  `executeTimeout`, `maxLiveModels` and `maxInFlightExecutes` are available
+  here; the connection-level limits are not. `SocketBackendConfig`'s timeouts
+  bound the *client's* own I/O loop against a stalled server, and give a
+  `SocketServer` nothing against a stalled client.
 - **The server is loopback-only, and not by configuration.**
   `SocketServer::listen()` binds `127.0.0.1` unconditionally — there is no
   `bindAddress`, so there is also no equivalent of the Qt transport's
@@ -812,7 +813,7 @@ transport above is not a matter of degree:
 Even with `SigningAuthorizer` installed, the following remain the deployer's
 responsibility:
 
-- **Use TLS and verify the peer — now the documented default.** Bearer tokens
+- **Use TLS and verify the peer.** Bearer tokens
   and payloads travel in plaintext otherwise, and a captured token can be
   replayed until it expires. There is no envelope-level confidentiality or
   replay protection. The Qt transport supports `wss://` (above) — **the
@@ -830,16 +831,16 @@ responsibility:
   seam (see "Recommended production wiring" above) and turn on
   `MORPH_REQUIRE_VETTED_HMAC` so a build that forgets to inject one fails to
   compile rather than shipping the reference impl silently.
-- **Bound message size, rate, and add timeouts — now available, still opt-in.**
+- **Bound message size, rate, and add timeouts — available, opt-in.**
   `RemoteServer::LimitPolicy` (`executeTimeout`, `maxLiveModels`,
   `maxInFlightExecutes`) and the Qt transport's `QtWebSocketServerConfig`
   (`maxConnections`, `maxMessageBytes`, `messagesPerSecond`,
-  `handshakeTimeout`/`idleTimeout`) cover every gap this bullet used to call out
-  **on the Qt transport**. Both default to unbounded/off — save the Qt
-  transport's `sendTimeout` (30 s), which closes a peer that stops reading — so
-  a deployer exposing `RemoteServer` publicly should configure both. On `morph::net` only the `LimitPolicy` half exists:
-  `SocketServerConfig` has no connection, size, rate or timeout limits at all
-  (above). See
+  `handshakeTimeout`/`idleTimeout`) bound message size, rate and time **on the
+  Qt transport**. Both default to unbounded/off — save the Qt transport's
+  `sendTimeout` (30 s), which closes a peer that stops reading — so a deployer
+  exposing `RemoteServer` publicly should configure both. On `morph::net` only
+  the `LimitPolicy` half exists, beside `SocketServerConfig`'s handshake and
+  send timeouts: no connection, size or rate limit (above). See
   [backend.md](core/backend.md#limitpolicy--opt-in-resource-limits).
 - **Do not rely on the authorizer for correctness inside models.** It runs only
   on the remote path and only for `execute`. Enforce invariants in the model so
@@ -859,7 +860,7 @@ base64url round-tripping, token issue/verify, and rejection of tampering, wrong
 secret, expiry, and malformed input, plus `SigningAuthorizer` authorization,
 the no-token denial path, and role-policy enforcement.
 
-`tests/test_policy_hardening.cpp` covers the policy fixes in this spec: a token
+`tests/test_policy_hardening.cpp` covers the token and ownership policies above: a token
 with `expiresAtMs == 0` or negative is rejected as `Expired` (never eternal) and
 one with a real positive expiry still verifies; a token issued far in the future
 is rejected `NotYetValid` while one within the 60s skew (or with an unset
@@ -867,17 +868,16 @@ is rejected `NotYetValid` while one within the 60s skew (or with an unset
 non-canonical trailing bits, and a token with a mutated trailing signature
 character fails; and, with an ownership authorizer installed, principal B cannot
 `execute` or `deregister` principal A's instance while A can, whereas with the
-default authorizer any principal can (backward compatible).
+default authorizer any principal can.
 
 `tests/test_register_authorization.cpp` covers `authorizeRegister`: an
 authorizer denying a specific model type (or an unauthenticated caller)
 receives `err "unauthorized"` on `register` and creates no instance — a
 subsequent `execute` against an arbitrary id still reports `err "model not
 found"`; the default authorizer and a plain `SigningAuthorizer` (neither
-overrides the hook) continue to register any known type, unchanged from
-before.
+overrides the hook) register any known type.
 
-`tests/test_opaque_model_ids.cpp` covers the id-opacity change directly: unit
+`tests/test_opaque_model_ids.cpp` covers id opacity directly: unit
 tests on `morph::backend::detail::OpaqueIdGenerator` confirm it is a bijection
 (20000 counters → 20000 distinct outputs), that its output is not sequential,
 and that two independently-constructed instances (independent random keys)
@@ -909,9 +909,9 @@ directly: `wire::decode` accepts an envelope under `kMaxEnvelopeBytes`, rejects
 an oversized one (including one whose bulk is deeply-nested JSON inside the
 opaque `body` string) with `std::runtime_error` before parsing, and — pinning
 the honest, non-guaranteed behavior — accepts duplicate JSON keys (top-level and
-nested `session`) with last-wins rather than rejecting them, since glaze 7.2.1
+nested `session`) with last-wins rather than rejecting them, since glaze
 offers no option to error on duplicates. A per-request timeout and a rate/
-message-count cap are now available via `LimitPolicy` and
+message-count cap are available via `LimitPolicy` and
 `QtWebSocketServerConfig` (both opt-in — see above).
 
 `tests/qt/test_qt_websocket.cpp` (with `tests/certs/server.crt`/`server.key` and

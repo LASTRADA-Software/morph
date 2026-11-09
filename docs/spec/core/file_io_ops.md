@@ -26,7 +26,7 @@ or logic that exists to paper over a platform difference:
 
 ## Why it exists
 
-`FileActionLog`/`FileOfflineQueue` both have several branch arms that only
+`FileActionLog` and `FileOfflineQueue` both have several branch arms that only
 run when a real OS-level file-I/O call fails partway through an
 otherwise-successful operation — disk full, a file descriptor closed
 underneath, a permission change racing an exact window between two library
@@ -61,8 +61,8 @@ only that file's data durable, not the directory entry that names it. Both
 `FileActionLog` and `FileOfflineQueue` call it after every directory
 mutation (file creation at construction, `rotate()`'s seal rename, and
 `compact()`'s rewrite-in-place rename), surfacing a failure rather than
-swallowing it — see `docs/spec/journal/journal.md` and
-`docs/spec/offline/offline.md` for the call sites. `rollBackShortWrite()`
+swallowing it — see [journal.md](../journal/journal.md) and
+[offline.md](../offline/offline.md) for the call sites. `rollBackShortWrite()`
 is the other seam-driven member of this header: on a short
 `fwrite`, it truncates the file back to its pre-write length using the
 same injectable `resizeFile`/`fflush` this struct provides, so a partial
@@ -83,7 +83,7 @@ construction itself.
 | `void positionAtEnd(std::FILE*)` | Seeks a just-opened append-mode stream to end-of-file. C11 leaves an append stream's *initial* position implementation-defined: glibc seeks to end, while the Microsoft CRT and musl report position 0 until the first I/O. Every write still lands at the end; only what `ftell` reports differs — which matters because `rollBackShortWrite` takes a pre-write `ftell` as the offset to roll back to. Unnormalised, the first short write after any open would roll a Windows file back to **zero bytes**. Called after each successful append-mode `fopen`. |
 | `[[nodiscard]] RollBack rollBackShortWrite(FileIoOps&, std::FILE*, const path&, long long)` | Undoes a partial record so the next write cannot merge with it, and reports whether it succeeded. See [Rolling back a short write](#rolling-back-a-short-write). |
 | `void repairTornTail(FileIoOps&, const path&, std::string_view)` | Trims bytes after the final newline at open time. Called by `FileActionLog` only. It trims **by newline, not by parse**, so a *complete* final record whose only missing byte is the terminating newline is discarded along with a genuinely torn one; a caller that accepts externally-appended records needs to know that before adopting it. `FileOfflineQueue` deliberately does not call it — see `docs/spec/offline/offline.md`. |
-| `DirectorySync classifyDirectorySync(int)` | Splits a nonzero `syncPath` result into `unsupported` (warn and continue) and `failed` (throw). See `docs/spec/journal/journal.md`, "Directory durability". |
+| `DirectorySync classifyDirectorySync(int)` | Splits a nonzero `syncPath` result into `unsupported` (warn and continue) and `failed` (throw). See [journal.md, "Directory durability"](../journal/journal.md#directory-durability). |
 
 ### Rolling back a short write
 
@@ -140,24 +140,27 @@ error-flagged stream.
 
 ## Usage
 
-The three classes take it as an optional constructor parameter — **second** for
-the two file-backed ones, **third** for `SqliteOfflineQueue`, which uses it for
-`syncPath` alone and reaches SQLite through the C API directly:
+Three classes take it as an optional constructor parameter, after the owning
+executor and the path — **third** for the two file-backed ones, **fourth** for
+`SqliteOfflineQueue`, which uses it for `syncPath` alone and reaches SQLite
+through the C API directly:
 
 ```cpp
-explicit FileActionLog(std::filesystem::path path, morph::core::FileIoOps ioOps = {});
-explicit FileOfflineQueue(std::filesystem::path path, morph::core::FileIoOps ioOps = {},
-                          std::optional<std::size_t> maxDepth = std::nullopt);
-explicit SqliteOfflineQueue(std::filesystem::path path, std::optional<std::size_t> maxDepth = std::nullopt,
+FileActionLog(morph::exec::IExecutor& owner, std::filesystem::path path,
+              morph::core::FileIoOps ioOps = {});
+FileOfflineQueue(morph::exec::IExecutor& owner, std::filesystem::path path,
+                 morph::core::FileIoOps ioOps = {},
+                 std::optional<std::size_t> maxDepth = std::nullopt);
+explicit SqliteOfflineQueue(morph::exec::IExecutor& owner, std::filesystem::path path,
+                            std::optional<std::size_t> maxDepth = std::nullopt,
                             morph::core::FileIoOps ioOps = {},
-                            SqliteOfflineQueue::Synchronous synchronous = Synchronous::normal,
-                            std::chrono::milliseconds busyTimeout = std::chrono::milliseconds{5000});
+                            Synchronous synchronous = Synchronous::normal,
+                            std::chrono::milliseconds busyTimeout = std::chrono::milliseconds{kBusyTimeoutMillis},
+                            core::platform::WallClockRef wallClock = core::platform::defaultSystemWallClock());
 ```
 
-A normal caller never passes one — the default-constructed `FileIoOps` is
-byte-for-byte what both classes called directly before this seam existed, so
-this is not a behavior change for any existing caller. Example, forcing a
-short write:
+A normal caller never passes one: the default-constructed `FileIoOps` makes
+exactly the real calls each member mirrors. Example, forcing a short write:
 
 ```cpp
 morph::core::FileIoOps ioOps;

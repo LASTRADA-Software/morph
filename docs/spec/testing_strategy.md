@@ -1,7 +1,6 @@
 # Load, soak, and fuzz testing
 
-`morph`'s unit suite (`tests/CMakeLists.txt`, 7234+ Catch2 assertions as of the
-last count) is deterministic, single-shot, and in-process: every test picks a
+`morph`'s unit suite (`tests/CMakeLists.txt`, Catch2) is deterministic, single-shot, and in-process: every test picks a
 fixed input and asserts one outcome. Four additional, **opt-in** test
 categories complement it by exercising the framework over *distributions* of
 input and *time*, rather than hand-picked examples: a fuzz harness, a soak
@@ -46,29 +45,27 @@ the existing hardening tests (`test_wire_hardening.cpp`, `test_server_limits.cpp
 — a valid register/execute/deregister envelope, a duplicate-key envelope, a
 moderately-nested body, a malformed-UTF-8 body, and plain garbage.
 `tests/fuzz/findings/wire_decode/` and `tests/fuzz/findings/dispatch_execute/`
-hold the committed reproducers (two today) and are where any input that
-triggers a crash/hang/sanitizer report **in a bug that has since been fixed**
-gets committed as a permanent regression case — see "Known findings" below for
-inputs discovered but not yet in that state.
+hold the committed reproducers and are where any input that triggers a
+crash/hang/sanitizer report gets committed as a permanent regression case, once
+the bug it found is fixed — see "Known findings" below.
 
 **CI-integrated regression check.** `ctest -R fuzz_.*_replay` runs each target
 once per file in its corpus + findings directories (libFuzzer's single-run
 replay mode — passing individual files, not a directory, so it replays and
 exits rather than starting a mutating fuzzing session) and fails if any input
-now crashes. This is fast and deterministic, suitable for CI; it is **not** a
+crashes. This is fast and deterministic, suitable for CI; it is **not** a
 fuzzing campaign.
 
 The input globs are deliberately **extension-agnostic** (`*`, not `*.txt`): a
 fuzzer input is an arbitrary byte string, and a libFuzzer-minimized reproducer
 is conventionally saved as `.bin`. An extension-scoped glob silently skips
-whatever it does not match, which is exactly what happened — both committed
-reproducers are `.bin`, so the replay tests ran only the seeds and never the
-crash inputs, leaving the test that exists to catch a `skip_ws` regression green
-if the bug came back. An empty glob is now a configure-time `FATAL_ERROR` too:
-a replay invocation with no `FILE` arguments is an unbounded fuzzing run, not a
-regression check. CI additionally asserts, after the run, that every file under
-`tests/fuzz/findings/` was actually referenced — a guard that never fires is
-indistinguishable from one that works.
+whatever it does not match — the committed reproducers are `.bin`, so a `*.txt`
+glob would replay only the seeds and leave the regression cases unrun. An empty
+glob is a configure-time `FATAL_ERROR`: a replay invocation with no `FILE`
+arguments is an unbounded fuzzing run, not a regression check. The nightly
+`linux-all-features` job additionally asserts, after the run, that every file
+under `tests/fuzz/findings/` was actually referenced — a guard that never fires
+is indistinguishable from one that works.
 
 **Running an actual campaign** (manual / scheduled, not CI-per-commit):
 ```
@@ -82,69 +79,52 @@ directory — review and keep genuinely new, interesting cases; move anything
 that crashes into `findings/` instead, once the underlying bug is fixed (see
 below).
 
-**Known findings (fixed).** A short campaign run while this harness was built
-surfaced two real, reproducible issues in `morph::wire`'s glaze-based parsing.
-Both are now fixed, with the original crashing inputs preserved as permanent
-regression cases under `tests/fuzz/findings/`:
+**Known findings.** The committed reproducers under `tests/fuzz/findings/`
+each guard a property of `morph::wire`'s glaze-based parsing that fuzzing
+showed can fail:
 
-- **`skip_ws` heap-buffer-overflow** (`tests/fuzz/findings/wire_decode/skip_ws_heap_overflow.bin`).
-  `morph::wire::decode` (and the other `glz::read<>` call sites accepting an
-  arbitrary `string_view` — `journal::fromJson`, `BRIDGE_REGISTER_ACTION`'s
-  generated `fromJson`/`resultFromJson`, `FileOfflineQueue`'s `fromJson`) left
-  glaze's `null_terminated` option at its default (`true`), so `skip_ws`
-  assumed it could scan past the buffer's real end looking for a terminator
-  byte that a `string_view` — unlike a `std::string`, which always has one at
-  `data()[size()]` — never guarantees exists. A 5-byte input (`{"{k`, no
-  closing quote/brace) was enough to trip an AddressSanitizer
-  heap-buffer-overflow, reachable by any peer sending a handful of bytes to a
-  `RemoteServer`. Fixed by setting `.null_terminated = false` on every such
-  call site — the correct, documented way to tell glaze the buffer isn't
-  guaranteed null-terminated; costs nothing beyond disabling an optimization
-  that never legitimately applied. `session_auth.hpp`'s token-claims decode
-  was checked and needed no change: it parses a `const std::string&` (a real
-  owned string with the standard's null-terminator guarantee), not a view.
-- **Unescaped control bytes broke the `err`-reply round-trip**
+- **Decode never reads past the buffer**
+  (`tests/fuzz/findings/wire_decode/skip_ws_heap_overflow.bin`). Every
+  `glz::read<>` call site that accepts an arbitrary `string_view` —
+  `morph::wire::decode`, `journal::fromJson`, `BRIDGE_REGISTER_ACTION`'s
+  generated `fromJson`/`resultFromJson`, `FileOfflineQueue`'s `fromJson` —
+  sets `.null_terminated = false`. With glaze's default (`true`), `skip_ws`
+  scans past the buffer's real end for a terminator a `string_view` never
+  guarantees, and a 5-byte input (`{"{k`) is an AddressSanitizer
+  heap-buffer-overflow any peer can send a `RemoteServer`. The option costs
+  nothing beyond an optimization that never legitimately applied.
+  `session_auth.hpp`'s token-claims decode parses a `const std::string&`, which
+  has the standard's null terminator, and needs no option.
+- **Every reply and every body is valid JSON whatever bytes it carries**
   (`tests/fuzz/findings/dispatch_execute/err_reply_control_char_roundtrip.bin`).
-  Glaze's writer escapes `"` and `\` but not ASCII control bytes (0x00-0x1F,
-  0x7F); an `err` reply whose `message` echoed untrusted text containing one
-  (e.g. an unrecognized `Envelope::kind`, or a caught exception's `what()`,
-  either of which can carry attacker-controlled bytes) served syntactically
-  invalid JSON that glaze's own reader then rejected on decode — the server
-  could emit a reply that wasn't itself valid wire JSON. Fixed in
-  `wire::makeErr` (the single choke point every `err` reply goes through):
-  `detail::sanitizeControlChars` replaces each control byte with a printable
-  `\xHH` placeholder before it reaches the writer. Diagnostic text doesn't
-  need byte-for-byte fidelity; guaranteed-valid JSON does.
+  Glaze's default writer escapes `"` and `\` but not ASCII control bytes
+  (0x00-0x1F, 0x7F), so a string carrying one produces invalid JSON — and, when
+  the same string also holds a `\` or `"`, glaze's chunked write path
+  *corrupts* the byte into two `0x00` bytes while the output still decodes.
+  Three layers close it:
+  - **`err` messages** go through `wire::makeErr`, whose
+    `detail::sanitizeControlChars` replaces each control byte with a printable
+    `\xHH` placeholder. An err message echoes untrusted text (an unrecognized
+    `Envelope::kind`, a caught exception's `what()`) and is log-bound, so
+    substitution is right there: a raw `0x1B` would carry an ANSI escape into
+    the reader's terminal.
+  - **Every other envelope string** — `body`, `modelType`, `actionType`,
+    `contextKey`, `typeId`, the session's `principal`/`token` — carries caller
+    data that must round-trip byte for byte, so `wire::encode` writes with
+    `wire::detail::EscapingWriteOpts` (glaze's `escape_control_characters`),
+    which is lossless in both directions.
+  - **Action and result bodies** are written not by `wire::encode` but by
+    `ActionTraits<A>::toJson` / `resultToJson` (registry.hpp's
+    `BRIDGE_REGISTER_ACTION`), with the same instrument one layer down,
+    `model::detail::EscapingWriteOpts` (see docs/spec/core/registry.md,
+    "Control bytes in action and result bodies"). Action bodies are pure caller
+    data (a paste's content, a chat message, a filename), so they are at least
+    as exposed as the envelope; an application-ladder rung replays
+    `tests/fuzz/findings/` as stored user content to cover that round trip.
 
-  That fix covered `message` only. The same writer gap applies to **every**
-  `Envelope` string — `body`, `modelType`, `actionType`, `contextKey`, `typeId`,
-  and the session's `principal`/`token` — which carry caller data that must
-  round-trip byte-for-byte, so substitution is the wrong instrument there. Worse
-  than invalid output, glaze's chunked write path *corrupts* such a byte when
-  the same string also holds a `\` or `"`, emitting two `0x00` bytes in its
-  place; the envelope still decodes, so nothing downstream can notice. Now fixed
-  at the writer with `wire::detail::EscapingWriteOpts` (glaze's
-  `escape_control_characters`), which is lossless in both directions.
-  `makeErr` keeps its substitution for a different reason: an err message is
-  log-bound text, and a raw `0x1B` in it would carry an ANSI escape into the
-  reader's terminal.
-
-  That fix, in turn, covered the *envelope* only. An execute envelope's `body`
-  is not written by `wire::encode` at all — it is produced separately by
-  `ActionTraits<A>::toJson` / `resultToJson` (registry.hpp's
-  `BRIDGE_REGISTER_ACTION` macro), which wrote with plain `glz::write_json` and
-  so reproduced the identical gap for every string field of every action and
-  result. Action bodies are pure caller data (a paste's content, a chat
-  message, a filename), so this is at least as exposed as the envelope was.
-  Found from the other end — by an application-ladder rung replaying
-  `tests/fuzz/findings/` as stored *user content*, the round trip a
-  "hostile content" requirement asks for — and fixed with the same
-  instrument one layer down, `model::detail::EscapingWriteOpts` (see
-  docs/spec/core/registry.md, "Control bytes in action and result bodies").
-
-These fixes are covered by dedicated regression tests in
-`tests/test_wire_hardening.cpp` ("Bug C"/"Bug D"/"Bug E"/"Bug F"/"Bug G") in
-addition to the `fuzz_*_replay` findings above.
+Each is also covered by a dedicated regression test in
+`tests/test_wire_hardening.cpp` ("Bug C" through "Bug G") in addition to the
+`fuzz_*_replay` findings above.
 
 ## Soak tests (`tests/soak/`)
 
@@ -284,17 +264,15 @@ one-allocation margin, on a quantity machine load cannot move.
 **The two numbers are deliberately not restated here.** Both live in
 `tests/bench/CMakeLists.txt` — the ceiling as `MORPH_ALLOC_BUDGET_PER_CALL`,
 the measured figure in the comment that derives it — and they move together
-every time the dispatch path gets cheaper. Copies of them in this paragraph went
-stale twice in three days, while the argument they were quoted for survived both
-unchanged; so the argument is what this paragraph keeps, and the file above is
-where the current values are.
+every time the dispatch path gets cheaper, while the argument they support does
+not; so this paragraph keeps the argument, and that file the current values.
 So "dispatch does not get more expensive" is already gated to a resolution no
 wall-clock constant on any host can approach. What the two ceilings gate is the
 residue: a regression that costs time without costing allocations — a spin, a
 syscall, a lock held longer. That is a real class, and it is the only class
 they are for.
 
-**Two things a future tightening needs, which the benchmark now produces.**
+**Two things a future tightening needs, which the benchmark produces.**
 
 - **A cross-process distribution** (`bench_dispatch_latency.jsonl`, beside the
   per-process `.json`, overridable with `MORPH_BENCH_LEDGER`, `off` to
@@ -328,8 +306,7 @@ they are for.
 | 3000 µs | 3.18618 | 331.2 | pass | **FAIL** |
 | 60000 µs | 61.0339 | 16.7 | **FAIL** | **FAIL** |
 
-This is the first time either `CHECK` has been shown firing on anything. The
-baseline round trip is ~5.9 µs, so the throughput floor — the tighter of the
+The baseline round trip is ~5.9 µs, so the throughput floor — the tighter of the
 two — first speaks at roughly a **340×** regression and the p99 ceiling at
 roughly **8500×**. The ratio, not the time, is the portable part: reproduce the
 table on any host with `MORPH_BENCH_INJECT_DELAY_US`.
@@ -422,7 +399,8 @@ takes `--id-length-budget` to 2.01; restoring `executeJson`'s
 **Both halves are checked against a reverted fix rather than only against
 themselves**: each was run with the transparent keys taken back out, and each
 went red. A budget that has never been seen to fail is the
-control-that-measures-nothing this document's own charter warns about.
+control that measures nothing, which `AGENTS.md` ("Verify rather than assert")
+warns about.
 
 **The dispatch census pins a race, and without that pin it is not comparable
 between runs.** A dispatch and the handlers attached to it race: win, and each
@@ -440,8 +418,7 @@ opaque-key build costs **17.06 allocations per local round trip** and 2.00
 allocations per registry lookup for ids past the SSO buffer; the transparent-key
 build costs **14.06** and 0.00 per lookup — exactly 3.00 removed, in every one
 of 40 processes, idle and loaded, on clang Release, clang Debug and gcc Debug
-alike. A figure from an ungated benchmark, or from before the strand's map-node
-handling was changed, is not comparable with either.
+alike. A figure from an ungated benchmark is not comparable with either.
 
 ## Concurrent-user benchmark (`scripts/scenario/bench_bookmarks.py`)
 
@@ -474,8 +451,8 @@ value is in comparing two runs on the same quiet machine.
 
 ## Adversarial cross-socket run (`tests/qt/test_qt_websocket_adversarial.cpp`)
 
-Built under the existing `MORPH_BUILD_QT=ON` option (no new option — it's one
-more file in the existing `morph_qt_tests` binary). A hostile `QWebSocket`
+Built under `MORPH_BUILD_QT=ON` (one more file in the `morph_qt_tests`
+binary). A hostile `QWebSocket`
 client, talking to a real `QtWebSocketServer` over loopback TCP (same-process,
 like most of `test_qt_websocket.cpp` — see that file's dedicated
 "Process separation: ..." cases for genuine OS-process separation), drives
@@ -515,10 +492,10 @@ Definition Rule (ODR) violation: undefined behavior that neither the
 compiler nor the linker diagnoses, since each translation unit only ever
 sees its own definition. Which definition the linker keeps for a given call
 site is link-order dependent, so the bug can pass locally and fail in CI (or
-the reverse), with no diagnostic pointing at the cause. This happened for
-real in this tree: a bare `OrderModel` stub in one file silently won over
-another file's real `OrderModel` in some builds, so the real one's
-`onBackendChanged()` was never invoked and its offline queue never drained.
+the reverse), with no diagnostic pointing at the cause: a bare `OrderModel`
+stub in one file can silently win over another file's real `OrderModel`, so
+the real one's `onBackendChanged()` is never invoked and its offline queue
+never drains.
 
 **Convention**: wrap local model/action types in an anonymous namespace by
 default. Only lift a type to file scope when a macro that requires external
@@ -537,10 +514,9 @@ operations *within* a translation unit at compile time — signed overflow, an
 invalid enum load, a misaligned access, a bad `vptr` cast — and its runtime
 checks fire while that instrumented code executes. An ODR violation across
 two TUs has no such moment: each TU's own code is entirely well-formed and
-runs exactly as instrumented: `test_conflict_resolution.cpp`'s `OrderModel`
-calls its own real `onBackendChanged()` correctly when compiled and run
-alone, and `test_remote_step_interleaving.cpp`'s bare stub is equally
-well-formed on its own. The defect exists only in what the **linker** does
+runs exactly as instrumented: a real `OrderModel` calls its own
+`onBackendChanged()` correctly when compiled and run alone, and a bare stub of
+the same name in another file is equally well-formed on its own. The defect exists only in what the **linker** does
 across the two `.o` files — silently keeping one TU's definition of
 `BackendChangedNotifiable<OrderModel>` for both — which happens before any
 sanitizer runtime is even loaded. No sanitizer (ASan, UBSan, TSan, MSan) is
@@ -560,19 +536,10 @@ so it silently keeps one arbitrarily in both cases. (GNU gold's
 gold-specific, heuristic on this exact template-instantiation shape, and not
 wired into any preset here.)
 
-This is why the fix is a **source-level static check**
-(a gate removed on 2026-09-23, above) rather than a build flag: it is
-the only layer that can see both TUs' declarations before they are ever
-compiled down to symbols a linker or sanitizer could reason about.
-
-**CI-enforced**: a gate removed on 2026-09-23 scans every
-`tests/**/*.cpp` file for file-scope `struct`/`class` declarations (template
-specializations, which qualify their own name and specialize an existing
-template rather than declaring a new one, are excluded) and fails if the
-same simple name appears at file scope in more than one file. Self-tested by
-a gate removed on 2026-09-23 against the fixtures in
-`tests/lint/test_type_names/` before the real scan runs, following the same
-"test the checker first" pattern as the deprecation-marker lint.
+So only a **source-level check** could catch it — the one layer that sees
+both TUs' declarations before they are compiled down to symbols a linker or
+sanitizer could reason about. No such check runs in CI: the convention above
+is kept by review.
 
 ## Install / export consumability (`scripts/check_install_export.sh`)
 
@@ -624,8 +591,8 @@ consumer asking for a component that was *not* installed must fail at
 
 Self-tested by `scripts/test_check_install_export.sh`, which reintroduces each
 defect into a scratch copy of the tree one at a time and requires the checker
-to catch each one *for the stated reason* — the same "test the checker first"
-pattern as the deprecation-marker and test-type-name lints.
+to catch each one *for the stated reason* — the checker is tested before it is
+trusted.
 
 ## Rung bundles load without warnings
 
@@ -640,9 +607,7 @@ rungs' actions declaring their effects and their screens free of refresh declara
 
 ## Declined techniques, and why
 
-Kept from `testing_charter.md`, which was removed on 2026-09-23 along with the
-meta-gates it inventoried. The inventory drifted every time a gate moved; these
-are scope decisions about what this library is, and they do not.
+These are scope decisions about what this library is, not gaps.
 
 - **Crash / power-loss simulation.** SQLite ships a storage engine of its own
   and must survive an OS crash mid-write; morph does not own storage — its
@@ -655,14 +620,12 @@ are scope decisions about what this library is, and they do not.
 - **A proprietary, dedicated coverage harness (SQLite's TH3).** SQLite's
   headline coverage figure is produced by TH3, which is not shipped with
   SQLite and is not free to obtain. Citing that number as a model without
-  the harness that produces it would make this charter aspirational rather
-  than checkable — the constraint this whole document exists to avoid (see
-  "The guarantee" above). morph's coverage figures are produced entirely by
+  the harness that produces it would make the claim aspirational rather
+  than checkable. morph's coverage figures are produced entirely by
   tools already in this repository (`scripts/coverage.sh`,
   `llvm-cov`/`llvm-profdata`), so anyone can reproduce them.
-- **100% MC/DC as a stated target.** Named directly in "The guarantee" above:
-  this repository measures line and branch coverage, not MC/DC, and does not
-  claim to. Adopting the *number* without the instrument that verifies it
+- **100% MC/DC as a stated target.** This repository measures line and
+  branch coverage, not MC/DC, and does not claim to. Adopting the *number* without the instrument that verifies it
   would be exactly the mistake the TH3 point above describes.
 
 

@@ -6,7 +6,9 @@ state reconstruction — the journal, not the live model, is the source of truth
 for "what happened."
 
 Three concerns live here, spread across four headers (`action_log.hpp`,
-`action_log_json.hpp`, `file_action_log.hpp`, and `journal.hpp`):
+`action_log_json.hpp`, `file_action_log.hpp`, and `journal.hpp`); a fifth,
+`outbox.hpp`, holds the opt-in [transactional outbox](#transactional-outbox-opt-in)
+relay:
 
 1. **The log entry format** — `LogEntry`, a flat struct of what one action
    execution produced (`action_log.hpp`), plus `toJson`/`fromJson` for wire/file
@@ -86,8 +88,8 @@ relies on. Both real `Model::execute()` call sites — `ActionDispatcher::regist
 runner (server/remote topologies) and `Bridge::executeVia`'s `localOp`
 (`LocalBackend`) — wrap the call in a `try`/`catch (const std::exception&)`:
 the `catch` records a `Failed` entry (`error = exc.what()`, `result` empty)
-and rethrows unchanged, so the caller's error handling is unaffected — only
-the journal gains an entry it previously lacked.
+and rethrows unchanged, so the caller's error handling is unaffected by the
+recording.
 
 ### The run's origin
 
@@ -113,8 +115,8 @@ result (`ActionTraits<Action>::resultToJson`, which raises
 can throw, and by the time either does the model's mutation has already
 committed — an `IActionLog` that could not reach its backend is *required* to
 throw, since `append`/`flush` return `void` and that is the only channel the
-interface gives it (`FileActionLog` throws from eighteen sites; a full disk or a
-revoked permission reaches them in production).
+interface gives it (`FileActionLog` throws on every write, flush and reopen
+failure; a full disk or a revoked permission reaches them in production).
 
 Inside the execution `try` they would give three wrong answers at once: a caller
 told a durable write was rejected and free to retry it, an `Outcome::Failed`
@@ -127,9 +129,9 @@ So both steps sit outside that `try`, and a throw from either surfaces as
 `morph::model::ActionRecordingError` — a `std::runtime_error` subclass whose
 `what()` is `"action executed but was not recorded: <cause>"`, with `cause()`
 returning the underlying message and `result()` the committed action's result
-JSON. The caller still learns the recording failed; what changed is what it is
-told, which is now true: the write happened, the record of it did not. Existing
-`catch (const std::exception&)` handling is unaffected — `RemoteServer` still
+JSON. The caller still learns the recording failed, and what it is told is
+true: the write happened, the record of it did not. Generic
+`catch (const std::exception&)` handling still works — `RemoteServer` still
 turns it into an `err` reply, `LocalBackend` still rejects the `Completion`
 through `onError` — and a caller that wants to distinguish a
 committed-but-unrecorded action from a rejected one catches the type.
@@ -152,9 +154,9 @@ relayed only after the sink returned normally.
 them live in **`journal/action_log_json.hpp`**, not in `action_log.hpp`.
 
 `action_log.hpp` is on `core/model.hpp`'s include path — `model.hpp` needs
-`IActionLog` for the holder's log slot and nothing else — so while the codec
-sat there, **every consumer that reached a model compiled
-`<glaze/glaze.hpp>`**, whether or not it ever serialised anything. Measured
+`IActionLog` for the holder's log slot and nothing else — so a codec in that
+header would make **every consumer that reaches a model compile
+`<glaze/glaze.hpp>`**, whether or not it ever serialises anything. Measured
 with clang 22.1.8, `-O2 -fsyntax-only`, one translation unit per header, best
 of three, with the codec in `action_log.hpp` and with it split out:
 
@@ -170,8 +172,8 @@ unsplit it costs more than twice as much.
 **What this costs.** Dropping a transitive include from a header-only library is
 a source-breaking change for consumers, and this one is: a translation unit that
 includes `action_log.hpp` and calls `journal::toJson` must also include
-`action_log_json.hpp`. Inside morph exactly one header does
-(`file_action_log.hpp`), plus four tests and one ladder-rung test. That price is
+`action_log_json.hpp`. Inside morph one header does (`file_action_log.hpp`),
+plus a handful of tests. That price is
 worth paying here and *not* worth paying for `model.hpp`'s `strand.hpp` include
 (see that file's comment), and the difference is the measurement above:
 `strand.hpp` is a transitive include that costs a consumer nothing, and this one
@@ -184,7 +186,7 @@ a `Bridge` goes through `core/registry.hpp`, which includes `forms/forms.hpp`,
 which includes glaze regardless; a TU that dispatches still pays. What the
 split does is make the *model-only* and *journal-only* include paths cheap,
 which is a precondition for that figure rather than a down payment on it. The
-remaining half — splitting `forms/forms.hpp` — is untouched.
+other half — splitting `forms/forms.hpp` — is not done.
 
 `SerializationError` deliberately stays in `action_log.hpp`: a caller catching
 it needs only `<stdexcept>`, and making that catch drag in glaze would put the
@@ -193,8 +195,8 @@ surcharge back on the consumers the split exists to spare.
 ### `toJson(LogEntry const&) -> std::string`
 
 Encodes a `LogEntry` as JSON via Glaze, writing with `detail::EscapingWriteOpts`
-so a raw ASCII control byte (0x00-0x1F) in `entityKey`/`payload`/`error`/
-`principal`/`idempotencyKey` round-trips through `fromJson` instead of
+so a raw ASCII control byte (0x00-0x1F) in any string field (`entityKey`,
+`payload`, `error`, `principal`, `idempotencyKey`, …) round-trips through `fromJson` instead of
 producing invalid JSON — or, when the same string also holds an escaped `\`/`"`,
 silently corrupted JSON (glaze's chunked writer path rewrites the control byte
 as two `0x00` bytes in that case). Mirrors `morph::wire::detail::EscapingWriteOpts`
@@ -206,7 +208,7 @@ realistically reachable for a flat struct of strings/integers — see
 ### `fromJson(std::string_view) -> LogEntry`
 
 Decodes JSON into a `LogEntry`. Reads leniently —
-`glz::read<glz::opts{.error_on_unknown_keys = false}>`, the same stance
+`glz::read<glz::opts{.null_terminated = false, .error_on_unknown_keys = false}>`, the same stance
 `wire::decode` takes ([wire.md](../core/wire.md)) — so an unknown/extra key
 (an additive field from a newer writer) is ignored rather than rejected; the
 same duplicate-key caveat as `wire::decode` applies (last-wins, not a security
@@ -270,14 +272,14 @@ format wrote a persisted entry.
 **payload** — the shape of the action struct whose JSON is in `payload`.
 
 The problem it solves is the one the [Data-at-rest
-contract](#data-at-rest-contract) below states as a rule but had no way to
-enforce. Replay decodes a stored payload with the *current* action struct,
+contract](#data-at-rest-contract) below states as a rule that a decode alone
+cannot enforce. Replay decodes a stored payload with the *current* action struct,
 through `ActionTraits<A>::fromJson`'s lenient reader. Rename a field and both
 halves of the rename are invisible: the old key is an unknown key, silently
 ignored; the new one is an absent key, silently default-constructed. The entry
 decodes, the model reconstructs, `replay()` returns normally — and reports a
-state that was never recorded. Nothing in the entry said which shape wrote it,
-so nothing *could* notice. For rungs 5 and 6, whose definition of done is
+state that was never recorded. Without a record of which shape wrote the
+entry, nothing *could* notice. For rungs 5 and 6, whose definition of done is
 "every state X was ever in is reconstructible from the journal alone", that
 is the disqualifying case: not a reconstruction that fails, but one that
 succeeds and is wrong.
@@ -412,7 +414,7 @@ Stated plainly, because the guarantee is only as good as its boundary:
 
 ### Unstamped entries — what happens to journals already written
 
-An entry written before this field existed has no `schema` key. Under
+An entry written by a build that did not stamp payloads has no `schema` key. Under
 `fromJson`'s leniency that is just an absent key, so it decodes with the
 member's default: the empty string. Empty is therefore not "verified as
 unchanged" — it is **unverifiable**, and no check can be performed on it at
@@ -422,7 +424,7 @@ all.
 
 | Value | Behaviour |
 |---|---|
-| `Replay` (default) | Replay it, exactly as every build before this check did. |
+| `Replay` (default) | Replay it, unverified. |
 | `Refuse` | Throw `SchemaMismatchError` on the first unstamped entry. |
 
 `Replay` is the default because it is the only choice that keeps existing
@@ -451,7 +453,7 @@ It throws rather than warning or flagging because there is no partially-correct
 reconstruction to hand back: the decode gives no signal about how much of the
 entry survived it, and a `replay()` that returned a suspect holder alongside a
 warning would put the burden of noticing on exactly the code path that
-demonstrably did not notice for as long as this defect existed.
+cannot notice: the decode itself reports success.
 
 The handler is **the caller** — application-level reconstruction code, not the
 framework. Its three answers are: register a migration, replay with a build
@@ -487,16 +489,17 @@ With `PairKeyEqual` in place `find` takes a `detail::PairKeyView` directly.
 
 **Measured** with `morph_bench_alloc`'s migration census (clang 22.1.8 /
 libstdc++ 16.2.1, 200 lookups, 50 warm-up excluded): for a pair whose ids both
-exceed libstdc++'s 15-character SSO buffer, **2.00 → 0.00** allocations per
-`find`; for a pair whose ids both fit inside it, **0.00 → 0.00**. `find` hashes,
+exceed libstdc++'s 15-character SSO buffer, `find` costs **2.00** allocations
+without `PairKeyEqual` and **0.00** with it; for a pair whose ids both fit
+inside it, 0.00 either way. `find` hashes,
 probes and returns a pointer and can do nothing else, so that figure is the
 key's whole cost. The ctest gate `bench.alloc_budget` holds it at zero through
 `--lookup-budget=0`, alongside `ActionDispatcher`'s.
 
 The rate is low and worth stating plainly: `replay()` calls `find` only on the
 branch where a recorded entry's schema fingerprint differs from this build's,
-so a journal written by the current build never reaches it at all. What it
-costs is two allocations per *migrated* entry, across a whole replay.
+so a journal written by the current build never reaches it at all; a
+non-transparent equality would cost two allocations per *migrated* entry.
 
 A migration is a pure function over the recorded payload JSON: given the bytes
 the older build wrote, return the bytes this build's `fromJson` should see. It
@@ -546,11 +549,11 @@ that ever wrote to it:
 - Replay and dispatch share one codec — `ActionTraits<A>::fromJson` — so there
   is exactly one compatibility surface to keep honest; there is no separate
   "archive format" that can drift from the live one.
-- **The rule is now checked, not merely stated.** Every recorded entry carries
+- **The rule is checked, not merely stated.** Every recorded entry carries
   a fingerprint of the payload shape that wrote it, and `replay()` refuses an
-  entry whose fingerprint disagrees with this build's. Before that, a violation
-  of the two rules above produced a confident, wrong reconstruction rather than
-  an error. See [Payload schema fingerprint](#payload-schema-fingerprint) —
+  entry whose fingerprint disagrees with this build's. Without that check, a
+  violation of the two rules above produces a confident, wrong reconstruction
+  rather than an error. See [Payload schema fingerprint](#payload-schema-fingerprint) —
   including what it cannot see, and what happens to entries already written
   without one.
 
@@ -710,12 +713,13 @@ opening it for append. Discarding those bytes is safe by construction: every
 complete record is written newline-terminated in a single `fwrite`, so whatever
 follows the final newline can only be an incomplete record — never a whole one.
 
-Tolerating the torn line without removing it was not enough. The file is opened
-`"a"`, so the next `append()` began writing at the exact byte the truncated JSON
-stopped at, with no separating newline: the two merged into one line that
-swallowed the new entry. A *further* append then pushed that merged line out of
-trailing position, at which point `entries()` threw — and because the
-constructor itself calls `entries()`, the journal became permanently unopenable.
+Tolerating the torn line on read without removing it is not enough. The file is
+opened `"a"`, so the next `append()` would begin writing at the exact byte the
+truncated JSON stopped at, with no separating newline: the two would merge into
+one line that swallows the new entry. A *further* append would then push that
+merged line out of trailing position, at which point `entries()` throws — and
+because the constructor itself calls `entries()`, the journal would become
+permanently unopenable.
 `FileOfflineQueue` heals the same damage during `compact()`; this is
 `FileActionLog`'s equivalent.
 
@@ -786,10 +790,8 @@ row is recoverable; a dropped one is not.
 **`rotate()` warns on `unsupported` too.** Both directory fsyncs it performs —
 the active path's, and the sealed path's when it lands in a different directory
 — run through the same classification as the constructor's, and each distinct
-`unsupported` parent is logged at `warn`. An earlier revision collapsed the
-tri-state to a bool and tested only for `failed`, which left `rotate()` silent
-on exactly the state the contract above says must be surfaced, so an operator
-saw the warning at construction and nothing at every rotation afterwards.
+`unsupported` parent is logged at `warn`, so an operator sees the condition at
+every rotation, not only at construction.
 
 **After a failed `rotate()` reopen.** If `rotate()` renames successfully but
 cannot reopen the active path, it throws with no file open. `append()`,
@@ -845,8 +847,8 @@ the seam, not the policy).
 ## SessionLog
 
 Full-fidelity, in-memory log of one model instance's executed actions. Attach
-directly via `IModelHolder::attachActionLog` — every successfully executed
-loggable action is appended here in order, regardless of any
+directly via `IModelHolder::attachActionLog` — every loggable action attempt
+(`Succeeded` or `Failed`) is appended here in order, regardless of any
 `ActionLogPolicy::coalesce` setting. This full history is the raw material for
 `undoLast()`.
 
@@ -876,7 +878,7 @@ plus optional `registry` and `dispatcher` — `registry` and `dispatcher`
 default to the process-level singletons. Dropping the last entry rewinds only
 `SessionLog`'s in-memory history; it does **not** touch the checkpoint
 watermark. The watermark is a committed-`seq` threshold, not a position in the
-mutable `_all` vector (see [checkpoint()](#checkpoint) and the
+mutable history vector (see [checkpoint()](#checkpoint) and the
 [undo / checkpoint / coalescing interaction](#undo--checkpoint--coalescing-interaction)),
 so removing a tail entry cannot lower it. Because the durable sink is
 append-only, `undoLast()` cannot remove an entry a prior `checkpoint()` already
@@ -934,7 +936,7 @@ shares the session log's owner.
 #### undo / checkpoint / coalescing interaction
 
 The checkpoint watermark is the **highest committed entry `seq`**, not an index
-into the mutable `_all` history. This is what makes checkpointing coherent with
+into the mutable history vector. This is what makes checkpointing coherent with
 both coalescing and `undoLast()`:
 
 - **Coalescing.** `checkpoint()` selects every entry whose `seq` exceeds the
@@ -944,7 +946,7 @@ both coalescing and `undoLast()`:
   entries than it consumes. An index-based watermark cannot express "these
   specific entries are committed" once coalescing collapses several source
   entries into one.
-- **Undo.** `undoLast()` pops the tail of `_all` and never moves the watermark.
+- **Undo.** `undoLast()` pops the tail of the history and never moves the watermark.
   Popping a not-yet-checkpointed tail entry simply means a later `checkpoint()`
   no longer sees it (its `seq` is gone from the history). Popping an
   already-checkpointed entry does not lower the watermark, so a later
@@ -982,9 +984,8 @@ disagrees with this build's (see below).
 **`Failed` entries are skipped, not replayed.** A rejected/thrown action never
 mutated model state, so there is nothing to reconstruct from it — and
 re-dispatching it would likely throw the very same exception again, aborting
-reconstruction. `replay()` filters out every entry with `outcome ==
-Outcome::Failed` before dispatching; `Succeeded` entries dispatch exactly as
-before.
+reconstruction. `replay()` skips every entry with `outcome ==
+Outcome::Failed`; `Succeeded` entries dispatch normally.
 
 **Reconstruction does not pollute the live audit trail.** `registry.create(...)`
 (via `ModelFactory::create`) auto-attaches the process-wide default action log
@@ -1027,16 +1028,15 @@ action does not: a durable link back to what caused it, and a way for the
 mutation that *produced* the cascade to avoid re-producing it a second time
 when the trigger is replayed. Both are framework primitives, not app-specific
 code, and neither is specific to any one application. No example journals a
-cascade today; an automation-rules engine is the shape that would.
+cascade; an automation-rules engine is the shape that would.
 
 ### `LogEntry::causalParentId`
 
 A cascaded entry's `causalParentId` is set to the *triggering* entry's own
 stable identity, so a reader (an activity-stream view, a replay-aware rules
 engine) can recover "what caused this" without guessing from adjacency or
-timing. Empty (the sentinel) means "not caused by another entry" — the
-overwhelming majority of entries, including every entry recorded today, since
-nothing in this codebase journals a cascade yet.
+timing. Empty (the sentinel) means "not caused by another entry" — every entry
+the framework records itself, since it never sets the field.
 
 **Must not be a `LogEntry::seq` value.** `seq` is sink-local and re-stamped by
 every sink's `append()` — and again by `SessionLog::checkpoint()` when
@@ -1052,10 +1052,9 @@ the scheme for generating and threading it through is entirely the
 application's responsibility.
 
 **Additive, per the [data-at-rest contract](#data-at-rest-contract).**
-`causalParentId` is optional/defaulted exactly like `idempotencyKey` and every
-other evolutionarily-added `LogEntry` field: an old payload recorded before
-this field existed has no such key, and `fromJson`'s lenient decode falls back
-to the empty default, so a pre-existing journal keeps decoding unchanged. This
+`causalParentId` is optional/defaulted like `idempotencyKey` and every other
+additive `LogEntry` field: a line without the key decodes, through `fromJson`'s
+lenient reader, to the empty default, so an older journal keeps decoding. This
 does **not** bump `kLogFormatVersion` — the version bump is reserved for
 *breaking* changes to the line format, and an additive, defaulted key is by
 definition not one (see [Line-format version (`v`)](#line-format-version-v)).
@@ -1111,7 +1110,7 @@ the same reasoning `session::current()` already established for `Context`.
 *which* entry is being replayed or *which* model instance — a rule reading it
 combines it with the dispatched action's own fields (available inside
 `Model::execute` the ordinary way) to decide what to suppress. There is no
-`currentReplayEntry()` accessor; none of today's consumers need one.
+`currentReplayEntry()` accessor; no consumer needs one.
 
 ## Process-wide default log
 
@@ -1172,15 +1171,13 @@ config.logProvider = provider;          // given to the RemoteServer constructor
   `Model::attachActionLog(log, contextKey)` when `Model` structurally satisfies
   `ModelLevelActionLogAttachable` (`morph/core/model.hpp`) — the same
   "detect the hook structurally, forward only if present" shape
-  `onBackendChanged()`/`BackendChangedMixin` already use. This closes a real
-  gap for a model that keeps its own model-level `IActionLog` reference to
-  read back later (e.g. an activity-stream view over `entries(entityKey)`):
-  before this hook existed, `holder->attachActionLog(...)` populated only the
-  holder's own `_actionLog`/`_contextKey` (used by `recordIfAttached`'s
-  auto-append), never a model instance's own state, since a registry-
-  constructed model is always default-constructed and never otherwise
-  touched. A model with no `attachActionLog` of its own is unaffected — the
-  hook resolves to a no-op for it.
+  `onBackendChanged()`/`BackendChangedMixin` use. It serves a model that keeps
+  its own model-level `IActionLog` reference to read back later (e.g. an
+  activity-stream view over `entries(entityKey)`): a registry-constructed model
+  is default-constructed and never otherwise touched, so without the hook the
+  log would reach only the holder's own slot (used by `recordIfAttached`'s
+  auto-append), never the model. A model with no `attachActionLog` of its own
+  is unaffected — the hook resolves to a no-op for it.
 - **Configuring.** The provider is a `ServerConfig` field, fixed at
   construction; a server with none attaches no log. It is called only on the
   server strand, one call at a time, so it needs no synchronisation of its own.
@@ -1212,8 +1209,8 @@ Copy and move are deleted.
 A model with its own transactional store (a SQL database, a file) can tie its
 state commit and its journal entry into one atomic write instead of the
 framework's default two independent writes (mutate-then-auto-append). This is
-opt-in — a model that does nothing new keeps the fire-after-success behavior
-described above unchanged.
+opt-in — a model that does not opt in keeps the automatic append described
+above.
 
 ### The pattern
 
@@ -1245,8 +1242,8 @@ void setOutboxManaged(bool outboxManaged) noexcept;
   regardless of what `attachActionLog` attached. `hasActionLog()` is unaffected —
   it still reports whether a log is attached, independent of whether this
   instance auto-appends to it.
-- Defaults to `false`: every instance auto-appends exactly as before unless a
-  model explicitly opts in.
+- Defaults to `false`: every instance auto-appends unless a model explicitly
+  opts in.
 
 ### Sink-side dedup
 
@@ -1254,11 +1251,11 @@ void setOutboxManaged(bool outboxManaged) noexcept;
 `idempotencyKey` as a dedup key: if an entry with the same key was already
 appended, the second `append()` call is a silent no-op (no duplicate stored, no
 `seq` consumed). An **empty** `idempotencyKey` never dedups — every entry with
-no key is stored, exactly as before. `FileActionLog`'s dedup set is rebuilt from
+no key is stored. `FileActionLog`'s dedup set is rebuilt from
 the existing on-disk entries every time the file is opened (an O(n) scan of the
 current contents, paid once per open, not per append), so the dedup survives a
 process restart, not just repeated calls within one run — and, as a consequence,
-opening an existing file whose *interior* is corrupted now throws
+opening an existing file whose *interior* is corrupted throws
 `SerializationError` from the constructor itself (a malformed *trailing* line is
 still tolerated, matching `entries()`).
 
@@ -1332,9 +1329,9 @@ no-op regardless of `sink`, exactly as it is when `sink` is real.
 - **Not distributed transactions.** The model's own store commit (business
   tables + outbox row) is one local transaction; the relay to `sink` is a
   separate, at-least-once-plus-dedup step, not 2PC.
-- **`examples/bank` is unchanged.** It still demonstrates the two-write
-  divergence this section closes for models that opt in; adopting the pattern
-  there is not part of this change.
+- **Not every example opts in.** `examples/bookmarks` uses the outbox;
+  `examples/bank` keeps the default two independent writes, and so still has
+  the divergence this section closes for models that opt in.
 
 ## API reference
 
@@ -1344,11 +1341,11 @@ All symbols live in `namespace morph::journal`.
 
 | Symbol | Kind | Signature / Notes |
 |---|---|---|
-| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `schema` (payload fingerprint, empty when unstamped), `result`, `outcome`, `error`, `principal`, `timestampMs`, `idempotencyKey`, `v` (line-format version, default `kLogFormatVersion`), `causalParentId` (identity of the triggering entry, empty by default). Glaze-reflected (no `glz::meta` of its own; `outcome`'s type `Outcome` has one). |
+| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `schema` (payload fingerprint, empty when unstamped), `result`, `outcome`, `error`, `principal`, `timestampMs`, `idempotencyKey`, `v` (line-format version, default `kLogFormatVersion`), `causalParentId` (identity of the triggering entry, empty by default), `originKind`/`originText` (server-set run origin, empty by default). Glaze-reflected (no `glz::meta` of its own; `outcome`'s type `Outcome` has one). |
 | `Outcome` | `enum class : std::uint8_t` | `Succeeded` (default) or `Failed`. Has a `glz::meta` specialisation so it (de)serialises as the string, not the underlying int. |
 | `kLogFormatVersion` | `inline constexpr std::uint32_t` | Current line-format version (`1`). Bumped only on a breaking change to `LogEntry`'s shape. See [Line-format version (`v`)](#line-format-version-v). |
 | `toJson` | free function | `std::string toJson(const LogEntry&)` — encodes as JSON with `detail::EscapingWriteOpts` (control-byte escaping). Throws `SerializationError`. |
-| `fromJson` | free function | `LogEntry fromJson(std::string_view)` — decodes from JSON leniently (`error_on_unknown_keys = false`). Throws `SerializationError` on malformed JSON or if the decoded `v` exceeds `kLogFormatVersion`. |
+| `fromJson` | free function | `LogEntry fromJson(std::string_view)` — decodes from JSON leniently (`null_terminated = false`, `error_on_unknown_keys = false`). Throws `SerializationError` on malformed JSON or if the decoded `v` exceeds `kLogFormatVersion`. |
 | `SerializationError` | struct | `: std::runtime_error`. Thrown by `toJson`/`fromJson`. |
 | `detail::throwOnGlazeError` | inline function | `void throwOnGlazeError(const glz::error_ctx&, std::string_view)` — shared error path for `toJson`/`fromJson`. |
 | `SchemaMismatchError` | struct | `: std::runtime_error`. Thrown by `replay()` on a payload-fingerprint mismatch with no migration, or on an unstamped entry under `UnstampedPayloadPolicy::Refuse`. Message names the `modelType/actionType` pair and both fingerprints. |
@@ -1396,7 +1393,7 @@ and `ServerConfig::logProvider`, declared in `remote.hpp`. See
 | No entry-level deletion | **Append-only, no per-entry deletion API** | Permanent audit trail — unlike `IOfflineQueue` whose `markDone()` deletes retried items. `FileActionLog`'s `rotate()` and `morph::core::repairTornTail()` (shared file-I/O infrastructure, called here at construction; see `docs/spec/core/file_io_ops.md`) operate on the file, not on entries, and are not part of `IActionLog`. `FileOfflineQueue` deliberately does *not* call it — see [offline.md](../offline/offline.md), "No constructor-time `repairTornTail`". |
 | Default log is a function-local static | **`detail::defaultActionLogState()` returns a `pair<mutex, shared_ptr>`** | Safe regardless of translation-unit init order, unlike a namespace-scope global. |
 | `SessionLog::checkpoint` advances the watermark *before* forwarding | **At-most-once / forward-only** | A checkpoint is a forward-only commit point, not a transaction to retry: the watermark advances first, so a throwing durable sink drops that batch permanently. (`IOfflineQueue`'s retry semantics do *not* carry over — the shared shape is superficial.) |
-| Checkpoint watermark is a committed-`seq` threshold, not an `_all` index | **Track committed state by entry identity** | `seq` is assigned once and never reused, so it stays a valid commit marker even as coalescing forwards fewer entries than it consumes and as `undoLast()` pops tail entries. A raw index into the mutable `_all` vector cannot: it silently shifts meaning when entries are removed, which is the root of the undo/coalescing incoherence this replaces. |
+| Checkpoint watermark is a committed-`seq` threshold, not a history index | **Track committed state by entry identity** | `seq` is assigned once and never reused, so it stays a valid commit marker even as coalescing forwards fewer entries than it consumes and as `undoLast()` pops tail entries. A raw index into the mutable history vector cannot: it silently shifts meaning when entries are removed, making undo and coalescing incoherent with each other. |
 | A log's state belongs to one owner executor | **No lock; one post per append off the owner** | A log written from many models' strands and read by the application is an aggregate: it needs a lock or an owner. With an owner, every append, read and checkpoint is a task of one executor, so a checkpoint's slice and forward are one step and two checkpoints never interleave. On the owner a verb runs inline; elsewhere an append is posted, which is the accepted cost. See [One owner](#one-owner). |
 | The owner is the executor the caller gives, not a strand the log builds | **One queue between a writer and a reader on the same owner** | An append posted from a model's strand and that action's reply, both on the application's executor, are ordered by its one queue; a private strand would add a second queue that can reorder them, and would leave no caller able to use the synchronous verbs. |
 | `SessionLog::undoLast` uses `replay()` | **No inverse operations on actions** | Replays the shorter prefix against a fresh model — no per-action undo logic needed. Undo rewinds only in-memory history and never moves the watermark; reversing a checkpointed action durably needs a compensating action. |
@@ -1410,7 +1407,7 @@ and `ServerConfig::logProvider`, declared in `remote.hpp`. See
 | The fingerprint is order-insensitive and compiler-independent | **Key-sorted shape rendering from `std::` traits and reflected key strings** | Reordering members changes nothing about which JSON bytes decode where, so an order-sensitive digest would break replay for a cosmetic edit. A `glz::name_v`-derived tag would be compiler-spelled, making a journal readable only by the compiler that wrote it. |
 | A custom-codec type is distinguished by a name it declares, not one the compiler spells | **Opt-in `PayloadShapeTag<T>` specialisation, defaulting to the opaque `x`** | The portability requirement rules out the only *derived* per-type name available, so the name has to be author-written. Opt-in keeps that cost on the handful of types that need it, at the price of a new type silently starting out undeclared — stated as a boundary rather than assumed away. |
 | Unstamped entries replay by default | **`UnstampedPayloadPolicy::Replay`** | Refusing them would make an upgrade a data-loss event for every retained journal — this feature's own failure mode, inverted. `Refuse` exists for callers who would rather have no answer than an unverifiable one. |
-| Migrations rewrite in memory, never on disk | **`PayloadMigrationRegistry`, applied per replayed entry** | Reading never mutates history — the same rule the [migration recipe](#the-migration-recipe-not-shipped) states for the offline path. It also keeps the migration reviewable as code rather than as a one-time script someone ran. |
+| Migrations rewrite in memory, never on disk | **`PayloadMigrationRegistry`, applied per replayed entry** | Reading never mutates history — the same rule the [migration recipe](#the-migration-recipe-not-shipped) states for sealed segments. It also keeps the migration reviewable as code rather than as a one-time script someone ran. |
 | `fromJson` reads leniently | **`glz::read<{.error_on_unknown_keys = false}>`, not `glz::read_json`** | Matches `wire::decode`'s forward-compatibility contract; without it, adding the `v` key itself (or any future key) would be a reader flag-day for every already-deployed reader. |
 | `LogEntry::v` defaults to `kLogFormatVersion` | **Default member initializer, not a `toJson`-time stamp** | A freshly constructed entry (every entry `toJson` ever encodes for a new action) already carries the current version for free; a legacy line missing the key decodes with the same default, so "legacy is v1" falls out of the type rather than being special-cased in code. |
 | `v` newer than `kLogFormatVersion` throws | **Fail loud, not guess** | A reader has no way to know the shape a future breaking change introduces; refusing to decode is safer than guessing a superset/subset shape. |
@@ -1426,7 +1423,7 @@ These hold for every sink and are relied on by `replay()`/`undoLast()`:
 - **Every loggable action attempt is recorded, tagged with its outcome.** A
   `LogEntry` is produced by `IModelHolder::recordIfAttached` after both a
   successful `Model::execute` (`outcome = Succeeded`) and one that throws — a
-  business-rule failure, a validator rejection (`ActionValidator::validate`)
+  business-rule failure, a validator rejection (`ActionValidator<A>::ready`)
   — (`outcome = Failed`, `error` set, `result` empty). Any action registered
   `Loggable::No` (typically pure queries like `GetAccount`/`ListAccounts`)
   still never appears in the log either way. The log is a record of every
@@ -1447,9 +1444,9 @@ These hold for every sink and are relied on by `replay()`/`undoLast()`:
   mutated model state, so there is nothing to reconstruct from it — and
   re-dispatching it would likely throw the same exception again, aborting
   reconstruction. `replay()` filters `outcome == Outcome::Failed` entries out
-  before dispatching; `Succeeded` entries replay exactly as before.
+  before dispatching; `Succeeded` entries replay normally.
 - **`seq` is sink-local and re-stamped on every forward.** Each sink's
-  `append()` overwrites `entry.seq` with its own `++_nextSeq`, ignoring any
+  `append()` overwrites `entry.seq` with its own counter, ignoring any
   incoming value. When `SessionLog::checkpoint()` forwards entries to a durable
   sink, that sink re-stamps them again. `seq` is therefore an ordering key
   *within one sink instance in one process run* — it is **not** a stable,
@@ -1476,7 +1473,7 @@ These hold for every sink and are relied on by `replay()`/`undoLast()`:
   returned holder (whose default log is detached, so using it records nothing
   into the live trail).
 - **The checkpoint watermark is monotonic and identity-based.** It is the
-  highest committed entry `seq`, never an index into `_all`, and it never
+  highest committed entry `seq`, never an index into the history, and it never
   decreases. `checkpoint()` forwards exactly the entries with `seq` above it and
   then raises it; `undoLast()` never lowers it. Consequently a coalesced-away,
   already-committed entry is never re-forwarded, and durable state advances
@@ -1492,7 +1489,7 @@ These hold for every sink and are relied on by `replay()`/`undoLast()`:
   migration or throws — it never decodes the payload with the mismatched
   shape. The converse is *not* an invariant: an empty `schema` carries no
   evidence either way, and under the default `UnstampedPayloadPolicy::Replay`
-  such an entry decodes exactly as it did before this check existed.
+  such an entry decodes unverified.
 
 ## Failure modes / durability
 
@@ -1578,15 +1575,14 @@ Honest boundaries of the current design:
   journals by hand rather than through the two framework execution sites. The
   full boundary is in [What the fingerprint does not
   catch](#what-the-fingerprint-does-not-catch).
-- **The wire-path skew test is still unwritten.** The journal-path half now
-  exists: `tests/compile_checks/journal_skew_probe.cpp` is compiled into two
+- **Version skew is tested on the journal path only.**
+  `tests/compile_checks/journal_skew_probe.cpp` is compiled into two
   executables, one recording a journal and the other replaying it with a
   renamed and an added field, run in order as the `journal_skew_old_build_writes`
-  / `journal_skew_new_build_replays` ctest pair. The wire path cannot be tested
-  the same way, because nothing mechanically enforces the action-evolution
-  policy there — a per-action fingerprint exchanged at `hello` would be the
-  mechanism, and until one exists a client/server skew test has nothing to
-  assert on.
+  / `journal_skew_new_build_replays` ctest pair. The wire path has no such test,
+  because nothing mechanically enforces the action-evolution policy there — a
+  per-action fingerprint exchanged at `hello` would be the mechanism, and
+  without one a client/server skew test has nothing to assert on.
 - **`replay()` refuses an additive change, not only a breaking one.** The gate
   is fingerprint equality, so an entry written before a field was *added*
   throws exactly as a renamed one does, even though the
@@ -1600,7 +1596,7 @@ Honest boundaries of the current design:
 
 ## Lifetime annotations
 
-`MigrationRegistry::find()` returns a pointer into the registry's own map and
+`PayloadMigrationRegistry::find()` returns a pointer into the registry's own map and
 marks its implicit object parameter `MORPH_LIFETIMEBOUND`
 (`morph/attributes.hpp`), restating the "valid until the entry is replaced or the
 registry is destroyed" rule where the compiler can check the second half of it.
@@ -1608,22 +1604,22 @@ See [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md#morph_lifetim
 
 ## Cross-references
 
-- **`wire.md`** — `wire::decode`'s `error_on_unknown_keys = false` stance and
-  duplicate-key caveat, which `journal::fromJson` now mirrors.
-- **`registry.md`** — `ModelRegistryFactory`/`ActionDispatcher` and
+- **[wire.md](../core/wire.md)** — `wire::decode`'s `error_on_unknown_keys = false` stance and
+  duplicate-key caveat, which `journal::fromJson` mirrors.
+- **[registry.md](../core/registry.md)** — `ModelRegistryFactory`/`ActionDispatcher` and
   `ModelFactory::create`, which auto-attach the default log and which `replay()`
   reuses for dispatch. Also the `ActionDispatcher::coalesce` lookup driving
   `checkpoint()`, and `IModelHolder::setOutboxManaged`/`isOutboxManaged`, the
   opt-out this outbox section's suppression relies on.
-- **`bridge.md`** — the two (mutually exclusive) recording call sites
+- **[bridge.md](../core/bridge.md)** — the two (mutually exclusive) recording call sites
   (`Bridge::executeVia`'s `localOp` for local mode; the `RemoteServer` dispatch
   path for remote/Qt), and `HandlerBinding::contextKey`/`ServerConfig::logProvider`
   for per-instance identity.
-- **`backend.md`** — how local vs. remote topology decides which recording site
+- **[backend.md](../core/backend.md)** — how local vs. remote topology decides which recording site
   is live, and why recording is automatically server-side wherever a client/server
   split exists.
-- **`error_handling.md`** — `SerializationError` and the failure/validator-rejection
-  paths that explain *why* unsuccessful actions never reach the log.
-- **`session.md`** — `morph::session::detail::tlsCurrent()`/`ScopedContext`,
+- **[error_handling.md](../error_handling.md)** — `SerializationError`, `replay()`'s
+  errors, and the failure/validator-rejection paths that a `Failed` entry records.
+- **[session.md](../session/session.md)** — `morph::session::detail::tlsCurrent()`/`ScopedContext`,
   the thread-local-plus-RAII-guard shape `isReplaying()`/`detail::ScopedReplayFlag`
   mirrors for signaling replay mode instead of a per-call `Context`.

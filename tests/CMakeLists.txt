@@ -488,7 +488,7 @@ endif()
 # gates on MORPH_REQUIRE_VETTED_HMAC, independent of whatever value the
 # top-level MORPH_REQUIRE_VETTED_HMAC option currently has — each try_compile
 # defines (or omits) the macro just for that one probe, via COMPILE_DEFINITIONS.
-# See docs/spec/security.md, "MAC-primitive recommended wiring".
+# See docs/spec/security.md, "Recommended production wiring".
 #
 # unset(... CACHE) first: try_compile()'s result variable is stored as a cache
 # entry, so without clearing it a stale PASS/FAIL from an earlier configure

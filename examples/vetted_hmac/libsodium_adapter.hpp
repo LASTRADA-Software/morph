@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Example adapter: wires libsodium's crypto_auth_hmacsha256_* into morph's
-// MacFunction seam (see docs/spec/security.md, "MAC-primitive recommended
+// MacFunction seam (see docs/spec/security.md, "Recommended production
 // wiring"). Copy this file (and link libsodium) into a production deployment
 // that wants a vetted, side-channel-hardened HMAC-SHA256 instead of the
 // self-contained reference implementation `morph::session::hmacSha256`.

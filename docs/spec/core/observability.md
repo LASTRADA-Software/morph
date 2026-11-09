@@ -37,7 +37,7 @@ if the seam did not exist. `RemoteServer` additionally exposes a
 | `queueDepth` | gauge | `IOfflineQueue` pending items at the start of a `SyncWorker::run()`. |
 | `reconnectAttempts` | counter | `ReconnectCoordinator::onOnline`'s `tryReconnect` attempts. |
 | `reconnectOutcome` | counter | One per `onOnline()` call, tagged by outcome. |
-| `queueOverflow` | counter | An `IOfflineQueue::enqueue()` call rejected because the queue was at its configured `maxDepth()` (see `docs/spec/offline/offline.md`). |
+| `queueOverflow` | counter | An `IOfflineQueue::enqueue()` call rejected because the queue was at its configured `maxDepth()` (see [offline.md](../offline/offline.md)). |
 | `eventOversize` | counter | An envelope handed to `RemoteServer::post` dropped, unsent, because it exceeds `wire::kMaxEnvelopeBytes` (see [backend.md](backend.md), "Writing to a connection"). |
 
 Each observation is a `MetricEvent{metric, value, tags}`; `tags` is a
@@ -107,13 +107,14 @@ a deployment's transport (e.g. `QtWebSocketServer`) is expected to expose
 
 | Site | Metrics emitted | Trace hook |
 |---|---|---|
-| `RemoteServer::dispatchMessage`'s `register` branch | `registerCount` | — |
-| `RemoteServer::dispatchMessage`'s `deregister` branch | `deregisterCount` | — |
-| `RemoteServer::dispatchExecute`'s in-flight admit/complete | `executeInFlight` (on admit and again when the reply is delivered) | — |
-| `RemoteServer::dispatchExecute`'s strand task | `executeLatencyMs`, `executeErrors` | `beginSpan`/`endSpan` around `ActionDispatcher::dispatch` |
-| `LocalBackend::registerModel` | `registerCount` | — |
+| `RemoteServer::dispatchEnvelope`'s `register` branch | `registerCount` | — |
+| `RemoteServer::dispatchEnvelope`'s `deregister` branch | `deregisterCount` | — |
+| `RemoteServer::dispatchExecute` (admission) and `executeFinished` (reply sent) | `executeInFlight` (on admit and again when the reply is delivered) | — |
+| `RemoteServer::admitRemote` / `finishRemote`, on the model's strand | `executeLatencyMs`, `executeErrors` | `beginSpan` once the call holds its instance's action gate, `endSpan` when it finishes |
+| `LocalBackend::registerModel`, `LocalBackend::bindNow` | `registerCount` | — |
 | `LocalBackend::deregisterModel` | `deregisterCount` | — |
-| `LocalBackend::execute`'s strand task | `executeLatencyMs`, `executeInFlight`, `executeErrors` | `beginSpan`/`endSpan` around `localOp` |
+| `LocalBackend::executeInto` (admission) | `executeInFlight` (incremented) | — |
+| `LocalBackend::admitLocal` / `finishLocal`, on the model's strand | `executeLatencyMs`, `executeErrors`, `executeInFlight` (decremented) | `beginSpan` once the call holds its instance's action gate, `endSpan` when it finishes |
 | `SyncWorker::run()` | `queueDepth` (once, at drain) | — |
 | `ReconnectCoordinator::onOnline()` | `reconnectAttempts` (per attempt), `reconnectOutcome` (once, tagged `outcome`) | — |
 | `InMemoryOfflineQueue::enqueue`, `FileOfflineQueue::enqueue`, `SqliteOfflineQueue::enqueue` | `queueOverflow` (once per rejected call, at the queue's configured `maxDepth()`) | — |
@@ -154,8 +155,8 @@ code called from the framework's hot paths:
   metric of its own — or reinstalls itself via `setMetricSink` — would deadlock
   against the very mutex its caller holds.
 - **Inside `catch (...)`.** A throwing sink must not escape into the framework.
-  `LocalBackend::execute` brackets each dispatch with `beginSpan` / `emitMetric`
-  / `endSpan` and settles the caller's `Completion` *after* them, precisely so a
+  `LocalBackend` brackets each dispatch with `beginSpan` / `emitMetric`
+  / `endSpan` and settles the caller's `Completion` *after* them (`finishLocal`), precisely so a
   completion callback cannot observe the dispatch as finished before its metrics
   land. An exception escaping instrumentation would therefore skip
   `setValue`/`setException` entirely and be swallowed by the strand's
@@ -183,7 +184,7 @@ queued or running (see [backend.md](backend.md)'s Lifetime & ownership).
 
 ### `Metric`
 
-`enum class Metric : std::uint8_t` — see [Metrics](#metrics) for the nine enumerators.
+`enum class Metric : std::uint8_t` — see [Metrics](#metrics) for the ten enumerators.
 
 ### `MetricEvent`
 
@@ -230,7 +231,7 @@ See [backend.md](backend.md)'s `RemoteServer` API reference table.
 | `detail::emitMetric` | `void emitMetric(Metric, double, std::span<const std::pair<std::string_view, std::string_view>> tags = {})` | Framework-internal emit entry point; no-op (one atomic load) if no sink installed. |
 | `detail::beginSpan` | `[[nodiscard]] SpanId beginSpan(std::string_view, std::string_view, std::string_view)` | Framework-internal; returns `0` if tracing disabled. |
 | `detail::endSpan` | `void endSpan(SpanId, bool)` | Framework-internal; no-op if `id == 0` or tracing disabled. |
-| `offline::detail::reconnectOutcomeName` | `constexpr std::string_view reconnectOutcomeName(ReconnectOutcome) noexcept` | Maps a `ReconnectOutcome` to the `reconnectOutcome` metric's `"outcome"` tag value. |
+| `offline::detail::reconnectOutcomeName` (`offline/reconnect_coordinator.hpp`) | `constexpr std::string_view reconnectOutcomeName(ReconnectOutcome) noexcept` | Maps a `ReconnectOutcome` to the `reconnectOutcome` metric's `"outcome"` tag value. |
 
 ## Design decisions
 
@@ -242,7 +243,7 @@ See [backend.md](backend.md)'s `RemoteServer` API reference table.
 | `RemoteServer`'s in-flight metric reuses the in-flight count | No second counter added | `LimitPolicy::maxInFlightExecutes` already needs an in-flight count with exactly this admit/complete lifecycle; a parallel one for the metric alone would have to be kept in lockstep for no benefit. `health()`'s `inFlight` field reads the same count. |
 | `LocalBackend`'s in-flight counter is a `shared_ptr`, not a plain atomic member | Avoids capturing `this` in a strand-posted lambda | `LocalBackend`'s existing strand tasks already avoid `this` captures for lifetime safety (see Limitations); the counter follows the same rule rather than becoming a new dangling-pointer risk. `RemoteServer`'s equivalent count is a plain member of its server-strand state, reached through tasks that capture `self = shared_from_this()`, keeping the whole object alive. |
 | `ServerConfig::healthHandler` is called from the constructor | Once, synchronously, with the initial status | A subscriber gets a baseline status without waiting for the first transition; nothing else can reach the server yet, so the call needs no strand. |
-| `ready`'s sole mutator is `beginShutdown()` | `RemoteServer` sets `_ready` to `false` only from `beginShutdown()`, never back to `true` | This seam landed ahead of `beginShutdown()` specifically so that the later change ([backend.md](backend.md#graceful-shutdown-beginshutdown--drainedwithin)) needed no API change — just a store and a handler re-invocation inside the method already documented as the trigger. |
+| `ready`'s sole mutator is `beginShutdown()` | `RemoteServer` sets `_ready` to `false` only from `beginShutdown()`, never back to `true` | Readiness has exactly one transition a load balancer needs to see — "stop sending me new work" — and shutdown is the one event that causes it ([backend.md](backend.md#graceful-shutdown-beginshutdown--drainedwithin)). A server with no un-shutdown has no second transition to report. |
 
 ## Limitations
 
@@ -253,9 +254,9 @@ See [backend.md](backend.md)'s `RemoteServer` API reference table.
 - **No metrics/tracing/HTTP dependency shipped.** The seam is a
   `std::function` pair the host wires to Prometheus, StatsD, OpenTelemetry, or
   a test spy; there is no bundled backend.
-- **`ready` is always `true`.** See [Health / readiness](#health--readiness)
-  and the corresponding design decision — no code path in this release flips
-  it.
+- **`ready` reports shutdown only.** It is `true` until `beginShutdown()` and
+  `false` after, and reflects nothing else — not backend load, not a failing
+  dependency. See [Health / readiness](#health--readiness).
 - **No preemption or control.** Metrics/health *observe*; they never throttle
   or cancel work. Bounding behavior belongs to [backend.md](backend.md)'s
   `LimitPolicy`, which this seam only makes visible.

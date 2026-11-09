@@ -90,7 +90,7 @@ option(MORPH_ENABLE_STRICT_COMPILATION
 # vetted MacFunction (see examples/vetted_hmac/) must be injected explicitly.
 # Keys on a build configuration the deployer chooses, not on CMAKE_BUILD_TYPE,
 # so a zero-dependency local/low-stakes deployment can keep the reference impl
-# by leaving this off. See docs/spec/security.md, "MAC-primitive recommended
+# by leaving this off. See docs/spec/security.md, "Recommended production
 # wiring". Off by default: the standard build is unaffected.
 option(MORPH_REQUIRE_VETTED_HMAC
     "Fail to build if a call site relies on the reference hmacSha256 default; forces an explicit vetted MacFunction"

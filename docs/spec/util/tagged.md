@@ -9,9 +9,10 @@ happens to share the same underlying type.
 `Tagged<std::string, "UserId">` and `Tagged<std::string, "AccountId">` carry
 the identical wire representation but are distinct C++ types: a function
 expecting one does not accept the other, and neither is constructible from
-the other. Every application built on the framework otherwise hand-rolls the
-same wrapper shape per protocol scalar; `Tagged` is the framework-level,
-day-one primitive for it.
+the other. Without it, every application hand-rolls the same wrapper shape per
+protocol scalar.
+
+The header is `include/morph/util/tagged.hpp`.
 
 ## Contents
 
@@ -21,6 +22,8 @@ day-one primitive for it.
 - [Wire and schema](#wire-and-schema)
 - [Forms palette — `hasValue()`](#forms-palette--hasvalue)
 - [Design decisions](#design-decisions)
+- [Payload shape tag](#payload-shape-tag)
+- [Lifetime annotations](#lifetime-annotations)
 - [Cross-references](#cross-references)
 - [Limitations](#limitations)
 - [Out of scope](#out-of-scope)
@@ -52,6 +55,11 @@ several look-alikes). Because the tag lives in the type itself:
 | `get()` | `const T& get() const noexcept` | Named read access. |
 | `operator*()` | `const T& operator*() const noexcept` | Unchecked access, mirroring `Quantity`'s and `Choice`'s `operator*` for a consistent shape across the framework's newtype family — there is nothing to check here (the value always exists), but the same spelling reads uniformly next to `*quantity` / `*choice`. |
 | `tag()` | `static constexpr std::string_view tag() noexcept` | The compile-time tag text. |
+| `value` | `T value{}` | The wrapped value, a public data member: it is what `glz::meta` maps the type onto. Code outside serialisation reads through `get()` or `operator*()`. |
+| `hasValue()` | `constexpr bool hasValue() const noexcept` | Always `true` — see *Forms palette* below. |
+
+`morph::util::isTagged<T>` is `true` when `T`, with cv-ref removed, is a
+specialization of `Tagged`.
 
 ## Comparison
 
@@ -96,10 +104,9 @@ palette the same way `Quantity`/`Choice`/`Timestamp` do — a rule can name a
 `Tagged` field and `isEngaged()` resolves it via `hasValue()`, always `true`
 — instead of being silently treated as "no empty state, so always counted
 present" through the *other*, no-concept branch those helpers also support.
-The visible behavior is the same (always engaged) either way; the difference
-is that `Tagged` opts in explicitly rather than falling through the fallback
-path, which matters if a future palette helper ever distinguishes "declares
-no empty state" from "declares an empty state that never triggers."
+The visible behavior is the same (always engaged) either way; `Tagged` opts in
+explicitly so that it declares an empty state that never triggers, rather than
+relying on the fallback for types that declare none.
 
 A `Tagged` field is therefore always **required** wherever
 `morph::forms::schemaJson` derives requiredness, exactly like a plain
@@ -120,9 +127,10 @@ empty state.
 
 ## Payload shape tag
 
-`Tagged<T, Tag>` specialises `morph::model::PayloadShapeTag` and renders the tag
-text with the wrapped type inside it -- an `AccountId` tagged `acct` renders as
-`acct`, distinct from a `CustomerId` tagged `cust`.
+`Tagged<T, Tag>` specialises `morph::model::PayloadShapeTag` with the name
+`tagged.<Tag>` and the wrapped type as its `Inner`, rendered inside it: a member
+`id` of type `Tagged<std::string, "acct">` renders as `id:x{tagged.acct:s}`,
+distinct from one tagged `user` (`id:x{tagged.user:s}`).
 
 Carrying the tag text is the whole point: `Tagged` exists to separate two
 wrappers that are structurally identical but semantically different, and a
@@ -157,10 +165,11 @@ implicit object parameter `MORPH_LIFETIMEBOUND` (`morph/attributes.hpp`). See
   `std::hash`). An application that needs one of those either unwraps via
   `get()`/`operator*()` at the point of use or extends `Tagged` locally; nothing
   here forwards automatically.
-- **No implicit conversion to `T`.** Reaching the wrapped value always goes
-  through `get()` or `operator*()`; there is no `operator T()` that would let
+- **No implicit conversion to `T`.** There is no `operator T()` that would let
   a `Tagged` quietly decay back to a bare scalar (and, from there, back into
-  another tag's slot through an implicit `T` conversion).
+  another tag's slot through an implicit `T` conversion). Reaching the wrapped
+  value is always spelled out: `get()`, `operator*()`, or the public `value`
+  member that serialisation maps.
 
 ## Out of scope
 

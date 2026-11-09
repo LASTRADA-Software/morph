@@ -54,7 +54,7 @@ GUI, and the GUI thread never runs model work — the executors enforce the spli
 
 | Work | Runs on | Scheduled by |
 |---|---|---|
-| `Model::execute(action)` (local mode) | Worker pool, inside a per-`ModelId` strand | `LocalBackend::execute` → `ModelStrands::post` |
+| `Model::execute(action)` (local mode) | Worker pool, inside a per-`ModelId` strand | `LocalBackend::executeInto` → `ModelStrands::post` |
 | `Model::onBackendChanged()` (local mode) | Worker pool, inside the model's per-`ModelId` strand (serialised with its `execute`) | `LocalBackend::notifyBackendChanged` → `ModelStrands::post` |
 | `ActionDispatcher::dispatch` → `Model::execute` (remote mode) | `RemoteServer`'s worker pool, inside a per-`ModelId` strand | `RemoteServer::dispatchExecute`, on the server strand → `ModelStrands::post` |
 | Remote message decode | The transport's thread (`handle()`'s caller) | — |
@@ -138,8 +138,7 @@ itself; [`core/executor.md`](core/executor.md), "Strands", says what morph adds.
   for the same key are serialised under the registry's lock, so a post never
   finds a strand that has just been retired beside a new one. A coroutine that
   parked on a strand that was retired meanwhile comes back to the key's current
-  strand. morph's own `StrandExecutor` had to fix this invariant twice; it is
-  core-cpp's to keep now.
+  strand. The invariant is core-cpp's to keep, and its own tests cover it.
 - **A strand runs a batch per turn.** It queues itself on the base once however
   many tasks arrive while it is busy, and runs up to 32 before it hands the base
   back. A loaded host adds latency between turns, not more of them.
@@ -186,8 +185,8 @@ for which thread owns which field.
 
 ## Destruction ordering — who must outlive whom
 
-This is the section to read before writing any teardown code. Several of these
-rules encode recent fixes to real deadlocks and use-after-frees.
+This is the section to read before writing any teardown code. Every rule below
+guards against a real deadlock or use-after-free.
 
 | This… | must outlive / be destroyed after… | Consequence if violated |
 |---|---|---|
@@ -460,9 +459,7 @@ about how it sits in *this* threading model:
 
 - **Declare the scope last.** Members are destroyed in reverse declaration
   order, so a last-declared scope dies first and every gated callback is refused
-  before the fields it would have touched are torn down. This replaces the
-  per-class "token must stay last-declared" convention this document used to
-  teach as an incantation.
+  before the fields it would have touched are torn down.
 - **A destructor that can pump must `requestStop()` first.** Members are
   destroyed *after* the destructor body, so a body that blocks on a nested event
   loop can still deliver into a half-destroyed receiver.
@@ -604,14 +601,14 @@ since they serialise all logging.
 ### Thread-local session `Context` — valid only on the dispatch thread
 
 `session::current()` (`session.hpp`) returns a thread-local `Context*` installed
-by a `ScopedContext` around the model call — `LocalBackend::execute` on the local
+by a `ScopedContext` around the model call — `LocalBackend::executeInto`'s strand task on the local
 path, `RemoteServer::dispatchExecute` on the remote path. It is valid **only on
 the dispatch (strand/pool) thread, only for the duration of that `execute()`**.
 It is **not** visible from the GUI thread or from a `Completion` callback, and
 its address dangles once the scope exits. Models read it synchronously inside
 `execute()`; they must not stash the pointer for later use.
 
-Recent addition: the `Context` also carries the **authoritative principal**. A
+The `Context` also carries the **authoritative principal**. A
 verifying authorizer's `authenticate()` (e.g. `SigningAuthorizer`) overwrites
 `Context::principal` with the identity it extracted from a valid token
 **before** dispatch, so `session::current()->principal` read inside a model is
@@ -696,8 +693,8 @@ attribute is coarser than morph's actual contracts:
   because of how libc++ represents `std::function`, and the contract the
   annotation ends up documenting — "anything the callable captures by reference
   must outlive the object it is handed to" — is one these subsystems genuinely
-  have, since the callable runs on a probe or replay thread for the object's whole
-  life.
+  have, since the callable runs — on the I/O loop, or on the worker's owner — for
+  the object's whole life.
 - **`ModelHolder`'s forwarding constructor is deliberately *not* annotated.**
   Whether the arguments are borrowed depends entirely on the `Model` being built,
   and one attribute covers every instantiation: annotating it turns

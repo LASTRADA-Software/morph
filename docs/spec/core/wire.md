@@ -16,15 +16,17 @@ carries all request and reply variants, discriminated by a `kind` string field.
 - [Serving action schemas](#serving-action-schemas)
 - [The UI service's kinds](#the-ui-services-kinds)
 - [The `event` kind](#the-event-kind)
+- [The watch, unwatch and changes bodies](#the-watch-unwatch-and-changes-bodies)
 - [Action-evolution policy](#action-evolution-policy)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 
 ## Envelope
 
-The `Envelope` struct supersedes the legacy pipe-delimited protocol. Every field
-is present in the struct so the JSON shape is fixed; callers populate only what
-their `kind` needs and leave the rest as default-constructed values.
+Every field is present in the `Envelope` struct so the C++ shape is fixed;
+callers populate only what their `kind` needs and leave the rest as
+default-constructed values, which `encode` leaves out of the JSON (see
+[Omitted default fields](#omitted-default-fields)).
 
 ### Discriminator values
 
@@ -42,6 +44,9 @@ their `kind` needs and leave the rest as default-constructed values.
 | `"ui-hello"` | request   | The UI service's handshake: what the client speaks; replies with the application, the vocabularies its bundle needs and the manifest digest. Answered only by a server configured with the UI service. See [The UI service's kinds](#the-ui-services-kinds). | `body`, `session` |
 | `"ui-catalog"` | request | The catalog filtered for the principal, its permitted actions and the load-time facts. UI service only. | `session` |
 | `"ui-fetch"` | request   | A bundle file by its content hash; replies with the file's exact bytes in `body`. UI service only. | `body`, `session` |
+| `"ui-evaluate"` | request | Evaluates an action's body without executing it; replies with the recomputed body, its field errors and readiness. UI service only. | `body`, `modelType`, `actionType`, `session` |
+| `"ui-file"` | request  | One step of a file upload or read. UI service with a file store only. | `body`, `session` |
+| `"watch"` / `"unwatch"` | request | Adds topics to (or, with `replace`, sets) / removes them from the connection's watch set. See [The watch, unwatch and changes bodies](#the-watch-unwatch-and-changes-bodies). | `body`, `session` |
 | `"event"`    | server-initiated | An unprompted notification on a connection that negotiated events. Never a reply to anything. See [The `event` kind](#the-event-kind). | `callId` (always `0`), `body` (`{topic, payload}`) |
 | `"ok"`       | reply     | Server success. | `callId`, `body` (serialized result, or — for a `"hello"` reply — the server's `ProtocolRange`), `modelId` (for register-replies) |
 | `"err"`      | reply     | Server failure. | `callId`, `message` |
@@ -71,7 +76,7 @@ session — they round-trip it verbatim; enforcement lives in the server.
 
 ## Factory functions
 
-Eleven free functions construct `Envelope` instances with the correct `kind` and
+Twelve free functions construct `Envelope` instances with the correct `kind` and
 relevant fields. Callers never set `kind` manually.
 
 | Function | `kind` | Parameters |
@@ -87,16 +92,17 @@ relevant fields. Callers never set `kind` manually.
 | `makeCancel(targetCallId)` | `"cancel"` | `callId` of the `execute` to stop, stored in `cancelCallId`. The caller assigns the cancel's own `callId` and `session`. See [Cancelling a call](#cancelling-a-call). |
 | `makeOk(callId = 0, body = {}, modelId = 0)` | `"ok"` | Correlation id, serialized result (stored in the `body` field), optional model id (for register-replies). |
 | `makeErr(message, callId = 0)` | `"err"` | Error message, optional correlation id. |
+| `makeEvent(topic, payloadJson)` | `"event"` | Topic and the payload's JSON text; see [The `event` kind](#the-event-kind). |
 
 For `"execute"` there is no factory — callers construct the `Envelope` directly
-and set `kind = "execute"`, or use the `Client`/`RemoteServer` APIs which handle
-it internally.
+and set `kind = "execute"`, or use the client backends, which build it
+internally.
 
 ## Encode and decode
 
 | Function | Signature | Notes |
 |---|---|---|
-| `encode` | `std::string encode(const Envelope&)` | Serializes to a single JSON line via `glz::write_json_exclude<detail::EscapingWriteOpts{}>`, leaving out every member that holds its default apart from the identity fields `kind` and `callId`, which are always written — see [Omitted default fields](#omitted-default-fields). Throws `std::runtime_error` on failure (should never happen for valid input). Escapes ASCII control bytes — see [Control bytes in string fields](#control-bytes-in-string-fields). |
+| `encode` | `std::string encode(const Envelope&, const WireCodecOps& = defaultWireCodecOps())` | Serializes to a single JSON line via `glz::write_json_exclude<detail::EscapingWriteOpts{}>`, leaving out every member that holds its default apart from the identity fields `kind` and `callId`, which are always written — see [Omitted default fields](#omitted-default-fields). Throws `std::runtime_error` on failure (should never happen for valid input). Escapes ASCII control bytes — see [Control bytes in string fields](#control-bytes-in-string-fields). |
 | `decode` | `Envelope decode(std::string_view)` | Deserializes from JSON via `glz::read<{.error_on_unknown_keys = false}>`. Rejects input longer than `kMaxEnvelopeBytes` and throws `std::runtime_error` on an oversized or syntactically malformed envelope. **Ignores unknown/extra keys** (forward compatibility) and **does not reject duplicate JSON keys** — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |
 
 glaze reflects the struct's public members, so the JSON object keys are exactly
@@ -111,7 +117,7 @@ field an older peer does not know (and vice versa) without breaking the parse �
 this is the wire's forward-compatibility contract. Syntactically malformed JSON
 is still a hard parse error that throws. Servers catch that thrown exception and
 turn it into an `"err"` reply rather than propagating it (see
-`RemoteServer::handle` / `handleInline`).
+`RemoteServer::handle`).
 
 ### Omitted default fields
 
@@ -128,7 +134,7 @@ use**:
  "protocolVersion":0}
 ```
 
-`encode` now writes through glaze's exclude-by-key-list form, omitting every
+`encode` writes through glaze's exclude-by-key-list form, omitting every
 member that holds its default *except* the two identity fields held out below.
 The same reply is **44 bytes**:
 
@@ -136,26 +142,26 @@ The same reply is **44 bytes**:
 {"kind":"ok","callId":7,"body":"{\"y\":42}"}
 ```
 
-Measured on the change that introduced it, x86-64 Linux, clang 22.1.8,
-glaze 7.4.0, `-O2`:
+Measured x86-64 Linux, clang 22.1.8, glaze 7.4.0, `-O2`, all keys written
+against defaults omitted:
 
-| message | before | after |
+| message | all keys | defaults omitted |
 |---|---|---|
 | `ok` reply, 8-byte payload | 255 B | 44 B |
 | `execute`, 8-byte payload, one-character ids | 262 B | 94 B |
 | `execute`, 8-byte payload, `"Kanban_BoardModel"` / `"CreateSwimlane"` | 291 B | 123 B |
 | `ok` reply, 50-row (1,781 B) payload | 2,426 B (1.36x) | 2,215 B (1.24x) |
 
-**This is not a `kProtocolVersion` bump, and the reason is worth stating
-precisely.** `decode` starts from a default-constructed `Envelope` and reads
-with `error_on_unknown_keys = false`. A key that is *absent* therefore leaves
-its member at exactly the value the omitted key would have written — so a
-peer's decode of the short form and of the old all-keys form produce equal
+**Omitting defaults is not a `kProtocolVersion` change, and the reason is worth
+stating precisely.** `decode` starts from a default-constructed `Envelope` and
+reads with `error_on_unknown_keys = false`. A key that is *absent* therefore
+leaves its member at exactly the value the omitted key would have written — so
+a peer's decode of the short form and of the all-keys form produce equal
 envelopes. Nothing is removed from the schema and nothing is retyped, which is
 what the [Action-evolution policy](#action-evolution-policy) requires a bump
-for. `tests/test_wire_omitted_fields.cpp` holds the pre-change bytes as a
-literal and requires the two forms to decode equal, rather than leaving that as
-an argument.
+for. `tests/test_wire_omitted_fields.cpp` holds the all-keys bytes as a literal
+and requires the two forms to decode equal, rather than leaving that as an
+argument.
 
 #### Elide payload, never elide identity
 
@@ -187,14 +193,15 @@ Two fields are held out of the list, and are each pinned by a case in
   `scripts/scenario/morph_scenario.py` is a second one, and it reads an absent
   key as Python's `None`, which matches neither its correlation check nor its
   documented carve-out for the undecodable-envelope reply. The fix is at the
-  source rather than in each consumer: emitting the field unconditionally costs eleven bytes on the one
+  source rather than in each consumer: emitting the field unconditionally costs
+  eleven bytes on the one
   message shape that carries a zero id, and keeps "where does this frame go"
   answerable from the frame. Teaching every present and future client that
   absence means zero is the larger blast radius and the weaker invariant.
 
   The consequence for
   [`detail::peekCallId`](#detailpeekcallid--addressing-a-reply-to-a-message-never-decoded)
-  is that its scan-window argument now holds unconditionally: `callId` is the
+  is that its scan-window argument holds unconditionally: `callId` is the
   second key of *every* envelope `encode` produces. Its `0`-on-absence return is
   still load-bearing rather than vestigial, because its input is by definition a
   frame this side already declined to parse — whatever a peer sent, at a size
@@ -208,12 +215,12 @@ its default. If the field is payload, it is elided.
 
 The compatibility argument above is a claim about **decoders that
 default-initialise and ignore unknown keys** — which is what `morph::wire::decode`
-does, and what `test_wire_omitted_fields.cpp` pins. It was stated too broadly
-when this change first landed: eliding a field is transparent to *that* decoder,
-not to every consumer of the wire. A consumer that distinguishes "key absent"
-from "key present at its default" — as the Python scenario driver's
-`decoded.get("callId")` does, yielding `None` rather than `0` — observes the
-change whether or not the C++ round-trip is lossless.
+does, and what `test_wire_omitted_fields.cpp` pins. Eliding a field is
+transparent to *that* decoder, not to every consumer of the wire. A consumer
+that distinguishes "key absent" from "key present at its default" — as the
+Python scenario driver's `decoded.get("callId")` does, yielding `None` rather
+than `0` — observes the difference whether or not the C++ round-trip is
+lossless.
 
 That does not make it a `kProtocolVersion` bump: nothing is removed from the
 schema and nothing is retyped, which is what the
@@ -251,7 +258,7 @@ ways depending on where such a byte lands:
   anywhere serializes to JSON the peer's `decode` throws on. Found by the
   `fuzz_dispatch_execute` harness via an `err` reply echoing an unrecognized
   `kind`.
-- **Silent corruption.** Worse, with the option off the writer's chunked fast
+- **Silent corruption.** Worse, without the option the writer's chunked fast
   path *mangles* such a byte once the same string also contains an escaped
   character: with a `\` or `"` earlier in the string, a `0x0B` at certain
   offsets is written out as *two* `0x00` bytes. The payload is destroyed before
@@ -264,8 +271,8 @@ and the session's `principal`/`token` all carry caller data. `decode` needs no
 counterpart — glaze's reader already accepts `\uXXXX`.
 
 `makeErr` additionally replaces control bytes in its `message` with a printable
-`\xHH` transcription. That is no longer about JSON validity but about output
-sanitization: an `err` message echoes untrusted content back and is
+`\xHH` transcription. That is not about JSON validity, which escaping already
+gives, but about output sanitization: an `err` message echoes untrusted content back and is
 overwhelmingly destined for a log or console, where a raw `0x1B` would carry an
 ANSI escape sequence into the reader's terminal. `message` is diagnostic text,
 not data that must round-trip, so replacement costs nothing there.
@@ -277,12 +284,12 @@ A transport that rejects a frame *before* decoding it (e.g.
 must be addressed. `wire::detail::peekCallId(json, maxScanBytes = 1024)`
 recovers `callId` with a bounded prefix scan, returning `0` when absent,
 unparseable, or out of range. The bound keeps the size cap meaningful as a cost
-guard; `callId` is the second field `encode` writes **whenever it is present**
-(it is omitted when `0` — see [Omitted default fields](#omitted-default-fields)),
-so it lands well inside even a small window, and a `"callId":` sequence cannot
-be forged from an earlier string field because `encode` escapes any embedded
-quote. An omitted `callId` and a `peekCallId` that finds none both mean `0`, so
-the omission costs this function nothing.
+guard; `callId` is the second field `encode` writes on every envelope, `0`
+included (see [Omitted default fields](#omitted-default-fields)), so it lands
+well inside even a small window, and a `"callId":` sequence cannot be forged
+from an earlier string field because `encode` escapes any embedded quote. The
+frame being peeked is one this side declined to parse, so it need not come from
+`encode` at all; a missing `callId` there reads as `0`.
 
 Replying with a zeroed `callId` is not a harmless degradation: `0` matches no
 pending call, so the client drops the reply and the request it was meant for
@@ -297,19 +304,18 @@ that arm.** Glaze sets a write-time error only for
 as well as by reading glaze: five flavours of invalid UTF-8, an embedded NUL, a
 raw control byte and an 8 MiB payload all encode successfully.
 
-`encode` *does* now use a key list — the exclude list of
-[Omitted default fields](#omitted-default-fields) — so `unknown_key` is no
-longer structurally impossible the way it was when `encode` called plain
-`glz::write`. It is instead impossible by construction: every name in that list
-is `static_assert`ed against `glz::reflect<Envelope>::keys` at compile time, so
-a misspelling or a renamed member fails the build rather than throwing from
-every `encode` at runtime. The arm is still unreachable through any `Envelope`
-*value*, which is what `WireCodecOps` exists for.
+`encode` does pass a key list — the exclude list of
+[Omitted default fields](#omitted-default-fields) — so `unknown_key` is
+reachable in principle. It is impossible by construction: every name in that
+list is `static_assert`ed against `glz::reflect<Envelope>::keys` at compile
+time, so a misspelling or a renamed member fails the build rather than throwing
+from every `encode` at runtime. The arm is unreachable through any `Envelope`
+*value*.
 
-That left a branch guarding a real invariant permanently uncovered.
-`WireCodecOps` closes it the way this repository already closes the identical
-problem for file I/O (`morph::core::FileIoOps`): an injectable strategy whose
-single member defaults to the real call, so a default-constructed
+A branch guarding a real invariant would therefore stay permanently uncovered.
+`WireCodecOps` covers it the way this repository covers the identical problem
+for file I/O (`morph::core::FileIoOps`): an injectable strategy whose single
+member, `writeEnvelope`, defaults to the real call, so a default-constructed
 `WireCodecOps` is byte-for-byte the real codec, and a test injects a failing
 one.
 
@@ -380,13 +386,13 @@ must canonicalize or reject duplicate keys itself before the envelope reaches
 
 ## Protocol version negotiation
 
-`kProtocolVersion` (currently `1`) is the protocol version this build of morph
-speaks. `Envelope::protocolVersion` carries it; `0` means "unspecified / legacy
-peer" — the value on every envelope an old encoder (unaware of the field)
-produces, and the value an old decoder (unaware of the field) leaves untouched
-on an incoming envelope that omits it. Because `decode` ignores unknown keys
-and `encode` always writes every field, a `protocolVersion`-aware peer talking
-to an unaware one round-trips the field as `0` and nothing else changes.
+`kProtocolVersion` (`1`) is the protocol version this build of morph speaks.
+`Envelope::protocolVersion` carries it; `0` means "unspecified / legacy peer" —
+the value on every envelope an encoder unaware of the field produces, and the
+value a decoder unaware of the field leaves untouched on an incoming envelope
+that omits it. `encode` omits it at `0`, and `decode` reads an absent or
+unknown key as the default, so a `protocolVersion`-aware peer talking to an
+unaware one sees the field as `0` and nothing else changes.
 
 ### The `"hello"` control kind
 
@@ -416,8 +422,8 @@ a `Completion` from the reply; both classify the decoded reply through
 - An `"err"` whose `message` is exactly `"unknown envelope kind: hello"` (the
   generic unrecognised-`kind` message a pre-negotiation `RemoteServer`
   produces for a `kind` it does not switch on) → `ProtocolNegotiationResult::LegacyPeer`.
-  The caller is not blocked from proceeding — a legacy peer simply never spoke
-  the handshake, exactly as it would have before this feature existed.
+  The caller is not blocked from proceeding — a legacy peer simply never speaks
+  the handshake.
 - Any other `"err"` (e.g. `"protocol version unsupported"`) → throws
   `std::runtime_error`, refusing to proceed rather than surfacing a confusing
   per-request failure later.
@@ -425,19 +431,19 @@ a `Completion` from the reply; both classify the decoded reply through
 Calling `negotiateProtocolVersion()` is **opt-in** — the application decides
 when (typically once, right after `waitForConnected()` on the Qt backend, or
 right after constructing a `SimulatedRemoteBackend`) and whether to call it at
-all. A caller that never calls it sees exactly today's behavior: no handshake,
-no version check, `protocolVersion` stays `0` on every envelope.
+all. A caller that never calls it gets no handshake and no version check, and
+`protocolVersion` stays `0` on every envelope.
 
 ### Backward and forward compatibility
 
-- **New client, old (unmodified) server.** The client's `"hello"` reaches
-  `dispatchMessage`'s final `else` branch (the server does not recognise
-  `"hello"`), producing `err "unknown envelope kind: hello"`. The client's
-  `interpretHelloReply` recognises this exact message and returns `LegacyPeer`
-  rather than throwing — the caller proceeds exactly as it would have before
-  this feature existed.
-- **Old client, new server.** An old client never sends `"hello"`; the server
-  never receives one and behaves exactly as before (register/execute only).
+- **Handshaking client, server without the handshake.** The client's `"hello"`
+  reaches the server's unrecognised-`kind` branch, producing
+  `err "unknown envelope kind: hello"`. The client's `interpretHelloReply`
+  recognises this exact message and returns `LegacyPeer` rather than throwing,
+  and the caller proceeds without a negotiated version.
+- **Client without the handshake, handshaking server.** The client never sends
+  `"hello"`; the server never receives one and serves register/execute as
+  usual.
 - **New client, new server, incompatible versions.** The configured range
   lets a server narrow its accepted range (e.g. after a breaking
   `kProtocolVersion` bump and a deprecation window); a client outside it gets a
@@ -467,17 +473,17 @@ A client sends `"cancel"` only after a `"hello"` reply whose list names it
 (`wire::helloAdvertises(reply, wire::kCapabilityCancel)`). Every other answer
 — a legacy peer's `err "unknown envelope kind: hello"`, an `ok` whose body has
 no `capabilities` key, a client that never negotiated — means it never sends
-one. So a server that predates `"cancel"` never receives one, and keeps working
-exactly as before with a client that knows the kind.
+one. So a server without `"cancel"` never receives one, and works unchanged
+with a client that knows the kind.
 
 This is a capability, not a `kProtocolVersion` bump, for the reason the
 [Action-evolution policy](#action-evolution-policy) sets the bar where it does:
-nothing is removed or retyped. The new `Envelope` member (`cancelCallId`) and
-the new `ProtocolRange` member (`capabilities`) are both additive, and an
-older decoder that ignores unknown keys reads either message unchanged. A
-version bump would also have refused every client still announcing version
-`1` under the default `{kProtocolVersion, kProtocolVersion}` range, which a
-feature an old client simply does not use gives no reason to do.
+nothing is removed or retyped. The `Envelope` member `cancelCallId` and the
+`ProtocolRange` member `capabilities` are both additive, and a decoder that
+ignores unknown keys reads either message unchanged. A version bump would also
+refuse every client announcing version `1` under the default
+`{kProtocolVersion, kProtocolVersion}` range, which a feature such a client
+simply does not use gives no reason to do.
 
 ### Why the target travels in `cancelCallId`
 
@@ -607,13 +613,13 @@ A served description therefore looks like:
     "properties": { "amountCents": { "$ref": "#/$defs/int64_t", "x-order": 0 },
                     "memo": { "type": "string", "x-order": 1 } },
     "required": ["amountCents"],
-    "x-payloadFingerprint": "1:821c7650a597bbdd",
+    "x-payloadFingerprint": "2:821c7650a597bbdd",
     "x-payloadShape": "(amountCents:i8,memo:s)"
   }
 }
 ```
 
-The `1:` prefix is `kPayloadFingerprintScheme`, not a per-action version — it
+The `2:` prefix is `kPayloadFingerprintScheme`, not a per-action version — it
 tracks the fingerprint *algorithm* and moves for every action at once when that
 algorithm changes. The value above is illustrative of the shape, not a pinned
 constant.
@@ -661,7 +667,7 @@ an application's inventory.
 
 | Kind | Request `body` | `ok` reply `body` | Authorisation |
 |---|---|---|---|
-| `"ui-hello"` | `{vocabularies, qt, components, hostComponents, hostCommands, hostValues}` | `{application, version, vocabularies, digest}` | `authorize(session, "ui", "hello")`, the pseudo-action spec 5 writes `ui/hello`; an application with a login screen allows it for an empty principal. A client missing a vocabulary the bundle needs is answered `err "missing vocabulary: <v>[, <v>…]"`. |
+| `"ui-hello"` | `{vocabularies, qt, components, hostComponents, hostCommands, hostValues}` | `{application, version, vocabularies, digest}` | `authorize(session, "ui", "hello")`, the pseudo-action written `ui/hello`; an application with a login screen allows it for an empty principal. A client missing a vocabulary the bundle needs is answered `err "missing vocabulary: <v>[, <v>…]"`. |
 | `"ui-catalog"` | empty | `{entries, permitted, models?, actions?}` | `authorize(session, "ui", "catalog")`, then `authorize(session, modelType, action)` for every action the filter asks about. |
 | `"ui-fetch"` | `{hash}` | the file's bytes | The manifest and a public file: the `ui-hello` gate. Any other file: `authorize(session, "ui", "fetch")`, and for a screen the catalog's rule (available, every top-level query permitted). An unknown hash is answered `err "not found"` only past the `fetch` gate. |
 | `"ui-evaluate"` | the action's JSON body, with `modelType` and `actionType` naming it | `{body, errors, ready}` | `authorize(session, modelType, actionType)`: as the action it evaluates. A body that does not decode is answered `err` with the decoder's reason. |
@@ -676,9 +682,9 @@ requests and replies travel in `body`, and the session in `session`, both
 existing members. A server without the UI service answers
 `err "unknown envelope kind: ui-hello"`, which a client reads as "no UI
 service" exactly as `interpretHelloReply` reads the same reply to `hello` as a
-peer that predates the handshake. An old client never sends these kinds, so a
-server that has the UI service answers it as before; its `hello` reply is
-byte-for-byte the one a server without the service gives.
+peer without the handshake. A client that does not use the UI service never
+sends these kinds, and a server's `hello` reply is byte-for-byte the same with
+or without the service.
 
 ## The `event` kind
 
@@ -793,13 +799,13 @@ is:
 
 ### Enforcing the policy
 
-The four bullets above were, until `PayloadCompleteness`, enforced by nothing
+Without a check on the server, the four bullets above are enforced by nothing
 but author discipline: a client that performed the forbidden rename *and*
-skipped the mandated `kProtocolVersion` bump was accepted silently, because the
+skipped the mandated `kProtocolVersion` bump is accepted silently, because the
 lenient inner decode reads an unknown key as absent and an absent one as
 default-constructed. `validate()` cannot close that gap — it sees a
 zero-valued action and cannot tell "the client sent nothing" from "the client
-sent a legitimate zero".
+sent a legitimate zero". `PayloadCompleteness` is that check.
 
 **What is mechanically checkable, and what is not.** Only the first bullet
 states a machine-readable predicate: *new fields must be optional, so an older
@@ -844,8 +850,9 @@ action codec cannot answer. Three deliberate non-behaviours:
   *nothing to check* — never *nothing is required*. An action that could not
   publish a requirement never published one.
 
-**Why it is opt-in.** Turning the check on rejects payloads a pre-existing
-client sends today. That is a non-additive change to the wire contract —
+**Why it is opt-in.** Turning the check on rejects payloads that clients built
+against the lenient contract may send. That is a non-additive change to the
+wire contract —
 exactly what the fourth bullet says requires a `kProtocolVersion` bump. Making
 it the default would break the policy in the act of enforcing it. A deployment
 that has verified its clients enables it explicitly; a future
@@ -853,7 +860,7 @@ that has verified its clients enables it explicitly; a future
 
 **What this does not do.** It does not exchange per-action fingerprints during
 the `"hello"` handshake and refuse a mismatched peer the way Qt Remote Objects'
-`SignatureMismatch` does. The material for that now crosses the wire — every
+`SignatureMismatch` does. The material for that crosses the wire — every
 served schema carries `x-payloadFingerprint` and `x-payloadShape` (see
 [Serving action schemas](#serving-action-schemas)) — but comparing them, and
 deciding whether a given difference is additive or a break, is left to the
@@ -866,17 +873,17 @@ client.
 | Field | Type | Default | Used by `kind` |
 |---|---|---|---|
 | `kind` | `std::string` | `""` | All — the discriminator. |
-| `callId` | `uint64_t` | `0` | `"execute"`, `"ok"`, `"err"` — correlation id for async matching. |
+| `callId` | `uint64_t` | `0` | Every request and reply — correlation id for async matching; always written, `0` included. `0` on an `"event"`. |
 | `typeId` | `std::string` | `""` | `"register"` — model type id. |
 | `contextKey` | `std::string` | `""` | `"register"`, `"attach"` — stable identity for the new instance. |
 | `primary` | `std::string` | `""` | `"register"` (when `shared`), `"attach"`, `"assign"` — canonical string encoding of the instance's primary key. Empty means "no primary": the instance is anonymous and cannot be shared. Ignored on every other kind. |
 | `shared` | `bool` | `false` | `"register"` — whether the register joins the shared instance directory. When set, the server returns the live instance for `(typeId, primary)` if one exists, otherwise creates it and enters it in the directory. |
 | `modelId` | `uint64_t` | `0` | `"deregister"`, `"execute"`, `"ok"(register)`, `"attach"`, `"assign"` — instance id. |
-| `modelType` | `std::string` | `""` | `"execute"` — routing key for `ActionDispatcher`. |
-| `actionType` | `std::string` | `""` | `"execute"` — second routing key. |
-| `body` | `std::string` | `""` | `"execute"`, `"ok"`, `"ui-hello"`, `"ui-fetch"` — serialized JSON payload; a `"ui-fetch"` reply's is the file's exact bytes. |
+| `modelType` | `std::string` | `""` | `"execute"`, `"ui-evaluate"` — routing key for `ActionDispatcher`. |
+| `actionType` | `std::string` | `""` | `"execute"`, `"ui-evaluate"` — second routing key. |
+| `body` | `std::string` | `""` | `"execute"`, `"ok"`, `"event"`, `"watch"`/`"unwatch"` and the `"ui-*"` kinds — serialized JSON payload; a `"ui-fetch"` reply's is the file's exact bytes. |
 | `message` | `std::string` | `""` | `"err"` — free-text error message. |
-| `session` | `::morph::session::Context` | default | `"execute"`, `"ui-hello"`, `"ui-catalog"`, `"ui-fetch"` — authorization and routing context. |
+| `session` | `::morph::session::Context` | default | `"execute"`, `"cancel"`, `"schemas"`, `"watch"`/`"unwatch"` and the `"ui-*"` kinds — authorization and routing context. |
 | `protocolVersion` | `uint32_t` | `0` | `"hello"` — protocol version the sender speaks. `0` means unspecified/legacy peer; not otherwise inspected. |
 | `cancelCallId` | `uint64_t` | `0` | `"cancel"` — the `callId` of the `execute` to stop. `0` names no call. |
 
@@ -914,7 +921,9 @@ client.
 
 | Symbol | Signature | Throws |
 |---|---|---|
-| `encode` | `std::string encode(const Envelope&)` | `std::runtime_error` on serialisation failure |
+| `encode` | `std::string encode(const Envelope&, const WireCodecOps& ops = defaultWireCodecOps())` | `std::runtime_error` on serialisation failure |
+| `WireCodecOps` | `struct { std::function<glz::error_ctx(const Envelope&, std::string&)> writeEnvelope; }` | — the injectable write step; defaults to the real codec. |
+| `defaultWireCodecOps` | `const WireCodecOps& defaultWireCodecOps()` | — a function-local static, so `encode` allocates no `std::function` per call. |
 | `detail::kOmittableEnvelopeKeys` | `constexpr std::array<std::string_view, 12>` | — the envelope keys `encode` leaves out when the member is at its default (everything but `kind` and `callId`). |
 | `detail::defaultValuedKeys` | `std::span<const std::string_view> defaultValuedKeys(const Envelope&, std::array<std::string_view, 12>&)` | — which of those keys this envelope omits; writes into the caller's array so the per-message path allocates nothing. |
 | `detail::isDefaultSession` | `bool isDefaultSession(const ::morph::session::Context&)` | — whether the whole `session` object can be left out. |
@@ -932,12 +941,12 @@ client.
 | Decision | Choice | Why |
 |---|---|---|
 | Single struct vs. discriminated union | **One `Envelope` struct; every kind's fields are members of it** | The C++ shape is fixed and predictable; callers populate only what their kind needs. Avoids a tagged-union complexity that would add no benefit over a single struct with a `kind` string. |
-| Shrinking the serialized form | **Omit members at their default, rather than reshaping `Envelope`** | The 255-byte minimal reply was a *serialization* problem, not a struct problem. Omitting defaults needs no `std::optional` members (which would change every call site's `env.typeId = ...`), no variant, and no `kProtocolVersion` bump — a default-initialising, unknown-key-tolerant decoder cannot tell the two forms apart. 255 B → 44 B on a minimal reply. See [Omitted default fields](#omitted-default-fields). |
+| Shrinking the serialized form | **Omit members at their default, rather than reshaping `Envelope`** | A 255-byte minimal reply is a *serialization* problem, not a struct problem. Omitting defaults needs no `std::optional` members (which would change every call site's `env.typeId = ...`), no variant, and no `kProtocolVersion` bump — a default-initialising, unknown-key-tolerant decoder cannot tell the two forms apart. 255 B → 44 B on a minimal reply. See [Omitted default fields](#omitted-default-fields). |
 | `kind` as a string vs. enum | **`std::string`** | JSON naturally discriminates by string; avoids an enum-to-string mapping. The factory functions (`makeRegister`, etc.) ensure callers never set `kind` manually. |
-| `"execute"` has no factory | **No factory** | `"execute"` envelopes are typically constructed by higher-level APIs (`Client`, `RemoteServer`), not by end users. Adding a factory would be dead code at the wire layer. |
+| `"execute"` has no factory | **No factory** | `"execute"` envelopes are constructed by the client backends, not by end users. Adding a factory would be dead code at the wire layer. |
 | Factory functions are `inline` | **Header-only** | The entire wire module lives in the header. Wrapping each factory as a named function keeps construction safe (correct `kind`, no forgotten fields) without a separate compilation unit. |
-| Serialization via glaze | **`glz::write_json` / `glz::read<{.error_on_unknown_keys = false}>`** | glaze is the project's existing JSON library; no additional dependency. `decode` tolerates unknown keys for forward compatibility. Throws on failure rather than returning error codes because encode/decode at the wire boundary should fail loud and early. |
+| Serialization via glaze | **`glz::write_json_exclude` / `glz::read<{.error_on_unknown_keys = false}>`** | glaze is the project's existing JSON library; no additional dependency. `decode` tolerates unknown keys for forward compatibility. Throws on failure rather than returning error codes because encode/decode at the wire boundary should fail loud and early. |
 | `contextKey` vs. `modelId` for register | **`contextKey` is a separate field, not `modelId`** | `modelId` is server-assigned (a `uint64_t` handle); `contextKey` is a client-chosen stable identity string. They are semantically different and the server treats them differently (log attachment vs. instance routing). |
 | `session` as a dedicated field | **`::morph::session::Context`** | Session context is a first-class concern for authorization and routing, not an opaque sub-payload in `body`. Keeping it at the Envelope level ensures every `"execute"` carries it without caller discipline. |
 | Wire-layer size cap | **`kMaxEnvelopeBytes` (8 MiB), checked before parsing** | The `body` double-parse means depth/structure checks on the outer parse never reach the nested payload; a total-length bound is the one check that does cover the whole message (including `body`) and it is cheap. 8 MiB is generous for legitimate payloads while keeping a single message's peak allocation bounded. glaze 7.4 has no `max_depth` option, so a size cap is the only wire-layer depth mitigation available. |
-| Duplicate JSON keys | **Accepted, last-wins (not rejected)** | glaze 7.4 exposes no option to error on duplicate keys and a correct hand-rolled JSON-aware scan would be complex and error-prone. Rather than a fragile mitigation, the behavior is documented honestly and callers are told not to rely on rejection; a security-sensitive proxy must canonicalize duplicates upstream. |
+| Duplicate JSON keys | **Accepted, last-wins (not rejected)** | glaze 7.4 exposes no option to error on duplicate keys and a correct hand-rolled JSON-aware scan would be complex and error-prone. Rather than a fragile mitigation, the behavior is documented and callers are told not to rely on rejection; a security-sensitive proxy must canonicalize duplicates upstream. |

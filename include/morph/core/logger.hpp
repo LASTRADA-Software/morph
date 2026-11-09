@@ -112,9 +112,8 @@ struct LogState {
     // can reject a suppressed message without touching `mtx` or formatting it.
     //
     // `warn`, not `debug`: linking morph must not hand the framework a
-    // consumer's stderr. At `debug` -- the default until 0.1.0 -- a plain
-    // `morph_tests` run wrote 2,949 lines of dispatch tracing, and any
-    // application linking morph inherited the same firehose without asking for
+    // consumer's stderr. At `debug` every dispatch is traced, so any
+    // application linking morph would inherit that output without asking for
     // it. Deliberately one value in every build configuration rather than
     // keying on NDEBUG: this is a default member initializer in a header, so a
     // config-dependent one gives translation units compiled with different

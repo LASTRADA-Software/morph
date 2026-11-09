@@ -3,13 +3,13 @@
 Design spec for `include/morph/forms/engine/`: the runtime model of a schema-driven form, its rules, its exact
 values and its reactive session, in C++ and without a toolkit. The emitters (`forms/forms.hpp`) describe an
 action as schema JSON; the engine reads that JSON back into a form a user can fill in, and assembles the exact
-body the action takes. The program design is spec 2 (`docs/superpowers/specs/2026-10-04-forms-engine-design.md`).
+body the action takes.
 
 Read this before changing a header under `forms/engine/`. The headers here are the model, rules, values,
 `FormSession`, the submitters, `Form<A>`, the collection and wizard sessions, and the rendering (`formView`,
 overrides, the field overlay, `collectionView`, `wizardView`) that a document's `form`, `collection` and `wizard`
-nodes reach through the interpreter. The app shell is not in the tree yet: it mounts screens by document id, which
-is the host's contract.
+nodes reach through the interpreter. The app shell is not part of the engine: it mounts screens by document id,
+which is the host's contract ([../ui/host.md](../ui/host.md)).
 
 ## Contents
 
@@ -40,6 +40,7 @@ Header-only, in the base `morph` target:
 | `handler_submitter.hpp` | `handlerSubmitter`, `handlerChoiceFetcher` |
 | `typed_form.hpp` | `Form<A, M, S>`, and the definition of `FormModel::forAction<A>()` |
 | `overrides.hpp` | `FieldView`, `Overrides` |
+| `field_layout.hpp` | `FieldLayout` (shared with the authoring API, which names it without including the engine) |
 | `form_view.hpp` | `FormViewOptions`, `formView` |
 | `collection.hpp` | `CollectionModel`, `CollectionColumn`, `CollectionAction`, `CollectionRow`, `PendingConfirm`, `SchemaLookup`, `CollectionSession` |
 | `wizard.hpp` | `WizardModel`, `WizardStepSpec`, `WizardSession` |
@@ -100,7 +101,7 @@ bad input.
 older client never refuses a newer server's form.
 
 **One evaluator.** Each rule is translated, when the model is read, into the UI document's expression language
-(`expr/1`, `docs/spec/ui/expressions.md`) and evaluated with `ui::evaluate`. The client therefore has one
+(`expr/1`, [../ui/expressions.md](../ui/expressions.md)) and evaluated with `ui::evaluate`. The client therefore has one
 evaluator for rules, relations and checks, and the rules inherit its exact arithmetic and its Kleene logic.
 
 **Operands.** A rule's fields are numbered `f0`, `f1`, … (so a wire name need not be a document name), and each
@@ -164,7 +165,7 @@ every digit.
 ## FormSession
 
 `FormSession(runtime, model, submit, choices, options)` is the reactive state of one form, a controller in the
-sense of `docs/spec/reactive/control.md`. Non-copyable and non-movable: fields and in-flight replies point into
+sense of [../reactive/control.md](../reactive/control.md). Non-copyable and non-movable: fields and in-flight replies point into
 it. A view mounted on it is destroyed first.
 
 - **Fields.** `FieldState`: the `text`, `unit` and `engaged` signals (a write to `text` is a user edit, as is
@@ -197,7 +198,8 @@ it. A view mounted on it is destroyed first.
 - **Choice options** are a `reactive::Query<std::string, std::string>` per Choice, keyed on the options request:
   `{}` for an independent Choice, `{"parent": <literal>, …}` once every parent encodes, idle while one does not.
   A parent change refetches, and a reply for a superseded request is dropped. A selection the answered options no
-  longer contain is cleared (`clear`, the default of spec 5's `onStale`), but only once the query has answered for
+  longer contain is cleared (`clear`, the default of a `select` node's `onStale`,
+  [../ui/document.md](../ui/document.md)), but only once the query has answered for
   the current parents, so a selection prefilled before its options arrive survives. An idle query, and a failed
   fetch, keep the selection. A failed fetch is not repeated on its own: `retryOptions()` fetches again, and opening
   the field's dropdown in `formView` runs it, so options that failed when the form was built (an action that needs
@@ -227,7 +229,7 @@ the schema's literal (`render::resolveText`).
 
 ## The field overlay
 
-`FieldOverlay` is what a document's `fields` (spec 6 §10), or an application, changes about a top-level field
+`FieldOverlay` is what a `form` node's `fields` ([../ui/document.md](../ui/document.md)), or an application, changes about a top-level field
 before the session is built; `FormModel::fromSchema(action, schema, overlays)` applies it.
 
 - `omit` removes the property from the schema, so the member is out of the form and of the body; a `required`
@@ -296,19 +298,19 @@ before it.
   is handed a `FieldView` (the spec, the state, the session) and may wrap `defaultControl()`; it writes the draft
   as the built-in control does.
 - **Through a document.** The interpreter lowers a `form` node to `formView` over a session it builds from
-  `Catalog::schema`, the node's overlay and its model alias (`docs/spec/ui/interpreter.md`, "Lowering").
+  `Catalog::schema`, the node's overlay and its model alias ([../ui/interpreter.md](../ui/interpreter.md#lowering)).
 
 - **A host component per field.** A document's field overlay may name a `component` that draws the field
-  (`docs/spec/ui/interpreter.md`, "Lowering"): the interpreter adds it as a field-path override, and the cell
+  ([../ui/interpreter.md](../ui/interpreter.md#lowering)): the interpreter adds it as a field-path override, and the cell
   around it (caption, help, visibility) is drawn as for every override.
 
-**Not here yet:** the grid widget (`x-widget: grid`, spec 2 §7), whose keyboard model needs a way for the view
-tree to move focus, which it does not have (a kit's grid is reached through a host component); and a document's
-subtree overrides.
+**Not supported:** the grid widget (`x-widget: grid` on an `ObjectArray`), whose keyboard model needs a way for the
+view tree to move focus, which it does not have (a kit's grid is reached through a host component); and a
+document's subtree overrides.
 
 ## Collections
 
-`CollectionModel::fromSchema(viewJson)` reads the `v-*` view document (`docs/spec/forms/views.md`): the kind
+`CollectionModel::fromSchema(viewJson)` reads the `v-*` view document ([views.md](views.md)): the kind
 (`collection`, `master-detail`), title, query, row key, the columns (field, label, the table `kind` by
 `table::ColumnKind`'s JSON names, `v-hidden`, places, unit), the row action and the actions with their `bind`,
 `scope` and `confirm`. An unknown `v-kind` or column `kind`, a missing `v-query`, `field` or `action` is a
@@ -322,7 +324,7 @@ subtree overrides.
 - **The table source.** `source()` is a `table::VectorSource` with one column per `v-columns` entry (hidden ones
   included), kept in step with `rows()`: integers as `int64` (row keys too, so ids past 2^53 stay distinct), exact
   values as `Rational`, text, bools. Sorting, filtering and selection are the table engine's over it
-  (`docs/spec/table/engine.md`); the session keeps no order of its own.
+  ([../table/engine.md](../table/engine.md)); the session keeps no order of its own.
 - **Actions** are one `Exclusive` `reactive::Mutation`: a row action's body is its `bind` entries with the row's
   exact JSON values, a collection action's is `{}`. A `confirm` action waits in `pendingConfirm()` until
   `confirm()` runs it or `cancelConfirm()` drops it. A success refetches the list.
@@ -380,8 +382,8 @@ to every form they draw, so `Overrides` reach the editor's and every step's fiel
   gates are the session's: a chrome's Next does nothing until `canNext()`. A master-detail view has no editor
   dialog to replace.
 - **Through a document.** The interpreter lowers a `collection` or `wizard` node to these views over sessions it
-  builds from `Catalog::view` or `Catalog::wizard` and its model alias (`docs/spec/ui/interpreter.md`,
-  "Lowering").
+  builds from `Catalog::view` or `Catalog::wizard` and its model alias
+  ([../ui/interpreter.md](../ui/interpreter.md#lowering)).
 
 ## Corpora
 
@@ -413,7 +415,7 @@ Each is a named case of the body corpus, or a test of the engine's own suite:
 
 | Behaviour | Engine | Why |
 |---|---|---|
-| Nested objects, collections of objects | fields with their own encoders | spec 2: nothing is unrepresentable |
+| Nested objects, collections of objects | fields with their own encoders | every member kind the emitters write has an encoder, so nothing within the nesting limit is unrepresentable |
 | A blank parent of a dependent Choice | keeps the child's selection (the query is idle) | no options were fetched to judge it against |
 | An operand whose draft does not encode, for `engaged` | `Unknown` | a value the server would refuse does not satisfy a condition |
 | A presentation rule naming several fields | applies to every field it names | membership |

@@ -31,34 +31,24 @@ strand task on the worker pool:
 
 ```
 Model::execute(action) throws
-  └─ LocalBackend's strand task catches via try/catch (backend.hpp)
-       └─ CompletionState::setException(std::current_exception())
-            └─ .onError(fn) handler posted to the GUI (callback) executor
-                 └─ fn receives exception_ptr; caller rethrows to inspect
+  └─ LocalBackend's strand task catches it (backend.hpp)
+       └─ the call's sink settles with std::current_exception()
+            └─ CompletionState::setException(...) → deliver() posted to the callback executor
+                 └─ .onError(fn) runs there; fn receives exception_ptr; caller rethrows to inspect
 ```
 
-The strand task (`LocalBackend::execute`) is:
+The strand task (`LocalBackend::executeInto`) runs the action under the call's
+session, records its instrumentation, and then settles the call's sink exactly
+once — `settleValue` on success, `settleException` with the caught
+`std::current_exception()` otherwise. The sink resolves the shared
+`morph::async::detail::CompletionState`.
 
-```cpp
-_strand.post(mid, [localOp, action = std::move(action), holder = std::move(holder),
-                   compState, session = std::move(session)]() mutable {
-    try {
-        ::morph::session::detail::ScopedContext const scoped{session};
-        compState->setValue(localOp(*holder, action.get()));   // happy path
-    } catch (...) {
-        compState->setException(std::current_exception());  // error path
-    }
-});
-```
-
-Both `setValue` and `setException` resolve the shared
-`morph::async::detail::CompletionState<std::shared_ptr<void>>` exactly once
-(first writer wins; a second call while `ready == true` is a no-op). When a
-callback is already registered, they build it under the state mutex and then
-`post()` it to `cbExec` — the executor supplied at `Completion` construction,
-which for GUI code is the GUI executor. **The producing (worker) thread never
-invokes the callback directly**, so `.then` / `.onError` bodies always run on
-the intended thread.
+`setValue` and `setException` claim the state with an atomic exchange, so the
+first writer wins and every later settle returns at once. The claimant stores
+the outcome, publishes it, and `post()`s `deliver()` to `cbExec` — the executor
+supplied at `Completion` construction, which for GUI code is the GUI executor.
+**The producing (worker) thread never invokes a callback directly**, so
+`.then` / `.onError` bodies always run on the intended thread.
 
 To inspect the failure, the GUI's `.onError` handler rethrows:
 
@@ -82,12 +72,13 @@ those `err` messages.
 
 ## Orphan logging and single-shot callbacks
 
-`CompletionState<T>` (see `completion.hpp`) protects a value slot, an
-`std::exception_ptr error` slot, two callback lists (`onOk` / `onErr`, each a
-`std::vector`), and an `onErrAttached` flag, all under one mutex. The `cbExec`
-pointer is *not* mutex-guarded: it is set once in the `Completion` constructor,
-before any concurrency, and read unlocked thereafter (as
-`callback != nullptr && cbExec != nullptr` outside the critical section).
+`CompletionState<T>` (see `completion.hpp`) holds a value slot, an
+`std::exception_ptr error` slot, two handler lists (`onOk` / `onErr`, each a
+`std::vector`), and an `onErrAttached` flag, with no lock. The value and the
+error are write-once, published by the settle that claimed the state; the
+handler lists belong to `cbExec` — the attaches and `deliver()` both run there,
+so the executor's queue orders them after the settle. `cbExec` is set once,
+before the state is shared.
 
 **Single-shot result, composing callbacks.** The *result* (value or error) is
 single-shot — `setValue`/`setException` are no-ops once `ready`. But `then()`
@@ -100,15 +91,19 @@ the orphan logger too — losing the error entirely, not just misdelivering it.
 
 | Situation | Behavior |
 |---|---|
-| `then` registered before ready | Appended to `onOk`; every stored handler fires, in order, when `setValue` lands |
-| `then` on an already-value state | Fired immediately (posted to `cbExec`), for that one handler only |
-| `then` on an already-**error** state | Silent no-op — no success value exists |
-| `onError` registered before ready | Appended to `onErr`; every stored handler fires, in order, when `setException` lands |
-| `onError` on an already-**error** state | Fired immediately (posted to `cbExec`), for that one handler only |
-| `onError` on an already-value state | Silent no-op — no error exists |
-| Second `then` after a value settled | Re-fires immediately via the fire-now path (posts to `cbExec` again, this handler only). **What it delivers depends on how the value was first consumed:** if any `then` was attached *before* the state settled, `setValue` moved the stored `value` out into the dispatch closure (copying it into every handler but the last, moving only into the final one) — the stored `value` itself is left moved-from by that dispatch, so a later `attachThen` fire-now copies from that now moved-from `*value`. Only when every `then` was attached *after* settling does each receive a copy of the original value |
-| Second `onError` after an error settled | Re-fires immediately with the stored `exception_ptr` (same fire-now path, this handler only) |
-| Second `then`/`onError` registered **before** ready | Appended alongside the first — both fire when the result lands, in attachment order; neither is discarded |
+| `then` attached before delivery | Appended to `onOk`; `deliver()` runs every stored handler, in order |
+| `then` after a value was delivered | Posted to `cbExec` on its own, for that one handler; it reads the stored value in place |
+| `then` on an **error** state | Silent no-op — no success value exists |
+| `onError` attached before delivery | Appended to `onErr`; `deliver()` runs every stored handler, in order |
+| `onError` after an error was delivered | Posted to `cbExec` on its own with the stored `exception_ptr`, for that one handler |
+| `onError` on a value state | Silent no-op — no error exists |
+| Second `then`/`onError` attached **before** delivery | Appended alongside the first — both fire, in attachment order; neither is discarded |
+
+Every handler receives the value as `const T&`, read in place from the state,
+so a later handler sees the same value an earlier one did; a handler that takes
+`T` by value pays one copy at its own parameter. A handler that throws is
+logged (`[completion] then handler threw; continuing with next handler`, or the
+`onError` equivalent) and the next handler still runs.
 
 **Orphan logging.** If a `Completion` is destroyed while its state holds an
 unhandled error, `~CompletionState` logs it through `morph::log::logError`:
@@ -120,30 +115,25 @@ The destructor logs only when `ready && error && !onErrAttached`. So attaching
 an `.onError` handler suppresses the orphan log — **but only when there is an
 executor to actually deliver it on.**
 
-**Recent fix — null callback executor no longer silences the error.** Both
-`setException` and `attachOnError` set `onErrAttached = (cbExec != nullptr)`.
-Previously, attaching `.onError` unconditionally marked the error handled; with
-a null `cbExec` the callback is never posted (`post` runs only when
-`cbExec != nullptr`), so the error would be both undelivered *and*
-unsuppressed-from — it vanished. Now, with a null executor `onErrAttached`
-stays `false`, so even though the handler can't be delivered, the destructor's
-orphan logger still fires and the error reaches the log rather than
-disappearing silently. An undelivered *value* is still dropped silently (a
-value that no one is waiting for denotes nothing); an undelivered *error*
-always surfaces.
+**A null callback executor never silences an error.** `attachOnError` returns
+before setting `onErrAttached` when `cbExec` is null: nothing could deliver the
+handler, so marking the error handled would make it vanish — undelivered and
+unlogged. With `onErrAttached` still `false`, the destructor's orphan logger
+fires and the error reaches the log. An undelivered *value* is dropped
+silently (a value no one is waiting for denotes nothing); an undelivered
+*error* always surfaces.
 
 ## Executor exception handling
 
 Executors (`executor.hpp`, `strand.hpp`) are the thread boundaries. A task that
 throws must not kill its worker, must not abort sibling tasks, and must not
-vanish. **Recently changed:** the pool and strand executors now catch-and-log
-rather than swallow.
+vanish. Every executor catches and logs.
 
 | Executor | Catch behavior | Log prefix |
 |---|---|---|
 | `ThreadPoolExecutor` | Catches `std::exception` and `...` per task; worker loops on | `[thread-pool] task threw: <what>` / `[thread-pool] task threw unknown exception` |
 | `ModelStrands` | `LoggedTask` catches `std::exception` and `...` around every posted callable; next queued task for the same key still runs | `[strand] task threw: <what>` / `[strand] task threw unknown exception` |
-| `MainThreadExecutor::runFor` | Catches **only** `std::exception`; continues with the next task | `[main-thread] callback threw: <what>` |
+| `MainThreadExecutor` (`runFor`, `runOnce`, `drain`) | Catches `std::exception` and `...` per task; the pump continues with the next task | `[main-thread] callback threw: <what>` / `[main-thread] callback threw unknown exception` |
 
 Notes that matter:
 
@@ -154,17 +144,15 @@ Notes that matter:
   exceptions escaping the backend's own lambda body (e.g. a throw from
   `setValue`/`setException` machinery itself), not for ordinary action
   failures.
-- `MainThreadExecutor::runFor` deliberately catches only `std::exception`.
-  Any non-`std::exception` type (e.g. a bare `throw 42;` or a foreign SEH-style
-  type) **propagates out of `runFor`** to the caller's main loop. The pool and
-  strand executors, by contrast, catch `...` too and never propagate.
+- No executor lets a task exception propagate: a non-`std::exception` throw
+  (e.g. a bare `throw 42;`) is logged as an unknown exception like any other.
 - The base `IExecutor::post` contract documents that exceptions are "silently
   swallowed unless the implementation documents otherwise" — the two concrete
   executors above document otherwise (they log).
 
 ## Backend error types
 
-`backend.hpp` defines three typed errors, all `std::runtime_error` subclasses
+`backend.hpp` defines six typed errors, all `std::runtime_error` subclasses
 with canned messages, thrown *into* in-flight completions (delivered via
 `.onError`) rather than out of any call:
 
@@ -172,14 +160,17 @@ with canned messages, thrown *into* in-flight completions (delivered via
 |---|---|---|
 | `BackendChangedError` | `"backend changed before completion resolved"` | `Bridge::switchBackend()` calls `cancelPending()` on the outgoing backend; every still-pending completion resolves with this |
 | `BridgeDestroyedError` | `"bridge destroyed before completion resolved"` | `Bridge`'s destructor cancels pending completions |
+| `HandlerDestroyedError` | `"handler destroyed before its bind settled"` | A `BridgeHandler` is destroyed while calls it holds for its bind are still waiting |
 | `DisconnectedError` | `"transport disconnected before completion resolved"` | A transport (e.g. Qt WebSocket) drops mid-call; framework retries on reconnect if supported, else `.onError` runs |
+| `TimeoutError` | `"execute timed out on the server"` | The server replied that `LimitPolicy::executeTimeout` elapsed (its `"timeout"` `err`, below); the action itself keeps running on its strand |
+| `ClientTimeoutError` | `"execute timed out waiting for any reply"` | `Bridge::setExecuteDeadline`'s duration elapsed with no reply of any kind |
 
 `cancelPending(exc)` walks the backend's tracked-pending list and calls
 `setException(exc)` on each live state. Because `setException` is a no-op once
 `ready`, an in-flight server reply arriving *after* the cancel cannot resurrect
 a cancelled completion — the cancel wins.
 
-**One failure is deliberately untyped.** When `LocalBackend::execute` is given
+**One failure is deliberately untyped.** When `LocalBackend` is given
 a model id it doesn't hold, it resolves the completion with a plain
 `std::runtime_error("model not found: id=" + id)` — there is no dedicated
 error class for it. The remote path has an analogous plain
@@ -192,40 +183,29 @@ discriminator. Failures come back as `kind == "err"` envelopes carrying a
 free-text `message` and an echoed `callId`. `RemoteServer` (`remote.hpp`)
 produces them.
 
-**The envelope kinds.** `dispatchMessage` compares `env.kind` against **eight**
-values, each with a branch of its own:
+**The envelope kinds.** `dispatchMessage` gives each of these kinds a branch
+of its own:
 
-    assign  attach  deregister  execute  hello  instances  register  schemas
+    assign  attach  cancel  deregister  execute  hello  instances  register  schemas  watch  unwatch
 
-Anything else is the fall-through, which is what produces `unknown envelope
+A kind none of them names goes to the `IEnvelopeService` registered for it in
+`ServerConfig::services` (the UI service's kinds, for example), and a kind no
+service claims either is the fall-through, which produces `unknown envelope
 kind:`. The request and reply shape of each is tabulated in
 [`core/wire.md`](core/wire.md), "Discriminator values", and what
 `dispatchMessage` does with each in [`core/backend.md`](core/backend.md),
 "`RemoteServer` — server-side message handler"; only the refusals are
-enumerated here.
+enumerated here. A service's own refusals are its spec's concern.
 
 **The refusals are grouped by what a client should do about them**, not by the
 function they are raised in, because that is the distinction the message text
-does not carry. **The three groups below are exhaustive**, and the arithmetic
-is checkable: `remote.hpp`'s server half plus the body of `wire::decode` carry
-**17** refusal messages (14 fixed, 3 with a runtime suffix). Sixteen of them
-appear in the three tables — nine in group 1, two in group 2, five in group 3 —
-and the seventeenth is `handleInline`'s, which no transport can reach and which
-is called out separately below. The tables add two rows that come from outside
-those two headers: `unknown model type: <id>`, thrown by
-`ModelRegistryFactory::create` in `registry.hpp`, and the `exc.what()`
-passthrough, which carries every application-level refusal.
-
-That count is not a hand tally. `scripts/scenario/a gate removed on 2026-09-23
-extracts it from `remote.hpp`'s server half — the part above
-`class SimulatedRemoteBackend`, since everything below is the in-process client
-stub whose throws no peer ever sees — plus the body of `wire::decode` alone,
-since that is the one `wire.hpp` throw `dispatchMessage`'s `catch` turns into a
-real `err`. Its exact membership is pinned by that tool's self-test
-(`test_real_headers_carry_exactly_these_refusals`, and
-`test_real_header_carries_the_kinds_the_spec_records` for the eight kinds). A
-refusal added to either header fails those tests, and whoever adds it decides
-which group below it belongs in.
+does not carry. Every `err` message `remote.hpp`'s server half and
+`wire::decode` produce belongs to one of the three groups below, or to
+`handleInline`, which no transport reaches (called out separately). The tables
+add two rows that come from outside those two headers: `unknown model type:
+<id>`, thrown by `ModelRegistryFactory::create` in `registry.hpp`, and the
+`exc.what()` passthrough, which carries every application-level refusal.
+Whoever adds a refusal to either header decides which group it belongs in.
 
 ### 1. The request is malformed or unsupported
 
@@ -235,13 +215,15 @@ refusal.
 | Error `message` | Raised in | Cause |
 |---|---|---|
 | `"envelope decode failed: <detail>"` | `wire::decode`, caught by `dispatchMessage` | Malformed request JSON |
-| `"unknown envelope kind: <kind>"` | `dispatchMessage`'s final `else` | `kind` is none of the eight listed above |
+| `"unknown envelope kind: <kind>"` | `dispatchMessage`'s final `else` | `kind` is none of those listed above, and no registered service claims it |
 | `"register requires a typeId"` | `dispatchMessage` (`register`) | `register` envelope with empty `typeId` |
 | `"attach requires a typeId"` | `dispatchMessage` (`attach`) | `attach` envelope with empty `typeId` |
 | `"assign requires a typeId"` | `dispatchMessage` (`assign`) | `assign` envelope with empty `typeId` |
 | `"instances requires a typeId"` | `dispatchMessage` (`instances`) | `instances` envelope with empty `typeId` |
 | `"schemas requires a typeId"` | `dispatchMessage` (`schemas`) | `schemas` envelope with empty `typeId` |
 | `"protocol version unsupported"` | `dispatchMessage` (`hello`) | `env.protocolVersion` outside the server's negotiated `[min, max]` range |
+| `"<kind> needs a connection"` | `handleWatch` (`watch`, `unwatch`) | A watch sent without a connection scope (connection id `0`), which only an in-process caller can do |
+| the watch body's decode error, e.g. `"a record list more than 4096 topics"` | `handleWatch`, from `wire::readWatchBody` | A malformed `watch`/`unwatch` body |
 | `"payload missing required field(s): <names>"` | `dispatchExecute` | The action payload omits a field its schema declares required. **Only when `PayloadCompleteness::RequireDeclaredFields` is installed**; the default is `Lenient`, under which the check never runs. See `remote.hpp`'s `PayloadCompleteness` on why turning it on is a non-additive wire change |
 
 All five `requires a typeId` refusals are checked *before* authorization, so an
@@ -270,8 +252,8 @@ permanent failures will discard work it could have retried.
 
 | Error `message` | Raised in | Cause | Reachable when |
 |---|---|---|---|
-| `"server shutting down"` | `dispatchMessage`'s shutdown gate, ahead of every kind | `RemoteServer::shutdown()` has begun draining | Always — no configuration required |
-| `"connection closed"` | `attachExisting` and `acquireSharedInstance` (`noteScopeAttach` returning `false`), and the `register` branch's closed-scope check | The connection scope the instance was being attached to closed while the attach was in flight | Always; inherently a race |
+| `"server shutting down"` | `dispatchMessage`'s shutdown gate, ahead of every other check for `register`, `execute` and `attach` (every other kind, `deregister` included, still flows during the drain) | `RemoteServer::shutdown()` has begun draining | Always — no configuration required |
+| `"connection closed"` | `attachExisting` and `acquireSharedInstance` (`noteScopeAttach` returning `false`), the `register` branch's closed-scope check, and `handleWatch` | The connection scope the instance or watch was being attached to closed while the request was in flight | Always; inherently a race |
 | `"too many models"` | `dispatchMessage`'s `register` branch (advisory pre-check and post-construction re-test) and `acquireSharedInstance`'s re-test under the insert lock | The live-model cap is reached | `LimitPolicy::maxLiveModels != 0` |
 | `"server busy"` | `dispatchExecute` (advisory early shed, then the compare-exchange reservation) | The in-flight execute cap is reached | `LimitPolicy::maxInFlightExecutes != 0` |
 | `"timeout"` | The `TimeoutScheduler` callback armed by `dispatchExecute` | The execute did not reply within the configured budget | `LimitPolicy::executeTimeout > 0` **and** a `TimeoutScheduler` installed — with either missing, no timer is armed |
@@ -288,12 +270,8 @@ while `server busy` and `timeout` carry written exemptions in
 racing a teardown.
 
 Those four, plus group 1's `payload missing required field(s): ` and the
-`handleInline` message below, are the whole of that allowlist: six exemptions
-against the seventeen extracted refusals, leaving eleven that a scenario
-genuinely asserts against a running server. (The two rows sourced from outside
-`remote.hpp`/`wire::decode` — `unknown model type: <id>` and the `exc.what()`
-passthrough — are outside what that tool measures, so neither count includes
-them.)
+`handleInline` message below, are the whole of that allowlist's message
+exemptions.
 
 ### Not on the wire
 
@@ -380,7 +358,7 @@ surface layers three separate policies:
 
 | Type / message | Where | Trigger |
 |---|---|---|
-| `journal::SerializationError` (`std::runtime_error`) | `journal::toJson` / `journal::fromJson` (`action_log.hpp`) | `LogEntry` (de)serialisation fails. `fromJson`'s path is real (malformed JSON); `toJson`'s branch is shared but structurally unreachable for `LogEntry` |
+| `journal::SerializationError` (`std::runtime_error`) | `journal::toJson` / `journal::fromJson` (`action_log_json.hpp`; the type is in `action_log.hpp`) | `LogEntry` (de)serialisation fails. `fromJson`'s path is real (malformed JSON); `toJson`'s branch is shared but structurally unreachable for `LogEntry` |
 | `model::detail::ParseError` (`std::runtime_error`) | `ActionTraits<A>::toJson`/`fromJson`/`resultToJson`/`resultFromJson` (the `BRIDGE_REGISTER_ACTION` codec) | Glaze read/write of an action payload or result fails |
 | `std::runtime_error("unknown action: <model>/<action>")` | `ActionDispatcher::dispatch` (`registry.hpp`) | `(modelType, actionType)` pair was never registered |
 | `std::runtime_error("unknown model type: <id>")` | `ModelRegistryFactory::create` (`registry.hpp`) | Model type-id was never registered — also surfaces as the `register` wire `err` |
@@ -417,12 +395,10 @@ accordingly.
    them to spdlog, Qt logging, or a test spy (or to capture them at all in
    environments where stderr is discarded).
 
-3. **The log is the only signal for exceptions on worker threads.** A throw on
-   a pool or strand thread never propagates to the main thread (the sole
-   exception being a non-`std::exception` type escaping
-   `MainThreadExecutor::runFor`, which does propagate to that thread's caller).
-   If a worker-side action misbehaves and no `Completion` carried the error
-   out, the log entry is the only trace you get.
+3. **The log is the only signal for exceptions in executor tasks.** A throw
+   in a pool, strand or main-thread task never propagates to the thread's
+   caller. If a worker-side action misbehaves and no `Completion` carried the
+   error out, the log entry is the only trace you get.
 
 ## Cross-references
 

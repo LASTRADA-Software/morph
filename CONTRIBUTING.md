@@ -12,8 +12,8 @@ once rather than in every consumer.
 You need a C++23 compiler, CMake with Ninja, and the dependencies declared in
 `vcpkg.json` (Glaze, Catch2; Qt 6 only when building the optional Qt
 integration, `-DMORPH_BUILD_QT=ON`). CMake presets are provided — `cmake
---list-presets` shows the configured matrix; the README documents the full set
-of build options (`MORPH_BUILD_TESTS`, `MORPH_BUILD_EXAMPLES`,
+--list-presets` shows the configured matrix; [`docs/BUILDING.md`](docs/BUILDING.md)
+documents the full set of build options (`MORPH_BUILD_TESTS`, `MORPH_BUILD_EXAMPLES`,
 `MORPH_BUILD_QT`, `MORPH_BUILD_TUI`, `MORPH_BUILD_QT_QUICK`, …).
 
 A plain configure/build/test loop:

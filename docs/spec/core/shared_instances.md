@@ -2,19 +2,19 @@
 
 ## Contents
 
-- [The gap this closes](#the-gap-this-closes)
-- [What morph already has](#what-morph-already-has)
+- [Why instances are keyed](#why-instances-are-keyed)
+- [Mechanisms it builds on](#mechanisms-it-builds-on)
 - [Declaring a primary key](#declaring-a-primary-key)
 - [Where the key comes from](#where-the-key-comes-from)
 - [`AllowShared` — opting a handler into sharing](#allowshared--opting-a-handler-into-sharing)
 - [Re-pointing, not re-keying](#re-pointing-not-re-keying)
 - [The instance directory](#the-instance-directory)
 - [Enumerating live instances](#enumerating-live-instances)
-- [Wire protocol changes](#wire-protocol-changes)
+- [Wire requests](#wire-requests)
 - [Register-or-attach and attach go through the bind rule](#register-or-attach-and-attach-go-through-the-bind-rule)
 - [Ownership and authorization](#ownership-and-authorization)
 - [Watching a keyed instance](#watching-a-keyed-instance)
-- [Lifetime and the A7 connection-scope change](#lifetime-and-the-a7-connection-scope-change)
+- [Lifetime: an attachment is a reference](#lifetime-an-attachment-is-a-reference)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 - [Failure modes](#failure-modes)
@@ -22,44 +22,36 @@
 - [Non-goals](#non-goals)
 - [Cross-references](#cross-references)
 
-## The gap this closes
+## Why instances are keyed
 
-`Bridge::registerHandler<Model>()` unconditionally constructs a fresh
-`HandlerBinding` and calls `registerModelWithContext(...)`. Every
-`BridgeHandler` is therefore a new model instance, always. There is no way to
-name an instance, no way to ask for one that already exists, and no way to find
-out which ones are alive.
-
-The cost is visible in `examples/bank`: five controllers each construct a
-`BridgeHandler<bank::AccountModel>`, so the desktop GUI holds five
-`AccountModel` instances — and, because each model lazily opens its own
-`Lightweight::DataMapper`, five SQLite connections — for what is logically one
-thing.
+A plain `BridgeHandler<Model>` (`NoSharing`) always gets a new model instance of
+its own: it cannot name an instance, ask for one that already exists, or find
+out which ones are alive. Several screens showing one entity through plain
+handlers therefore hold one instance each — and, where each model opens its own
+database connection, one connection each — for what is logically one thing.
 
 Once models hold state ([the bank example](../../../examples/bank/README.md))
-the problem stops being wasteful and starts being wrong: five instances of
-account 42 are five divergent copies of that account's balance.
+that stops being wasteful and starts being wrong: five instances of account 42
+are five divergent copies of that account's balance. Keyed, shareable instances
+let every handler naming account 42 reach the one instance that holds it.
 
-## What morph already has
+## Mechanisms it builds on
 
-Most of the mechanism is present and only needs connecting.
-
-- **A stable per-instance identity already exists.** `HandlerBinding::contextKey`
-  is documented as "stable identity of this model instance (e.g. an account
-  id)" and already travels in the `register` wire envelope
-  ([wire.md](wire.md)). It is used **only** for journal entity keys
-  and server-side log attachment; `wire.md`'s design-decision table states
-  explicitly that `contextKey` plays no part in instance routing. The vocabulary
-  is there; the routing is not.
+- **A stable per-instance identity.** `HandlerBinding::contextKey` is the
+  "stable identity of this model instance (e.g. an account id)" and travels in
+  the `register` wire envelope ([wire.md](wire.md)). It is used **only** for
+  journal entity keys and server-side log attachment; `wire.md`'s
+  design-decision table states that `contextKey` plays no part in instance
+  routing, and the primary key below is a separate field.
 - **Structural trait detection is an established pattern.**
   [views.md](../forms/views.md) detects `kind`, `query`, `title`, `rowKey`
   and friends "via a `requires`-expression, not inheritance or a marker base".
   `KeyedModel` is detected the same way, over either the deduced
   `ModelKeyTraits<M>` or an explicit nested alias.
-- **Per-instance authorization exists.** `IAuthorizer::authorizeInstance` is
+- **Per-instance authorization.** `IAuthorizer::authorizeInstance` is
   consulted on every `execute` and every `deregister`, carrying the instance id
   and its recorded owner ([session.md](../session/session.md)).
-- **One strand per instance** already gives a shared instance the serialisation
+- **One strand per instance** gives a shared instance the serialisation
   it needs; sharing an instance changes nothing about how its actions run.
 
 ## Declaring a primary key
@@ -129,7 +121,7 @@ own body, and uses `BRIDGE_KEY_FROM` on every action purely for the
 unwrapping; deducing either strong id would make `primary()` claim a type that
 is wrong for the other actions. Where every keyed action names one entity —
 `SampleModel` — the deduced strong id is the right key type and nothing
-overrides it. No current example declares an override.
+overrides it.
 
 ### Attachment is automatic
 
@@ -193,10 +185,9 @@ a2.execute(GetAccount{.id = 42});   // primary 42 already live → attaches to m
 a3.execute(GetAccount{.id = 42});   // sets primary 42 → modelId 2, deliberately separate
 ```
 
-`BridgeHandler<Model>` — the spelling every existing call site uses — is
-`BridgeHandler<Model, NoSharing>`, and behaves byte-for-byte as it does today:
-its own instance, never entered into the directory, never handed to anyone
-else. This is what keeps the feature backward compatible.
+`BridgeHandler<Model>` is `BridgeHandler<Model, NoSharing>`: its own instance,
+never entered into the directory, never handed to anyone else. Sharing is
+opt-in, so a handler that does not name `AllowShared` is unaffected by it.
 
 Because a shared handler starts with no primary, **it registers nothing at
 construction**. The `register` envelope is deferred until the handler knows
@@ -233,8 +224,7 @@ normally; only subsequent calls go to the new instance.
 
 The directory lives **server-side**, in `RemoteServer`, so instances are
 reusable across clients. Two connections that attach to key 42 reach the same
-instance — that is the point of (a), and it is what distinguishes this from a
-client-side handle cache.
+instance — that is what distinguishes this from a client-side handle cache.
 
 **"The same instance" means shared state, not shared notifications.** Both
 handlers are pointed at one underlying instance, so each read/write round trip
@@ -242,11 +232,9 @@ observes the same durable state, and a write by one client is visible to the
 other *on that other client's next action*. There is no push: `subscribe<R>`
 fans out only to handlers on the same `Bridge` (in-process), never across
 connections or processes, so a change one client causes is not observed by
-another until that other client asks again. This is the same limitation the
-repository README states under "Instance subscriptions are best-effort and
-in-process"; an earlier revision of this section said shared attachers "see each
-other's state", which read as a promise of propagation the framework does not
-make.
+another until that other client asks again — unless it watches the instance
+(see [Watching a keyed instance](#watching-a-keyed-instance)). Shared attachers
+share state, not a propagation guarantee.
 
 **The directory is per-process, and that is load-bearing for the claim above.**
 `_instances` (a `detail::InstanceDirectory`), `_connectionScopes` and `_nextId`
@@ -306,24 +294,24 @@ instance.
 Only *shared* instances are enumerable. Plain handlers' instances are absent by
 construction.
 
-## Wire protocol changes
+## Wire requests
 
-Four additive changes. All are compatible with the additive-only evolution
-policy in [wire.md](wire.md), and the lenient decoding that A6
-established means an older peer ignores what it does not understand.
+Sharing uses two `register` fields and three request kinds. All follow the
+additive-only evolution policy in [wire.md](wire.md), whose lenient decoding
+lets a peer ignore a field it does not understand.
 
-- **`register` grows `primary` and `shared`.** `primary` is the key as a string
+- **`register`'s `primary` and `shared`.** `primary` is the key as a string
   (integral keys are decimal-encoded); `shared` is a bool. A `register` with
   `shared: true` is a *register-or-attach*: the server returns the existing
   `ModelId` for that `(typeId, primary)` if one is live, otherwise creates one
-  and enters it in the directory. `shared: false` or absent is today's
-  behaviour exactly.
-- **A new `attach` request.** Re-points an existing binding at a different
+  and enters it in the directory. `shared: false` or absent registers a
+  private instance.
+- **The `attach` request.** Re-points an existing binding at a different
   primary without tearing down and recreating it, returning the target
   `ModelId`. Semantically a `deregister` + `register` pair, made atomic so a
   re-pointing handler cannot lose its slot to `LimitPolicy::maxLiveModels` in
   between.
-- **A new `assign` request.** Files an already-live, still-anonymous `modelId`
+- **The `assign` request.** Files an already-live, still-anonymous `modelId`
   under a primary key, in place. This is what makes a result-sourced key work
   without losing state: an action that creates its own entity runs on a
   not-yet-keyed instance, and only the reply carries the generated key, so the
@@ -339,18 +327,18 @@ established means an older peer ignores what it does not understand.
   created for that key and told so once, permanently, via
   `IModelHolder::attachIdentity` — so `assign` leaves it alone too rather than
   handing later attachers a model that identifies itself as a different entity.
-- **A new `instances` request.** Takes a model type id, replies with the live
+- **The `instances` request.** Takes a model type id, replies with the live
   primary keys for it. Subject to `authorize` like any other request; see below.
 
-`contextKey` keeps its current meaning and is **not** overloaded as the primary.
-The two coincide in practice — a keyed model will normally set `contextKey` to
-its primary so journal entries carry the entity key — but conflating them would
-silently change behaviour for anyone already setting `contextKey` for journal
-purposes, which the framework's opt-in discipline forbids.
+`contextKey` is **not** overloaded as the primary. The two coincide in
+practice — a keyed model will normally set `contextKey` to its primary so
+journal entries carry the entity key — but conflating them would make every
+caller that sets `contextKey` for journal purposes opt into sharing without
+asking, which the framework's opt-in discipline forbids.
 
 ## Register-or-attach and attach go through the bind rule
 
-No wire change: the three requests above are unchanged. Every keyed acquire
+Every keyed acquire
 `Bridge` makes is a `bindModel` with the owner as the delivery executor (see
 [backend.md](backend.md), "The structural registration surface", and
 [bridge.md](bridge.md#registration-readiness--the-bind-rule)):
@@ -431,12 +419,11 @@ authorizer silently defeat the feature:
 - **`instances` is gated by `authorize`** for the model type with an empty
   action id, so an authorizer can refuse enumeration without refusing use. It
   leaks the set of live keys to anyone permitted to call it, which is a
-  meaningful disclosure for key spaces that are themselves sensitive — the
-  security spec must call this out.
+  meaningful disclosure for key spaces that are themselves sensitive.
 
 An application that needs per-instance ownership on a shared model must enforce
 it inside the model, from `Context::principal`, which is the same advice
-`security.md` already gives for security-critical checks.
+[security.md](../security.md) gives for security-critical checks.
 
 ## Watching a keyed instance
 
@@ -458,14 +445,12 @@ is the authorizer's rule for the model type's actions, as it is for an execute
 on a shared instance. A private instance needs no watch, since the server knows its
 owner. See [backend.md, "Watches"](backend.md#watches).
 
-## Lifetime and the A7 connection-scope change
+## Lifetime: an attachment is a reference
 
-This changed shipped A7 behaviour, which nothing in the §A–§E program did. It was
-unavoidable.
-
-`closeConnection(cid)` used to erase every model recorded in `cid`'s scope. With
-cross-client sharing that would destroy an instance another live client is still
-attached to, so a scope entry is a **reference**, not ownership:
+A connection scope does not own the instances recorded in it. If
+`closeConnection(cid)` erased every model in `cid`'s scope, it would destroy a
+shared instance another live client is still attached to, so a scope entry is a
+**reference**, not ownership:
 
 - Each attach — from any connection — increments an instance's attach count.
 - `deregister`, handler destruction, and `closeConnection` each decrement.
@@ -477,12 +462,12 @@ attached to, so a scope entry is a **reference**, not ownership:
   the same instance from two handlers releases two references, not one) —
   a duplicate attach never leaks, it always unwinds fully at connection close.
 
-Unshared instances have exactly one attacher by construction, so their lifetime
-is unchanged: count reaches zero on the same event that erases them today.
+Unshared instances have exactly one attacher by construction, so their count
+reaches zero on the one event that releases them: `deregister`, handler
+destruction or connection close.
 
-An optional idle grace period (keep a zero-count shared instance alive for *n*
-seconds in case another client re-attaches) is **not** part of this work.
-Default behaviour is immediate destruction at zero.
+There is no idle grace period: a shared instance whose count reaches zero is
+destroyed at once, even if another client is about to re-attach.
 
 `LimitPolicy::maxLiveModels` counts instances, not attachments, so sharing
 strictly reduces pressure on it.
@@ -494,15 +479,16 @@ strictly reduces pressure on it.
 | `BRIDGE_MODEL_KEY(M, A, &A::f)` | macro | Designates `A` as the action defining `M`'s key, and deduces the key type from `f`. Once per model. |
 | `Model::PrimaryKey` | optional nested alias | Overrides the deduced key type. Any `ModelKey`: a raw scalar (integral or `std::string`) or a strong id wrapping one. |
 | `morph::bridge::AllowShared` | tag type | Second template argument of `BridgeHandler`. Opts the handler into the directory. |
-| `morph::bridge::NoSharing` | tag type | The default. Today's isolated-instance behaviour. |
+| `morph::bridge::NoSharing` | tag type | The default. An isolated instance, never entered into the directory. |
 | `BRIDGE_KEY_FROM(A, &A::field)` | macro | Declares that a further action `A` also carries the key. |
 | `BRIDGE_MODEL_KEY_FROM_RESULT(M, A, &R::field)` | macro | As `BRIDGE_MODEL_KEY`, but the key comes from `A`'s *result*. |
 | `BRIDGE_KEY_FROM_RESULT(A, &R::field)` | macro | A further creating action whose result establishes the key. |
 | `handler.attach(key)` | `void` | Attaches (or re-points) without executing an action. Never throws or waits; a refused attach, an empty key included, is logged — see [Register-or-attach and attach go through the bind rule](#register-or-attach-and-attach-go-through-the-bind-rule). |
 | `handler.primary()` | `std::optional<PrimaryKey>` | The handler's current primary; empty if unattached. |
 | `handler.instances()` | `Completion<std::vector<PrimaryKey>>` | Snapshot of live shared keys for this model type. |
-| `handler.execute(keyedAction)` | `Completion<R>` | Unchanged signature and contract. Its **attach** step (payload-keyed) and the **bind** step of the result-keyed path take the backend's async path when one exists, so neither blocks on a round-trip — visible only as *not aborting a WASM main thread*. The result-keyed path's **promote** step (`assignPrimary`) is still synchronous and still blocks. See [Register-or-attach and attach go through the bind rule](#register-or-attach-and-attach-go-through-the-bind-rule). |
-| `IBackend::bindModel` | `Completion<ModelId>` | The one non-blocking acquire verb; its `BindRequest`'s shape selects private / register-or-attach / re-point. The default runs the synchronous verb that shape names and settles before returning, so a backend that overrides nothing is unchanged. |
+| `handler.execute(keyedAction)` | `Completion<R>` | The same signature and contract as an unkeyed `execute`. Its **attach** step (payload-keyed), and the **bind** and **promote** steps of the result-keyed path, go through `IBackend::bindModel` / `promoteModel`, so none blocks on a round trip. See [Register-or-attach and attach go through the bind rule](#register-or-attach-and-attach-go-through-the-bind-rule). |
+| `IBackend::bindModel` | `Completion<ModelId>` | The one non-blocking acquire verb; its `BindRequest`'s shape selects private / register-or-attach / re-point. The default implementation has no directory: it binds a private instance for every shape through `registerModelWithContext`, releases a non-zero `current` once the replacement is acquired, and settles before returning. |
+| `IBackend::promoteModel` | `Completion<ModelId>` | Files a live, anonymous instance under a key. The default calls `assignPrimary` and settles before returning. |
 
 ## Design decisions
 
@@ -520,11 +506,12 @@ strictly reduces pressure on it.
   on the same entity. Server-side is the whole reason this needs wire changes.
 - **Instances never change key.** Re-pointing the handler achieves the same user
   goal with none of the collision, merge, or directory-consistency cases.
-- **`contextKey` is not reused as the primary.** It has a shipped meaning;
-  overloading it would change behaviour for existing users silently.
+- **`contextKey` is not reused as the primary.** It already means "journal
+  entity key"; overloading it would silently opt every caller that sets it into
+  sharing.
 - **Shared instances are ownerless.** The alternative — teaching
-  `authorizeInstance` about a set of owners — makes a simple, shipped, verified
-  hook substantially more complex to serve a case the model layer can handle.
+  `authorizeInstance` about a set of owners — makes a simple hook substantially
+  more complex to serve a case the model layer can handle.
 - **`instances()` is async even locally.** Local/remote call-site symmetry is
   the framework's most load-bearing promise; a synchronous convenience overload
   would be the first place it broke.
@@ -534,9 +521,8 @@ strictly reduces pressure on it.
 - **A shared handler that runs a keyless action while unattached** gets a
   private instance with no primary, which can never enter the directory. It is
   then an `AllowShared` handler that shares nothing. The recommended discipline
-  is *keyed action, or `attach`, first*; the implementation should make this
-  observable — `primary()` returning empty after a successful execute is the
-  signal — rather than silently degrading.
+  is *keyed action, or `attach`, first*; `primary()` returning empty after a
+  successful execute is the observable signal.
 - **Attaching to a key whose entity does not exist.** The directory happily
   creates an instance; hydration fails inside the model and the action
   completes through `onError`. The instance must not be handed to a *new*
@@ -565,12 +551,11 @@ strictly reduces pressure on it.
   is stale on arrival. An `attach` to a key from a stale list is not an error —
   it simply creates the instance again.
 - **Re-pointing with calls in flight.** In-flight calls complete against the old
-  instance. A caller that assumes `.then` runs against the newly attached
-  instance is wrong; the spec must state the ordering explicitly.
-- **`closeConnection` under-counting.** If a connection attaches the same
-  instance from two handlers, the scope must record two references, or closing
-  it leaks one. This is the main correctness risk in the A7 change and needs a
-  dedicated test.
+  instance (see [Re-pointing, not re-keying](#re-pointing-not-re-keying)). A
+  caller that assumes `.then` runs against the newly attached instance is wrong.
+- **One connection attaching an instance twice.** The scope records two
+  references (`noteScopeAttach` keeps a per-`(connection, instance)` count), so
+  closing the connection releases both rather than leaking one.
 
 ## Limitations
 
@@ -611,7 +596,7 @@ strictly reduces pressure on it.
   no activation-on-message-to-a-cold-key. The directory tracks what exists; it
   does not conjure it.
 - **No cross-instance transactions.** Two shared instances are two strands; an
-  operation spanning both is a domain concern, as it is today.
+  operation spanning both is a domain concern.
 - **No state persistence provider.** What an instance holds and how it is loaded
   is entirely the model's business — see
   [the bank example](../../../examples/bank/README.md).
@@ -624,10 +609,10 @@ strictly reduces pressure on it.
   learn that a shared instance changed.
 - [bridge.md](bridge.md) — `HandlerBinding`, `contextKey`,
   `registerHandler`, and `switchBackend`'s re-registration path.
-- [backend.md](backend.md) — `RemoteServer`, connection scopes
-  (A7), and `LimitPolicy`.
+- [backend.md](backend.md) — `RemoteServer`, connection scopes, and
+  `LimitPolicy`.
 - [wire.md](wire.md) — the envelope, additive evolution, and the
-  `contextKey`-vs-`modelId` decision this proposal preserves.
+  `contextKey`-vs-`modelId` decision.
 - [session.md](../session/session.md) — `authorizeInstance`,
   `authorizeRegister`, and the recorded owner principal.
 - [security.md](../security.md) — the per-instance ownership hook and the

@@ -27,7 +27,8 @@ enum class ReconnectOutcome : std::uint8_t {
                   ///< point — see `onOnline()`; `Reconnected` can be returned
                   ///< without replaying.
     GaveUp,       ///< Exhausted maxAttempts without a successful reconnect; stayed offline.
-    Aborted,      ///< shouldContinue() returned false before any reconnect (e.g. went offline again).
+    Aborted,      ///< shouldContinue() returned false (or threw) at the start of an
+                  ///< attempt, before a reconnect succeeded.
 };
 
 namespace detail {

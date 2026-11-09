@@ -11,7 +11,7 @@ no new execution mode.
 
 ## Contents
 
-- [The gap this closes](#the-gap-this-closes)
+- [Why an unordered session](#why-an-unordered-session)
 - [The `s-*` section-group document](#the-s--section-group-document)
 - [C++ descriptors](#c-descriptors)
 - [`SectionSet<Model, Sections...>`](#sectionsetmodel-sections)
@@ -23,7 +23,7 @@ no new execution mode.
 - [Testing](#testing)
 - [Cross-references](#cross-references)
 
-## The gap this closes
+## Why an unordered session
 
 `FlowSession` has exactly one current step, and `FlowSession::set<>` throws
 `std::logic_error` on a field belonging to any other. That is right for a
@@ -106,8 +106,8 @@ BRIDGE_REGISTER_SECTION_GROUP(AccountSettings, "AccountSettings")
 
 `Bind` and the declaration-walking helpers live in
 `morph/forms/detail/session_common.hpp`, shared by both session types.
-`morph::flows::Bind` remains as an alias, since that is the name existing
-consumers write.
+`morph::flows::Bind` is an alias of it, so wizard declarations spell it in
+their own namespace.
 
 Registration is metadata only. `BRIDGE_REGISTER_SECTION_GROUP` specialises a
 traits template and registers nothing with the dispatcher — exactly as
@@ -153,7 +153,7 @@ renderer resolves it against. `SectionSet` never writes a bound field into a
 draft on its own.
 
 This is exact parity with `FlowSession`, which also emits `prefill` metadata
-and captures values without ever assigning a bound field. A section set had a
+and captures values without ever assigning a bound field. A section set has a
 stronger temptation to differ — with no ordering, "fill in the dependent field
 the moment the source resolves" is a coherent design — but a reactive write
 would silently overwrite a value the user had already typed into that field,
@@ -166,8 +166,8 @@ Capture happens on success only, in the dispatch's completion:
   so a result field wins on a name collision — the result is what the model
   actually settled on, and is therefore what a dependent field should show;
 - keys are `"<ActionTypeId>.<field>"`, the same vocabulary `Bind::path()` uses;
-- values are JSON-encoded, so `resolved("Profile.name")` yields `"\"ada\""`
-  and `resolved("Profile.id")` yields `"3"`.
+- values are JSON-encoded, so `resolved("UpdateProfile.name")` yields
+  `"\"ada\""` and `resolved("UpdateProfile.id")` yields `"3"`.
 
 A failed dispatch captures nothing.
 
@@ -224,7 +224,7 @@ make a member field wrong to set.
   would need a documented answer for the unordered case. A separate type has
   only the members that make sense.
 - **Shared declaration vocabulary.** `Bind`, the tuple/pack walkers and the
-  distinctness trait moved to `forms/detail/session_common.hpp` rather than
+  distinctness trait live in `forms/detail/session_common.hpp` rather than
   being duplicated. They describe how a form session declares its units, which
   both types do identically; only the sequencing differs.
 - **No index in the schema.** See [The `s-*` section-group document](#the-s--section-group-document).
@@ -236,9 +236,9 @@ make a member field wrong to set.
 
 ## Limitations
 
-- No renderer ships for `s-*` yet: the forms engine has no section-group
+- No renderer ships for `s-*`: the forms engine has no section-group
   counterpart to `wizardView`, so a host consuming the document builds its own
-  layout for now.
+  layout.
 - `resolved()` returns JSON-encoded strings, not typed values — the same shape
   `FlowSession::resolved` has, and the same caller-side decode.
 - A section that fires repeatedly issues one dispatch per `set<>`; there is no

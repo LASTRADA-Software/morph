@@ -18,11 +18,13 @@ security.md for the full trust model rather than duplicating it.
 - [Principal — readable authorization state outside a dispatch](#principal--readable-authorization-state-outside-a-dispatch)
 - [IAuthorizer — gate for action dispatch](#iauthorizer--gate-for-action-dispatch)
 - [The `authenticate` hook — the authoritative principal](#the-authenticate-hook--the-authoritative-principal)
+- [The `admit` hook — both answers from one look](#the-admit-hook--both-answers-from-one-look)
 - [The `authorizeInstance` hook — per-instance ownership](#the-authorizeinstance-hook--per-instance-ownership)
 - [The `authorizeRegister` hook — gating registration](#the-authorizeregister-hook--gating-registration)
 - [AllowAllAuthorizer and `allowAllAuthorizer()`](#allowallauthorizer-and-allowallauthorizer)
 - [Trust boundary](#trust-boundary)
 - [Thread safety — `current()` and `ScopedContext`](#thread-safety--current-and-scopedcontext)
+- [`RunOrigin` — what started a run, as the server says](#runorigin--what-started-a-run-as-the-server-says)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 - [Limitations](#limitations)
@@ -153,9 +155,31 @@ way — it is purely a UI-facing convenience with no wire representation.
 
 ## IAuthorizer — gate for action dispatch
 
-`IAuthorizer` is an abstract interface called once per `execute` envelope,
-before the action is dispatched. A `false` return causes the server to reply
-with `err|unauthorized` (the client surfaces the error through `.onError(...)`).
+`IAuthorizer` is an abstract interface `RemoteServer` consults before it acts on
+an envelope. A `false` return causes the server to reply with
+`err|unauthorized` (the client surfaces the error through `.onError(...)`).
+`authorize` is called on more than `execute`:
+
+| Envelope | `modelType` | `actionType` |
+|---|---|---|
+| `execute` (through [`admit`](#the-admit-hook--both-answers-from-one-look)) | the envelope's model type | the envelope's action type |
+| `instances`, `schemas` | the envelope's type id | **empty** |
+| `deregister` | **empty** | **empty** |
+
+The two read channels are gated so a deployer can refuse enumeration or schema
+disclosure without refusing use: `schemas` returns field names, bounds, rules
+and the payload fingerprint of every action. A `deregister` names no type; its
+type-level call lets a verifying authorizer refuse a release from a caller with
+no valid token before the per-instance check runs. **An implementation that
+matches on `modelType` or `actionType` must handle the empty case explicitly**,
+or it hits its default arm on exactly those envelopes.
+
+The server also asks `authorize` before honouring a `cancel` (with the
+cancelled call's ids) and before admitting a watch on a record or a model type
+(it may be watched when the principal may run at least one action that holds
+it). A server hosting the UI service consults it for that service's envelopes,
+under the pseudo-model `ui`, and to filter the catalog
+([`../ui/service.md`, "Authorisation"](../ui/service.md#authorisation)).
 
 ```cpp
 [[nodiscard]] virtual bool authorize(
@@ -187,8 +211,12 @@ dispatch thread and gives it no per-call mutable state.
 authenticate(const Context& ctx) const { return std::nullopt; }
 ```
 
-The default returns `nullopt`, meaning "I do not authenticate". `RemoteServer`
-calls `authenticate` **after `authorize` has already succeeded**:
+The default returns `nullopt`, meaning "I do not authenticate". On `execute`
+the server takes `authenticate`'s answer from [`admit`](#the-admit-hook--both-answers-from-one-look),
+together with `authorize`'s. On every other envelope it authenticates, `register`
+included, it calls `authenticate` first and stamps the result before any other
+hook runs, so `authorize`, `authorizeRegister` and `authorizeInstance` see the
+verified principal there. Either way:
 
 - If it returns a value, the server **overwrites `Context::principal`** with that
   verified value before building the `ScopedContext` around dispatch. From then
@@ -196,11 +224,9 @@ calls `authenticate` **after `authorize` has already succeeded**:
   identity the authorizer vouched for, not the string the client sent.
 - If it returns `nullopt`, the server **clears `Context::principal`** to the
   empty string. An unverified principal is never presented to model code as
-  authoritative — the client's claim does not pass through. This closes a
-  time-of-check/time-of-use gap (a token can pass `authorize` and then expire
-  before `authenticate`, whose `nullopt` would otherwise let the client's claim
-  survive) and the analogous authorize-only passthrough. See
-  [security.md](../security.md).
+  authoritative — the client's claim does not pass through, whether the
+  authorizer authenticates nothing (authorize-only or allow-all) or refused
+  this token. See [security.md](../security.md).
 
 This split keeps the two concerns separate: `authorize` answers "is this call
 permitted?" and `authenticate` answers "who is actually making it?". An
@@ -217,9 +243,37 @@ principal regardless.
 
 The full mechanism — token format, verification order, `RemoteServer`'s
 `dispatchExecute` call site, and the login flow — is documented in
-[security.md](../security.md). This spec fixes the *contract*: `authenticate`
-is consulted post-`authorize`, its return replaces the principal when present,
-and its `nullopt` clears the principal.
+[security.md](../security.md). This spec fixes the *contract*: a call the
+server admits runs under `authenticate`'s answer, which replaces the principal
+when present and clears it when `nullopt`.
+
+## The `admit` hook — both answers from one look
+
+```cpp
+struct Admission {
+    bool allowed = false;                      // authorize's answer
+    std::optional<std::string> principal;      // authenticate's answer
+};
+[[nodiscard]] virtual Admission admit(
+    const Context& ctx,
+    std::string_view modelType,
+    std::string_view actionType) const;
+```
+
+`RemoteServer` calls `admit` once per `execute`, in place of separate
+`authenticate` and `authorize` calls. The default calls `authenticate` and then
+`authorize`, so an authorizer that overrides only those two behaves as it would
+if they were called directly. `SigningAuthorizer` overrides it to verify the
+token **once** and answer both from that verification: a token that expires
+between two verifications cannot be judged valid by one and expired by the
+other. Its `authenticate` and `authorize` are still called through the vtable,
+so a subclass that overrides either keeps its own decision.
+
+The verified principal is compared with the connection's baseline before any
+check can refuse the call, so an `execute` under a different principal (or
+none) drops the connection's watches even when it is refused. A refused
+admission replies `err "unauthorized"`; an admitted call runs under
+`Admission::principal`, or the empty principal when it is `nullopt`.
 
 ## The `authorizeInstance` hook — per-instance ownership
 
@@ -245,9 +299,11 @@ type/action ids), passing the target instance id and its recorded owner. A
 `false` return replies `err "unauthorized"` and the operation does not proceed.
 
 The **default returns `true`**, so `AllowAllAuthorizer` and a plain
-`SigningAuthorizer` impose no per-instance restriction — behaviour is unchanged
-unless an authorizer overrides the hook (typically `ownerPrincipal.empty() ||
-ownerPrincipal == ctx.principal`). The full mechanism, the register-time owner
+`SigningAuthorizer` impose no per-instance restriction; an authorizer opts in
+by overriding the hook (typically `ownerPrincipal.empty() ||
+ownerPrincipal == ctx.principal`). The server also calls it with an instance id
+of 0 and an empty owner when admitting a watch on a model type, since the
+instance may not exist yet. The full mechanism, the register-time owner
 recording, and the trust model are in [security.md](../security.md)
 ("The per-instance ownership hook"). This spec fixes the *contract*:
 `authorizeInstance` is consulted per `execute` and per `deregister`, defaults to
@@ -274,7 +330,7 @@ rejection costs nothing beyond the authenticate/authorize check.
 
 The **default returns `true`**, so `AllowAllAuthorizer` and a plain
 `SigningAuthorizer` impose no register restriction — an unconfigured server
-registers any known model type exactly as before. A deployer opts into
+registers any known model type. A deployer opts into
 bounding registration by overriding the hook, typically requiring
 authentication and/or restricting `modelType`:
 
@@ -320,10 +376,10 @@ input. The rules that govern where trust begins:
   `authenticate` overwrites it — and when no authorizer authenticates, the
   server clears `principal` rather than passing the claim through. Model code
   must not treat any field as trusted before that point.
-- **The local backend does not authorize at all.** `authorize` is a
+- **The local backend does not authorize at all.** The authorizer is a
   **remote-only gate**: `LocalBackend::execute` installs the session context but
-  never consults the authorizer (its sole call site is `RemoteServer`'s
-  `dispatchExecute`, see [backend.md](../core/backend.md)). Any security-critical check
+  never consults it; every call site is in `RemoteServer` and the UI service it
+  hosts (see [backend.md](../core/backend.md)). Any security-critical check
   must therefore be enforced inside the model so it holds in both local and
   remote modes.
 - **The `RemoteServer` default authorizer is fail-open.** An unconfigured server
@@ -376,13 +432,33 @@ context is live while the model's `execute()` runs. `ActionDispatcher::dispatch`
 itself does not touch the thread-local pointer — it only looks up and invokes the
 registered runner.
 
-A usage example from the bank example (`bank/core/principal.hpp`):
+A usage example from the bank example (`examples/bank/include/bank/core/principal.hpp`):
 
 ```cpp
 if (const auto* ctx = morph::session::current(); ctx != nullptr) {
     // use ctx->principal, ctx->locale, etc.
 }
 ```
+
+## `RunOrigin` — what started a run, as the server says
+
+```cpp
+struct RunOrigin {
+    std::string kind;   // what started the run, such as "assistant"
+    std::string text;   // the words that led to it
+};
+```
+
+`RunOrigin` is deliberately **not** a `Context` field: a `Context` arrives in the
+envelope, so a client can put anything in it. Server-side code passes an origin
+through `RemoteServer::executeWithOrigin(env, origin, reply)`; it has no wire
+form, so a client can neither set nor remove one. The server installs it with
+`detail::ScopedOrigin` around the model's run, beside the `ScopedContext`, and
+model code reads it with `session::currentOrigin()` — `nullptr` for an ordinary
+`execute`. Like `current()`, it is thread-local and valid only on the thread
+running the action. Journal entries written through
+`IModelHolder::recordIfAttached` carry it automatically; a model that appends
+its own entries reads `currentOrigin()` to carry it onto them.
 
 ## API reference
 
@@ -414,8 +490,9 @@ above and [bridge.md](../core/bridge.md).
 | Member | Signature | Notes |
 |---|---|---|
 | `~IAuthorizer()` | `virtual ~IAuthorizer() = default` | Virtual destructor for polymorphic use. |
-| `authorize` | `[[nodiscard]] virtual bool authorize(const Context&, std::string_view modelType, std::string_view actionType) const = 0` | Returns `true` to allow dispatch, `false` to reject. Called on `execute`, `instances`, `schemas` and `deregister` envelopes -- `instances` and `schemas` pass an **empty** `actionType`, and `deregister` passes both ids empty, so an implementation matching on either must handle that case. Sees only type ids. |
-| `authenticate` | `[[nodiscard]] virtual std::optional<std::string> authenticate(const Context&) const` | Optional. Default returns `nullopt`. Called after `authorize` succeeds; a returned value overwrites `Context::principal` (making it authoritative), and `nullopt` clears `Context::principal` so an unverified claim is never presented to the model. Also called at `register` time to record the instance's owner principal. |
+| `authorize` | `[[nodiscard]] virtual bool authorize(const Context&, std::string_view modelType, std::string_view actionType) const = 0` | Returns `true` to allow, `false` to reject. Called on `execute` (through `admit`), `instances`, `schemas` and `deregister` envelopes, on `cancel` and watch admission, and by the UI service — `instances` and `schemas` pass an **empty** `actionType`, and `deregister` passes both ids empty, so an implementation matching on either must handle that case. Sees only type ids. |
+| `authenticate` | `[[nodiscard]] virtual std::optional<std::string> authenticate(const Context&) const` | Optional. Default returns `nullopt`. A returned value overwrites `Context::principal` (making it authoritative), and `nullopt` clears it so an unverified claim is never presented to the model. On `execute` it is reached through `admit`; on other envelopes it runs before the other hooks. Its answer at `register` time is recorded as the instance's owner principal. |
+| `admit` | `[[nodiscard]] virtual Admission admit(const Context&, std::string_view modelType, std::string_view actionType) const` | Called once per `execute`. Default: `authenticate`, then `authorize`. Returns `Admission{allowed, principal}`. Override to answer both from one verification. |
 | `authorizeInstance` | `[[nodiscard]] virtual bool authorizeInstance(const Context&, std::string_view modelType, std::string_view actionType, std::uint64_t modelId, std::string_view ownerPrincipal) const` | Optional. Default returns `true` (allow). Consulted per `execute` and per `deregister` with the target instance id and its recorded owner. Override to enforce per-instance ownership; `modelType`/`actionType` are empty for `deregister`. |
 | `authorizeRegister` | `[[nodiscard]] virtual bool authorizeRegister(const Context&, std::string_view modelType) const` | Optional. Default returns `true` (allow). Consulted on every `register`, after authentication, before the instance is constructed. Override to bound *who may create* an instance. |
 
@@ -432,6 +509,7 @@ above and [bridge.md](../core/bridge.md).
 |---|---|---|
 | `allowAllAuthorizer()` | `std::shared_ptr<IAuthorizer> allowAllAuthorizer()` | Returns a process-wide singleton `AllowAllAuthorizer`. |
 | `current()` | `const Context* current() noexcept` | Returns the active context, or `nullptr` when none / on a non-dispatch thread. |
+| `currentOrigin()` | `const RunOrigin* currentOrigin() noexcept` | Returns the server-set origin of the running action, or `nullptr` when it has none. |
 
 ### `detail::ScopedContext`
 
@@ -441,6 +519,11 @@ above and [bridge.md](../core/bridge.md).
 | dtor | `~ScopedContext()` | Restores the **previously** active context (composes under nesting). |
 | (copy/move) | deleted | Non-copyable, non-movable. |
 
+`detail::ScopedOrigin` is the same helper for the `RunOrigin` slot: `explicit
+ScopedOrigin(const RunOrigin* origin)` installs `origin` (null for a run without
+one), its destructor restores the previous one, and it is non-copyable and
+non-movable.
+
 ## Design decisions
 
 | Decision | Choice | Why |
@@ -448,9 +531,11 @@ above and [bridge.md](../core/bridge.md).
 | Context shape | **Plain struct, not polymorphic** | The context is a data bag, not a behaviour abstraction; a struct is simpler to construct, serialise, and consume. |
 | Thread-local context | **`const Context*` TLS pointer, installed by the backend around the model call** | Models read session data without changing `execute()` signatures; the pointer is `const` (immutable during dispatch) and RAII-guarded by `ScopedContext`. |
 | `ScopedContext` restores the previous pointer | **Save/restore rather than clear-to-null** | Nested dispatch (a model dispatching into another) composes: the inner context shadows the outer and the outer is restored on exit. |
-| Authorizer granularity | **Per-envelope, before dispatch, type ids only for `authorize`; a separate optional `authorizeInstance` for row-level** | `authorize` stays a cheap type-level gate; per-instance ownership is a distinct optional hook so a deployer can enforce multi-tenancy without patching the framework, while the default (allow) keeps existing servers unchanged. Logic the framework cannot know still lives in the model. |
-| Instance ownership hook defaults to allow | **`authorizeInstance` returns `true` by default; owner recorded from the verified register principal** | Backward compatibility: unconfigured and allow-all servers behave exactly as before. Recording the owner from the *verified* (not claimed) principal makes the check meaningful only under a verifying authorizer, which is the only context where ownership is trustworthy. |
-| Authentication as a separate hook | **`authenticate` distinct from `authorize`, optional with a `nullopt` default; `nullopt` clears the principal** | Separates "is this permitted?" from "who is it?"; authorizers that don't authenticate cost nothing, and the verified principal — not the client's claim — becomes authoritative when one does. A `nullopt` result clears the principal so an unauthenticated claim is never trusted, closing the TOCTOU/authorize-only passthrough. |
+| Authorizer granularity | **Per-envelope, before dispatch, type ids only for `authorize`; a separate optional `authorizeInstance` for row-level** | `authorize` stays a cheap type-level gate; per-instance ownership is a distinct optional hook so a deployer can enforce multi-tenancy without patching the framework, while the default (allow) imposes nothing on an authorizer that does not override it. Logic the framework cannot know still lives in the model. |
+| Instance ownership hook defaults to allow | **`authorizeInstance` returns `true` by default; owner recorded from the verified register principal** | An unconfigured or allow-all server imposes no per-instance restriction. Recording the owner from the *verified* (not claimed) principal makes the check meaningful only under a verifying authorizer, which is the only context where ownership is trustworthy. |
+| Authentication as a separate hook | **`authenticate` distinct from `authorize`, optional with a `nullopt` default; `nullopt` clears the principal** | Separates "is this permitted?" from "who is it?"; authorizers that don't authenticate cost nothing, and the verified principal — not the client's claim — becomes authoritative when one does. A `nullopt` result clears the principal so an unauthenticated claim is never trusted, even under an authorize-only authorizer. |
+| Both answers from one `admit` on `execute` | **One virtual that returns `authorize`'s and `authenticate`'s answers together** | Two independent verifications read the clock twice: a token could pass one and expire before the other. One verification judges the token against one clock reading. |
+| `RunOrigin` beside `Context`, not in it | **Server-set, no wire form, read through `currentOrigin()`** | Anything in `Context` is client input; an origin the journal records as the server's must be something a client cannot forge. |
 | Singleton authorizer | **Static local in `allowAllAuthorizer()`** | All trivial `RemoteServer` instances share one `AllowAllAuthorizer` allocation rather than each owning one. |
 | Serialisation | **Entire `Context` travels on the wire** | The remote backend's `RemoteServer` sees the same `principal`, `token`, `requestId`, `locale`, and `metadata` the GUI sent; no information is stripped. |
 | `Principal` scope | **Per-`Bridge` instance, not a process-wide global** | A global "current user" is convenient for a single-backend desktop client but wrong in general — an app may hold more than one `Bridge`, and a global would let one backend's identity leak into another's UI gating. Scoping it to the same object that already holds the default `Context` (`setDefaultSession`) keeps one consistent place to look for "this backend's session state," with no new ambient state. |

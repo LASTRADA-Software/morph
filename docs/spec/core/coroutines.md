@@ -15,8 +15,9 @@ locally, and its result travels back as the same `ok` or `err` envelope a
 synchronous handler's does.
 
 The implementation lives in `include/morph/core/coroutine.hpp`, apart from
-three pieces: the awaiter hook in `completion.hpp`, the handler detection in
-`model.hpp`, and the driver at the two execution sites (`bridge.hpp`'s
+four pieces: the awaiter hook in `completion.hpp`, the handler detection and
+action gate in `detail/task_handler.hpp` (included by `model.hpp`), the
+handler's resumer and `ModelStrands` in `strand.hpp`, and the driver at the two execution sites (`bridge.hpp`'s
 `localOp` and `registry.hpp`'s `ActionDispatcher` runner).
 
 ## Contents
@@ -348,8 +349,8 @@ token as the handler Task's stop token. `LocalBackend` creates one itself for
 a call that has no deadline, so that its destructor can stop the handler (see
 Limitations, "Teardown"). So:
 
-- the caller's `Completion` rejects with `ClientTimeoutError`, exactly as
-  before;
+- the caller's `Completion` rejects with `ClientTimeoutError`, as for any
+  handler;
 - the suspended handler receives `core::async::OperationCancelled` at its next
   `co_await` of a morph awaiter or a stop-aware core-cpp one, unwinds, and
   leaves the action gate;
@@ -362,7 +363,7 @@ the client's deadline cannot reach the server's handler, since nothing on the
 wire carries it. The server's own `LimitPolicy::executeTimeout` stops it
 instead: `RemoteServer` creates a `StopSource` per dispatch when a timeout is
 configured, and hands its token to the handler. The timeout's timer replies
-`err "timeout"` to the caller as before, then requests stop, and the handler
+`err "timeout"` to the caller, then requests stop, and the handler
 unwinds and leaves the action gate as above.
 
 ### Journal and observability
@@ -485,8 +486,7 @@ refused and unwinds inline, and closing them drops only what was queued before
   handler. `RemoteServer` asks `dispatchesAsync` which of the two an action
   needs, and uses `dispatchAsync` for a Task handler. `journal::replay`, which
   dispatches synchronously, therefore cannot replay an entry whose handler is
-  a Task handler; such an action is not replayable until replay is
-  asynchronous.
+  a Task handler; such an action is not replayable.
 
 ## Cross-references
 

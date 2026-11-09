@@ -4,7 +4,7 @@
 
 `morph` is a typed, asynchronous bridge between a GUI thread and business-object models. Models may live in-process (local mode) or in a remote server process (remote mode). The GUI code is identical in both cases — only the backend implementation changes.
 
-The framework is header-only (C++23, namespace `morph`), depends on Glaze for JSON reflection and on [core-cpp](https://github.com/contour-terminal/core-cpp) for its event-loop timers, base64 and wakeup primitive, and optionally integrates with Qt 6 via a separate target. core-cpp's `core::base`, `core::net` and `core::platform` are static libraries, so while morph's own surface is headers only, a project that links `morph::morph` also builds those.
+The core library, `morph::morph`, is header-only (C++23, namespace `morph`). It depends on Glaze for JSON reflection and on [core-cpp](https://github.com/contour-terminal/core-cpp) for its event-loop timers, base64 and wakeup primitive; core-cpp's `core::base`, `core::net` and `core::platform` are static libraries, so a project that links `morph::morph` also builds those. The optional parts are separate targets, and some are compiled: the Qt integration (`morph::qt`), the terminal frontend (`morph::tui`), the Qt Quick frontend (`morph::qt_quick`) and the generic client (`morph::client`) are static libraries with sources under `src/`.
 
 > **New to morph?** `docs/GETTING-STARTED.md` is the step-by-step tutorial that
 > comes before this document: it builds one small app end to end
@@ -46,9 +46,9 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::bridge` | Bridge between handler and backend | `Bridge`, `BridgeHandler<M>` |
 | `morph::offline` | Connectivity + replay | `NetworkMonitor`, `NetworkMonitorConfig`, `IOfflineQueue`, `QueueItem`, `OfflineQueueFullError`, `InMemoryOfflineQueue`, `FileOfflineQueue`, `FileOfflineQueueError`, `SqliteOfflineQueue`, `SqliteOfflineQueueError`, `SyncWorker` (incl. `DeadLetterSink`), `SyncResult`, `ReconnectCoordinator`, `ReconnectOutcome`, `ReconnectCoordinatorConfig` |
 | `morph::session` | Per-call session context + authentication | `Context`, `IAuthorizer`, `AllowAllAuthorizer`, `allowAllAuthorizer`, `current`; authenticated sessions (`session_auth.hpp`): `SessionToken`, `TokenIssuer`, `TokenVerifier`, `SigningAuthorizer`, `MacFunction`, `hmacSha256`, `AuthError` |
-| `morph::journal` | Ordered, replayable action log (issue #3) | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `FileActionLog`, `SessionLog`, `OutboxRelay`, `OutboxRelayResult`, `PayloadMigrationRegistry`, `SchemaMismatchError`, `SerializationError`, `NullSinkError`, `replay()`, `toJson`/`fromJson`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` |
+| `morph::journal` | Ordered, replayable action log | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `FileActionLog`, `SessionLog`, `OutboxRelay`, `OutboxRelayResult`, `PayloadMigrationRegistry`, `SchemaMismatchError`, `SerializationError`, `NullSinkError`, `replay()`, `toJson`/`fromJson`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` |
 | `morph::math` | Exact numeric values for actions | `Rational`, `DecimalPlaces`, `RationalError`, `kMaxDecimalPlaces`, `abs`/`ceil`/`floor`/`trunc` |
-| `morph::units` | Unit-tagged, optionally-empty values | `Quantity<U>`, `UnitMeta`, `UnitTraits<E>` (app-specialised), `UnitAlternative<E>`, `HasUnitAlternatives`, `UnitEnum`, `isQuantity` |
+| `morph::units` | Unit-tagged, optionally-empty values | `Quantity<U>`, `UnitMeta`, `UnitTraits<E>` (app-specialised), `UnitAlternative<E>`, `HasUnitRelations`, `UnitEnum`, `isQuantity` |
 | `morph::time` | UTC timestamps for actions | `DateTime`, `Timestamp` |
 | `morph::forms` | JSON-Schema generation for auto-built GUIs, and the forms engine that reads it back and renders it through the view tree (see `docs/spec/forms/engine.md`) | `schemaJson<A>()`, `allRequiredEngaged()`, `Choice<T, ...>`, `FixedString`, `isChoice`, `EmptyCapableField`, `BlankAs`; `FormModel`, `FieldSpec`, `RuleExpr`, `FormSession`, `FieldState`, `Submitter`, `ChoiceFetcher`, `handlerSubmitter`, `Form<A, M, S>`, `CollectionSession`, `WizardSession`, `formView`, `collectionView`, `wizardView` |
 | `morph::reactive` | Signal graph, view state and declarative control (see `docs/spec/reactive/`) | `Runtime`, `RuntimeOptions`, `Signal<T>`, `Computed<T>`, `Effect`, `Scope`, `EqualityPolicy`, `kEqualityUsable`, `Store<ViewState, Msg>`, `ExhaustiveUpdate`, `request()`, `Query<A, R>`, `QueryOptions`, `InvalidationLink`, `Mutation<A, R>`, `MutationOptions<A>`, `Concurrency`, `Subscription<R>`, `Refetchable`, `errorMessage`, `Scheduler`, `TimerHandle`; `testing::ManualScheduler` |
@@ -57,6 +57,10 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::tui` | The terminal renderer and frontend (built only when `MORPH_BUILD_TUI=ON`; see `docs/spec/tui/`) | `Backend`, `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `kInterruptExitCode`, `LoopExecutor` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |
 | `morph::qt_quick` | The Qt Quick renderer and frontend (built only when `MORPH_BUILD_QT_QUICK=ON`; see `docs/spec/qt_quick/`) | `Backend`, `BackendOptions`, `CustomWidget`, `CustomRequest`, `Components`, `ComponentFailure`, `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `usableHere`, `QtScheduler` |
+| `morph::net` | The raw-socket WebSocket transport (built only when `MORPH_BUILD_NET=ON`, POSIX only) | `SocketBackend`, `SocketServer` |
+| `morph::table` | The table engine: sort, filter and view mapping over a data source (see `docs/spec/table/engine.md`) | `Engine`, `EngineOptions`, the data-source, query, selection and edit types |
+| `morph::render` | Client-side rendering helpers that never reach the wire | the translation-catalog seam (`i18n.hpp`), locale numeric-entry normalisation (`locale_format.hpp`) |
+| `morph::client` | The generic client's source, command line and shell (built when `MORPH_BUILD_CLIENT=ON`, the default; see `docs/spec/client/client.md`) | `Args`, `Source`, `RemoteSource`, `LocalSource`, `LocalApp`, `RemoteTransport`, `ApplicationHost`, `ShellOptions` |
 
 Every nested `detail` namespace under those topics holds implementation symbols. These do appear in some public signatures (e.g. `Bridge`'s constructor takes `unique_ptr<backend::detail::IBackend>`), but callers never type a detail name directly — `std::make_unique<morph::backend::LocalBackend>(...)` converts implicitly.
 
@@ -96,7 +100,7 @@ Every nested `detail` namespace under those topics holds implementation symbols.
 GUI thread
   └─ bridge::BridgeHandler<M>::execute(action)
        └─ bridge::Bridge::executeVia<M, A>
-            └─ backend::LocalBackend::execute
+            └─ backend::LocalBackend::executeInto
                  └─ ModelStrands → worker thread → Model::execute(action)
                       └─ async::Completion<T>::then callback → GUI executor
 ```
@@ -163,6 +167,11 @@ field is the discriminator:
 | `"ok"`        | server → client | `callId`, plus `body` (execute result) or `modelId` (register reply) | Success |
 | `"err"`       | server → client | `callId` (echoed), `message` | Failure |
 
+These are the kinds every client uses. The rest — `hello` (protocol-version
+negotiation), `attach`/`assign`/`instances` (shared instances), `schemas`,
+`cancel`, and `watch`/`unwatch`/`event` (change notifications) — are specified
+in `docs/spec/core/wire.md`.
+
 All envelopes round-trip through Glaze JSON, so the protocol is self-describing,
 escaping-safe, and easy to extend (add a field, ignore unknowns). A kind the server
 does not answer itself goes to the `IEnvelopeService`s in `ServerConfig::services`;
@@ -193,7 +202,8 @@ and destroyed the reply buffer the deferred callback would write into.
 account id) from `HandlerBinding::contextKey` across the wire, so a
 server-side `RemoteServer::LogProvider` can attach an action log to the
 instance it creates — see "Action log" below. Empty (the default) means no
-identity; the field is ignored on every other envelope kind.
+identity. The field is carried on `register` and `attach` and ignored on every
+other kind.
 
 ## Component detail
 
@@ -202,18 +212,18 @@ identity; the field is ignored on every other envelope kind.
 All concurrency runs through `morph::exec::IExecutor::post(fn)`:
 
 - **`ThreadPoolExecutor`** — fixed N worker threads, MPMC queue. A task exception is caught and logged via `morph::log` (`std::exception` with its `what()`, anything else as "unknown exception"); it never propagates out of the worker or aborts sibling tasks.
-- **`MainThreadExecutor`** — single-threaded queue with `runFor(timeout)` drain; used in non-Qt tests to pump the "GUI" thread. It catches only `std::exception` from a task, logs it via `morph::log`, and continues with the next task.
-- **`QtExecutor`** — posts via `QMetaObject::invokeMethod(Qt::QueuedConnection)`; safe from any thread; drops silently if the target object is deleted.
+- **`MainThreadExecutor`** — single-threaded queue pumped by `runFor(timeout)`; used in non-Qt tests and tools as the "GUI" thread. A task exception is caught and logged the same way, and the pump continues with the next task.
+- **`QtExecutor`** — posts via `QMetaObject::invokeMethod(Qt::QueuedConnection)`; safe from any thread. A task still queued when the executor is destroyed is dropped, not run.
 
 A model instance's strand (`morph::exec::detail::ModelStrands`, below) is where `Model::execute()` actually runs; like `ThreadPoolExecutor`, it catches a task exception (`std::exception` or unknown) and logs it via `morph::log` so a throw neither stalls the strand nor vanishes — the next queued task for that model still runs.
 
 ### Strands
 
-`morph::exec::detail::ModelStrands` guarantees that all tasks for the same `ModelId` are serialised while tasks for different models are parallelised. It is core-cpp's `core::async::KeyedStrands<ModelId>` over the backend's `IExecutor`: a strand per model instance with work, made when it gets work and retired when it runs out, which queues itself on the executor once per turn and runs a batch of tasks there. morph adds the adapter to its `IExecutor`, the catch-and-log above, and the Task handler's session around each of the handler's resumptions (see `spec/core/coroutines.md`).
+`morph::exec::detail::ModelStrands` guarantees that all tasks for the same `ModelId` are serialised while tasks for different models are parallelised. It is core-cpp's `core::async::KeyedStrands<ModelId>` over the backend's `IExecutor`: a strand per model instance with work, made when it gets work and retired when it runs out, which queues itself on the executor once per turn and runs a batch of tasks there. morph adds the adapter to its `IExecutor`, the catch-and-log above, and the Task handler's session around each of the handler's resumptions (see `docs/spec/core/coroutines.md`).
 
 ### Completion<T>
 
-Move-only public result handle (`morph::async::Completion<T>`). Internally backed by `morph::async::detail::CompletionState<T>` (mutex-protected value + error + two callback slots). Key invariant: callbacks are always delivered via the `IExecutor` supplied at construction, so the GUI thread is never blocked and callbacks always fire on the right thread.
+Move-only public result handle (`morph::async::Completion<T>`). Internally backed by `morph::async::detail::CompletionState<T>`, which takes no lock: the first settle claims the state with an atomic exchange and publishes the value or error, and everything else — the attached handlers and their delivery — belongs to the callback executor. Key invariant: callbacks are always delivered via the `IExecutor` supplied at construction, so the GUI thread is never blocked and callbacks always fire on the right thread. Several handlers may be attached; they run in attachment order.
 
 If a `Completion` is destroyed with an unhandled error (no `.onError` was attached), `CompletionState::~CompletionState` logs the exception through the configured logger.
 
@@ -242,15 +252,13 @@ Bridge            ──holds──►  weak_ptr<HandlerBinding>   (does NOT kee
 
 `BridgeHandler` holds the `shared_ptr`, so the `HandlerBinding` lives exactly as long as the handler does. `Bridge` holds a `weak_ptr`, so it can observe whether the handler is still alive — but it cannot prevent its destruction.
 
-**RAII lifetime:** When `BridgeHandler` goes out of scope, its destructor calls `Bridge::deregisterHandler`, which tells the backend to destroy the model instance and removes the stale `weak_ptr` from the Bridge's list. No manual cleanup is required from application code.
+**One owner.** A `Bridge`, its handlers and its backend belong to the executor passed to the `Bridge` constructor (typically the GUI executor). Every member function runs there, so the bridge takes no lock; what arrives from other threads — bind replies, reconnects, the bridge-side work an action's result triggers — is posted to the owner. Only `pendingCalls()`, `isBound()` and `hasSubscribers()` read atomics and may be asked from anywhere. See `docs/spec/core/bridge.md`, "Thread safety — one owner".
 
-**Destruction order is safe either way:** the `BridgeHandler` also holds a `weak_ptr<const void>` liveness token published by the `Bridge` (`Bridge::liveness()`; the token is destroyed with the bridge). The destructor deregisters only if that token is still live — if the `Bridge` was destroyed first, the token has expired and the handler skips deregistration instead of dereferencing a dangling `Bridge&`. Destroying a bridge before its handlers is still discouraged, but is defined behaviour rather than a use-after-free.
+**RAII lifetime:** When `BridgeHandler` goes out of scope, its destructor calls `Bridge::deregisterHandler`, which tells the backend to release the model instance. No manual cleanup is required from application code. Handlers are destroyed before their bridge. A handler that outlives its bridge checks the bridge's liveness token (`Bridge::liveness()`) and deregisters nothing once it has expired, so destroying it late is tolerated — but any call through it after the bridge is gone is not.
 
-**`atomic<uint64_t> currentId`:** Every call to `executeVia` reads `binding->currentId` to find out which backend-assigned ID to use. The value is an atomic so it can be updated during a backend switch without holding the bridge mutex for the duration of every execute call. A value of `0` is the sentinel for "not bound" — `executeVia` returns an immediate error in that case.
+**`atomic<uint64_t> currentId`:** the backend-assigned `ModelId` the binding's calls go to; `0` means unbound. It is the one binding field read off the owner (by `isBound()`), which is why it is atomic. A call made while the binding is unbound or a bind is in flight is held and dispatched when the bind settles (`docs/spec/core/bridge.md`, "Registration readiness — the bind rule").
 
-**Backend switching:** `Bridge::switchBackend(newBackend)` acquires the bridge mutex, re-registers every live `HandlerBinding` on the new backend, replaces the active backend, then calls `notifyBackendChanged()`. `LocalBackend` forwards this to every live model that implements `IBackendChangedSink` (detected at compile time via the `BackendChangedNotifiable` concept). `SimulatedRemoteBackend` is a no-op — its models live inside `RemoteServer`.
-
-The switch is **exception-safe and atomic** (stage-all-then-commit): phase 1 registers every binding on the new backend into a staging list *without* touching any `currentId`; if any registration throws (a plausible remote/transport failure) the already-registered instances are rolled back with `deregisterModel` and the exception is rethrown, leaving the old backend and every `currentId` untouched — the switch either fully succeeds or is a no-op. Only after all registrations succeed does phase 2 publish the new `ModelId` values atomically into each `binding->currentId` and swap the backend in. The outgoing backend's pending completions are drained (`cancelPending` with `BackendChangedError`) *outside* the bridge mutex, so user callbacks never run while `_mtx` is held.
+**Backend switching:** `Bridge::switchBackend(newBackend)` issues a bind on the new backend for every live binding. If a bind that settles before `switchBackend` returns failed, every instance acquired so far is released and the failure is rethrown with the old backend and every binding untouched. Otherwise the switch commits: the new ids are published, the backend is swapped, `notifyBackendChanged()` runs, and the old backend's pending calls are cancelled with `BackendChangedError`. `LocalBackend` posts `onBackendChanged()` onto the strand of every live model that implements `IBackendChangedSink` (detected at compile time via the `BackendChangedNotifiable` concept); `SimulatedRemoteBackend` does nothing, because its models live inside `RemoteServer`.
 
 ### Logger
 
@@ -279,23 +287,23 @@ section is only a map, not a substitute.
 
 ### NetworkMonitor
 
-`morph::offline::NetworkMonitor` provides a background probe thread that tracks connectivity and fires callbacks on transitions. The framework supplies no probe implementation — the caller provides a `bool()` callable that returns `true` when the system is reachable (TCP connect, HTTP ping, custom check, etc.). This keeps the monitor fully portable across OS and transport.
+`morph::offline::NetworkMonitor` probes connectivity on a timer of an I/O loop — the application's `IoLoop`, or one the monitor owns, with a thread of its own — and fires callbacks on transitions. The framework supplies no probe implementation — the caller provides a `bool()` callable that returns `true` when the system is reachable (TCP connect, HTTP ping, custom check, etc.). This keeps the monitor fully portable across OS and transport.
 
 **State machine:**
 - Starts online (assumes connectivity until proven otherwise).
 - Goes offline after `failureThreshold` consecutive probe failures → fires `onOffline`.
 - Returns online after `onlineThreshold` consecutive probe successes → fires `onOnline`.
 - Each transition fires its callback exactly once.
-- Callbacks run on the probe thread and must not block.
+- The probe and the callbacks run on the loop's thread and must not block: while they run, nothing else on that loop makes progress.
 
-**Thread safety:** `isOnline()` reads an `std::atomic<bool>` — safe from any thread. `stop()` is idempotent and safe to call multiple times or from any thread. The destructor calls `stop()`, so explicit shutdown is optional.
+**Thread safety:** `isOnline()` reads an `std::atomic<bool>` — safe from any thread. `stop()` is idempotent and safe from any thread, including from inside the probe or a callback; once it returns, no probe or callback of the monitor runs again. The destructor calls `stop()`, so explicit shutdown is optional.
 
-**Intended integration with switchBackend:**
+**Intended integration with switchBackend:** the callbacks run on the loop's thread, and `switchBackend` belongs to the bridge's owner, so they post the switch there:
 ```cpp
 morph::offline::NetworkMonitor monitor{
     myTcpProbe,
-    [&] { bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(localPool)); },
-    [&] { bridge.switchBackend(std::make_unique<morph::backend::SimulatedRemoteBackend>(server)); }
+    [&] { gui.post([&] { bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(localPool)); }); },
+    [&] { gui.post([&] { bridge.switchBackend(std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)); }); }
 };
 ```
 
@@ -330,7 +338,7 @@ Application code that needs a specific instance identity (e.g. per-account audit
 
 Because these are mutually exclusive per topology, recording is automatically server-side wherever a client/server split exists, with no extra plumbing.
 
-**`Loggable`** (`morph::model::Loggable::{Yes,No}`) is a strong-typed opt-out on the existing `BRIDGE_REGISTER_ACTION` macro (an optional 4th argument; no separate registration macro). Default is `Yes` — every action is recorded unless explicitly marked `Loggable::No` (typically pure queries like `GetAccount`/`ListAccounts`). Hand-written `ActionTraits` specialisations that predate this member (as used in several tests) are unaffected: `morph::model::detail::actionLoggable<A>()` defaults to `Yes` when the member is absent, via a `HasLoggableFlag` concept exactly like `ActionValidator`'s `HasValidate`.
+**`Loggable`** (`morph::model::Loggable::{Yes,No}`) is a strong-typed opt-out on `BRIDGE_REGISTER_ACTION` (an optional 4th argument; no separate registration macro). Default is `Yes` — every action is recorded unless explicitly marked `Loggable::No` (typically pure queries like `GetAccount`/`ListAccounts`). A hand-written `ActionTraits` specialisation without a `loggable` member is recorded too: `morph::model::detail::actionLoggable<A>()` defaults to `Yes` when the member is absent, via a `HasLoggableFlag` concept exactly like `ActionValidator`'s `HasValidate`.
 
 **`ActionLogPolicy<A>::coalesce`** (default `false`) decides whether repeated executions of the same action against the same entity should collapse to the latest occurrence at a checkpoint, or whether every occurrence is a distinct, permanent fact. This matters because a form driving one action per edit can fire the same action many times in a row — without coalescing, every keystroke-driven re-fire would become a permanent log entry. `false` is correct for anything resembling a business event (a deposit); `true` is for drafts/settings where only the final value matters.
 
@@ -340,7 +348,7 @@ Because these are mutually exclusive per topology, recording is automatically se
 
 **Remote-mode per-instance identity** (`ServerConfig::logProvider`) is the advanced escape hatch for when the global default isn't granular enough: `RemoteServer` owns the actual model instances behind any remote/simulated-remote client, so it is the only place able to attach a *different* log (or a specific `entityKey`) to a *specific* instance. `HandlerBinding::contextKey` (client-side) travels through the `register` wire envelope's `contextKey` field; if a `LogProvider` is installed, `RemoteServer` calls it with `(modelType, contextKey)` and attaches whatever `IActionLog` it returns (or nothing, if it returns `nullptr` or no `contextKey` was sent) before the instance ever executes an action — overriding whatever the global default would have attached.
 
-**Transactional outbox (opt-in)**: a model that also owns its own durable store can avoid the log and the store's committed state silently diverging by writing its own outbox row inside its own transaction, calling `IModelHolder::setOutboxManaged(true)` to suppress the automatic append, and draining that outbox through a `journal::OutboxRelay` into the real sink — see `docs/spec/journal/journal.md`'s "Transactional outbox (opt-in)" section. `examples/bank` still demonstrates the un-opted-in two-independent-writes behavior this closes for models that adopt the pattern.
+**Transactional outbox (opt-in)**: a model that also owns its own durable store can avoid the log and the store's committed state silently diverging by writing its own outbox row inside its own transaction, calling `IModelHolder::setOutboxManaged(true)` to suppress the automatic append, and draining that outbox through a `journal::OutboxRelay` into the real sink — see `docs/spec/journal/journal.md`'s "Transactional outbox (opt-in)" section. `examples/bookmarks`' `BulkEdit` adopts the pattern; a model that does not keeps the two independent writes (its store, then the log).
 
 ### SyncWorker
 
@@ -383,11 +391,11 @@ Conflict resolution during offline-to-online sync belongs entirely in the model.
 | Component | Guarantee |
 |---|---|
 | `Model::execute` | Never called concurrently for the same `ModelId` (strand). |
-| `Completion<T>` / `CompletionState<T>` | Fully mutex-protected; callbacks always marshal to the supplied executor. |
-| `Bridge` | Handler list protected by mutex; register/deregister safe from any thread. |
+| `Completion<T>` / `CompletionState<T>` | Settled from any thread, once (an atomic claim); handlers are attached and delivered on the supplied executor. |
+| `Bridge`, `BridgeHandler` | One owner: every call on the bridge's executor, no lock. `pendingCalls()`, `isBound()` and `hasSubscribers()` may be read from any thread. |
 | Logger | Sink and level accesses protected by mutex. |
 | `ModelStrands` | core-cpp's `KeyedStrands`: a registry lock taken before each strand's own; safe from any thread. |
-| `Bridge::switchBackend` | Holds bridge mutex while staging + committing; re-registration and notification are atomic with respect to new `execute` calls. Exception-safe: a registration failure rolls back and leaves the old backend and all `currentId`s untouched (no-op). Outgoing-backend cancellation runs after the mutex is released. |
+| `Bridge::switchBackend` | On the owner. A bind failure the new backend reports before returning rolls the switch back and leaves the old backend and every binding untouched; calls made during the switch are held until their binding is bound. |
 
 ## Error propagation
 
@@ -401,7 +409,7 @@ Model::execute(action) throws
 
 If the `Completion` is abandoned (no `.onError` attached, or no callback executor to deliver it on), the destructor logs the exception through the orphan logger. Non-`std::exception` types are logged as "unknown exception".
 
-Task exceptions on the executors themselves are handled independently: `ThreadPoolExecutor` and `ModelStrands` catch and log every task throw via `morph::log`, and `MainThreadExecutor::runFor` catches `std::exception`. A throwing task therefore never kills a worker or stalls a strand — see "Executors" above.
+Task exceptions on the executors themselves are handled independently: `ThreadPoolExecutor`, `MainThreadExecutor` and `ModelStrands` catch and log every task throw via `morph::log`. A throwing task therefore never kills a worker or stalls a strand — see "Executors" above.
 
 ## Adding a new model and actions
 
@@ -435,7 +443,7 @@ BRIDGE_REGISTER_EFFECTS(MyAction, ::morph::effects::changes<MyRow>)       // bes
 3. Use from the GUI (same code for local and remote):
 
 ```cpp
-morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), guiExecutor};
 morph::bridge::BridgeHandler<MyModel> handler{bridge, &guiExecutor};
 
 handler.execute(MyAction{21})
@@ -677,6 +685,9 @@ metadata rather than part of any one sub-domain, so it is documented in the
 top-level `docs/spec/VERSIONING.md` instead of a `docs/spec/<sub-domain>/`
 folder.
 
+The tables list each subsystem's principal headers; `docs/spec/README.md`
+indexes the spec for every one.
+
 ### Library headers (`include/morph/`)
 
 #### `core/` — async core, registry, bridge, backends, wire
@@ -693,10 +704,15 @@ folder.
 | `core/effects.hpp` | `BRIDGE_REGISTER_EFFECTS` and `updates<R>`, `changes<R>`, `changesInstance`, `none`; `Effect`, `ActionRecord`, `effectsOf`, `recordsOf`, `recordNamed`, `actionsHolding` (`morph::effects::`); `EffectsRegistrationError` (`morph::model::`) — what each action changes, matched with the records its result holds and validated on the first read. See `docs/spec/core/registry.md`, "Effects". |
 | `core/changes.hpp`, `core/change_types.hpp` | `deriveChanges`, `Changes`, `RecordChange`, `InstanceChange`, `kMaxChangeKeys` (`morph::effects::`) — the changes a successful execute made. |
 | `core/connection_writer.hpp` | `ConnectionWriter`, `kEventBacklogHigh`, `kEventBacklogLow` (`morph::backend::`) — how `RemoteServer` writes events to a connection, and the backlog above which it holds them back. |
-| `core/backend.hpp` | `LocalBackend` (public) + `ActionCall`, `IBackend` (detail), including the non-breaking `registerModelWithContext()` default method |
+| `core/backend.hpp` | `LocalBackend` (public) + `ActionCall`, `IBackend` (detail) — the backend interface every transport implements |
 | `core/remote.hpp` | `RemoteServer` (configured by `ServerConfig`, incl. `logProvider`), `SimulatedRemoteBackend` (`morph::backend::`) |
 | `core/bridge.hpp` | `Bridge`, `BridgeHandler<M>` (public) + `HandlerBinding` (carrying `contextKey`), `MemberPointerTraits` (detail) |
 | `core/wire.hpp` | `Envelope`, `encode`/`decode`, `kMaxEnvelopeBytes` (`morph::wire::`) — the JSON wire envelope and length-bounded framing between any client and `RemoteServer` |
+| `core/callback_scope.hpp` | `CallbackScope`, `CallbackToken` (`morph::async::`) — the opt-in lifetime gate for completion callbacks. See `docs/spec/core/callback_scope.md`. |
+| `core/coroutine.hpp` | Coroutines on `core::async::Task`: awaiting a `Completion`, and Task action handlers. See `docs/spec/core/coroutines.md`. |
+| `core/io_loop.hpp` | `IoLoop` (`morph::exec::`) — the I/O event loop the socket transport and `NetworkMonitor` run on |
+| `core/model_key.hpp` | `BRIDGE_MODEL_KEY`, `BRIDGE_KEY_FROM`, `BRIDGE_MODEL_KEY_FROM_RESULT` and the key types — keyed, shareable instances. See `docs/spec/core/shared_instances.md`. |
+| `core/observability.hpp` | Metric and trace hooks on the framework's hot paths. See `docs/spec/core/observability.md`. |
 
 #### `journal/` — ordered, replayable action log
 
@@ -779,6 +795,10 @@ folder.
 | `ui/backend.hpp` | `Widget`, `ContainerWidget`, `FieldWidget`, one widget interface per kind, `MenuEntry`, `IViewBackend`, `widthClassOf` — the retained widgets a renderer implements. See `docs/spec/ui/backend_contract.md`. |
 | `ui/mount.hpp` | `Mounted` — builds a tree's widgets once, keeps them current through bindings, mounts content in child scopes, keeps keyed rows, controls inputs by their slots |
 | `ui/frontend.hpp` | `AppContext`, `AppSource`, `Bundle`, `ConnectError`, `Backend`, `Frontend`, `FrontendOption`, `FrontendError`, `selectFrontend`, `MountedShell`, `ShellFactory`, `runApp` — the seam `main` picks a frontend through. See `docs/spec/ui/frontend.md`. |
+| `ui/service.hpp`, `ui/service_client.hpp`, `ui/bundle.hpp` | `UiRegistry`, `ServedBundle`, `UiService`, `UiClient`, `Manifest` — the UI service that serves an application's screens to clients by content hash. See `docs/spec/ui/service.md`. |
+| `ui/shell_frame.hpp`, `ui/workspace.hpp`, `ui/navigator.hpp`, `ui/host.hpp`, `ui/host_vocabulary.hpp` | The client shell: the frame with its sidebar and top bar, the tabbed workspace, the navigator, and the host contract a screen is mounted through. See `docs/spec/ui/shell_frame.md`, `workspace.md`, `host.md`. |
+| `ui/theme.hpp`, `ui/preferences.hpp`, `ui/catalogue.hpp` | Theme tokens, per-person preferences, and message catalogues. See `docs/spec/ui/theme.md`, `preferences.md`. |
+| `ui/explorer.hpp`, `ui/inspector.hpp` | The app explorer and the development inspector. See `docs/spec/ui/explorer.md`, `inspector.md`. |
 | `ui/testing/recording_backend.hpp` | `testing::RecordingBackend` — the headless reference backend: operation log, golden dump, interaction helpers |
 | `ui/testing/backend_conformance.hpp` | `testing::ConformanceProbe`, `testing::ConformanceCase`, `testing::conformanceCases()` — the scripted cases every backend passes |
 
@@ -788,6 +808,40 @@ folder.
 |---|---|
 | `testing/step_executor.hpp` | `StepExecutor` (`morph::testing::`) — an executor whose posted tasks run only when a test steps it |
 | `testing/owner_probe_recorder.hpp` | `OwnerProbeRecorder` (`morph::testing::`) — records every owner check while it is alive, instead of a debug build asserting |
+
+#### `table/` — the table engine
+
+| Header | Responsibility |
+|---|---|
+| `table/engine.hpp` and its siblings | `Engine` (`morph::table::`) — a table's sort chain, filter and source-to-view row mapping, owner-affine, with sorting and filtering run off the owner. See `docs/spec/table/engine.md`. |
+
+#### `render/` — client-side rendering helpers
+
+| Header | Responsibility |
+|---|---|
+| `render/i18n.hpp` | The renderer-side translation-catalog seam over the forms layer's derived message keys (`morph::render::`) |
+| `render/locale_format.hpp` | Locale numeric-entry normalisation: a locale's typed number to the canonical exact payload |
+
+#### `client/` — the generic client
+
+Built as the compiled STATIC library `morph::client` (sources in `src/client/`) when `MORPH_BUILD_CLIENT=ON`, the
+default. See `docs/spec/client/client.md`.
+
+| Header | Responsibility |
+|---|---|
+| `client/args.hpp` | `Args` (`morph::client::`) — the client's command line: which source it opens and how it starts |
+| `client/source.hpp` | `Source`, `RemoteSource`, `LocalSource`, `LocalApp` — where screens and models come from: a server, or an application linked in-process |
+| `client/transport.hpp` | `RemoteTransport` — the transport a remote client connects with, chosen by its frontend |
+| `client/shell.hpp` | `ShellOptions`, `ApplicationHost`, `SignedIn` — the shell the client mounts once its source is open |
+
+### Socket transport headers (`include/morph/net/`)
+
+Built only when `MORPH_BUILD_NET=ON` (POSIX only).
+
+| Header | Responsibility |
+|---|---|
+| `net/socket_backend.hpp` | `SocketBackend` (`morph::net::`) — a WebSocket client `IBackend` over raw sockets on an `IoLoop` |
+| `net/socket_server.hpp` | `SocketServer` — a WebSocket server forwarding messages to `RemoteServer` |
 
 ### Terminal frontend headers (`include/morph/tui/`, sources in `src/tui/`)
 
@@ -799,7 +853,9 @@ Built only when `MORPH_BUILD_TUI=ON`, as the compiled STATIC library `morph::tui
 | `tui/frontend.hpp` | `Frontend`, `FrontendConfig`, `ShellFactory`, `frontendOption`, `kInterruptExitCode` — runs an `AppSource` in a terminal on one caller-driven `IoLoop`. |
 | `tui/loop_executor.hpp` | `LoopExecutor` — the `IExecutor` that runs tasks in later turns of a `core::net::EventLoop`; the runtime's owner and every handler's callback executor. |
 
-### Qt integration headers (`include/morph/qt/`)
+### Qt integration headers (`include/morph/qt/`, sources in `src/qt/`)
+
+Built only when `MORPH_BUILD_QT=ON`.
 
 | Header | Responsibility |
 |---|---|
@@ -827,11 +883,11 @@ module `MorphUi`. The headers hold declarations only.
 
 ### `NetworkMonitor` callbacks must not block
 
-Callbacks (`onOffline`, `onOnline`) run directly on the probe thread. A blocking call inside a callback will delay or prevent subsequent probes, and a blocking `stop()` call from within a callback will self-deadlock on the thread join. `stop()` detects this case and detaches instead of joining; the monitor thread completes its current iteration and exits, and the destructor spin-waits until it does. The intent is that callbacks should be short — typically just setting an atomic flag or posting to an executor.
+The probe and the callbacks (`onOffline`, `onOnline`) run inline on the I/O loop's thread. A blocking call inside one stalls every probe, socket and timer on that loop. Keep them short — set an atomic flag or post to an executor — and run reconnect sequencing (`ReconnectCoordinator`) and replay (`SyncWorker`) elsewhere. See `docs/spec/offline/offline.md`, "NetworkMonitor callback constraint".
 
-### `Bridge::switchBackend` must not be called from `onBackendChanged`
+### `onBackendChanged` runs on the model's strand, not inside `switchBackend`
 
-`switchBackend` holds `Bridge::_mtx` for its entire duration and calls `notifyBackendChanged()` while still holding it. `onBackendChanged()` is invoked from inside that call. If an `onBackendChanged()` implementation calls `switchBackend` or `registerHandler` / `deregisterHandler` (which also acquire `_mtx`), the thread will self-deadlock. `executeVia` is safe to call from `onBackendChanged()` because it uses a lock-free snapshot of the backend.
+`LocalBackend` posts each change-aware model's `onBackendChanged()` onto that model's strand, so it never overlaps an `execute()` on the same model and needs no lock of its own. It runs after `switchBackend` has returned, on a pool thread: a model that wants to reach the bridge from it posts to the bridge's owner.
 
 ### A null callback executor drops the callback (but not the orphan log)
 
@@ -839,9 +895,9 @@ The `cbExec` pointer on `CompletionState` should be set before `setValue` / `set
 
 An abandoned **error**, however, is not silenced by a null executor: `onErrAttached` (the flag that suppresses the destructor's orphan log) is only set when an executor actually exists to deliver the handler. With a null executor the error handler is never posted, so `onErrAttached` stays `false` and `~CompletionState` still logs the exception through the orphan logger rather than losing it.
 
-### `MainThreadExecutor::runFor` does not drain on timeout
+### `MainThreadExecutor::runFor` is a pump, not a flush
 
-If `runFor(timeout)` returns because the timeout expired rather than because the queue emptied, any remaining tasks stay enqueued. A subsequent `runFor` call will process them. This is intentional — `runFor` is a pump, not a flush.
+`runFor(timeout)` runs queued tasks and, while time remains, blocks for newly posted ones; it returns only when the deadline is reached, whether or not the queue drained. Tasks still queued then stay for the next call. A test that waits for a completion pumps in short slices until its condition holds.
 
 ## Versioning & compatibility
 
@@ -852,7 +908,7 @@ commitment morph makes **starting at 1.0** is fully specified in
 `docs/spec/VERSIONING.md` — this section is only a
 pointer, not a substitute. In short: the per-topic public namespaces above
 (everything outside a `detail` namespace) are the stable surface; because
-morph is header-only there is no ABI to preserve, so the promise is *source*
+morph is header-only or static there is no shared-object ABI to preserve, so the promise is *source*
 compatibility, checked against both a symbol's signature and its `docs/spec/`
 documented behavior.
 
@@ -860,7 +916,7 @@ documented behavior.
 
 | Decision | Rationale |
 |---|---|
-| Header-only library | Zero build-system friction; include and use. morph's own surface stays headers only; core-cpp's static modules are built with it. |
+| Header-only core library | Zero build-system friction; include and use. The core stays headers only; core-cpp's static modules are built with it, and only the optional frontends, client and Qt transport are compiled. |
 | core-cpp for timers, base64 and wakeup | One implementation shared with the other Contour Terminal projects, including a WebAssembly subset whose host-driven loop runs `TimeoutScheduler` on the browser's main thread. |
 | Per-topic public namespaces with per-topic `detail::` | Minimal public surface — callers see only what they need; internals are clearly walled off. |
 | A strand per `ModelId` | Parallelism across models; serial within one model — model authors write single-threaded code. |
@@ -889,7 +945,6 @@ What morph deliberately does not build, and why. morph is a UI bridge with one s
 |---|---|
 | **Entity metamodel / naked objects** (Causeway) | morph's unit is the *action*, deliberately. Rows plus row-bound actions already are an object UI; what is missing is metadata on the row, not a second parallel metamodel. |
 | **Server-authoritative per-instance action availability** ("see it, use it, do it") | A real gap — a client cannot ask "may I?" before invoking an action — but not worth the surface area it would add. |
-| **Query invalidation / live lists** | Instance subscriptions already give shared instances a change channel, without a query-invalidation vocabulary. |
 | **Paging / sorting contract on view schemas** | `views.md` already records "no server-side query language" as a non-goal; paging stays a field on the query action. |
 | **Result-type presentation metadata** (money, enum labels, badge severity) | Every GUI controller hand-writes a `toMap()` projection. Genuine duplication, but it is a forms-layer concern, not a model-layer one. |
 | **Field- and row-level permissions** (Jmix, Causeway SecMan) | They own the ORM and the whole app; morph owns a seam. Per-principal schema redaction would break the one-cached-schema-per-type design. The model is the right place, and `bank`'s `loadOwned` guard shows it works. |

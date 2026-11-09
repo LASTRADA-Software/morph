@@ -62,9 +62,9 @@ Requiring every consumer of `BridgeHandler` to derive from a framework base
 constrains a hierarchy for what should be an implementation detail of one
 screen, and penalises types that already have a base, are `QObject`s, or are
 aggregates. A member composes with all of them. The decisive property: **code
-that does not opt in is unaffected.** Every pre-existing `then(fn)` /
-`onError(fn)` / `subscribe<R>(cb)` call site keeps its exact previous behaviour;
-the gated forms are additional overloads, not replacements.
+that does not opt in is unaffected.** The ungated `then(fn)` / `onError(fn)` /
+`subscribe<R>(cb)` forms behave as if the scope did not exist; the gated forms
+are additional overloads, not replacements.
 
 ```cpp
 class BoardPresenter {
@@ -157,8 +157,8 @@ The rejection is a `static_assert` **inside the returned wrapper's body**, so it
 fires when the wrapper is *invoked*, not when `guard()` is called. A wrapper
 built from a value-returning callable and then never called compiles cleanly —
 worth knowing when the guarded callback is stored and its subscription torn down
-before its first tick. Constraining `guard()` itself would make the rejection
-unconditional; that has not been done.
+before its first tick. `guard()` itself is not constrained, so the rejection is
+not unconditional.
 
 ### Gated overloads elsewhere
 
@@ -168,7 +168,7 @@ unconditional; that has not been done.
 | `Completion<T>::onError` | `onError(scope, fn)`, `onError(token, fn)` |
 | `BridgeHandler<M>::subscribe<R>` | `subscribe<R>(scope, cb)`, `subscribe<R>(token, cb)` |
 
-`Completion<T>` additionally gains `thenDetached(fn)` / `onErrorDetached(fn)`:
+`Completion<T>` also has `thenDetached(fn)` / `onErrorDetached(fn)`:
 byte-for-byte the ungated `then(fn)` / `onError(fn)`, spelled so that a
 deliberately unmanaged callback says so and stays greppable in review. Both
 spellings remain available; the ungated forms are **not** deprecated.
@@ -180,7 +180,7 @@ the work producing it. Each generation carries a `core::async::StopSource`
 beside its stop flag. A call is **owned** by the scope once a callback is
 attached to its `Completion` through one of the scope's tokens
 (`then(token, fn)`, `onError(token, fn)`, or the `scope` forms) and the call
-carries a stop source of its own — today, a `Bridge` call whose handler returns
+carries a stop source of its own — a `Bridge` call whose handler returns
 a `core::async::Task` ([coroutines.md](coroutines.md)). Attaching links the
 scope's stop token to the call's source with a `StopCallback` that lives in the
 call's `CompletionState` until it settles; a settled call has nothing left to
@@ -266,8 +266,8 @@ cannot. It is normative.
   blocked posting back to the GUI executor is a deadlock by construction — the
   same self-join family
   [concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md) already warns
-  about. A stronger cross-thread guarantee, if ever wanted, can arrive later as
-  a separate opt-in without breaking this contract.
+  about. A stronger cross-thread guarantee would have to be a separate opt-in,
+  so as not to change this contract.
 
 ## Declared last, destroyed first
 
@@ -276,9 +276,8 @@ are destroyed in reverse declaration order, so a last-declared scope is the
 first thing to die and every gated callback is already refused before the fields
 it would have touched are torn down.
 
-This was previously a per-class convention, separately re-derived and
-re-documented in at least six places in this repository. It is now stated once,
-here and in the type's own doc comment.
+The rule is stated once, here and in the type's own doc comment, rather than
+re-derived by every class that holds a scope.
 
 **Teardown that pumps.** Members are destroyed *after* the destructor body runs.
 A destructor body that can pump a nested event loop (a blocking call that spins
@@ -293,7 +292,7 @@ statement. `morph::flows::FlowSession` does exactly this.
 | Default-constructed (unbound) token | Permanently `Expired`; every gated callback is suppressed. Gating is **fail-closed**: a token that was never bound suppresses rather than admits, trading a silently-dropped callback for never dereferencing a freed receiver. |
 | Callback attached to an already-stopped scope | Suppressed at delivery, as if it had been stopped afterwards. There is no attach-time diagnostic. |
 | Scope reset while a subscription sink is installed | The sink stays installed but is never delivered to again; nothing prunes it. `unsubscribe<R>()` or handler destruction removes the entry. |
-| Gated callable returns non-`void` | Compile error (`static_assert` in `CallbackToken::guard()`). |
+| Gated callable returns non-`void` | Compile error when the wrapper is invoked (`static_assert` in the body of the callable `CallbackToken::guard()` returns). |
 | Gated handler throws | Unchanged from the ungated path: `CompletionState` isolates each handler in its own `try`/`catch` and logs. The gate is not an exception boundary. |
 
 ## Design decisions
@@ -305,9 +304,9 @@ statement. `morph::flows::FlowSession` does exactly this.
 | **Not named `CallbackContext`** | `morph::session::Context` already exists and means something entirely different (authenticated principal, token, request id). Two unrelated "Context" types in one framework is a readability tax. `Scope`/`Token` also matches the `std::stop_source`/`stop_token` pairing. |
 | **Fail-closed default token** | An unbound token suppressing is a visible functional bug (a callback that did not fire); an unbound token admitting is a use-after-free. The type exists to make that trade. |
 | **Three-way `status()` rather than a single `bool`** | Liveness and stop are genuinely different facts. Collapsing them is what made the hand-rolled `weak_ptr` idiom unable to express "alive but cancelled" in the first place. |
-| **`guard()` as a first-class member, not just `Completion` overloads** | Roughly a third of the at-risk callbacks in the tree are timer ticks, posted closures, poller dispatch and event sinks rather than `Completion` attachments. Without a standalone guard those sites keep the incantation and only the `Completion` subset improves. |
+| **`guard()` as a first-class member, not just `Completion` overloads** | Many at-risk callbacks are timer ticks, posted closures, poller dispatch and event sinks rather than `Completion` attachments. Without a standalone guard those sites keep the incantation and only the `Completion` subset improves. |
 | **Gate wrapped at attach, not enforced in `CompletionState`** | Keeps the shared state untouched, so fan-out, the fire-now path and orphan accounting all keep their existing semantics; and the same wrapper serves every other callback surface unchanged. |
-| **`then(fn)` not deprecated** | The migration is mechanical but wide. Landing the primitive without breaking or warning on existing call sites is what makes it adoptable per subsystem; `thenDetached()` gives the greppable spelling now, and any deprecation is a later, separate decision. |
+| **`then(fn)` not deprecated** | Moving every call site to a gated form is mechanical but wide. Leaving the ungated forms un-warned is what lets the primitive be adopted one subsystem at a time; `thenDetached()` gives a deliberately unmanaged callback a greppable spelling. |
 | **Non-movable** | See [API surface](#api-surface): a move would strand or silently retarget tokens already in flight. |
 | **No block-until-drained** | See [the boundary of the guarantee](#thread-safety-and-the-boundary-of-the-guarantee): it is a deadlock by construction across executors. |
 
@@ -318,7 +317,7 @@ statement. `morph::flows::FlowSession` does exactly this.
   See [Stopping the calls a scope owns](#stopping-the-calls-a-scope-owns).
 - **Interop with `std::stop_token`.** Constructing a `CallbackToken` from an
   externally supplied `std::stop_token` (so callbacks tie into an existing
-  cancellation tree) is a deliberate future extension, not present today.
+  cancellation tree) is not supported.
 - **Pruning dead subscription sinks.** A subscription whose scope has gone
   inactive stops being delivered to but is not removed from the subscriber list.
 - **Debug-build affinity assertions.** `requestStop()`, `reset()` and `token()`
