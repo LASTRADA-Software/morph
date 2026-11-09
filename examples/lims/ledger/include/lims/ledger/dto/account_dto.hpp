@@ -27,10 +27,11 @@ struct CreateAccount {
     AccountType type = AccountType::Asset;
 
     /// @brief Whether the account is well-formed.
-    /// @return `true` when a company, a code of 1 to 16 letters and digits and a name of 1 to 128 bytes are named.
+    /// @return `true` when a company, a code of 1 to 16 upper-case letters and digits and a name of 1 to 128 bytes
+    /// are named. Codes are upper-case so that two codes differing only in case cannot coexist.
     [[nodiscard]] bool validate() const noexcept {
         bool const codeOk = !code.empty() && code.size() <= 16 && std::ranges::all_of(code, [](char c) {
-            return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+            return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z');
         });
         return company.hasValue() && codeOk && !name.empty() && name.size() <= 128;
     }

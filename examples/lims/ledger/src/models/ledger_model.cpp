@@ -30,11 +30,13 @@ constexpr int kMaxPeriodState = static_cast<int>(PeriodState::Closed);
     if (type < 0 || type > kMaxAccountType) {
         throw ValidationError{"account " + std::to_string(row.id.Value()) + " stores a type outside its range"};
     }
-    return AccountView{.id = AccountId{static_cast<std::int64_t>(row.id.Value())},
-                       .company = CompanyId{row.companyId.Value()},
-                       .code = std::string{row.code.Value().ToStringView()},
-                       .name = std::string{row.name.Value().ToStringView()},
-                       .type = static_cast<AccountType>(type)};
+    return AccountView{
+        .id = AccountId{static_cast<std::int64_t>(row.id.Value())},
+        .company = CompanyId{row.companyId.Value()},
+        .code = std::string{row.code.Value().ToStringView()},
+        .name = std::string{row.name.Value().ToStringView()},
+        .type = static_cast<AccountType>(type),
+    };
 }
 
 /// @brief Maps a period row to its view.
@@ -47,11 +49,13 @@ constexpr int kMaxPeriodState = static_cast<int>(PeriodState::Closed);
         throw ValidationError{"period " + std::to_string(row.id.Value()) + " stores a state outside its range"};
     }
     auto const start = timestampFromMillis(row.startMs.Value());
-    return PeriodView{.id = PeriodId{static_cast<std::int64_t>(row.id.Value())},
-                      .company = CompanyId{row.companyId.Value()},
-                      .start = start,
-                      .label = monthLabel(calendarMonthOf(start)),
-                      .state = static_cast<PeriodState>(state)};
+    return PeriodView{
+        .id = PeriodId{static_cast<std::int64_t>(row.id.Value())},
+        .company = CompanyId{row.companyId.Value()},
+        .start = start,
+        .label = monthLabel(calendarMonthOf(start)),
+        .state = static_cast<PeriodState>(state),
+    };
 }
 
 /// @brief Throws `NotFound` unless @p company exists.
@@ -73,11 +77,13 @@ void requireCompany(std::string_view where, CompanyId company) {
 
 }  // namespace
 
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 AccountView LedgerModel::execute(const CreateAccount& action) {
     requirePrincipal();
     if (!action.validate()) {
         throw ValidationError{
-            "CreateAccount: a company, a code of 1 to 16 letters and digits and a name are required"};
+            "CreateAccount: a company, a code of 1 to 16 upper-case letters and digits and a name are required"};
     }
     requireRoleSomewhere<CreateAccount>();
     requireCompany("CreateAccount", action.company);
@@ -122,6 +128,8 @@ ListAccountsResult LedgerModel::execute(const ListAccounts& action) {
     return result;
 }
 
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 PeriodView LedgerModel::execute(const OpenPeriod& action) {
     requirePrincipal();
     if (!action.validate()) {
@@ -171,6 +179,8 @@ ListPeriodsResult LedgerModel::execute(const ListPeriods& action) {
     return result;
 }
 
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 PeriodView LedgerModel::execute(const BeginClosePeriod& action) {
     requirePrincipal();
     if (!action.validate()) {

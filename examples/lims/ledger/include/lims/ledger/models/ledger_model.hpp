@@ -8,7 +8,7 @@
 #include "lims/ledger/dto/account_dto.hpp"
 
 /// @file
-/// `LedgerModel`: a company's chart of accounts, its periods, its journal entries and its exchange rates.
+/// `LedgerModel`: a company's chart of accounts and its monthly periods.
 
 namespace lims {
 

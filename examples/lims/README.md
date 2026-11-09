@@ -218,7 +218,7 @@ lims is built from modules, each its own library with its own include directory 
 | `org/` (shared) | the error set, the model support every module uses, sign-in, companies and sites, role assignments, and declared authorization | nothing in lims |
 | `posting/` (shared) | the posting contract: `PostingRequest` and `PostingResult`, DTOs only | `org` |
 | `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
-| `ledger/` | accounts, periods, journal entries, exchange rates and the reports | `org`, `posting` |
+| `ledger/` | the chart of accounts and the monthly periods | `org`, `posting` |
 | `app/` | the server edge's `LimsAuthorizer`, and the tables it reads: `declaredRequirements` and `openMutatingActions` | every module |
 
 The server (`src/server/`), the screens (`screens/`) and the suites (`tests/`) belong to the app and link every
