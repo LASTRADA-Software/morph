@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <morph/core/detail/watch_table.hpp>
 #include <morph/core/wire.hpp>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -89,4 +90,22 @@ TEST_CASE("an_instance_past_the_cap_is_refused", "[push][watch]") {
     CHECK(refused.refusedInstances.front().primary == "k");
     CHECK(table.topicCount(1) == morph::wire::kMaxWatchTopics);
     CHECK(table.watchersOf("M", "k").empty());
+}
+
+// Mutation: forget a session's answers whenever one of its topics is released, instead of when the last one is.
+TEST_CASE("a_session_keeps_its_admission_answers_until_its_last_topic_goes", "[push][watch]") {
+    using morph::backend::detail::AdmissionTopic;
+    WatchTable table;
+    auto const session = watchAs("alice", "t");
+    REQUIRE(table.add(1, records({"A", "B"}), session).refusedRecords.empty());
+    table.noteAdmission(session.context, AdmissionTopic::record, "A", true);
+    table.noteAdmission(session.context, AdmissionTopic::modelType, "M", false);
+
+    table.remove(1, records({"A"}));
+    CHECK(table.admission(session.context, AdmissionTopic::record, "A") == std::optional<bool>{true});
+    CHECK(table.admission(session.context, AdmissionTopic::modelType, "M") == std::optional<bool>{false});
+
+    table.remove(1, records({"B"}));
+    CHECK_FALSE(table.admission(session.context, AdmissionTopic::record, "A").has_value());
+    CHECK_FALSE(table.admission(session.context, AdmissionTopic::modelType, "M").has_value());
 }
