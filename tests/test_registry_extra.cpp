@@ -305,6 +305,17 @@ TEST_CASE("morph::model::detail::ActionDispatcher: different (model,action) pair
     REQUIRE_THROWS_AS(dispatcher.dispatch("REG_RxModel", "REG_Unknown", *holder, "{}"), std::runtime_error);
 }
 
+// Mutation: report an action no one registered as not loggable -- a chat check for "journaled" would refuse tools
+// the dispatcher has never heard of instead of leaving them to the unknown-action error.
+TEST_CASE("ActionDispatcher::isLoggable is true for an action registered loggable and for one never registered",
+          "[registry]") {
+    morph::model::detail::ActionDispatcher dispatcher;
+    dispatcher.registerAction<RxModel, RxAction>("REG_RxModel", "REG_RxAction");
+    CHECK(dispatcher.isLoggable("REG_RxModel", "REG_RxAction"));
+    CHECK(dispatcher.isLoggable("REG_RxModel", "REG_NeverRegistered"));
+    CHECK(dispatcher.isLoggable("REG_NeverRegistered", "REG_RxAction"));
+}
+
 namespace {
 
 struct PlainDraft {
