@@ -27,7 +27,7 @@
 #if MORPH_CLIENT_HAS_LIMS
 #include <lims_screens.hpp>
 
-#include "lims/db/database.hpp"
+#include "lims/lab/db/database.hpp"
 #endif
 
 #include "local_apps.hpp"

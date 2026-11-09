@@ -19,9 +19,9 @@
 #include <testkit/screen_harness.hpp>
 #include <vector>
 
-#include "lims/dto/sample_dto.hpp"
-#include "lims/dto/sample_entry_dto.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/lab/dto/sample_dto.hpp"
+#include "lims/lab/dto/sample_entry_dto.hpp"
+#include "lims/lab/models/sample_model.hpp"
 #include "lims_screens.hpp"
 #include "lims_test_support.hpp"
 

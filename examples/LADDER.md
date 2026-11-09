@@ -29,7 +29,7 @@ capability that needs an application to prove it lands in lims unless it is
 specifically about the small path (bookmarks) or bank's domain.
 
 [`rungs.txt`](rungs.txt) is the single authority for the rung list and its
-order. bookmarks and lims are built by `morph_add_rung()`; bank keeps its own
+order. bookmarks and lims are built by `morph_add_rung()` (lims from modules, one library each); bank keeps its own
 `CMakeLists.txt`, because it builds variants a rung does not (the in-memory
 model library for WebAssembly, the command-line client), and is added by the
 same rung loop. [`bank/README.md`](bank/README.md) says which conventions it

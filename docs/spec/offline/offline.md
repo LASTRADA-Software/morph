@@ -808,7 +808,7 @@ the seam.
 
 **Reference shapes in the ladder.**
 
-- `examples/lims/include/lims/offline/field_outbox.hpp` — the reference for the
+- `examples/lims/lab/include/lims/lab/offline/field_outbox.hpp` — the reference for the
   domain-shaped half. A plain, non-Qt, app-layer class that stamps each queued
   capture with a base version from its own local ledger and advances that
   ledger on enqueue, so a client's second offline edit chains onto its own

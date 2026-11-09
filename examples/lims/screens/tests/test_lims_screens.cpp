@@ -21,13 +21,13 @@
 #include <testkit/screen_harness.hpp>
 #include <vector>
 
-#include "lims/auth/lims_authorizer.hpp"
-#include "lims/dto/analysis_dto.hpp"
-#include "lims/dto/result_dto.hpp"
-#include "lims/dto/sample_dto.hpp"
-#include "lims/models/analysis_catalog_model.hpp"
-#include "lims/models/auth_model.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/app/lims_authorizer.hpp"
+#include "lims/lab/dto/analysis_dto.hpp"
+#include "lims/lab/dto/result_dto.hpp"
+#include "lims/lab/dto/sample_dto.hpp"
+#include "lims/lab/models/analysis_catalog_model.hpp"
+#include "lims/org/models/auth_model.hpp"
+#include "lims/lab/models/sample_model.hpp"
 #include "lims_screens.hpp"
 #include "lims_test_support.hpp"
 

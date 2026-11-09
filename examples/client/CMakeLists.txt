@@ -50,8 +50,8 @@ foreach(_morph_client IN LISTS _morph_clients)
         # Each ladder rung with screens runs in local mode too, when the ladder builds it.
         set(_morph_client_lims 0)
         if(TARGET ladder_lims_screens)
-            target_link_libraries(${_morph_client} PRIVATE morph::ladder_lims_screens
-                                  "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph::ladder_lims_lib>")
+            # ladder_lims_lib is an INTERFACE target whose own links whole-archive lims's modules, so it is linked plain.
+            target_link_libraries(${_morph_client} PRIVATE morph::ladder_lims_screens morph::ladder_lims_lib)
             set(_morph_client_lims 1)
         endif()
         target_compile_definitions(${_morph_client} PRIVATE MORPH_CLIENT_HAS_LIMS=${_morph_client_lims})

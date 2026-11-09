@@ -226,6 +226,15 @@ for _rung in "${RUNG_TEST_EXES[@]}"; do
             SOURCES+=("examples/${_rung}/${_sub}")
         fi
     done
+    # A rung built from modules (morph_add_rung's MODULES) keeps each module's include/ and src/ in
+    # examples/<rung>/<module>/.
+    for _module_include in "examples/${_rung}"/*/include; do
+        [ -d "$_module_include" ] || continue
+        SOURCES+=("$_module_include")
+        if [ -d "${_module_include%/include}/src" ]; then
+            SOURCES+=("${_module_include%/include}/src")
+        fi
+    done
 done
 
 # examples/common/testkit/ mixes real, reusable test-support headers

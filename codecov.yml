@@ -311,8 +311,10 @@ component_management:
     - component_id: lims
       name: "application ladder rung 3 (examples/lims models)"
       paths:
-        - examples/lims/src/models/**
-        - examples/lims/include/lims/models/**
+        - examples/lims/lab/src/models/**
+        - examples/lims/lab/include/lims/lab/models/**
+        - examples/lims/org/src/models/**
+        - examples/lims/org/include/lims/org/models/**
       statuses:
         - type: project
           target: 97%

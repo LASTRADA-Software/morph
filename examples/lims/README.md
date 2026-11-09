@@ -200,6 +200,21 @@ flags are set by its own buttons, so an assistant's calls change the working cop
   evolution scheme this rung defines**, verified by replaying a journal
   recorded before a schema migration.
 
+## Modules
+
+lims is built from modules, each its own library with its own include directory (`morph_add_rung`'s `MODULES`):
+
+| Module | Holds | Links |
+|---|---|---|
+| `org/` (shared) | the error set, the model support every module uses, sign-in, companies, sites, role assignments and the declared-authorization evaluator | nothing in lims |
+| `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
+| `app/` | the server edge's `LimsAuthorizer` and the table of declared role requirements | every module |
+
+The server (`src/server/`), the screens (`screens/`) and the suites (`tests/`) belong to the app and link every
+module. A module that includes another module's header (other than a shared one) does not compile; the
+`lims.module_boundary.*` tests build such an include and pass only when the compiler refuses it, beside a control that
+must build.
+
 ## Resolved design decisions
 
 Recorded as they are taken, per the [`LADDER.md`](../LADDER.md) discipline
@@ -381,7 +396,7 @@ never does.
 The write half could not use a framework seam either: there is no
 enqueue-on-failure hook, and the machine that must make the decision (a
 disconnected field client) has no model on it at all.
-`include/lims/offline/field_outbox.hpp` is the app-layer answer, and it is
+`lab/include/lims/lab/offline/field_outbox.hpp` is the app-layer answer, and it is
 app-layer by design rather than by omission: `IMPLEMENTATION.md` rule 1
 carries a named carve-out for this seam, and `FieldOutbox` is the shape it
 points at (`docs/spec/offline/offline.md`, "Disposition: app-layer by design").
@@ -606,7 +621,7 @@ lims' screens are UI documents served by the framework (spec 4), authored with t
   and it is dirty while the working copy holds unsaved edits.
 
 Each action declares what it changes beside its registration (`BRIDGE_REGISTER_EFFECTS` in
-`include/lims/models/`): a transition updates its `Lims_Sample`, a capture changes `Lims_Result`, the sample-entry
+`lab/include/lims/lab/models/`): a transition updates its `Lims_Sample`, a capture changes `Lims_Result`, the sample-entry
 actions change their instance's working copy, and `OpenSample` changes nothing. A reply refreshes the queries it
 changed, so the screens declare no refreshes; `lims_bundle_loads_without_warnings` keeps it so.
 
@@ -621,8 +636,8 @@ process over a local database (`--db`, default `lims.db`).
 
 ### 20. Model coverage is 98.96%, and measuring it found a real defect (§ coverage gate)
 
-`codecov.yml` gains a `lims` component scoped to `examples/lims/src/models/**`
-and `examples/lims/include/lims/models/**` — the paths
+`codecov.yml` gains a `lims` component scoped to `examples/lims/lab/src/models/**`
+and `examples/lims/lab/include/lims/lab/models/**` — the paths
 `examples/IMPLEMENTATION.md` rule 5's bar actually names — with a 97% target,
 a margin below the measured 855/864 = 98.96% ceiling.
 
@@ -643,6 +658,16 @@ defect rather than a coverage artifact: a sample's audit trail silently
 omitted the second pair of eyes, which is the one thing a four-eyes record
 exists to show. Fixed by rekeying the journal to the result's own sample
 (same for conflict resolutions), and pinned by its own test.
+
+### 21. lims is built from modules, and the boundary is a link boundary
+
+Each module is a library whose include path holds its own headers and the shared modules' only, so a module that
+includes another module's header fails to compile rather than drawing a lint finding. ERP modules are written by
+different teams, and the property under test is whether morph lets them cooperate without knowing each other; a
+boundary that only a reviewer enforces would not test it. All modules keep the `lims` namespace and every action id,
+record name, table and migration they had: the split changed where code lives, not what it does, and the suites ran
+unchanged apart from their include lines. `posting`, the second shared module the design names, is added with the
+first module that posts.
 
 ## Findings raised by this rung
 
@@ -689,7 +714,7 @@ exists to show. Fixed by rekeying the journal to the result's own sample
   worked example is this rung's own `CaptureConcentration`. The sanctioned
   escape (`optionalFields`) is still what makes the rule the only gate on the
   pair; `CaptureConcentration`'s own doc comment
-  (`include/lims/dto/result_dto.hpp`) explains why it is still needed even
+  (`lab/include/lims/lab/dto/result_dto.hpp`) explains why it is still needed even
   though omitting it is now a loud error rather than a silent one. Guarded
   here by a test asserting `required` is exactly `["analysisVersionId"]`.
 - **the three shipped `IOfflineQueue`s disagree about repeated idempotency
@@ -752,7 +777,7 @@ exists to show. Fixed by rekeying the journal to the result's own sample
   `IMPLEMENTATION.md` rule 5 requires the audit trail to be tested through —
   records nothing, so a model that journals carries its own
   `attachActionLog`/`logAction` pair; this rung shares one copy between its
-  two models (`include/lims/core/self_journal.hpp`). Not
+  two models (`lab/include/lims/lab/core/self_journal.hpp`). Not
   filed as a separate finding pending a decision on whether "models do not
   journal, dispatchers do" is the intended contract — but if it is, the
   contract makes the "reconstructible from the journal alone" DoD untestable

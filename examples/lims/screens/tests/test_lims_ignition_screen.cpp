@@ -33,7 +33,7 @@
 #include <utility>
 #include <vector>
 
-#include "lims/models/ignition_model.hpp"
+#include "lims/lab/models/ignition_model.hpp"
 #include "lims_screens.hpp"
 
 namespace {

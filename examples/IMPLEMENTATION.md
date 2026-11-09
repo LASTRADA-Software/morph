@@ -19,7 +19,10 @@ or stays visible.
 **The promotion rule (rule-of-three, from the round-7 review):** an
 app-built answer to a framework gap (the polling helper with its timeout,
 an op-id ledger, epoch tokens, a recursive validator, redaction-on-serve)
-may be built twice in `examples/`. The moment a **third** rung consumes it,
+may be built twice in `examples/`. A module of a rung built from modules
+(lims's `org`, `lab`, and the ERP modules that follow) counts as a consumer
+of its own, and inside such a rung the **second** module's need promotes, as
+`AGENTS.md`'s second-place signal says. Across rungs, the moment a **third** rung consumes it,
 it must either be **promoted into `include/morph`** (with its full docs
 tax, drawn from the fix budget) or **explicitly dispositioned in the spec
 as app-layer by design**. Without this rule the ladder ends with a shadow
@@ -55,7 +58,7 @@ The user-code contract is: **you implement Models; morph exposes them.**
     on replay — validation, authorization, dedup, conflict classification —
     stays in the model, which replay re-dispatches through as usual. The
     sanctioned home is a dedicated app-layer write-path class
-    (`examples/lims/include/lims/offline/field_outbox.hpp` is the reference),
+    (`examples/lims/lab/include/lims/lab/offline/field_outbox.hpp` is the reference),
     **not** a screen or a client; the transport-shaped half (queue a
     mutation while offline, replay it in order) is the framework's
     `morph::ui::QueueingDispatcher`.
@@ -155,7 +158,7 @@ same way [`bank`](bank/README.md) does. **No rung implements any database
 code itself.**
 
 - **Entities** are Lightweight `Field<>`-wrapped records in
-  `include/<rung>/db/*_entity.hpp`, kept strictly separate from the wire
+  `include/<rung>/db/*_entity.hpp` (or, in a rung built from modules, `<module>/include/<rung>/<module>/db/*_entity.hpp`), kept strictly separate from the wire
   DTOs; the model maps DTO ⇄ entity (bank's two-type-layer architecture).
 - **Access** is through `Lightweight::DataMapper`: a model holds no
   connection of its own — each `execute()` acquires one from
@@ -207,7 +210,7 @@ code itself.**
 ## 5. Testing: models are 100% unit tested
 
 - **Every model is 100% unit tested** — line and branch coverage of
-  `src/models/` + `include/<rung>/models/` at 100%. This is a target, not a
+  `src/models/` + `include/<rung>/models/` (per module in a rung built from modules) at 100%. This is a target, not a
   gate: each rung has a `codecov.yml` component
   (`component_management.individual_components`) naming its paths, and every
   component is `informational: true`, so a shortfall is recorded in the rung's

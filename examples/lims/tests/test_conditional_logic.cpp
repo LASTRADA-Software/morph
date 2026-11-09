@@ -28,9 +28,9 @@
 #include <string>
 #include <vector>
 
-#include "lims/core/errors.hpp"
-#include "lims/models/analysis_catalog_model.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/org/core/errors.hpp"
+#include "lims/lab/models/analysis_catalog_model.hpp"
+#include "lims/lab/models/sample_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 

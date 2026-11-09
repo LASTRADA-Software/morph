@@ -17,8 +17,8 @@
 #include <utility>
 #include <vector>
 
-#include "lims/core/errors.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/org/core/errors.hpp"
+#include "lims/lab/models/sample_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/storage_owner.hpp"
@@ -399,7 +399,7 @@ TEST_CASE("Every keyed SampleModel action encodes exactly the key its hand-writt
 TEST_CASE("An empty sampleId fails key extraction instead of routing to a garbage instance", "[lims][sample][key]") {
     // The failure a hand-written trait is exposed to: its body is
     // `keyToString(*action.sampleId)`, and `SampleId::operator*` is
-    // `return *value;` on a `std::optional` (lims/core/types.hpp) --
+    // `return *value;` on a `std::optional` (lims/lab/core/types.hpp) --
     // undefined behaviour for a disengaged id, which on a plain libc++ hands
     // back whatever the union held and attaches the caller to an arbitrary
     // instance. `morph::model::keyToString` refuses an empty strong id

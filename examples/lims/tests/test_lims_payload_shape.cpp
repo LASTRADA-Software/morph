@@ -5,7 +5,7 @@
 // `morph/core/payload_schema.hpp`).
 //
 // All eight of this rung's strong ids are generated with their own
-// `glz::meta` (`LIMS_DEFINE_STRONG_ID_WIRE`, `lims/core/types.hpp`) -- on the
+// `glz::meta` (`LIMS_DEFINE_STRONG_ID_WIRE`, `lims/lab/core/types.hpp`) -- on the
 // wire each *is* its nullable underlying integer, which is what makes
 // `BRIDGE_REGISTER_ACTION` on a DTO carrying one compile at all. The cost,
 // stated in `morph/core/payload_shape_tag.hpp` and in
@@ -15,7 +15,7 @@
 // the bare opaque `x`, indistinguishable from every other such type.
 //
 // This rung is where that matters most, because its journal *is* the product:
-// `SelfJournal` (`lims/core/self_journal.hpp`) stamps every entry so the
+// `SelfJournal` (`lims/lab/core/self_journal.hpp`) stamps every entry so the
 // regulatory trail can be replayed, and `GetAuditTrail` renders it back to a
 // human. Every id is `std::optional<std::int64_t>` on the wire, so a retype
 // between two of them -- `AnalysisId` for the `AnalysisVersionId` a reading
@@ -38,12 +38,12 @@
 #include <string>
 #include <vector>
 
-#include "lims/core/types.hpp"
-#include "lims/dto/offline_dto.hpp"
-#include "lims/dto/result_dto.hpp"
-#include "lims/dto/sample_dto.hpp"
-#include "lims/dto/verification_dto.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/lab/core/types.hpp"
+#include "lims/lab/dto/offline_dto.hpp"
+#include "lims/lab/dto/result_dto.hpp"
+#include "lims/lab/dto/sample_dto.hpp"
+#include "lims/lab/dto/verification_dto.hpp"
+#include "lims/lab/models/sample_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/storage_owner.hpp"

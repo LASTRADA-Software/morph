@@ -35,11 +35,11 @@
 #include <string_view>
 #include <vector>
 
-#include "lims/auth/lims_authorizer.hpp"
-#include "lims/core/errors.hpp"
-#include "lims/models/analysis_catalog_model.hpp"
-#include "lims/models/sample_model.hpp"
-#include "lims/offline/field_outbox.hpp"
+#include "lims/app/lims_authorizer.hpp"
+#include "lims/org/core/errors.hpp"
+#include "lims/lab/models/analysis_catalog_model.hpp"
+#include "lims/lab/models/sample_model.hpp"
+#include "lims/lab/offline/field_outbox.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
