@@ -7,9 +7,9 @@
 cmake_minimum_required(VERSION 3.25)
 
 morph_add_rung(NAME lims
-    MODULES org posting lab ledger app
+    MODULES org posting lab ledger billing app
     SHARED_MODULES org posting
-    USES lab:org ledger:org,posting
+    USES lab:org ledger:org,posting billing:org,posting
     APP_MODULE app)
 
 # Each probe compiles one include as part of one module, and its test builds it: a probe that crosses the
@@ -43,4 +43,8 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
     _lims_boundary_probe(app_includes_posting app pass lims/posting/posting.hpp)
     _lims_boundary_probe(ledger_includes_lab ledger fail lims/lab/models/sample_model.hpp)
     _lims_boundary_probe(ledger_includes_posting ledger pass lims/posting/posting.hpp)
+    _lims_boundary_probe(billing_includes_ledger billing fail lims/ledger/models/ledger_model.hpp)
+    _lims_boundary_probe(billing_includes_lab billing fail lims/lab/models/sample_model.hpp)
+    _lims_boundary_probe(billing_includes_posting billing pass lims/posting/posting.hpp)
+    _lims_boundary_probe(ledger_includes_billing ledger fail lims/billing/models/price_list_model.hpp)
 endif()

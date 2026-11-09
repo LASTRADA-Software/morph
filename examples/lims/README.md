@@ -219,6 +219,7 @@ lims is built from modules, each its own library with its own include directory 
 | `posting/` (shared) | the posting contract: `PostingRequest` and `PostingResult`, DTOs only | `org` |
 | `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
 | `ledger/` | the chart of accounts, the monthly periods and the journal entries (balanced, unrounded, immutable once posted, corrected by reversal; postings recorded once per source key; a closed period freezes its balances; dated exchange rates; the trial balance, account balance and account ledger reports) | `org`, `posting` |
+| `billing/` | billing settings, billing clients and dated price lists with per-client prices | `org`, `posting` |
 | `app/` | the server edge's `LimsAuthorizer`, and the tables it reads: `declaredRequirements` and `openMutatingActions` | every module |
 
 The server (`src/server/`), the screens (`screens/`) and the suites (`tests/`) belong to the app and link every
@@ -938,6 +939,22 @@ several; lims's posters each post one document in one currency (an invoice in it
 supplier's), and a single currency per entry keeps the rate one fact of the entry rather than one per line, so
 `PostingRequest` carries one `currency` and one `rate` and `entryProblem` checks that one. A document in several
 currencies would post one entry per currency; nothing in Parts B and C produces one.
+
+### 31. A price is read from the list in force, and a new list replaces the old one whole
+
+A client is billed at a company in the currency it is registered with there (`RegisterBillingClient`); lims's client
+record has no company or currency, since clients are reference data the whole lab shares (decision 22). A price list
+belongs to a company, has a currency and a date it applies from; the list in force on a date is the latest that
+applies by then, in the client's currency. In it, the client's own price for the analysis wins over the list's. A list
+in force with no price for an analysis prices nothing: an older list is never consulted, so retiring a price is
+making a list without it. A company has one list per currency and start, one price per list, analysis and client
+(the list's own price is stored with client 0, since a NULL would be distinct from every other NULL in a unique
+index), and one registration per client and company; each is a unique index, and a concurrent insert that loses the
+race to it is answered as a `Conflict`, like the lookup that precedes it. A company's billing settings (its
+receivable, revenue, tax and rounding account codes, its flat tax rate from 0 to 1 with at most six decimals, how many
+hours an approval may wait, 1 to 720, and the day of the month the billing run drafts invoices, 1 to 28 so that every
+month has it) are a supervisor's; setting them again replaces them. The account codes are text: billing does not read
+the ledger's chart, and the ledger refuses a posting that names a code it lacks.
 
 ## Findings raised by this rung
 
