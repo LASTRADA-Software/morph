@@ -17,7 +17,10 @@ namespace lims {
 
 /// @brief Enters the rate of converting @p from into @p to for a company, valid from an instant.
 ///
-/// The rate valid on a date is the one with the latest `validFrom` not after it.
+/// The rate valid on a date is the one with the latest `validFrom` not after it. A rate is a hand-entered fact, never
+/// edited: a correction is a new rate with a later start. The rate for the opposite direction is a separate row,
+/// entered separately; it is never derived as a reciprocal, because the two quotes differ and rounding the reciprocal
+/// would invent a rate nobody entered.
 struct SetExchangeRate {
     /// @brief The company whose books the rate converts for.
     CompanyId company;

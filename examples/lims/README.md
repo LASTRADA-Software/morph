@@ -906,12 +906,31 @@ lines. A total, a balance or a running balance that does not fit `int64` is `Out
   total does not fit and when every account fits and the company's total does not; the same holds for an account
   balance and for an account ledger's running balance.
 
-Measured over the summation only. Not measured: a report over 10^7 rows in the database (the reports load the posted
-entries of a company into memory, line by line, so that case is hypothesis 10's subject in Part C); the cost of the
-reports themselves, which is a query per entry. Inferred, not measured: that the 780 ms holds on another machine.
+The design's hypothesis-8 condition is met for two things: the summation step (the 10^7-line `ExactSum` case above) and
+the refusal of an over-range total through the real reports. The 10^7 in-memory loop alone would also pass with plain
+`operator+`, because its totals stay near 5 * 10^15; the over-range control is what distinguishes checked from unchecked
+arithmetic.
 
-Because the case runs 10^7 iterations it is named `Stress: ` and so carries the ctest label `stress`: a local
-`ctest -L ladder-lims` and a direct run of the binary include it; CI's ladder legs and its coverage leg leave it out.
+The trial balance through the database was measured separately by `Stress: Hypothesis 10: ...` (same file), on the
+same build: 1,000 entries of 200 lines each (2 * 10^5 lines of up to 10^9 minor units, total 47,076,604,421,980 minor
+units) posted through `LedgerModel::record`, then `TrialBalance` through `LedgerReportModel`. The totals equal the
+independently accumulated sum exactly. Posting took 68,135 ms and the trial balance 216 ms. Extrapolated linearly to
+10^7 lines, the trial balance is about 11 s (inferred, not measured: it assumes the report's cost per line stays
+constant and that 10^7 lines fit in memory). What limits it is not the summation but that the report loads every posted
+line into memory with one query per posted entry (`postedLines`); that is hypothesis 10's subject, and the design states
+the 10^7-line trial balance as part of it. Posting dominates the case's time (every posting is its own durable
+transaction), which is why it posts few large entries and not 10^5 small ones: 50,000 two-line entries did not finish
+in 590 s. On the `gcc-debug` build (the nightly's configuration) the 10^7 summation took 2,091 ms and the database case
+92 s (posting 91,275 ms, trial balance 653 ms). Not measured: other hardware.
+
+The two stress cases carry the ctest label `stress` and a 600 s limit (the rung's other tests have 120 s; the database case
+needs 92 s on Debug, too near that for a loaded runner). A local `ctest -L ladder-lims` and a direct run
+of the binary include them; CI's ladder legs and its coverage leg leave them out, and `nightly-slow-checks.yml` (Debug,
+every test) runs them.
+
+**Exchange rates are facts entered by hand.** A rate for each direction of a pair is its own row, entered separately;
+the opposite direction is never derived as a reciprocal. A rate is not edited: a correction is a new rate with a later
+start.
 
 **One transaction currency per entry.** An entry carries one transaction currency, and balances in it and in company
 currency. The design allows an entry to "sum to zero per transaction currency", which admits one entry mixing

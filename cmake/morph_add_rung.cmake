@@ -480,11 +480,13 @@ function(morph_add_rung)
     # the test name's own \"Journey: \" prefix rather than a separate source
     # list, so adding a journey needs no CMake edit. A long-running case named
     # \"Stress: ...\" gets `stress` the same way, which CI's ladder legs
-    # (ctest -L ladder -LE stress) and its coverage leg leave out.
+    # (ctest -L ladder -LE stress) and its coverage leg leave out. A stress
+    # case is long by design, so it gets a 600 s limit instead of the
+    # rung's 120 s.
     if(_ladder_test MATCHES \"Journey: \")
         set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder-${_rung};journey\")
     elseif(_ladder_test MATCHES \"Stress: \")
-        set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder-${_rung};stress\")
+        set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder-${_rung};stress\" TIMEOUT 600)
     endif()
 endforeach()
 "

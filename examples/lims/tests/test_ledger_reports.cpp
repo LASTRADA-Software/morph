@@ -14,6 +14,7 @@
 #include <morph/util/rational.hpp>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include "lims/ledger/db/ledger_entity.hpp"
@@ -325,6 +326,41 @@ TEST_CASE("ledger rates: entering one is an accountant's, at its company, and ea
         CHECK(ledger.execute(lims::ListExchangeRates{.company = osaka}).rates.empty());
         CHECK_THROWS_AS(ledger.execute(lims::ListExchangeRates{}), lims::ValidationError);
     }
+}
+
+// Mutation: rethrow the SqlException from LedgerModel::enterRate instead of answering Conflict.
+// The winner is another connection (a thread) that enters the same start between the loser's lookup and its insert,
+// so the loser's insert meets the unique index and its rolled-back transaction is followed by a lookup that finds the
+// winner's committed row.
+TEST_CASE("ledger rates: a start entered by a concurrent call between the lookup and the insert is a Conflict",
+          "[lims][ledger][rates]") {
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    lims::SetExchangeRate const request{.company = lims::test::seededCompany(),
+                                        .from = lims::CurrencyCode::USD,
+                                        .to = lims::CurrencyCode::EUR,
+                                        .validFrom = morph::time::Timestamp{lims::test::at(2026, 11, 1, 0)},
+                                        .rate = rate(92, 100)};
+    bool winnerEntered = false;
+    auto const winner = [&] {
+        std::thread other{[&] {
+            static_cast<void>(lims::LedgerModel::enterRate(lims::SetExchangeRate{.company = request.company,
+                                                                                 .from = request.from,
+                                                                                 .to = request.to,
+                                                                                 .validFrom = request.validFrom,
+                                                                                 .rate = rate(93, 100)},
+                                                           "winner", {}));
+            winnerEntered = true;
+        }};
+        other.join();
+    };
+    CHECK_THROWS_AS(static_cast<void>(lims::LedgerModel::enterRate(request, "alice", winner)), lims::Conflict);
+    REQUIRE(winnerEntered);
+    auto const listed = lims::LedgerModel{}.execute(lims::ListExchangeRates{.company = lims::test::seededCompany()});
+    REQUIRE(listed.rates.size() == 1U);
+    CHECK(listed.rates.front().setBy == "winner");
+    CHECK(*listed.rates.front().rate == Rational{Numerator{93}, Denominator{100}, DecimalPlaces{6}});
 }
 
 // Mutation: include drafts in TrialBalance (the draft's 7 units appear in the totals).
@@ -670,6 +706,59 @@ TEST_CASE(
     CHECK(over.add(big));
     CHECK_FALSE(over.add(big));
     CHECK(over.total() == big);
+}
+
+// The trial balance of a real ledger: kEntries entries of kPairs debit/credit pairs each, posted through the ledger
+// and totalled by the report. Entries carry many lines because every posting is its own durable transaction and so
+// costs milliseconds whatever its size, while the report's cost is in loading lines: a count of lines reachable in
+// minutes needs few entries. The report loads each posted entry's lines with its own query. Mutation: make
+// TrialBalance skip every other entry (the totals no longer equal the posted sum).
+TEST_CASE("Stress: Hypothesis 10: a trial balance over posted entries totals exactly", "[lims][ledger][h10][stress]") {
+    constexpr std::int64_t kEntries = 1'000;
+    constexpr std::int64_t kPairs = 100;
+    constexpr std::uint64_t kMaxMinor = 1'000'000'000;
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    std::int64_t expectedMinor = 0;
+    std::uint64_t state = 0x9E3779B97F4A7C15ULL;
+    auto const postingStarted = std::chrono::steady_clock::now();
+    for (std::int64_t i = 0; i < kEntries; ++i) {
+        lims::PostingRequest request{.company = lims::test::seededCompany(),
+                                     .date = november(static_cast<unsigned>(1 + (i % 28))),
+                                     .sourceKey = "stress:" + std::to_string(i),
+                                     .sourceReference = "stress",
+                                     .currency = lims::CurrencyCode::EUR,
+                                     .rate = one(),
+                                     .lines = {}};
+        for (std::int64_t pair = 0; pair < kPairs; ++pair) {
+            state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+            auto const minor = static_cast<std::int64_t>((state >> 33U) % (kMaxMinor + 1U));
+            expectedMinor += minor;
+            lims::Amount const amount{Rational{Numerator{minor}, Denominator{100}, DecimalPlaces{2}}};
+            request.lines.push_back(lims::PostingLine{.accountCode = pair % 2 == 0 ? "1200" : "1300",
+                                                      .side = lims::PostingSide::Debit,
+                                                      .amount = amount,
+                                                      .companyAmount = amount});
+            request.lines.push_back(lims::PostingLine{.accountCode = pair % 3 == 0 ? "4000" : "4100",
+                                                      .side = lims::PostingSide::Credit,
+                                                      .amount = amount,
+                                                      .companyAmount = amount});
+        }
+        static_cast<void>(lims::LedgerModel::record(request));
+    }
+    auto const reportStarted = std::chrono::steady_clock::now();
+    auto const view = trial();
+    auto const finished = std::chrono::steady_clock::now();
+    WARN("posted " << kEntries << " entries (" << 2 * kEntries * kPairs << " lines) in "
+                   << std::chrono::duration_cast<std::chrono::milliseconds>(reportStarted - postingStarted).count()
+                   << " ms; trial balance in "
+                   << std::chrono::duration_cast<std::chrono::milliseconds>(finished - reportStarted).count()
+                   << " ms; total " << expectedMinor << " minor units");
+    auto const expected = Rational{Numerator{expectedMinor}, Denominator{100}, DecimalPlaces{2}};
+    CHECK(*view.totalDebit == expected);
+    CHECK(*view.totalCredit == expected);
+    CHECK(view.rows.size() == 4U);
 }
 
 // Mutation: let TrialBalance clamp instead of throwing (it answers a total of INT64_MAX).

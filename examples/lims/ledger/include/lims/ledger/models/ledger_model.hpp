@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <functional>
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/util/datetime.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
+#include <string>
 
 #include "lims/ledger/dto/account_dto.hpp"
 #include "lims/ledger/dto/entry_dto.hpp"
@@ -174,6 +176,21 @@ public:
     [[nodiscard]] static std::optional<::morph::math::Rational> rateOn(CompanyId company, CurrencyCode from,
                                                                        CurrencyCode target,
                                                                        ::morph::time::Timestamp const& date);
+
+    /// @brief Stores a rate, answering a start another call entered first as a Conflict.
+    ///
+    /// The seam under `SetExchangeRate` after its checks. A concurrent entry of the same start is refused by the
+    /// unique index at the insert; the lookup then finds the winner's row and the answer is the same Conflict a
+    /// later call gets.
+    /// @param action The rate, already validated and authorized.
+    /// @param setBy Who enters it.
+    /// @param betweenLookupAndInsert Called once the lookup found no such start and before the insert; a test
+    ///        enters the winner's row here. Empty in production.
+    /// @return The stored rate.
+    /// @throws Conflict if the start is already entered.
+    /// @throws Lightweight::SqlException if the insert fails for another reason.
+    [[nodiscard]] static ExchangeRateView enterRate(SetExchangeRate const& action, std::string const& setBy,
+                                                    std::function<void()> const& betweenLookupAndInsert);
 };
 
 }  // namespace lims

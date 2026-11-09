@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -55,6 +57,62 @@ constexpr int kMaxCurrencyCode = static_cast<int>(CurrencyCode::JPY);
     };
 }
 
+/// @brief Whether a company already has a rate for a pair from an instant.
+/// @param action The rate being entered.
+/// @return `true` when one is stored.
+[[nodiscard]] bool rateStartExists(SetExchangeRate const& action) {
+    Lightweight::DataMapper mapper;
+    return !mapper.Query<db::ExchangeRateRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::ExchangeRateRecord::companyId>, "=", *action.company)
+                .Where(::Lightweight::FieldNameOf<&db::ExchangeRateRecord::fromCurrency>, "=",
+                       static_cast<int>(action.from))
+                .Where(::Lightweight::FieldNameOf<&db::ExchangeRateRecord::toCurrency>, "=",
+                       static_cast<int>(action.to))
+                .Where(::Lightweight::FieldNameOf<&db::ExchangeRateRecord::validFromMs>, "=",
+                       millisOf(action.validFrom))
+                .All()
+                .empty();
+}
+
+/// @brief The refusal of a start that is already entered.
+/// @param action The rate being entered.
+/// @return The exception to throw.
+[[nodiscard]] Conflict rateConflict(SetExchangeRate const& action) {
+    return Conflict{"SetExchangeRate: company " + std::to_string(*action.company) + " already has a " +
+                    std::string{currencyName(action.from)} + "/" + std::string{currencyName(action.to)} +
+                    " rate from that instant"};
+}
+
+/// @brief One attempt at entering a rate, in its own transaction.
+/// @param action The rate.
+/// @param setBy Who enters it.
+/// @param betweenLookupAndInsert Called after the lookup found no such start and before the insert.
+/// @return The stored rate.
+/// @throws Conflict if the start is already entered.
+/// @throws Lightweight::SqlException if the insert fails.
+[[nodiscard]] ExchangeRateView enterRateOnce(SetExchangeRate const& action, std::string const& setBy,
+                                             std::function<void()> const& betweenLookupAndInsert) {
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    if (rateStartExists(action)) {
+        throw rateConflict(action);
+    }
+    if (betweenLookupAndInsert) {
+        betweenLookupAndInsert();
+    }
+    db::ExchangeRateRecord row;
+    row.companyId = *action.company;
+    row.fromCurrency = static_cast<int>(action.from);
+    row.toCurrency = static_cast<int>(action.to);
+    row.validFromMs = millisOf(action.validFrom);
+    row.rateNum = (*action.rate).numerator;
+    row.rateDen = (*action.rate).denominator;
+    row.setBy = Lightweight::SqlAnsiString<64>{setBy};
+    mapper.Create(row);
+    sqlTxn.Commit();
+    return toView(row);
+}
+
 }  // namespace
 
 // An action handler: the registry calls it on the instance, like every other.
@@ -70,31 +128,23 @@ ExchangeRateView LedgerModel::execute(const SetExchangeRate& action) {
         throw NotFound{"SetExchangeRate: company " + std::to_string(*action.company) + " does not exist"};
     }
     requireAuthorized(action);
-    Lightweight::DataMapper mapper;
-    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    if (!mapper.Query<db::ExchangeRateRecord>()
-             .Where(::Lightweight::FieldNameOf<&db::ExchangeRateRecord::companyId>, "=", *action.company)
-             .Where(::Lightweight::FieldNameOf<&db::ExchangeRateRecord::fromCurrency>, "=",
-                    static_cast<int>(action.from))
-             .Where(::Lightweight::FieldNameOf<&db::ExchangeRateRecord::toCurrency>, "=", static_cast<int>(action.to))
-             .Where(::Lightweight::FieldNameOf<&db::ExchangeRateRecord::validFromMs>, "=", millisOf(action.validFrom))
-             .All()
-             .empty()) {
-        throw Conflict{"SetExchangeRate: company " + std::to_string(*action.company) + " already has a " +
-                       std::string{currencyName(action.from)} + "/" + std::string{currencyName(action.to)} +
-                       " rate from that instant"};
+    return enterRate(action, currentPrincipal(), {});
+}
+
+ExchangeRateView LedgerModel::enterRate(SetExchangeRate const& action, std::string const& setBy,
+                                        std::function<void()> const& betweenLookupAndInsert) {
+    try {
+        return enterRateOnce(action, setBy, betweenLookupAndInsert);
+    } catch (Lightweight::SqlException const&) {
+        // A concurrent call entering the same start committed between this call's lookup and its insert (the unique
+        // index refuses the second row), and this call's transaction is rolled back. The winner's row is there now:
+        // the second entry is a Conflict, as if it had come after. A failure that is not that race has no such row
+        // and surfaces as it is.
+        if (rateStartExists(action)) {
+            throw rateConflict(action);
+        }
+        throw;
     }
-    db::ExchangeRateRecord row;
-    row.companyId = *action.company;
-    row.fromCurrency = static_cast<int>(action.from);
-    row.toCurrency = static_cast<int>(action.to);
-    row.validFromMs = millisOf(action.validFrom);
-    row.rateNum = (*action.rate).numerator;
-    row.rateDen = (*action.rate).denominator;
-    row.setBy = Lightweight::SqlAnsiString<64>{currentPrincipal()};
-    mapper.Create(row);
-    sqlTxn.Commit();
-    return toView(row);
 }
 
 // An action handler: the registry calls it on the instance, like every other.
