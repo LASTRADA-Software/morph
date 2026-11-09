@@ -80,6 +80,9 @@ struct SampleRecord {
     /// against to detect a stale base (README build order §7).
     Light::Field<std::int32_t, Light::SqlRealName{"version"}> version{1};             // 4
     Light::Field<std::int64_t, Light::SqlRealName{"registered_at"}> registeredAt{0};  // 5
+    /// @brief The `org_sites` row the sample is at. Nullable in the schema only because the column was added to a
+    ///        table with rows; the migration that added it set every row, and every write sets it.
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"site_id"}> siteId;  // 6
 };
 
 /// @brief A sample's entry data: the header, sampling, optional measurements and project the sample-entry screen

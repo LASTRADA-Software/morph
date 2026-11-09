@@ -26,7 +26,9 @@
 #include "lims/lab/models/ignition_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/org/dto/auth_dto.hpp"
+#include "lims/org/dto/company_dto.hpp"
 #include "lims/org/models/auth_model.hpp"
+#include "lims/org/models/org_model.hpp"
 
 namespace lims::screens {
 
@@ -43,6 +45,9 @@ ui::Screen registerScreen() {
         auto const registerSample = screen.mutation<RegisterSample>("registerSample", lab);
         auto const client = screen.let("client", registerClient.result());
         auto const registered = screen.let("registered", registerSample.result());
+        auto const org = screen.model<OrgModel>("org");
+        auto const sites = screen.query<ListSites>("sites", org);
+        auto const siteList = ui::element("siteList");
         // A registered sample opens in its own lifecycle screen.
         screen.watch(registered,
                      ui::ifThen(ui::engaged(registered),
@@ -62,13 +67,23 @@ ui::Screen registerScreen() {
                   ui::text({.text = registerClient.error()}).testId("clientError")},
                  {.title = "Client", .padding = 2}),
              ui::panel(
-                 {ui::textInput({.label = "Reference", .placeholder = "Sample reference"})
+                 {ui::table(
+                      sites.value().at(&ListSitesResult::sites),
+                      {.key = ui::row(&SiteView::id),
+                       .columns = {{.name = "name", .label = "Site", .cell = ui::text({.text = ui::row("name")})}},
+                       .selectionMode = ui::Selection::Single})
+                      .id(siteList)
+                      .a11y("Sites")
+                      .testId("sites"),
+                  ui::textInput({.label = "Reference", .placeholder = "Sample reference"})
                       .id(reference)
                       .testId("reference"),
-                  ui::button({.label = "Register sample",
-                              .onClick = ui::run(registerSample, {{&RegisterSample::clientId,
-                                                                   client.at(&RegisterClientResult::clientId)},
-                                                                  {&RegisterSample::reference, reference.value()}})})
+                  ui::button(
+                      {.label = "Register sample",
+                       .onClick = ui::run(registerSample,
+                                          {{&RegisterSample::siteId, ui::call("first", {siteList.selection()})},
+                                           {&RegisterSample::clientId, client.at(&RegisterClientResult::clientId)},
+                                           {&RegisterSample::reference, reference.value()}})})
                       .testId("registerSample")
                       .enabled(ui::engaged(client)),
                   ui::text({.text = registerSample.error()}).testId("sampleError")},
@@ -242,7 +257,8 @@ ui::Handle<std::string> saveRefusal(ui::AnyHandle const& error) {
     return reason(
         "noClient", "Choose a client before saving",
         reason("noReference", "Enter a reference before saving",
-               reason("noProject", "Choose a project before saving", ui::t("lims.save.notSaved", "Not saved"))));
+               reason("noProject", "Choose a project before saving",
+                      reason("noSite", "Choose a site before saving", ui::t("lims.save.notSaved", "Not saved")))));
 }
 
 // Sample entry: a record-editing screen over a private working copy of one sample. Each section is a form whose

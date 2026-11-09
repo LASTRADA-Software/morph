@@ -95,6 +95,7 @@ struct VerifyResultIdRetyped {
 ///        idea: the lifecycle's entry point names the owning client, in a
 ///        rung where nearly every other action's id names a sample.
 struct RegisterSampleClientIdRetyped {
+    lims::SiteId siteId;
     lims::SampleId clientId;
     std::string reference;
 };
@@ -116,12 +117,15 @@ TEST_CASE("Every lims strong id renders a distinct payload shape", "[lims][journ
     INFO("WorksheetId       -> " << payloadShapeString<lims::WorksheetId>());
     INFO("VerificationId    -> " << payloadShapeString<lims::VerificationId>());
     INFO("ConflictId        -> " << payloadShapeString<lims::ConflictId>());
+    INFO("CompanyId         -> " << payloadShapeString<lims::CompanyId>());
+    INFO("SiteId            -> " << payloadShapeString<lims::SiteId>());
 
     const std::vector<std::string> shapes{
         payloadShapeString<lims::ClientId>(),       payloadShapeString<lims::SampleId>(),
         payloadShapeString<lims::AnalysisId>(),     payloadShapeString<lims::AnalysisVersionId>(),
         payloadShapeString<lims::ResultId>(),       payloadShapeString<lims::WorksheetId>(),
         payloadShapeString<lims::VerificationId>(), payloadShapeString<lims::ConflictId>(),
+        payloadShapeString<lims::CompanyId>(),      payloadShapeString<lims::SiteId>(),
     };
 
     // None of them may still be the bare opaque tag, and no two may collide.
@@ -165,7 +169,8 @@ TEST_CASE("replay() refuses a RegisterSample entry stamped by a build whose clie
     lims::SampleModel model;
     model.attachActionLog(log, std::string{});
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    const auto sample = model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-2026-0001"});
+    const auto sample = model.execute(lims::RegisterSample{
+        .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-2026-0001"});
     REQUIRE(sample.id.hasValue());
 
     auto entries = log->entries(std::to_string(*sample.id));

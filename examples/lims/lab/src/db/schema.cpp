@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlMigration.hpp>
+#include <string>
 
 #include "lims/lab/db/database.hpp"
+#include "lims/org/db/org_entity.hpp"
 
 namespace lims::db {
 
@@ -176,5 +178,15 @@ LIGHTWEIGHT_SQL_MIGRATION(20261107000001, "Create lims_ignition_tests table") {
         .Column("mass_container", Real())
         .Column("mass_before", Real())
         .Column("mass_after", Real());
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20261109000002, "Give every lims_samples row its site") {
+    plan.AlterTable("lims_samples")
+        .AddNotRequiredForeignKeyColumn(
+            "site_id", Bigint(),
+            SqlForeignKeyReferenceDefinition{.tableName = std::string{lims::db::SiteRecord::TableName},
+                                             .columnName = "id"});
+    // Every sample that predates sites was registered at the one place the lab had, which is the seeded site.
+    plan.Update("lims_samples").Set("site_id", lims::db::kSeededSiteId).WhereExpression("site_id IS NULL");
 }
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

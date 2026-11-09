@@ -65,7 +65,8 @@ struct ReadyToVerify {
         const auto nitrate =
             catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
         const auto client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-        sample = bench.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+        sample = bench.execute(lims::RegisterSample{
+            .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
         bench.execute(lims::ReceiveSample{});
         bench.execute(lims::StartWork{});
         result = bench.execute(lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
@@ -549,7 +550,8 @@ TEST_CASE("Offline replay and conflict resolution both reach the sample's trail"
     lims::SampleModel bench;
     bench.attachActionLog(log, std::string{});
     const auto client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    const auto sample = bench.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    const auto sample = bench.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     bench.execute(lims::ReceiveSample{});
     const auto atWork = bench.execute(lims::StartWork{});
 
@@ -633,7 +635,8 @@ TEST_CASE("Every refused action kind is named in the trail, not lumped as unread
     lims::SampleModel bench;
     bench.attachActionLog(log, std::string{});
     const auto client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    bench.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    bench.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     bench.execute(lims::ReceiveSample{});
     const auto atWork = bench.execute(lims::StartWork{});
 

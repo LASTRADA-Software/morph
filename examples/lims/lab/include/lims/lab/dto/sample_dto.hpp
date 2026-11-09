@@ -112,6 +112,9 @@ struct RegisterClientResult {
 /// @brief Logs a new sample against a client. The lifecycle's entry point:
 ///        the created sample is `Registered`, at version 1.
 struct RegisterSample {
+    /// @brief The site the sample is registered at.
+    SiteId siteId;
+
     /// @brief The owning client.
     ClientId clientId;
 
@@ -119,8 +122,10 @@ struct RegisterSample {
     std::string reference;
 
     /// @brief Whether this registration is well-formed.
-    /// @return `true` when a client is named and a reference is given.
-    [[nodiscard]] bool validate() const noexcept { return clientId.hasValue() && !reference.empty(); }
+    /// @return `true` when a site and a client are named and a reference is given.
+    [[nodiscard]] bool validate() const noexcept {
+        return siteId.hasValue() && clientId.hasValue() && !reference.empty();
+    }
 
     /// @brief Same opt-out, same reason as `RegisterClient::explicitSubmit`.
     static constexpr bool explicitSubmit = true;
@@ -131,6 +136,9 @@ struct RegisterSample {
 struct SampleView {
     /// @brief The sample's id.
     SampleId id;
+
+    /// @brief The site the sample is at.
+    SiteId siteId;
 
     /// @brief The owning client.
     ClientId clientId;

@@ -4,6 +4,7 @@
 // through the transitions its state allows, and the results screen opens on its sample. The models run in process
 // over the rung's test database, as the presenter tests they replace did.
 
+#include <algorithm>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -48,7 +49,8 @@ std::int64_t registeredSample() {
     lims::test::ScopedPrincipal const principal{"tech"};
     lims::SampleModel model;
     auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    auto const sample = model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    auto const sample = model.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     return *sample.id;
 }
 
@@ -129,6 +131,12 @@ TEST_CASE("lims screens: registration registers a client and a sample, then open
         auto const text = harness.text("clientId");
         return text && text->starts_with("Client ");
     }));
+    int const sites = harness.find("Table", "sites").value();
+    REQUIRE(harness.waitFor([&harness, sites] {
+        auto const rows = harness.backend().children(sites);
+        return std::ranges::any_of(rows, [&harness](int row) { return harness.backend().hasProp(row, "rowKey"); });
+    }));
+    harness.backend().selectRows(sites, {morph::ui::Key{std::int64_t{1}}});
     harness.edit("reference", "WW-7");
     harness.click("registerSample");
     REQUIRE(harness.waitFor([&harness] { return harness.mounted().size() == 2; }));
@@ -162,7 +170,8 @@ TEST_CASE("lims screens: a captured result is listed with its exact decimal", "[
             catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
         lims::SampleModel model;
         auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-        auto const sample = model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-2"});
+        auto const sample = model.execute(lims::RegisterSample{
+            .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-2"});
         model.execute(lims::ReceiveSample{});
         model.execute(lims::StartWork{});
         model.execute(lims::CaptureConcentration{
@@ -223,7 +232,8 @@ TEST_CASE("lims screens: the results screen previews the reported concentration 
         lims::test::ScopedPrincipal const principal{"tech"};
         lims::SampleModel model;
         auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-        auto const sample = model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-3"});
+        auto const sample = model.execute(lims::RegisterSample{
+            .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-3"});
         model.execute(lims::ReceiveSample{});
         model.execute(lims::StartWork{});
         sampleId = *sample.id;
@@ -276,7 +286,8 @@ TEST_CASE("lims screens: a row's re-capture shows its new value through the capt
             catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
         lims::SampleModel model;
         auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-        auto const sample = model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-4"});
+        auto const sample = model.execute(lims::RegisterSample{
+            .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-4"});
         model.execute(lims::ReceiveSample{});
         model.execute(lims::StartWork{});
         model.execute(lims::CaptureConcentration{

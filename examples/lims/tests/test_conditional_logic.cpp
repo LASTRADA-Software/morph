@@ -474,7 +474,8 @@ TEST_CASE("A hidden field's draft value still travels, and the server acts on it
     const auto nitrate =
         catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    model.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     model.execute(lims::ReceiveSample{});
     model.execute(lims::StartWork{});
 
@@ -506,7 +507,8 @@ TEST_CASE("A declared dilution is applied exactly", "[lims][forms][dilution]") {
     const auto nitrate =
         catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    model.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     model.execute(lims::ReceiveSample{});
     model.execute(lims::StartWork{});
 

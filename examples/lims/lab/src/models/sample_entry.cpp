@@ -19,6 +19,7 @@
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
+#include "lims/org/models/org_model.hpp"
 
 namespace lims {
 
@@ -125,6 +126,7 @@ HeaderView SampleModel::headerView() const {
     }
     if (_draft) {
         view.clientId = _draft->header.clientId;
+        view.siteId = _draft->header.siteId;
         view.reference = _draft->header.reference;
         view.receivedOn = _draft->header.receivedOn;
         view.remarks = _draft->header.remarks;
@@ -165,6 +167,7 @@ HeaderView SampleModel::execute(const LoadSample& action) {
     // The sample row is the source of truth for who it belongs to and its reference.
     loaded.header.clientId = ClientId{static_cast<std::int64_t>(row.client.Value())};
     loaded.header.reference = std::string{row.reference.Value().ToStringView()};
+    loaded.header.siteId = SiteId::fromOptional(row.siteId.Value());
     _draft = std::move(loaded);
     _sampleId = *action.id;
     _journal.rekey(std::to_string(*_sampleId));
@@ -185,6 +188,9 @@ SaveSampleResult SampleModel::execute(const SaveSample& action) {
     if (findProject(_draft->projectId) == nullptr) {
         return {.error = SaveError::noProject, .sampleId = {}};
     }
+    if (!header.siteId.hasValue()) {
+        return {.error = SaveError::noSite, .sampleId = {}};
+    }
     requirePrincipal();
 
     Lightweight::DataMapper mapper;
@@ -193,6 +199,9 @@ SaveSampleResult SampleModel::execute(const SaveSample& action) {
                        .All();
     if (clients.empty()) {
         throw NotFound{"SaveSample: no such client"};
+    }
+    if (!OrgModel::findSite(header.siteId)) {
+        throw NotFound{"SaveSample: no such site"};
     }
     std::string payload;
     if (auto const error = glz::write_json(*_draft, payload); error) {
@@ -211,12 +220,14 @@ SaveSampleResult SampleModel::execute(const SaveSample& action) {
         db::SampleRecord& row = samples.front();
         row.client = clients.front();
         row.reference = Lightweight::SqlAnsiString<64>{header.reference};
+        row.siteId = std::optional<std::int64_t>{*header.siteId};
         mapper.Update(row);
         sampleId = *_sampleId;
     } else {
         db::SampleRecord row;
         row.client = clients.front();
         row.reference = Lightweight::SqlAnsiString<64>{header.reference};
+        row.siteId = std::optional<std::int64_t>{*header.siteId};
         row.state = static_cast<int>(SampleState::Registered);
         row.version = 1;
         row.registeredAt = nowMillis();

@@ -40,6 +40,7 @@
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/lab/offline/field_outbox.hpp"
 #include "lims/org/core/errors.hpp"
+#include "lims_test_support.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
@@ -119,8 +120,8 @@ TEST_CASE("SampleModel over the full backend-mode matrix: register, attach, tran
     // the completion resolves. Nothing in the model suites exercises this —
     // they construct the model directly.
     BridgeHandler<lims::SampleModel, AllowShared> handler{rig.bridge(0), rig.executor()};
-    const auto registered =
-        awaitQt(handler.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"}));
+    const auto registered = awaitQt(handler.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"}));
     REQUIRE(registered.id.hasValue());
     CHECK(registered.state == lims::SampleState::Registered);
 
@@ -154,8 +155,8 @@ TEST_CASE("A payload-keyed OpenSample attaches a fresh handler in every mode", "
 
     auto creator = rig.client<lims::SampleModel>(0);
     const auto client = awaitQt(creator.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
-    const auto registered =
-        awaitQt(creator.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-2"}));
+    const auto registered = awaitQt(creator.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-2"}));
 
     // A *different*, freshly built handler attaches by id — the payload-keyed
     // path, through `ActionKeyTraits<OpenSample>`.
@@ -181,8 +182,8 @@ TEST_CASE("Two connections attached to one sample share the instance", "[lims][m
 
     auto creator = rig.client<lims::SampleModel>(0);
     const auto client = awaitQt(creator.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
-    const auto registered =
-        awaitQt(creator.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-3"}));
+    const auto registered = awaitQt(creator.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-3"}));
 
     BridgeHandler<lims::SampleModel, AllowShared> bench{rig.bridge(0), rig.executor()};
     BridgeHandler<lims::SampleModel, AllowShared> office{rig.bridge(1), rig.executor()};
@@ -219,8 +220,8 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
     auto creator = rig.client<lims::SampleModel>(0);
     const auto client = awaitQt(creator.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
     BridgeHandler<lims::SampleModel, AllowShared> handler{rig.bridge(0), rig.executor()};
-    const auto registered =
-        awaitQt(handler.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-4"}));
+    const auto registered = awaitQt(handler.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-4"}));
     awaitQt(handler.execute(lims::ReceiveSample{}));
     const auto atWork = awaitQt(handler.execute(lims::StartWork{}));
 
@@ -268,8 +269,8 @@ TEST_CASE("A queued capture replayed as the wrong operator is refused over the w
     auto creator = rig.client<lims::SampleModel>(0);
     const auto client = awaitQt(creator.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
     BridgeHandler<lims::SampleModel, AllowShared> handler{rig.bridge(0), rig.executor()};
-    const auto registered =
-        awaitQt(handler.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-5"}));
+    const auto registered = awaitQt(handler.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-5"}));
     awaitQt(handler.execute(lims::ReceiveSample{}));
     const auto atWork = awaitQt(handler.execute(lims::StartWork{}));
 
@@ -321,7 +322,8 @@ TEST_CASE("onBackendChanged fires on switchBackend, and fails closed with no ses
                 .versionId;
         lims::SampleModel setup;
         const auto client = setup.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-        const auto sample = setup.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-6"});
+        const auto sample = setup.execute(lims::RegisterSample{
+            .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-6"});
         setup.execute(lims::ReceiveSample{});
         const auto atWork = setup.execute(lims::StartWork{});
         sampleId = atWork.id;

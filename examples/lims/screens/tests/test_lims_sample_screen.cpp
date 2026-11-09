@@ -118,8 +118,11 @@ Stored storedSample() {
     lims::SampleModel model;
     auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
     model.execute(lims::NewSample{});
-    model.execute(
-        lims::HeaderSection{.clientId = client.clientId, .reference = "WW-3", .receivedOn = 0, .remarks = {}});
+    model.execute(lims::HeaderSection{.clientId = client.clientId,
+                                      .reference = "WW-3",
+                                      .receivedOn = 0,
+                                      .remarks = {},
+                                      .siteId = lims::test::seededSite()});
     model.execute(lims::SamplingSection{
         .spike = mgL(10), .measured1 = mgL(10), .measured2 = mgL(5), .measured3 = {}, .measured4 = mgL(9, 10)});
     model.execute(lims::SelectProject{.projectId = 1});
@@ -149,6 +152,7 @@ TEST_CASE("lims sample screen: a new sample is refused until complete, then save
 
     editField(harness, {.form = "headerForm", .name = "clientId"}, std::to_string(clientId));
     editField(harness, {.form = "headerForm", .name = "reference"}, "WW-9");
+    editField(harness, {.form = "headerForm", .name = "siteId"}, "1");
     submitForm(harness, "headerForm");
     // A section edits the working copy; the header shows it once the submit is answered.
     REQUIRE(harness.waitForText("client", "Client " + std::to_string(clientId)));

@@ -60,6 +60,7 @@ enum class SaveError : std::uint8_t {
     noClient,       ///< The header names no client.
     noReference,    ///< The header has no reference.
     noProject,      ///< No project was chosen.
+    noSite,         ///< The header names no site.
 };
 
 /// @brief Commits the working copy: registers the sample when it is new, then stores its entry data.
@@ -92,9 +93,12 @@ struct HeaderSection {
     std::int64_t receivedOn = 0;
     /// @brief Free-text remarks.
     std::string remarks;
+    /// @brief The site the sample is at. A save without one is refused with `SaveError::noSite`.
+    SiteId siteId;
 
     /// @brief Members a client may leave out.
-    static constexpr std::array optionalFields{std::string_view{"receivedOn"}, std::string_view{"remarks"}};
+    static constexpr std::array optionalFields{std::string_view{"receivedOn"}, std::string_view{"remarks"},
+                                               std::string_view{"siteId"}};
 
     /// @brief A section is submitted with its own button.
     static constexpr bool explicitSubmit = true;
@@ -170,6 +174,8 @@ struct HeaderView {
     std::optional<std::string> sampleNumber;
     /// @brief The client.
     ClientId clientId;
+    /// @brief The site, or empty while none is chosen.
+    SiteId siteId;
     /// @brief The container reference.
     std::string reference;
     /// @brief The day received, in days since the epoch.
@@ -272,5 +278,5 @@ template <>
 struct glz::meta<lims::SaveError> {
     using enum lims::SaveError;
 
-    static constexpr auto value = glz::enumerate(none, noWorkingCopy, noClient, noReference, noProject);
+    static constexpr auto value = glz::enumerate(none, noWorkingCopy, noClient, noReference, noProject, noSite);
 };

@@ -80,7 +80,8 @@ namespace {
 /// @return The sample, at `InProgress`.
 lims::SampleView sampleAtWork(lims::SampleModel& model) {
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    model.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     model.execute(lims::ReceiveSample{});
     return model.execute(lims::StartWork{});
 }

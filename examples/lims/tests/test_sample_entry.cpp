@@ -45,8 +45,11 @@ Rational pct(std::int64_t num, std::int64_t den = 1) {
 void completeCopy(lims::SampleModel& model) {
     auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
     model.execute(lims::NewSample{});
-    model.execute(lims::HeaderSection{
-        .clientId = client.clientId, .reference = "WW-0001", .receivedOn = 20'000, .remarks = "cold chain"});
+    model.execute(lims::HeaderSection{.clientId = client.clientId,
+                                      .reference = "WW-0001",
+                                      .receivedOn = 20'000,
+                                      .remarks = "cold chain",
+                                      .siteId = lims::test::seededSite()});
     model.execute(lims::SelectProject{.projectId = 2});
 }
 

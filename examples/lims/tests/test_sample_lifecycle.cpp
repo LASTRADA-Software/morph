@@ -40,7 +40,8 @@ constexpr std::array<lims::SampleState, 6> kAllStates{
 /// @return The freshly registered sample.
 lims::SampleView registerSample(lims::SampleModel& model) {
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    return model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-2026-0001"});
+    return model.execute(lims::RegisterSample{
+        .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-2026-0001"});
 }
 
 /// @brief Walks @p model's attached sample up to `ToBeVerified`.
@@ -325,8 +326,10 @@ TEST_CASE("Opening or registering against something that does not exist is NotFo
     lims::SampleModel model;
 
     CHECK_THROWS_AS(model.execute(lims::OpenSample{.sampleId = lims::SampleId{424242}}), lims::NotFound);
-    CHECK_THROWS_AS(model.execute(lims::RegisterSample{.clientId = lims::ClientId{424242}, .reference = "orphan"}),
-                    lims::NotFound);
+    CHECK_THROWS_AS(
+        model.execute(lims::RegisterSample{
+            .siteId = lims::test::seededSite(), .clientId = lims::ClientId{424242}, .reference = "orphan"}),
+        lims::NotFound);
     CHECK_THROWS_AS(model.execute(lims::OpenSample{}), lims::ValidationError);
 }
 
@@ -339,7 +342,9 @@ TEST_CASE("Registering a sample or a client requires a principal and well-formed
     const ScopedPrincipal alice{"alice"};
     CHECK_THROWS_AS(model.execute(lims::RegisterClient{}), lims::ValidationError);
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    CHECK_THROWS_AS(model.execute(lims::RegisterSample{.clientId = client.clientId}), lims::ValidationError);
+    CHECK_THROWS_AS(
+        model.execute(lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId}),
+        lims::ValidationError);
 }
 
 // ═════════════════════════════════════════════════════════════════════════

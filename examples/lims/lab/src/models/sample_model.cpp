@@ -15,6 +15,7 @@
 #include "lims/lab/dto/analysis_dto.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
+#include "lims/org/models/org_model.hpp"
 
 namespace lims {
 
@@ -26,6 +27,7 @@ namespace {
 [[nodiscard]] SampleView toView(const db::SampleRecord& row) {
     return SampleView{
         .id = SampleId{static_cast<std::int64_t>(row.id.Value())},
+        .siteId = SiteId::fromOptional(row.siteId.Value()),
         .clientId = ClientId{static_cast<std::int64_t>(row.client.Value())},
         .reference = std::string{row.reference.Value().ToStringView()},
         .state = static_cast<SampleState>(row.state.Value()),
@@ -209,7 +211,10 @@ RegisterClientResult SampleModel::execute(const RegisterClient& action) {
 SampleView SampleModel::execute(const RegisterSample& action) {
     requirePrincipal();
     if (!action.validate()) {
-        throw ValidationError{"RegisterSample: a client and a reference are required"};
+        throw ValidationError{"RegisterSample: a site, a client and a reference are required"};
+    }
+    if (!OrgModel::findSite(action.siteId)) {
+        throw NotFound{"RegisterSample: no such site"};
     }
 
     Lightweight::DataMapper mapper;
@@ -223,6 +228,7 @@ SampleView SampleModel::execute(const RegisterSample& action) {
     db::SampleRecord row;
     row.client = clients.front();
     row.reference = Lightweight::SqlAnsiString<64>{action.reference};
+    row.siteId = std::optional<std::int64_t>{*action.siteId};
     row.state = static_cast<int>(SampleState::Registered);
     row.version = 1;
     row.registeredAt = nowMillis();

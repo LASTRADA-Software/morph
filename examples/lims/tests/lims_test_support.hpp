@@ -5,6 +5,9 @@
 #include <string>
 #include <utility>
 
+#include "lims/org/core/types.hpp"
+#include "lims/org/db/org_entity.hpp"
+
 /// @file
 /// The scaffolding every lims test needs: a scoped authenticated principal.
 ///
@@ -37,5 +40,13 @@ private:
     morph::session::Context _ctx;
     morph::session::detail::ScopedContext _scope;
 };
+
+/// @brief The site the first org migration seeds, where every sample that predates sites is.
+/// @return Its id.
+[[nodiscard]] inline lims::SiteId seededSite() { return lims::SiteId{lims::db::kSeededSiteId}; }
+
+/// @brief The company the first org migration seeds, which owns the seeded site.
+/// @return Its id.
+[[nodiscard]] inline lims::CompanyId seededCompany() { return lims::CompanyId{lims::db::kSeededCompanyId}; }
 
 }  // namespace lims::test

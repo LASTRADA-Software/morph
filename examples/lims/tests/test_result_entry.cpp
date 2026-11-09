@@ -86,7 +86,8 @@ lims::DefineAnalysisResult defineNitrate(lims::AnalysisCatalogModel& catalog) {
 /// @return The sample, at `InProgress`.
 lims::SampleView sampleAtWork(lims::SampleModel& model) {
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    const auto sample = model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    const auto sample = model.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     model.execute(lims::ReceiveSample{});
     return model.execute(lims::StartWork{});
 }
@@ -459,7 +460,8 @@ TEST_CASE("Results can only be captured while a sample is in progress", "[lims][
 
     const auto nitrate = defineNitrate(catalog);
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-2"});
+    model.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-2"});
 
     const lims::CaptureConcentration capture{.analysisVersionId = nitrate.versionId,
                                              .value = lims::Concentration{exact(12, 5, 3)}};

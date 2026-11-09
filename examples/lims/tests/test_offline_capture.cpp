@@ -76,7 +76,8 @@ struct Lab {
             catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3})
                 .versionId;
         const auto client = server.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-        server.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+        server.execute(lims::RegisterSample{
+            .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
         server.execute(lims::ReceiveSample{});
         sample = server.execute(lims::StartWork{});
     }

@@ -206,7 +206,7 @@ lims is built from modules, each its own library with its own include directory 
 
 | Module | Holds | Links |
 |---|---|---|
-| `org/` (shared) | the error set, the model support every module uses, and sign-in | nothing in lims |
+| `org/` (shared) | the error set, the model support every module uses, sign-in, and companies and sites | nothing in lims |
 | `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
 | `app/` | the server edge's `LimsAuthorizer` | every module |
 
@@ -668,6 +668,22 @@ boundary that only a reviewer enforces would not test it. All modules keep the `
 record name, table and migration they had: the split changed where code lives, not what it does, and the suites ran
 unchanged apart from their include lines. `posting`, the second shared module the design names, is added with the
 first module that posts.
+
+### 22. Companies and sites live in org, and every sample is at a site
+
+A company has a base currency and a fiscal-year start; a site belongs to one company. The first org migration seeds
+one company and one site, because every record that existed before companies needs one to belong to, and the lab
+migration that adds `lims_samples.site_id` puts every existing sample at the seeded site.
+
+The site is on the sample, and on nothing hanging off it: results, verifications, conflicts and the entry record reach
+their site through their sample, so a second copy of the site could only disagree with the first. Clients and
+analysis definitions are reference data the whole lab shares and are not at a site; billing gives clients their
+company when it needs to bill them. Ignition tests are the chat's proof and sit outside the sample workflow, so they
+are not at a site either; a lab that needs them per site changes this.
+
+A registration names its site, and a missing site is a validation error, not a default: a sample registered nowhere
+would be visible to nobody once lists are scoped. Sample entry refuses a save without one as `noSite`, a reply like
+its other refusals.
 
 ## Findings raised by this rung
 
