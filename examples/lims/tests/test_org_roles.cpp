@@ -4,11 +4,13 @@
 // company holds at every site of it; roles themselves are not hierarchical (README decision 16).
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlStatement.hpp>
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "lims/org/core/errors.hpp"
@@ -18,6 +20,7 @@
 #include "lims_test_support.hpp"
 #include "migration_probe.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
@@ -199,7 +202,8 @@ TEST_CASE("org roles: users are the principals holding an assignment, with the r
     CHECK(users[1].roles == std::vector<lims::LimsRole>{lims::LimsRole::Analyst, lims::LimsRole::Verifier});
 }
 
-// Mutation: copy no rows in the lab migration (bob holds nothing after it).
+// Mutations: copy no rows in the lab migration (the table is empty); copy only the first row (bob's second role is
+// missing); put the rows at no company (the scope check fails).
 TEST_CASE("org roles: assignments made before roles were scoped migrate to the seeded company",
           "[lims][org][roles][migration]") {
     using lims_role_migration_fixtures::LegacyOperatorRecord;
@@ -207,14 +211,30 @@ TEST_CASE("org roles: assignments made before roles were scoped migrate to the s
     lims::test::MigrationProbe probe{20261109000002};
     {
         Lightweight::DataMapper mapper;
-        LegacyOperatorRecord bob;
-        bob.principal = Lightweight::SqlAnsiString<64>{"bob"};
-        bob.role = static_cast<int>(lims::LimsRole::Verifier);
-        bob.grantedBy = Lightweight::SqlAnsiString<64>{"alice"};
-        mapper.Create(bob);
+        for (auto const& [principal, role] : {std::pair{std::string_view{"alice"}, lims::LimsRole::Supervisor},
+                                              std::pair{std::string_view{"bob"}, lims::LimsRole::Analyst},
+                                              std::pair{std::string_view{"bob"}, lims::LimsRole::Verifier}}) {
+            LegacyOperatorRecord row;
+            row.principal = Lightweight::SqlAnsiString<64>{principal};
+            row.role = static_cast<int>(role);
+            row.grantedBy = Lightweight::SqlAnsiString<64>{"alice"};
+            mapper.Create(row);
+        }
     }
     probe.applyRest();
-    CHECK(holds(lims::OrgModel::rolesIn("bob", lims::Scope{lims::test::seededCompany()}), lims::LimsRole::Verifier));
+    lims::OrgModel org;
+    auto const assignments = org.execute(lims::ListRoleAssignments{}).assignments;
+    REQUIRE(assignments.size() == 3);
+    for (auto const& assignment : assignments) {
+        CHECK(assignment.scopeKind == lims::ScopeKind::Company);
+        CHECK(assignment.company == lims::test::seededCompany());
+    }
+    CHECK(
+        holds(lims::OrgModel::rolesIn("alice", lims::Scope{lims::test::seededCompany()}), lims::LimsRole::Supervisor));
+    auto const bob = lims::OrgModel::rolesIn("bob", lims::Scope{lims::test::seededCompany()});
+    CHECK(bob.size() == 2);
+    CHECK(holds(bob, lims::LimsRole::Analyst));
+    CHECK(holds(bob, lims::LimsRole::Verifier));
     CHECK(holds(lims::OrgModel::rolesIn("bob", lims::Scope{lims::test::seededSite()}), lims::LimsRole::Verifier));
     Lightweight::DataMapper mapper;
     CHECK_THROWS(mapper.Query<LegacyOperatorRecord>().All());
@@ -245,4 +265,161 @@ TEST_CASE("org roles: a stored role or scope kind outside its enumeration is ref
     mapper.Update(row);
     CHECK_THROWS_AS(org.execute(lims::ListRoleAssignments{}), lims::ValidationError);
     CHECK_THROWS_AS(lims::OrgModel::rolesIn("bob", lims::Scope{lims::test::seededCompany()}), lims::ValidationError);
+}
+
+// Mutation: skip the supervisor appointment in CreateCompany (alice holds nothing at Osaka and bob's assignment is
+// refused).
+TEST_CASE("org roles: creating a company appoints its creator supervisor there", "[lims][org][roles]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    org.execute(lims::AssignRole{
+        .principal = "alice", .role = lims::LimsRole::Supervisor, .company = lims::test::seededCompany(), .site = {}});
+    auto const osaka = org.execute(lims::CreateCompany{
+        .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April});
+
+    CHECK(holds(lims::OrgModel::rolesIn("alice", lims::Scope{osaka.id}), lims::LimsRole::Supervisor));
+    auto const assignments = org.execute(lims::ListRoleAssignments{}).assignments;
+    REQUIRE(assignments.size() == 2);
+    CHECK(assignments.back().company == osaka.id);
+    CHECK(assignments.back().grantedBy == "alice");
+
+    auto const bob = org.execute(
+        lims::AssignRole{.principal = "bob", .role = lims::LimsRole::Analyst, .company = osaka.id, .site = {}});
+    CHECK(bob.company == osaka.id);
+    {
+        // Roles are not hierarchical: mallory, a supervisor at neither company, cannot assign at Osaka.
+        ScopedPrincipal const mallory{"mallory"};
+        CHECK_THROWS_AS(
+            org.execute(lims::AssignRole{
+                .principal = "mallory", .role = lims::LimsRole::Supervisor, .company = osaka.id, .site = {}}),
+            lims::Forbidden);
+    }
+}
+
+// Mutation: drop the transaction around CreateCompany (the company stays behind without its supervisor).
+TEST_CASE("org roles: a company whose supervisor cannot be appointed is not created", "[lims][org][roles]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    {
+        // The statement that fails is the one the model really issues.
+        Lightweight::SqlStatement stmt;
+        (void)stmt.ExecuteDirect(
+            "CREATE TRIGGER morph_fail_insert BEFORE INSERT ON \"org_role_assignments\" BEGIN SELECT RAISE(ABORT, "
+            "'injected'); END");
+    }
+    CHECK_THROWS(org.execute(lims::CreateCompany{
+        .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April}));
+    {
+        Lightweight::SqlStatement stmt;
+        (void)stmt.ExecuteDirect("DROP TRIGGER morph_fail_insert");
+    }
+    CHECK(org.execute(lims::ListCompanies{}).companies.size() == 1);
+    CHECK(org.execute(lims::ListRoleAssignments{}).assignments.empty());
+}
+
+// Mutations: count supervisors across the whole table (the revoke at Osaka goes through because the seeded company
+// has one); count site-scoped supervisors (carol, supervisor at the field lab, lets alice's revoke through).
+TEST_CASE("org roles: a company's last supervisor cannot be revoked, whoever else supervises elsewhere",
+          "[lims][org][roles]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    org.execute(lims::AssignRole{
+        .principal = "alice", .role = lims::LimsRole::Supervisor, .company = lims::test::seededCompany(), .site = {}});
+    auto const osaka = org.execute(lims::CreateCompany{
+        .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April});
+    auto const osakaLab = org.execute(lims::CreateSite{.companyId = osaka.id, .name = "Osaka lab"});
+    auto const aliceAtOsaka = [&] {
+        for (auto const& assignment : org.execute(lims::ListRoleAssignments{}).assignments) {
+            if (assignment.company == osaka.id) {
+                return assignment;
+            }
+        }
+        FAIL("alice holds no assignment at Osaka");
+        return lims::RoleAssignmentView{};
+    }();
+
+    // Another company has a supervisor, and so does a site of this one; neither is this company's.
+    org.execute(lims::AssignRole{
+        .principal = "carol", .role = lims::LimsRole::Supervisor, .company = {}, .site = osakaLab.id});
+    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = aliceAtOsaka.id}), lims::Conflict);
+    CHECK(holds(lims::OrgModel::rolesIn("alice", lims::Scope{osaka.id}), lims::LimsRole::Supervisor));
+
+    // A second company-scope supervisor makes the first one's revoke legitimate.
+    org.execute(
+        lims::AssignRole{.principal = "dave", .role = lims::LimsRole::Supervisor, .company = osaka.id, .site = {}});
+    CHECK(org.execute(lims::RevokeRole{.assignmentId = aliceAtOsaka.id}).assignmentId == aliceAtOsaka.id);
+    CHECK_FALSE(holds(lims::OrgModel::rolesIn("alice", lims::Scope{osaka.id}), lims::LimsRole::Supervisor));
+}
+
+// Mutations: look the scope up before the permission check (mallory gets NotFound); check permission only when the
+// scope exists (the same); refuse a supervisor's unknown scope with Forbidden instead (alice gets Forbidden).
+TEST_CASE("org roles: a caller who supervises nowhere cannot tell which scopes and assignments exist",
+          "[lims][org][roles]") {
+    DbFixture fixture;
+    lims::OrgModel org;
+    lims::RoleAssignmentView bob;
+    {
+        ScopedPrincipal const alice{"alice"};
+        org.execute(lims::AssignRole{.principal = "alice",
+                                     .role = lims::LimsRole::Supervisor,
+                                     .company = lims::test::seededCompany(),
+                                     .site = {}});
+        bob = org.execute(lims::AssignRole{
+            .principal = "bob", .role = lims::LimsRole::Analyst, .company = lims::test::seededCompany(), .site = {}});
+        CHECK_THROWS_AS(
+            org.execute(lims::AssignRole{
+                .principal = "bob", .role = lims::LimsRole::Analyst, .company = {}, .site = lims::SiteId{999}}),
+            lims::NotFound);
+        CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = lims::RoleAssignmentId{999}}), lims::NotFound);
+    }
+    ScopedPrincipal const mallory{"mallory"};
+    CHECK_THROWS_AS(
+        org.execute(lims::AssignRole{
+            .principal = "mallory", .role = lims::LimsRole::Analyst, .company = {}, .site = lims::SiteId{999}}),
+        lims::Forbidden);
+    CHECK_THROWS_AS(
+        org.execute(lims::AssignRole{
+            .principal = "mallory", .role = lims::LimsRole::Analyst, .company = lims::CompanyId{999}, .site = {}}),
+        lims::Forbidden);
+    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = lims::RoleAssignmentId{999}}), lims::Forbidden);
+    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = bob.id}), lims::Forbidden);
+}
+
+// Mutations: bypass the dispatcher's journaling of a refused action (no Failed entry); drop AssignRole's
+// loggability (neither entry appears).
+TEST_CASE("org roles: the dispatcher journals a role assignment, the refused ones included", "[lims][org][roles]") {
+    DbFixture fixture;
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
+    auto holder = morph::model::detail::defaultRegistry().create("OrgModel");
+    REQUIRE(holder != nullptr);
+    holder->attachActionLog(log, std::string{});
+    auto const dispatch = [&](std::string_view principal, lims::AssignRole const& action) {
+        ScopedPrincipal const caller{std::string{principal}};
+        morph::model::detail::defaultDispatcher().dispatch(
+            "OrgModel", "AssignRole", *holder, morph::model::ActionTraits<lims::AssignRole>::toJson(action));
+    };
+
+    dispatch("alice", lims::AssignRole{.principal = "alice",
+                                       .role = lims::LimsRole::Supervisor,
+                                       .company = lims::test::seededCompany(),
+                                       .site = {}});
+    CHECK_THROWS_AS(dispatch("mallory", lims::AssignRole{.principal = "mallory",
+                                                         .role = lims::LimsRole::Supervisor,
+                                                         .company = lims::test::seededCompany(),
+                                                         .site = {}}),
+                    lims::Forbidden);
+
+    auto const entries = log->entries();
+    REQUIRE(entries.size() == 2);
+    CHECK(entries[0].modelType == "OrgModel");
+    CHECK(entries[0].actionType == "AssignRole");
+    CHECK(entries[0].outcome == morph::journal::Outcome::Succeeded);
+    CHECK(entries[0].principal == "alice");
+    CHECK(entries[1].actionType == "AssignRole");
+    CHECK(entries[1].outcome == morph::journal::Outcome::Failed);
+    CHECK(entries[1].principal == "mallory");
+    CHECK_FALSE(entries[1].error.empty());
 }

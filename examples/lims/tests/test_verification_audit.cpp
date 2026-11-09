@@ -244,6 +244,7 @@ TEST_CASE("An authorizer with no role source fails closed", "[lims][audit][autho
     bob.token = tokenFor(issuer, "bob");
     CHECK_FALSE(authorizer.authorize(bob, "SampleModel", "VerifyResult"));
     CHECK_FALSE(authorizer.authorize(bob, "OrgModel", "AssignRole"));
+    CHECK_FALSE(authorizer.authorize(bob, "OrgModel", "RevokeRole"));
     // Ungated actions are unaffected: failing closed means refusing the things
     // that need a role, not refusing everything.
     CHECK(authorizer.authorize(bob, "SampleModel", "GetSample"));

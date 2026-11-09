@@ -2,6 +2,7 @@
 #include "lims/org/models/org_model.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
 #include <cstdint>
 #include <map>
@@ -147,6 +148,18 @@ void requireSupervisorIn(Scope const& scope) {
     }
 }
 
+/// @brief Throws `Forbidden` unless the authenticated principal is a supervisor in some scope.
+///
+/// Asked before a scope or an assignment is looked up, so a caller with no supervisor role anywhere learns nothing
+/// about which ids exist.
+void requireSupervisorAnywhere() {
+    auto const& principal = ::morph::session::current()->principal;
+    auto const held = OrgModel::rolesAnywhere(principal);
+    if (std::ranges::find(held, LimsRole::Supervisor) == held.end()) {
+        throw Forbidden{"'" + principal + "' does not hold the supervisor role"};
+    }
+}
+
 /// @brief Every assignment of @p principal, by id.
 /// @param mapper The open mapper.
 /// @param principal The principal.
@@ -182,11 +195,24 @@ CompanyView OrgModel::execute(const CreateCompany& action) {
             throw Conflict{"CreateCompany: a company named \"" + action.name + "\" already exists"};
         }
     }
+    // The company and its first supervisor are one fact: a company with nobody able to administer it could never be
+    // given a role again, because roles are not hierarchical and nothing sits above a company.
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     db::CompanyRecord row;
     row.name = Lightweight::SqlAnsiString<128>{action.name};
     row.baseCurrency = static_cast<int>(action.baseCurrency);
     row.fiscalYearStart = static_cast<int>(action.fiscalYearStart);
     mapper.Create(row);
+    auto const& principal = ::morph::session::current()->principal;
+    db::RoleAssignmentRecord supervisor;
+    supervisor.principal = Lightweight::SqlAnsiString<64>{principal};
+    supervisor.role = static_cast<int>(LimsRole::Supervisor);
+    supervisor.scopeKind = static_cast<int>(ScopeKind::Company);
+    supervisor.scopeId = static_cast<std::int64_t>(row.id.Value());
+    supervisor.grantedBy = Lightweight::SqlAnsiString<64>{principal};
+    supervisor.grantedAt = nowMillis();
+    mapper.Create(supervisor);
+    sqlTxn.Commit();
     return toView(row);
 }
 
@@ -248,13 +274,17 @@ RoleAssignmentView OrgModel::execute(const AssignRole& action) {
         throw ValidationError{"AssignRole: a principal and exactly one of a company or a site are required"};
     }
     Scope const scope = scopeOf(action);
+    // A lab with no supervisor anywhere cannot appoint its first one any other way. The exception closes as soon as
+    // one exists, and the assignment names who made it.
+    bool const bootstrap = !supervisorExists();
+    if (!bootstrap) {
+        requireSupervisorAnywhere();
+    }
     Lightweight::DataMapper mapper;
     if (!scopeExists(mapper, scope)) {
         throw NotFound{"AssignRole: " + scopeName(scope) + " does not exist"};
     }
-    // A lab with no supervisor anywhere cannot appoint its first one any other way. The exception closes as soon as
-    // one exists, and the assignment names who made it.
-    if (supervisorExists()) {
+    if (!bootstrap) {
         requireSupervisorIn(scope);
     }
     auto const [kind, id] = storedScope(scope);
@@ -280,6 +310,7 @@ RevokeRoleResult OrgModel::execute(const RevokeRole& action) {
     if (!action.validate()) {
         throw ValidationError{"RevokeRole: an assignment is required"};
     }
+    requireSupervisorAnywhere();
     Lightweight::DataMapper mapper;
     auto rows = mapper.Query<db::RoleAssignmentRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::id>, "=", *action.assignmentId)
@@ -289,13 +320,21 @@ RevokeRoleResult OrgModel::execute(const RevokeRole& action) {
     }
     auto const view = toView(rows.front());
     requireSupervisorIn(view.scopeKind == ScopeKind::Company ? Scope{view.company} : Scope{view.site});
-    if (view.role == LimsRole::Supervisor &&
-        mapper.Query<db::RoleAssignmentRecord>()
+    // Only a company's own supervisors can administer it, so only they are counted: a supervisor at one of its sites
+    // cannot assign at the company, and another company's supervisor cannot assign here.
+    if (view.role == LimsRole::Supervisor && view.scopeKind == ScopeKind::Company) {
+        auto const supervisorsHere = std::ranges::count_if(
+            mapper.Query<db::RoleAssignmentRecord>()
                 .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::role>, "=",
                        static_cast<int>(LimsRole::Supervisor))
-                .All()
-                .size() == 1) {
-        throw Conflict{"RevokeRole: the last supervisor's assignment cannot be revoked"};
+                .All(),
+            [&](db::RoleAssignmentRecord const& row) {
+                return scopeKindOf(row) == ScopeKind::Company && row.scopeId.Value() == *view.company;
+            });
+        if (supervisorsHere == 1) {
+            throw Conflict{"RevokeRole: the last supervisor assignment of company " + std::to_string(*view.company) +
+                           " cannot be revoked"};
+        }
     }
     mapper.Delete(rows.front());
     return RevokeRoleResult{.assignmentId = action.assignmentId};

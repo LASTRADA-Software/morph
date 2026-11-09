@@ -23,7 +23,7 @@ namespace lims {
 /// lookups here.
 class OrgModel {
 public:
-    /// @brief Creates a company.
+    /// @brief Creates a company and appoints the caller its supervisor, in one transaction.
     /// @param action Its name, base currency and fiscal-year start.
     /// @return The new company.
     /// @throws ValidationError if the name is empty or longer than 128 bytes.
@@ -57,7 +57,8 @@ public:
     /// @return The assignment.
     /// @throws ValidationError if no principal, or not exactly one scope, is named.
     /// @throws NotFound if the scope does not exist.
-    /// @throws Forbidden if a supervisor exists and the caller is not one in that scope.
+    /// @throws Forbidden if a supervisor exists and the caller is not one in that scope. A caller who is a supervisor
+    ///         nowhere is refused before the scope is looked up, so it cannot probe which ones exist.
     /// @throws EmptyPrincipalError if no principal is authenticated.
     RoleAssignmentView execute(const AssignRole& action);
 
@@ -66,8 +67,10 @@ public:
     /// @return Which one went.
     /// @throws ValidationError if no assignment is named.
     /// @throws NotFound if it does not exist.
-    /// @throws Forbidden if the caller is not a supervisor in its scope.
-    /// @throws Conflict if it is the last supervisor's: without one, nobody could assign roles again.
+    /// @throws Forbidden if the caller is not a supervisor in its scope. A caller who is a supervisor nowhere is
+    ///         refused before the assignment is looked up.
+    /// @throws Conflict if it is a company's last supervisor assignment at the company scope: without one, nobody
+    ///         could administer that company again. Supervisors at its sites do not count.
     /// @throws EmptyPrincipalError if no principal is authenticated.
     RevokeRoleResult execute(const RevokeRole& action);
 
@@ -113,7 +116,8 @@ public:
 // NOLINTBEGIN(misc-const-correctness)
 BRIDGE_REGISTER_MODEL(lims::OrgModel, "OrgModel")
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::CreateCompany, "CreateCompany")
-BRIDGE_REGISTER_EFFECTS(lims::CreateCompany, ::morph::effects::changes<lims::CompanyView>)
+BRIDGE_REGISTER_EFFECTS(lims::CreateCompany, ::morph::effects::changes<lims::CompanyView>,
+                        ::morph::effects::changes<lims::RoleAssignmentView>, ::morph::effects::changes<lims::UserView>)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListCompanies, "ListCompanies", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::CreateSite, "CreateSite")
 BRIDGE_REGISTER_EFFECTS(lims::CreateSite, ::morph::effects::changes<lims::SiteView>)

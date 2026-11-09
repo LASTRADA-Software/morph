@@ -20,9 +20,11 @@
 // LimsAuthorizer` is that authorizer, so the matrix runs it end-to-end
 // against a real server rather than only unit-testing its policy.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/executor.hpp>
@@ -40,6 +42,7 @@
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/lab/offline/field_outbox.hpp"
 #include "lims/org/core/errors.hpp"
+#include "lims/org/db/org_entity.hpp"
 #include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/backend_rig.hpp"
@@ -243,6 +246,44 @@ TEST_CASE("OrgModel over the full backend-mode matrix: assign, list and revoke a
     CHECK(awaitQt(org.execute(lims::RevokeRole{.assignmentId = bob.id})).assignmentId == bob.id);
     CHECK(awaitQt(org.execute(lims::ListRoleAssignments{})).assignments.size() == 2);
     CHECK(lims::OrgModel::rolesAnywhere("bob").empty());
+}
+
+// The server answers an exception from the authorizer with an error reply carrying its text. Mutation: let the role
+// lookup skip a corrupt row (bob is refused as unauthorised instead, and the message check fails).
+TEST_CASE("A role lookup that throws inside authorize() fails the request cleanly and the server keeps serving",
+          "[lims][matrix][org][roles][socket-only]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    lims::test::grant("bob", lims::LimsRole::Verifier);
+    {
+        Lightweight::DataMapper mapper;
+        auto rows =
+            mapper.Query<lims::db::RoleAssignmentRecord>()
+                .Where(Lightweight::FieldNameOf<&lims::db::RoleAssignmentRecord::principal>, "=", std::string{"bob"})
+                .All();
+        REQUIRE(rows.size() == 1);
+        rows.front().role = 99;
+        mapper.Update(rows.front());
+    }
+
+    BackendRig rig{Mode::Socket, 2, makeAuthorizer()};
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "bob"));
+    rig.bridge(1).setDefaultSession(tokenContextFor(issuer, "alice"));
+
+    // bob's role-gated request makes the server read his corrupt row inside authorize().
+    auto asBob = rig.client<lims::OrgModel>(0);
+    CHECK_THROWS_WITH(
+        awaitQt(asBob.execute(lims::AssignRole{
+            .principal = "bob", .role = lims::LimsRole::Analyst, .company = lims::test::seededCompany(), .site = {}})),
+        Catch::Matchers::ContainsSubstring("stores a role outside its range"));
+
+    // The same connection and another one both keep being served.
+    CHECK(awaitQt(asBob.execute(lims::ListCompanies{})).companies.size() == 1);
+    auto asAlice = rig.client<lims::OrgModel>(1);
+    const auto carol = awaitQt(asAlice.execute(lims::AssignRole{
+        .principal = "carol", .role = lims::LimsRole::Analyst, .company = lims::test::seededCompany(), .site = {}}));
+    CHECK(carol.principal == "carol");
 }
 
 TEST_CASE("Two connections attached to one sample share the instance", "[lims][matrix][socket-only]") {

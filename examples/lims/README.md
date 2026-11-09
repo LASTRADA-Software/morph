@@ -698,12 +698,34 @@ at a site holds there only. Roles themselves stay non-hierarchical (decision 16)
 nests. Grants made before scopes existed were for the whole lab, so the migration moves them to the seeded company.
 
 The bootstrap carve-out moves with the action: the first assignment on a lab with no supervisor anywhere is allowed,
-and the carve-out closes as soon as any supervisor exists. Revoking the last supervisor's assignment is refused,
-because it would reopen that carve-out to whoever acted next.
+and the carve-out closes as soon as any supervisor exists. Revoking a company's last supervisor assignment is refused
+(decision 24).
 
-Assignments are not a sample's history, so a sample's audit trail no longer shows them; they are journaled by the
-framework's dispatcher like any other action of `OrgModel`. A `GrantRole` entry an older build wrote into a sample's
-journal reconstructs as an `Unreadable` step, as any entry this build cannot interpret does (decision 17).
+Assignments are not a sample's history, so a sample's audit trail no longer shows them. `OrgModel` is journaled by
+the framework's dispatcher, which records every loggable action it runs, and `AssignRole` and `RevokeRole` are
+loggable: a successful assignment is an `Outcome::Succeeded` entry naming the caller, and a refused one (a model
+refusal such as `Forbidden` or `NotFound`) is an `Outcome::Failed` entry with the exception text. Only a call that
+reaches the dispatcher is journaled: `OrgModel::execute` called directly records nothing, and the lists
+(`Loggable::No`) are never recorded. A `GrantRole` entry an older build wrote into a sample's journal reconstructs as
+an `Unreadable` step, as any entry this build cannot interpret does (decision 17).
+
+An assignment is decided before anything is looked up. A caller who holds `Supervisor` in no scope is refused with
+`Forbidden` whether or not the scope or the assignment it names exists, so it cannot probe which ids exist; a
+supervisor naming a scope that does not exist gets `NotFound`.
+
+### 24. A company's administration is seeded by its creator and is never left empty
+
+Roles are not hierarchical (decision 16) and nothing sits above a company, so the only people who can assign roles at
+a company are its own supervisors. A company created with none could never be given a role again, and a company that
+loses its last one is in the same state.
+
+`CreateCompany` therefore appoints the calling principal `Supervisor` at the new company, in the same transaction as
+the company's row: either both exist or neither does. `RevokeRole` refuses to remove a company's last `Supervisor`
+assignment at that company's scope, however many supervisors exist elsewhere. A supervisor at one of the company's
+sites does not count: a site role cannot administer the company scope, so it would leave the company's administration
+empty all the same.
+
+The bootstrap carve-out is the only rule that looks across companies: it applies while no `Supervisor` exists anywhere.
 
 ## Findings raised by this rung
 
