@@ -303,3 +303,46 @@ TEST_CASE("RuleExpr: a rule too large for expr/1 is a SchemaError", "[forms-engi
     CHECK(parsed.error().path == "x-rules[1]");
     CHECK(parsed.error().message.starts_with("the rule does not translate into an expression: "));
 }
+
+TEST_CASE("RuleExpr: a presentation rule nested as a condition decides nothing", "[forms-engine][rules]") {
+    Fields const fields{{{"yes", valid(ui::Value{"x"})}}};
+    auto const lookup = fields.lookup();
+    auto const verdict = [&](std::string_view json) { return rule(json).evaluate(lookup); };
+    for (std::string_view const kind : {"requiredWhen", "visibleWhen", "readonlyWhen"}) {
+        INFO(kind);
+        std::string const nested =
+            R"({"kind":")" + std::string{kind} + R"(","fields":["yes"],"when":{"kind":"engaged","fields":["yes"]}})";
+        // A true sibling settles an `or`; a true sibling cannot settle an `and`; the nested node itself reads null.
+        CHECK(verdict(R"({"kind":"not","condition":)" + nested + "}") == Tri::Unknown);
+        CHECK(verdict(R"({"kind":"and","conditions":[)" + nested + R"(,{"kind":"engaged","fields":["yes"]}]})") ==
+              Tri::Unknown);
+        CHECK(verdict(R"({"kind":"or","conditions":[)" + nested + R"(,{"kind":"engaged","fields":["yes"]}]})") ==
+              Tri::True);
+        CHECK(verdict(R"({"kind":"and","conditions":[)" + nested + R"(,{"kind":"engaged","fields":["no"]}]})") ==
+              Tri::False);
+    }
+}
+
+TEST_CASE("RuleExpr: every operand of a long field list is read by its own number", "[forms-engine][rules]") {
+    std::string fields = "[";
+    for (int index = 0; index < 13; ++index) {
+        fields += std::string{index == 0 ? "" : ","} + R"("n)" + std::to_string(index) + R"(")";
+    }
+    fields += ']';
+    RuleExpr const any = rule(R"({"kind":"atLeastOneOf","fields":)" + fields + "}");
+    REQUIRE(any.operands().size() == 13);
+    for (std::string const name : {"n4", "n9", "n10", "n12"}) {
+        INFO(name);
+        Fields const only{{{name, valid(ui::Value{"x"})}}};
+        CHECK(any.evaluate(only.lookup()) == Tri::True);
+    }
+}
+
+TEST_CASE("RuleExpr: a malformed nested condition is reported at its own index", "[forms-engine][rules]") {
+    auto const dom = engine::parseJson(
+        R"({"kind":"and","conditions":[{"kind":"engaged","fields":["a"]},{"kind":"less","fields":["a"]}]})");
+    REQUIRE(dom.has_value());
+    auto const parsed = RuleExpr::parse(*dom, "x-rules[0]");
+    REQUIRE_FALSE(parsed.has_value());
+    CHECK(parsed.error().path == "x-rules[0].conditions[1]");
+}

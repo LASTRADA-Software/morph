@@ -573,3 +573,57 @@ TEST_CASE("Bridge and its backends: the remaining owner-only bodies run in the o
         REQUIRE(recorder.allPosted("SynchronousBackendAdapter::cancelPending"));
     }
 }
+
+// Mutation: leave a shared handler's bind marked in flight when its registration is posted from another thread -- a
+// call made after it is held for a bind that never settles.
+TEST_CASE("Bridge: a shared handler constructed off the owner serves its calls once registered",
+          "[bridge][owner][bind]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+
+    using Keyed = morph::bridge::BridgeHandler<owner_test::KeyedModel, morph::bridge::AllowShared>;
+    std::unique_ptr<Keyed> keyed;
+    std::atomic<bool> built{false};
+    std::thread builder{[&] {
+        keyed = std::make_unique<Keyed>(bridge, &owner);
+        built.store(true);
+    }};
+    builder.join();
+    REQUIRE(built.load());
+
+    std::atomic<int> tally{0};
+    keyed->attach(7);
+    keyed->execute(owner_test::Tally{.value = 3}).then([&](int value) { tally.store(value); });
+    CHECK(pumpOwnerUntil(owner, [&] { return tally.load() == 3; }));
+    keyed.reset();
+}
+
+// Mutation: leave a deregistered binding marked as binding -- a call made through it is held, not refused.
+TEST_CASE("Bridge: a call through a deregistered binding is refused at once", "[bridge][owner][bind]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool), owner};
+
+    auto const binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "Owner_SubModel";
+    binding->modelFactory = morph::model::detail::ModelFactory::create<owner_test::SubModel>;
+    {
+        morph::bridge::BridgeHandler<owner_test::SubModel> handler{bridge, &owner, binding};
+        REQUIRE(pumpOwnerUntil(owner, [&] { return handler.isBound(); }));
+    }
+
+    std::string message;
+    std::atomic<bool> failed{false};
+    bridge.executeVia<owner_test::SubModel, owner_test::Sub>(binding, owner_test::Sub{.value = 1}, &owner)
+        .onError([&](std::exception_ptr const& exc) {
+            try {
+                std::rethrow_exception(exc);
+            } catch (std::exception const& ex) {
+                message = ex.what();
+            }
+            failed.store(true);
+        });
+    REQUIRE(pumpOwnerUntil(owner, [&] { return failed.load(); }));
+    CHECK(message == "handler not bound");
+}

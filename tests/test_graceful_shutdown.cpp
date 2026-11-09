@@ -77,6 +77,18 @@ TEST_CASE("RemoteServer::beginShutdown rejects register with \"server shutting d
     REQUIRE(regReply.env.message == "server shutting down");
 }
 
+TEST_CASE("RemoteServer::beginShutdown rejects attach with \"server shutting down\"", "[shutdown][graceful]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool);
+    server->beginShutdown();
+
+    morph::testing::WaitReply attachReply;
+    server->handle(morph::wire::encode(morph::wire::makeAttach("GS_EchoModel", "k")), std::ref(attachReply));
+    REQUIRE(attachReply.await());
+    REQUIRE(attachReply.env.kind == "err");
+    REQUIRE(attachReply.env.message == "server shutting down");
+}
+
 TEST_CASE("RemoteServer::beginShutdown rejects execute with \"server shutting down\"", "[shutdown][graceful]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);

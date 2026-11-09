@@ -252,6 +252,12 @@ TEST_CASE("payloadFingerprint: reordering members does NOT change the fingerprin
     REQUIRE(payloadFingerprint<PEShapeReordered>() == payloadFingerprint<PEShapeBase>());
 }
 
+TEST_CASE("payload digest rendering: every nibble of the 64-bit digest is written", "[journal][payload_evolution]") {
+    CHECK(morph::model::detail::hex64(0x0123456789abcdefULL) == "0123456789abcdef");
+    CHECK(morph::model::detail::hex64(0xfULL) == "000000000000000f");
+    CHECK(morph::model::detail::hex64(0ULL) == "0000000000000000");
+}
+
 // ── The recursion limit, read at its own edge ────────────────────────────────
 //
 // `payloadShape` stops decomposing and emits the opaque tag once `depth` is

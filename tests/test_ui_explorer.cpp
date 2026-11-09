@@ -385,3 +385,168 @@ TEST_CASE("facts_show_reads_when_undeclared", "[ui][explorer][push]") {
     CHECK(f.shows("Text", "reads"));
     CHECK_FALSE(f.shows("Text", "records"));
 }
+
+// Mutation: drop a type phrase (the field reads by its bare kind name), or a rule (it is missing from `rules`).
+TEST_CASE("actionFields: quantities, decimals, choices and lists read by what they hold", "[ui][explorer]") {
+    auto const fields = morph::ui::actionFields(R"({"type":"object","properties":{
+      "mass":{"type":["object","null"],"x-decimalPlaces":2,"ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"},
+              "x-unitAlternatives":[{"id":"g","display":"g","num":1,"den":1000,"decimals":0}],"x-order":0},
+      "price":{"type":["object","null"],"x-decimalPlaces":3,"x-order":1},
+      "owner":{"type":"string","x-optionsAction":"Lims_ListOwners","x-order":2},
+      "tags":{"type":"array","items":{"type":"string"},"x-order":3},
+      "rows":{"type":"array","items":{"type":"object","properties":{"a":{"type":"integer"}}},"x-order":4},
+      "step":{"type":"number","multipleOf":5,"x-readonly":true,"x-hidden":true,"x-order":5}}})");
+    REQUIRE(fields.has_value());
+    REQUIRE(fields->size() == 6U);
+    CHECK(fields->at(0).type == "quantity in kg (or g)");
+    CHECK(fields->at(1).type == "decimal, 3 places");
+    CHECK(fields->at(2).type == "choice from Lims_ListOwners");
+    CHECK(fields->at(3).type == "list of string");
+    CHECK(fields->at(4).type == "list of objects");
+    CHECK(fields->at(5).rules == std::vector<std::string>{"multiple of 5", "read-only", "hidden"});
+}
+
+// Mutation: accept a document that is not an object (an empty map is returned).
+TEST_CASE("schemasOf: a document that is not an object, or not JSON, is refused with a reason", "[ui][explorer]") {
+    auto const listed = morph::ui::schemasOf(R"({"A":{"type":"object"},"B":{}})");
+    REQUIRE(listed.has_value());
+    CHECK(listed->at("A") == R"({"type":"object"})");
+    CHECK(listed->at("B") == "{}");
+    auto const array = morph::ui::schemasOf("[1]");
+    REQUIRE_FALSE(array.has_value());
+    CHECK(array.error() == "the schemas document is not an object");
+    CHECK_FALSE(morph::ui::schemasOf("{nope").has_value());
+}
+
+// Mutation: let the documents win over the client's own answer, or answer an unknown action.
+TEST_CASE("tryItCatalog: the client's own answer wins, and an action nobody lists is unknown", "[ui][explorer]") {
+    Catalog const base = corpusCatalog();
+    Catalog const catalog = morph::ui::tryItCatalog(
+        base, SchemasByModel{
+                  {"Lims_SampleModel", R"({"Lims_ConfirmSample":{"type":"object","title":"Other"}})"},
+                  {"Lims_Broken", "not json"},
+                  {"Lims_Refused", std::unexpected(std::string{"not authorized"})},
+              });
+    CHECK(catalog.schema("Lims_ConfirmSample") == base.schema("Lims_ConfirmSample"));
+    CHECK(catalog.action("Lims_ConfirmSample")->modelType == "Lims_SampleModel");
+    // The corpus catalog answers every action, so the fallback is reached only with no inner lookup.
+    Catalog none;
+    Catalog const bare = morph::ui::tryItCatalog(none, SchemasByModel{{"M", R"({"A":{"type":"object"}})"}});
+    CHECK(bare.action("A")->modelType == "M");
+    CHECK_FALSE(bare.action("Zed").has_value());
+    CHECK(bare.schema("A").value() == R"({"type":"object"})");
+    CHECK_FALSE(bare.schema("Zed").has_value());
+}
+
+// Mutation: leave the refusal empty for a model whose document is not JSON, or one that never arrived (its note is
+// missing).
+TEST_CASE("Explorer: a model whose schemas never arrived, or are no JSON, says so", "[ui][explorer]") {
+    Fixture f;
+    auto const explorer =
+        f.explorer([](ExplorerOptions& options) { options.schemas = SchemasByModel{{"Lims_SecretModel", "{nope"}}; });
+    CHECK(f.shows("Text", "not described: the schemas did not arrive"));
+    bool shown = false;
+    for (int const text : f.harness.backend.all("Text")) {
+        shown = shown || f.harness.backend.prop(text, "text").starts_with("not described: ");
+    }
+    CHECK(shown);
+    CHECK_FALSE(explorer->select("Lims_CaptureConcentration"));
+}
+
+// Mutation: offer "Try it" for a schema that cannot be read, or draw no schema text for it.
+TEST_CASE("Explorer: an action whose schema cannot be read shows why, and Try it is withheld", "[ui][explorer]") {
+    Fixture f;
+    auto const explorer = f.explorer([](ExplorerOptions& options) {
+        options.schemas = SchemasByModel{{"Lims_SampleModel", R"({"Lims_Bad":"oops"})"}};
+    });
+    REQUIRE(explorer->select("Lims_Bad"));
+    f.harness.settle();
+    bool unreadable = false;
+    for (int const text : f.harness.backend.all("Text")) {
+        unreadable = unreadable || f.harness.backend.prop(text, "text").starts_with("unreadable schema: ");
+    }
+    CHECK(unreadable);
+    CHECK(f.shows("Text", R"("oops")"));
+    CHECK(f.shows("Text", "Not offered: the schema cannot be read."));
+    CHECK(f.provided.empty());
+}
+
+// Mutation: offer "Try it" without a host.
+TEST_CASE("Explorer: without a host to mount through, Try it is not offered", "[ui][explorer]") {
+    Fixture f;
+    auto const explorer = f.explorer([](ExplorerOptions& options) { options.host = nullptr; });
+    REQUIRE(explorer->select("Lims_CaptureConcentration"));
+    f.harness.settle();
+    CHECK(f.shows("Text", "Not offered here."));
+    CHECK(f.provided.empty());
+}
+
+// Mutation: drop the payload cells, or print the shape's JSON as an empty text.
+TEST_CASE("Explorer: a schema's payload fingerprint and shape are shown as facts", "[ui][explorer]") {
+    Fixture f;
+    auto const explorer = f.explorer([](ExplorerOptions& options) {
+        options.schemas = SchemasByModel{
+            {
+                "Lims_SampleModel",
+                R"({"Lims_Fp":{"type":"object","properties":{},"x-payloadFingerprint":"abc","x-payloadShape":{"a":1}}})",
+            },
+        };
+    });
+    REQUIRE(explorer->select("Lims_Fp"));
+    f.harness.settle();
+    CHECK(f.shows("Text", "payload fingerprint"));
+    CHECK(f.shows("Text", "abc"));
+    CHECK(f.shows("Text", "payload shape"));
+    CHECK(f.shows("Text", R"({"a":1})"));
+}
+
+// Mutation: print an effect with no record as an empty text.
+TEST_CASE("Explorer: an effect without a record is listed by its kind", "[ui][explorer]") {
+    Fixture f;
+    auto const explorer = f.explorer([](ExplorerOptions& options) {
+        options.catalog.actions->at("Lims_ConfirmSample").effects =
+            std::vector<morph::ui::ActionEffect>{{.kind = "touches", .record = std::nullopt}};
+    });
+    REQUIRE(explorer->select("Lims_ConfirmSample"));
+    f.harness.settle();
+    CHECK(f.shows("Text", "touches"));
+}
+
+// Mutation: leave the facts empty ("Try it" builds for an action the catalog places on another model).
+TEST_CASE("Explorer: with no facts given, the catalog's own decide whether Try it can be built", "[ui][explorer]") {
+    Fixture f;
+    auto const explorer = f.explorer([](ExplorerOptions& options) {
+        options.facts = {};
+        options.catalog.actions->at("Lims_CaptureConcentration").modelType = "Lims_OtherModel";
+    });
+    REQUIRE(explorer->select("Lims_CaptureConcentration"));
+    f.harness.settle();
+    bool refused = false;
+    for (int const text : f.harness.backend.all("Text")) {
+        refused = refused || f.harness.backend.prop(text, "text").starts_with("Cannot build it: ");
+    }
+    CHECK(refused);
+    CHECK(f.provided.empty());
+}
+
+// Mutation: ignore the catalog's collection and wizard documents when choosing what Try it builds, or when showing
+// the action's schema.
+TEST_CASE("Explorer: an action the catalog serves a collection or a wizard for shows that document",
+          "[ui][explorer]") {
+    Fixture f;
+    auto const explorer = f.explorer([](ExplorerOptions& options) {
+        options.catalog.views =
+            std::map<std::string, std::string, std::less<>>{{"Lims_CaptureConcentration", "VIEWDOC"}};
+        options.catalog.wizards = std::map<std::string, std::string, std::less<>>{{"Lims_ConfirmSample", "WIZDOC"}};
+        options.catalog.permitted.emplace_back("Lims_ConfirmSample");
+    });
+    // A collection or wizard is what "Try it" builds for these actions, not the form with the action's fields.
+    REQUIRE(explorer->select("Lims_CaptureConcentration"));
+    f.harness.settle();
+    CHECK(f.shows("Text", "VIEWDOC"));
+    CHECK_FALSE(f.harness.backend.find("TextInput", "testId", "field_sampleId").has_value());
+    REQUIRE(explorer->select("Lims_ConfirmSample"));
+    f.harness.settle();
+    CHECK(f.shows("Text", "WIZDOC"));
+    CHECK_FALSE(f.harness.backend.find("TextInput", "testId", "field_sampleId").has_value());
+}

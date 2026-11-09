@@ -327,6 +327,37 @@ TEST_CASE("post_above_envelope_cap_is_dropped_and_counted", "[push][channel]") {
     CHECK(wire.snapshot() == std::vector<std::string>{fits});
 }
 
+// Mutation: drop an envelope of exactly `kMaxEnvelopeBytes` (a `<` bound) -- the cap is inclusive.
+TEST_CASE("post_at_exactly_the_envelope_cap_is_written", "[push][channel]") {
+    ::morph::exec::ThreadPoolExecutor pool{2};
+    auto const server = std::make_shared<::morph::backend::RemoteServer>(pool, pcEnv().dispatcher, pcEnv().registry);
+    FakeWire wire;
+    auto const cid = server->openConnection();
+    server->setConnectionWriter(cid, wire.writer());
+
+    server->post(cid, std::string(::morph::wire::kMaxEnvelopeBytes, 'x'));
+    flush(*server);
+
+    auto const sent = wire.snapshot();
+    REQUIRE(sent.size() == 1U);
+    CHECK(sent.front().size() == ::morph::wire::kMaxEnvelopeBytes);
+}
+
+// Mutation: hold an event back at a backlog of exactly `kEventBacklogHigh` (a `>=` bound) -- only above it is high.
+TEST_CASE("post_at_exactly_the_backlog_bound_is_written", "[push][channel]") {
+    ::morph::exec::ThreadPoolExecutor pool{2};
+    auto const server = std::make_shared<::morph::backend::RemoteServer>(pool, pcEnv().dispatcher, pcEnv().registry);
+    FakeWire wire;
+    auto const cid = server->openConnection();
+    server->setConnectionWriter(cid, wire.writer());
+
+    wire.backlog = ::morph::backend::kEventBacklogHigh;
+    auto const at = encodedEvent("changes", "{}");
+    server->post(cid, at);
+    flush(*server);
+    CHECK(wire.snapshot() == std::vector<std::string>{at});
+}
+
 TEST_CASE("throwing_connection_writer_does_not_escape_the_server", "[push][channel]") {
     ::morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<::morph::backend::RemoteServer>(pool, pcEnv().dispatcher, pcEnv().registry);

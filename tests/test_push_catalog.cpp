@@ -348,3 +348,97 @@ TEST_CASE("changes_body_round_trips_and_is_bounded", "[push][catalog]") {
         CHECK(morph::wire::kResyncTopic == "resync");
     }
 }
+
+TEST_CASE("wire_readers_bound_every_name_and_list", "[push][catalog]") {
+    namespace wire = morph::wire;
+    auto const longName = std::string(wire::kMaxTopicNameBytes + 1, 'x');
+    auto const fitsName = std::string(wire::kMaxTopicNameBytes, 'x');
+    auto const json = [](auto const& value) { return glz::write_json(value).value_or(""); };
+
+    SECTION("an event with an empty payload carries null") {
+        auto const env = wire::makeEvent("topic", "");
+        wire::EventBody event;
+        REQUIRE_FALSE(glz::read_json(event, env.body));
+        CHECK(event.payload.str == "null");
+    }
+    SECTION("a watch body refuses an over-long model type or primary key, and accepts the bound") {
+        wire::WatchBody body;
+        body.instances = {{.modelType = longName, .primary = "", .instance = 0}};
+        auto const type = wire::readWatchBody(json(body));
+        REQUIRE_FALSE(type);
+        CHECK(type.error().contains("a model type"));
+
+        body.instances = {{.modelType = "M", .primary = longName, .instance = 0}};
+        auto const primary = wire::readWatchBody(json(body));
+        REQUIRE_FALSE(primary);
+        CHECK(primary.error().contains("a primary key"));
+
+        body.instances = {{.modelType = fitsName, .primary = fitsName, .instance = 0}};
+        CHECK(wire::readWatchBody(json(body)));
+    }
+    SECTION("a watch reply refuses garbage, oversize input, long names and over-long lists") {
+        CHECK_FALSE(wire::readWatchReply("not json"));
+        CHECK_FALSE(wire::readWatchReply(std::string(wire::kMaxEnvelopeBytes + 1, ' ')));
+
+        wire::WatchReply reply;
+        reply.refusedRecords = {longName};
+        auto const record = wire::readWatchReply(json(reply));
+        REQUIRE_FALSE(record);
+        CHECK(record.error().contains("a record name"));
+
+        reply.refusedRecords.clear();
+        reply.refusedInstances = {{.modelType = longName, .primary = "", .instance = 1}};
+        auto const instance = wire::readWatchReply(json(reply));
+        REQUIRE_FALSE(instance);
+        CHECK(instance.error().contains("a model type"));
+
+        reply.refusedInstances.assign(wire::kMaxWatchTopics + 1, {.modelType = "M", .primary = "", .instance = 1});
+        CHECK_FALSE(wire::readWatchReply(json(reply)));
+        reply.refusedInstances.pop_back();
+        CHECK(wire::readWatchReply(json(reply)));
+    }
+    SECTION("a changes payload refuses garbage, a long record name and bad instance topics") {
+        CHECK_FALSE(wire::readChangesBody("not json"));
+
+        auto const record = wire::readChangesBody(R"({"records":[{"record":")" + longName + R"("}]})");
+        REQUIRE_FALSE(record);
+        CHECK(record.error().contains("a record name"));
+        CHECK(wire::readChangesBody(R"({"records":[{"record":")" + fitsName + R"("}]})"));
+
+        wire::ChangesBody body;
+        body.instances = {{.modelType = "M", .primary = longName, .instance = 2}};
+        auto const instance = wire::readChangesBody(json(body));
+        REQUIRE_FALSE(instance);
+        CHECK(instance.error().contains("a primary key"));
+
+        body.instances.assign(wire::kMaxWatchTopics + 1, {.modelType = "M", .primary = "", .instance = 2});
+        CHECK_FALSE(wire::readChangesBody(json(body)));
+    }
+}
+
+// Mutation: refuse a body of exactly `kMaxEnvelopeBytes` (a `>=` cap) -- the largest body is one byte under the next.
+TEST_CASE("a_body_of_exactly_the_envelope_cap_is_read", "[push][catalog]") {
+    std::string atCap = R"({"records":["A"]})";
+    atCap.append(morph::wire::kMaxEnvelopeBytes - atCap.size(), ' ');
+    REQUIRE(atCap.size() == morph::wire::kMaxEnvelopeBytes);
+    CHECK(morph::wire::readWatchBody(atCap));
+    CHECK_FALSE(morph::wire::readWatchBody(atCap + " "));
+}
+
+// Mutation: refuse a record list of exactly `kMaxWatchTopics` (a `>=` bound).
+TEST_CASE("a_changes_payload_of_exactly_the_record_bound_is_read", "[push][catalog]") {
+    morph::wire::ChangesBody body;
+    body.records.resize(morph::wire::kMaxWatchTopics);
+    for (auto& change : body.records) {
+        change.record = "R";
+    }
+    CHECK(morph::wire::readChangesBody(glz::write_json(body).value_or("")));
+    body.records.emplace_back().record = "R";
+    CHECK_FALSE(morph::wire::readChangesBody(glz::write_json(body).value_or("")));
+}
+
+// Mutation: build the keyed envelopes with `shared` false -- the server would treat them as private instances.
+TEST_CASE("keyed_envelopes_are_shared", "[push][catalog]") {
+    CHECK(morph::wire::makeAttach("M", "k").shared);
+    CHECK(morph::wire::makeAssign("M", "k", 3).shared);
+}

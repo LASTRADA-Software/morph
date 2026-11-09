@@ -526,6 +526,11 @@ TEST_CASE("sanitizeLogLine escapes carriage returns, tabs, and other control byt
     REQUIRE(clean == "a\\r\\tb\\x01c\\x7f");
 }
 
+TEST_CASE("sanitizeLogLine escapes a control byte in the first position", "[policy][logger]") {
+    CHECK(morph::log::detail::sanitizeLogLine("\n[ERROR] forged") == "\\n[ERROR] forged");
+    CHECK(morph::log::detail::sanitizeLogLine(std::string(1, '\x01')) == "\\x01");
+}
+
 TEST_CASE("sanitizeLogLine leaves clean printable text (including UTF-8) untouched", "[policy][logger]") {
     const std::string clean = "normal message with UTF-8: \xc3\xa9 \xe2\x9c\x93";
     REQUIRE(morph::log::detail::sanitizeLogLine(clean) == clean);

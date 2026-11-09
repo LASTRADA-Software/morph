@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 #include "test_support.hpp"
 
@@ -1331,4 +1332,18 @@ TEST_CASE("Forms::Rules::NoDrift::SimulatedRemoteBackendDispatchesAValidBookingN
     REQUIRE(morph::testing::pumpOwnerUntil(cbExec, [&] { return done.load(); }));
     REQUIRE(observedBooked.load());
     REQUIRE(gCfrBookRoomExecuteCount.load() == 1);
+}
+
+TEST_CASE("equalsOperand reads an engaged payload by reference, and any other member as it is", "[forms][rules]") {
+    std::optional<std::int64_t> const engaged{7};
+    std::int64_t const plain = 9;
+
+    static_assert(std::is_same_v<decltype(morph::forms::detail::equalsOperand(engaged)), std::int64_t const&>);
+    static_assert(std::is_same_v<decltype(morph::forms::detail::equalsOperand(plain)), std::int64_t const&>);
+
+    // The operand is the payload itself, not a copy of it.
+    CHECK(&morph::forms::detail::equalsOperand(engaged) == &*engaged);
+    CHECK(morph::forms::detail::equalsOperand(engaged) == 7);
+    CHECK(&morph::forms::detail::equalsOperand(plain) == &plain);
+    CHECK(morph::forms::detail::equalsOperand(plain) == 9);
 }

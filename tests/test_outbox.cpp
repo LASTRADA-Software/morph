@@ -170,6 +170,19 @@ TEST_CASE("IModelHolder::setOutboxManaged: defaults to false, ordinary recording
     REQUIRE(log->entries().size() == 1);
 }
 
+TEST_CASE("IModelHolder::setOutboxManaged: false restores ordinary recording", "[outbox][holder]") {
+    auto holder = morph::model::detail::ModelFactory::create<OBModel>();
+    auto const log = std::make_shared<InMemoryActionLog>(morph::testing::storageOwner());
+    holder->attachActionLog(log, "acct-1");
+    holder->setOutboxManaged(true);
+    holder->setOutboxManaged(false);
+
+    CHECK_FALSE(holder->isOutboxManaged());
+    holder->recordIfAttached(makeEntry("OB_Model", "", "OB_Deposit"));
+
+    CHECK(log->entries().size() == 1);
+}
+
 TEST_CASE("ActionDispatcher: outbox-managed holder does not auto-append despite an attached log",
           "[outbox][dispatch]") {
     morph::model::detail::ActionDispatcher dispatcher;

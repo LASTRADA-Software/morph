@@ -411,3 +411,104 @@ TEST_CASE("CollectionSession: a reply's rows, keys and an editor that cannot be 
     REQUIRE(view.rows().size() == 1);
     CHECK(view.rows()[0].key == "3");
 }
+
+TEST_CASE("CollectionSession: a cell's own precision wins over its column's; a table cell without one has none",
+          "[forms-engine][collection]") {
+    namespace engine = morph::forms::detail::engine;
+    auto const row = engine::parseJson(R"({"own":{"num":15,"den":10,"dp":2},"bare":{"num":15,"den":10},
+      "label":"text","count":7})");
+    REQUIRE(row.has_value());
+    morph::forms::CollectionColumn column{};
+    column.decimalPlaces = 1;
+    column.field = "own";
+    CHECK(engine::cellText(*row, column) == "1.50");
+    column.field = "bare";
+    CHECK(engine::cellText(*row, column) == "1.5");
+    column.field = "label";
+    CHECK(engine::cellText(*row, column) == "text");
+    column.field = "count";
+    CHECK(engine::cellText(*row, column) == "7");
+    column.field = "bare";
+    auto const cell = engine::tableCell(*row, column);
+    REQUIRE(std::holds_alternative<morph::math::Rational>(cell));
+    CHECK(std::get<morph::math::Rational>(cell).decimalPlaces.value == 0U);
+    column.field = "own";
+    CHECK(std::get<morph::math::Rational>(engine::tableCell(*row, column)).decimalPlaces.value == 2U);
+}
+
+TEST_CASE("CollectionModel: a unit shows its Unicode spelling when it has one, and a bind must be an object",
+          "[forms-engine][collection]") {
+    CollectionModel const model = viewModel(R"({"v-query":"Q","v-columns":[
+      {"field":"a","kind":"quantity","ExtUnits":{"unitAscii":"ug","unitUnicode":"µg"}},
+      {"field":"b","kind":"quantity","ExtUnits":{"unitAscii":"kg","unitUnicode":""}}],
+      "v-actions":[{"action":"X","label":"X","scope":"row","bind":5}]})");
+    CHECK(model.columns()[0].unit == "\xC2\xB5g");
+    CHECK(model.columns()[1].unit == "kg");
+    REQUIRE(model.actions().size() == 1);
+    CHECK(model.actions()[0].bind.empty());
+}
+
+TEST_CASE("CollectionSession: a reply without row keys numbers its rows; a text key stays text",
+          "[forms-engine][collection]") {
+    Harness harness;
+    harness.server.replyWith([](Call const& call) -> std::optional<std::string> {
+        return call.action == "ListRows"
+                   ? std::optional<std::string>{R"([{"name":"a"},{"id":"abc","name":"b"},{"name":"c"}])"}
+                   : std::nullopt;
+    });
+    CollectionSession view{harness.rt, viewModel(kView), editRowSchema(), harness.server.submitter(),
+                           harness.server.fetcher()};
+    harness.settle();
+    REQUIRE(view.rows().size() == 3);
+    CHECK(view.rows()[0].key == "0");
+    CHECK(view.rows()[2].key == "2");
+    CHECK(std::get<std::int64_t>(view.rows()[2].id) == 2);
+    CHECK(std::get<std::string>(view.rows()[1].id) == "abc");
+    CHECK(std::get<std::string>(view.source()->tableSnapshot()->rowId(1)) == "abc");
+}
+
+TEST_CASE("CollectionSession: a reply that is neither a list nor an object holds no rows; a pending one is loading",
+          "[forms-engine][collection]") {
+    Harness harness;
+    std::optional<std::string> reply = std::string{"5"};
+    harness.server.replyWith([&reply](Call const&) { return reply; });
+    CollectionSession view{harness.rt, viewModel(kView), {}, harness.server.submitter(), harness.server.fetcher()};
+    harness.settle();
+    CHECK(view.rows().empty());
+    CHECK(view.editor() == nullptr);  // no schema lookup: no editor
+    CHECK_FALSE(view.loading());
+    reply = std::nullopt;
+    view.refresh();
+    harness.settle();
+    CHECK(view.loading());
+    harness.server.resolveSubmit(harness.server.submits().size() - 1, "[]");
+    harness.settle();
+    CHECK_FALSE(view.loading());
+}
+
+TEST_CASE("CollectionSession: a row action with several bound fields sends them all, and reports itself pending",
+          "[forms-engine][collection]") {
+    Harness harness;
+    std::optional<std::string> reply = std::string{kRows};
+    harness.server.replyWith([&reply](Call const& call) -> std::optional<std::string> {
+        return call.action == "ListRows" ? std::optional<std::string>{std::string{kRows}} : reply;
+    });
+    CollectionSession view{harness.rt, viewModel(R"({"v-query":"ListRows","v-columns":[{"field":"id","kind":"integer"},
+                             {"field":"name","kind":"text"}],
+                             "v-actions":[{"action":"Mark","label":"Mark","scope":"row",
+                               "bind":{"id":"id","name":"name"}}]})"),
+                           editRowSchema(), harness.server.submitter(), harness.server.fetcher()};
+    harness.settle();
+    reply = std::nullopt;
+    CHECK_FALSE(view.actionPending());
+    view.fire(0, "1");
+    harness.settle();
+    CHECK(view.actionPending());
+    std::optional<std::string> body;
+    for (Call const& call : harness.server.submits()) {
+        if (call.action == "Mark") {
+            body = call.body;
+        }
+    }
+    CHECK(body == R"({"id":1,"name":"First"})");
+}

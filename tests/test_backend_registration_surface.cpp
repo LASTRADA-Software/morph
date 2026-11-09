@@ -33,6 +33,7 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
 #include <morph/core/strand.hpp>
+#include <morph/core/wire.hpp>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -107,6 +108,11 @@ struct RecordingBackend : IBackend {
 
     void setReconnectHandler(std::function<void()> /*handler*/, morph::exec::IExecutor* /*exec*/) override {
         calls.emplace_back("setReconnectHandler");
+    }
+
+    void setEventHandler(std::function<void(morph::wire::EventBody)> /*handler*/,
+                         morph::exec::IExecutor* /*exec*/) override {
+        calls.emplace_back("setEventHandler");
     }
 
     void setConnectHandler(const std::function<void()>& /*handler*/) override {
@@ -492,6 +498,7 @@ TEST_CASE(
     adapter.notifyBackendChanged();
     adapter.cancelPending(std::make_exception_ptr(std::runtime_error{"cancelled"}));
     adapter.setReconnectHandler(nullptr, nullptr);
+    adapter.setEventHandler(nullptr, nullptr);
     adapter.setConnectHandler(nullptr);
     adapter.setDisconnectHandler(nullptr);
     adapter.setSession(morph::session::Context{.principal = "pal"});
@@ -502,7 +509,7 @@ TEST_CASE(
     REQUIRE(recording->calls == std::vector<std::string>{"registerModel", "registerModelWithContext:ck",
                                                          "assignPrimary:6:pk", "deregisterModel:7", "execute:8",
                                                          "notifyBackendChanged", "cancelPending",
-                                                         "setReconnectHandler", "setConnectHandler",
+                                                         "setReconnectHandler", "setEventHandler", "setConnectHandler",
                                                          "setDisconnectHandler", "setSession:pal", "listInstances"});
 }
 
@@ -829,4 +836,73 @@ TEST_CASE("morph::backend::SynchronousBackendAdapter: a synchronous verb called 
     }
     REQUIRE(answer.get() == std::vector<std::string>{"outer"});
     REQUIRE(inner->nested == std::vector<std::string>{"inner"});
+}
+
+// ── The adapter's list of cancellable calls ─────────────────────────────────
+
+namespace {
+
+/// @brief A backend that keeps every bind's promise until the test settles it.
+struct StashingBackend : RecordingBackend {
+    ModelCompletion bindModel(BindRequest /*request*/, morph::exec::IExecutor& cbExec) override {
+        auto [completion, promise] = ModelCompletion::makeSettleable(&cbExec);
+        std::scoped_lock const lock{mutex};
+        promises.push_back(std::make_shared<ModelCompletion::Promise>(std::move(promise)));
+        return std::move(completion);
+    }
+
+    [[nodiscard]] std::size_t stashed() {
+        std::scoped_lock const lock{mutex};
+        return promises.size();
+    }
+
+    void resolve(std::size_t index) {
+        std::shared_ptr<ModelCompletion::Promise> promise;
+        {
+            std::scoped_lock const lock{mutex};
+            promise = promises.at(index);
+        }
+        promise->resolve(ModelId{static_cast<std::uint64_t>(index) + 1});
+    }
+
+    std::mutex mutex;
+    std::vector<std::shared_ptr<ModelCompletion::Promise>> promises;
+};
+
+}  // namespace
+
+TEST_CASE(
+    "morph::backend::SynchronousBackendAdapter: calls settled long ago do not hide a pending one from "
+    "cancelPending",
+    "[backend][registration-surface][threading]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    morph::exec::MainThreadExecutor callerExec;
+    auto inner = std::make_shared<StashingBackend>();
+    SynchronousBackendAdapter adapter{inner, pool};
+    auto const request = [] {
+        return BindRequest{.typeId = std::string{kTypeId}, .factory = makeHolder, .contextKey = "ctx", .primary = {}};
+    };
+
+    // One call stays pending throughout.
+    std::atomic<bool> rejected{false};
+    std::string message;
+    adapter.bindModel(request(), callerExec).then([](ModelId /*mid*/) {}).onError(captureError(message, rejected));
+    REQUIRE(morph::testing::waitUntil([&] { return inner->stashed() == 1; }));
+
+    // Past the list's sweep threshold, so that a later call sweeps the settled entries out of it.
+    constexpr std::size_t kSettled = 40;
+    std::atomic<std::size_t> okRan{0};
+    for (std::size_t index = 1; index <= kSettled; ++index) {
+        adapter.bindModel(request(), callerExec).then([&](ModelId /*mid*/) { okRan.fetch_add(1); });
+        REQUIRE(morph::testing::waitUntil([&] { return inner->stashed() == index + 1; }));
+        inner->resolve(index);
+        REQUIRE(morph::testing::waitUntil([&] {
+            callerExec.runOnce();
+            return okRan.load() == index;
+        }));
+    }
+
+    adapter.cancelPending(std::make_exception_ptr(morph::backend::BridgeDestroyedError{}));
+    REQUIRE(drainUntil(callerExec, rejected));
+    CHECK(message == std::string{morph::backend::BridgeDestroyedError{}.what()});
 }

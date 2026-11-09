@@ -1128,6 +1128,35 @@ TEST_CASE("the server refuses to re-file an already-keyed instance onto a differ
     REQUIRE(keys == std::vector<std::string>{"old"});
 }
 
+// Mutation: let an attach with no type id through -- the registry's own unknown-type error would answer in its place.
+TEST_CASE("an attach that names no model type is refused by name", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    auto const reply =
+        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeAttach("", "k"))));
+    REQUIRE(reply.kind == "err");
+    CHECK(reply.message == "attach requires a typeId");
+}
+
+// Mutation: file an unkeyed instance under the empty key when an assign names no key.
+TEST_CASE("an assign that names no key files nothing", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto const server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    auto reg =
+        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeRegister("SHI_CounterModel"))));
+    REQUIRE(reg.kind == "ok");
+
+    server->handleInline(morph::wire::encode(morph::wire::makeAssign("SHI_CounterModel", "", reg.modelId)));
+
+    auto listed =
+        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeInstances("SHI_CounterModel"))));
+    std::vector<std::string> keys;
+    REQUIRE_FALSE(glz::read_json(keys, listed.body));
+    CHECK(keys.empty());
+}
+
 TEST_CASE("an attach that creates the instance carries contextKey to a configured LogProvider", "[shared-instances]") {
     morph::exec::ThreadPoolExecutor pool{2};
 

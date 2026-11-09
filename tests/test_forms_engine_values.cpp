@@ -321,3 +321,79 @@ TEST_CASE("values: epoch widgets enter a wall clock or a date and send the count
     CHECK(decode(days, "-1", plainContext()) == "1969-12-31");
     CHECK(decode(days, "1.5", plainContext()).empty());
 }
+
+TEST_CASE("values: an encoding carries the value that rules read, per kind", "[forms-engine][values]") {
+    auto const valueOf = [](FieldSpec const& spec, std::string_view text) {
+        auto const encoded = morph::forms::encodeScalar(spec, text, 0, plainContext());
+        REQUIRE(encoded.has_value());
+        REQUIRE(encoded->has_value());
+        return (*encoded)->value;
+    };
+    CHECK(valueOf(field(R"({"type":"number"})"), "3.5").asDecimal() != nullptr);
+    CHECK_FALSE(valueOf(field(R"({"type":"array","items":{"type":"string"}})"), "red, green").isNull());
+    FieldSpec const role = field(
+        R"({"type":"string","oneOf":[{"title":"Viewer","const":"Viewer"},{"title":"Manager","const":"Manager"}]})");
+    REQUIRE(valueOf(role, R"("Manager")").asString() != nullptr);
+    CHECK(*valueOf(role, R"("Manager")").asString() == "Manager");
+    CHECK_FALSE(valueOf(field(R"({"type":"string","format":"date-time"})"), "2026-07-05T14:30").isNull());
+    // An integer slider answers an int, not a decimal.
+    FieldSpec const level = field(R"({"type":"integer","x-widget":"slider","x-min":0,"x-max":10})");
+    REQUIRE(level.kind == morph::forms::FieldKind::Slider);
+    CHECK(valueOf(level, "5").asInt() != nullptr);
+    // A number with more digits than the exact decimal holds reads as null.
+    auto const huge = engine::parseJson("1e30");
+    REQUIRE(huge.has_value());
+    CHECK(engine::valueOfLiteral(*huge).isNull());
+}
+
+TEST_CASE("values: an integer's exact bounds win over the rounded ones", "[forms-engine][values]") {
+    FieldSpec const wide = field(R"({"type":"integer","minimum":9007199254740992,"maximum":9007199254740992,
+      "x-exactMinimum":"9007199254740993","x-exactMaximum":"9007199254740994"})");
+    CHECK(error(morph::forms::encodeScalar(wide, "9007199254740992", 0, plainContext())) == "below-minimum");
+    CHECK(json(morph::forms::encodeScalar(wide, "9007199254740993", 0, plainContext())) == "9007199254740993");
+    CHECK(json(morph::forms::encodeScalar(wide, "9007199254740994", 0, plainContext())) == "9007199254740994");
+    CHECK(error(morph::forms::encodeScalar(wide, "9007199254740995", 0, plainContext())) == "above-maximum");
+}
+
+TEST_CASE("values: a typed quantity that leaves the exact range is out-of-range, never wrapped",
+          "[forms-engine][values]") {
+    FieldSpec const decimal = field(R"({"type":"object","x-decimalPlaces":3})");
+    CHECK(error(morph::forms::encodeScalar(decimal, "9300000000000000", 0, plainContext())) == "out-of-range");
+    FieldSpec const mass = field(kMass, kMassDefs);
+    CHECK(error(morph::forms::encodeScalar(mass, "922337203685477", 2, plainContext())) == "out-of-range");
+    FieldSpec const fine = field(R"({"$ref":"#/$defs/q","x-decimalPlaces":3,
+      "x-unitAlternatives":[{"id":"x","display":"x","decimals":18,"num":1,"den":1000}]})",
+                                 kMassDefs);
+    CHECK(error(morph::forms::encodeScalar(fine, "1", 1, plainContext())) == "out-of-range");
+    CHECK(error(morph::forms::encodeScalar(decimal, "1e5", 0, plainContext())) == "malformed");
+}
+
+TEST_CASE("values: a long comma-separated draft ends at its last item", "[forms-engine][values]") {
+    FieldSpec const tags = field(R"({"type":"array","items":{"type":"string"}})");
+    std::string const longTag(60, 'x');
+    CHECK(json(morph::forms::encodeScalar(tags, "a, " + longTag, 0, plainContext())) ==
+          R"(["a",")" + longTag + R"("])");
+}
+
+TEST_CASE("values: a displayed number is padded only when it has fewer places than declared",
+          "[forms-engine][values]") {
+    auto const decode = [](FieldSpec const& spec, std::string_view value) {
+        auto const dom = engine::parseJson(value);
+        REQUIRE(dom.has_value());
+        return morph::forms::decodeScalar(spec, *dom, plainContext());
+    };
+    CHECK(decode(field(R"({"type":"number","x-displayDecimals":0})"), "5") == "5");
+    CHECK(decode(field(R"({"type":"number","x-displayDecimals":2})"), "1.25") == "1.25");
+    CHECK(decode(field(R"({"type":"string","oneOf":[{"const":"A"},{"const":"B"}]})"), "null").empty());
+    CHECK(decode(field(R"({"type":"integer","x-optionsAction":"ListSlots"})"), "null").empty());
+}
+
+TEST_CASE("values: a unit conversion that leaves the exact range has no draft", "[forms-engine][values]") {
+    using morph::forms::convertDraft;
+    using morph::forms::UnitOption;
+    UnitOption const base{.id = "a", .display = "a", .decimals = 0, .num = 1, .den = 1};
+    UnitOption const micro{.id = "b", .display = "b", .decimals = 0, .num = 1, .den = 1'000'000};
+    UnitOption const mega{.id = "c", .display = "c", .decimals = 0, .num = 1'000'000, .den = 1};
+    CHECK(convertDraft("9000000000000000", base, micro, {}) == std::nullopt);
+    CHECK(convertDraft("9000000000000000", mega, base, {}) == std::nullopt);
+}

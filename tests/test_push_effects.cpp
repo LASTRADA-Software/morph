@@ -278,6 +278,36 @@ TEST_CASE("derived_cycle_throws", "[push][records]") {
     REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("V_CycleA -> V_CycleB -> V_CycleA"));
 }
 
+// Mutation: leave a finished record unmarked -- a cycle reached through a record that is visited first is
+// walked, and reported, a second time when the loop reaches the records on it.
+TEST_CASE("derived_cycle_reached_through_another_record_is_reported_once", "[push][records]") {
+    auto const message = refusal(
+        {
+            record("V_Entry", typeid(VRow), std::nullopt, {typeid(VCycleA)}),
+            record("V_CycleA", typeid(VCycleA), std::nullopt, {typeid(VCycleB)}),
+            record("V_CycleB", typeid(VCycleB), std::nullopt, {typeid(VCycleA)}),
+        },
+        {}, {});
+    constexpr std::string_view kProblem = "is derived from itself";
+    std::size_t occurrences = 0;
+    for (std::size_t at = message.find(kProblem); at != std::string::npos; at = message.find(kProblem, at + 1)) {
+        ++occurrences;
+    }
+    CHECK(occurrences == 1);
+}
+
+TEST_CASE("effect_on_unregistered_type_names_the_declared_kind", "[push][records]") {
+    EffectsMap changing;
+    morph::effects::detail::addEffects(changing, "A_Stray", {changesOf(typeid(VOther))});
+    CHECK_THAT(refusal({record("V_Row", typeid(VRow))}, {}, changing),
+               Catch::Matchers::ContainsSubstring("declares changes<"));
+
+    EffectsMap updating;
+    morph::effects::detail::addEffects(updating, "A_Stray", {updatesOf(typeid(VOther))});
+    CHECK_THAT(refusal({record("V_Row", typeid(VRow))}, {}, updating),
+               Catch::Matchers::ContainsSubstring("declares updates<"));
+}
+
 TEST_CASE("duplicate_record_name_throws", "[push][records]") {
     auto const byName = refusal({record("V_Row", typeid(VRow)), record("V_Row", typeid(VOther))}, {}, {});
     REQUIRE_THAT(byName, Catch::Matchers::ContainsSubstring("record name `V_Row` is registered for two types"));

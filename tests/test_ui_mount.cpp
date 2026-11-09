@@ -1329,3 +1329,47 @@ TEST_CASE("ui::Mounted: a wrapping action bar in a dialog's content is refused, 
     ui::Mounted const outside{runtime, backend, ui::actionBar(bar)};
     CHECK(actionRowsOf(backend).size() == 1);
 }
+
+// Mutation: drop the multiline check (the centered multiline input mounts), or refuse the single-line one.
+TEST_CASE("ui::Mounted: a multiline text input's text starts at the leading edge", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    ui::TextInput input{.mode = ui::TextInputMode::Multiline};
+    input.align = ui::Align::Center;
+    CHECK_THROWS_WITH((ui::Mounted{runtime, backend, ui::textInput(std::move(input))}),
+                      Catch::Matchers::ContainsSubstring("a multiline text input's text starts at the leading edge"));
+    ui::TextInput single{.mode = ui::TextInputMode::SingleLine};
+    single.align = ui::Align::Center;
+    CHECK_NOTHROW(ui::Mounted{runtime, backend, ui::textInput(std::move(single))});
+}
+
+// Mutation: drop the binding of a constant label that differs from the default, or send the default as well.
+TEST_CASE("ui::Mounted: a tab bar's overflow label reaches the backend when it is not the default", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    {
+        RecordingBackend backend;
+        ui::Tabs tabs{.tabs = {{.label = "A", .node = ui::text({.text = "a"})}}};
+        tabs.moreLabel = std::string{"Others"};
+        ui::Mounted const view{runtime, backend, ui::tabs(std::move(tabs))};
+        CHECK(backend.dump().contains("moreLabel=Others"));
+    }
+    {
+        RecordingBackend backend;
+        ui::Mounted const view{runtime, backend,
+                               ui::tabs({.tabs = {{.label = "A", .node = ui::text({.text = "a"})}}})};
+        CHECK_FALSE(backend.dump().contains("moreLabel"));
+    }
+    {
+        RecordingBackend backend;
+        Signal<std::string> label{runtime, "Elsewhere"};
+        ui::Tabs tabs{.tabs = {{.label = "A", .node = ui::text({.text = "a"})}}};
+        tabs.moreLabel = [&label] { return label.get(); };
+        ui::Mounted const view{runtime, backend, ui::tabs(std::move(tabs))};
+        CHECK(backend.dump().contains("moreLabel=Elsewhere"));
+        label.set("Else");
+        owner.runAll();
+        CHECK(backend.dump().contains("moreLabel=Else"));
+    }
+}

@@ -23,6 +23,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -111,12 +112,12 @@ constexpr std::string_view kShelf = R"({
   "mutations": { "tally": { "model": "shelf", "action": "Ag_Tally" } },
   "view": { "kind": "text", "text": "Shelf" } })";
 
-// The token is the principal; `agent` may not wipe.
+// The token is the principal; `agent` may not wipe, and `nobody` may not run anything.
 struct Authorizer final : morph::session::IAuthorizer {
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): IAuthorizer's signature.
     [[nodiscard]] bool authorize(morph::session::Context const& ctx, std::string_view /*modelType*/,
                                  std::string_view actionType) const override {
-        return !(ctx.principal == "agent" && actionType == "Ag_Wipe");
+        return ctx.principal != "nobody" && !(ctx.principal == "agent" && actionType == "Ag_Wipe");
     }
     [[nodiscard]] std::optional<std::string> authenticate(morph::session::Context const& ctx) const override {
         return ctx.token.empty() ? std::nullopt : std::optional{ctx.token};
@@ -443,4 +444,61 @@ TEST_CASE("evaluate_tool_requires_action_and_body", "[push][agent]") {
                                   R"({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"evaluate",)"
                                   R"("arguments":{"action":"Ag_Missing","body":{}}}})"));
     CHECK(dump(unknown["error"]["code"]) == "-32602");
+}
+
+// Mutation: build the adapter anyway (no throw), for either missing part.
+TEST_CASE("an adapter needs a server and a callbacks executor", "[push][agent]") {
+    Rig rig;
+    CHECK_THROWS_AS(ui::McpAdapter(nullptr, ui::McpOptions{.callbacks = &rig.callbacks}), std::invalid_argument);
+    CHECK_THROWS_AS(ui::McpAdapter(rig.server, ui::McpOptions{}), std::invalid_argument);
+}
+
+// Mutation: answer a notification that names no method with an error, or a non-object with nothing.
+TEST_CASE("a message without a method is answered only when it could be a request", "[push][agent]") {
+    Rig rig;
+    auto adapter = rig.adapter();
+    CHECK_FALSE(ask(rig, *adapter, R"({"jsonrpc":"2.0"})").has_value());
+    auto const array = json(ask(rig, *adapter, "[1]"));
+    CHECK(dump(array["error"]["code"]) == "-32600");
+    CHECK(dump(array["id"]) == "null");
+}
+
+// Mutation: key an instance given as a number by something other than its text.
+TEST_CASE("a keyed tool's instance given as a number is the shared instance of its text", "[push][agent]") {
+    Rig rig;
+    auto adapter = rig.adapter();
+    auto const tally = [&](std::string_view instance) {
+        auto const reply = json(ask(rig, *adapter,
+                                    R"({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"Ag_Tally",)"
+                                    R"("arguments":{"label":"x","instance":)" +
+                                        std::string{instance} + "}}}"));
+        REQUIRE_FALSE(std::get<bool>(reply["result"]["isError"].data));
+        return std::get<std::string>(reply["result"]["content"][0]["text"].data);
+    };
+    CHECK(tally("7") == "1");
+    CHECK(tally(R"("7")") == "2");
+    auto const withNull = json(ask(rig, *adapter,
+                                   R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"Ag_Tally",)"
+                                   R"("arguments":{"label":"x","instance":null}}})"));
+    CHECK(dump(withNull["error"]["code"]) == "-32602");
+}
+
+// Mutation: list a tool for an action the principal may not run.
+TEST_CASE("a principal who may run nothing lists only evaluate", "[push][agent]") {
+    Rig rig;
+    auto adapter = rig.adapter("nobody");
+    auto const reply = json(ask(rig, *adapter, R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})"));
+    CHECK(toolNames(reply) == std::vector<std::string>{"evaluate"});
+}
+
+// Mutation: send the body as `null` when the call gives none.
+TEST_CASE("evaluate without a body evaluates the empty one", "[push][agent]") {
+    Rig rig;
+    auto adapter = rig.adapter();
+    auto const reply = json(ask(rig, *adapter,
+                                R"({"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"evaluate",)"
+                                R"("arguments":{"action":"Ag_Add"}}})"));
+    REQUIRE(reply.contains("result"));
+    CHECK_FALSE(std::get<bool>(reply["result"]["isError"].data));
+    CHECK(std::get<std::string>(reply["result"]["content"][0]["text"].data).contains("text"));
 }

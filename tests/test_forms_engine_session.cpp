@@ -617,3 +617,192 @@ TEST_CASE("FormSession: automatic mode sends the latest body once the submission
     CHECK(harness.server.lastBody() == R"({"a":125})");
     CHECK(form->submitAttempts() == 2);
 }
+
+namespace {
+
+constexpr std::string_view kGroupAndRows = R"({"properties":{
+  "n":{"type":"integer","x-order":0},
+  "obj":{"type":"object","x-order":1,"properties":{"c":{"type":"integer"}}},
+  "rows":{"type":"array","x-order":2,"items":{"type":"object","properties":{"x":{"type":"integer"}}}}}})";
+
+/// An action whose only property is an object nested @p levels deep, the innermost holding a string, or a
+/// collection of rows when @p rowsInside.
+[[nodiscard]] std::string deepSchema(int levels, bool collections, bool rowsInside = false) {
+    std::string inner = rowsInside
+                            ? R"({"type":"array","items":{"type":"object","properties":{"z":{"type":"string"}}}})"
+                            : R"({"type":"string"})";
+    for (int level = 0; level < levels; ++level) {
+        std::string const object = R"({"type":"object","properties":{"c":)" + inner + "}}";
+        inner = collections ? R"({"type":"array","items":)" + object + "}" : object;
+    }
+    return R"({"properties":{"c":)" + inner + "}}";
+}
+
+/// The path of the first field the model kept as text instead of describing.
+[[nodiscard]] std::string truncatedPath(morph::forms::FormModel const& model) {
+    morph::forms::FieldSpec const* current = &model.fields().front();
+    while (!current->truncated) {
+        current = &current->children.front();
+    }
+    return current->path;
+}
+
+}  // namespace
+
+TEST_CASE("FormSession: a field tells blank, invalid and valid apart to the rules", "[forms-engine][session]") {
+    using morph::forms::RuleOperand;
+    Harness harness;
+    auto const form = harness.session("TestAction", kTwoInts);
+    CHECK(form->field("a").blank());
+    CHECK(form->field("a").ruleOperand().state == RuleOperand::State::Blank);
+    harness.type(*form, "a", "x");
+    CHECK_FALSE(form->field("a").blank());
+    CHECK(form->field("a").ruleOperand().state == RuleOperand::State::Invalid);
+    harness.type(*form, "a", "3");
+    CHECK(form->field("a").ruleOperand().state == RuleOperand::State::Valid);
+}
+
+TEST_CASE("FormSession: a field the model kept as text is blank until something is entered",
+          "[forms-engine][session]") {
+    Harness harness;
+    auto const objects = harness.session("Deep", deepSchema(8, false));
+    std::string const objectPath = truncatedPath(objects->model());
+    CHECK(objects->field(objectPath).blank());
+    harness.type(*objects, objectPath, R"({"c":"x"})");
+    CHECK_FALSE(objects->field(objectPath).blank());
+    Harness rowsHarness;
+    auto const rows = rowsHarness.session("DeepRows", deepSchema(4, false, true));
+    std::string const rowsPath = truncatedPath(rows->model());
+    REQUIRE(rows->model().find("c") != nullptr);
+    CHECK(rows->field(rowsPath).spec().kind == morph::forms::FieldKind::ObjectArray);
+    CHECK(rows->field(rowsPath).blank());
+    rowsHarness.type(*rows, rowsPath, R"([{"c":"x"}])");
+    CHECK_FALSE(rows->field(rowsPath).blank());
+    rows->assign(rowsPath, "[]");
+    rowsHarness.settle();
+    CHECK(rows->field(rowsPath).text().peek() == "[]");
+    CHECK_FALSE(rows->field(rowsPath).blank());
+}
+
+TEST_CASE("FormSession: a collection is blank until a row exists or an empty list was loaded",
+          "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("TestAction", kGroupAndRows);
+    CHECK(form->field("rows").blank());
+    form->refill(R"({"rows":null})");
+    harness.settle();
+    CHECK(form->field("rows").blank());
+    form->refill(R"({"rows":[]})");
+    harness.settle();
+    CHECK_FALSE(form->field("rows").blank());
+    form->refill(R"({"rows":[{"x":1}]})");
+    harness.settle();
+    CHECK_FALSE(form->field("rows").blank());
+    form->refill(R"({"rows":null})");
+    harness.settle();
+    CHECK(form->field("rows").blank());
+}
+
+TEST_CASE("FormSession: an object field takes an object, or nothing", "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("TestAction", kGroupAndRows);
+    auto const parse = [](std::string_view text) {
+        auto dom = morph::forms::detail::engine::parseJson(text);
+        REQUIRE(dom.has_value());
+        return *std::move(dom);
+    };
+    CHECK(form->field("obj").edit(parse("null")).has_value());
+    CHECK(form->field("obj").edit(parse(R"({"c":1})")).has_value());
+    auto const refused = form->field("obj").edit(parse("5"));
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error() == "an object field takes a JSON object");
+}
+
+TEST_CASE("FormSession: a collection nobody entered is left out of the body, one that was loaded empty is sent",
+          "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("TestAction", kGroupAndRows);
+    harness.type(*form, "n", "1");
+    CHECK(form->body() == R"({"n":1})");
+    form->refill(R"({"rows":[]})");
+    harness.settle();
+    CHECK(form->body() == R"({"n":1,"rows":[]})");
+}
+
+TEST_CASE("FormSession: assigning any path of a field makes the next refill replace that field",
+          "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("TestAction", kGroupAndRows);
+    form->prefill(R"({"n":1,"obj":{"c":2},"rows":[{"x":3}]})");
+    harness.settle();
+    harness.type(*form, "n", "10");
+    harness.type(*form, "obj.c", "20");
+    harness.type(*form, "rows[0].x", "30");
+    form->assign("n", "11");
+    form->assign("obj.c", "21");
+    form->assign("rows[0].x", "31");
+    form->refill(R"({"n":12,"obj":{"c":22},"rows":[{"x":32}]})");
+    harness.settle();
+    CHECK(form->field("n").text().peek() == "12");
+    CHECK(form->field("obj.c").text().peek() == "22");
+    CHECK(form->field("rows[0].x").text().peek() == "32");
+}
+
+TEST_CASE("FormSession: a path with an unclosed bracket names no field", "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("TestAction", kGroupAndRows);
+    form->prefill(R"({"rows":[{"x":1},{"x":2},{"x":3}]})");
+    harness.settle();
+    CHECK_NOTHROW(form->field("rows[1].x"));
+    CHECK_THROWS(form->field("rows[12"));
+    CHECK_THROWS(form->field("rows[3].x"));
+}
+
+TEST_CASE("FormSession: a unit past the last one is ignored, and a blank draft stays as typed",
+          "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("Probe", kProbe);
+    harness.type(*form, "mass", "   ");
+    form->field("mass").switchUnit(1);
+    harness.settle();
+    CHECK(form->field("mass").text().peek() == "   ");
+    CHECK(form->field("mass").unit().peek() == 1);
+    form->field("mass").switchUnit(2);
+    harness.settle();
+    CHECK(form->field("mass").unit().peek() == 1);
+}
+
+TEST_CASE("FormSession: explicit submissions are counted", "[forms-engine][session]") {
+    Harness harness;
+    auto const form =
+        harness.session("TestAction", R"({"x-submitMode":"explicit","properties":{"a":{"type":"integer"}},
+      "required":["a"]})");
+    CHECK(form->submitAttempts() == 0);
+    harness.type(*form, "a", "1");
+    form->submit();
+    harness.settle();
+    CHECK(form->submitAttempts() == 1);
+}
+
+TEST_CASE("FormSession: a field shows its own placeholder, else the kind's default", "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("TestAction", R"({"properties":{
+      "own":{"type":"string","x-placeholder":"e.g. ab","x-order":0},
+      "num":{"type":"number","x-displayDecimals":2,"x-order":1}}})");
+    CHECK(form->field("own").placeholder() == "e.g. ab");
+    CHECK_FALSE(form->field("num").placeholder().empty());
+    CHECK(form->field("num").placeholder() == morph::forms::defaultPlaceholder(*form->model().find("num")));
+}
+
+TEST_CASE("FormSession: a Choice reports its options as pending only while they are being fetched",
+          "[forms-engine][session]") {
+    Harness harness;
+    harness.server.optionsWith([](auto const&) { return std::nullopt; });
+    auto const form = harness.session("TestAction", R"({"properties":{"slot":{"type":["integer","null"],
+      "x-optionsAction":"ListSlots","x-optionValue":"id","x-optionLabel":"name"}}})");
+    harness.settle();
+    CHECK(form->field("slot").optionsPending());
+    harness.server.resolveFetch(0, R"([{"id":1,"name":"One"}])");
+    harness.settle();
+    CHECK_FALSE(form->field("slot").optionsPending());
+}

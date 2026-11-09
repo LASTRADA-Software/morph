@@ -74,6 +74,15 @@ struct FDUOverPreciseAction {
     };
 };
 
+/// The widest precision there is.
+struct FDUMaxPreciseAction {
+    double value = 0.0;
+
+    static constexpr std::array<morph::forms::FieldMeta, 1> fieldMetadata{
+        morph::forms::FieldMeta{.field = "value", .decimals = DecimalPlaces{morph::math::kMaxDecimalPlaces}},
+    };
+};
+
 /// The same declaration one level down: the element of a repeated aggregate.
 struct FDURow {
     double sieve = 0.0;
@@ -184,6 +193,11 @@ TEST_CASE("Forms::FieldMeta::DisplayUnitIsIgnoredOnAQuantity", "[forms][field_me
     // The type's own unit is the only one anywhere in the schema.
     CHECK_FALSE(schema.contains(R"("lb")"));
     CHECK(resolvedProperty(dom, "mass", false)["ExtUnits"]["unitAscii"].get<std::string>() == "kg");
+}
+
+TEST_CASE("Forms::FieldMeta::DecimalsAtTheMaximumAreKept", "[forms][field_meta][display_unit]") {
+    auto const dom = schemaDom(morph::forms::schemaJson<FDUMaxPreciseAction>());
+    CHECK(dom["properties"]["value"]["x-displayDecimals"].as<std::uint64_t>() == morph::math::kMaxDecimalPlaces);
 }
 
 TEST_CASE("Forms::FieldMeta::DecimalsPastTheMaximumAreIgnored", "[forms][field_meta][display_unit]") {

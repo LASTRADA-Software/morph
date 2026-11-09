@@ -1625,3 +1625,22 @@ TEST_CASE("workspace: the head's trail end is what its last shown element draws"
     harness.settle();
     CHECK(shell.activeHeadTrailEnd() == HeadTrailEnd::Framed);
 }
+
+// Mutation: close nothing for an index past the last tab (the tabs stay), or keep the first tab.
+TEST_CASE("workspace: closing the others of a tab past the last one closes every tab", "[ui][workspace]") {
+    Harness harness;
+    Host host{harness, std::nullopt};
+    Workspace shell{harness.runtime, harness.backend, host, catalog()};
+    REQUIRE(shell.open("home", {}).has_value());
+    REQUIRE(shell.open("note", note(2)).has_value());
+    harness.settle();
+    CHECK(shell.record().size() == 2U);
+    CHECK(shell.record().front() == "home");
+
+    std::optional<bool> outcome;
+    shell.closeOthers(7, [&outcome](bool closed) { outcome = closed; });
+    harness.settle();
+    CHECK(outcome == true);
+    CHECK(shell.tabs().empty());
+    CHECK(shell.record().empty());
+}

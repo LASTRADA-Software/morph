@@ -560,3 +560,42 @@ TEST_CASE("views: a column entry takes the enum of the definition its property r
     CHECK(text.contains(R"("enum":["a","b"])"));
     CHECK(text.contains(R"("title":"Tag")"));
 }
+
+namespace {
+
+/// The table column kind a property schema infers, resolved against a row schema's `$defs`.
+[[nodiscard]] std::string kindOf(std::string_view rowSchema, std::string_view property) {
+    glz::generic_u64 row{};
+    glz::generic_u64 prop{};
+    REQUIRE_FALSE(glz::read_json(row, rowSchema));
+    REQUIRE_FALSE(glz::read_json(prop, property));
+    return std::string{morph::views::detail::inferColumnKind(row, prop)};
+}
+
+constexpr std::string_view kDefs = R"({"$defs":{"count":{"type":"integer"},
+  "exact":{"type":"object","properties":{"num":{"type":"integer"},"den":{"type":"integer"}}},
+  "unit":{"type":"object","properties":{"num":{"type":"integer"},"den":{"type":"integer"}},
+          "ExtUnits":{"unitAscii":"kg"}}}})";
+
+}  // namespace
+
+TEST_CASE("Views::InferColumnKind::ANullableResolvesThroughItsNonNullAlternative", "[views]") {
+    CHECK(kindOf(kDefs, R"({"anyOf":[{"type":"null"},{"type":"integer"}]})") == "integer");
+    CHECK(kindOf(kDefs, R"({"anyOf":[{"type":"integer"},{"type":"null"}]})") == "integer");
+    CHECK(kindOf(kDefs, R"({"anyOf":[{"$ref":"#/$defs/count"},{"type":"null"}]})") == "integer");
+    CHECK(kindOf(kDefs, R"({"anyOf":[{"type":["integer","null"]}]})") == "integer");
+    CHECK(kindOf(kDefs, R"({"anyOf":5,"type":"integer"})") == "integer");
+    CHECK(kindOf(kDefs, R"({"$ref":5,"type":"integer"})") == "integer");
+    CHECK(kindOf(kDefs, R"({"type":[5,"integer"]})") == "integer");
+    CHECK(kindOf(kDefs, R"({"type":"integer","x-widget":5})") == "integer");
+}
+
+TEST_CASE("Views::InferColumnKind::AnExactValueIsADecimalAndAQuantityWhenItCarriesUnits", "[views]") {
+    CHECK(kindOf(kDefs, R"({"$ref":"#/$defs/exact"})") == "decimal");
+    CHECK(kindOf(kDefs, R"({"$ref":"#/$defs/unit"})") == "quantity");
+    CHECK(kindOf(kDefs, R"({"$ref":"#/$defs/exact","ExtUnits":{"unitAscii":"g"}})") == "quantity");
+    CHECK(kindOf(kDefs, R"({"type":"object","properties":{"num":{"type":"integer"}}})") == "text");
+    CHECK(kindOf(kDefs, R"({"type":"object","properties":{"den":{"type":"integer"}}})") == "text");
+    CHECK(kindOf(kDefs, R"({"type":"object","properties":{"x":{"type":"integer"}}})") == "text");
+    CHECK(kindOf(kDefs, R"({"type":"object"})") == "text");
+}
