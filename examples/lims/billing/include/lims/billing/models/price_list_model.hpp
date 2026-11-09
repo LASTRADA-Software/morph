@@ -22,7 +22,9 @@ namespace lims {
 /// is billed in the currency it is registered with at a company. The price of an analysis on a date comes from the
 /// company's list in that currency with the latest start not after the date, the list in force; within it the
 /// client's own price wins over the list's. A list in force with no price for an analysis prices nothing, so an older
-/// list's price never shows through a newer list.
+/// list's price never shows through a newer list. A list stays open to new prices, including one already in force; a
+/// price is never changed (a second one for the same analysis and client is a `Conflict`), and a correction is a new
+/// list with a later effective date.
 class PriceListModel {
 public:
     /// @brief Sets a company's billing settings, replacing any it had.

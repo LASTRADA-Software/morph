@@ -7,9 +7,12 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 
 #include "lims/billing/db/billing_entity.hpp"
 #include "lims/billing/models/price_list_model.hpp"
@@ -35,7 +38,21 @@ namespace {
 
 constexpr std::string_view kSecret = "lims-price-lists-test-secret-at-least-32b";
 
-[[nodiscard]] lims::Amount euros(std::int64_t units) { return lims::Amount{Rational{units, DecimalPlaces{2}}}; }
+/// @brief The value of an optional the caller has just required, or a failure.
+/// @param value The optional.
+/// @return Its value.
+template <typename T>
+[[nodiscard]] T need(std::optional<T> value) {
+    if (!value.has_value()) {
+        throw std::logic_error{"a required optional is empty"};
+    }
+    return *std::move(value);
+}
+
+/// @brief An amount of hundredths of a unit: `amountOfCents(4000)` is 40.00.
+[[nodiscard]] lims::Amount amountOfCents(std::int64_t cents) {
+    return lims::Amount{Rational{cents, DecimalPlaces{2}}};
+}
 
 [[nodiscard]] morph::time::Timestamp day(unsigned month, unsigned dayOfMonth) {
     return morph::time::Timestamp{lims::test::at(2026, month, dayOfMonth, 0)};
@@ -48,25 +65,35 @@ constexpr std::string_view kSecret = "lims-price-lists-test-secret-at-least-32b"
 [[nodiscard]] lims::Count count(std::int64_t value) { return lims::Count{Rational{value, DecimalPlaces{0}}}; }
 
 [[nodiscard]] lims::SetBillingSettings settingsFor(lims::CompanyId company) {
-    return lims::SetBillingSettings{.company = company,
-                                    .receivableAccount = "1200",
-                                    .revenueAccount = "4000",
-                                    .taxAccount = "2200",
-                                    .roundingAccount = "6900",
-                                    .taxRate = taxRate(19, 100),
-                                    .approvalHours = count(48),
-                                    .billingDay = count(25)};
+    return lims::SetBillingSettings{
+        .company = company,
+        .receivableAccount = "1200",
+        .revenueAccount = "4000",
+        .taxAccount = "2200",
+        .roundingAccount = "6900",
+        .taxRate = taxRate(19, 100),
+        .approvalHours = count(48),
+        .billingDay = count(25),
+    };
 }
 
 [[nodiscard]] lims::CreatePriceList listFor(lims::CompanyId company, unsigned month = 10) {
     return lims::CreatePriceList{
-        .company = company, .name = "List", .currency = lims::CurrencyCode::EUR, .validFrom = day(month, 1)};
+        .company = company,
+        .name = "List",
+        .currency = lims::CurrencyCode::EUR,
+        .validFrom = day(month, 1),
+    };
 }
 
-[[nodiscard]] lims::SetPrice priceIn(lims::PriceListId list, std::int64_t analysis, std::int64_t cents,
-                                     lims::ClientId client = {}) {
+[[nodiscard]] lims::SetPrice priceInCents(lims::PriceListId list, std::int64_t analysis, std::int64_t cents,
+                                          lims::ClientId client = {}) {
     return lims::SetPrice{
-        .priceList = list, .analysis = lims::AnalysisId{analysis}, .client = client, .amount = euros(cents)};
+        .priceList = list,
+        .analysis = lims::AnalysisId{analysis},
+        .client = client,
+        .amount = amountOfCents(cents),
+    };
 }
 
 /// @brief A second company with a billing clerk, `dave`, and a supervisor, `sven`, who hold nothing at the seeded one.
@@ -75,9 +102,11 @@ lims::CompanyId secondCompany() {
     lims::test::grant("alice", lims::LimsRole::Supervisor);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
-    auto const osaka = org.execute(lims::CreateCompany{.name = "Osaka",
-                                                       .baseCurrency = lims::CurrencyCode::JPY,
-                                                       .fiscalYearStart = lims::Month::April})
+    auto const osaka = org.execute(lims::CreateCompany{
+                                       .name = "Osaka",
+                                       .baseCurrency = lims::CurrencyCode::JPY,
+                                       .fiscalYearStart = lims::Month::April,
+                                   })
                            .id;
     org.execute(
         lims::AssignRole{.principal = "dave", .role = lims::LimsRole::BillingClerk, .company = osaka, .site = {}});
@@ -100,38 +129,48 @@ TEST_CASE("price lists: the list in force on a date prices an analysis, a client
     lims::ClientId const brewery{2};
     lims::AnalysisId const nitrate{1};
     lims::AnalysisId const turbidity{2};
-    prices.execute(lims::RegisterBillingClient{.client = waterworks,
-                                               .company = lims::test::seededCompany(),
-                                               .name = "Waterworks",
-                                               .currency = lims::CurrencyCode::EUR});
-    prices.execute(lims::RegisterBillingClient{.client = brewery,
-                                               .company = lims::test::seededCompany(),
-                                               .name = "Brewery",
-                                               .currency = lims::CurrencyCode::EUR});
-    auto const october = prices.execute(lims::CreatePriceList{.company = lims::test::seededCompany(),
-                                                              .name = "2026 Q4",
-                                                              .currency = lims::CurrencyCode::EUR,
-                                                              .validFrom = day(10, 1)});
-    prices.execute(lims::SetPrice{.priceList = october.id, .analysis = nitrate, .client = {}, .amount = euros(40)});
+    prices.execute(lims::RegisterBillingClient{
+        .client = waterworks,
+        .company = lims::test::seededCompany(),
+        .name = "Waterworks",
+        .currency = lims::CurrencyCode::EUR,
+    });
+    prices.execute(lims::RegisterBillingClient{
+        .client = brewery,
+        .company = lims::test::seededCompany(),
+        .name = "Brewery",
+        .currency = lims::CurrencyCode::EUR,
+    });
+    auto const october = prices.execute(lims::CreatePriceList{
+        .company = lims::test::seededCompany(),
+        .name = "2026 Q4",
+        .currency = lims::CurrencyCode::EUR,
+        .validFrom = day(10, 1),
+    });
     prices.execute(
-        lims::SetPrice{.priceList = october.id, .analysis = nitrate, .client = brewery, .amount = euros(35)});
-    auto const december = prices.execute(lims::CreatePriceList{.company = lims::test::seededCompany(),
-                                                               .name = "December",
-                                                               .currency = lims::CurrencyCode::EUR,
-                                                               .validFrom = day(12, 1)});
-    prices.execute(lims::SetPrice{.priceList = december.id, .analysis = turbidity, .client = {}, .amount = euros(20)});
+        lims::SetPrice{.priceList = october.id, .analysis = nitrate, .client = {}, .amount = amountOfCents(40)});
+    prices.execute(
+        lims::SetPrice{.priceList = october.id, .analysis = nitrate, .client = brewery, .amount = amountOfCents(35)});
+    auto const december = prices.execute(lims::CreatePriceList{
+        .company = lims::test::seededCompany(),
+        .name = "December",
+        .currency = lims::CurrencyCode::EUR,
+        .validFrom = day(12, 1),
+    });
+    prices.execute(
+        lims::SetPrice{.priceList = december.id, .analysis = turbidity, .client = {}, .amount = amountOfCents(20)});
 
-    auto const quote = [](lims::ClientId client, lims::AnalysisId analysis, morph::time::Timestamp on) {
-        return lims::PriceListModel::priceOn(lims::test::seededCompany(), client, analysis, on);
+    auto const quote = [](lims::ClientId client, lims::AnalysisId analysis, morph::time::Timestamp when) {
+        return lims::PriceListModel::priceOn(lims::test::seededCompany(), client, analysis, when);
     };
     REQUIRE(quote(waterworks, nitrate, day(11, 10)).has_value());
-    CHECK(*quote(waterworks, nitrate, day(11, 10))->amount == Rational{40, DecimalPlaces{2}});
-    CHECK(quote(waterworks, nitrate, day(11, 10))->priceList == october.id);
-    CHECK(*quote(brewery, nitrate, day(11, 10))->amount == Rational{35, DecimalPlaces{2}});
+    CHECK(*need(quote(waterworks, nitrate, day(11, 10))).amount == Rational{40, DecimalPlaces{2}});
+    CHECK(need(quote(waterworks, nitrate, day(11, 10))).priceList == october.id);
+    CHECK(*need(quote(brewery, nitrate, day(11, 10))).amount == Rational{35, DecimalPlaces{2}});
     CHECK_FALSE(quote(waterworks, nitrate, day(12, 2)).has_value());
     REQUIRE(quote(waterworks, turbidity, day(12, 2)).has_value());
-    CHECK(*quote(waterworks, turbidity, day(12, 2))->amount == Rational{20, DecimalPlaces{2}});
-    CHECK(quote(waterworks, turbidity, day(12, 2))->priceList == december.id);
+    CHECK(*need(quote(waterworks, turbidity, day(12, 2))).amount == Rational{20, DecimalPlaces{2}});
+    CHECK(need(quote(waterworks, turbidity, day(12, 2))).priceList == december.id);
     CHECK_FALSE(quote(waterworks, nitrate, day(9, 30)).has_value());
     CHECK_FALSE(quote(lims::ClientId{3}, nitrate, day(11, 10)).has_value());
     CHECK_FALSE(quote(waterworks, lims::AnalysisId{}, day(11, 10)).has_value());
@@ -141,7 +180,11 @@ TEST_CASE("price lists: the list in force on a date prices an analysis, a client
 
     // The same question as an action.
     auto const asked = prices.execute(lims::QuotePrice{
-        .company = lims::test::seededCompany(), .client = brewery, .analysis = nitrate, .on = day(11, 10)});
+        .company = lims::test::seededCompany(),
+        .client = brewery,
+        .analysis = nitrate,
+        .on = day(11, 10),
+    });
     CHECK(*asked.amount == Rational{35, DecimalPlaces{2}});
     CHECK(asked.currency == lims::CurrencyCode::EUR);
     CHECK_THROWS_AS(
@@ -162,15 +205,19 @@ TEST_CASE("price lists: a client is priced from the lists of its own currency an
     ScopedPrincipal const bea{"bea"};
     lims::PriceListModel prices;
     auto const eur = prices.execute(listFor(lims::test::seededCompany()));
-    prices.execute(priceIn(eur.id, 1, 40));
-    prices.execute(lims::RegisterBillingClient{.client = lims::ClientId{1},
-                                               .company = lims::test::seededCompany(),
-                                               .name = "US client",
-                                               .currency = lims::CurrencyCode::USD});
-    prices.execute(lims::RegisterBillingClient{.client = lims::ClientId{2},
-                                               .company = lims::test::seededCompany(),
-                                               .name = "EU client",
-                                               .currency = lims::CurrencyCode::EUR});
+    prices.execute(priceInCents(eur.id, 1, 40));
+    prices.execute(lims::RegisterBillingClient{
+        .client = lims::ClientId{1},
+        .company = lims::test::seededCompany(),
+        .name = "US client",
+        .currency = lims::CurrencyCode::USD,
+    });
+    prices.execute(lims::RegisterBillingClient{
+        .client = lims::ClientId{2},
+        .company = lims::test::seededCompany(),
+        .name = "EU client",
+        .currency = lims::CurrencyCode::EUR,
+    });
     auto const quote = [](lims::CompanyId company, lims::ClientId client) {
         return lims::PriceListModel::priceOn(company, client, lims::AnalysisId{1}, day(11, 1));
     };
@@ -191,10 +238,12 @@ TEST_CASE("price lists: a JPY list holds whole yen, and a client is registered o
     lims::test::grant("bea", lims::LimsRole::BillingClerk);
     ScopedPrincipal const bea{"bea"};
     lims::PriceListModel prices;
-    auto const yen = prices.execute(lims::CreatePriceList{.company = lims::test::seededCompany(),
-                                                          .name = "Yen",
-                                                          .currency = lims::CurrencyCode::JPY,
-                                                          .validFrom = day(1, 1)});
+    auto const yen = prices.execute(lims::CreatePriceList{
+        .company = lims::test::seededCompany(),
+        .name = "Yen",
+        .currency = lims::CurrencyCode::JPY,
+        .validFrom = day(1, 1),
+    });
     CHECK_THROWS_AS(prices.execute(lims::SetPrice{
                         .priceList = yen.id,
                         .analysis = lims::AnalysisId{1},
@@ -215,10 +264,12 @@ TEST_CASE("price lists: a JPY list holds whole yen, and a client is registered o
                         .client = {},
                         .amount = lims::Amount{Rational{Numerator{1}, Denominator{3}, DecimalPlaces{2}}}}),
                     lims::ValidationError);
-    prices.execute(lims::RegisterBillingClient{.client = lims::ClientId{1},
-                                               .company = lims::test::seededCompany(),
-                                               .name = "W",
-                                               .currency = lims::CurrencyCode::JPY});
+    prices.execute(lims::RegisterBillingClient{
+        .client = lims::ClientId{1},
+        .company = lims::test::seededCompany(),
+        .name = "W",
+        .currency = lims::CurrencyCode::JPY,
+    });
     CHECK_THROWS_AS(prices.execute(lims::RegisterBillingClient{.client = lims::ClientId{1},
                                                                .company = lims::test::seededCompany(),
                                                                .name = "W",
@@ -226,8 +277,8 @@ TEST_CASE("price lists: a JPY list holds whole yen, and a client is registered o
                     lims::Conflict);
     auto const registered = lims::PriceListModel::billingClient(lims::ClientId{1}, lims::test::seededCompany());
     REQUIRE(registered.has_value());
-    CHECK(registered->currency == lims::CurrencyCode::JPY);
-    CHECK(registered->name == "W");
+    CHECK(need(registered).currency == lims::CurrencyCode::JPY);
+    CHECK(need(registered).name == "W");
 }
 
 // Mutations: accept a billing day of 29; accept a tax rate above 1; accept a negative tax rate; accept a tax rate
@@ -247,37 +298,39 @@ TEST_CASE("price lists: a supervisor sets a company's billing settings, within t
     CHECK(saved.revenueAccount == "4000");
     auto const stored = lims::PriceListModel::settingsOf(lims::test::seededCompany());
     REQUIRE(stored.has_value());
-    CHECK(stored->company == lims::test::seededCompany());
-    CHECK(stored->receivableAccount == "1200");
-    CHECK(stored->revenueAccount == "4000");
-    CHECK(stored->taxAccount == "2200");
-    CHECK(stored->roundingAccount == "6900");
-    CHECK(*stored->taxRate == Rational{Numerator{19}, Denominator{100}, DecimalPlaces{6}});
-    CHECK(*stored->approvalHours == Rational{48, DecimalPlaces{0}});
-    CHECK(*stored->billingDay == Rational{25, DecimalPlaces{0}});
+    CHECK(need(stored).company == lims::test::seededCompany());
+    CHECK(need(stored).receivableAccount == "1200");
+    CHECK(need(stored).revenueAccount == "4000");
+    CHECK(need(stored).taxAccount == "2200");
+    CHECK(need(stored).roundingAccount == "6900");
+    CHECK(*need(stored).taxRate == Rational{Numerator{19}, Denominator{100}, DecimalPlaces{6}});
+    CHECK(*need(stored).approvalHours == Rational{48, DecimalPlaces{0}});
+    CHECK(*need(stored).billingDay == Rational{25, DecimalPlaces{0}});
 
     auto const refused = [&](auto edit) {
         lims::SetBillingSettings bad = settingsFor(lims::test::seededCompany());
         edit(bad);
         CHECK_THROWS_AS(prices.execute(bad), lims::ValidationError);
     };
-    refused([](auto& s) { s.billingDay = count(29); });
-    refused([](auto& s) { s.billingDay = count(0); });
-    refused([](auto& s) { s.billingDay = lims::Count{Rational{Numerator{5}, Denominator{2}, DecimalPlaces{1}}}; });
-    refused([](auto& s) { s.taxRate = lims::Rate{Rational{2, DecimalPlaces{6}}}; });
-    refused([](auto& s) { s.taxRate = taxRate(1000001, 1000000); });
-    refused([](auto& s) { s.taxRate = taxRate(-1, 100); });
-    refused([](auto& s) { s.taxRate = taxRate(1, 3); });
-    refused([](auto& s) { s.approvalHours = count(0); });
-    refused([](auto& s) { s.approvalHours = count(721); });
-    refused([](auto& s) { s.receivableAccount = ""; });
-    refused([](auto& s) { s.revenueAccount = "4000 "; });
-    refused([](auto& s) { s.taxAccount = "tax"; });
-    refused([](auto& s) { s.roundingAccount = "12345678901234567"; });
-    refused([](auto& s) { s.taxRate = lims::Rate{}; });
-    refused([](auto& s) { s.approvalHours = lims::Count{}; });
-    refused([](auto& s) { s.billingDay = lims::Count{}; });
-    refused([](auto& s) { s.company = lims::CompanyId{}; });
+    refused([](auto& settings) { settings.billingDay = count(29); });
+    refused([](auto& settings) { settings.billingDay = count(0); });
+    refused([](auto& settings) {
+        settings.billingDay = lims::Count{Rational{Numerator{5}, Denominator{2}, DecimalPlaces{1}}};
+    });
+    refused([](auto& settings) { settings.taxRate = lims::Rate{Rational{2, DecimalPlaces{6}}}; });
+    refused([](auto& settings) { settings.taxRate = taxRate(1000001, 1000000); });
+    refused([](auto& settings) { settings.taxRate = taxRate(-1, 100); });
+    refused([](auto& settings) { settings.taxRate = taxRate(1, 3); });
+    refused([](auto& settings) { settings.approvalHours = count(0); });
+    refused([](auto& settings) { settings.approvalHours = count(721); });
+    refused([](auto& settings) { settings.receivableAccount = ""; });
+    refused([](auto& settings) { settings.revenueAccount = "4000 "; });
+    refused([](auto& settings) { settings.taxAccount = "tax"; });
+    refused([](auto& settings) { settings.roundingAccount = "12345678901234567"; });
+    refused([](auto& settings) { settings.taxRate = lims::Rate{}; });
+    refused([](auto& settings) { settings.approvalHours = lims::Count{}; });
+    refused([](auto& settings) { settings.billingDay = lims::Count{}; });
+    refused([](auto& settings) { settings.company = lims::CompanyId{}; });
     // The edges are accepted.
     settings.billingDay = count(28);
     settings.approvalHours = count(720);
@@ -318,8 +371,8 @@ TEST_CASE("price lists: each write is a role's, at the company, and a missing th
                             .client = lims::ClientId{1}, .company = lims::test::seededCompany(), .name = "C"}),
                         lims::Forbidden);
         CHECK_THROWS_AS(prices.execute(listFor(lims::test::seededCompany())), lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(priceIn(list, 1, 10)), lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(priceIn(lims::PriceListId{9999}, 1, 10)), lims::Forbidden);
+        CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, 10)), lims::Forbidden);
+        CHECK_THROWS_AS(prices.execute(priceInCents(lims::PriceListId{9999}, 1, 10)), lims::Forbidden);
     }
     {
         // A role of the wrong kind is no role: a clerk does not set settings, a supervisor does not price.
@@ -330,7 +383,7 @@ TEST_CASE("price lists: each write is a role's, at the company, and a missing th
                             .client = lims::ClientId{1}, .company = lims::test::seededCompany(), .name = "C"}),
                         lims::Forbidden);
         CHECK_THROWS_AS(prices.execute(listFor(lims::test::seededCompany())), lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(priceIn(list, 1, 10)), lims::Forbidden);
+        CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, 10)), lims::Forbidden);
     }
     {
         // A role at another company is a role somewhere, so what does not exist is a NotFound; for the company it
@@ -340,12 +393,12 @@ TEST_CASE("price lists: each write is a role's, at the company, and a missing th
         CHECK_THROWS_AS(prices.execute(lims::RegisterBillingClient{
                             .client = lims::ClientId{1}, .company = lims::CompanyId{9999}, .name = "C"}),
                         lims::NotFound);
-        CHECK_THROWS_AS(prices.execute(priceIn(lims::PriceListId{9999}, 1, 10)), lims::NotFound);
+        CHECK_THROWS_AS(prices.execute(priceInCents(lims::PriceListId{9999}, 1, 10)), lims::NotFound);
         CHECK_THROWS_AS(prices.execute(listFor(lims::test::seededCompany())), lims::Forbidden);
         CHECK_THROWS_AS(prices.execute(lims::RegisterBillingClient{
                             .client = lims::ClientId{1}, .company = lims::test::seededCompany(), .name = "C"}),
                         lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(priceIn(list, 1, 10)), lims::Forbidden);
+        CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, 10)), lims::Forbidden);
         CHECK_NOTHROW(prices.execute(listFor(osaka)));
     }
     {
@@ -359,7 +412,10 @@ TEST_CASE("price lists: each write is a role's, at the company, and a missing th
     ScopedPrincipal const bea{"bea"};
     SECTION("a malformed request is a ValidationError, before anything is looked up") {
         auto client = lims::RegisterBillingClient{
-            .client = lims::ClientId{1}, .company = lims::test::seededCompany(), .name = "C"};
+            .client = lims::ClientId{1},
+            .company = lims::test::seededCompany(),
+            .name = "C",
+        };
         client.client = lims::ClientId{};
         CHECK_THROWS_AS(prices.execute(client), lims::ValidationError);
         client.client = lims::ClientId{1};
@@ -385,37 +441,52 @@ TEST_CASE("price lists: each write is a role's, at the company, and a missing th
         bad.name = std::string(129, 'x');
         CHECK_THROWS_AS(prices.execute(bad), lims::ValidationError);
 
-        CHECK_THROWS_AS(prices.execute(priceIn(lims::PriceListId{}, 1, 10)), lims::ValidationError);
-        CHECK_THROWS_AS(
-            prices.execute(lims::SetPrice{.priceList = list, .analysis = {}, .client = {}, .amount = euros(1)}),
-            lims::ValidationError);
+        CHECK_THROWS_AS(prices.execute(priceInCents(lims::PriceListId{}, 1, 10)), lims::ValidationError);
+        CHECK_THROWS_AS(prices.execute(lims::SetPrice{
+                            .priceList = list, .analysis = {}, .client = {}, .amount = amountOfCents(1)}),
+                        lims::ValidationError);
         CHECK_THROWS_AS(prices.execute(lims::SetPrice{
                             .priceList = list, .analysis = lims::AnalysisId{1}, .client = {}, .amount = {}}),
                         lims::ValidationError);
-        CHECK_THROWS_AS(prices.execute(priceIn(list, 1, -1)), lims::ValidationError);
+        CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, -1)), lims::ValidationError);
         CHECK_THROWS_AS(prices.execute(lims::ListPriceLists{}), lims::ValidationError);
         CHECK_THROWS_AS(prices.execute(lims::GetBillingSettings{}), lims::ValidationError);
         CHECK_THROWS_AS(prices.execute(lims::QuotePrice{}), lims::ValidationError);
         CHECK(prices.execute(lims::ListPriceLists{.company = lims::test::seededCompany()}).priceLists.size() == 1U);
     }
     SECTION("a price is set once per list, analysis and client, and may be zero") {
-        auto const first = prices.execute(priceIn(list, 1, 4000));
+        auto const first = prices.execute(priceInCents(list, 1, 4000));
         CHECK(first.id.hasValue());
         CHECK_FALSE(first.client.hasValue());
         CHECK(first.analysis == lims::AnalysisId{1});
         CHECK(*first.amount == Rational{4000, DecimalPlaces{2}});
-        CHECK_THROWS_AS(prices.execute(priceIn(list, 1, 4100)), lims::Conflict);
+        CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, 4100)), lims::Conflict);
         // Another client, another analysis and a free price are other rows.
-        CHECK_NOTHROW(prices.execute(priceIn(list, 1, 3500, lims::ClientId{2})));
-        CHECK_THROWS_AS(prices.execute(priceIn(list, 1, 3600, lims::ClientId{2})), lims::Conflict);
-        CHECK_NOTHROW(prices.execute(priceIn(list, 2, 0)));
+        CHECK_NOTHROW(prices.execute(priceInCents(list, 1, 3500, lims::ClientId{2})));
+        CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, 3600, lims::ClientId{2})), lims::Conflict);
+        CHECK_NOTHROW(prices.execute(priceInCents(list, 2, 0)));
         auto const shown = prices.execute(lims::ListPriceLists{.company = lims::test::seededCompany()});
         REQUIRE(shown.priceLists.size() == 1U);
         REQUIRE(shown.priceLists.front().prices.size() == 3U);
-        CHECK(shown.priceLists.front().prices[0].analysis == lims::AnalysisId{1});
-        CHECK_FALSE(shown.priceLists.front().prices[0].client.hasValue());
-        CHECK(shown.priceLists.front().prices[1].client == lims::ClientId{2});
-        CHECK(shown.priceLists.front().prices[2].analysis == lims::AnalysisId{2});
+        CHECK(shown.priceLists.front().prices.at(0).analysis == lims::AnalysisId{1});
+        CHECK_FALSE(shown.priceLists.front().prices.at(0).client.hasValue());
+        CHECK(shown.priceLists.front().prices.at(1).client == lims::ClientId{2});
+        CHECK(shown.priceLists.front().prices.at(2).analysis == lims::AnalysisId{2});
+    }
+    SECTION("client 0 and a negative client are refused and write nothing") {
+        auto const clientsBefore = prices.execute(lims::ListBillingClients{}).clients.size();
+        for (std::int64_t const bad : {std::int64_t{0}, std::int64_t{-3}}) {
+            CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, 4000, lims::ClientId{bad})), lims::ValidationError);
+            CHECK_THROWS_AS(prices.execute(lims::RegisterBillingClient{
+                                .client = lims::ClientId{bad}, .company = lims::test::seededCompany(), .name = "C"}),
+                            lims::ValidationError);
+        }
+        auto const shown = prices.execute(lims::ListPriceLists{.company = lims::test::seededCompany()});
+        REQUIRE(shown.priceLists.size() == 1U);
+        CHECK(shown.priceLists.front().prices.empty());
+        CHECK(prices.execute(lims::ListBillingClients{}).clients.size() == clientsBefore);
+        // The list's own price is still free to be set once.
+        CHECK_NOTHROW(prices.execute(priceInCents(list, 1, 4000)));
     }
     SECTION("a company has one list per currency and start") {
         CHECK_THROWS_AS(prices.execute(listFor(lims::test::seededCompany())), lims::Conflict);
@@ -435,9 +506,12 @@ TEST_CASE("price lists: a list or a read shows only a company the caller can see
     {
         ScopedPrincipal const bea{"bea"};
         auto const list = prices.execute(listFor(lims::test::seededCompany()));
-        prices.execute(priceIn(list.id, 1, 4000));
+        prices.execute(priceInCents(list.id, 1, 4000));
         prices.execute(lims::RegisterBillingClient{
-            .client = lims::ClientId{1}, .company = lims::test::seededCompany(), .name = "Waterworks"});
+            .client = lims::ClientId{1},
+            .company = lims::test::seededCompany(),
+            .name = "Waterworks",
+        });
     }
     {
         ScopedPrincipal const sven{"sven"};
@@ -445,19 +519,20 @@ TEST_CASE("price lists: a list or a read shows only a company the caller can see
     }
     {
         ScopedPrincipal const dave{"dave"};
-        prices.execute(lims::RegisterBillingClient{.client = lims::ClientId{1},
-                                                   .company = osaka,
-                                                   .name = "Waterworks Japan",
-                                                   .currency = lims::CurrencyCode::JPY});
-        prices.execute(
-            lims::RegisterBillingClient{.client = lims::ClientId{0 + 7}, .company = osaka, .name = "Another"});
+        prices.execute(lims::RegisterBillingClient{
+            .client = lims::ClientId{1},
+            .company = osaka,
+            .name = "Waterworks Japan",
+            .currency = lims::CurrencyCode::JPY,
+        });
+        prices.execute(lims::RegisterBillingClient{.client = lims::ClientId{7}, .company = osaka, .name = "Another"});
         CHECK(prices.execute(lims::ListPriceLists{.company = lims::test::seededCompany()}).priceLists.empty());
         auto const clients = prices.execute(lims::ListBillingClients{}).clients;
         REQUIRE(clients.size() == 2U);
-        CHECK(clients[0].company == osaka);
-        CHECK(clients[0].client == lims::ClientId{1});
-        CHECK(clients[0].currency == lims::CurrencyCode::JPY);
-        CHECK(clients[1].client == lims::ClientId{7});
+        CHECK(clients.at(0).company == osaka);
+        CHECK(clients.at(0).client == lims::ClientId{1});
+        CHECK(clients.at(0).currency == lims::CurrencyCode::JPY);
+        CHECK(clients.at(1).client == lims::ClientId{7});
         CHECK_THROWS_AS(prices.execute(lims::GetBillingSettings{.company = lims::test::seededCompany()}),
                         lims::NotFound);
         CHECK_NOTHROW(prices.execute(lims::GetBillingSettings{.company = osaka}));
@@ -489,8 +564,8 @@ TEST_CASE("price lists: a company's lists are shown by start", "[lims][billing][
     auto const october = prices.execute(listFor(lims::test::seededCompany(), 10));
     auto const shown = prices.execute(lims::ListPriceLists{.company = lims::test::seededCompany()}).priceLists;
     REQUIRE(shown.size() == 2U);
-    CHECK(shown[0].id == october.id);
-    CHECK(shown[1].id == december.id);
+    CHECK(shown.at(0).id == october.id);
+    CHECK(shown.at(1).id == december.id);
 }
 
 // Mutations: rethrow the SqlException from storeClient, storePriceList or storePrice instead of answering Conflict;
@@ -508,25 +583,31 @@ TEST_CASE("price lists: a key stored by a concurrent call between the lookup and
     };
     SECTION("a billing client") {
         lims::RegisterBillingClient const loser{
-            .client = lims::ClientId{1}, .company = company, .name = "Loser", .currency = lims::CurrencyCode::EUR};
-        auto winner = [&] {
+            .client = lims::ClientId{1},
+            .company = company,
+            .name = "Loser",
+            .currency = lims::CurrencyCode::EUR,
+        };
+        auto const winner = [&] {
             inThread([&] {
-                static_cast<void>(
-                    lims::PriceListModel::storeClient(lims::RegisterBillingClient{.client = loser.client,
-                                                                                  .company = company,
-                                                                                  .name = "Winner",
-                                                                                  .currency = lims::CurrencyCode::USD},
-                                                      {}));
+                static_cast<void>(lims::PriceListModel::storeClient(
+                    lims::RegisterBillingClient{
+                        .client = loser.client,
+                        .company = company,
+                        .name = "Winner",
+                        .currency = lims::CurrencyCode::USD,
+                    },
+                    {}));
             });
         };
         CHECK_THROWS_AS(static_cast<void>(lims::PriceListModel::storeClient(loser, winner)), lims::Conflict);
         auto const kept = lims::PriceListModel::billingClient(loser.client, company);
         REQUIRE(kept.has_value());
-        CHECK(kept->name == "Winner");
+        CHECK(need(kept).name == "Winner");
     }
     SECTION("a price list") {
         auto const loser = listFor(company);
-        auto winner = [&] {
+        auto const winner = [&] {
             inThread([&] {
                 auto other = listFor(company);
                 other.name = "Winner";
@@ -547,10 +628,10 @@ TEST_CASE("price lists: a key stored by a concurrent call between the lookup and
             ScopedPrincipal const bea{"bea"};
             list = lims::PriceListModel{}.execute(listFor(company)).id;
         }
-        auto winner = [&] {
-            inThread([&] { static_cast<void>(lims::PriceListModel::storePrice(priceIn(list, 1, 9900), {})); });
+        auto const winner = [&] {
+            inThread([&] { static_cast<void>(lims::PriceListModel::storePrice(priceInCents(list, 1, 9900), {})); });
         };
-        CHECK_THROWS_AS(static_cast<void>(lims::PriceListModel::storePrice(priceIn(list, 1, 4000), winner)),
+        CHECK_THROWS_AS(static_cast<void>(lims::PriceListModel::storePrice(priceInCents(list, 1, 4000), winner)),
                         lims::Conflict);
         ScopedPrincipal const bea{"bea"};
         auto const shown = lims::PriceListModel{}.execute(lims::ListPriceLists{.company = company}).priceLists;
@@ -559,7 +640,7 @@ TEST_CASE("price lists: a key stored by a concurrent call between the lookup and
         CHECK(*shown.front().prices.front().amount == Rational{9900, DecimalPlaces{2}});
     }
     SECTION("settings: the loser replaces the winner's") {
-        auto winner = [&] {
+        auto const winner = [&] {
             inThread([&] {
                 auto other = settingsFor(company);
                 other.revenueAccount = "9999";
@@ -570,7 +651,7 @@ TEST_CASE("price lists: a key stored by a concurrent call between the lookup and
         CHECK(stored.revenueAccount == "4000");
         auto const read = lims::PriceListModel::settingsOf(company);
         REQUIRE(read.has_value());
-        CHECK(read->revenueAccount == "4000");
+        CHECK(need(read).revenueAccount == "4000");
         Lightweight::DataMapper mapper;
         CHECK(mapper.Query<lims::db::BillingSettingsRecord>().All().size() == 1U);
     }
@@ -625,13 +706,18 @@ TEST_CASE("PriceListModel over the full backend-mode matrix: a price list and a 
     rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "bea"));
     auto prices = rig.client<lims::PriceListModel>(0);
     awaitQt(prices.execute(lims::RegisterBillingClient{
-        .client = lims::ClientId{1}, .company = lims::test::seededCompany(), .name = "Waterworks"}));
+        .client = lims::ClientId{1},
+        .company = lims::test::seededCompany(),
+        .name = "Waterworks",
+    }));
     auto const list = awaitQt(prices.execute(listFor(lims::test::seededCompany())));
-    awaitQt(prices.execute(priceIn(list.id, 1, 4000)));
-    auto const quote = awaitQt(prices.execute(lims::QuotePrice{.company = lims::test::seededCompany(),
-                                                               .client = lims::ClientId{1},
-                                                               .analysis = lims::AnalysisId{1},
-                                                               .on = day(11, 1)}));
+    awaitQt(prices.execute(priceInCents(list.id, 1, 4000)));
+    auto const quote = awaitQt(prices.execute(lims::QuotePrice{
+        .company = lims::test::seededCompany(),
+        .client = lims::ClientId{1},
+        .analysis = lims::AnalysisId{1},
+        .on = day(11, 1),
+    }));
     CHECK(*quote.amount == Rational{4000, DecimalPlaces{2}});
     CHECK(quote.priceList == list.id);
     auto const shown =

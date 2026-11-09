@@ -305,7 +305,8 @@ BillingSettingsView PriceListModel::execute(const GetBillingSettings& action) {
 BillingClientView PriceListModel::execute(const RegisterBillingClient& action) {
     requirePrincipal();
     if (!action.validate()) {
-        throw ValidationError{"RegisterBillingClient: a client, a company and a name of 1 to 128 bytes are required"};
+        throw ValidationError{
+            "RegisterBillingClient: a client above zero, a company and a name of 1 to 128 bytes are required"};
     }
     requireRoleSomewhere<RegisterBillingClient>();
     requireCompany("RegisterBillingClient", action.company);
@@ -417,7 +418,8 @@ PriceListView PriceListModel::storePriceList(CreatePriceList const& action,
 PriceView PriceListModel::execute(const SetPrice& action) {
     requirePrincipal();
     if (!action.validate()) {
-        throw ValidationError{"SetPrice: a price list, an analysis and an amount are required"};
+        throw ValidationError{
+            "SetPrice: a price list, an analysis, an amount and, if given, a client above zero are required"};
     }
     if ((*action.amount).isNegative()) {
         throw ValidationError{"SetPrice: a price cannot be negative"};
@@ -447,14 +449,17 @@ PriceView PriceListModel::storePrice(SetPrice const& action, std::function<void(
     };
     return guardedInsert(
         [&] {
-            Lightweight::DataMapper lookup;
-            auto const list = listRow(lookup, action.priceList);
-            if (!list.has_value()) {
-                throw NotFound{"SetPrice: price list " + std::to_string(*action.priceList) + " does not exist"};
-            }
-            if (priceRow(lookup, action).has_value()) {
-                throw conflict();
-            }
+            auto const list = std::invoke([&] {
+                Lightweight::DataMapper lookup;
+                auto found = listRow(lookup, action.priceList);
+                if (!found.has_value()) {
+                    throw NotFound{"SetPrice: price list " + std::to_string(*action.priceList) + " does not exist"};
+                }
+                if (priceRow(lookup, action).has_value()) {
+                    throw conflict();
+                }
+                return found;
+            });
             if (betweenLookupAndInsert) {
                 betweenLookupAndInsert();
             }

@@ -954,7 +954,10 @@ race to it is answered as a `Conflict`, like the lookup that precedes it. A comp
 receivable, revenue, tax and rounding account codes, its flat tax rate from 0 to 1 with at most six decimals, how many
 hours an approval may wait, 1 to 720, and the day of the month the billing run drafts invoices, 1 to 28 so that every
 month has it) are a supervisor's; setting them again replaces them. The account codes are text: billing does not read
-the ledger's chart, and the ledger refuses a posting that names a code it lacks.
+the ledger's chart, and the ledger refuses a posting that names a code it lacks. A list stays open to new prices, including one already in
+force; a price is never changed (a second one for the same analysis and client is a `Conflict`), and a correction is
+a new list with a later effective date. A client id is above zero wherever one is given, since 0 is the stored key of
+the list's own price.
 
 ## Findings raised by this rung
 

@@ -80,9 +80,10 @@ struct SetPrice {
     Amount amount;
 
     /// @brief Whether the price is well-formed.
-    /// @return `true` when a list, an analysis and an amount are named.
+    /// @return `true` when a list, an analysis and an amount are named, and a client, if given, is above zero (the
+    ///         stored key 0 means the list's own price).
     [[nodiscard]] bool validate() const noexcept {
-        return priceList.hasValue() && analysis.hasValue() && amount.hasValue();
+        return priceList.hasValue() && analysis.hasValue() && amount.hasValue() && (!client.hasValue() || *client > 0);
     }
 
     /// @brief Sent by its button, never per keystroke.

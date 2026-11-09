@@ -9,6 +9,7 @@
 
 #include "lims/billing/core/types.hpp"
 #include "lims/org/core/money.hpp"
+#include "lims/org/core/references.hpp"
 #include "lims/org/core/types.hpp"
 
 /// @file
@@ -102,9 +103,9 @@ struct RegisterBillingClient {
     CurrencyCode currency = CurrencyCode::EUR;
 
     /// @brief Whether the registration is well-formed.
-    /// @return `true` when a client, a company and a name of 1 to 128 bytes are named.
+    /// @return `true` when a client above zero, a company and a name of 1 to 128 bytes are named.
     [[nodiscard]] bool validate() const noexcept {
-        return client.hasValue() && company.hasValue() && !name.empty() && name.size() <= 128;
+        return client.hasValue() && *client > 0 && company.hasValue() && !name.empty() && name.size() <= 128;
     }
 
     /// @brief Sent by its button, never per keystroke.
