@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <cstdint>
+#include <glaze/glaze.hpp>
+
+#include "lims/org/core/strong_id.hpp"
+
+/// @file
+/// The ledger's identities and closed sets.
+
+namespace lims {
+
+LIMS_DEFINE_STRONG_ID(AccountId);
+LIMS_DEFINE_STRONG_ID(PeriodId);
+
+/// @brief What an account records.
+enum class AccountType : std::uint8_t {
+    Asset,      ///< What the company owns or is owed.
+    Liability,  ///< What it owes.
+    Equity,     ///< What its owners hold.
+    Revenue,    ///< What it earns.
+    Expense,    ///< What it spends.
+};
+
+/// @brief Where a month of the books stands.
+enum class PeriodState : std::uint8_t {
+    Open,     ///< Entries are drafted and posted.
+    Closing,  ///< No new drafts; postings and the drafts already there may still be posted.
+    Closed,   ///< Frozen: nothing more is recorded in it.
+};
+
+}  // namespace lims
+
+LIMS_DEFINE_STRONG_ID_WIRE(AccountId);
+LIMS_DEFINE_STRONG_ID_WIRE(PeriodId);
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(AccountId, "lims.accountId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(PeriodId, "lims.periodId");
+
+/// @brief Reflects `AccountType` as its enumerator name.
+template <>
+struct glz::meta<lims::AccountType> {
+    using enum lims::AccountType;
+
+    /// @brief The enumerator ⇄ name mapping glaze reads and writes.
+    static constexpr auto value = glz::enumerate(Asset, Liability, Equity, Revenue, Expense);
+};
+
+/// @brief Reflects `PeriodState` as its enumerator name.
+template <>
+struct glz::meta<lims::PeriodState> {
+    using enum lims::PeriodState;
+
+    /// @brief The enumerator ⇄ name mapping glaze reads and writes.
+    static constexpr auto value = glz::enumerate(Open, Closing, Closed);
+};

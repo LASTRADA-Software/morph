@@ -2,12 +2,18 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <memory>
 #include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+#include <morph/util/datetime.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
 
+#include "lims/app/lims_authorizer.hpp"
 #include "lims/org/core/types.hpp"
 #include "lims/org/db/org_entity.hpp"
 #include "lims/org/dto/role_dto.hpp"
@@ -96,5 +102,37 @@ public:
         }
     }
 };
+
+/// @brief A UTC instant on a calendar day.
+/// @param year The year.
+/// @param month The month, 1 to 12.
+/// @param day The day.
+/// @param hour The hour.
+/// @return The instant.
+[[nodiscard]] inline morph::time::DateTime at(int year, unsigned month, unsigned day, int hour = 9) {
+    return morph::time::DateTime{std::chrono::year{year},  std::chrono::month{month}, std::chrono::day{day},
+                                 std::chrono::hours{hour}, std::chrono::minutes{0},   std::chrono::seconds{0}};
+}
+
+/// @brief A signed session for @p principal.
+/// @param issuer The issuer.
+/// @param principal The principal.
+/// @return The context, with the token and the principal set.
+[[nodiscard]] inline morph::session::Context signedAs(morph::session::TokenIssuer const& issuer,
+                                                      std::string principal) {
+    morph::session::Context ctx;
+    ctx.principal = principal;
+    ctx.token = issuer.issue(morph::session::SessionToken{
+        .principal = std::move(principal), .issuedAtMs = 0, .expiresAtMs = 4102444800000, .roles = {}});
+    return ctx;
+}
+
+/// @brief The server's authorizer, reading roles where production does.
+/// @param secret The token secret.
+/// @return The authorizer.
+[[nodiscard]] inline std::shared_ptr<lims::auth::LimsAuthorizer> limsAuthorizer(std::string_view secret) {
+    return std::make_shared<lims::auth::LimsAuthorizer>(
+        std::string{secret}, [](std::string_view principal) { return lims::OrgModel::rolesAnywhere(principal); });
+}
 
 }  // namespace lims::test

@@ -41,6 +41,7 @@
 #include "lims/lab/models/analysis_catalog_model.hpp"
 #include "lims/lab/models/ignition_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
+#include "lims/ledger/authorization/ledger_authorization.hpp"
 #include "lims/org/authorization/declared.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/db/org_entity.hpp"
@@ -364,7 +365,8 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
                    lims::VerifyResult, lims::NewSample, lims::LoadSample, lims::SaveSample, lims::DeleteSample,
                    lims::HeaderSection, lims::SamplingSection, lims::TurbiditySection, lims::NitrateSection,
                    lims::ClearOptionalMeasurement, lims::SelectProject, lims::AddIgnitionTest,
-                   lims::RecordIgnitionValues, lims::DeleteIgnitionTest, lims::SetValueLimit>;
+                   lims::RecordIgnitionValues, lims::DeleteIgnitionTest, lims::SetValueLimit, lims::CreateAccount,
+                   lims::OpenPeriod, lims::BeginClosePeriod>;
     std::set<std::string_view> listed;
     std::set<std::string_view> declared;
     std::apply(
@@ -409,7 +411,8 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
     std::set<std::string_view> const effectless{"RegisterClient"};
     auto const& dispatcher = morph::model::detail::ActionDispatcher::instance();
     std::set<std::string> withEffects;
-    for (std::string_view const model : {"OrgModel", "SampleModel", "AnalysisCatalogModel", "IgnitionModel"}) {
+    for (std::string_view const model :
+         {"OrgModel", "SampleModel", "AnalysisCatalogModel", "IgnitionModel", "LedgerModel"}) {
         for (auto const& actionId : dispatcher.actionsOf(model)) {
             auto const effects = morph::effects::effectsOf(actionId);
             bool const mutates =
