@@ -249,18 +249,17 @@ public:
 
     /// @brief Records the four-eyes verification of one captured result.
     ///
-    /// Both halves of the control are enforced here, because only one of them
-    /// *can* be enforced anywhere else: the caller must hold
-    /// `LimsRole::Verifier` (which `lims::auth::LimsAuthorizer` also checks at
-    /// the `RemoteServer` edge, and which is re-checked here because no
-    /// authorizer runs on the `Local` path), and the caller must not be the
-    /// analyst who captured the result (which `IAuthorizer` structurally
-    /// cannot express — it never sees the result).
+    /// Both halves of the control are checked here, as
+    /// `lims::Authorization<VerifyResult>` declares them: the caller must hold
+    /// `LimsRole::Verifier` at the sample's site (a role at its company holds
+    /// there), and must not be the analyst who captured the result.
+    /// `lims::auth::LimsAuthorizer` can check only that the role is held
+    /// somewhere, and runs on no `Local` path at all.
     /// @param action The result to verify.
     /// @return The recorded verification.
     /// @throws ValidationError if no result is named.
     /// @throws NotFound if the result does not exist.
-    /// @throws Forbidden if the caller lacks `Verifier`, or captured the result.
+    /// @throws Forbidden if the caller lacks `Verifier` at the sample's site, or captured the result.
     /// @throws IllegalTransition if the sample is not awaiting verification.
     /// @throws Conflict if the result is already verified.
     /// @throws EmptyPrincipalError if no principal is authenticated.
@@ -414,10 +413,6 @@ private:
     /// The `PublishSample` precondition, and the reason the four-eyes step is
     /// load-bearing rather than decorative.
     void requireEveryResultVerified() const;
-
-    /// @brief Throws `Forbidden` unless the authenticated principal holds @p role.
-    /// @param role The role the action requires.
-    static void requireRole(LimsRole role);
 
     /// @brief Whether @p opKey names an operation this server already decided.
     /// @param opKey The operation's dedup token; empty is never a match.

@@ -49,6 +49,7 @@ struct LegacySampleRecord {
 // Mutation: store no site (the view reads back an empty site).
 TEST_CASE("lab: a sample is registered at a site, and its view names the site", "[lims][org][sites]") {
     DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
     auto const fieldLab = org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Field lab"});
@@ -147,6 +148,7 @@ TEST_CASE("lab: sample entry refuses a header naming a site that does not exist"
 // Mutation: drop the site assignment from SaveSample's update branch (the moved sample reads back its old site).
 TEST_CASE("lab: a saved sample can be moved to another site", "[lims][org][sites]") {
     DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
     auto const fieldLab = org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Field lab"});

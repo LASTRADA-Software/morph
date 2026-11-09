@@ -464,7 +464,7 @@ The verifier must **hold the role** and must **not be the analyst who
 captured the reading**. Only the first is a type-level fact, so only the first
 can be checked before dispatch: `lims::auth::LimsAuthorizer` does it at the
 `RemoteServer` edge, and `SampleModel` re-does it on every dispatch path,
-because no authorizer runs in `Local` mode at all. The second is a row-level
+because no authorizer runs in `Local` mode at all (decision 25 declares both). The second is a row-level
 fact `IAuthorizer` structurally cannot express — it is handed the model and
 action type ids and the caller's session, never the result — so it lives only
 in the model. Neither check stands in for the other, and both are tested.
@@ -728,6 +728,37 @@ empty all the same.
 Two rules look across companies. The bootstrap carve-out applies while no `Supervisor` exists anywhere, and
 `RevokeRole` refuses to remove the last `Supervisor` assignment anywhere, whatever its scope: revoking
 it would reopen the bootstrap carve-out to whoever acted next.
+
+### 25. Authorization is declared per action and checked in the model (hypothesis 6, first instance)
+
+An action's authorization is declared once, beside its registration, by the module that owns it
+(`lims::Authorization<Action>`): the role it needs, the scope its payload names, an optional value limit, and an
+optional separation-of-duties pair. Capture and verify are the first declared pair: verifying a reading needs the
+verifier role at the sample's site (a role at the site's company holds there), and the verifier must not be the analyst
+who captured it. `lims::requireAuthorized` checks a declaration inside the model, on every dispatch path; the server
+edge checks only that the principal holds the declared role somewhere, from a table the app composes from every
+module's declarations (`lims::app::declaredRequirements`). A caller who holds the role nowhere is refused before any
+row the action names is looked up, as decision 23 requires of role assignments.
+
+`CreateCompany` declares `Supervisor` in any scope, because a new company has no scope yet, and is refused while no
+supervisor exists anywhere, so the bootstrap `AssignRole` stays the first administrative act. `CreateSite` declares
+`Supervisor` at the site's company.
+
+**Hypothesis 6 (authorization cannot see the payload) is confirmed for this instance.**
+`IAuthorizer::authorize(ctx, modelType, actionType)` decides before the payload is decoded: its signature
+(`include/morph/session/session.hpp`) takes the session context and the two ids, never the payload. The scope (the result's sample's
+site), the pair (who captured the result) and any value limit are facts about rows the payload names, so they can only
+be checked where the payload is decoded and the rows are readable: in the model, by `requireAuthorized`. Measured in
+`tests/test_declared_authorization.cpp`: a verifier whose role is at another site of the same company is allowed by
+`LimsAuthorizer` and refused by the model in `Local`, `LocalSingleThread` and `Socket` mode alike, and a verifier at
+the sample's company goes through the same edge and the same model.
+
+This is instance 1 of 2. What it shows about a seam: a declaration is data apart from `scopeOf` and `firstPerformerOf`,
+which read the module's own rows, so a framework check would have to run after decoding and call back into the
+module for those; and the edge needs a second, app-composed table, because it cannot reach the declarations through
+the ids it is given. No framework seam is designed from one instance. Billing's create-and-approve pair in Part B,
+with an approver's value limit, is instance 2: if the same hand-rolled guarantee recurs there, a framework seam is
+designed against both, and otherwise the guarantee is recorded as domain logic the models own.
 
 ## Findings raised by this rung
 

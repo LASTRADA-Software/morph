@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "lims/app/declared_requirements.hpp"
 #include "lims/org/dto/role_dto.hpp"
 
 /// @file
@@ -20,11 +21,11 @@
 /// @par What it can and cannot do, exactly
 /// `IAuthorizer::authorize` is handed the caller's `Context` plus the target
 /// **model type** and **action type** ids — and nothing else. It can answer
-/// "may this principal ever verify a result?"; it structurally cannot answer
-/// "may this principal verify *this* result?", because it never sees the
-/// result. The second question is the one four-eyes actually turns on
-/// (a verifier must not verify their own reading), so `SampleModel` enforces
-/// it itself. Neither check stands in for the other.
+/// "may this principal ever verify a result?" from the declared roles
+/// (`lims::app::declaredRequirements`); it cannot answer "may this principal
+/// verify *this* result?", because it never sees the result, its site or who
+/// captured it. `lims::requireAuthorized` answers that in the model. Neither
+/// check stands in for the other.
 ///
 /// @par Why it derives from `SigningAuthorizer`
 /// A role gate is only worth anything if the principal is authenticated. A
@@ -52,22 +53,8 @@ namespace lims::auth {
 /// somewhere else (LDAP, the token's own claim) without touching this class.
 using RoleLookup = std::function<std::vector<LimsRole>(std::string_view principal)>;
 
-/// @brief The actions that require `LimsRole::Verifier`.
-/// @param actionType The action type id from the dispatch envelope.
-/// @return `true` when the action is role-gated.
-[[nodiscard]] inline bool requiresVerifierRole(std::string_view actionType) noexcept {
-    return actionType == "VerifyResult";
-}
-
-/// @brief The actions that require `LimsRole::Supervisor`.
-/// @param actionType The action type id from the dispatch envelope.
-/// @return `true` when the action is role-gated.
-[[nodiscard]] inline bool requiresSupervisorRole(std::string_view actionType) noexcept {
-    return actionType == "AssignRole" || actionType == "RevokeRole";
-}
-
 /// @brief This rung's authorizer: a signed-token gate plus a role check on the
-///        two actions that need one.
+///        actions that declare a role.
 class LimsAuthorizer : public ::morph::session::SigningAuthorizer {
 public:
     /// @param secret Shared secret tokens are signed with.
@@ -131,11 +118,10 @@ public:
         if (!principal.has_value()) {
             return false;
         }
-        if (requiresVerifierRole(actionType)) {
-            return holds(*principal, LimsRole::Verifier);
-        }
-        if (requiresSupervisorRole(actionType)) {
-            return holds(*principal, LimsRole::Supervisor);
+        // The edge sees no payload, so it asks whether the principal holds the declared role anywhere; the scope, a
+        // value limit and a separation-of-duties pair are checked by the model, which has the payload.
+        if (auto const role = ::lims::app::requiredRole(actionType)) {
+            return holds(*principal, *role);
         }
         return true;
     }

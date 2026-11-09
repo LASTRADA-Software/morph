@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "lims/lab/authorization/lab_authorization.hpp"
 #include "lims/lab/db/lims_entity.hpp"
 #include "lims/lab/dto/analysis_dto.hpp"
 #include "lims/org/core/errors.hpp"
@@ -757,25 +758,15 @@ void SampleModel::requireEveryResultVerified() const {
     }
 }
 
-void SampleModel::requireRole(LimsRole role) {
-    const auto& principal = ::morph::session::current()->principal;
-    const auto held = OrgModel::rolesAnywhere(principal);
-    if (std::ranges::find(held, role) == held.end()) {
-        throw Forbidden{"'" + principal + "' does not hold the " + std::string{roleName(role)} + " role"};
-    }
-}
-
 VerificationView SampleModel::execute(const VerifyResult& action) {
     requirePrincipal();
     try {
         if (!action.validate()) {
             throw ValidationError{"VerifyResult: a resultId is required"};
         }
-        // Half one of four eyes: the role. Re-checked here rather than left to
-        // lims::auth::LimsAuthorizer, because no authorizer runs on the Local
-        // dispatch path at all -- a client-side gate is UX, not security
-        // (examples/IMPLEMENTATION.md rule 1).
-        requireRole(LimsRole::Verifier);
+        // Asked before the result is looked up, so a caller who is no verifier anywhere learns nothing about which
+        // results exist; the scope and the pair are judged below, once the result is known.
+        requireRoleSomewhere<VerifyResult>();
 
         Lightweight::DataMapper mapper;
         auto results = mapper.Query<db::ResultRecord>()
@@ -788,13 +779,10 @@ VerificationView SampleModel::execute(const VerifyResult& action) {
         const auto capturedBy = std::string{result.capturedBy.Value().ToStringView()};
         const auto& principal = ::morph::session::current()->principal;
 
-        // Half two: the second pair of eyes must belong to a second person.
-        // This is the half `IAuthorizer` cannot express -- it is handed the
-        // model and action type ids and never the row -- so it can only live
-        // here.
-        if (capturedBy == principal) {
-            throw Forbidden{"VerifyResult: '" + principal + "' captured this result and cannot also verify it"};
-        }
+        // Both halves of four eyes, as lab declares them: the verifier role at the sample's site, and not being the
+        // analyst who captured the reading. The server edge can check only the role, held anywhere, because it
+        // never sees the result; this check runs on every dispatch path, and no authorizer runs on the Local one.
+        requireAuthorized(action);
 
         const auto sampleId = static_cast<std::int64_t>(result.sample.Value());
         // Journal this verification against the *sample* it belongs to, not

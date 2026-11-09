@@ -41,6 +41,7 @@ TEST_CASE("org: the first migration seeds one company with one site", "[lims][or
 // Mutation: store the base currency as EUR whatever is asked (the JPY company reads back EUR).
 TEST_CASE("org: a company keeps its base currency and fiscal-year start", "[lims][org]") {
     DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
 
@@ -60,6 +61,7 @@ TEST_CASE("org: a company keeps its base currency and fiscal-year start", "[lims
 // Mutation: skip the company lookup (a site is created under company 999).
 TEST_CASE("org: a site belongs to a company that exists", "[lims][org]") {
     DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
 
@@ -109,6 +111,7 @@ TEST_CASE("org: the company and site forms are served with explicit submit and c
 // Mutation: lift the 128-byte bound (a 129-byte name is accepted).
 TEST_CASE("org: a company or site name of 128 bytes is accepted and one of 129 is refused", "[lims][org]") {
     DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
     std::string const longest(128, 'a');
@@ -124,6 +127,7 @@ TEST_CASE("org: a company or site name of 128 bytes is accepted and one of 129 i
 // Mutation: drop the company-name check (a second "Main laboratory" is created).
 TEST_CASE("org: a company name is unique", "[lims][org]") {
     DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
     CHECK_THROWS_AS(org.execute(lims::CreateCompany{.name = "Main laboratory"}), lims::Conflict);
@@ -134,6 +138,7 @@ TEST_CASE("org: a company name is unique", "[lims][org]") {
 // Mutation: drop the site-name check (a second "Main site" is created in the company).
 TEST_CASE("org: a site name is unique within its company, not across companies", "[lims][org]") {
     DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
     CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Main site"}),

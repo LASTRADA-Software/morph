@@ -13,6 +13,7 @@
 #include <variant>
 #include <vector>
 
+#include "lims/org/authorization/org_authorization.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
 #include "lims/org/db/org_entity.hpp"
@@ -107,13 +108,6 @@ constexpr int kMaxScopeKind = static_cast<int>(ScopeKind::Site);
     };
 }
 
-/// @brief The scope an assignment action names.
-/// @param action A validated assignment.
-/// @return Its company or its site.
-[[nodiscard]] Scope scopeOf(AssignRole const& action) {
-    return action.company.hasValue() ? Scope{action.company} : Scope{action.site};
-}
-
 /// @brief The kind and id an assignment row stores for @p scope.
 /// @param scope A scope holding a value.
 /// @return The kind and the id.
@@ -136,28 +130,6 @@ constexpr int kMaxScopeKind = static_cast<int>(ScopeKind::Site);
                                            .empty();
     }
     return OrgModel::findSite(std::get<SiteId>(scope)).has_value();
-}
-
-/// @brief Throws `Forbidden` unless the authenticated principal is a supervisor in @p scope.
-/// @param scope The scope.
-void requireSupervisorIn(Scope const& scope) {
-    auto const& principal = ::morph::session::current()->principal;
-    auto const held = OrgModel::rolesIn(principal, scope);
-    if (std::ranges::find(held, LimsRole::Supervisor) == held.end()) {
-        throw Forbidden{"'" + principal + "' does not hold the supervisor role at " + scopeName(scope)};
-    }
-}
-
-/// @brief Throws `Forbidden` unless the authenticated principal is a supervisor in some scope.
-///
-/// Asked before a scope or an assignment is looked up, so a caller with no supervisor role anywhere learns nothing
-/// about which ids exist.
-void requireSupervisorAnywhere() {
-    auto const& principal = ::morph::session::current()->principal;
-    auto const held = OrgModel::rolesAnywhere(principal);
-    if (std::ranges::find(held, LimsRole::Supervisor) == held.end()) {
-        throw Forbidden{"'" + principal + "' does not hold the supervisor role"};
-    }
 }
 
 /// @brief Every assignment of @p principal, by id.
@@ -189,6 +161,8 @@ CompanyView OrgModel::execute(const CreateCompany& action) {
     if (!action.validate()) {
         throw ValidationError{"CreateCompany: a name of at most 128 bytes is required"};
     }
+    // Without a supervisor anywhere nobody passes, so the bootstrap assignment stays the first administrative act.
+    requireAuthorized(action);
     Lightweight::DataMapper mapper;
     for (auto const& existing : mapper.Query<db::CompanyRecord>().All()) {
         if (existing.name.Value().ToStringView() == action.name) {
@@ -234,6 +208,7 @@ SiteView OrgModel::execute(const CreateSite& action) {
     if (!action.validate()) {
         throw ValidationError{"CreateSite: a company and a name of at most 128 bytes are required"};
     }
+    requireRoleSomewhere<CreateSite>();
     Lightweight::DataMapper mapper;
     if (mapper.Query<db::CompanyRecord>()
             .Where(::Lightweight::FieldNameOf<&db::CompanyRecord::id>, "=", *action.companyId)
@@ -241,6 +216,7 @@ SiteView OrgModel::execute(const CreateSite& action) {
             .empty()) {
         throw NotFound{"CreateSite: company " + std::to_string(*action.companyId) + " does not exist"};
     }
+    requireAuthorized(action);
     for (auto const& existing : mapper.Query<db::SiteRecord>().All()) {
         if (static_cast<std::int64_t>(existing.company.Value()) == *action.companyId &&
             existing.name.Value().ToStringView() == action.name) {
@@ -273,19 +249,19 @@ RoleAssignmentView OrgModel::execute(const AssignRole& action) {
     if (!action.validate()) {
         throw ValidationError{"AssignRole: a principal and exactly one of a company or a site are required"};
     }
-    Scope const scope = scopeOf(action);
+    Scope const scope = Authorization<AssignRole>::scopeOf(action);
     // A lab with no supervisor anywhere cannot appoint its first one any other way. The exception closes as soon as
     // one exists, and the assignment names who made it.
     bool const bootstrap = !supervisorExists();
     if (!bootstrap) {
-        requireSupervisorAnywhere();
+        requireRoleSomewhere<AssignRole>();
     }
     Lightweight::DataMapper mapper;
     if (!scopeExists(mapper, scope)) {
         throw NotFound{"AssignRole: " + scopeName(scope) + " does not exist"};
     }
     if (!bootstrap) {
-        requireSupervisorIn(scope);
+        requireAuthorized(action);
     }
     auto const [kind, id] = storedScope(scope);
     for (auto const& row : assignmentsOf(mapper, action.principal)) {
@@ -310,7 +286,7 @@ RevokeRoleResult OrgModel::execute(const RevokeRole& action) {
     if (!action.validate()) {
         throw ValidationError{"RevokeRole: an assignment is required"};
     }
-    requireSupervisorAnywhere();
+    requireRoleSomewhere<RevokeRole>();
     Lightweight::DataMapper mapper;
     auto rows = mapper.Query<db::RoleAssignmentRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::id>, "=", *action.assignmentId)
@@ -319,7 +295,7 @@ RevokeRoleResult OrgModel::execute(const RevokeRole& action) {
         throw NotFound{"RevokeRole: assignment " + std::to_string(*action.assignmentId) + " does not exist"};
     }
     auto const view = toView(rows.front());
-    requireSupervisorIn(view.scopeKind == ScopeKind::Company ? Scope{view.company} : Scope{view.site});
+    requireAuthorized(action);
     if (view.role == LimsRole::Supervisor) {
         // Only a company's own supervisors can administer it, so only they are counted: a supervisor at one of its
         // sites cannot assign at the company, and another company's supervisor cannot assign here.

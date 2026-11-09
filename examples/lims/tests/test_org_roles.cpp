@@ -383,7 +383,10 @@ TEST_CASE("org roles: a corrupt supervisor row at another company does not block
         .principal = "alice", .role = lims::LimsRole::Supervisor, .company = lims::test::seededCompany(), .site = {}});
     auto const dave = org.execute(lims::AssignRole{
         .principal = "dave", .role = lims::LimsRole::Supervisor, .company = lims::test::seededCompany(), .site = {}});
-    // erin founds the second company, so the corrupt row is hers and no lookup of alice's roles reads it.
+    // erin supervises the seeded site, which lets her found the second company, so the corrupt row is hers and no
+    // lookup of alice's roles reads it.
+    org.execute(lims::AssignRole{
+        .principal = "erin", .role = lims::LimsRole::Supervisor, .company = {}, .site = lims::test::seededSite()});
     auto const osaka = [&] {
         ScopedPrincipal const asErin{"erin"};
         return org.execute(lims::CreateCompany{

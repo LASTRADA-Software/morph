@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 
 #include "lims/org/core/types.hpp"
 #include "lims/org/db/org_entity.hpp"
@@ -53,14 +54,16 @@ private:
 /// @return Its id.
 [[nodiscard]] inline lims::CompanyId seededCompany() { return lims::CompanyId{lims::db::kSeededCompanyId}; }
 
-/// @brief Assigns @p role to @p principal at the seeded company.
+/// @brief Assigns @p role to @p principal in @p scope.
 ///
-/// Made by `lab-supervisor`, a supervisor the helper appoints itself while the lab has none. A test that appoints
-/// its own supervisor first assigns through `OrgModel` as that supervisor instead.
+/// Made by `lab-supervisor`, a supervisor at the seeded company the helper appoints itself while the lab has none. A
+/// test that appoints its own supervisor first assigns through `OrgModel` as that supervisor instead.
 /// @param principal Who gets the role.
 /// @param role The role.
+/// @param scope Where; the seeded company unless said.
 /// @return The assignment.
-inline lims::RoleAssignmentView grant(std::string principal, lims::LimsRole role) {
+inline lims::RoleAssignmentView grant(std::string principal, lims::LimsRole role,
+                                      lims::Scope scope = lims::Scope{seededCompany()}) {
     constexpr std::string_view kGranter = "lab-supervisor";
     ScopedPrincipal const granter{std::string{kGranter}};
     lims::OrgModel org;
@@ -71,8 +74,11 @@ inline lims::RoleAssignmentView grant(std::string principal, lims::LimsRole role
                                      .company = seededCompany(),
                                      .site = {}});
     }
-    return org.execute(
-        lims::AssignRole{.principal = std::move(principal), .role = role, .company = seededCompany(), .site = {}});
+    auto const* company = std::get_if<lims::CompanyId>(&scope);
+    return org.execute(lims::AssignRole{.principal = std::move(principal),
+                                        .role = role,
+                                        .company = company != nullptr ? *company : lims::CompanyId{},
+                                        .site = company != nullptr ? lims::SiteId{} : std::get<lims::SiteId>(scope)});
 }
 
 }  // namespace lims::test

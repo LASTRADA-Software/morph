@@ -180,6 +180,7 @@ TEST_CASE("OrgModel over the full backend-mode matrix: a company, its site and a
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
 
     BackendRig rig{mode, 1, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
