@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goods receipt</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,system-ui,sans-serif;font-size:13px;color:#1C1E21;background:#EEF0F3;font-variant-numeric:tabular-nums}
+a{color:#17784A;text-decoration:none}
+p{margin:0}
+h1,h2,h3{margin:0}
+.cap{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#4D5461;margin:0 0 12px}
+.note{font-size:12px;color:#4D5461;margin:8px 0 0;max-width:1215px;line-height:1.45}
+.win{background:#F6F7F9;border:1px solid #D2D7DE;border-radius:8px;overflow:hidden;box-sizing:border-box;position:relative}
+.card{background:#fff;border:1px solid #DDE1E6;border-radius:6px;box-sizing:border-box}
+.btn{font:500 13px Inter,system-ui,sans-serif;height:30px;padding:0 12px;border-radius:6px;border:1px solid #C3C9D2;background:#fff;color:#1C1E21;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;box-sizing:border-box}
+.btn.primary{background:#17784A;border-color:#17784A;color:#fff}
+.btn.danger{color:#A61B1B;border-color:#E8B4B4}
+.btn.ghost{border-color:transparent;background:transparent;color:#17784A;padding:0 6px}
+.btn.sm{height:26px;padding:0 8px;font-size:12px}
+.btn.lg{height:44px;font-size:14px}
+.btn.icon{width:30px;padding:0}
+.btn[disabled]{opacity:.5;cursor:default}
+.input{height:30px;border:1px solid #C3C9D2;border-radius:6px;padding:0 8px;font:13px Inter,system-ui,sans-serif;background:#fff;box-sizing:border-box;color:#1C1E21;width:100%}
+.input.lg{height:44px;font-size:14px}
+.input.num{text-align:right}
+.input.err,.input.oos{border-color:#B42318;box-shadow:0 0 0 2px #FBE3E3}
+.input[readonly]{background:#F3F5F7}
+.input.focus{border-color:#17784A;box-shadow:0 0 0 3px #CDEBD8}
+textarea.input{padding:6px 8px;resize:none;height:56px}
+.lbl{font-size:12px;font-weight:500;color:#363C46;display:block;margin-bottom:4px}
+.req{color:#A61B1B}
+.help{font-size:12px;color:#4D5461;margin:3px 0 0}
+.errt{font-size:12px;color:#A61B1B;margin:3px 0 0}
+.muted{color:#4D5461}
+.faint{color:#7A828F}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px}
+.b{font-weight:600}
+.tag{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;display:inline-block;white-space:nowrap;border:1px solid transparent;line-height:16px}
+.t-err{background:#FDE7E7;color:#9B1C1C}.t-warn{background:#FFF1D6;color:#7A4A00}.t-ok{background:#E2F4E8;color:#17602F}.t-neu{background:#EEF0F3;color:#363C46}.t-info{background:#E6ECFF;color:#1F3FA8}
+.t-out{background:#fff;border-color:#C3C9D2;color:#4D5461}
+.pri{background:#fff}.p-stat{color:#9B1C1C;border-color:#D98C8C}.p-urg{color:#7A4A00;border-color:#D9B36A}.p-rou{color:#4D5461;border-color:#C3C9D2}
+.banner{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:6px;font-size:13px;line-height:1.45}
+.banner .grow{flex:1}
+.b-err{background:#FDECEC;color:#8A1C1C;border:1px solid #F2C0C0}
+.b-warn{background:#FFF6E5;color:#6B4100;border:1px solid #F1D49A}
+.b-info{background:#EEF2FF;color:#1F3A8A;border:1px solid #C9D4F5}
+.b-ok{background:#EAF5EE;color:#17602F;border:1px solid #BCDFC9}
+table{border-collapse:collapse;width:100%}
+th{text-align:left;font-size:11px;font-weight:600;color:#4D5461;padding:6px 8px;border-bottom:1px solid #DDE1E6;background:#FAFBFC;white-space:nowrap}
+td{padding:5px 8px;border-bottom:1px solid #EDF0F3;white-space:nowrap;height:20px}
+td.num,th.num{text-align:right}
+td.wrap{white-space:normal}
+tr.sel td{background:#F2F9F5}
+tr.sel td:first-child{box-shadow:inset 3px 0 0 #17784A}
+tr.oos td{background:#FFF5F5}
+tr.grp td{background:#FAFBFC;font-weight:600;padding:6px 8px}
+tr.tot td{font-weight:600;background:#FAFBFC;border-top:1px solid #C3C9D2}
+tr.dim td{color:#7A828F}
+input[type=checkbox],input[type=radio]{width:15px;height:15px;accent-color:#17784A;margin:0;vertical-align:middle}
+.ck{display:flex;align-items:center;gap:8px;padding:3px 0}
+.kv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:5px 12px;margin:0}
+.kv dt{color:#4D5461}.kv dd{margin:0}
+.tab{font:500 13px Inter,system-ui,sans-serif;background:none;border:none;border-bottom:2px solid transparent;padding:9px 2px;color:#4D5461;cursor:pointer}
+.tab.on{color:#1C1E21;border-bottom-color:#17784A}
+.tabs{display:flex;gap:18px;border-bottom:1px solid #E1E5EA}
+.seg{display:inline-flex;background:#E7EAEE;border-radius:6px;padding:2px}
+.seg button{font:500 12px Inter,system-ui,sans-serif;border:none;background:transparent;height:24px;padding:0 10px;border-radius:4px;color:#363C46;cursor:pointer}
+.seg button.on{background:#fff;color:#1C1E21;box-shadow:0 1px 2px rgba(20,24,31,.12)}
+.chip{display:inline-flex;align-items:center;gap:2px;background:#fff;border:1px solid #C3C9D2;border-radius:4px;padding:0 0 0 8px;height:24px;font-size:12px}
+.chip button{border:none;background:none;color:#4D5461;width:22px;height:22px;cursor:pointer}
+.fh{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#4D5461;margin:0 0 6px}
+.kpi{padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.kpi .v{font-size:22px;font-weight:700;line-height:28px}
+.kpi .s{font-size:12px;color:#4D5461}
+.step{display:flex;align-items:center;gap:6px;font-weight:500;color:#4D5461;white-space:nowrap}
+.dot{width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;border:1.5px solid #C3C9D2;background:#fff;color:#4D5461;flex:none;box-sizing:border-box}
+.step.done .dot{background:#17784A;border-color:#17784A;color:#fff}
+.step.cur{color:#1C1E21}.step.cur .dot{border-color:#17784A;color:#17784A}
+.step.bad .dot{border-color:#B42318;color:#B42318}
+.line{flex:1;height:2px;background:#D2D7DE;min-width:16px}.line.done{background:#17784A}
+.tl{display:flex;gap:8px;font-size:12px;padding:3px 0;line-height:1.45}
+.tl i{width:8px;height:8px;border-radius:4px;background:#17784A;margin-top:4px;flex:none}
+.tl i.err{background:#C62828}.tl i.neu{background:#9AA2AE}.tl i.warn{background:#D19100}
+.overlay{position:absolute;inset:0;background:rgba(20,24,31,.42)}
+.dialog{position:absolute;background:#fff;border:1px solid #DDE1E6;border-radius:8px;box-shadow:0 18px 48px rgba(20,24,31,.28);display:flex;flex-direction:column;box-sizing:border-box}
+.dh{padding:14px 18px 12px;border-bottom:1px solid #E6E9ED}
+.dh h2{font-size:15px;font-weight:600}
+.db{padding:14px 18px;display:flex;flex-direction:column;gap:12px}
+.df{padding:12px 18px;border-top:1px solid #E6E9ED;display:flex;justify-content:flex-end;gap:8px;align-items:center}
+.menu{position:absolute;background:#fff;border:1px solid #DDE1E6;border-radius:6px;box-shadow:0 8px 24px rgba(20,24,31,.16);padding:4px;z-index:3;box-sizing:border-box}
+.mi{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font:13px Inter,system-ui,sans-serif;background:none;border:none;padding:7px 10px;border-radius:4px;color:#1C1E21;box-sizing:border-box}
+.mi.on{background:#EAF5EE}
+.mi .r{margin-left:auto}
+.msep{height:1px;background:#E6E9ED;margin:4px 6px}
+.mh{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#7A828F;padding:6px 10px 2px}
+.skel{display:block;height:10px;border-radius:3px;background:#E7EAEE}
+.ring{width:18px;height:18px;border-radius:9px;border:2.5px solid #D2D7DE;border-top-color:#17784A;box-sizing:border-box;flex:none}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:6px;padding:36px 24px}
+.empty .ic{width:44px;height:44px;border-radius:22px;background:#EAF5EE;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+.empty h3{font-size:14px;font-weight:600}
+.empty p{color:#4D5461;max-width:340px;line-height:1.45}
+.bar{height:8px;border-radius:4px;background:#E7EAEE;overflow:hidden}
+.bar i{display:block;height:100%;background:#17784A}
+.rc{padding:10px 12px;border-top:1px solid #EDF0F3;line-height:1.45}
+.rc:first-child{border-top:none}
+.rc .rt{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.sect{font-size:13px;font-weight:600}
+.pad{padding:12px 14px}
+.row{display:flex;align-items:center;gap:8px}
+.col{display:flex;flex-direction:column}
+.grow{flex:1;min-width:0}
+.right{text-align:right}
+.kbd{font:500 11px Inter,system-ui,sans-serif;color:#4D5461;border:1px solid #C3C9D2;border-bottom-width:2px;border-radius:4px;padding:0 4px;background:#fff;line-height:16px}
+.fold{border:1px solid #DDE1E6;border-radius:6px;background:#fff}
+.fold>.fh2{min-height:44px;display:flex;align-items:center;gap:8px;padding:0 12px;font-weight:600}
+/* shell, expanded */
+.app{display:flex;height:100%}
+.side{width:220px;flex:none;background:#1C1E21;color:#C9CFD8;display:flex;flex-direction:column;box-sizing:border-box;padding:10px 8px}
+.brand{display:flex;align-items:center;gap:8px;padding:2px 6px 10px}
+.brand .mk{width:24px;height:24px;border-radius:5px;background:#17784A;color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center}
+.brand .nm{color:#fff;font-weight:600}
+.sw{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:#2B3038;border:1px solid #3A404A;border-radius:6px;padding:6px 8px;color:#fff;font:inherit;box-sizing:border-box;margin-bottom:10px}
+.sw .co{font-weight:600;font-size:13px;line-height:17px}
+.sw .si{font-size:12px;color:#9AA2AE;line-height:16px}
+.nav{display:flex;align-items:center;gap:9px;width:100%;text-align:left;font:500 13px Inter,system-ui,sans-serif;border:none;background:transparent;color:#C9CFD8;padding:0 10px;height:30px;border-radius:4px;box-sizing:border-box}
+.nav svg{flex:none}
+.nav.on{background:#2B3038;color:#fff}
+.nav.mod.open{color:#fff}
+.nav.sub{padding-left:35px;height:28px;font-weight:400}
+.nav.sub.on{background:#2B3038;color:#fff;box-shadow:inset 3px 0 0 #3FB57A;font-weight:500}
+.nav .cnt{margin-left:auto;font-size:11px;font-weight:600;background:#3A404A;color:#fff;border-radius:9px;padding:0 6px;line-height:18px}
+.nav .cnt.hot{background:#17784A}
+.nav .chev{margin-left:auto;color:#7A828F;font-size:11px}
+.navh{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#7A828F;margin:12px 10px 4px}
+.sidefoot{margin-top:auto;border-top:1px solid #2B3038;padding:8px 6px 0;font-size:12px;color:#9AA2AE;display:flex;align-items:center;gap:6px}
+.sidefoot i{width:7px;height:7px;border-radius:4px;background:#3FB57A;flex:none}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:50px;flex:none;background:#fff;border-bottom:1px solid #E1E5EA;display:flex;align-items:center;gap:10px;padding:0 14px;box-sizing:border-box}
+.gsearch{display:flex;align-items:center;gap:8px;height:32px;width:380px;border:1px solid #C3C9D2;border-radius:6px;background:#F6F7F9;padding:0 8px;box-sizing:border-box;color:#7A828F}
+.gsearch.focus{background:#fff;border-color:#17784A;box-shadow:0 0 0 3px #CDEBD8;color:#1C1E21}
+.inbox{position:relative}
+.inbox .n{font-size:11px;font-weight:700;background:#B42318;color:#fff;border-radius:9px;padding:0 6px;line-height:18px}
+.avatar{width:28px;height:28px;border-radius:14px;background:#DCEFE4;color:#17602F;font-weight:600;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none}
+.who{display:flex;align-items:center;gap:8px;line-height:15px}
+.who .nm{font-weight:500}
+.who .rl{font-size:11px;color:#4D5461}
+.page{flex:1;min-height:0;display:flex;flex-direction:column}
+.ph{padding:12px 18px 10px;background:#fff;border-bottom:1px solid #E1E5EA;display:flex;align-items:flex-start;gap:10px}
+.ph .eb{font-size:12px;color:#4D5461;margin-bottom:2px}
+.ph h1{font-size:17px;font-weight:600;line-height:24px}
+.body{flex:1;min-height:0;padding:14px 18px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box}
+.foot{padding:10px 18px;background:#fff;border-top:1px solid #E1E5EA;display:flex;align-items:center;gap:8px}
+/* shell, compact */
+.ctop{height:52px;flex:none;background:#1C1E21;color:#fff;display:flex;align-items:center;gap:2px;padding:0 4px;box-sizing:border-box}
+.ctop .t{flex:1;min-width:0;line-height:17px}
+.ctop .t h1{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctop .t p{font-size:11px;color:#9AA2AE}
+.cbtn{width:44px;height:44px;border:none;background:transparent;color:#fff;display:flex;align-items:center;justify-content:center;position:relative;flex:none;font:inherit}
+.cbtn .n{position:absolute;top:5px;right:3px;font-size:10px;font-weight:700;background:#B42318;color:#fff;border-radius:8px;padding:0 4px;line-height:15px}
+.cbody{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;padding:12px;box-sizing:border-box}
+.cfoot{padding:10px 12px;background:#fff;border-top:1px solid #E1E5EA;display:flex;gap:8px;align-items:center}
+.chead{padding:10px 16px;background:#fff;border-bottom:1px solid #E1E5EA}
+
+.lease{display:flex;align-items:center;gap:10px;padding:8px 18px;background:#FFF6E5;border-bottom:1px solid #F1D49A;color:#6B4100}
+.ck2{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-top:1px solid #EDF0F3;line-height:1.45}
+.ck2 .m{width:20px;height:20px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;font-size:12px;font-weight:700}
+.m.ok{background:#E2F4E8;color:#17602F}.m.err{background:#FDE7E7;color:#9B1C1C}.m.warn{background:#FFF1D6;color:#7A4A00}
+.per{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.per button{font:inherit;text-align:left;border:1px solid #DDE1E6;background:#fff;border-radius:6px;padding:6px 8px;line-height:1.35}
+.per button.sel{border-color:#17784A;box-shadow:0 0 0 2px #CDEBD8}
+</style>
+</helmet>
+<div style="width:1733px;box-sizing:border-box;padding:40px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;gap:48px;align-items:flex-start"><div><p class="cap">Expanded · the receipt dialog: order lines, new lots, and the posting it makes</p><div class="win" style="width:1215px;height:900px;"><div class="app"><nav class="side" aria-label="Modules">
+<div class="brand"><span class="mk" aria-hidden="true">L</span><span class="nm">lims</span><span style="margin-left:auto;font-size:11px;color:#7A828F">ERP</span></div>
+<button class="sw" aria-label="Company and site: Rheinlab Analytik GmbH, Köln · EUR" aria-haspopup="menu"><span class="grow"><span class="co" style="display:block">Rheinlab Analytik GmbH</span><span class="si" style="display:block">Köln · EUR</span></span><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#9AA2AE" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 6.5 3-3 3 3M5 9.5l3 3 3-3"/></svg></button>
+<button class="nav mod"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H9.5v-3.5h-3v3.5H3a.5.5 0 0 1-.5-.5z"/></svg>Home</button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2.5h4M6.5 2.5v4L3 12.5a1 1 0 0 0 .9 1.5h8.2a1 1 0 0 0 .9-1.5L9.5 6.5v-4M4.6 10h6.8"/></svg>Lab<span class="cnt">4</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h8v11l-2-1.2-2 1.2-2-1.2-2 1.2zM6 6h4M6 8.5h4"/></svg>Billing<span class="cnt">3</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3.5h4.2c.5 0 .8.4.8.8V13c0-.5-.4-.8-.8-.8H3zM13 3.5H8.8c-.5 0-.8.4-.8.8V13c0-.5.4-.8.8-.8H13z"/></svg>Ledger<span class="chev" aria-hidden="true">▸</span></button>
+<button class="nav mod open" aria-expanded="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 5 8 2.5 13.5 5v6L8 13.5 2.5 11zM2.5 5 8 7.5 13.5 5M8 7.5v6"/></svg>Inventory<span class="chev" aria-hidden="true">▾</span></button>
+<button class="nav sub">Stock<span class="cnt">2</span></button>
+<button class="nav sub">Requisitions and orders</button>
+<button class="nav sub on" aria-current="page">Goods receipt<span class="cnt">1</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13.5V4.5L8 2.5l5 2v9M6 13.5v-3h4v3M5.5 6.5h1M9.5 6.5h1M5.5 8.5h1M9.5 8.5h1"/></svg>Admin<span class="chev" aria-hidden="true">▸</span></button>
+<div class="sidefoot"><i aria-hidden="true"></i><span class="grow">Connected</span><span>v4.2</span></div></nav><div class="main"><header class="top"><div class="gsearch" role="search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.2 10.2 3.3 3.3"/></svg><span class="grow">Search samples, invoices, accounts, items…</span><span class="kbd">Ctrl K</span></div><span class="grow"></span><button class="btn inbox" aria-label="Approvals, none waiting"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 9.5 4 3.5h8l1.5 6v3.5a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5zM2.5 9.5H6l.8 1.5h2.4l.8-1.5h3.5"/></svg>Approvals</button><button class="btn icon" aria-label="Help">?</button><div class="who"><span class="avatar" aria-hidden="true">TK</span><span><span class="nm" style="display:block">Tobias Krüger</span><span class="rl">Stores and purchasing</span></span><span class="faint" aria-hidden="true">▾</span></div></header><div class="page"><div class="ph"><div class="grow"><p class="eb">Inventory · Köln</p><h1>Goods receipt</h1></div><div class="row" style="flex:none"><button class="btn">Receive without an order…</button></div></div><div class="body"><div class="card" style="overflow:hidden"><table><thead><tr><th>Order</th><th>Supplier</th><th>Sent</th><th class="num">Lines open</th><th class="num">Value</th><th>Status</th></tr></thead><tbody>
+<tr class="sel"><td class="mono">PO-2026-0144</td><td>Chromatec AG, Basel</td><td>28-Oct-2026</td><td class="num">3</td><td class="num">CHF 2,450.35</td><td><span class="tag t-info">Arrived 08:12</span></td></tr>
+<tr><td class="mono">PO-2026-0143</td><td>Laborbedarf Hansen GmbH</td><td>24-Oct-2026</td><td class="num">1</td><td class="num">€640.00</td><td><span class="tag t-warn">Partly received</span></td></tr>
+<tr><td class="mono">PO-2026-0146</td><td>Laborbedarf Hansen GmbH</td><td>07-Nov-2026</td><td class="num">5</td><td class="num">€3,180.00</td><td><span class="tag t-neu">Sent</span></td></tr></tbody></table></div></div></div></div></div><div class="overlay"></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="grT" style="left:150px;top:40px;width:920px">
+<div class="dh row" style="align-items:flex-start"><div class="grow"><h2 id="grT">Receive <span class="mono" style="font-size:14px">PO-2026-0144</span> · Chromatec AG</h2><p class="muted" style="margin-top:4px">Ordered 28-Oct-2026 in CHF · arrived 09-Nov 08:12 · 3 lines</p></div><span class="tag t-info">Arrived</span></div>
+<div class="db">
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px"><div><label class="lbl">Delivery note <span class="req">*</span></label><input class="input" value="LS-884120"></div><div><label class="lbl">Received on <span class="req">*</span></label><input class="input" value="09-Nov-2026"></div><div><label class="lbl">Received by</label><input class="input" readonly value="Tobias Krüger"></div></div>
+<table><thead><tr><th>Item · ordered</th><th style="width:150px">Receiving now</th><th>Into stock</th><th style="width:120px">New lot <span class="req">*</span></th><th style="width:118px">Expiry</th><th style="width:170px">Location <span class="req">*</span></th></tr></thead><tbody>
+<tr><td class="wrap">Acetonitrile, HPLC grade<br><span class="muted">1 case, 4 × 2.5 L · CHF 1,115.03</span></td><td><div class="row" style="gap:4px"><input class="input num" value="10000" style="width:80px"><select class="input" style="width:62px"><option>mL</option></select></div></td><td>10.00 L</td><td><input class="input" value="A-26-0412"></td><td><input class="input" value="31-Oct-2027"></td><td><select class="input"><option>Solvent cabinet 2</option></select></td></tr>
+<tr><td class="wrap">HPLC column C18, 150 × 4.6 mm<br><span class="muted">1 piece · CHF 469.97</span></td><td><div class="row" style="gap:4px"><input class="input num" value="1" style="width:80px"><select class="input" style="width:62px"><option>pc</option></select></div></td><td>1 piece</td><td><input class="input" value="COL-26-118"></td><td><input class="input" placeholder="none" value=""></td><td><select class="input"><option>Column cabinet</option></select></td></tr>
+<tr><td class="wrap" rowspan="2">4-Aminophenol impurity standard<br><span class="muted">3 × 50 mg · CHF 865.35</span><br><button class="btn ghost sm" style="padding:0">Split into another lot</button></td><td><div class="row" style="gap:4px"><input class="input num" value="100" style="width:80px"><select class="input" style="width:62px"><option>mg</option></select></div></td><td>100 mg</td><td><input class="input" value="RS-0121"></td><td><input class="input" value="30-Jun-2027"></td><td><select class="input"><option>Fridge F-01</option></select></td></tr>
+<tr><td><div class="row" style="gap:4px"><input class="input num" value="50" style="width:80px"><select class="input" style="width:62px"><option>mg</option></select></div></td><td>50 mg</td><td><input class="input" value="RS-0122"></td><td><input class="input" value="30-Sep-2027"></td><td><select class="input"><option>Fridge F-01</option></select></td></tr></tbody></table>
+<section style="background:#F6F7F9;border:1px solid #E6E9ED;border-radius:6px;padding:10px 12px" aria-label="Posting"><div class="row" style="margin-bottom:6px"><b class="grow">Posts with the receipt, as one step</b><span class="muted">1 CHF = 1.0715 EUR · rate of 09-Nov-2026</span></div>
+<table><tbody><tr><td class="mono">3980</td><td>Reagents and consumables</td><td class="num">Debit €2,625.54</td></tr><tr><td class="mono">2490</td><td>Exchange rounding</td><td class="num">Debit €0.01</td></tr><tr><td class="mono">1610</td><td>Goods received, not invoiced</td><td class="num">Credit €2,625.55</td></tr></tbody></table></section></div>
+<div class="df"><button class="btn">Cancel</button><button class="btn primary">Receive and post</button></div></div></div></div><div><p class="cap">Compact · one line open at a time</p><div class="win" style="width:390px;height:900px;display:flex;flex-direction:column"><header class="ctop"><button class="cbtn" aria-label="Back to Goods receipt"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 3.5-4.5 4.5 4.5 4.5"/></svg></button><div class="t"><h1>Receive PO-2026-0144</h1><p>Chromatec AG · CHF</p></div><button class="cbtn" aria-label="Search"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.2 10.2 3.3 3.3"/></svg></button><button class="cbtn" aria-label="Approvals, none waiting"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 9.5 4 3.5h8l1.5 6v3.5a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5zM2.5 9.5H6l.8 1.5h2.4l.8-1.5h3.5"/></svg></button></header><div class="cbody">
+<div class="row" style="gap:8px"><div class="grow"><label class="lbl">Delivery note *</label><input class="input lg" value="LS-884120"></div><div style="width:130px"><label class="lbl">Received on *</label><input class="input lg" value="09-Nov-2026"></div></div>
+<div class="card pad col" style="gap:8px"><b>Acetonitrile, HPLC grade</b><span class="muted">1 case, 4 × 2.5 L</span><div class="row"><input class="input lg num grow" value="10000"><select class="input lg" style="width:80px"><option>mL</option></select></div><span class="muted" style="font-size:12px">= 10.00 L into stock</span>
+<div class="row"><input class="input lg grow" value="A-26-0412" aria-label="Lot"><input class="input lg" style="width:130px" value="31-Oct-2027" aria-label="Expiry"></div><select class="input lg"><option>Solvent cabinet 2</option></select></div>
+<div class="fold"><div class="fh2"><span class="grow">HPLC column C18 · 1 piece</span><span class="tag t-ok">ready</span></div></div>
+<div class="fold"><div class="fh2"><span class="grow">4-Aminophenol std · 2 lots</span><span class="tag t-ok">ready</span></div></div>
+<div class="card pad" style="line-height:1.5"><b>Posts €2,625.55</b><p class="muted" style="font-size:12px">Stock against goods received, not invoiced · CHF at 1.0715</p></div></div>
+<div class="cfoot"><button class="btn primary lg grow">Receive and post</button></div></div></div></div>
+<div style="display:flex;gap:48px;align-items:flex-start"><div><p class="cap">Refused · no exchange rate, so neither the receipt nor the posting happened</p><div class="win" style="width:1215px;height:960px;"><div class="app"><nav class="side" aria-label="Modules">
+<div class="brand"><span class="mk" aria-hidden="true">L</span><span class="nm">lims</span><span style="margin-left:auto;font-size:11px;color:#7A828F">ERP</span></div>
+<button class="sw" aria-label="Company and site: Rheinlab Analytik GmbH, Köln · EUR" aria-haspopup="menu"><span class="grow"><span class="co" style="display:block">Rheinlab Analytik GmbH</span><span class="si" style="display:block">Köln · EUR</span></span><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#9AA2AE" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 6.5 3-3 3 3M5 9.5l3 3 3-3"/></svg></button>
+<button class="nav mod"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H9.5v-3.5h-3v3.5H3a.5.5 0 0 1-.5-.5z"/></svg>Home</button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2.5h4M6.5 2.5v4L3 12.5a1 1 0 0 0 .9 1.5h8.2a1 1 0 0 0 .9-1.5L9.5 6.5v-4M4.6 10h6.8"/></svg>Lab<span class="cnt">4</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h8v11l-2-1.2-2 1.2-2-1.2-2 1.2zM6 6h4M6 8.5h4"/></svg>Billing<span class="cnt">3</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3.5h4.2c.5 0 .8.4.8.8V13c0-.5-.4-.8-.8-.8H3zM13 3.5H8.8c-.5 0-.8.4-.8.8V13c0-.5.4-.8.8-.8H13z"/></svg>Ledger<span class="chev" aria-hidden="true">▸</span></button>
+<button class="nav mod open" aria-expanded="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 5 8 2.5 13.5 5v6L8 13.5 2.5 11zM2.5 5 8 7.5 13.5 5M8 7.5v6"/></svg>Inventory<span class="chev" aria-hidden="true">▾</span></button>
+<button class="nav sub">Stock<span class="cnt">2</span></button>
+<button class="nav sub">Requisitions and orders</button>
+<button class="nav sub on" aria-current="page">Goods receipt<span class="cnt">1</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13.5V4.5L8 2.5l5 2v9M6 13.5v-3h4v3M5.5 6.5h1M9.5 6.5h1M5.5 8.5h1M9.5 8.5h1"/></svg>Admin<span class="chev" aria-hidden="true">▸</span></button>
+<div class="sidefoot"><i aria-hidden="true"></i><span class="grow">Connected</span><span>v4.2</span></div></nav><div class="main"><header class="top"><div class="gsearch" role="search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.2 10.2 3.3 3.3"/></svg><span class="grow">Search samples, invoices, accounts, items…</span><span class="kbd">Ctrl K</span></div><span class="grow"></span><button class="btn inbox" aria-label="Approvals, none waiting"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 9.5 4 3.5h8l1.5 6v3.5a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5zM2.5 9.5H6l.8 1.5h2.4l.8-1.5h3.5"/></svg>Approvals</button><button class="btn icon" aria-label="Help">?</button><div class="who"><span class="avatar" aria-hidden="true">TK</span><span><span class="nm" style="display:block">Tobias Krüger</span><span class="rl">Stores and purchasing</span></span><span class="faint" aria-hidden="true">▾</span></div></header><div class="page"><div class="ph"><div class="grow"><p class="eb">Inventory · Köln</p><h1>Goods receipt</h1></div><div class="row" style="flex:none"><button class="btn">Receive without an order…</button></div></div><div class="body"><div class="card" style="overflow:hidden"><table><thead><tr><th>Order</th><th>Supplier</th><th>Sent</th><th class="num">Lines open</th><th class="num">Value</th><th>Status</th></tr></thead><tbody>
+<tr class="sel"><td class="mono">PO-2026-0144</td><td>Chromatec AG, Basel</td><td>28-Oct-2026</td><td class="num">3</td><td class="num">CHF 2,450.35</td><td><span class="tag t-info">Arrived 08:12</span></td></tr>
+<tr><td class="mono">PO-2026-0143</td><td>Laborbedarf Hansen GmbH</td><td>24-Oct-2026</td><td class="num">1</td><td class="num">€640.00</td><td><span class="tag t-warn">Partly received</span></td></tr>
+<tr><td class="mono">PO-2026-0146</td><td>Laborbedarf Hansen GmbH</td><td>07-Nov-2026</td><td class="num">5</td><td class="num">€3,180.00</td><td><span class="tag t-neu">Sent</span></td></tr></tbody></table></div></div></div></div></div><div class="overlay"></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="grT" style="left:150px;top:20px;width:920px">
+<div class="dh row" style="align-items:flex-start"><div class="grow"><h2 id="grT">Receive <span class="mono" style="font-size:14px">PO-2026-0144</span> · Chromatec AG</h2><p class="muted" style="margin-top:4px">Ordered 28-Oct-2026 in CHF · arrived 09-Nov 08:12 · 3 lines</p></div><span class="tag t-info">Arrived</span></div>
+<div class="db"><div class="banner b-err" role="alert"><span><b>Not received: there is no CHF rate for 09-Nov-2026.</b> The receipt and its posting go together, so nothing was received and nothing was posted. A finance controller enters the rate under Ledger · Period close; then receive again.</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px"><div><label class="lbl">Delivery note <span class="req">*</span></label><input class="input" value="LS-884120"></div><div><label class="lbl">Received on <span class="req">*</span></label><input class="input" value="09-Nov-2026"></div><div><label class="lbl">Received by</label><input class="input" readonly value="Tobias Krüger"></div></div>
+<table><thead><tr><th>Item · ordered</th><th style="width:150px">Receiving now</th><th>Into stock</th><th style="width:120px">New lot <span class="req">*</span></th><th style="width:118px">Expiry</th><th style="width:170px">Location <span class="req">*</span></th></tr></thead><tbody>
+<tr><td class="wrap">Acetonitrile, HPLC grade<br><span class="muted">1 case, 4 × 2.5 L · CHF 1,115.03</span></td><td><div class="row" style="gap:4px"><input class="input num" value="10000" style="width:80px"><select class="input" style="width:62px"><option>mL</option></select></div></td><td>10.00 L</td><td><input class="input" value="A-26-0412"></td><td><input class="input" value="31-Oct-2027"></td><td><select class="input"><option>Solvent cabinet 2</option></select></td></tr>
+<tr><td class="wrap">HPLC column C18, 150 × 4.6 mm<br><span class="muted">1 piece · CHF 469.97</span></td><td><div class="row" style="gap:4px"><input class="input num" value="1" style="width:80px"><select class="input" style="width:62px"><option>pc</option></select></div></td><td>1 piece</td><td><input class="input" value="COL-26-118"></td><td><input class="input" placeholder="none" value=""></td><td><select class="input"><option>Column cabinet</option></select></td></tr>
+<tr><td class="wrap" rowspan="2">4-Aminophenol impurity standard<br><span class="muted">3 × 50 mg · CHF 865.35</span><br><button class="btn ghost sm" style="padding:0">Split into another lot</button></td><td><div class="row" style="gap:4px"><input class="input num" value="100" style="width:80px"><select class="input" style="width:62px"><option>mg</option></select></div></td><td>100 mg</td><td><input class="input" value="RS-0121"></td><td><input class="input" value="30-Jun-2027"></td><td><select class="input"><option>Fridge F-01</option></select></td></tr>
+<tr><td><div class="row" style="gap:4px"><input class="input num" value="50" style="width:80px"><select class="input" style="width:62px"><option>mg</option></select></div></td><td>50 mg</td><td><input class="input" value="RS-0122"></td><td><input class="input" value="30-Sep-2027"></td><td><select class="input"><option>Fridge F-01</option></select></td></tr></tbody></table>
+<section style="background:#F6F7F9;border:1px solid #E6E9ED;border-radius:6px;padding:10px 12px" aria-label="Posting"><div class="row" style="margin-bottom:6px"><b class="grow">Posts with the receipt, as one step</b><span class="muted">1 CHF = 1.0715 EUR · rate of 09-Nov-2026</span></div>
+<table><tbody><tr><td class="mono">3980</td><td>Reagents and consumables</td><td class="num">Debit €2,625.54</td></tr><tr><td class="mono">2490</td><td>Exchange rounding</td><td class="num">Debit €0.01</td></tr><tr><td class="mono">1610</td><td>Goods received, not invoiced</td><td class="num">Credit €2,625.55</td></tr></tbody></table></section></div>
+<div class="df"><button class="btn">Cancel</button><button class="btn primary">Receive and post</button></div></div></div></div></div>
+<div style="display:flex;gap:48px;align-items:flex-start"><div><p class="cap">Refused · a lot number that already exists</p><div class="win" style="width:1215px;height:960px;"><div class="app"><nav class="side" aria-label="Modules">
+<div class="brand"><span class="mk" aria-hidden="true">L</span><span class="nm">lims</span><span style="margin-left:auto;font-size:11px;color:#7A828F">ERP</span></div>
+<button class="sw" aria-label="Company and site: Rheinlab Analytik GmbH, Köln · EUR" aria-haspopup="menu"><span class="grow"><span class="co" style="display:block">Rheinlab Analytik GmbH</span><span class="si" style="display:block">Köln · EUR</span></span><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#9AA2AE" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 6.5 3-3 3 3M5 9.5l3 3 3-3"/></svg></button>
+<button class="nav mod"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H9.5v-3.5h-3v3.5H3a.5.5 0 0 1-.5-.5z"/></svg>Home</button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2.5h4M6.5 2.5v4L3 12.5a1 1 0 0 0 .9 1.5h8.2a1 1 0 0 0 .9-1.5L9.5 6.5v-4M4.6 10h6.8"/></svg>Lab<span class="cnt">4</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h8v11l-2-1.2-2 1.2-2-1.2-2 1.2zM6 6h4M6 8.5h4"/></svg>Billing<span class="cnt">3</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3.5h4.2c.5 0 .8.4.8.8V13c0-.5-.4-.8-.8-.8H3zM13 3.5H8.8c-.5 0-.8.4-.8.8V13c0-.5.4-.8.8-.8H13z"/></svg>Ledger<span class="chev" aria-hidden="true">▸</span></button>
+<button class="nav mod open" aria-expanded="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 5 8 2.5 13.5 5v6L8 13.5 2.5 11zM2.5 5 8 7.5 13.5 5M8 7.5v6"/></svg>Inventory<span class="chev" aria-hidden="true">▾</span></button>
+<button class="nav sub">Stock<span class="cnt">2</span></button>
+<button class="nav sub">Requisitions and orders</button>
+<button class="nav sub on" aria-current="page">Goods receipt<span class="cnt">1</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13.5V4.5L8 2.5l5 2v9M6 13.5v-3h4v3M5.5 6.5h1M9.5 6.5h1M5.5 8.5h1M9.5 8.5h1"/></svg>Admin<span class="chev" aria-hidden="true">▸</span></button>
+<div class="sidefoot"><i aria-hidden="true"></i><span class="grow">Connected</span><span>v4.2</span></div></nav><div class="main"><header class="top"><div class="gsearch" role="search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.2 10.2 3.3 3.3"/></svg><span class="grow">Search samples, invoices, accounts, items…</span><span class="kbd">Ctrl K</span></div><span class="grow"></span><button class="btn inbox" aria-label="Approvals, none waiting"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 9.5 4 3.5h8l1.5 6v3.5a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5zM2.5 9.5H6l.8 1.5h2.4l.8-1.5h3.5"/></svg>Approvals</button><button class="btn icon" aria-label="Help">?</button><div class="who"><span class="avatar" aria-hidden="true">TK</span><span><span class="nm" style="display:block">Tobias Krüger</span><span class="rl">Stores and purchasing</span></span><span class="faint" aria-hidden="true">▾</span></div></header><div class="page"><div class="ph"><div class="grow"><p class="eb">Inventory · Köln</p><h1>Goods receipt</h1></div><div class="row" style="flex:none"><button class="btn">Receive without an order…</button></div></div><div class="body"><div class="card" style="overflow:hidden"><table><thead><tr><th>Order</th><th>Supplier</th><th>Sent</th><th class="num">Lines open</th><th class="num">Value</th><th>Status</th></tr></thead><tbody>
+<tr class="sel"><td class="mono">PO-2026-0144</td><td>Chromatec AG, Basel</td><td>28-Oct-2026</td><td class="num">3</td><td class="num">CHF 2,450.35</td><td><span class="tag t-info">Arrived 08:12</span></td></tr>
+<tr><td class="mono">PO-2026-0143</td><td>Laborbedarf Hansen GmbH</td><td>24-Oct-2026</td><td class="num">1</td><td class="num">€640.00</td><td><span class="tag t-warn">Partly received</span></td></tr>
+<tr><td class="mono">PO-2026-0146</td><td>Laborbedarf Hansen GmbH</td><td>07-Nov-2026</td><td class="num">5</td><td class="num">€3,180.00</td><td><span class="tag t-neu">Sent</span></td></tr></tbody></table></div></div></div></div></div><div class="overlay"></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="grT" style="left:150px;top:20px;width:920px">
+<div class="dh row" style="align-items:flex-start"><div class="grow"><h2 id="grT">Receive <span class="mono" style="font-size:14px">PO-2026-0144</span> · Chromatec AG</h2><p class="muted" style="margin-top:4px">Ordered 28-Oct-2026 in CHF · arrived 09-Nov 08:12 · 3 lines</p></div><span class="tag t-info">Arrived</span></div>
+<div class="db"><div class="banner b-err" role="alert"><span><b>Not received: lot RS-0104 already exists</b> for 4-Aminophenol impurity standard, with expiry 31-Dec-2026. Give the new lot its own number, or receive into RS-0104 if it is the same lot.</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px"><div><label class="lbl">Delivery note <span class="req">*</span></label><input class="input" value="LS-884120"></div><div><label class="lbl">Received on <span class="req">*</span></label><input class="input" value="09-Nov-2026"></div><div><label class="lbl">Received by</label><input class="input" readonly value="Tobias Krüger"></div></div>
+<table><thead><tr><th>Item · ordered</th><th style="width:150px">Receiving now</th><th>Into stock</th><th style="width:120px">New lot <span class="req">*</span></th><th style="width:118px">Expiry</th><th style="width:170px">Location <span class="req">*</span></th></tr></thead><tbody>
+<tr><td class="wrap">Acetonitrile, HPLC grade<br><span class="muted">1 case, 4 × 2.5 L · CHF 1,115.03</span></td><td><div class="row" style="gap:4px"><input class="input num" value="10000" style="width:80px"><select class="input" style="width:62px"><option>mL</option></select></div></td><td>10.00 L</td><td><input class="input" value="A-26-0412"></td><td><input class="input" value="31-Oct-2027"></td><td><select class="input"><option>Solvent cabinet 2</option></select></td></tr>
+<tr><td class="wrap">HPLC column C18, 150 × 4.6 mm<br><span class="muted">1 piece · CHF 469.97</span></td><td><div class="row" style="gap:4px"><input class="input num" value="1" style="width:80px"><select class="input" style="width:62px"><option>pc</option></select></div></td><td>1 piece</td><td><input class="input" value="COL-26-118"></td><td><input class="input" placeholder="none" value=""></td><td><select class="input"><option>Column cabinet</option></select></td></tr>
+<tr><td class="wrap" rowspan="2">4-Aminophenol impurity standard<br><span class="muted">3 × 50 mg · CHF 865.35</span><br><button class="btn ghost sm" style="padding:0">Split into another lot</button></td><td><div class="row" style="gap:4px"><input class="input num" value="100" style="width:80px"><select class="input" style="width:62px"><option>mg</option></select></div></td><td>100 mg</td><td><input class="input" value="RS-0121"></td><td><input class="input" value="30-Jun-2027"></td><td><select class="input"><option>Fridge F-01</option></select></td></tr>
+<tr><td><div class="row" style="gap:4px"><input class="input num" value="50" style="width:80px"><select class="input" style="width:62px"><option>mg</option></select></div></td><td>50 mg</td><td><input class="input" value="RS-0122"></td><td><input class="input" value="30-Sep-2027"></td><td><select class="input"><option>Fridge F-01</option></select></td></tr></tbody></table>
+<section style="background:#F6F7F9;border:1px solid #E6E9ED;border-radius:6px;padding:10px 12px" aria-label="Posting"><div class="row" style="margin-bottom:6px"><b class="grow">Posts with the receipt, as one step</b><span class="muted">1 CHF = 1.0715 EUR · rate of 09-Nov-2026</span></div>
+<table><tbody><tr><td class="mono">3980</td><td>Reagents and consumables</td><td class="num">Debit €2,625.54</td></tr><tr><td class="mono">2490</td><td>Exchange rounding</td><td class="num">Debit €0.01</td></tr><tr><td class="mono">1610</td><td>Goods received, not invoiced</td><td class="num">Credit €2,625.55</td></tr></tbody></table></section></div>
+<div class="df"><button class="btn">Cancel</button><button class="btn primary">Receive and post</button></div></div></div></div></div>
+<div style="display:flex;gap:48px;align-items:flex-start"><div><p class="cap">Loading</p><div class="win" style="width:1215px;height:440px;"><div class="app"><nav class="side" aria-label="Modules">
+<div class="brand"><span class="mk" aria-hidden="true">L</span><span class="nm">lims</span><span style="margin-left:auto;font-size:11px;color:#7A828F">ERP</span></div>
+<button class="sw" aria-label="Company and site: Rheinlab Analytik GmbH, Köln · EUR" aria-haspopup="menu"><span class="grow"><span class="co" style="display:block">Rheinlab Analytik GmbH</span><span class="si" style="display:block">Köln · EUR</span></span><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#9AA2AE" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 6.5 3-3 3 3M5 9.5l3 3 3-3"/></svg></button>
+<button class="nav mod"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H9.5v-3.5h-3v3.5H3a.5.5 0 0 1-.5-.5z"/></svg>Home</button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2.5h4M6.5 2.5v4L3 12.5a1 1 0 0 0 .9 1.5h8.2a1 1 0 0 0 .9-1.5L9.5 6.5v-4M4.6 10h6.8"/></svg>Lab<span class="cnt">4</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h8v11l-2-1.2-2 1.2-2-1.2-2 1.2zM6 6h4M6 8.5h4"/></svg>Billing<span class="cnt">3</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3.5h4.2c.5 0 .8.4.8.8V13c0-.5-.4-.8-.8-.8H3zM13 3.5H8.8c-.5 0-.8.4-.8.8V13c0-.5.4-.8.8-.8H13z"/></svg>Ledger<span class="chev" aria-hidden="true">▸</span></button>
+<button class="nav mod open" aria-expanded="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 5 8 2.5 13.5 5v6L8 13.5 2.5 11zM2.5 5 8 7.5 13.5 5M8 7.5v6"/></svg>Inventory<span class="chev" aria-hidden="true">▾</span></button>
+<button class="nav sub">Stock<span class="cnt">2</span></button>
+<button class="nav sub">Requisitions and orders</button>
+<button class="nav sub on" aria-current="page">Goods receipt<span class="cnt">1</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13.5V4.5L8 2.5l5 2v9M6 13.5v-3h4v3M5.5 6.5h1M9.5 6.5h1M5.5 8.5h1M9.5 8.5h1"/></svg>Admin<span class="chev" aria-hidden="true">▸</span></button>
+<div class="sidefoot"><i aria-hidden="true"></i><span class="grow">Connected</span><span>v4.2</span></div></nav><div class="main"><header class="top"><div class="gsearch" role="search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.2 10.2 3.3 3.3"/></svg><span class="grow">Search samples, invoices, accounts, items…</span><span class="kbd">Ctrl K</span></div><span class="grow"></span><button class="btn inbox" aria-label="Approvals, none waiting"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 9.5 4 3.5h8l1.5 6v3.5a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5zM2.5 9.5H6l.8 1.5h2.4l.8-1.5h3.5"/></svg>Approvals</button><button class="btn icon" aria-label="Help">?</button><div class="who"><span class="avatar" aria-hidden="true">TK</span><span><span class="nm" style="display:block">Tobias Krüger</span><span class="rl">Stores and purchasing</span></span><span class="faint" aria-hidden="true">▾</span></div></header><div class="page"><div class="ph"><div class="grow"><p class="eb">Inventory · Köln</p><h1>Goods receipt</h1></div><div class="row" style="flex:none"><button class="btn">Receive without an order…</button></div></div><div class="body"><div class="card" style="overflow:hidden"><table><thead><tr><th>Order</th><th>Supplier</th><th>Sent</th><th class="num">Lines open</th><th class="num">Value</th><th>Status</th></tr></thead><tbody>
+<tr class="sel"><td class="mono">PO-2026-0144</td><td>Chromatec AG, Basel</td><td>28-Oct-2026</td><td class="num">3</td><td class="num">CHF 2,450.35</td><td><span class="tag t-info">Arrived 08:12</span></td></tr>
+<tr><td class="mono">PO-2026-0143</td><td>Laborbedarf Hansen GmbH</td><td>24-Oct-2026</td><td class="num">1</td><td class="num">€640.00</td><td><span class="tag t-warn">Partly received</span></td></tr>
+<tr><td class="mono">PO-2026-0146</td><td>Laborbedarf Hansen GmbH</td><td>07-Nov-2026</td><td class="num">5</td><td class="num">€3,180.00</td><td><span class="tag t-neu">Sent</span></td></tr></tbody></table></div></div></div></div></div><div class="overlay"></div><div class="dialog" role="dialog" style="left:150px;top:60px;width:920px"><div class="dh"><h2>Receive <span class="mono" style="font-size:14px">PO-2026-0144</span></h2></div><div class="db"><div class="row" style="gap:12px"><span class="skel" style="width:200px"></span><span class="skel" style="width:90px"></span><span class="skel" style="width:110px"></span><span class="skel" style="width:120px"></span></div><div class="row" style="gap:12px"><span class="skel" style="width:200px"></span><span class="skel" style="width:90px"></span><span class="skel" style="width:110px"></span><span class="skel" style="width:120px"></span></div><div class="row" style="gap:12px"><span class="skel" style="width:200px"></span><span class="skel" style="width:90px"></span><span class="skel" style="width:110px"></span><span class="skel" style="width:120px"></span></div><div class="row" style="gap:12px"><span class="skel" style="width:200px"></span><span class="skel" style="width:90px"></span><span class="skel" style="width:110px"></span><span class="skel" style="width:120px"></span></div><div class="row muted" role="status"><span class="ring"></span>Loading the order, its open lines and the CHF rate…</div></div><div class="df"><button class="btn">Cancel</button><button class="btn primary" disabled>Receive and post</button></div></div></div></div></div>
+<div style="display:flex;gap:48px;align-items:flex-start"><div><p class="cap">Empty</p><div class="win" style="width:1215px;height:400px;"><div class="app"><nav class="side" aria-label="Modules">
+<div class="brand"><span class="mk" aria-hidden="true">L</span><span class="nm">lims</span><span style="margin-left:auto;font-size:11px;color:#7A828F">ERP</span></div>
+<button class="sw" aria-label="Company and site: Rheinlab Analytik GmbH, Köln · EUR" aria-haspopup="menu"><span class="grow"><span class="co" style="display:block">Rheinlab Analytik GmbH</span><span class="si" style="display:block">Köln · EUR</span></span><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#9AA2AE" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 6.5 3-3 3 3M5 9.5l3 3 3-3"/></svg></button>
+<button class="nav mod"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H9.5v-3.5h-3v3.5H3a.5.5 0 0 1-.5-.5z"/></svg>Home</button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2.5h4M6.5 2.5v4L3 12.5a1 1 0 0 0 .9 1.5h8.2a1 1 0 0 0 .9-1.5L9.5 6.5v-4M4.6 10h6.8"/></svg>Lab<span class="cnt">4</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h8v11l-2-1.2-2 1.2-2-1.2-2 1.2zM6 6h4M6 8.5h4"/></svg>Billing<span class="cnt">3</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3.5h4.2c.5 0 .8.4.8.8V13c0-.5-.4-.8-.8-.8H3zM13 3.5H8.8c-.5 0-.8.4-.8.8V13c0-.5.4-.8.8-.8H13z"/></svg>Ledger<span class="chev" aria-hidden="true">▸</span></button>
+<button class="nav mod open" aria-expanded="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 5 8 2.5 13.5 5v6L8 13.5 2.5 11zM2.5 5 8 7.5 13.5 5M8 7.5v6"/></svg>Inventory<span class="chev" aria-hidden="true">▾</span></button>
+<button class="nav sub">Stock<span class="cnt">2</span></button>
+<button class="nav sub">Requisitions and orders</button>
+<button class="nav sub on" aria-current="page">Goods receipt<span class="cnt">1</span></button>
+<button class="nav mod" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13.5V4.5L8 2.5l5 2v9M6 13.5v-3h4v3M5.5 6.5h1M9.5 6.5h1M5.5 8.5h1M9.5 8.5h1"/></svg>Admin<span class="chev" aria-hidden="true">▸</span></button>
+<div class="sidefoot"><i aria-hidden="true"></i><span class="grow">Connected</span><span>v4.2</span></div></nav><div class="main"><header class="top"><div class="gsearch" role="search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.2 10.2 3.3 3.3"/></svg><span class="grow">Search samples, invoices, accounts, items…</span><span class="kbd">Ctrl K</span></div><span class="grow"></span><button class="btn inbox" aria-label="Approvals, none waiting"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 9.5 4 3.5h8l1.5 6v3.5a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5zM2.5 9.5H6l.8 1.5h2.4l.8-1.5h3.5"/></svg>Approvals</button><button class="btn icon" aria-label="Help">?</button><div class="who"><span class="avatar" aria-hidden="true">TK</span><span><span class="nm" style="display:block">Tobias Krüger</span><span class="rl">Stores and purchasing</span></span><span class="faint" aria-hidden="true">▾</span></div></header><div class="page"><div class="ph"><div class="grow"><p class="eb">Inventory · Köln</p><h1>Goods receipt</h1></div><div class="row" style="flex:none"></div></div><div class="body"><div class="card"><div class="empty"><span class="ic"><svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="#17784A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 5 8 2.5 13.5 5v6L8 13.5 2.5 11zM2.5 5 8 7.5 13.5 5M8 7.5v6"/></svg></span><h3>Nothing to receive</h3><p>Purchase orders appear here once they are sent to the supplier. All 41 orders of Köln are fully received.</p><div style="margin-top:8px"><button class="btn">Receive without an order…</button></div></div></div></div></div></div></div></div></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1733,"height":1200}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
