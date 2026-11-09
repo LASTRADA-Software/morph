@@ -209,3 +209,39 @@ TEST_CASE("sample entry: deleting withdraws a registration and refuses a receive
     CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::IllegalTransition);
     CHECK(reader.execute(lims::LoadSample{.id = second.sampleId}).reference == "WW-0001");
 }
+
+// Mutations: drop the id check from LoadSample; let DeleteSample run on a working copy that was never saved.
+TEST_CASE("sample entry: loading names a sample, and a never-saved working copy cannot be deleted",
+          "[lims][sample-entry]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Analyst);
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    CHECK_THROWS_AS(model.execute(lims::LoadSample{}), lims::ValidationError);
+    CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::NotFound);
+}
+
+// Mutations: skip the client lookup in SaveSample (a header naming a client that does not exist is stored); clear
+// turbidity whichever optional measurement is named.
+TEST_CASE("sample entry: a save names a client that exists, and each optional measurement clears on its own",
+          "[lims][sample-entry]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Analyst);
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    completeCopy(model);
+    model.execute(lims::HeaderSection{.clientId = lims::ClientId{9999},
+                                      .reference = "WW-0001",
+                                      .receivedOn = 20'000,
+                                      .remarks = {},
+                                      .siteId = lims::test::seededSite()});
+    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::NotFound);
+
+    model.execute(
+        lims::TurbiditySection{.ntu = lims::Turbidity{Rational{Numerator{3}, Denominator{2}, DecimalPlaces{2}}}});
+    model.execute(lims::NitrateSection{
+        .nitrate = lims::Concentration{Rational{Numerator{3}, Denominator{2}, DecimalPlaces{2}}}});
+    auto const cleared = model.execute(lims::ClearOptionalMeasurement{.which = std::string{lims::kNitrate}});
+    CHECK_FALSE(cleared.hasNitrate);
+    CHECK(cleared.hasTurbidity);
+}

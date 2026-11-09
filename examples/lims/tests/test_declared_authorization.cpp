@@ -182,14 +182,14 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
     std::set<std::string_view> listed;
     std::set<std::string_view> declared;
     std::apply(
-        [&](auto... action) {
+        [&](auto const&... action) {
             (
                 [&] {
-                    using A = decltype(action);
-                    auto const id = morph::model::ActionTraits<A>::typeId();
-                    listed.insert(id);
+                    using A = std::remove_cvref_t<decltype(action)>;
+                    auto const typeId = morph::model::ActionTraits<A>::typeId();
+                    listed.insert(typeId);
                     if constexpr (lims::DeclaresRule<A>) {
-                        declared.insert(id);
+                        declared.insert(typeId);
                     }
                 }(),
                 ...);
@@ -207,13 +207,13 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
     }();
 
     CHECK(inTable == declared);
-    for (auto const id : listed) {
-        CAPTURE(id);
-        CHECK((declared.contains(id) != open.contains(id)));
+    for (auto const actionId : listed) {
+        CAPTURE(actionId);
+        CHECK((declared.contains(actionId) != open.contains(actionId)));
     }
-    for (auto const id : open) {
-        CAPTURE(id);
-        CHECK(listed.contains(id));
+    for (auto const actionId : open) {
+        CAPTURE(actionId);
+        CHECK(listed.contains(actionId));
     }
 
     // What this proves: every action of the three models that declares an effect other than None is in the list
@@ -224,22 +224,22 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
     auto const& dispatcher = morph::model::detail::ActionDispatcher::instance();
     std::set<std::string> withEffects;
     for (std::string_view const model : {"OrgModel", "SampleModel", "AnalysisCatalogModel"}) {
-        for (auto const& id : dispatcher.actionsOf(model)) {
-            auto const effects = morph::effects::effectsOf(id);
+        for (auto const& actionId : dispatcher.actionsOf(model)) {
+            auto const effects = morph::effects::effectsOf(actionId);
             bool const mutates =
-                effects.has_value() && std::ranges::any_of(*effects, [](morph::effects::Effect const& e) {
-                    return e.kind != morph::effects::Kind::None;
+                effects.has_value() && std::ranges::any_of(*effects, [](morph::effects::Effect const& effect) {
+                    return effect.kind != morph::effects::Kind::None;
                 });
             if (mutates) {
-                withEffects.emplace(id);
+                withEffects.emplace(actionId);
             }
         }
     }
     std::set<std::string> expected{listed.begin(), listed.end()};
-    for (auto const id : effectless) {
-        CAPTURE(id);
-        CHECK(listed.contains(id));
-        expected.erase(std::string{id});
+    for (auto const actionId : effectless) {
+        CAPTURE(actionId);
+        CHECK(listed.contains(actionId));
+        expected.erase(std::string{actionId});
     }
     CHECK(withEffects == expected);
 }

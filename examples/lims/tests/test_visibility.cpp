@@ -15,6 +15,7 @@
 
 #include "lims/app/lims_authorizer.hpp"
 #include "lims/lab/models/sample_model.hpp"
+#include "lims/org/core/errors.hpp"
 #include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/backend_rig.hpp"
@@ -246,4 +247,18 @@ TEST_CASE("visibility: the sample list is scoped over every backend", "[lims][vi
     auto lister = rig.client<lims::SampleModel>(0);
     auto const page = awaitQt(lister.execute(lims::ListSamples{}));
     CHECK(idsOf(page.rows) == std::vector<lims::SampleId>{org.atField});
+}
+
+// Mutation: ignore the table engine's refusal of a query (an out-of-range page then returns every row).
+TEST_CASE("visibility: a list refuses a page the table engine rejects", "[lims][visibility]") {
+    DbFixture fixture;
+    static_cast<void>(setUp());
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    lims::ListSamples samples;
+    samples.query.page.offset = -1;
+    CHECK_THROWS_AS(model.execute(samples), lims::ValidationError);
+    lims::ListProjects projects;
+    projects.query.page.offset = -1;
+    CHECK_THROWS_AS(model.execute(projects), lims::ValidationError);
 }

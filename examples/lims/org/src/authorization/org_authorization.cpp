@@ -18,9 +18,9 @@ Scope Authorization<RevokeRole>::scopeOf(RevokeRole const& action) {
     if (rows.empty()) {
         return Scope{CompanyId{}};
     }
-    auto const id = static_cast<std::int64_t>(rows.front().scopeId.Value());
-    return rows.front().scopeKind.Value() == static_cast<int>(ScopeKind::Company) ? Scope{CompanyId{id}}
-                                                                                  : Scope{SiteId{id}};
+    auto const scopeId = static_cast<std::int64_t>(rows.front().scopeId.Value());
+    return rows.front().scopeKind.Value() == static_cast<int>(ScopeKind::Company) ? Scope{CompanyId{scopeId}}
+                                                                                  : Scope{SiteId{scopeId}};
 }
 
 }  // namespace lims

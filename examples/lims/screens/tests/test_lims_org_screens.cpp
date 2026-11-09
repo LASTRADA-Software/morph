@@ -117,7 +117,7 @@ TEST_CASE("lims org screens: a revoke drops its own row, and the last supervisor
     harness.click("revoke");
     CHECK(harness.waitFor([&harness] {
         auto const text = harness.text("error");
-        return text && text->find("last supervisor") != std::string::npos;
+        return text && text->contains("last supervisor");
     }));
     CHECK(shown("bob"));
     reportProblems(harness);
@@ -142,6 +142,6 @@ TEST_CASE("lims org screens: a refused create-company form names the missing sup
     REQUIRE(harness.submitForm("companyForm"));
     CHECK(harness.waitFor([&harness] {
         auto const text = harness.text("form_result");
-        return text && text->find("does not hold the supervisor role") != std::string::npos;
+        return text && text->contains("does not hold the supervisor role");
     }));
 }

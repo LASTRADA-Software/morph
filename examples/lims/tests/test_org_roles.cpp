@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <memory>
+#include <morph/session/session_auth.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -16,6 +18,7 @@
 #include "lims/org/core/errors.hpp"
 #include "lims/org/db/org_entity.hpp"
 #include "lims/org/dto/role_dto.hpp"
+#include "lims/org/models/auth_model.hpp"
 #include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
 #include "migration_probe.hpp"
@@ -446,7 +449,7 @@ TEST_CASE("org roles: a caller who supervises nowhere cannot tell which scopes a
 // loggability (neither entry appears).
 TEST_CASE("org roles: the dispatcher journals a role assignment, the refused ones included", "[lims][org][roles]") {
     DbFixture fixture;
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
+    auto const log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     auto holder = morph::model::detail::defaultRegistry().create("OrgModel");
     REQUIRE(holder != nullptr);
     holder->attachActionLog(log, std::string{});
@@ -476,4 +479,33 @@ TEST_CASE("org roles: the dispatcher journals a role assignment, the refused one
     CHECK(entries[1].outcome == morph::journal::Outcome::Failed);
     CHECK(entries[1].principal == "mallory");
     CHECK_FALSE(entries[1].error.empty());
+}
+
+// Mutation: drop the id check from RevokeRole (an empty id reaches the lookup and revokes nothing, silently).
+TEST_CASE("org: a revoke that names no assignment is refused", "[lims][org]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    CHECK_THROWS_AS(org.execute(lims::RevokeRole{}), lims::ValidationError);
+}
+
+// Mutations: let a service principal log in; skip the username check; issue a token with no issuer installed.
+TEST_CASE("auth: sign-in refuses a malformed or reserved principal and needs an issuer", "[lims][auth]") {
+    lims::LimsAuthModel auth;
+    auto const previous = lims::auth::tokenIssuer();
+    lims::auth::setTokenIssuer(
+        std::make_shared<morph::session::TokenIssuer>("auth-test-secret", morph::session::hmacSha256));
+
+    auto const signedIn = auth.execute(lims::LimsLogin{.username = "alice"});
+    CHECK(signedIn.principal == "alice");
+    CHECK_FALSE(signedIn.token.empty());
+    CHECK_THROWS_AS(auth.execute(lims::LimsLogin{.username = ""}), lims::ValidationError);
+    CHECK_THROWS_AS(auth.execute(lims::LimsLogin{.username = "not a principal"}), lims::ValidationError);
+    CHECK_THROWS_AS(auth.execute(lims::LimsLogin{.username = std::string(65, 'a')}), lims::ValidationError);
+    CHECK_THROWS_AS(auth.execute(lims::LimsLogin{.username = "system:server"}), lims::ValidationError);
+
+    lims::auth::setTokenIssuer(nullptr);
+    CHECK_THROWS_AS(auth.execute(lims::LimsLogin{.username = "alice"}), lims::ValidationError);
+    lims::auth::setTokenIssuer(previous);
 }

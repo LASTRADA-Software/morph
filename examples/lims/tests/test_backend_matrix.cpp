@@ -260,7 +260,7 @@ TEST_CASE("A role lookup that throws inside authorize() fails the request cleanl
     lims::test::grant("alice", lims::LimsRole::Supervisor);
     lims::test::grant("bob", lims::LimsRole::Verifier);
 
-    auto authorizer = std::make_shared<lims::auth::LimsAuthorizer>(
+    auto const authorizer = std::make_shared<lims::auth::LimsAuthorizer>(
         std::string{kSecret}, [](std::string_view principal) -> std::vector<lims::LimsRole> {
             if (principal == "bob") {
                 throw std::runtime_error{"authorizer lookup failed for bob"};

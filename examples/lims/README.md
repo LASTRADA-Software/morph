@@ -6,7 +6,9 @@ whose size is what a real client faces (see [`LADDER.md`](../LADDER.md)).
 
 **Status: built** — §1–§7 below are all implemented, with model tests under [`tests/`](tests) and its screens
 under [`screens/`](screens); see [Definition of
-done](#definition-of-done) for what that does and does not mean. A
+done](#definition-of-done) for what that does and does not mean. Part A of the ERP
+design (`docs/superpowers/specs/2026-11-09-lims-erp-design.md`) is built: modules, companies and sites, scoped
+roles, declared authorization, scoped lists and the administration screens (decisions 21–27). A
 lightweight Laboratory Information Management System:
 register samples, assign analyses, capture results with real units and
 detection limits on versioned forms, verify and publish, keep a regulatory
@@ -51,7 +53,9 @@ Three anchors, each for a different layer:
 
 Models: `SampleModel` keyed by sample id (shared instance — bench and office
 clients attach to the same sample), `AnalysisCatalogModel` (analysis
-definitions = form schemas, versioned). ~~`WorksheetModel`~~ — **struck
+definitions = form schemas, versioned) and `IgnitionModel` in the lab module;
+`LimsAuthModel` (sign-in) and `OrgModel` (companies, sites, role assignments)
+in the org module. ~~`WorksheetModel`~~ — **struck
 after the rest of the rung was built; see resolved decision 19 for the
 reasoning.**
 
@@ -645,20 +649,22 @@ mounts every screen on Qt Quick offscreen. `morph_examples_client --app lims` ru
 process over a local database (`--db`, default `lims.db`).
 
 
-### 20. Model coverage is 98.96%, and measuring it found a real defect (§ coverage gate)
+### 20. Model coverage is 98.92%, and measuring it found a real defect (§ coverage gate)
 
 `codecov.yml` gains a `lims` component scoped to the model paths of the lab and org modules
 (`examples/lims/{lab,org}/src/models/**` and `examples/lims/{lab,org}/include/lims/{lab,org}/models/**`) — the paths
 `examples/IMPLEMENTATION.md` rule 5's bar actually names — with a 97% target,
-a margin below the measured 855/864 = 98.96% ceiling.
+a margin below the measured 1557/1574 = 98.92% line ceiling (449 of 484 branches).
 
-The remaining nine lines are three defensive guards, each unreachable through
-the model's own API rather than merely untested: `alreadyDecided`'s empty-key
-guard (validation refuses an empty operation key first), `renderSchemaFor`'s
-malformed-JSON arm (its input is `schemaJson<A>()`), and
-`GetAnalysisVersion`'s dangling-version arm (a declared foreign key forbids
-the row). Each turns an impossible state into a typed error instead of a
-dereference, so each is kept.
+The remaining seventeen lines are defensive guards, each unreachable through the model's own API rather than merely
+untested: `alreadyDecided`'s empty-key guard (validation refuses an empty operation key first), `renderSchemaFor`'s
+malformed-JSON arm (its input is `schemaJson<A>()`), `GetAnalysisVersion`'s dangling-version arm (a declared foreign key
+forbids the row), the arms of `SampleModel`'s entry actions that meet a sample row deleted between two reads of it or a
+draft that cannot be encoded, and the `default` arm of the capture's constraint switch, which `checkValue` has no
+other kind to reach. Each turns an impossible state into a typed error instead of a dereference, so each is kept. One
+line is a measurement artifact: the continuation line of the precision refusal's `throw` is reached by its test and
+reported unhit. The one reachable gap is a stored entry that does not decode, which needs a corrupted row and is not
+tested.
 
 Measuring rather than assuming was worth it twice. The first measurement came
 in at 93.27%, and the gap was not padding: `AnalysisCatalogModel::attachActionLog`

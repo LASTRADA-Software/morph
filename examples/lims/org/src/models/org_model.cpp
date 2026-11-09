@@ -271,10 +271,10 @@ RoleAssignmentView OrgModel::execute(const AssignRole& action) {
     if (!bootstrap) {
         requireAuthorized(action);
     }
-    auto const [kind, id] = storedScope(scope);
+    auto const [kind, scopeId] = storedScope(scope);
     for (auto const& row : assignmentsOf(mapper, action.principal)) {
         if (row.role.Value() == static_cast<int>(action.role) && row.scopeKind.Value() == static_cast<int>(kind) &&
-            row.scopeId.Value() == id) {
+            row.scopeId.Value() == scopeId) {
             return toView(row);
         }
     }
@@ -282,7 +282,7 @@ RoleAssignmentView OrgModel::execute(const AssignRole& action) {
     row.principal = Lightweight::SqlAnsiString<64>{action.principal};
     row.role = static_cast<int>(action.role);
     row.scopeKind = static_cast<int>(kind);
-    row.scopeId = id;
+    row.scopeId = scopeId;
     row.grantedBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
     row.grantedAt = nowMillis();
     mapper.Create(row);
@@ -384,7 +384,7 @@ std::vector<SiteId> OrgModel::visibleSites(std::string_view principal) {
                    (kind == ScopeKind::Company && row.scopeId.Value() == companyId);
         });
         if (seen) {
-            visible.push_back(SiteId{siteId});
+            visible.emplace_back(siteId);
         }
     }
     std::ranges::sort(visible, {}, [](SiteId const& site) { return *site; });
