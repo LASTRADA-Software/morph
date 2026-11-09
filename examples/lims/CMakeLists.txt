@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# lims — rung 3 of the application ladder (examples/lims/README.md), built from modules: org and posting (shared), lab, and app,
-# which composes them. All target wiring lives in morph_add_rung() (cmake/morph_add_rung.cmake); this file calls it
-# and adds the compile checks that prove the module boundary.
+# lims — rung 3 of the application ladder (examples/lims/README.md), built from modules: org and posting (shared),
+# lab, and app, which composes them. All target wiring lives in morph_add_rung() (cmake/morph_add_rung.cmake); this
+# file calls it and adds the compile checks that prove the module boundary.
 
 cmake_minimum_required(VERSION 3.25)
 
@@ -12,8 +12,9 @@ morph_add_rung(NAME lims
     USES lab:org
     APP_MODULE app)
 
-# A module's include path holds its own headers and the shared modules' only. Each probe compiles one include as part
-# of one module, and its test builds it: a probe that crosses the boundary must fail with the compiler naming the
+# Each probe compiles one include as part of one module, and its test builds it: a probe that crosses the
+# boundary must fail with the compiler naming the header, and the control must build, which shows the probes compile
+# through the module's real include path.
 # header, and the control must build, which shows the probes compile through the module's real include path.
 if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
     # morph_add_rung creates ladder_lims_lab on every non-Emscripten build; without it the probes would vanish while

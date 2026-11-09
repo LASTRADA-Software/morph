@@ -221,9 +221,9 @@ lims is built from modules, each its own library with its own include directory 
 | `app/` | the server edge's `LimsAuthorizer`, and the tables it reads: `declaredRequirements` and `openMutatingActions` | every module |
 
 The server (`src/server/`), the screens (`screens/`) and the suites (`tests/`) belong to the app and link every
-module. A module that includes another module's header (other than a shared one) does not compile; the
-`lims.module_boundary.*` tests build such an include and pass only when the compiler refuses it, beside a control that
-must build.
+module. A module that includes another module's header does not compile, and neither does one that includes a shared
+module it does not use (`USES` names the shared modules each module links); the `lims.module_boundary.*` tests build
+such an include and pass only when the compiler refuses it, beside a control that must build.
 
 ## Resolved design decisions
 

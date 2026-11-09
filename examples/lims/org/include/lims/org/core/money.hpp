@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 #include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
@@ -82,6 +83,7 @@ using Count = ::morph::units::Quantity<ErpUnit::count, 0>;
         default:
             break;
     }
+    assert(false && "a CurrencyCode outside its enumeration");
     std::unreachable();
 }
 
@@ -103,6 +105,7 @@ using Count = ::morph::units::Quantity<ErpUnit::count, 0>;
         default:
             break;
     }
+    assert(false && "a CurrencyCode outside its enumeration");
     std::unreachable();
 }
 

@@ -7,6 +7,8 @@
 #include <morph/util/rational.hpp>
 #include <string>
 
+#include "lims/org/core/errors.hpp"
+#include "lims/org/core/model_support.hpp"
 #include "lims/posting/posting.hpp"
 
 namespace {
@@ -20,11 +22,11 @@ using morph::math::Rational;
 TEST_CASE("posting contract: a request round-trips through JSON with its zero-decimal amounts", "[lims][posting]") {
     lims::PostingRequest request{
         .company = lims::CompanyId{2},
-        .date = {},
+        .date = lims::timestampFromMillis(1767225600000),
         .sourceKey = "billing.invoice:7",
         .sourceReference = "invoice 7",
         .currency = lims::CurrencyCode::JPY,
-        .rate = lims::Rate{Rational{1, DecimalPlaces{6}}},
+        .rate = lims::Rate{Rational{157, DecimalPlaces{6}}},
         .lines = {lims::PostingLine{.accountCode = "1200",
                                     .side = lims::PostingSide::Debit,
                                     .amount = lims::Amount{Rational{1100, DecimalPlaces{0}}},
@@ -40,11 +42,21 @@ TEST_CASE("posting contract: a request round-trips through JSON with its zero-de
     REQUIRE_FALSE(glz::read_json(decoded, *json));
     REQUIRE(decoded.lines.size() == 2U);
     CHECK(decoded.company == lims::CompanyId{2});
+    CHECK(decoded.date == request.date);
     CHECK(decoded.sourceKey == "billing.invoice:7");
+    CHECK(decoded.sourceReference == "invoice 7");
     CHECK(decoded.currency == lims::CurrencyCode::JPY);
-    CHECK(decoded.lines[1].side == lims::PostingSide::Credit);
-    CHECK(decoded.lines[1].accountCode == "4000");
-    CHECK(*decoded.lines[0].amount == Rational{1100, DecimalPlaces{0}});
+    CHECK(*decoded.rate == Rational{157, DecimalPlaces{6}});
+    CHECK((*decoded.rate).getDecimalPlaces() == DecimalPlaces{6});
+    for (std::size_t i = 0; i < 2U; ++i) {
+        CAPTURE(i);
+        CHECK(decoded.lines[i].accountCode == request.lines[i].accountCode);
+        CHECK(decoded.lines[i].side == request.lines[i].side);
+        CHECK(*decoded.lines[i].amount == Rational{1100, DecimalPlaces{0}});
+        CHECK((*decoded.lines[i].amount).getDecimalPlaces() == DecimalPlaces{0});
+        CHECK(*decoded.lines[i].companyAmount == Rational{1100, DecimalPlaces{0}});
+        CHECK((*decoded.lines[i].companyAmount).getDecimalPlaces() == DecimalPlaces{0});
+    }
 }
 
 TEST_CASE("posting contract: a result names the entry", "[lims][posting]") {

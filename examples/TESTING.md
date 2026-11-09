@@ -442,9 +442,9 @@ Open framework facts every WASM client must respect (verified):
   the names distinct, and note the prefix reaches the *ctest* entry only, so
   `ctest -R` still matches the bare test name), warnings and
   sanitizers **applied to all app code**, AUTOMOC, and a TIMEOUT on every
-  binary. A rung built from modules passes `MODULES`, `SHARED_MODULES` and
-  `APP_MODULE`: each module becomes `ladder_<rung>_<module>` with its own
-  include directory, linked only to the shared modules (the app module to all),
+  binary. A rung built from modules passes `MODULES`, `SHARED_MODULES`, `USES`
+  and `APP_MODULE`: each module becomes `ladder_<rung>_<module>` with its own
+  include directory, linked only to the shared modules `USES` names for it (the app module to all),
   and `ladder_<rung>_lib` links them all (a module with sources
   whole-archive, one without sources plain)
   (`cmake/morph_add_rung.cmake` states the rules); lims is built that way.

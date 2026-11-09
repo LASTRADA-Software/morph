@@ -15,7 +15,7 @@
 #   src/server/*.cpp                                -> ladder_<rung>_server   EXE    (standalone server; skipped under Emscripten)
 #   tests/*.cpp                                     -> ladder_<rung>_tests    EXE    (Catch2; skipped under Emscripten)
 #
-# A rung built from modules passes MODULES <m>... (and SHARED_MODULES, APP_MODULE). Then each module is its own
+# A rung built from modules passes MODULES <m>... (and SHARED_MODULES, USES, APP_MODULE). Then each module is its own
 # library, ladder_<rung>_<m>, built from <m>/src/**/*.cpp with <m>/include as its include directory (an INTERFACE
 # library when it has no sources), and ladder_<rung>_lib is an INTERFACE target that links every module.
 # Link rules, which make including another module's header a compile error:
