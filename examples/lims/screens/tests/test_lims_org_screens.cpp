@@ -57,6 +57,32 @@ TEST_CASE("lims org screens: a supervisor creates a company and a site, and both
     CHECK(harness.problems().empty());
 }
 
+// Mutations: drop changes<RoleAssignmentView> from AssignRole's effects (the count stays at 0); render the roles cell
+// as an empty list (no role name appears in the users table).
+TEST_CASE("lims org screens: the first supervisor assigns themselves, then a verifier, and the users list their roles",
+          "[lims-screens][org]") {
+    DbFixture fixture;
+    ScreenHarness harness{
+        limsApp(), std::string{lims::screens::kAccess}, RigMode::Local, {}, LocalSetup{.db = {}, .user = "tech"}};
+    REQUIRE(harness.waitForText("assignmentCount", "0 role assignments"));
+
+    harness.editField("assignForm", "principal", "tech");
+    harness.chooseField("assignForm", "role", R"("Supervisor")");
+    harness.editField("assignForm", "company", "1");
+    REQUIRE(harness.submitForm("assignForm"));
+    REQUIRE(harness.waitForText("assignmentCount", "1 role assignments"));
+    CHECK(harness.waitForText("userCount", "1 users"));
+    CHECK(harness.waitForText("userRole", "Supervisor"));
+
+    harness.editField("assignForm", "principal", "bob");
+    harness.chooseField("assignForm", "role", R"("Verifier")");
+    REQUIRE(harness.submitForm("assignForm"));
+    REQUIRE(harness.waitForText("assignmentCount", "2 role assignments"));
+    CHECK(harness.waitForText("userCount", "2 users"));
+    reportProblems(harness);
+    CHECK(harness.problems().empty());
+}
+
 // Mutations: drop changes<RoleAssignmentView> from RevokeRole's effects (the count stays at 3); make every row's
 // button send the table's current first row's id (pressing carol's button revokes the first row instead, so carol's
 // row stays and the first row goes).
