@@ -98,6 +98,7 @@ callback executor. So:
 | Zone | Where | Thread | Text |
 |---|---|---|---|
 | `Bridge::executeVia`, `Bridge::executeAttachedVia`, `Bridge::executeCreatingVia` | `bridge.hpp` | the bridge's owner | — |
+| `Bridge::executeRaw`, `Bridge::executeRawOn` | `bridge.hpp`, the model-free `RawHandler` dispatch | the bridge's owner | — |
 | `Bridge::dispatchNow` | `bridge.hpp` | the owner; later than `executeVia` for a call that waited for its bind | the bridge's session's `requestId` |
 | `ActionTraits::toJson`, `ActionTraits::resultFromJson` | the `ActionCall` codec a remote backend calls | the backend's thread | — |
 | `BridgeSink::settleValue`, `BridgeSink::settleException` | `bridge.hpp` | wherever the backend settles | — |
@@ -106,6 +107,7 @@ callback executor. So:
 | `LocalBackend::startLocal`, `LocalBackend::startTaskLocal`, `LocalBackend::finishLocal` | `backend.hpp` | the model's strand | the call's `requestId` |
 | `ModelStrands::task` | `strand.hpp`, the strands' around-task hook | the pool thread running one strand task | — |
 | `ActionDispatcher::dispatch`, `ActionDispatcher::dispatchAsync` | `registry.hpp` | the model's strand | the installed session's `requestId` |
+| `ActionDispatcher::evaluate`, `ActionDispatcher::evaluateAction` | `registry.hpp`: a dry run of the pre-handler gates, with no `execute` | the caller | — |
 | `ActionDispatcher::prepareAction` | `registry.hpp`: decode and the pre-handler gates | the model's strand | — |
 | `recordActionSuccess`, `recordActionFailure` | `registry.hpp`, the journal write of an outcome | the model's strand | — |
 | `wire::encode`, `wire::decode` | `wire.hpp` | the encoding or decoding thread | the envelope's `requestId` |
@@ -113,10 +115,18 @@ callback executor. So:
 | `SocketBackend::fileControl`, `SocketBackend::dispatchIncomingEnvelope`, `SocketBackend::drainFrames` | `net/socket_backend.hpp` | the I/O loop | — |
 | `ws::enqueueFrame` | `net/detail/ws_connection.hpp`, the send side | the I/O loop | — |
 | `InMemoryOfflineQueue::enqueue`, `FileOfflineQueue::enqueue` | `offline/` | the queue's owner | — |
+| `FileActionLog::append` | `journal/file_action_log.hpp` | the log's owner | — |
 | `SyncWorker::drain`, `SyncWorker::replay` (one per item) | `offline/sync_worker.hpp` | the worker's owner | — |
 | `RemoteServer::dispatchMessage` | `remote.hpp`, every message after its decode | the server strand | the envelope's `requestId` |
+| `RemoteServer::register` | `remote.hpp`, a `register` message | the server strand | the envelope's `typeId` |
+| `RemoteServer::deregister`, `RemoteServer::hello` | `remote.hpp`, those message kinds | the server strand | — |
+| `RemoteServer::openConnection`, `RemoteServer::closeConnection` | `remote.hpp`, a connection scope's open and close | `openConnection`'s caller; the server strand for `closeConnection` | — |
 | `RemoteServer::dispatchExecute` | `remote.hpp`, an `execute`'s admission gates | the server strand | the envelope's `requestId` |
 | `RemoteServer::startRemote`, `RemoteServer::startTaskRemote`, `RemoteServer::finishRemote` | `remote.hpp` | the model's strand | the envelope's `requestId` |
+| `SocketServer::accept`, `handshake`, `drainFrames`, `encodeReply`, `queueReply`, `finish`, `forget` | `net/socket_server.hpp` | the I/O loop | — |
+| `QtWebSocketServer::accept`, `onTextMessage`, `sendReply`, `disconnect` | `src/qt/qt_websocket_server.cpp` | the server's Qt thread | — |
+| `TokenIssuer::issue`, `TokenVerifier::verify` | `session/session_auth.hpp` | the caller | — |
+| `table.keyBuild`, `table.change`, `table.filter`, `table.sort`, `table.apply`, `table.snapshot` | `table/engine.hpp` | the thread running the table engine's job | the filter or sort description, for `table.filter` and `table.sort` |
 
 ## Thread names
 

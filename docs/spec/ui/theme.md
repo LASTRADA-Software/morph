@@ -173,7 +173,7 @@ built in nor in the theme draws nothing and changes no colour.
 | Paths | Kind |
 |---|---|
 | `color.surface`, `color.text`, `color.muted`, `color.accent`, `color.focus`, `color.border`, `color.selection` | colour |
-| `color.ok`, `color.warn`, `color.err`, `color.info`, `color.neutral`, each with `.bg`, `.border` and `.dot`; `color.neutral` and its parts default to `#6e6e73`, `#6e6e7326`, `#6e6e73`, `#6e6e73`, so the neutral tone is drawn like the others, and no longer follows `color.muted` | colour |
+| `color.ok`, `color.warn`, `color.err`, `color.info`, `color.neutral`, each with `.bg`, `.border` and `.dot`; `color.neutral` and its parts default to `#6e6e73`, `#6e6e7326`, `#6e6e73`, `#6e6e73`, so the neutral tone is drawn like the others rather than following `color.muted` | colour |
 | `color.hover` (`#1d1d1f14`): the fill under a hovered or pressed list item, ghost button, segmented option and menu entry; translucent, so it darkens whatever light surface it lies on by one step and keeps its text readable | colour |
 | `color.controlSurface` (`#ffffff`): the fill of a text input, a text area, a select's field, a date input, a check box's box and a normal or danger-outline button; a scheme role, so a surface that sets only `color.surface` leaves its controls on it. A read-only input keeps its own fill | colour |
 | `color.controlBorder` (`#c7c7cc`): the outline of those controls at rest; a theme that sets `color.border` alone no longer moves them. A focused control's outline stays `color.focus`, a toned one's its tone's border | colour |
@@ -342,9 +342,9 @@ file the bundle lacks or one that is not an `icon` file, naming the index and th
   `tone.info`, `tone.ok`, `tone.warn`, `tone.err` (a banner's tone), `nav.expand` and `nav.collapse` (a collapsible's
   and a panel's chevron, and a select's dropdown indicator), `close` (a dismissible banner's close button) and
   `date.pick` (a date input's calendar button), `more` (an overflow menu's trigger, `⋯`) and `nav.menu` (the compact
-  shell frame's navigation menu, `☰`), from the set when it names them, and as today's glyph or nothing
-  otherwise, so a bundle without a set keeps today's look. `nav.back` and `nav.forward` are framework names no
-  built-in component draws yet (`kFrameworkIcons`).
+  shell frame's navigation menu, `☰`), from the set when it names them, and as their built-in glyph or nothing
+  otherwise, so a bundle without a set keeps the built-in look. `nav.back` and `nav.forward` are framework names
+  too (`kFrameworkIcons`), though no built-in component uses them on its own: a document names them on a button.
   Qt Quick draws them as a vector chevron when the set does not name them: a push button with no label whose icon
   is `nav.back` or `nav.forward` (a pager's buttons) shows a `MorphChevron`, in the button's caption colour.
 - **On Qt Quick.** `applyBundleTheme(engine, themes, icons)` hands the set to `Theme.icons` (name to a
@@ -352,7 +352,7 @@ file the bundle lacks or one that is not an `icon` file, naming the index and th
   `Theme.iconSource(name)` is the URL, or empty. It also writes `Theme.iconGlyphs`, name to glyph for every
   framework name that has one (`iconGlyph`, the glyphs the terminal draws), whether or not the bundle has a set. A button, a
   badge, an empty state, a menu entry and a single-line or password text input's leading `icon` draw a node's icon
-  from the set when it names it, and today's text otherwise (a badge's and a menu entry's name before the label, a
+  from the set when it names it, and the built-in text otherwise (a badge's and a menu entry's name before the label, a
   button and a text input nothing — a text input with no themed icon for its name shows no leading space at all).
   An icon-only push button the set does not name is never blank: with no label it draws, in order, the set's icon, a
   built-in chevron (`nav.back`, `nav.forward`), `Theme.iconGlyphs[name]`, and its accessible name.

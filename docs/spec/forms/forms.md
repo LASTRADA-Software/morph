@@ -1,7 +1,7 @@
 # `morph::forms` — schema generation & readiness for action types
 
 Given a plain-aggregate action type `A` (registered with
-[`BRIDGE_REGISTER_ACTION`](../core/registry.md#bridge_register_action)),
+[`BRIDGE_REGISTER_ACTION`](../core/registry.md#what-the-macros-emit)),
 `morph::forms` produces a standard JSON Schema a client can render a form from,
 and provides a compile-time `validate()` body that gates submission until every
 required empty-capable field is filled in. It builds on glaze's
@@ -28,9 +28,9 @@ development" with "flexible when the generated form isn't enough":
    Never mandatory; absence falls back to a
    sensible convention.
 3. **Escape hatch always available.** The schema below is a documented, stable
-   contract (see "Renderer contract"). Anything the generated GUI cannot
+   contract (see [Renderer contract](#renderer-contract-the-schema-key-vocabulary)). Anything the generated GUI cannot
    express, an app builds by consuming the schema directly or overriding one
-   field's widget (see "Theming / component-override registry").
+   field's widget (see [Overrides](#overrides--x-widget-and-the-control-kinds)).
 
 This is why the constraints placed on a model's action types are light: flat,
 default-constructible, reflectable aggregates whose fields come from the known
@@ -212,13 +212,16 @@ feature](#field-metadata--fieldmeta) uses, as long as its entries expose
 read structurally (duck-typed), so this header does not gain a named
 dependency on `FieldMeta`'s declaration — any type shaped that way is
 honoured, and the override always wins over a type's own derived `widget()`.
-Full API, the `$defs`-collapse caveat shared with `Choice`, and design
-rationale are in [widget_hints.md](widget_hints.md).
+Full API, the per-payload-type `$defs` naming, and design rationale are in
+[widget_hints.md](widget_hints.md).
 
 ## `schemaJson<A>()` — schema generation
 
 Produces a complete JSON Schema string for action type `A`, post-processing the
-output of `glz::write_json_schema<A>()` to add seven annotation groups:
+output of `glz::write_json_schema<A>()`. The type-derived annotation groups are
+below; the declared ones (field metadata, layout, rules, computed fields) have
+sections of their own, and [Renderer contract](#renderer-contract-the-schema-key-vocabulary)
+lists every key:
 
 | Annotation | Scope | Contents |
 |---|---|---|
@@ -236,10 +239,17 @@ etc.) the unmerged glaze schema is returned — or an empty string when even
 glaze's own `write_json_schema<A>()` failed, since `schemaJson` feeds
 `mergeSchemaExtras` with `write_json_schema<A>().value_or(std::string{})`.
 
-Schema generation throws in exactly **one** case, and never for malformed
-input: an `A::formRules` declaration that contradicts `A`'s own derived
-`required` array so completely that no submission could satisfy both — see
-[Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules).
+Schema generation never throws for malformed input. It throws a
+`std::logic_error` only for a declaration on `A` that is a programming error,
+when the action registers:
+
+- `UnsatisfiableFormError` — an `A::formRules` declaration that contradicts
+  `A`'s own derived `required` array so completely that no submission could
+  satisfy both; see
+  [Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules).
+- `IncompleteOptionsError` / `ConflictingOptionsError` — a `FieldMeta` that
+  sets only some of `optionsAction`/`valueField`/`labelField`, or sets
+  `optionsAction` on a `Choice` member; see [Field metadata](#field-metadata--fieldmeta).
 
 ### Required-ness rule
 
@@ -294,10 +304,10 @@ same syntax, and only one of them is safe to leave unchecked:
 
 `detail::findMember(node, key)` is the read. It returns a pointer to the
 member, or `nullptr` when `node` is not an object or holds no such key; the
-caller branches on that instead of subscripting. It replaces a
-`contains(key)` + `operator[](key)` pair, which probed the same map twice, at
-every read site in `forms.hpp`, `instance_constraints.hpp` and `views.hpp`
-whose key is not guaranteed present — see "Not every read" below. The pointer is
+caller branches on that instead of subscripting, and probes the map once where
+a `contains(key)` + `operator[](key)` pair would probe it twice. Every read in
+`forms.hpp`, `instance_constraints.hpp` and `views.hpp` whose key is not
+guaranteed present goes through it — see "Not every read" below. The pointer is
 into `node`'s own storage, so a caller may write through it — and, exactly like
 the reference `operator[]` returns, it is invalidated by any insertion into
 `node`.
@@ -310,9 +320,8 @@ constnesses share one implementation with no `const_cast` and no copy.
 one of these subscripts and advises a "bounds-safe alternative". On
 `glz::generic_json` there is none. `at(key)` is defined as
 `{ return operator[](key); }` for *both* overloads (glaze v7.4.0,
-`glaze/json/generic.hpp:320` and `:322`), and the non-const `operator[]` it
-forwards to inserts a default-constructed member for a missing key
-(`generic.hpp:201-211`):
+`glaze/json/generic.hpp`), and the non-const `operator[]` it forwards to
+inserts a default-constructed member for a missing key:
 
 | spelling | non-const DOM | const DOM |
 |---|---|---|
@@ -322,8 +331,8 @@ forwards to inserts a default-constructed member for a missing key
 
 So the checking depends on the constness of the DOM, not on the spelling, and
 these walkers are mutating by construction. A mechanical `operator[]` → `at()`
-sweep over them would silence ~70 findings while changing a read into a write
-on exactly the inputs the check warns about.
+sweep over them would silence the check while leaving a read that inserts on
+exactly the inputs the check warns about.
 `tests/test_forms_dom_access.cpp` asserts both halves — that `findMember` leaves
 the document byte-identical on a miss, and that `at()` on the pinned glaze does
 not — so a glaze release that gives `at()` real checked semantics turns that
@@ -343,40 +352,20 @@ a branch nothing can take — untestable code, and a branch-coverage allowlist
 entry someone must later write a justification for. That is a cost, not a
 safety improvement.
 
-Two reads of `rowDom["properties"]` are that exception. glaze's schema writer
-emits `"properties"` unconditionally for every reflectable aggregate, including
-a zero-member one (measured with a standalone `glz::write_json_schema<T>()`
-probe; `llvm-cov` reports 0 hits on `deriveColumns`'s `!contains("properties")`
-early return across all ten instantiations the suite exercises), and
-`deriveColumns` has already tested the key before `buildColumnEntry` can read
-it. So the split in `views.hpp` is six reads converted and two left, against
-21 writes untouched — measured with
+The two reads of `rowDom["properties"]` in `views.hpp` are that exception.
+glaze's schema writer emits `"properties"` unconditionally for every
+reflectable aggregate, including a zero-member one, and `deriveColumns` has
+already tested the key before `buildColumnEntry` can read it.
 
-```
-clang-tidy -p build/clang-debug --extra-arg=-std=c++23 \
-    --extra-arg=-Wno-missing-include-dirs --quiet \
-    --checks='-*,cppcoreguidelines-pro-bounds-avoid-unchecked-container-access' \
-    include/morph/forms/views.hpp
-```
+A write that carries a
+`NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)` says
+in the directive that it is a write; not every write carries one, because
+`clang-tidy-diff` reports only changed lines.
 
-which reports 29 findings in the file before (21 writes + 8 reads) and 20
-after, with no new category. 23 of those 29 remain in the source; three of them
-now carry a
-`NOLINT(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)`, because
-converting a read moved the *write* beside it onto a changed line and
-`clang-tidy-diff` reports on changed lines. Those three are the first
-suppressions of this check in `views.hpp`, and each says in one word what it
-is: a write. The other 18 writes are unsuppressed, because only a changed line
-is reported; converting the tree in one sweep is a separate job from this one.
-
-Counted a second way as well, through `tests/test_views.cpp`, a translation unit
-that actually *instantiates* the templates: the two measurements agree exactly,
-site for site, before and after. That is worth recording because it does
-**not** generalise — `forms.hpp` under-reports when analysed as a main
-file, because a subscript inside an uninstantiated template body is dependent
-and the check cannot see it. `views.hpp`'s subscripts are all on the
-non-dependent `glz::generic_u64`, so there is nothing for instantiation to
-reveal.
+Measuring this check needs a translation unit that instantiates the templates
+(`tests/test_views.cpp` for `views.hpp`). `forms.hpp` analysed as a main file
+under-reports: a subscript inside an uninstantiated template body is dependent
+and the check cannot see it.
 
 ## Field metadata — `FieldMeta`
 
@@ -393,10 +382,10 @@ struct FieldMeta {
     std::string_view label{};               // "" = infer from name
     std::string_view help{};                // "" = omit description
     std::string_view placeholder{};         // "" = omit x-placeholder
+    std::string_view i18nKey{};             // "" = derive the key stem; see below
     std::string_view widget{};              // widget-selection override (see widget_hints.md)
     bool readOnly{false};
     bool hidden{false};
-    std::string_view i18nKey{};             // "" = derive the key stem; see below
     std::optional<math::Rational> minimum{};     // disengaged = no floor
     std::optional<math::Rational> maximum{};     // disengaged = no ceiling
     std::optional<math::Rational> multipleOf{};  // disengaged = any value
@@ -435,7 +424,7 @@ property.
 `std::optional<std::int64_t>` id, say) into a lookup select: the member is
 emitted with the same `x-optionsAction`, `x-optionValue` and `x-optionLabel`
 a `Choice<…>` carries, so the forms engine reads it as a `Choice` field and
-no client changes. The three are set together; schema generation throws
+no renderer change is needed. The three are set together; schema generation throws
 `IncompleteOptionsError` (a `std::logic_error`, at registration, as
 `UnsatisfiableFormError` is) when one is set without the others, and
 `ConflictingOptionsError` when the member is a `Choice<…>` and its meta also
@@ -477,7 +466,7 @@ literal.
 `describe<>()` is deliberately **not** `constexpr`/`consteval`, and a
 `fieldMetadata` array built from it must be **declared inside the class and
 defined just after its closing brace** rather than as a single in-class
-initializer, for two reasons verified while implementing this feature:
+initializer, for two reasons:
 
 1. **Incomplete-type self-reference.** A static data member's in-class
    initializer is evaluated while the enclosing class is still incomplete
@@ -525,8 +514,8 @@ modified copies, so a `describe<>()`-built entry can carry a bound too.
 **Why this is not part of the `x-rules` vocabulary.** Every comparison node
 there — `greater`, `greaterOrEqual`, `less`, `lessOrEqual` — takes **two member
 pointers of the same action**; only `equals` accepts a literal, and it
-expresses equality alone. So "at least 1" had no right-hand operand to name,
-and integrality had no spelling at all. `x-rules` is also, by its own title,
+expresses equality alone. So "at least 1" has no right-hand operand to name
+there, and integrality has no spelling at all. `x-rules` is also, by its own title,
 the *cross-field* vocabulary: a bound on a single field's value is a property
 of that field, and belongs on its property node beside `title` and
 `x-decimalPlaces` rather than in a rule node whose `fields` array would hold
@@ -642,11 +631,11 @@ static constexpr std::array fieldMetadata{
 };
 ```
 
-| Field state (since the last `prefill` / `resetFields`) | Blank control submits |
+| Field state (since the last `prefill` / `reset`) | Blank control submits |
 |---|---|
 | Prefilled with a string, `""` included | `"remark": ""` |
-| Non-blank at any point (typed into, `setFieldValue`, a slot's `setValue`), then cleared | `"remark": ""` |
-| Never prefilled with a string and never non-blank; a stored `null` counts as not prefilled | nothing (omitted, as before) |
+| Non-blank at any point (typed into, or set by `assign`), then cleared | `"remark": ""` |
+| Never prefilled with a string and never non-blank; a stored `null` counts as not prefilled | nothing (omitted) |
 
 That rule has two consequences. A stored `""` round-trips: prefill → submit sends `""`.
 A create form in which the user types and then clears a field sends `""` as well.
@@ -690,9 +679,8 @@ member of the action at all.
 | `x-blankAs` | property node (sibling of `$ref`) | string | `"empty"`, from `FieldMeta::blankAs = BlankAs::Empty`: once engaged, a blank string field submits `""` instead of being omitted. Emitted only for `Empty` on a `std::string` / `std::optional<std::string>` member. See [Clearing a string in an edit form](#clearing-a-string-in-an-edit-form--blankas). |
 
 All thirteen keys are additive and non-breaking, extending the renderer-contract
-table below without renaming or retyping any existing key, per this program's
-versioning stance (see "Design principle" above). A
-renderer that ignores them falls back to today's behavior exactly: it shows
+table below without renaming or retyping any existing key, per the versioning
+stance (see "Design principle" above). A renderer that ignores them shows
 the raw wire key as the caption, no helper/placeholder text, every field
 editable and visible, and no scalar bound gated client-side (the model still
 refuses an out-of-bounds value).
@@ -706,8 +694,7 @@ individual fields in a grid renderer. Both mirror the `optionalFields`
 convention above — a `static constexpr` list `mergeSchemaExtras` looks for by
 name, present only when an action opts in. Absent either, `schemaJson<A>()`'s
 output is unchanged: no `x-layout`, `x-group`, `x-section`, or `x-colspan` key
-is emitted, and a renderer lays every field out exactly as it always has
-(flat, `x-order` order).
+is emitted, and a renderer lays every field out flat, in `x-order` order.
 
 `groupKindName(GroupKind)` (`forms/layout.hpp`) is the one place the three
 enumerators are spelled for the wire — `"section"`, `"tab"`, `"accordion"`, in
@@ -761,7 +748,7 @@ of one shared tab bar, and `Accordion` renders as a collapsible panel.
 `fields` list gives membership only. A field named in no group falls into an
 implicit trailing default group, in `x-order` order, so declaring a group for
 *some* fields never hides the rest — the no-`formLayout` case is simply one
-implicit group containing every field, which is exactly today's flat form.
+implicit group containing every field, which is the flat form.
 
 `mergeSchemaExtras<A>` (see above) stamps this onto the DOM in a pass that
 runs only when `A::formLayout` / `A::fieldSpans` exist
@@ -786,7 +773,7 @@ implicit flat group (one column, no chrome) when the schema carries no
 while `gridColumns` is `2` and follows `gridColumns` as soon as a host sets that
 to anything else, so one option puts the whole form on the host's grid
 (`gridColumns = 12`: `x-colspan` 6 is half a row, 4 a third, 12 full). A document sets both at once with a
-`form`'s, `collection`'s or `wizard`'s `columns` key (1 to 12; `docs/spec/ui/document.md`).
+`form`'s, `collection`'s or `wizard`'s `columns` key (1 to 12; [../ui/document.md](../ui/document.md)).
 
 A field spans `x-colspan` columns (1 when absent), **clamped to its grid's
 column count**, so a span wider than the grid takes one full row rather than
@@ -826,10 +813,10 @@ carries only a `$ref` pointing at it, e.g.:
 
 ```json
 "$defs": {
-  "quantity_kg_per_m3": { "type": "object", "ExtUnits": { "unitAscii": "kg_per_m3", "unitUnicode": "kg/m³" }, ... }
+  "kg_per_m3": { "type": "object", "ExtUnits": { "unitAscii": "kg_per_m3", "unitUnicode": "kg/m³" }, ... }
 },
 "properties": {
-  "density": { "$ref": "#/$defs/quantity_kg_per_m3", "x-order": 2, "x-decimalPlaces": 1, "x-unitAlternatives": [ ... ] }
+  "density": { "$ref": "#/$defs/kg_per_m3", "x-order": 2, "x-decimalPlaces": 1, "x-unitAlternatives": [ ... ] }
 }
 ```
 
@@ -844,7 +831,7 @@ must resolve the `$ref` to see both:
   `$ref` on *this* property** — `mergeSchemaExtras` patches
   `dom["properties"][name]`, which is the property node holding the `$ref`.
   This is still true for a `Quantity`/`Choice` property's own `$def` (the
-  `quantity_kg_per_m3`-style def shown above never gets `x-order`/`required`/
+  `kg_per_m3`-style def shown above never gets `x-order`/`required`/
   title — only `ExtUnits` and glaze's own `type`/bounds/`description` live
   there). It is **not** true for a *nested-aggregate* member's `$def`: see
   [Nested aggregates (recursive, cycle-safe)](#nested-aggregates-recursive-cycle-safe)
@@ -884,7 +871,7 @@ this dual read.
 | `minimum` | `$def` (glaze's own bound for the member's scalar type), **or** the property node when the field declares `FieldMeta::minimum` | number | Inclusive lower bound the renderer must refuse values below. The property node wins over the `$def` on merge, which is what makes a declared bound per-*field* rather than per-type — see [Per-field scalar bounds](#per-field-scalar-bounds--minimum--maximum--multipleof). For a `Quantity` property it bounds the scalar value in the **canonical** unit, not the `{num,den,dp}` object. |
 | `maximum` | as `minimum` | number | Inclusive upper bound, same sources and same reading. |
 | `multipleOf` | property node (sibling of `$ref`) | number, strictly positive | The value must be an exact integer multiple of this; `1` means "whole number". Emitted only from `FieldMeta::multipleOf` — glaze never stamps it. A renderer that ignores it loses the client-side gate only; the model still refuses. |
-| `x-exactMinimum` | wherever `minimum` sits (property node, or the `$def` reached through its `$ref`) | string | Exact decimal spelling of `minimum`, emitted **only** when the bound's magnitude exceeds 2^53 — i.e. when an IEEE-754 double cannot hold it. See [Exact numeric bounds](#exact-numeric-bounds--x-minimumtext--x-maximumtext). |
+| `x-exactMinimum` | wherever `minimum` sits (property node, or the `$def` reached through its `$ref`) | string | Exact decimal spelling of `minimum`, emitted **only** when the bound's magnitude exceeds 2^53 — i.e. when an IEEE-754 double cannot hold it. See [Exact numeric bounds](#exact-numeric-bounds--x-exactminimum--x-exactmaximum). |
 | `x-exactMaximum` | wherever `maximum` sits | string | Exact decimal spelling of `maximum`, under the same condition. |
 | `x-step` | property node (sibling of `$ref`) | number | Slider / numeric increment, from `Ranged::step()`. Emitted only for a `Ranged` field. For a `Quantity` the entry granularity remains `x-decimalPlaces` (above); `x-step` is not emitted for `Quantity`. |
 | `x-minimum` | property node (sibling of `$ref`) | object `{num,den,dp}` | Inclusive lower bound for the field's value, from a model's `InstanceConstraints` — an exact `Rational` in the same wire shape as the value it bounds, never a `double`. Emitted only for a decorated instance schema ([Per-instance constraints](#per-instance-constraints--values-that-live-in-data)); never by `schemaJson<A>()`. Distinct from `x-min` (a *slider track* start, which is never checked). |
@@ -898,7 +885,7 @@ this dual read.
 | `x-section` | property node (sibling of `$ref`) | non-negative integer | The 0-based index of this field's group in `x-layout.groups`. Omitted under the same conditions as `x-group`. |
 | `x-colspan` | property node (sibling of `$ref`) | positive integer | Number of grid columns the field should span, from `FieldSpan::colspan`. Emitted only when greater than `1` (the default, single-column width). A renderer laying fields out in a grid widens the control; a single-column renderer ignores it. The forms engine clamps it to the grid's column count (`gridColumns`, see [Layout & grouping](#layout--grouping--sections-tabs-spans)). |
 | `x-rules` | top-level (object) | array of rule objects | Cross-field rules the renderer must satisfy before enabling submit, and should surface live as inline errors. Emitted only when the action declares `formRules`; absent otherwise. A renderer that ignores it falls back to per-field `required` only. |
-| ↳ `kind` | rule / condition object | string | One of the closed vocabulary ids in the "Cross-field rules" section's table above (or a condition id: `engaged`, `notEngaged`, `equals`, `and`, `or`, `not`). An unrecognised `kind` — a rule *or* a nested condition — must be treated as "cannot evaluate": a third answer, distinct from both true and false. The renderer neither claims the rule is satisfied nor blocks submission on it; the payload reaches the server, which runs the compiled rule list and has no unrecognised-kind case. See [Renderer fallback](#renderer-fallback) for the full contract and why it is *defer*, not *block*. |
+| ↳ `kind` | rule / condition object | string | One of the closed vocabulary ids in the "Cross-field rules" section's table below (or a condition id: `engaged`, `notEngaged`, `equals`, `and`, `or`, `not`). An unrecognised `kind` — a rule *or* a nested condition — must be treated as "cannot evaluate": a third answer, distinct from both true and false. The renderer neither claims the rule is satisfied nor blocks submission on it; the payload reaches the server, which runs the compiled rule list and has no unrecognised-kind case. See [Renderer fallback](#renderer-fallback) for the full contract and why it is *defer*, not *block*. |
 | ↳ `fields` | rule / condition object | array of strings | Wire field names the rule ranges over, in declaration order (operand order is significant for `greater`/`less`). Absent on `and`/`or`/`not`, which range over nested conditions (`conditions`/`condition` below) instead of fields directly. |
 | ↳ `when` | `requiredWhen` / `visibleWhen` / `readonlyWhen` object | rule/condition object | The nested condition the rule keys on. Present only on these condition-bearing kinds. May itself be an `and`/`or`/`not` node (a compound condition), nested to any depth — see [Compound conditions](#compound-conditions--andof--orof--notof). |
 | ↳ `value` | `equals` condition object | scalar / `{num,den}` | The literal an `equals` condition compares against; a numeric literal is the exact `Rational` `{num, den}`, never a `double`. A `bool` literal is emitted as a JSON **boolean**, so a renderer must compare a boolean field as a boolean, not as its display text. |
@@ -947,8 +934,7 @@ struct CreatePaste {
 `schemaJson<A>()` then emits the top-level `"x-submitMode": "explicit"`. This
 is **opt-in**, exactly like `formLayout`, `fieldSpans`, and `formRules`: an
 action that says nothing keeps the auto-submit default and its generated schema
-is byte-for-byte unchanged, so adding the emitter changed no shipped schema.
-Declaring `explicitSubmit = false` is the same statement as not declaring it.
+carries no `x-submitMode` key. Declaring `explicitSubmit = false` is the same statement as not declaring it.
 
 The detection is the `HasExplicitSubmit<A>` concept — `true` when `A` declares
 an `explicitSubmit` member convertible to `bool`, the same shape as
@@ -957,10 +943,10 @@ emitter reads its value afterwards, which is why `= false` and declaring
 nothing produce the same schema.
 
 Deriving the flag instead — from some "does this action mutate" predicate — is
-deliberately **not** done. No such predicate exists in `forms.hpp`, and adding
-one would flip the rendering of every existing generated form at once, which is
-a shipped-behavior change rather than an emitter addition. Opting in per action
-keeps the decision with the author who knows whether the action has effects.
+deliberately **not** done. No such predicate exists in `forms.hpp`, and one
+would change the rendering of every generated form at once rather than one
+action at a time. Opting in per action keeps the decision with the author who
+knows whether the action has effects.
 
 ### Array fields — `type: "array"`
 
@@ -1052,12 +1038,12 @@ a JSON *string* — `{"flag":"true"}` — or any text at all. glaze rejects both
 
 The control emits a bare `true` or `false`, never quoted. A `bool` member is
 **required** (it has no null branch), and a checkbox always displays a definite
-state, so a required boolean with no retained value is seeded `false` at
-delegate creation rather than left blank — otherwise the form would show an
-unchecked box while the required-field gate silently withheld submission, with
-nothing on screen indicating what was missing. An *optional* boolean is left
-unseeded and is omitted from the request body until the user touches it, which
-is what distinguishes "not answered" from an explicit `false` for a
+state, so a required boolean with no value encodes `false` rather than blank:
+an unchecked box is an answer. Otherwise the form would show an unchecked box
+while the required-field gate silently withheld submission, with nothing on
+screen indicating what was missing. An *optional* boolean stays blank and is
+omitted from the request body until the user touches it, which is what
+distinguishes "not answered" from an explicit `false` for a
 `std::optional<bool>` member.
 
 ### Plain number fields — `type: "number"`
@@ -1117,9 +1103,8 @@ number:
 an entry with more fraction digits than that has no literal, exactly as an
 over-precise `Quantity` entry has none: it is refused, never rounded, because a
 rounded value is one the user did not type. The encoding stays a bare JSON
-number. The field descriptor carries the count as `decimals` (with
-`decimalsDeclared` telling a slot whether `0` was declared or merely
-defaulted), and the placeholder spells it (`"0.000"`).
+number. When no placeholder is declared, the default placeholder spells the
+count (`"0.000"`).
 
 A generated `Quantity` property is therefore not `"number"` at all. The order
 still matters, because a *decorated* schema can put `x-decimalPlaces` on a
@@ -1238,12 +1223,13 @@ draw as a choice. `schemaJson<A>()` therefore `static_assert`s on
 `glz::glaze_enum_t` for every `enum class` member it reaches, so a rung that
 declares one without `glz::meta`/`glz::enumerate` fails to build rather than
 shipping a form that lies about being ready.
+
 ### Exact numeric bounds — `x-exactMinimum` / `x-exactMaximum`
 
 `minimum` and `maximum` are standard JSON-Schema vocabulary, stamped by glaze.
-They are JSON *numbers*, and a renderer reaches them by parsing the schema —
-every shipped app does `JSON.parse(controller.schemasJson)`. JavaScript numbers
-are IEEE-754 doubles, so any bound above 2^53 loses precision at that moment:
+They are JSON *numbers*, and a renderer that parses the schema into IEEE-754
+doubles — any JavaScript client's `JSON.parse` does — loses precision on any
+bound above 2^53 at that moment:
 
 ```
 schema maximum for an int64_t field: 9223372036854775807
@@ -1267,12 +1253,12 @@ that case.
 Two deliberate limits:
 
 - **Emitted only above 2^53.** An ordinary bound (`int32_t`, a `Ranged` slider,
-  a hand-written `maximum: 10`) loses nothing to a double, so its schema is
-  byte-for-byte what it was before this key existed. Only the definitions that
+  a hand-written `maximum: 10`) loses nothing to a double, so its schema
+  carries no companion. Only the definitions that
   genuinely need it — `$defs/int64_t`, `$defs/uint64_t` — carry the companion.
 - **The numeric bound stays.** The companion is additive: `minimum`/`maximum`
-  remain exactly as glaze emitted them, so a renderer that ignores the new keys
-  behaves precisely as it did before, per the versioning stance below.
+  remain exactly as glaze emitted them, so a renderer that ignores the
+  companion keys loses only the exactness, per the versioning stance below.
 
 Note the companion sits **wherever the bound sits**. For a `std::int64_t`
 member that is the `$defs` entry the property's `$ref` points at, not the
@@ -1458,8 +1444,8 @@ explicit key (when declared) is tried first, then the derived key, and a
 miss at both falls back to `schemaLiteral` — the schema's authored `title` /
 `description` / `x-placeholder` / group or step title, unchanged. A
 default-constructed (empty) `provider` — no catalog installed — skips
-straight to `schemaLiteral`, so an unconfigured renderer behaves exactly as
-it did before this spec. morph ships the seam and this resolution algorithm
+straight to `schemaLiteral`, so an unconfigured renderer shows the schema's
+own text. morph ships the seam and this resolution algorithm
 only; it defines no translation storage format — a host adapts whatever
 catalog it already owns (Qt `QTranslator`/`.qm`, a JSON bundle, a database)
 into the one `TranslationProvider` signature.
@@ -1490,7 +1476,7 @@ Display formatting is the renderer's duty; the wire stays canonical:
 - **Numbers.** `morph::render::normalizeLocaleNumber(text, loc)`
   (`include/morph/render/locale_format.hpp`) converts a locale-formatted entry
   (`"1.050,25"`) to the canonical `.`-decimal text `Quantity`'s exact digit
-  routines already consume (`"1050.25"`); malformed input yields `std::nullopt`
+  routines consume (`"1050.25"`); malformed input yields `std::nullopt`
   rather than a best-effort guess. `formatCanonicalNumber(canonicalText, loc)`
   is the display-direction inverse, with display-only thousands grouping. The
   exact `Rational`/`Quantity` digit arithmetic
@@ -1512,21 +1498,15 @@ Display formatting is the renderer's duty; the wire stays canonical:
 
   Both edges take it, and a call site names each fact with a designated
   initialiser: `normalizeLocaleNumber(text, {.decimalSeparator = ",",
-  .groupSeparator = "."})`. Three things this is for, and the first is not
-  tidiness. The five facts were five adjacent `std::string_view` parameters,
-  every one silently swappable with its neighbours, and the header carried a
-  clang-tidy suppression for `bugprone-easily-swappable-parameters` — on each
-  of the two functions and on the sign helper — with a paragraph of
-  justification each. A sixth would have made that argument weaker, not
-  stronger; the aggregate deleted all three suppressions instead, and the header
-  is clean under `bugprone-*` with no suppression of that check anywhere in it.
-  Second, the next locale fact (a percent sign, an exponent separator) is a new
-  defaulted member rather than a seventh parameter. Third, and the reason it is
-  worth the churn: **the two edges take the same type**, so "these two must
-  agree" is structural rather than a convention a caller can get half right —
-  and that convention is exactly what the two edges drift apart on. There is
-  deliberately no back-compatible positional overload: two spellings of one call
-  is how they drift.
+  .groupSeparator = "."})`. Three reasons. Five adjacent `std::string_view`
+  parameters would each be silently swappable with their neighbours
+  (`bugprone-easily-swappable-parameters`); named members are not. The next
+  locale fact (a percent sign, an exponent separator) is a new defaulted member
+  rather than another parameter. And, most importantly, **the two edges take
+  the same type**, so "these two must agree" is structural rather than a
+  convention a caller can get half right — and that convention is exactly what
+  the two edges drift apart on. There is deliberately no positional overload:
+  two spellings of one call is how they drift.
 
   Every member is defaulted to its `"C"`-locale spelling, so a caller that names
   none of them gets the identity transform in both directions.
@@ -1554,21 +1534,17 @@ Display formatting is the renderer's duty; the wire stays canonical:
 
   76 of 711, across eleven distinct sets. Two of them (Chakma U+11136, Adlam
   U+1E950) are outside the BMP, so one digit is four UTF-8 bytes — the scan
-  therefore decodes a code *point* rather than comparing a byte.
+  therefore decodes a code *point* rather than comparing a byte. A scan that
+  compared one byte against `['0','9']` would leave a user of any of those 76
+  locales unable to enter a number at all.
 
-  Before this, `normalizeLocaleNumber` compared one byte against `['0','9']`,
-  so a user of any of those 76 locales could not enter a number at all — a flat
-  rejection, not a wrong value.
-
-  **Both edges move or neither does, and the round trip is what says so.**
-  `formatCanonicalNumber` used to copy the canonical ASCII digits out unchanged.
-  That is *why* the pair was self-consistent and the defect invisible from
-  either side alone: display emitted the locale's separators and sign around
-  ASCII digits, and entry accepted exactly that. Teaching entry to accept
-  U+0665 while display kept emitting `'5'` satisfies a naive reading of the bug
-  report and breaks the round trip this section requires. So the display edge
-  emits the digit that far above `zeroDigit`, and the property is stated in
-  those terms:
+  **Both edges move or neither does, and the round trip is what says so.** A
+  display edge that copies the canonical ASCII digits out unchanged is
+  self-consistent with an entry edge that accepts only ASCII digits, so a
+  defect in both is invisible from either side alone; an entry edge that
+  accepts U+0665 while display keeps emitting `'5'` breaks the round trip this
+  section requires. So the display edge emits the digit that far above
+  `zeroDigit`, and the property is stated in those terms:
 
   > for every canonical `-?[0-9]+(\.[0-9]+)?` text and every `NumericLocale`,
   > `normalizeLocaleNumber(formatCanonicalNumber(canonical, loc), loc) ==
@@ -1579,8 +1555,9 @@ Display formatting is the renderer's duty; the wire stays canonical:
   not fail if only the entry edge moved, because entry accepts ASCII digits too
   — so the test that pins this asserts the display text contains no ASCII
   digit as well as asserting the round trip, and it is that assertion which
-  fails for the half-fix. Pinned over all eleven digit sets:
-  `[morph591]` in `tests/test_render_locale_format.cpp`.
+  fails for a fix of only one edge. Pinned over all eleven digit sets in
+  `tests/test_render_locale_format.cpp` ("the pair round-trips through every
+  measured digit set").
 
   **Entry accepts the locale's digits *and* ASCII ones; display emits only the
   locale's.** That asymmetry is the rule the signs follow, applied to digits: an ASCII `'+'` is accepted in every locale because the
@@ -1596,25 +1573,22 @@ Display formatting is the renderer's duty; the wire stays canonical:
   on both edges: neither a keyboard nor a display edge produces an
   interleaving, and rejecting it matches the existing strictness about a sign
   anywhere but the leading position. When `zeroDigit` is the ASCII `"0"` the two
-  families are the same set, so nothing can mix and the rule is invisible —
-  which is why it costs no existing caller anything.
+  families are the same set, so nothing can mix and the rule is invisible.
 
   **An empty or undecodable `zeroDigit` reads as ASCII `"0"`**, the reading an
   empty `negativeSign` gets and for the same reason: there is no locale without
   digits, so empty cannot mean absence, and a base of "nothing" would reject
-  every entry the locale can produce. Because `zeroDigit` defaults to `"0"`,
-  every caller that does not name it is byte-identical to the
-  five-positional-parameter version — asserted rather than assumed: a 1680-case
-  sweep (14 locale configurations × 60 entries × both edges) run against the
-  positional spelling and against this one produces identical output.
+  every entry the locale can produce. Because `zeroDigit` defaults to `"0"`, a
+  caller that does not name it gets ASCII digits on both edges (asserted by "a
+  defaulted NumericLocale reproduces the previous defaults").
 
   All the locale facts are `std::string_view`, not `char`, because a real
   locale's
   separator is not always one byte: fr-FR groups with U+202F (narrow no-break
   space, 3 bytes in UTF-8) and several locales use U+00A0 (2 bytes). Typed as
   `char`, neither could be expressed at all — a caller could only pass some
-  single byte that never matched, so a perfectly valid `"1 050,25"` typed by a
-  French user normalised to `std::nullopt` and the control reported it
+  single byte that never matches, so a perfectly valid `"1 050,25"` typed by a
+  French user would normalise to `std::nullopt` and the control report it
   malformed. An empty view means "this locale has no such separator".
 
   **So is the negative sign.** The same argument applies to the sign: both edges
@@ -1634,11 +1608,11 @@ Display formatting is the renderer's duty; the wire stays canonical:
   | U+200F U+002D | 2 | `ckb_IQ` |
   | U+2212 | 23 | `eu_ES` |
 
-  Matched as the literal byte `'-'`, none of the 77 round-tripped: the display
-  direction emitted a sign the entry direction then rejected, so the pair was
-  not inverse for any of them. Note `ar_DZ`, whose sign *is* the ordinary
-  hyphen — it failed on the U+200E in front of it, so this was never only "the
-  U+2212 locales", and a wider `char` would not have fixed it. Whole-string
+  Matched as the literal byte `'-'`, none of the 77 round-trips: the display
+  direction emits a sign the entry direction then rejects, so the pair is not
+  inverse for any of them. Note `ar_DZ`, whose sign *is* the ordinary hyphen —
+  the U+200E in front of it is what a byte match trips on, so this is not only
+  "the U+2212 locales", and a wider `char` would not cover it. Whole-string
   matching is what covers the 2–3 code point bidi forms, which is why the sign
   is typed like the separators rather than widened.
 
@@ -1658,7 +1632,8 @@ Display formatting is the renderer's duty; the wire stays canonical:
   sign, which is silent corruption rather than a rejection.
 
   The renderer passes the locale's own sign beside its separators. The member
-  is defaulted, so a caller that names only the separators is unchanged.
+  is defaulted, so a caller that names only the separators gets the ASCII
+  sign.
 
   **A leading positive sign is accepted on entry and never emitted on
   display.** `normalizeLocaleNumber` reads
@@ -1678,9 +1653,8 @@ Display formatting is the renderer's duty; the wire stays canonical:
 
   54 of 711 are more than one code point. Unlike the negative side there is no
   U+2212 analogue, so *every* non-ASCII spelling here is multi-code-point and
-  whole-string matching is the only thing that can match any of them. Before
-  this, a leading `'+'` fell through to the "any other character is malformed"
-  arm and an explicitly-positive entry was rejected in every locale, `"C"`
+  whole-string matching is the only thing that can match any of them. Without
+  this, an explicitly-positive entry would be malformed in every locale, `"C"`
   included.
 
   **The two functions are deliberately not inverse across a positive sign.**
@@ -1706,8 +1680,8 @@ Display formatting is the renderer's duty; the wire stays canonical:
   separator. `"1.050,25"`, `"1.000.000,25"` and an ungrouped `"1050,25"` all
   normalise; `"1.5"`, `"1.50"`, `"1.05"` and `"1.2.3.4"` in a de-DE locale are
   malformed, and so is the en-US mirror image `"1,5"`. This is not
-  strictness for its own sake: dropping every occurrence unconditionally, as
-  a naive edge does, turns a de-DE user's US-style `"1.5"` into `15` —
+  strictness for its own sake: dropping every occurrence unconditionally
+  turns a de-DE user's US-style `"1.5"` into `15` —
   a perfectly valid number, ten times too large, that no downstream check can
   recognise as wrong, so the user is charged ten times with no diagnostic
   anywhere. The field's job at this edge is to report a fact to the
@@ -1716,7 +1690,8 @@ Display formatting is the renderer's duty; the wire stays canonical:
   **The two separators must differ.** A non-empty `groupSeparator` equal to
   `decimalSeparator` is rejected like any other malformed entry — with one
   string in both roles there is no reading of `"1.5"` the function could
-  defend, and the old code silently ate the decimal. It is reported through the
+  defend, and stripping it as a group separator would silently eat the
+  decimal. It is reported through the
   return value rather than an assertion, deliberately: an assertion would make
   a control edge behave differently in Debug and Release, and would be
   untestable in the configuration where it fires.
@@ -1743,8 +1718,8 @@ Display formatting is the renderer's duty; the wire stays canonical:
   zero for any locale field it is pointed at. So **a test driven by a real
   locale cannot distinguish whole-string from one-unit separator matching**,
   and the corpus that pins it is synthetic — separators of two or more code
-  units that no locale uses, passed straight to both functions (`[morph599]`
-  in `tests/test_render_locale_format.cpp`). One of the synthetic separators is
+  units that no locale uses, passed straight to both functions ("the
+  multi-unit separator corpus" in `tests/test_render_locale_format.cpp`). One of the synthetic separators is
   a surrogate pair: a single code *point* that is two UTF-16 code *units*.
 - **Timestamps.** The wire value is strict UTC ISO-8601
   ([datetime.md](../util/datetime.md)); a renderer displays and edits in the
@@ -1852,9 +1827,6 @@ calls, the `kind` string the schema carries, and the `RuleKind` enumerator the
 framework switches on. They are listed together because a reader emitting JSON
 and a reader writing C++ read the same table, and the C++ capitalisation is not
 derivable from the wire spelling by any rule stated anywhere.
-a gate removed on 2026-09-23 (check 6) reads `ruleKindName()`'s switch and
-requires each enumerator and its wire spelling to appear in one row here, so a
-kind added to the enum cannot reach the wire undocumented.
 
 | Factory | Meaning | `x-rules` `kind` | `RuleKind` enumerator | Also valid as a condition? |
 |---|---|---|---|---|
@@ -1907,9 +1879,9 @@ keeps the documented
 literal of any length: a rule node has to be a literal type, and a `std::string`
 holding more characters than the standard library's small-string buffer (15 on
 libstdc++) allocates, so the declaration fails with "refers to a result of
-`operator new`". The limit was invisible in the source — the same code compiled
-or did not depending only on how long the literal was, and on which standard
-library was in use. Serialisation is unaffected: `emitNode()` emits the same
+`operator new`". That limit would be invisible in the source — the same code
+would compile or not depending only on how long the literal was, and on which
+standard library was in use. Serialisation is unaffected: `emitNode()` emits the same
 JSON string either way. Passing an explicit `std::string` still stores a
 `std::string` and still cannot be `constexpr` when it allocates; that is
 inherent to the type the caller chose.
@@ -1978,8 +1950,8 @@ collapses to `c` — while looking exactly like a condition that says something.
 The author wrote "while this field is visible" and got "true". `requiredWhen`
 is excluded for the neighbouring reason: it is a rule *about* a condition
 rather than a condition, and nesting one emits a `"requiredWhen"` node in a
-`when` position no renderer's condition vocabulary has a case for. All six
-spellings compiled before this was enforced, because "exposes
+`when` position no renderer's condition vocabulary has a case for. Without the
+marker all six spellings would compile, because "exposes
 `test(const A&) const noexcept`" is a test every rule node passes.
 
 The membership rules (`exactlyOneOf` / `atLeastOneOf` / `mutuallyExclusive`)
@@ -1998,9 +1970,9 @@ The marker is declared per node rather than derived from `isPresentation`
 line on the node itself.
 
 The same constraints carry two diagnostics. `andOf`/`orOf` recover the action
-type from their first operand, and now require every other operand to agree,
-so `andOf(engaged(&C::x), engaged(&B::y))` is an error at the call site rather
-than 153 lines whose first line is inside `<type_traits>`. And `equals` requires
+type from their first operand and require every other operand to agree, so
+`andOf(engaged(&C::x), engaged(&B::y))` is an error at the call site rather
+than a long template backtrace starting inside `<type_traits>`. And `equals` requires
 the field to be comparable against the literal at all, so
 `equals(&A::someQuantity, "URGENT")` names `equals` and the caller's own line
 instead of reporting `no match for 'operator=='` from inside `forms.hpp`.
@@ -2069,8 +2041,7 @@ Field names are the **wire (JSON) field names**, resolved from the
 pointer-to-member the same way `x-order` is derived: a fresh probe instance of
 the action is walked and each rule's stored member pointer is matched against
 the probe's members by address. An action with no `formRules` emits no
-`x-rules` key at all — byte-identical to a version of the schema generated
-before this feature existed.
+`x-rules` key at all.
 
 ### Unsatisfiable declarations — `required` contradicting `x-rules`
 
@@ -2132,11 +2103,11 @@ ruleList(exactlyOneOf(&A::a, &A::b))
 ruleList(andOf(exactlyOneOf(&A::a, &A::b), engaged(&A::c)))
 ```
 
-The second spelling used to ship silently, because the check skipped any node
-with no `fields` key and `and`/`or`/`not` emit `conditions`/`condition`
-instead. The same contradiction being a hard build failure in one spelling and
-an unsubmittable form in the other is worse than not checking at all: the
-check's *existence* is what an author trusts.
+A check that skipped any node with no `fields` key would miss the second
+spelling, since `and`/`or`/`not` emit `conditions`/`condition` instead. The
+same contradiction being a hard build failure in one spelling and an
+unsubmittable form in the other is worse than not checking at all: the check's
+*existence* is what an author trusts.
 
 `or` and `not` are **not** descended, and that is a property of the operators
 rather than an omission:
@@ -2180,7 +2151,7 @@ generation time and belongs to the author's own build, so it is raised there
 rather than left to surface as a user who cannot press Save. A `static_assert`
 would be better still, but `detail::resolveFieldName` is not `constexpr` (it
 matches member addresses against a runtime probe instance), so a
-generation-time throw is the achievable form today.
+generation-time throw is the achievable form.
 
 **Interaction with the schema cache.** `schemaJson<A>()` memoises into a
 function-local `static const std::string`. A throw during that static's
@@ -2217,8 +2188,8 @@ rather than caveats:
 ### Renderer fallback
 
 Every key here is additive and optional, consistent with the unversioned
-schema stance below. An action declaring no `formRules` emits no `x-rules` and
-behaves exactly as before this feature existed. A renderer that does not
+schema stance below. An action declaring no `formRules` emits no `x-rules`. A
+renderer that does not
 understand `x-rules` still produces a usable form: it honours the per-field
 `required` array and lets the **server** reject any cross-field violation —
 the correctness floor never depends on the client understanding the key. An
@@ -2229,9 +2200,9 @@ rule list directly, has no such "unrecognised kind" case.
 
 #### "Cannot evaluate" means defer, not block
 
-"Cannot evaluate" is a **third** answer, alongside true and false, and the two
-shipped clients of this sentence can read it in opposite directions — block
-submission on an unknown `kind`, or defer. The contract is *defer*:
+"Cannot evaluate" is a **third** answer, alongside true and false, and a client
+could read it in either direction — block submission on an unknown `kind`, or
+defer. The contract is *defer*:
 
 | Question a renderer asks | Answer when the condition cannot be evaluated |
 |---|---|
@@ -2279,13 +2250,12 @@ property to be measured. It is measured by a single shared artifact —
 - `tests/test_forms_rule_corpus.cpp` drives every row through
   `allRulesSatisfied`;
 - `tests/test_forms_engine_corpora.cpp` drives the same rows through the forms
-  engine's `FormSession` (`docs/spec/forms/engine.md`), and requires its verdict
+  engine's `FormSession` ([engine.md](engine.md)), and requires its verdict
   to equal `allRulesSatisfied`'s.
 
 Each row is `(schema, field state, expected verdict)`. The schemas are stored
-as **text** and parsed by the renderer exactly as an application parses
-`controller.schemasJson`, because parsing is what rounds an integer literal
-past 2^53 — a fixture built as an inline JSON object could not express that
+as **text** and parsed by the engine exactly as served schema text is,
+because parsing is what would round an integer literal past 2^53 — a fixture built as an inline JSON object could not express that
 case at all.
 
 Three assertions are what make this a pin rather than a pair of samples, and a
@@ -2369,31 +2339,33 @@ table below); an action that declares no `computedFields` emits neither key.
 
 ### Where the value is authoritative
 
-`recomputeAll` runs at three call sites, all authoritative:
+`recomputeAll` runs on every execution path, each authoritative:
 
 1. `ActionExecuteRegistry::registerAction`'s executor (the client-bridge JSON
    dispatch path behind `BridgeHandler::executeJson`, [bridge.md](../core/bridge.md)).
-2. `Bridge::executeVia`'s `localOp` (the in-process execution path `LocalBackend`
-   uses for every `execute<Action>()`/`executeJson` call, [bridge.md](../core/bridge.md)).
+2. `Bridge::executeVia`'s `localOp`, and its coroutine twin `localTaskOp` (the
+   in-process execution path `LocalBackend` uses for every
+   `execute<Action>()`/`executeJson` call, [bridge.md](../core/bridge.md)).
 3. `ActionDispatcher::registerAction`'s runner (the server-side execution path
    `RemoteServer` uses for `SimulatedRemoteBackend` and the Qt WebSocket
-   transport, [registry.md](../core/registry.md)).
+   transport, [registry.md](../core/registry.md)), and the non-executing
+   `ActionDispatcher::evaluateAction`, which applies the same gates as checks.
 
-Sites 2–4 run **after** decode and **before** `Model::execute`, so a computed
-value arriving on the wire is always discarded and replaced with the
-authoritative recomputation — a hostile or buggy client cannot influence the
-stored value by tampering with a computed field. On every site that also
-decodes JSON (2 and 4; `localOp` never does — it dispatches an already-typed
-`Action`), `recomputeAll` runs immediately after `reconcileDeclaredPrecision`
-and **before** the `ActionValidator::ready` check, so a validator that
-inspects a computed field sees the authoritative, server-derived value rather
-than whatever arrived on the wire. Because every site calls the identical
-`recomputeAll` over inputs reconciled to declared precision
+Every site runs it **before** `Model::execute`, so a computed value arriving
+on the wire is always discarded and replaced with the authoritative
+recomputation — a hostile or buggy client cannot influence the stored value by
+tampering with a computed field. On the sites that decode JSON (1 and 3; the
+in-process path dispatches an already-typed `Action`), `recomputeAll` runs
+after `reconcileDeclaredPrecision` and `enforceQuantityBounds` and **before**
+the `ActionValidator::ready` check, so a validator that inspects a computed
+field sees the authoritative, server-derived value rather than whatever
+arrived on the wire. Because every site calls the identical `recomputeAll`
+over inputs reconciled to declared precision
 (`reconcileDeclaredPrecision`, [above](#advertised-precision-is-enforced-on-dispatch)),
 the client's displayed value and the server's stored value are identical to
-the last digit. It is a **no-op** for actions with no `computedFields` — zero
-behaviour change, backward compatible — mirroring how `reconcileDeclaredPrecision`
-no-ops for actions with no `Quantity` members.
+the last digit. It is a **no-op** for actions with no `computedFields`,
+mirroring how `reconcileDeclaredPrecision` no-ops for actions with no
+`Quantity` members.
 
 A cross-field rule ([Cross-field rules](#cross-field-rules--the-x-rules-vocabulary))
 that references a computed field evaluates on the server's authoritative
@@ -2448,7 +2420,7 @@ Two boundaries follow the framework's own:
 | `detail::findMember(node, key)` | function template | The checked read over a `glz::generic_u64` object node: a pointer to the member, or `nullptr` when `node` is not an object or has no such key. Never inserts, never throws; `const`-preserving. See [Reading the DOM with `findMember`](#reading-the-dom-with-findmember). |
 | `detail::mergeSchemaExtras<A>(raw)` | function | Post-processes a glaze-generated schema to inject `required`, `x-decimalPlaces`, `x-order`, `x-unitAlternatives`, `x-optionsAction`, `title`, `description`/`x-placeholder`/`x-readonly`/`x-hidden` etc. onto the property nodes. Called by `schemaJson<A>()`. |
 | `reconcileDeclaredPrecision<A>(action)` | function | **Rounds** every `Quantity` member of `action` in place to its declared precision (`atDeclaredPrecision()`, an exact `Rational` re-rounding — not a retag), so a decoded wire value *equals* the schema's advertised `x-decimalPlaces`, not merely displays at it. Empty members stay empty. No-op for non-`Quantity` members and for action types glaze cannot reflect. Under a `glz::meta` only the members the meta lists are rounded. Called on both wire dispatch paths (`bridge.hpp`, `registry.hpp`); not on the in-process `localOp` path, which decodes no JSON. |
-| `FieldMeta` | struct | Per-field descriptor: `field`, `label`, `help`, `placeholder`, `widget` (control-selection override, see [Widget hints](#widget-hints--multiline--ranged)), `readOnly`, `hidden`, `i18nKey`, plus the scalar bounds `minimum`/`maximum`/`multipleOf`, and the `withPlaceholder`/`withReadOnly`/`withHidden`/`withMinimum`/`withMaximum`/`withMultipleOf` fluent copies. See "Field metadata" above. |
+| `FieldMeta` | struct | Per-field descriptor: `field`, `label`, `help`, `placeholder`, `i18nKey`, `widget` (control-selection override, see [Widget hints](#widget-hints--multiline--ranged)), `readOnly`, `hidden`, the scalar bounds `minimum`/`maximum`/`multipleOf`, `unit`/`decimals`, `blankAs`, and `optionsAction`/`valueField`/`labelField`, plus the `withPlaceholder`/`withReadOnly`/`withHidden`/`withMinimum`/`withMaximum`/`withMultipleOf`/`withUnit`/`withDecimals`/`withBlankAs` fluent copies. See "Field metadata" above. |
 | `detail::HasFieldMetadata<A>` | concept | `true` when `A` has a `static constexpr`/`static const` iterable `fieldMetadata`. |
 | `detail::findFieldMeta<A>(name)` | function | Returns the `FieldMeta` entry naming `name`, or `nullptr`. |
 | `detail::BoundCheckableInteger<T>` | concept | `true` for an integral `T` (never `bool`) every value of which is exactly representable as a `Rational` numerator — every signed type, plus every unsigned type narrower than 64 bits. Decides which integral members `allFieldBoundsSatisfied` checks. |
@@ -2463,7 +2435,7 @@ Two boundaries follow the framework's own:
 
 | Signature | Returns |
 |---|---|
-| `template <typename A> const std::string& schemaJson()` | The merged schema JSON. Cached per type and returned **by reference** (the same shape `model::payloadFingerprint<A>()` and `model::payloadShapeString<A>()` use): the cache is built once per type per process, is never mutated afterwards, and lives until the process exits, so the reference stays valid for as long as any caller could hold it. A caller that needs its own mutable copy asks for one (`std::string mine = schemaJson<A>();`); an *explicit specialisation* of this template must likewise return a reference to something that outlives the call, not to a temporary. On internal failure returns the raw glaze schema, or an empty string if glaze's own schema generation failed — it never throws over malformed *input*. Throws `UnsatisfiableFormError` for a self-contradicting *declaration* ([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules)). |
+| `template <typename A> const std::string& schemaJson()` | The merged schema JSON. Cached per type and returned **by reference** (the same shape `model::payloadFingerprint<A>()` and `model::payloadShapeString<A>()` use): the cache is built once per type per process, is never mutated afterwards, and lives until the process exits, so the reference stays valid for as long as any caller could hold it. A caller that needs its own mutable copy asks for one (`std::string mine = schemaJson<A>();`); an *explicit specialisation* of this template must likewise return a reference to something that outlives the call, not to a temporary. On internal failure returns the raw glaze schema, or an empty string if glaze's own schema generation failed — it never throws over malformed *input*. Throws `UnsatisfiableFormError` for a self-contradicting *declaration* ([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules)), and `IncompleteOptionsError`/`ConflictingOptionsError` for a malformed options declaration in `FieldMeta` ([Field metadata](#field-metadata--fieldmeta)). |
 
 ### `allRequiredEngaged<A>()`
 
@@ -2537,7 +2509,7 @@ for the exhaustive tables and design rationale.
 | Optional mechanism | **Two orthogonal opt-outs** | `std::optional<T>` handles library types (glaze already knows how to serialise them); `optionalFields` handles custom types like `Quantity` whose emptiness is not expressed through `optional`. |
 | Schema caching | **`static const std::string` inside the template** | Same schema for the same type in every translation unit. No synchronisation needed — schema generation does not mutate anything. |
 | Failure mode | **Returns raw glaze schema (or empty) rather than throwing** | Schema generation is a description facility; crashing a server over a malformed schema would be wrong. |
-| Unsatisfiable declaration | **Rejected at generation with `UnsatisfiableFormError`, the one exception to the row above** | A capping rule (`exactlyOneOf`/`mutuallyExclusive`) over two or more `required` fields yields a form *nobody can submit*, not a form missing a hint — the failure is certain at generation time and belongs to the author's build, not to a user who cannot press Save. See [Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules). |
+| Unsatisfiable declaration | **Rejected at generation with `UnsatisfiableFormError`, an exception to the row above** (as are the options-declaration errors) | A capping rule (`exactlyOneOf`/`mutuallyExclusive`) over two or more `required` fields yields a form *nobody can submit*, not a form missing a hint — the failure is certain at generation time and belongs to the author's build, not to a user who cannot press Save. See [Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules). |
 | `Choice` metadata | **In the type, not the payload** | The set of options for a field is a compile-time property of the action, not a runtime property of each submission. The generated schema communicates it to the client; payloads carry only the selected value. |
 | Wire serialisation | **Glaze `meta` reflects `value` directly** | `Choice<T, ...>` serialises as `T \| null` — the options metadata never travels. |
 | Options action | **A registered action type id** | The same action dispatch mechanism handles queries for picklist data, so no separate protocol or endpoint is needed. |
@@ -2599,59 +2571,49 @@ compile error. It is the remedy for what `bugprone-easily-swappable-parameters`
 reports on this signature, rather than a suppression of the report.
 
 **Instantiations are per type, and that is the whole termination argument.**
-The recursion originally carried the ancestor *chain* as a variadic template parameter pack,
-which made `annotateNestedAggregate<Leaf, Ancestors...>` a distinct
-instantiation for every distinct root-to-node route through the type graph. A
-domain model shaped like a tree has one route per node; a model shaped like a
-DAG — an `Address` under both a `Customer` and a `Supplier`, a `Money`
-everywhere — has as many as it has paths, and that count grows exponentially in
-the graph's depth. A depth counter in place of the chain collapses that to one
-instantiation per (type, depth) pair. Measured on a
-fixture with 27 types over 8 levels, where
-6,561 routes reach the deepest node (`tests/compile_checks/forms_dag_probe.cpp`,
-g++ 16.2.1, `-std=c++23 -fsyntax-only`, CPU seconds): 26.8 s with the ancestor
-chain against a 2.7 s control that has one route per node, and 3.0 s against
-the same control with the depth counter. `tests/compile_checks/forms_dag_budget.cmake`
-is the ctest guard that keeps it that way, asserting the DAG fixture costs no
-more than three times its one-route control.
+The recursion carries **no** template argument that varies down it.
+`recurseIntoNestedAggregateIfAny<Member>` reaches
+`annotateNestedAggregate<Sub>` reaches `recurseIntoNestedAggregateIfAny<Member'>`:
+every specialisation is keyed on a type alone, the reachable type set of any
+program is finite, and a specialisation already on the instantiation stack is
+not instantiated again. So instantiation terminates *even for a cyclic type
+graph*, at one instantiation per type.
 
-The depth counter is gone too, and the recursion carries **no**
-template argument that varies down it. `recurseIntoNestedAggregateIfAny<Member>`
-reaches `annotateNestedAggregate<Sub>` reaches
-`recurseIntoNestedAggregateIfAny<Member'>`: every specialisation is keyed on a
-type alone, the reachable type set of any program is finite, and a
-specialisation already on the instantiation stack is not instantiated again. So
-instantiation terminates *even for a cyclic type graph*, and the count drops
-from one per (type, depth) pair to one per type — a further factor of the
-graph's depth on a DAG. The `forms_dag_budget.cmake` guard is unchanged and
-still passes: it asserts a ratio and does not care how the ratio is achieved.
-Run back to back on one (loaded) machine, clang 22.1.8, best of 2: 108% of
-control with the depth counter, 66% without it. The absolute millisecond counts
-in those two runs differ by a factor of two in the *control*, which is the whole
-reason this guard asserts a ratio and takes a minimum — read the two percentages
-as "unchanged or better", not as a 1.6x speedup.
+The rejected alternatives are why this matters. Carrying the ancestor *chain*
+as a variadic pack makes one instantiation per distinct root-to-node route
+through the type graph. A domain model shaped like a tree has one route per
+node; a model shaped like a DAG — an `Address` under both a `Customer` and a
+`Supplier`, a `Money` everywhere — has as many as it has paths, and that count
+grows exponentially in the graph's depth. Measured on a fixture with 27 types
+over 8 levels, where 6,561 routes reach the deepest node
+(`tests/compile_checks/forms_dag_probe.cpp`, g++ 16.2.1, `-std=c++23
+-fsyntax-only`, CPU seconds): 26.8 s with the ancestor chain against a 2.7 s
+control that has one route per node. A depth counter instead of the chain
+gives one instantiation per (type, depth) pair, but needs a cap to terminate on
+a cycle. `tests/compile_checks/forms_dag_budget.cmake` is the ctest guard,
+asserting the DAG fixture costs no more than three times its one-route
+control. It asserts a ratio and takes a minimum because absolute timings on a
+loaded machine vary by a factor of two in the *control* alone.
 
 The `$defs` set is the runtime half of the same observation: a nested
 aggregate's annotations are a function of its own type alone, so a shared
-`$defs` entry reachable by several routes used to be rewritten with
-byte-identical content once per route. It is now annotated by the first route
-to reach it, and later routes return immediately. The emitted schema is
-unchanged either way — that is what makes the skip safe.
+`$defs` entry reachable by several routes is annotated by the first route to
+reach it, and later routes return immediately rather than rewriting it with
+byte-identical content. The emitted schema is the same either way — that is
+what makes the skip safe.
 
 **There is no depth limit, and a cyclic type is described rather than
-rejected.** This paragraph used to say the opposite — that a cycle "cannot be
-supported at all: the schema it describes has no bottom" — and that claim was
-measurably wrong about the *schema*. glaze emits a finite, well-formed document
-for a self-referential type by pointing `$ref` back at the `$defs` entry, and
-morph's annotator walks that document rather than the type graph, so it visits
-the entry once and stops. What stops it is the runtime `$defs` visited set,
-which a cyclic type always reaches: glaze inlines a nested type only when it is
-used exactly once in the whole schema, and a type reachable from itself never
-is.
+rejected.** A cycle does not make the *schema* bottomless: glaze emits a
+finite, well-formed document for a self-referential type by pointing `$ref`
+back at the `$defs` entry, and morph's annotator walks that document rather
+than the type graph, so it visits the entry once and stops. What stops it is
+the runtime `$defs` visited set, which a cyclic type always reaches: glaze
+inlines a nested type only when it is used exactly once in the whole schema,
+and a type reachable from itself never is.
 
 Measured with clang 22.1.8, `-std=c++23`, glaze v7.4.0 — three actions that a
-depth-carrying recursion rejects with a hard `static_assert` compile here, and
-the generated schema is annotated correctly:
+depth-capped recursion would reject compile here, and the generated schema is
+annotated correctly:
 
 ```cpp
 struct TreeNode { std::string name; std::vector<TreeNode> children; };
@@ -2673,16 +2635,10 @@ struct Bee { std::string tag; std::vector<Ay>  ays;  };
 — one `$defs` entry, self-referential by `$ref`, with `x-order`, `title` and
 `required` applied exactly as for an acyclic nested aggregate. The mutually
 referential `Ay`/`Bee` pair behaves the same way, and a straight 20-level
-acyclic chain — four levels past the old cap — compiles too, on this toolchain
-(see [Nesting depth in practice](#nesting-depth-in-practice): MSVC stops
-lower). Compiled against
-the previous revision, the identical fixture fails with three
-`static assertion failed ... '16UL < kMaxNestDepth'` errors. That control is
-what says the change is responsible for the difference, rather than the fixture
-having been compilable all along.
+acyclic chain compiles too, on this toolchain (see
+[Nesting depth in practice](#nesting-depth-in-practice): MSVC stops lower).
 
-`kMaxNestDepth`, the `static_assert` and the 16-level cap are therefore gone.
-A cap is needed only because a depth counter cannot tell a cycle from a deep
+A cap is needed only when a depth counter cannot tell a cycle from a deep
 graph; with nothing carried in the type system there is nothing to bound, and
 so no limit to state.
 
@@ -2712,23 +2668,21 @@ int sink = make<DeepN>();
 Two things about MSVC's number. It is **specific to an instantiated template**:
 the same chain initialised at namespace scope compiled at 120 levels without
 complaint, so it is not a limit on aggregate nesting as such but on the
-initialiser MSVC builds while instantiating. And it is **lower than the
-16-level cap a depth counter would impose** — a 15- or 16-level chain hits
-C1054 on MSVC ahead of any `static_assert` meant to be the diagnostic. Nothing
-in the repository nests more than three levels, so nothing in the tree reaches
-either limit.
+initialiser MSVC builds while instantiating. And it is **lower than a 16-level
+cap** would be — a 15- or 16-level chain hits C1054 on MSVC ahead of any
+`static_assert` meant to be the diagnostic. Nothing in the repository nests
+more than three levels, so nothing in the tree reaches either limit.
 
 The action type counts as one of the 15, so `cl` accepts a chain of **14**
-below it. `tests/test_nested_forms.cpp` uses 20 (four past the removed cap)
-everywhere and 12 on MSVC — one link of margin — selected at `kDeepChainLevels`
-with the measurement in a comment beside it.
+below it. `tests/test_nested_forms.cpp` uses 20 everywhere and 12 on MSVC —
+one link of margin — selected at `kDeepChainLevels` with the measurement in a
+comment beside it.
 
-C1054 is a worse diagnostic than the `static_assert` it replaced: it names
-neither the action type nor the nesting, and points at `forms.hpp`'s `A probe{}`
-rather than at the domain type responsible. That is a real cost of removing the
-cap, and it is not recoverable — morph cannot detect a limit the compiler does
-not expose. What is recoverable is knowing the number, which is what this
-section is for.
+C1054 is a poor diagnostic: it names neither the action type nor the nesting,
+and points at `forms.hpp`'s `A probe{}` rather than at the domain type
+responsible. That is the cost of carrying no cap, and it is not recoverable —
+morph cannot detect a limit the compiler does not expose. What is recoverable
+is knowing the number, which is what this section is for.
 
 **Verification status.** The per-toolchain numbers above are *measured*, on the
 reduced probe, not on morph's own headers: `cl` via Compiler Explorer's
@@ -2743,9 +2697,8 @@ toolchain upgrade that moves MSVC's limit down would be found by a red
 `Windows / cl-*` leg rather than by a named guard. A compile-check on the model
 of `forms_dag_budget.cmake` would close that, and does not exist.
 
-A "diamond" was never affected and still is not — the same type reused from two
-unrelated places in the schema, e.g. an `Address` nested under both a `Company`
-and a `Person` member of the same action, recurses normally into both and, per
+A "diamond" — the same type reused from two unrelated places in the schema, e.g. an `Address` nested under both a `Company`
+and a `Person` member of the same action — recurses normally into both and, per
 the `$defs` set above, is annotated once rather than twice.
 
 **What the forms engine does with a nested aggregate.** It reads a nested
@@ -2765,22 +2718,13 @@ what a nested-aggregate schema actually needs (per-field annotations) rather
 than becoming a general recursive-descent schema compiler that also
 re-derives layout/rules/computed-field semantics at every level.
 
-**Purely additive, with one source-compatibility exception.** An action with
-no nested-aggregate member has nothing here to trigger on, so its generated
-schema is byte-for-byte unchanged. A pre-existing action that *does* have a
-nested-aggregate member sees its schema gain annotations it previously
-lacked — the whole point of this feature — with no change to any of its flat
-top-level members. Neither a deeply nested action nor a self- or
-mutually-referential nested-aggregate member fails to compile, and no action in
-this repository is in that position in any case.
-
 Every nested-aggregate type in the chain must be **default-constructible**,
 exactly like the top-level action type (see below): the recursion builds its
 own probe instance purely to enumerate its members via reflection.
 
 ### Scope: flat actions only (form layout, computed fields, and rules)
 
-`formLayout`/`fieldSpans` ([Layout & grouping](#layout--grouping)) and
+`formLayout`/`fieldSpans` ([Layout & grouping](#layout--grouping--sections-tabs-spans)) and
 `formRules` ([Cross-field rules](#cross-field-rules--the-x-rules-vocabulary)) are read only
 from the top-level action type — they are not consulted on a nested
 aggregate, no matter how deep `mergeSchemaExtras` otherwise recurses (see
@@ -2802,10 +2746,11 @@ an empty JSON object `{}`. Renderers must treat an empty string as "schema
 unavailable" and refuse to build a form from it. Because the fallback path
 carries no diagnostic, an empty result is **indistinguishable** from any other
 failure mode (there is no error code, message, or partial schema to inspect).
-The empty string is the only failure signal a caller receives on this path; the
-one case in which schema generation throws instead is a self-contradicting
-declaration ([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules)),
-which is an author error in the action type, not a failure of the input schema.
+The empty string is the only failure signal a caller receives on this path;
+schema generation throws instead only for a self-contradicting declaration
+([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules))
+or a malformed options declaration ([Field metadata](#field-metadata--fieldmeta)),
+which are author errors in the action type, not failures of the input schema.
 
 ## Limitations
 
@@ -2818,7 +2763,7 @@ in-process, and the server-side wire dispatcher:
   client-side path a schema-driven GUI uses). Enforces
   `ActionValidator<Action>::ready` after decoding and before invoking the handler
   (see [bridge.md](../core/bridge.md)): an action that fails `validate()` is rejected with
-  an error, never executed. It also retags `Quantity` fields to their declared
+  an error, never executed. It also rounds `Quantity` fields to their declared
   precision (below).
 - **`Bridge::executeVia`'s `localOp`** (`LocalBackend`, reached by any
   hand-built `Action` passed to `BridgeHandler<Model>::execute<Action>()`
@@ -2867,7 +2812,7 @@ on **both wire paths** — client-bridge and remote.
 `Quantity::atDeclaredPrecision()` performs an exact `Rational` re-rounding
 (`math::roundToDecimalPlaces`, half away from zero, matching the decimal
 formatter — see
-[rational.md](../util/rational.md#roundtodecimalplaces--the-one-helper-that-stays-in-the-domain)).
+[rational.md](../util/rational.md#roundtodecimalplaces--rounding-that-stays-in-the-domain)).
 It does **not** merely move the `DecimalPlaces` tag. A tag-only change would
 leave a field declaring `dp = 1` holding exactly `1.23456` while rendering
 `1.2`: the report says one number and the database another, and an audit trail
@@ -3011,7 +2956,9 @@ wrong or un-merged schema rather than fail loudly.
 - Generating schemas for non‑action types (the module assumes glaze reflection is
   available on `A`).
 - Validating payloads against the schema — the schema is for the *client*.
-- Executing the options action — `choices` metadata tells the client *which*
-  action to call, but the forms module does not invoke it.
+- Executing the options action during schema generation — the `x-optionsAction`
+  metadata tells the client *which* action to call; the forms engine's
+  `ChoiceFetcher` invokes it ([engine.md](engine.md)), `schemaJson` never
+  does.
 - `morph::time::Timestamp` definition — it is only consumed here via
   `EmptyCapableField`.

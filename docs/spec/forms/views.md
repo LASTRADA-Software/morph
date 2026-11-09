@@ -8,14 +8,14 @@ describes one action, a view describes a *set* of related actions — a query,
 an edit, a delete — and how to choreograph their already-generated forms.
 
 > **Terminology note.** "Screen" here is the informal, UI sense — whatever a
-> view renders into. It is a different, not-yet-connected concept from the
-> app-shell layer's formal `Screen` family (`FormScreen`/`WizardScreen`/`kind`,
-> [workflows_navigation.md](workflows_navigation.md)): a view is not yet one
-> of that layer's declarable screen kinds (see [Non-goals](#non-goals)).
+> view renders into. It is a different concept from the app-shell layer's
+> formal `Screen` family (`FormScreen`/`WizardScreen`/`kind`,
+> [workflows_navigation.md](workflows_navigation.md)): a view is not one of
+> that layer's declarable screen kinds (see [Non-goals](#non-goals)).
 
 ## Contents
 
-- [The gap this closes](#the-gap-this-closes)
+- [Why a view document](#why-a-view-document)
 - [A new, separate top-level document](#a-new-separate-top-level-document)
 - [`ActionDescriptor` and `describeAction<Action>()`](#actiondescriptor-and-describeactionaction)
 - [Declaring a view in C++](#declaring-a-view-in-c)
@@ -31,14 +31,14 @@ an edit, a delete — and how to choreograph their already-generated forms.
 - [Non-goals](#non-goals)
 - [Cross-references](#cross-references)
 
-## The gap this closes
+## Why a view document
 
 The forms layer is **one action → one flat form**
 ([forms.md](forms.md)). Nothing says "run query action `ListSamples`, show
 its rows as a table, let a row open the edit form for action `EditSample`,
-and let a button run `DeleteSample`" — every create/read/update/delete
-(CRUD) screen had to be hand-wired,
-even though all three actions are already registered
+and let a button run `DeleteSample`" — without a view every
+create/read/update/delete (CRUD) screen is hand-wired, even though all three
+actions are already registered
 ([registry.md](../core/registry.md)) and each already generates its own form.
 `Choice` ([choice.md](choice.md)) already proves the smaller version of this
 pattern — a query action, executed with an empty body, serves rows a
@@ -49,9 +49,8 @@ rows" from a combo box to a full table with per-row actions.
 
 `schemaJson<A>()` describes one action; `viewSchemaJson<V>()` describes a
 *view* — a **separate JSON document**, never merged into any action schema.
-An action schema a [Tier-1](forms.md#renderer-conformance-kit) (per-action
-`x-*` schema) renderer consumes is byte-for-byte unchanged by this
-layer; a renderer that knows nothing about views still renders every
+An action schema a per-action renderer ([forms.md](forms.md#renderers))
+consumes is byte-for-byte unchanged by this layer; a renderer that knows nothing about views still renders every
 referenced action as a plain form. The view document only *references* action
 type-ids (the same string ids `ActionTraits<A>::typeId()` and
 `x-optionsAction` already use).
@@ -155,12 +154,12 @@ type it is instantiated on. Each derived column carries:
   struct schema in place); glaze only promotes the nested schema to a
   `$defs` entry (referenced back via the property's `$ref`) when the *same*
   `Quantity` type occurs on more than one property of `Row` (see
-  [forms.md's renderer conformance kit](forms.md#renderer-conformance-kit),
-  whose `CFSharedDefFields` fixture covers exactly this case) — column
+  [forms.md's conformance corpus](forms.md#conformance), whose
+  `CFSharedDefFields` fixture covers exactly this case) — column
   derivation reads whichever shape `schemaJson<Row>()` actually produced,
   trying the inlined property first and falling back to the `$ref`/`$defs`
   indirection.
-- `kind` — the column's table kind (spec 7 §4), by the names
+- `kind` — the column's table kind, by the names
   `morph::table::ColumnKind` reads: `custom` for an `x-comparator` member;
   `quantity` for an exact value (`num`/`den`) with `ExtUnits`, `decimal`
   without; `date` / `dateTime` for an integer with `x-widget` `epochDays` /
@@ -209,8 +208,8 @@ declared above (row type carrying `id`/`name`):
   "v-query": "ListSamples",
   "v-rowKey": "id",
   "v-columns": [
-    { "field": "id", "label": "Id" },
-    { "field": "name", "label": "Name" }
+    { "field": "id", "label": "id", "kind": "integer", "title": "Id" },
+    { "field": "name", "label": "name", "kind": "text", "title": "Name" }
   ],
   "v-rowAction": {
     "action": "EditSample",
@@ -233,8 +232,8 @@ iterate with a `for...in` over its own keys, not by numeric index.
 All keys are **additive**: a renderer that does not recognise `v-*` never
 builds a screen from this document, but every action it references still
 renders as an ordinary standalone form from its own `schemaJson<A>()` — the
-view document changes nothing about that action's own schema (verified: no
-`v-*` key is ever present in an action schema).
+view document changes nothing about that action's own schema (no `v-*` key is
+ever present in an action schema).
 
 ## `ViewTraits<V>` / `BRIDGE_REGISTER_VIEW` / `ViewRegistry`
 
@@ -396,8 +395,7 @@ pattern:
   action-forms. Multi-screen navigation, menus, and cross-screen flow are a
   separate concern, implemented in
   [workflows_navigation.md](workflows_navigation.md) — a view is not itself
-  one of that layer's screen kinds yet (`ViewScreen`/`kind: "view"` is
-  reserved but not declared there).
+  one of that layer's screen kinds.
 - **No new dispatch path or wire change.** Populate/edit/delete/create are
   ordinary action executes over the existing path
   ([bridge.md](../core/bridge.md)); the view document is metadata a renderer
@@ -426,6 +424,4 @@ pattern:
   ids `describeAction` resolves), and the `BRIDGE_REGISTER_ACTION` pattern
   `BRIDGE_REGISTER_VIEW` mirrors.
 - [workflows_navigation.md](workflows_navigation.md) — the wizard/app-shell
-  layer this view's Non-goals defers menus and cross-screen flow to; that
-  layer's `app-*` document reserves but does not yet declare a `kind: "view"`
-  screen referencing a view like this one.
+  layer this view's Non-goals defers menus and cross-screen flow to.

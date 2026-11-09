@@ -11,7 +11,7 @@ execution mode.
 
 ## Contents
 
-- [The gap this closes](#the-gap-this-closes)
+- [Why a sequencing layer](#why-a-sequencing-layer)
 - [The `w-*` wizard document](#the-w--wizard-document)
 - [The `app-*` app-shell document](#the-app--app-shell-document)
 - [C++ descriptors](#c-descriptors)
@@ -23,13 +23,13 @@ execution mode.
 - [Testing](#testing)
 - [Cross-references](#cross-references)
 
-## The gap this closes
+## Why a sequencing layer
 
 A single form ([forms.md](forms.md)) gates on its own fields only — nothing
 sequences one action's result into the next action's prefill, or groups a set
-of already-registered actions into one navigable menu. Before this layer, a
+of already-registered actions into one navigable menu. Without this layer, a
 multi-step flow ("register a sample, then record its first measurement,
-carrying the new sample's id forward as a prefill") had to be hand-wired: a
+carrying the new sample's id forward as a prefill") is hand-wired: a
 bespoke controller tracking a step index, manually reading one action's reply
 to seed the next request body, with no shared, introspectable vocabulary a
 renderer could build a generic stepper from. `morph::flows` and `morph::app`
@@ -90,7 +90,7 @@ enumerating every action schema onto one scroll:
 | `app-title` | top-level | string | Application title. |
 | `app-menu` | top-level | array | Ordered `{label, screen}` entries; `screen` keys into `app-screens`. |
 | `app-screens` | top-level | object | Map of screen-id → `{kind, ref}`. |
-| ↳ `kind` | screen | string | `"form"` or `"wizard"` in the current implementation (`"view"` is a reserved, not-yet-implemented value — see [Limitations](#limitations)). |
+| ↳ `kind` | screen | string | `"form"` or `"wizard"` (there is no `"view"` screen kind — see [Limitations](#limitations)). |
 | ↳ `ref` | screen | string | The referenced action's or wizard's registered type-id. |
 
 A screen is only a reference — the shell contributes menu and routing, never
@@ -102,9 +102,8 @@ referenced action schema directly and render a plain form.
 Declared in `include/morph/forms/flows.hpp` (namespace `morph::flows`) and
 `include/morph/forms/app.hpp` (namespace `morph::app`), alongside
 `forms.hpp`/`choice.hpp`/`views.hpp` in the same directory — mirroring how
-`include/morph/util/` already hosts three distinct namespaces
-(`morph::time`, `morph::math`, `morph::units`) under one directory, and how
-`views.hpp` (E-G7) landed the same way for the same reasons.
+`include/morph/util/` hosts three distinct namespaces (`morph::time`,
+`morph::math`, `morph::units`) under one directory.
 
 Both descriptor sets are built entirely from
 [`FixedString`](forms.md#fixedstring--nttp-compile-time-string) NTTPs (the
@@ -153,19 +152,18 @@ A wizard/app descriptor is registered with `BRIDGE_REGISTER_WIZARD(W, NAME)` /
 `AppTraits<A>` with a `typeId()`. Unlike `BRIDGE_REGISTER_ACTION`
 ([registry.md](../core/registry.md)), neither macro performs static-init
 registration into any dispatch or enumeration registry — a wizard or app is
-never itself executed or looked up by string id at runtime in this
-implementation; only the actions/wizards its steps/screens reference are
+never itself executed or looked up by string id at runtime; only the actions/wizards its steps/screens reference are
 (via the already-registered `ActionTraits`/`WizardTraits`). A consumer that
 needs the schema for a specific wizard/app calls `wizardSchemaJson<W>()` /
-`appSchemaJson<AppT>()` directly, naming the type — exactly how
-`examples/forms/lab_schemas.hpp`'s `schemasJson()` already hand-assembles a
-fixed `{actionType: schema}` map today, rather than through a generic
-type-erased registry walk.
+`appSchemaJson<AppT>()` directly, naming the type — the way
+`examples/forms/lab_schemas.hpp`'s `schemasJson()` assembles a fixed
+`{actionType: schema}` map, rather than through a generic type-erased registry
+walk.
 
-`ViewScreen<Id, View>` (a `kind: "view"` screen referencing a
-[views.md](views.md) view) is deliberately not yet declared: `appSchemaJson`
-only requires each screen type to expose `id()`/`kind()`/`ref()`, so adding
-it later needs no change to `appSchemaJson` itself.
+There is no `ViewScreen<Id, View>` (a `kind: "view"` screen referencing a
+[views.md](views.md) view). `appSchemaJson` only requires each screen type to
+expose `id()`/`kind()`/`ref()`, so one could be added without changing
+`appSchemaJson`.
 
 ## `FlowSession<Model, Steps...>`
 
@@ -202,16 +200,27 @@ public:
   Keystroke-rate `set<>` calls on an already-complete draft therefore produce
   one request each, and their replies land in whatever order the backend
   answers — the last reply to arrive wins, which need not be the last call
-  made. An earlier handler-side draft did collapse patches arriving during a
-  flight; nothing does now, here or on the standalone-form path. A caller that wants one
-  request per pause throttles or debounces on its own side; `FlowSession`
+  made. Nothing collapses in-flight patches, here or on the standalone-form
+  path. A caller that wants one request per pause throttles or debounces on its own side; `FlowSession`
   deliberately does not, since it cannot know the host's input cadence.
+- **`set<>` targets the current step only.** A field whose action is not one
+  of `Steps...` is a compile error; a field of a declared step that is not the
+  current one throws `std::logic_error` — order is what a flow means.
 - **`advance()`/`back()` are pure sequencing.** `advance()` moves to the next
   step only if the current step has already produced a captured, successful
   result (`ready() == true`); a not-ready step does not advance. `back()`
   returns to the previous step; `FlowSession`'s own per-step
   `std::tuple<Steps...>` draft — the only draft in play, since the handler
-  keeps none — is never reset, so entered values survive navigation.
+  keeps none — is never reset, so entered values survive navigation. A step
+  returned to by `back()` is ready again: it produced a result once, or it
+  could not have been left.
+- **A late reply for a step already left changes nothing.** Each dispatch
+  records the step it was fired from, compared against `_activeStep`, which
+  `advance()` and `back()` move. A success for a step no longer current is
+  dropped: it neither captures values nor marks the new step ready, which
+  would let the next `advance()` skip a step. A failure on the current step
+  clears `ready()`; a failure for a step already left does not, but still
+  reaches `onError`, since the action did fail.
 - **`resolved(path)` is the prefill source.** On every successful step
   result, `FlowSession` flattens both the step's submitted draft (via
   `morph::forms::detail::forEachNamedMember`) and its result into a
@@ -242,8 +251,9 @@ public:
   dereferencing freed memory. `~FlowSession` calls `requestStop()` as its first
   statement rather than relying on member destruction alone: members are
   destroyed only *after* the destructor body, and a body that pumped an event
-  loop could deliver into a half-dead session. This is the "teardown that pumps" escape hatch callback_scope.md
-  documents, and `FlowSession` is its worked example.
+  loop could deliver into a half-dead session. This is the "teardown that
+  pumps" escape hatch callback_scope.md documents, and `FlowSession` is its
+  worked example.
 
 ## Rendering
 
@@ -256,7 +266,7 @@ the header, the current step's form and Back/Next with their gates
 Result fields win over draft fields on a name collision, the same order as
 `FlowSession::captureResult`. A document's `wizard` node reaches it through the
 interpreter; the app shell's menu and screens are the host's
-(`docs/spec/ui/host.md`).
+([../ui/host.md](../ui/host.md)).
 
 ## API reference
 
@@ -293,22 +303,21 @@ interpreter; the app shell's menu and screens are the host's
 
 | Decision | Choice | Why |
 |---|---|---|
-| Header location | `include/morph/forms/{flows,app}.hpp`, not a new top-level directory | Both modules are small, tightly coupled to `forms.hpp`'s `FixedString`/schema machinery, and `include/morph/util/` already establishes the precedent that one directory can host several distinct namespaces — `views.hpp` (E-G7) independently converged on the same answer. |
-| No runtime wizard/app registry | `BRIDGE_REGISTER_WIZARD`/`BRIDGE_REGISTER_APP` only specialise traits | Neither a wizard nor an app is ever executed or looked up by string id at runtime; the consuming code always names the concrete type. Avoids a second registry to keep in lockstep with the schema-emission call sites, mirroring how the example's own `schemasJson()` already hand-assembles its schema set rather than walking a generic registry. |
+| Header location | `include/morph/forms/{flows,app}.hpp`, not a new top-level directory | Both modules are small, tightly coupled to `forms.hpp`'s `FixedString`/schema machinery, and `include/morph/util/` establishes the precedent that one directory can host several distinct namespaces, as `views.hpp` also does. |
+| No runtime wizard/app registry | `BRIDGE_REGISTER_WIZARD`/`BRIDGE_REGISTER_APP` only specialise traits | Neither a wizard nor an app is ever executed or looked up by string id at runtime; the consuming code always names the concrete type. Avoids a second registry to keep in lockstep with the schema-emission call sites, mirroring how the example's own `schemasJson()` assembles its schema set rather than walking a generic registry. |
 | Prefill resolution lives with the caller/renderer | `FlowSession::resolved(path)` is read-only; nothing calls `set<>` automatically | Matches the wizard document's own wording that the renderer resolves and issues the `set<>` calls; keeps `FlowSession` a pure sequencer with no opinion on *when* a step should be pre-populated. |
-| Result fields win over draft fields on name collision | `FlowSession::captureResult` records the draft first, then the result, so identical field names are overwritten by the result; `WizardSession`'s resolved values apply the same order | A deterministic, testable rule for the one genuinely ambiguous point in the source design (prefill can come from "an earlier step's result *or* submitted draft"), applied identically on the typed C++ path and the runtime wizard. |
+| Result fields win over draft fields on name collision | `FlowSession::captureResult` records the draft first, then the result, so identical field names are overwritten by the result; `WizardSession`'s resolved values apply the same order | A deterministic, testable rule for the one genuinely ambiguous point of prefill (a path can name a field of an earlier step's result *or* of its submitted draft), applied identically on the typed C++ path and the runtime wizard. |
 | Steps must be pairwise distinct types | `static_assert(detail::AllDistinct<Steps...>::value, ...)` | `std::get<A>(_drafts)` needs a unique `T`, and reusing a step type would silently collide the two steps' drafts. |
 | The rendered wizard does not use `FlowSession` | `WizardSession` sequences a served `w-*` document over JSON bodies, not the typed template API | A client renders a wizard it was served and cannot name its C++ action types. `FlowSession` remains available for typed embeddings and is exercised directly by `tests/test_flows_apps.cpp`. |
 
 ## Limitations
 
-- **`kind: "view"` is not implemented.** The `app-*` vocabulary reserves the
-  value but no `ViewScreen` type exists yet — it would be added once a need
-  arises to route an app-shell menu entry straight at a
-  [views.md](views.md) `morph::views` view, requiring no change to
-  `appSchemaJson` itself. `examples/forms/lab_schemas.hpp`'s `SamplesView`
-  (a `morph::views::CollectionView`) is therefore not one of `LabApp`'s menu
-  entries — integrating it would require `ViewScreen`.
+- **No `kind: "view"` screen.** No `ViewScreen` type exists, so an app-shell
+  menu entry cannot route straight at a [views.md](views.md) `morph::views`
+  view; adding one would need no change to `appSchemaJson` itself.
+  `examples/forms/lab_schemas.hpp`'s `SamplesView` (a
+  `morph::views::CollectionView`) is therefore not one of `LabApp`'s menu
+  entries.
 - **`Steps...` uniqueness is a hard requirement, not a documented escape
   hatch.** A wizard that needs the same action type twice (e.g. two
   identically-shaped approval steps) is not expressible with one
@@ -316,9 +325,10 @@ interpreter; the app shell's menu and screens are the host's
   structurally identical) to get two independent draft slots.
 - **No conditional branching, no cross-action transaction, no server-driven
   navigation.** `w-steps` is a linear list; each step commits independently;
-  the menu/screens are a static compiled-in descriptor. See the planning
-  source's Non-goals for the full rationale (unchanged by this
-  implementation).
+  the menu/screens are a static compiled-in descriptor. Cross-action
+  atomicity belongs in the outbox ([../journal/journal.md](../journal/journal.md));
+  server-driven navigation belongs in the declarative UI layer
+  ([../ui/host.md](../ui/host.md)).
 
 ## Testing
 
@@ -330,9 +340,11 @@ interpreter; the app shell's menu and screens are the host's
   (`tests/test_flows_apps.cpp`, `App::*`).
 - `FlowSession` fires step one, advances, captures step two's prefill
   source, gates `advance()` on readiness, supports `back()` with draft
-  persistence, throws on a `set<>` targeting the wrong step, and surfaces
-  `BackendChangedError` on the current step's error callback when a backend
-  switch lands mid-flight (`tests/test_flows_apps.cpp`, `FlowSession:*`).
+  persistence, throws on a `set<>` targeting the wrong step, drops a late
+  reply or error for a step already left, refuses completions after
+  destruction, and surfaces `BackendChangedError` on the current step's error
+  callback when a backend switch lands mid-flight
+  (`tests/test_flows_apps.cpp`, `FlowSession:*`).
 - The rendered wizard is covered by `tests/test_forms_engine_wizard.cpp` and
   `tests/test_forms_engine_wizard_view.cpp`: Next stays disabled until the
   step replies ok, Next/Back move the step index, and prefill lands in the
@@ -347,8 +359,8 @@ interpreter; the app shell's menu and screens are the host's
 - [choice.md](choice.md) — `FixedString`'s other consumer; the "declare a
   compile-time name, validate at runtime" pattern `Bind`/`MenuEntry`/screen
   `Id`s reuse.
-- [views.md](views.md) — the `v-*` view-schema layer; the `kind: "view"`
-  screen this document reserves but does not yet implement.
+- [views.md](views.md) — the `v-*` view-schema layer, which the app shell
+  does not route to.
 - [../core/bridge.md](../core/bridge.md) — `BridgeHandler::execute`,
   `ActionValidator::ready`, and `BackendChangedError` — the mechanism
   `FlowSession` extends to span a sequence without adding a new dispatch path.

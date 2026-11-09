@@ -57,8 +57,6 @@ Everything that looks like ceremony — why a result is a `Completion<T>` rather
 than a return value, why every action type has a string id, why callbacks
 always arrive through an executor — is that goal being paid for.
 
-State it early because it explains the rest.
-
 ## 2. The whole seam in one file
 
 Before any persistence, GUI or transport, here are all four moving parts with
@@ -133,7 +131,7 @@ morph::exec::MainThreadExecutor gui;      // where .then / .onError land
 morph::exec::ThreadPoolExecutor pool{2};  // where models run
 
 auto server = std::make_shared<morph::backend::RemoteServer>(pool);
-morph::bridge::Bridge bridge{makeBackend(deployment, pool, server)};
+morph::bridge::Bridge bridge{makeBackend(deployment, pool, server), gui};
 morph::bridge::BridgeHandler<GsPasteModel> pastes{bridge, &gui};
 
 std::string createdId;
@@ -249,7 +247,7 @@ access live in plain, single-threaded model classes with typed actions.**
 Nothing domain-shaped may live in a screen, in a client, or in `main()`.
 
 bookmarks' main entity is one class,
-[`include/bookmarks/models/bookmark_model.hpp:53`](../examples/bookmarks/include/bookmarks/models/bookmark_model.hpp):
+[`include/bookmarks/models/bookmark_model.hpp:79`](../examples/bookmarks/include/bookmarks/models/bookmark_model.hpp):
 
 ```cpp
 class BookmarkModel {
@@ -349,7 +347,7 @@ type only, declared by a `glz::meta` specialisation at the bottom of that file.
 
 ### DTOs are wire types, kept apart from storage types
 
-[`dto/bookmark_dto.hpp:44`](../examples/bookmarks/include/bookmarks/dto/bookmark_dto.hpp)
+[`dto/bookmark_dto.hpp:45`](../examples/bookmarks/include/bookmarks/dto/bookmark_dto.hpp)
 (comments trimmed):
 
 ```cpp
@@ -474,10 +472,10 @@ force-link caveat (section 7).
 **The access pattern.** A model holds no connection of its own. Each
 `execute()` acquires one from the pool for its own duration and returns it
 before returning. Writes that touch more than one row run in one transaction
-([`src/models/bookmark_model.cpp:353`](../examples/bookmarks/src/models/bookmark_model.cpp)):
+([`src/models/bookmark_model.cpp:381`](../examples/bookmarks/src/models/bookmark_model.cpp)):
 
 ```cpp
-auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+auto mapper = db::acquireMapper();  // Lightweight's GlobalDataMapperPool().Acquire(), in a profiler zone
 ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
 mapper->Create(rec);
 applyTagSet(mapper.Get(), rec.id.Value(), owner, action.tags);
@@ -504,7 +502,7 @@ BRIDGE_REGISTER_ACTION(bookmarks::BookmarkModel, bookmarks::ListBookmarks, "List
                        ::morph::model::Loggable::No)
 ```
 
-([`models/bookmark_model.hpp:71`](../examples/bookmarks/include/bookmarks/models/bookmark_model.hpp).)
+([`models/bookmark_model.hpp:109`](../examples/bookmarks/include/bookmarks/models/bookmark_model.hpp).)
 
 Each macro emits two things:
 
@@ -560,9 +558,11 @@ Three things that bite:
 
 Three objects sit between a call site and a model.
 
-- **`Bridge`** — the single, process-wide hub. It owns the active backend and
-  tracks every live handler so it can re-point them when the backend is swapped
-  (going offline → online, say). You construct **one** and share it.
+- **`Bridge`** — the hub. It owns the active backend and tracks every live
+  handler so it can re-point them when the backend is swapped (going offline →
+  online, say). It belongs to the executor it is constructed with — typically
+  your UI event loop — and every call on it is made there. You construct
+  **one** and share it.
 - **`BridgeHandler<M>`** — your typed handle to one model type. It registers
   `M` on the bridge on construction and deregisters on destruction. Create one
   per model type, wherever in the UI you talk to that model.
@@ -574,9 +574,11 @@ Three objects sit between a call site and a model.
 bearing on where your callback runs. That decoupling is what makes local and
 remote interchangeable at the call site.
 
-> **Lifetime rule:** a `Bridge` must outlive every `BridgeHandler` registered
-> on it. A handler deregisters itself on destruction, so destroying the bridge
-> first is undefined behaviour.
+> **Lifetime rule:** a `Bridge` must outlive every use of the handlers
+> registered on it, and the bridge and its handlers are created, called and
+> destroyed on the executor the bridge was constructed with (its *owner*).
+> Destroy handlers before their bridge; a handler destroyed after it is
+> tolerated, but any call through it is not.
 
 ### This is where a new reader's first real bug lives
 
@@ -588,10 +590,6 @@ natural spelling is silently wrong:
 ```cpp
 completion.then([this](BookmarkView v) { /* `this` may be long gone */ });
 ```
-
-This is not hypothetical: a receiver destroyed while a completion was still in
-flight, whose callback then wrote to freed memory, has been found by
-AddressSanitizer in this repository.
 
 `Completion` has no cancellation of its own; a receiver opts in to a lifetime
 gate instead. `morph::async::CallbackScope`
@@ -637,30 +635,37 @@ abridged):
 ```cpp
 auto const marks = screen.model<BookmarkModel>("marks", {.instance = ui::Instance::Private});
 auto const list = ui::element("list");
-auto const bookmarks = screen.query<ListBookmarks>("bookmarks", marks, {});
+auto const create = ui::element("create");
+auto const bookmarks = screen.query<ListBookmarks>("bookmarks", marks, {/* search text, tag, archive filter */}, {});
 auto const archive = screen.mutation<BulkEdit>("archive", marks);
 auto const rows = bookmarks.value().at(&ListBookmarksResult::bookmarks);
+auto const bulk = [&](std::string const& op) {
+    return ui::run(archive, {{&BulkEdit::ids, list.selection()}, {&BulkEdit::archive, ui::AnyHandle{op}}});
+};
 return ui::column({
-    ui::form<CreateBookmark>(marks).id(ui::element("createForm")).testId("createForm"),
-    ui::table(rows, {.key = ui::row("id"), /* title and URL columns */, .selectionMode = ui::Selection::Multiple})
+    /* the search row */
+    ui::table(rows, {.key = ui::row("id"), /* title, tags and visibility columns */,
+                     .selectionMode = ui::Selection::Multiple})
         .id(list).testId("bookmarks"),
-    ui::button({.label = "Archive selected",
-                .onClick = ui::run(archive, {{&BulkEdit::ids, list.selection()},
-                                             {&BulkEdit::archive, ui::AnyHandle{std::string{"Archive"}}}})}),
-    /* the edit, import, rename and merge forms, the tag table, and the error line */
+    ui::button({.label = "Archive selected", .onClick = {bulk("Archive")}}).testId("archiveSelected"),
+    ui::drawer(create, {ui::form<CreateBookmark>(marks, {.onSuccess = {ui::close(create)}})
+                            .id(ui::element("createForm")).testId("createForm")},
+               {.title = "New bookmark", .side = std::string{"end"}}),
+    /* the count, the error line and the edit drawer */
 });
 ```
 
 The screen decides nothing about the domain. It names the model, the query
 that lists bookmarks and the mutation; every rule about what a bookmark may be
 stays in `BookmarkModel`, and nothing on the screen says when the list
-refetches. Archiving a selection is
-one `BulkEdit` built from the table's own selection, so it is one transaction
-in the model however many rows are selected.
+refetches. Archiving a selection is one `BulkEdit` built from the table's own
+selection, so it is one transaction in the model however many rows are
+selected.
 
 Sign-in is a screen too: `bookmarks.login` runs `Login` and installs the
-token its reply carries with `ui::signIn`, and the catalog hides
-`bookmarks.main` until a principal is signed in, because its queries need one.
+token its reply carries with `ui::signIn`. The catalog marks only
+`bookmarks.login` public and hides every other screen until a principal is
+signed in, because their queries need one.
 
 The screen is data on the wire, so the same document runs in either deployment
 mode, and on any frontend. Its tests run headless: they mount it on a recording
@@ -672,6 +677,7 @@ its helpers inlined):
 harness.edit("username", "alice");
 harness.click("signIn");
 REQUIRE(harness.waitForText("count", "0 bookmarks"));
+harness.click("newBookmark");
 harness.editField("createForm", "url", "https://example.org/a");
 REQUIRE(harness.submitForm("createForm"));
 REQUIRE(harness.waitForText("count", "1 bookmarks"));
@@ -812,7 +818,7 @@ Here is the headline claim, as something you can run rather than something you
 have to believe.
 
 bookmarks' backend-matrix test body is generated over all three deployments
-([`tests/test_bookmark_model.cpp:641`](../examples/bookmarks/tests/test_bookmark_model.cpp),
+([`tests/test_bookmark_model.cpp:658`](../examples/bookmarks/tests/test_bookmark_model.cpp),
 abridged):
 
 ```cpp

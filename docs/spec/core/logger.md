@@ -58,30 +58,11 @@ A single `detail::LogState` singleton holds:
   [The default level](#the-default-level)). Read/written lock-free with relaxed
   ordering; **not** guarded by `mtx`.
 - **`mtx`** — a `std::mutex` protecting `sink` and serialising sink invocation.
+- **`dropped`** — a `std::atomic<std::uint64_t>` counting records discarded
+  because emitting them failed (see [Failure modes](#failure-modes)); read
+  through `droppedLogRecords()`.
 
-### The default level
-
-`minLevel` defaults to `warn`: linking morph must not hand the framework a
-consumer's `stderr`. It defaulted to `debug` until 0.1.0, which meant every
-application that linked morph inherited its dispatch tracing without asking —
-a plain `morph_tests` run wrote 2,949 such lines against 23 lines of actual
-test output.
-
-`warn` is deliberately **one value in every build configuration**, not keyed on
-`NDEBUG`. `minLevel` is a default member initializer in a header, so a
-configuration-dependent one gives translation units compiled with different
-settings two definitions of `LogState` and of the inline `logState()` — an ODR
-violation the linker resolves silently and arbitrarily, turning the observed
-default into a link-order accident. A debug build therefore does **not** enable
-debug logging by itself; `setLogLevel(LogLevel::debug)` is the one line that
-does, and it is the only documented way to change the level.
-
-morph's own test binaries go further and default to `off`, since expected
-error-path records are still noise in a test run. That is a property of the
-test harness (`tests/testkit/log_level.hpp`, exposed as `--log-level` and
-`$MORPH_TEST_LOG_LEVEL`), not of this library — a consumer sees `warn`.
-
-The two fields have different concurrency disciplines:
+`minLevel` and `sink` have different concurrency disciplines:
 
 - **`minLevel` is lock-free.** `setLogLevel` is a relaxed atomic `store` and
   `getLogLevel` is a relaxed atomic `load` — neither touches `mtx`. This makes
@@ -96,6 +77,28 @@ The relaxed memory order is intentional: level filtering is advisory (a message
 racing a concurrent `setLogLevel` may be emitted or dropped depending on
 timing), so no cross-thread happens-before relationship on the level is needed,
 and relaxed is the cheapest correct choice.
+
+### The default level
+
+`minLevel` defaults to `warn`: linking morph must not hand the framework a
+consumer's `stderr`. The framework traces at `debug` — `RemoteServer` writes a
+line for every request it decodes — so a lower default would make every
+application that links morph inherit that tracing without asking, enough to
+bury the application's own output.
+
+`warn` is deliberately **one value in every build configuration**, not keyed on
+`NDEBUG`. `minLevel` is a default member initializer in a header, so a
+configuration-dependent one gives translation units compiled with different
+settings two definitions of `LogState` and of the inline `logState()` — an ODR
+violation the linker resolves silently and arbitrarily, turning the observed
+default into a link-order accident. A debug build therefore does **not** enable
+debug logging by itself; `setLogLevel(LogLevel::debug)` is the one line that
+does, and it is the only documented way to change the level.
+
+morph's own test binaries go further and default to `off`, since expected
+error-path records are still noise in a test run. That is a property of the
+test harness (`tests/testkit/log_level.hpp`, exposed as `--log-level` and
+`$MORPH_TEST_LOG_LEVEL`), not of this library — a consumer sees `warn`.
 
 ## Log-injection sanitisation
 
@@ -227,10 +230,10 @@ thread.
 
   This is a guarantee to the *caller*, and it is what makes logging legal from
   a `noexcept` function or a destructor -- where an escaping exception is
-  `std::terminate`, not a catchable error. It replaces the previous contract,
-  under which a sink's exception propagated into whatever code happened to be
-  logging; that put the burden on the sink, which no caller can verify, since
-  the sink is installed by unrelated code.
+  `std::terminate`, not a catchable error. The alternative — letting a sink's
+  exception propagate into whatever code happened to be logging — would put
+  the burden on the sink, which no caller can verify, since the sink is
+  installed by unrelated code.
 
 - **A discarded record is counted, not ignored.** `morph::log::droppedLogRecords()`
   returns the number of records lost this way since process start: monotonic,
@@ -320,7 +323,7 @@ during static teardown.
 | Thread safety | **Split: lock-free `std::atomic<LogLevel>` for the level, `std::mutex` for the sink** | The level is the per-call hot path, read on every log call; making it an atomic keeps filtering contention-free and lets a suppressed formatted call reject before `std::format`. The sink is a `std::function` that cannot be swapped atomically, so it keeps the mutex — which also serialises sink calls. The default `stderr` sink is independently thread-safe, but serialising keeps arbitrary user sinks' output from interleaving. Consequence: the sink runs under a non-recursive mutex and must not re-enter `morph::log` (see [Thread safety](#thread-safety)). |
 | Default sink | **`std::println(stderr, "[{}] {}", levelName(lvl), sanitizeLogLine(msg))`** | C++23 `std::println` is the modern replacement for `fprintf` — type-safe, no format string mismatch, and it appends a newline automatically. The `[LEVEL]` prefix is concise and grep-friendly. The message is run through `sanitizeLogLine` so a newline/control byte in user-controlled text cannot forge a second log line (see [Log-injection sanitisation](#log-injection-sanitisation)). |
 | Sanitise in the sink, not the emit path | **Only the default sink escapes; `detail::log` passes the raw view** | Keeps the fast path allocation-free for custom sinks that route to structured backends where raw bytes are safe; the out-of-the-box `stderr` sink is still safe by default, and custom sinks can reuse the public `detail::sanitizeLogLine`. |
-| Format support | **Two overloads per level: `std::string_view` and `std::format_string` + variadic args** | The plain overload avoids forcing `std::format` on callers with a raw string; the variadic overload provides type-safe formatting. SFINAE on `std::format_string` ensures the format args are checked at compile time. |
+| Format support | **Two overloads per level: `std::string_view` and `std::format_string` + variadic args** | The plain overload avoids forcing `std::format` on callers with a raw string; the variadic overload provides type-safe formatting. `std::format_string`'s `consteval` constructor checks the format args at compile time. |
 | `ScopedLoggerOverride` | **RAII guard with two constructors (snapshot-only and install), deleted copy/move** | The default constructor enables a pattern where test fixtures set up their own logger mid-test and still get automatic restoration. The explicit constructor is the common case. Deleted copy/move prevents double-restore. |
 | No `operator<<` | **`std::format` / `std::print` only** | Consistent with C++23 direction — no iostreams dependency, no ADL pitfalls, no locale contamination. |
 | No compile-time level filtering | **All levels compiled in; filtering is runtime only** | The system is small enough that the dead code from unused levels is negligible. A compile-time toggle would require `if constexpr` at every call site or a macro-based approach, neither of which is justified here. |
@@ -362,7 +365,7 @@ logger is the right tool:
 
 ## Cross-references
 
-- **`completion.md`** and ARCHITECTURE.md's *Error propagation* section — the
+- [completion.md](completion.md) and [ARCHITECTURE.md](../../ARCHITECTURE.md)'s *Error propagation* section — the
   error-handling path is a primary user of this logger: an abandoned
   `Completion` with no `.onError` handler logs the pending exception through the
   configured sink from its destructor (non-`std::exception` types are logged as
@@ -371,14 +374,14 @@ logger is the right tool:
   but not from static-destruction ordering after `LogState` is gone.
 - **`ScopedLoggerOverride` usage** — the standard pattern for capturing log
   output in tests without leaking a sink across cases; it mirrors
-  `morph::journal::ScopedActionLog` (see `journal.md`), which applies the same
+  `morph::journal::ScopedActionLog` (see [journal.md](../journal/journal.md)), which applies the same
   RAII save/restore idiom to the action-log sink. Because both swap global
   state, tests using them must run serially (see [Limitations](#limitations)).
-- ARCHITECTURE.md *Logger* section — the one-paragraph framework-level summary:
+- [ARCHITECTURE.md](../../ARCHITECTURE.md) *Logger* section — the one-paragraph framework-level summary:
   all framework internals route through `morph::log::detail::log`, and
   applications call `setLogger` once at startup to redirect to spdlog, Qt
   logging, or a test spy.
-- **`observability.md`** — the `morph::observe` metrics/trace seam copies this
+- [observability.md](observability.md) — the `morph::observe` metrics/trace seam copies this
   file's replaceable-sink pattern (global `std::function` sink, mutex-guarded
   swap, lock-free hot-path check) for structured numbers and spans that this
   logger's `(LogLevel, string_view)` sink signature cannot carry (see

@@ -15,6 +15,7 @@ application host.
 - [Sign-in mapping](#sign-in-mapping)
 - [The application host](#the-application-host)
 - [Tests](#tests)
+- [Chat](#chat)
 
 ## Packaging
 
@@ -131,8 +132,9 @@ the space it gets; with the sidebar, an 80-unit `medium` window, an 80-column te
 page 52 units, narrower than any `compact` window. On `expanded` the page is the window less the sidebar's 28 units,
 at least 80 (`expanded` begins at `kExpandedWidthUnits`, 108, which is the compact bound plus the sidebar).
 
-The frame shows its sidebar (with the principal and the sign-out button at its foot, or, compact, the navigation menu's sign-out entry) and top bar while the shell is signed in, and the page alone
-otherwise (`ShellFrame::showSignedIn`). The shell is signed in after a sign-in, until a sign-out, and from the start
+The frame shows its sidebar (with the principal and the sign-out button at its foot, or, compact, the navigation
+menu's sign-out entry) and top bar while the shell is signed in, and the page alone otherwise
+(`ShellFrame::showSignedIn`). The shell is signed in after a sign-in, until a sign-out, and from the start
 when its start screen is not public: an application without a public screen, or a `--screen` that is not public, is
 used by the principal the source opened with. While it is signed out, opening a listed screen that is not public (a
 route the history holds at start, a move back or forward) signs it in the same way. Whether a sign-in happened is the
@@ -143,14 +145,13 @@ workspace sets the title to the tab's caption and `Navigator::setCurrent` to its
 `Workspace` with `HeadPlacement::External`, so a page holds only its screen and the head is shown once, in the top
 bar's head slots (`headPartsForActive()`: the lead under the title, the inline lead on the title line, the trail at the
 line's trailing edge, with an `end` lead inside it), which the shell shows through an effect beside those mounts
-(`ShellFrame::setHeadShown(Workspace::activeHeadShown())`). A second effect lays the head and the page area out for the active screen:
-`setLeadInline` from `activeLeadPlacement()`, `setTitleRole` from `activeTitleRole()`, `setHeadOneLine` from `activeHeadOneLine()`, `setHeadJoined` from
-`activeHeadJoined()`, `setHeadSurface` from `activeHeadSurface()` and `setPageSurface` from `activePageSurface()`. After mounting the app document the shell moves
-the principal into the top bar when `AppRoot::principalPlacement()` is `Head`. The slots
-follow the active tab the same way, but only
-re-mounts on a genuine active-tab change
-(compared by the model's own tab id, not the bar's index), since the mounted row is itself reactive to its own
-content.
+(`ShellFrame::setHeadShown(Workspace::activeHeadShown())`). A second effect lays the head and the page area out for
+the active screen: `setLeadInline` from `activeLeadPlacement()`, `setTitleRole` from `activeTitleRole()`,
+`setHeadOneLine` from `activeHeadOneLine()`, `setHeadJoined` from `activeHeadJoined()`, `setHeadSurface` from
+`activeHeadSurface()` and `setPageSurface` from `activePageSurface()`. After mounting the app document the shell
+moves the principal into the top bar when `AppRoot::principalPlacement()` is `Head`. The slots follow the active tab
+the same way, but re-mount only on a genuine active-tab change (compared by the model's own tab id, not the bar's
+index), since the mounted row is itself reactive to its own content.
 
 ## Sign-in mapping
 
@@ -176,7 +177,8 @@ there itself. An empty mapper is `std::invalid_argument`.
   reading it. `saveFile` saves inline bytes in the downloads directory, as `download` saves a fetched file.
 - A preview, by reference or inline, is not supported: the shell has no viewer.
 - `setNotifySink(sink)` sets what `notify(text, role)` calls; empty falls through to `InterpreterHost::notify`'s
-  base, safe no-op. The generic shell wires the sink to its `ShellFrame::showToast` (`shell_frame.md`#toast) inside
+  base, safe no-op. The generic shell wires the sink to its `ShellFrame::showToast`
+  ([shell_frame.md](../ui/shell_frame.md#toast)) inside
   `buildFrame()`, re-wired on every rebuild (sign-in, sign-out, a catalog reload all replace the frame), mapping
   `notify`'s role (`"info"`, `"success"`, `"warning"`, `"error"`; empty or unknown default to `Tone::Info`) to a
   `Tone`.
@@ -187,8 +189,7 @@ there itself. An empty mapper is `std::invalid_argument`.
 the arguments, both sources and the shell over a two-screen probe application (and the same behind a public login,
 for when the frame shows its chrome), a navigation as a dialog and a callee that returns from a tab, a call to a
 screen whose tab is open, the frame's compact form below `expanded`, the app document's navigation counts, the waits
-the tests use, and the
-sign-in mapping: a mapper reading `{user, jwt}` signs in, an empty principal is reported, and an `ApplicationHost`
+the tests use, and the sign-in mapping: a mapper reading `{user, jwt}` signs in, an empty principal is reported, and an `ApplicationHost`
 passed to a hand-built `DocumentScreenHost` runs a document's `signIn` and inline `upload`, while the same host
 without it reports both as not supported.
 

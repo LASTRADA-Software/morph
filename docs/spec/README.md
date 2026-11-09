@@ -16,7 +16,7 @@ path: tutorial → architecture narrative → these specs.
 ## How an action reaches a model
 
 The client half is identical in both deployments. The two diverge at
-`IBackend::execute`, and it is worth knowing which side you are looking at:
+`IBackend::executeInto`, and it is worth knowing which side you are looking at:
 **`ActionDispatcher` is server-side only.** `LocalBackend` never consults it —
 it posts the action's own `localOp` on the model's strand.
 
@@ -31,17 +31,17 @@ sequenceDiagram
 
     GUI->>H: execute(action)
     H->>B: executeVia&lt;Model, Action&gt;(binding, action, cbExec)
-    B->>BE: execute(ModelId, ActionCall, cbExec)
+    B->>BE: executeInto(ModelId, ActionCall, cbExec, sink)
 
     alt LocalBackend (in-process)
         BE->>M: post call.localOp on the model's strand,<br/>under ScopedContext
     else RemoteServer (over the wire)
         BE->>BE: serialise ActionCall, send "execute"
-        BE->>M: dispatchMessage looks the model up on a pool thread,<br/>then ActionDispatcher::dispatch on the model's strand,<br/>under ScopedContext
+        BE->>M: dispatchMessage admits the call and looks the model up on the server strand,<br/>then ActionDispatcher::dispatch on the model's strand,<br/>under ScopedContext
         BE->>BE: reply resolves the pending callId
     end
 
-    M-->>CB: Completion&lt;R&gt; resolves
+    M-->>CB: the sink settles the call's Completion&lt;R&gt;
     CB-->>GUI: .then / .onError run on cbExec
 ```
 
@@ -78,7 +78,8 @@ flowchart LR
 
 `SimulatedRemoteBackend` exercises the *same* serialise/dispatch path as the
 socket transport without a socket, which is why a bug that only appears
-remotely is usually reproducible in a plain unit test. Per-backend API details are in [`core/backend.md`](core/backend.md); the
+remotely is usually reproducible in a plain unit test. Per-backend API details are in
+[`core/backend.md`](core/backend.md); the
 behavioural differences between the two, collected in one table, are in
 [`core/locality.md`](core/locality.md).
 
@@ -123,6 +124,9 @@ before writing a durability test
 [`forms/choice.md`](forms/choice.md) ·
 [`forms/widget_hints.md`](forms/widget_hints.md) ·
 [`forms/workflows_navigation.md`](forms/workflows_navigation.md) ·
+[`forms/sections.md`](forms/sections.md) — independently editable action drafts on one screen ·
+[`forms/instance_constraints.md`](forms/instance_constraints.md) — per-instance values in framework schema keys, for
+form definitions that are data ·
 [`forms/engine.md`](forms/engine.md) — the C++ forms engine: a form's model,
 rules, exact values and reactive session, headless ·
 [`table/engine.md`](table/engine.md) — sorting, filtering and view
@@ -147,6 +151,7 @@ registration that validates it once, with the accessibility rules ·
 filtered for the principal, and content-addressed bundles verified into the client's cache ·
 [`ui/preferences.md`](ui/preferences.md) — customization choices stored per person by the server's
 preferences model, keyed by the verified session, and loaded back into a mounted screen ·
+[`ui/agent.md`](ui/agent.md) — an AI agent acting on the application over MCP, as one more server connection ·
 [`ui/chat.md`](ui/chat.md) — a chat built into a client whose assistant runs on the server: its protocol, turn loop,
 providers and limits ·
 [`ui/host_vocabulary.md`](ui/host_vocabulary.md) — the commands and values a client application registers
@@ -159,6 +164,11 @@ the closed `ui-theme/1` set and its defaults, and applying it on Qt Quick ·
 and `DocumentScreenHost` mounting screens as roots or into a host's container ·
 [`ui/workspace.md`](ui/workspace.md) — the workspace shell: tabs over screens, focus by identity, singleton and
 placeholder tabs, closing tab by tab until a veto, and the most-recently-used walk ·
+[`ui/shell_frame.md`](ui/shell_frame.md) — the frame screens are shown in: sidebar with the navigator, top bar, page ·
+[`ui/explorer.md`](ui/explorer.md) — the app explorer: an application's screens, models and actions, with a live form
+for each action ·
+[`ui/inspector.md`](ui/inspector.md) — the development inspector: a mounted screen's nodes, queries, mutations and
+commands ·
 [`ui/view_tree.md`](ui/view_tree.md) ·
 [`ui/backend_contract.md`](ui/backend_contract.md) ·
 [`ui/frontend.md`](ui/frontend.md) ·
@@ -214,10 +224,9 @@ or not at all.
 [`pinned_facts.toml`](pinned_facts.toml) is not prose. It is the spec↔code
 drift guard: each entry pins a mechanical fact some spec states in words (a
 buffer size, a limit, a default) to the real symbol, and
-`tests/test_pinned_facts.cpp` fails if they diverge, while
-a gate removed on 2026-09-23 fails if the citing spec stops mentioning
-it. Change a pinned value only in the same commit that changes both the code
-and the prose. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) under "Quality
+`tests/test_pinned_facts.cpp` fails if they diverge. Nothing checks that the
+citing spec still states the value, so change a pinned value only in the same
+commit that changes both the code and the prose. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) under "Quality
 gates".
 
 ## Keeping this file cheap

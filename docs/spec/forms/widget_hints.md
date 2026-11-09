@@ -161,7 +161,7 @@ is a wire-shape change for any client that resolves `$ref` targets by name.
 
 ## Widget override: `fieldMetadata`
 
-`mergeSchemaExtras` (verified in `forms.hpp`) computes each property's
+`mergeSchemaExtras` (`forms.hpp`) computes each property's
 `x-widget` in two steps, for **every** reflected member (not only `Multiline`
 / `Ranged` fields):
 
@@ -177,8 +177,8 @@ is a wire-shape change for any client that resolves `$ref` targets by name.
    `.widget`, that string **replaces** the type-derived default.
 
 Both checks are **structural** (duck-typed): `forms.hpp` never names or
-includes a `FieldMeta` type in this lookup. In practice, every action that
-declares `fieldMetadata` today uses `morph::forms::FieldMeta`
+includes a `FieldMeta` type in this lookup. In practice, actions that
+declare `fieldMetadata` use `morph::forms::FieldMeta`
 ([forms.md, "Field metadata"](forms.md#field-metadata--fieldmeta)) — which
 already carries `.field` and `.widget` — so the override mechanism is
 exercised through that one concrete type; the structural check simply means
@@ -241,7 +241,7 @@ harmless for a renderer that ignores them.
 | Widget default | **Type-derived, via a `widget()` static function** | Matches the ["infer by default, declare to override"](forms.md#design-principle-infer-by-default-declare-to-override) design principle; any user type can opt in the same way `Multiline`/`Ranged` do, with no registration step. |
 | Widget override | **Duck-typed on `fieldMetadata`'s `.field`/`.widget`** | Lets the override live in a descriptor whose canonical definition is owned by a different feature ([forms.md, "Field metadata"](forms.md#field-metadata--fieldmeta)) without `forms.hpp` gaining a named dependency on that type. |
 | Range subfields | **Not overridable via `fieldMetadata`** | `x-min`/`x-max`/`x-step` describe the *type's* declared bounds; overriding the widget choice must not silently change what those bounds mean. |
-| `$defs` naming | **Fixed `name` per wrapper (`"Multiline"`, `"Ranged"`)** | Same trade-off as `Choice`: instantiations collapse into one shared `$def`, harmless because the differentiating data (bounds, widget) is property-level. |
+| `$defs` naming | **`"Multiline"`; `Ranged_<tag>` per payload type** | The `$def` describes only the payload, so instantiations with the same payload type share one entry (bounds and widget are property-level), while different payload types must not — glaze fills a `$defs` entry once ([Schema representation](#schema-representation)). |
 
 ## Usage example
 
@@ -279,7 +279,7 @@ empty-capable).
 `widgetOverride<A>` only ever compares `.field` against the wire names
 `forEachNamedMember` actually visits; an entry naming a field that does not
 exist on `A` (a typo, a renamed member) never matches anything and is
-dropped — consistent with `optionalFields`'s existing behaviour
+dropped — consistent with `optionalFields`'s behaviour
 ([forms.md](forms.md)) and with schema generation never throwing.
 
 ### A non-conforming `fieldMetadata` disqualifies the whole action
@@ -325,7 +325,8 @@ both.
   describes; and the renderer-contract table `x-widget`/`x-min`/`x-max`/
   `x-step` extend.
 - **[choice.md](choice.md)** — the type-carries-intent / wire-carries-value
-  pattern and the `$defs`-collapse consequence both wrappers follow.
+  pattern, and the per-instantiation `$defs` naming `Ranged` follows for the
+  same reason.
 - **[quantity_type.md](../util/quantity_type.md)** — `Quantity`'s own
   `x-decimalPlaces` entry-granularity annotation, the analogous (but
   distinct) numeric-precision contract `x-step` does not replace.

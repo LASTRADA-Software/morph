@@ -11,14 +11,16 @@ split:
   with the same one-kind-of-empty semantics as `Quantity` (a form draft starts
   blank; required-ness is derived by `morph::forms`).
 
+Both live in `include/morph/util/datetime.hpp`.
+
 ## Contents
 
 - [Wire format](#wire-format)
 - [Schema](#schema)
 - [`DateTime`](#datetime)
-  - [Construction](#datetime-construction)
-  - [Access and inspection](#datetime-access-and-inspection)
-  - [Arithmetic and ordering](#datetime-arithmetic-and-ordering)
+  - [Construction](#datetime--construction)
+  - [Access and inspection](#datetime--access-and-inspection)
+  - [Arithmetic and ordering](#datetime--arithmetic-and-ordering)
 - [`Timestamp`](#timestamp)
   - [Free functions (namespace scope)](#free-functions-namespace-scope)
   - [Empty-state semantics](#empty-state-semantics)
@@ -29,6 +31,8 @@ split:
 - [Range & precision](#range--precision)
 - [Failure modes — what is rejected](#failure-modes--what-is-rejected)
 - [Limitations](#limitations)
+- [Payload shape tag](#payload-shape-tag)
+- [Lifetime annotations](#lifetime-annotations)
 - [Cross-references](#cross-references)
 - [Out of scope](#out-of-scope)
 
@@ -58,7 +62,7 @@ Unix time with leap seconds ignored.
 ### `DateTime` — construction
 
 | Member | Signature | Notes |
-|---|---|---|---|
+|---|---|---|
 | `value` | `std::chrono::sys_time<std::chrono::milliseconds>` | The underlying UTC instant (public data member). |
 | default ctor | `constexpr DateTime() noexcept` | The Unix epoch (1970-01-01T00:00:00.000Z). |
 | sys_time ctor | `constexpr DateTime(sys_time<milliseconds>) noexcept` | Wraps an existing UTC instant. |
@@ -90,7 +94,7 @@ like `Quantity`: action structs never wrap a `Timestamp` in `std::optional`,
 and a non-optional `Timestamp` member is *required* by `morph::forms` rules.
 
 | Member | Signature | Notes |
-|---|---|---|---|
+|---|---|---|
 | `value` | `std::optional<DateTime>` | The payload; `std::nullopt` means empty (public data member). |
 | default ctor | `constexpr Timestamp() noexcept` | The **empty** state. |
 | DateTime ctor | `constexpr Timestamp(DateTime) noexcept` | Engages with the given instant. |
@@ -202,7 +206,8 @@ Specialisations in `glz` (and `glz::detail` for schema):
   `DateTime::fromIso8601`; malformed input sets `error_code::syntax_error`.
 - `to<JSON, DateTime>` — writes `DateTime::toIso8601()` as a JSON string.
 - `meta<Timestamp>` — declares the wire layout as the underlying
-  `std::optional<DateTime>` (nullable on the wire, null = empty).
+  `std::optional<DateTime>` (nullable on the wire, null = empty), with the
+  name `Timestamp`.
 - `to_json_schema<DateTime>` — produces a JSON-Schema string with
   `"format": "date-time"`.
 
@@ -224,7 +229,7 @@ An empty format spec `{}` or `{:}` is accepted; any non-empty spec throws
 | Timestamp empty state | **Inside the struct**, not `std::optional<Timestamp>` | Same one-kind-of-empty design as `Quantity`; required-ness is a `morph::forms` property, not a type property. |
 | Formatting | **`std::formatter` only** | Single formatting path; no `operator<<`. |
 | Time zone support | **UTC only** | All application timestamps are UTC; no time zone offset parsing, no local time storage. A non-UTC input (`+02:00`) is rejected as malformed. |
-| `now()` injection | **Process-wide mutex-guarded override slot**, not a constructor parameter or thread-local | Registry-constructed models (`ModelRegistryFactory::create`) have no constructor parameter a test could use to inject a clock — see `docs/spec/core/registry.md`. A global override consulted by `DateTime::now()` itself needs no change to any call site or model constructor; `ScopedNowOverride` bounds its lifetime to a test/tool scope. Mirrors the existing `setActionLog`/`ScopedActionLog` and logger-override seams rather than inventing a new pattern. |
+| `now()` injection | **Process-wide mutex-guarded override slot**, not a constructor parameter or thread-local | Registry-constructed models (`ModelRegistryFactory::create`) have no constructor parameter a test could use to inject a clock — see `docs/spec/core/registry.md`. A global override consulted by `DateTime::now()` itself needs no change to any call site or model constructor; `ScopedNowOverride` bounds its lifetime to a test/tool scope. It has the same shape as the `setActionLog`/`ScopedActionLog` and logger-override seams. |
 
 ## Range & precision
 
@@ -344,13 +349,14 @@ learns only that the string was not a valid canonical UTC timestamp.
 ## Payload shape tag
 
 `DateTime` specialises `morph::model::PayloadShapeTag` and renders as
-`datetime`.
+`datetime`; `Timestamp` renders as `timestamp`.
 
 `DateTime` serialises through a custom codec (it travels as an ISO-8601
 string), so the journal's payload fingerprint has no reflected members to
 decompose and would otherwise render it as the same opaque placeholder as every
 other custom-codec type. That would make a retype between two of them invisible
-to `replay()`'s fingerprint check.
+to `replay()`'s fingerprint check. `Timestamp` has its own name for the same
+reason: a retype between `DateTime` and `Timestamp` changes the fingerprint.
 
 See [`journal/journal.md`](../journal/journal.md) for the fingerprint itself.
 
@@ -398,7 +404,7 @@ struct RecordMeterReading {
 RecordMeterReading draft{};                       // observedAt is empty (blank form)
 morph::forms::allRequiredEngaged(draft);          // false — observedAt not engaged
 draft.observedAt = morph::time::DateTime::now();  // implicit DateTime -> Timestamp
-morph::forms::allRequiredEngaged(draft);          // observedAt gate now satisfied
+morph::forms::allRequiredEngaged(draft);          // true — observedAt is engaged
 ```
 
 The schema fragment generated for the field (the nullable string + `date-time`

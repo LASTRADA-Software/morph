@@ -3,15 +3,12 @@
 morph's headline claim is that a call site works "without caring whether the
 model runs in this process or across a socket". That claim is defensible — the
 local path already obeys the remote path's asynchronous, fallible contract, and
-there is no distributed object graph to leak — but it is not *absolute*, and the
-exceptions were previously scattered across `backend.md`, `registry.md`,
-`security.md`, `forms.md` and the README, with no page collecting them.
+there is no distributed object graph to leak — but it is not *absolute*. This
+page collects the exceptions in one place. It is the reference for anyone
+deciding whether a model can be moved across the wire unchanged, and for anyone
+debugging a behaviour that appears only on one side.
 
-This is that page. It is the reference for anyone deciding whether a model can
-be moved across the wire unchanged, and for anyone debugging a behaviour that
-appears only on one side.
-
-`docs/spec/core/backend.md` remains the per-backend API reference; this document
+[`backend.md`](backend.md) remains the per-backend API reference; this document
 only tabulates the *differences*, and links there for depth.
 
 ## The delta

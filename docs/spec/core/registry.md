@@ -10,30 +10,30 @@ without knowing their concrete types.
 - [Overview](#overview)
 - [Registration rules and invariants](#registration-rules-and-invariants)
 - [Customisation traits](#customisation-traits)
-  - [ModelTraits](#modeltraits)
-  - [ActionTraits](#actiontraits)
+  - [`ModelTraits<Model>`](#modeltraitsmodel)
+  - [`ActionTraits<Action>`](#actiontraitsaction)
+  - [`payload_schema.hpp` — the payload fingerprint](#payload_schemahpp--the-payload-fingerprint)
     - [Control bytes in action and result bodies](#control-bytes-in-action-and-result-bodies)
-    - [`payload_schema.hpp` — the payload fingerprint](#payload_schemahpp--the-payload-fingerprint)
 - [Validation and logging policy](#validation-and-logging-policy)
-  - [ActionValidator](#actionvalidator)
+  - [`ActionValidator<Action>`](#actionvalidatoraction)
   - [ValidationError](#validationerror)
   - [Loggable](#loggable)
-  - [ActionLogPolicy](#actionlogpolicy)
+  - [`ActionLogPolicy<Action>`](#actionlogpolicyaction)
 - [Type-erased holders and factory](#type-erased-holders-and-factory)
   - [IModelHolder](#imodelholder)
-  - [ModelHolder](#modelholder)
+  - [`ModelHolder<Model>`](#modelholdermodel)
   - [ModelFactory](#modelfactory)
 - [Singleton registries](#singleton-registries)
   - [ActionDispatcher](#actiondispatcher)
   - [ModelRegistryFactory](#modelregistryfactory)
   - [ActionExecuteRegistry](#actionexecuteregistry)
 - [Registration macros](#registration-macros)
+  - [`BRIDGE_REGISTER_MODEL(M, NAME)`](#bridge_register_modelm-name)
+  - [`BRIDGE_REGISTER_ACTION(M, A, NAME, ...)`](#bridge_register_actionm-a-name-)
   - [Moving a registrar out of the header](#moving-a-registrar-out-of-the-header)
+  - [`BRIDGE_REGISTER_VALIDATOR(A, FN)`](#bridge_register_validatora-fn)
 - [`MORPH_CLIENT_ONLY` — suppressing model-owning registrars](#morph_client_only--suppressing-model-owning-registrars)
   - [`BRIDGE_REGISTER_ACTION_FOR_CLIENT` — a header seam for `MORPH_CLIENT_ONLY`](#bridge_register_action_for_client--a-header-seam-for-morph_client_only)
-  - [BRIDGE_REGISTER_MODEL](#bridge_register_model)
-  - [BRIDGE_REGISTER_ACTION](#bridge_register_action)
-  - [BRIDGE_REGISTER_VALIDATOR](#bridge_register_validator)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 - [Thread safety](#thread-safety)
@@ -63,8 +63,8 @@ provides:
   committed, but serialising the result or appending the journal entry failed.
   Carries `cause()` (the underlying message) and `result()` (the committed
   action's result JSON, or `""` when serialising it is what failed). Derives
-  from `std::runtime_error`, so existing `catch (const std::exception&)` paths
-  are unaffected.
+  from `std::runtime_error`, so a generic `catch (const std::exception&)`
+  catches it.
 - **Logging policy** — `ActionLogPolicy<A>` and `Loggable` that control whether
   an action's executions are recorded and how duplicates are coalesced.
 - **Type-erased holders** — `IModelHolder` / `ModelHolder<M>` that own a model
@@ -124,11 +124,10 @@ the id.
 ### Header placement is legal
 
 Placing a `BRIDGE_REGISTER_*` invocation in a header included by many `.cpp`
-files is **well-formed**, and is the ladder's standard practice — 40 headers under
-`examples/` invoke a `BRIDGE_REGISTER_*` macro.
+files is **well-formed**, and is the ladder's standard practice — most model
+headers under `examples/` invoke a `BRIDGE_REGISTER_*` macro.
 
-This document previously called it an ODR violation. That legal claim was
-false. Item (1) is an explicit specialisation — a class definition — and
+It is not an ODR violation. Item (1) is an explicit specialisation — a class definition — and
 [basic.def.odr] expressly *permits* a class to be defined in more than one
 translation unit when the definitions are token-identical, which a shared
 header `#include`d unchanged guarantees. It is the same rule that makes any
@@ -190,17 +189,16 @@ common case — must therefore be **default-constructible**. A model with no
 accessible default constructor still compiles the macro (which only needs
 `ModelTraits`) but fails to compile the factory instantiation.
 
-This is no longer the only registry-constructed path, though: the
-two-argument `registerModel<Model>(modelId, factory)` overload (see
+It is not the only registry-constructed path: the two-argument
+`registerModel<Model>(modelId, factory)` overload (see
 [`ModelRegistryFactory`](#modelregistryfactory) below) lets `factory` build
-the holder however it likes — including calling a non-default constructor —
-so a model that needs injected dependencies (previously reachable only
-through a custom `Bridge::HandlerBinding::modelFactory` closure, and therefore
-only via `Local`-mode/in-process registration) can now be registered for
-`Socket`-mode/remote instantiation too, by calling
+the holder however it likes — including calling a non-default constructor.
+A model that needs injected dependencies can therefore be registered for
+`Socket`-mode/remote instantiation, not only through a custom
+`HandlerBinding::modelFactory` closure on the in-process path, by calling
 `ModelRegistryFactory::instance().registerModel<Model>(modelId, factory)`
-directly instead of (or in addition to, last-write-wins) relying on
-`BRIDGE_REGISTER_MODEL`'s default-construction registrar.
+directly instead of (or in addition to, last-write-wins for the same type)
+relying on `BRIDGE_REGISTER_MODEL`'s default-construction registrar.
 
 ## Customisation traits
 
@@ -220,7 +218,7 @@ struct ModelTraits;  // forward — specialize or use BRIDGE_REGISTER_MODEL
 
 Maps a concrete action type to its string id, JSON codec, result type, and
 optional logging flag. The `BRIDGE_REGISTER_ACTION` macro generates a full
-specialisation. Hand-written specialisations (used in tests) predate the
+specialisation. A hand-written specialisation (as tests use) may omit the
 `loggable` member; the framework defaults to `Loggable::Yes` when it is absent
 (see `detail::actionLoggable()`). The default is a **forward declaration**.
 
@@ -248,8 +246,8 @@ registers an anonymous-namespace struct, which has no linkage and so cannot be
 reflected traditionally) — so deriving a shape from the struct would describe
 something that never reaches the journal. `detail::actionPayloadSchema<A>()`
 returns the empty string for it, entries are recorded unstamped, and replay
-treats them exactly as every build before the fingerprint existed did. Opting
-in is a matter of defining the member.
+does no fingerprint check on them. Opting in is a matter of defining the
+member.
 
 ### `payload_schema.hpp` — the payload fingerprint
 
@@ -285,9 +283,9 @@ consequences live.
 
 `toJson`/`resultToJson` write with `detail::EscapingWriteOpts`, a `glz::opts`
 refinement that turns on glaze's `escape_control_characters` — the same
-treatment, and for the same two reasons, that `wire::encode` already applies
-to the envelope (see wire.md, "Control bytes in string fields"). With the
-option off, an ASCII control byte (U+0000–U+001F) in any caller-supplied
+treatment, and for the same two reasons, that `wire::encode` applies to the
+envelope (see [wire.md, "Control bytes in string fields"](wire.md#control-bytes-in-string-fields)).
+Without the option, an ASCII control byte (U+0000–U+001F) in any caller-supplied
 string field of an action or result:
 
 - **produces invalid output** — RFC 8259 requires those code points to be
@@ -298,7 +296,7 @@ string field of an action or result:
   bytes, and the result still decodes.
 
 Action bodies are pure caller data (a paste's content, a chat message, a
-filename), so this is at least as exposed as the envelope was. Escaping is
+filename), so this is at least as exposed as the envelope. Escaping is
 lossless in both directions; the read side needs no counterpart, since glaze's
 reader already accepts `\uXXXX`.
 
@@ -364,7 +362,7 @@ struct ValidationError : std::runtime_error {
 (`morph::forms::reconcileDeclaredPrecision`, an exact re-rounding of the value
 and not just a retag) before the `ready()` check, so a hand-built wire payload's
 `Quantity` values match the schema's advertised `x-decimalPlaces` the same way
-the client bridge dispatch path already normalises them (see
+the bridge's `executeJson` path normalises them (see
 [forms.md](../forms/forms.md)). Immediately after
 reconciliation, `morph::forms::enforceQuantityBounds` rejects any `Quantity`
 field whose engaged value falls outside its unit's declared bounds
@@ -376,10 +374,10 @@ enforce bounds — that path never decodes JSON, so there is no wire `dp` or
 wire value to check against.
 
 `ValidationError` derives from `std::runtime_error`, so it is caught by
-existing generic `catch (const std::exception&)` handling on both paths
-without any special-casing: `LocalBackend::execute`'s strand `catch (...)`
-(`backend.hpp`) forwards it into the `Completion`'s `onError` with the concrete
-type intact; `RemoteServer::dispatchExecute`'s strand `catch (const
+generic `catch (const std::exception&)` handling on both paths without any
+special-casing: `LocalBackend` settles the call's sink with it on the strand
+(`backend.hpp`), so the `Completion`'s `onError` receives the concrete type
+intact; `RemoteServer::dispatchExecute`'s strand `catch (const
 std::exception&)` (`remote.hpp`) turns it into an ordinary `err` reply carrying
 `exc.what()` and the `callId` — the client's `Completion` resolves through
 `onError` with a generic `std::runtime_error` carrying that message (the
@@ -387,8 +385,7 @@ concrete type does not cross the wire).
 
 Actions with no validator are unaffected on both paths: `ActionValidator<A>::ready`
 defaults to `true` when neither a `bool validate() const` member nor a
-`BRIDGE_REGISTER_VALIDATOR` specialisation exists, so this is backward
-compatible.
+`BRIDGE_REGISTER_VALIDATOR` specialisation exists.
 
 `ValidationError` is **not** an authorization mechanism — see
 [security.md](../security.md) for that separate concern.
@@ -580,7 +577,8 @@ Maps `(modelId, actionId)` pairs to type-erased runner functions. Used by
 `RemoteServer` to dispatch incoming JSON requests.
 
 **One map, looked up by view.** Everything registered under a pair lives in one
-`ActionEntry` record — `runner`, `evaluator`, `coalesce`, `schema`, `describe` — in a single
+`ActionEntry` record — `runner`, `asyncRunner` (a Task handler's), `evaluator`,
+`coalesce`, `loggable`, `schema`, `describe` — in a single
 `unordered_map<pair<string, string>, ActionEntry, PairKeyHash, PairKeyEqual>`.
 Two things follow:
 
@@ -590,15 +588,14 @@ Two things follow:
   `std::string`s per lookup, and reaches the heap for any id past the
   15-character SSO buffer. **Measured** with `morph_bench_alloc`
   (clang 22.1.8 / libstdc++ 16.2.1), stored key against transparent lookup: for
-  a pair whose ids both exceed the buffer, **2.00 → 0.00** allocations per
-  lookup; for a pair whose ids both fit it, **0.00 → 0.00**. morph's real ids
+  a pair whose ids both exceed the buffer, **2.00 against 0.00** allocations per
+  lookup; for a pair whose ids both fit it, 0.00 either way. morph's real ids
   straddle that boundary, so the saving is real but id-dependent:
   `"BenchAlloc_Model"` (16 characters) allocates, `"BenchAlloc_Ping"` (15) does
   not.
-- *The four sub-maps cannot go out of step.* They were filled together by
-  `registerAction` and could not diverge in practice, but nothing said so.
-  `RemoteServer::handle` also reached three of them per request; that is now
-  three lookups of one map rather than three lookups of three.
+- *The parts cannot go out of step.* One record per pair means a runner can
+  never exist without its schema or coalesce flag, and `RemoteServer` answering
+  one request reads one map rather than several.
 
 `PairKeyHash`'s two overloads both reduce to the `string_view` body. They are
 not allowed merely to agree by coincidence: a heterogeneous `find` whose lookup
@@ -612,9 +609,15 @@ class ActionDispatcher {
     void registerAction(std::string_view modelId, std::string_view actionId);
     std::string dispatch(std::string_view modelId, std::string_view actionId,
                          IModelHolder& holder, std::string_view payload);
+    void dispatchAsync(std::string_view modelId, std::string_view actionId,
+                       IModelHolder& holder, std::string_view payload,
+                       const std::shared_ptr<exec::detail::TaskResumer>& executor,
+                       core::async::StopToken token, DispatchDone done);
+    bool dispatchesAsync(std::string_view modelId, std::string_view actionId) const;
     Evaluation evaluate(std::string_view modelId, std::string_view actionId,
                         std::string_view payload) const;
     bool coalesce(std::string_view modelId, std::string_view actionId) const;
+    bool isLoggable(std::string_view modelId, std::string_view actionId) const;
     std::string schemaFor(std::string_view modelId, std::string_view actionId) const;
     std::string schemasJson(std::string_view modelId) const;
     const std::vector<std::string>* requiredFieldsFor(std::string_view modelId,
@@ -651,7 +654,7 @@ class ActionDispatcher {
   inside a `try`/`catch (const std::exception&)`: on a throw it records
   `outcome = Outcome::Failed` (`error = exc.what()`, `result` empty) when the
   action is loggable and a log is attached, and rethrows unchanged, so callers
-  see the same exception as before — the journal entry is a side effect, not a
+  see the model's own exception — the journal entry is a side effect, not a
   change to error propagation. `Model::execute` is the **only** call inside that
   `try`: serialising the result and recording `outcome = Outcome::Succeeded` run
   after it, outside, because by then the mutation has committed and a throw from
@@ -660,14 +663,19 @@ class ActionDispatcher {
   recording is not an execution
   failure"](../journal/journal.md#a-refused-recording-is-not-an-execution-failure).
   Mirrors
-  `Bridge::executeVia`'s `localOp` (`bridge.md`) for `LocalBackend`. See
+  `Bridge::executeVia`'s `localOp` ([bridge.md](bridge.md)) for `LocalBackend`. See
   [journal.md, "Outcome"](../journal/journal.md#logentry--one-recorded-action-execution)
   for the full field/replay semantics. Every recorded entry — success or
   failure — is stamped with `detail::actionPayloadSchema<Action>()` in
   `LogEntry::schema`, and the same value is filed under `(modelId, actionId)`
   for `schemaFor()`.
 - `dispatch` looks up the runner and invokes it; throws `std::runtime_error` for
-  unknown pairs.
+  unknown pairs, and `std::logic_error` for a Task handler, whose result it
+  cannot wait for.
+- `dispatchAsync` drives a Task handler on the model's strand through the given
+  resumer and calls `done` with the result or the failure;
+  `dispatchesAsync` says which of the two an action needs (see
+  [coroutines.md](coroutines.md#task-handlers)).
 - `coalesce` returns the `ActionLogPolicy<Action>::coalesce` value for the pair;
   unknown pairs default to `false`.
 - `schemaFor` returns the payload fingerprint the pair was registered with, or
@@ -772,25 +780,25 @@ class ModelRegistryFactory {
   `holder->attachIdentity(primary)` on it, which reaches the wrapped model's
   own `attachIdentity` when it declares one (see `IModelHolder::attachIdentity`
   above) — a no-op for a model that doesn't, and a no-op entirely when
-  @p primary is empty, so every existing single-argument call site is
-  unaffected. This is what lets `RemoteServer`'s two construction call sites
+  @p primary is empty, so a single-argument call identifies nothing. This is
+  what lets `RemoteServer`'s two construction call sites
   (`acquireSharedInstance`'s directory-miss branch, and the plain `register`
-  branch — both already have `env.primary` in scope) tell a keyed model its
-  own key once, at construction, instead of the model re-deriving it from
-  every action's own payload.
+  branch — both have `env.primary` in scope) tell a keyed model its own key
+  once, at construction, instead of the model re-deriving it from every
+  action's own payload.
 - The single-argument `registerModel<Model>(modelId)` registers the plain
   default-construction path — equivalent to
   `registerModel<Model>(modelId, [] { return ModelFactory::create<Model>(); })`
   — and is what `BRIDGE_REGISTER_MODEL` always uses.
 - The two-argument overload is the **per-instance dependency-injection seam
   for registry-constructed (`Socket`-mode) models** — the equivalent, for
-  `RemoteServer`'s registry path, of `Bridge::HandlerBinding::modelFactory` for
+  `RemoteServer`'s registry path, of `bridge::detail::HandlerBinding::modelFactory` for
   the client-side `Local`-mode path. `factory` runs once per `create(modelId)`
   call (i.e. once per incoming `"register"` request, and once per fresh
   shared-instance creation — see `acquireSharedInstance`, `remote.hpp`), and
   may capture and hand the model constructor arbitrary per-instance
   dependencies an ordinary default constructor cannot reach: an injectable
-  clock (see `docs/spec/util/datetime.md`'s `now()` override seam for the
+  clock (see [datetime.md](../util/datetime.md)'s `now()` override seam for the
   complementary, constructor-free path to the same goal), a secondary log
   handle, a feature flag. It is also the **only** way to register a model
   whose constructor takes arguments at all — such a model has no accessible
@@ -806,13 +814,14 @@ class ModelRegistryFactory {
   (`morph::journal::defaultActionLog()`); a caller supplying its own factory is
   assumed to attach whatever log/identity it needs inside the closure via
   `IModelHolder::attachActionLog`, or to rely on `RemoteServer`'s
-  `LogProvider` doing so afterward, exactly as the default path already
-  allows. Two registrations for the same `modelId` still silently
-  last-write-wins, as for the single-argument overload (see
-  [Failure modes](#failure-modes)) — registering a custom factory under an id
-  that a `BRIDGE_REGISTER_MODEL(Model, id)` invocation already claimed
-  overwrites that default-construction factory, and vice versa, whichever
-  static-init/runtime call happens last.
+  `LogProvider` doing so afterward, as the default path allows. Two
+  registrations of the **same** model type under one `modelId` are
+  last-write-wins, as for the single-argument overload — registering a custom
+  factory under an id that a `BRIDGE_REGISTER_MODEL(Model, id)` invocation
+  already claimed overwrites that default-construction factory, and vice
+  versa, whichever static-init/runtime call happens last. A **different** type
+  under a claimed id throws `DuplicateRegistrationError` (see
+  [One id, one type](#one-id-one-type)).
 
 #### Instance identity and per-instance authorization
 
@@ -826,8 +835,8 @@ create, `RemoteServer` records an **owner principal** for each instance at
 (`IAuthorizer::authenticate`), not the client's raw claim — and consults the
 optional `IAuthorizer::authorizeInstance(ctx, modelType, actionType, modelId,
 ownerPrincipal)` hook on every `execute` and `deregister`. The hook **defaults
-to allow**, so this registry's type-keyed behaviour is unchanged unless a
-deployer installs an authorizer that overrides it. The type registry maps type
+to allow**, so instance ownership changes nothing unless a deployer installs an
+authorizer that overrides it. The type registry maps type
 ids only; instance ownership lives one layer up in `RemoteServer`. See
 [session.md](../session/session.md) and [security.md](../security.md).
 
@@ -939,18 +948,18 @@ can never be taken. The `noexcept` states what the call site already
 guarantees.
 
 The assertion is the other half of that argument: it is what enforces that the
-call site really is the only one. Before it, "the only caller is a static
-initialiser" was an assumption with nothing behind it.
+call site really is the only one, so "the only caller is a static initialiser"
+is checked rather than assumed.
 
 ## Registration macros
 
 Both macros below name their generated anonymous-namespace variable by pasting
 a fixed prefix onto `__COUNTER__` (via the two-level `BRIDGE_DETAIL_CAT`/
 `BRIDGE_DETAIL_CAT_` indirection needed to force macro expansion before the
-paste), not onto the spelling of `M`/`A`. Pasting the type directly (the
-original approach) breaks for namespace-qualified or template types —
-`app::models::Report` pastes `::` into the identifier. `__LINE__` was tried as
-a replacement key but is only unique *within a single physical file*; two
+paste), not onto the spelling of `M`/`A`. Pasting the type directly breaks
+for namespace-qualified or template types — `app::models::Report` pastes `::`
+into the identifier. `__LINE__` would not do either: it is only unique
+*within a single physical file*; two
 different headers that each invoke one of these macros on the same line
 number produce the same identifier once both are transitively `#include`d
 into one translation unit, which is a hard redefinition error because C++
@@ -1039,37 +1048,31 @@ them. So a model header that many translation units `#include` pays for this
 instantiation-and-optimisation work once per including TU, for codecs the
 overwhelming majority of those TUs never call.
 
-**A prior measurement** (clang 22.1.8, gcc 16.2.1, Linux, 12
-cores, compiler cache off, best of two): stripping only
-the 17 `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` lines from one rung's
-model header cost **26.93 CPU-s** at
-`-O3 -c` and **2.63 CPU-s** at `-fsyntax-only`, on the rung's own real compile
-command -- the `-fsyntax-only`/`-O3` gap showing the cost is
+**Measured** on one rung's model header with 17
+`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` lines (clang 22.1.8,
+gcc 16.2.1, Linux, 12 cores, compiler cache off, best of two, the rung's own
+compile command): those lines cost **26.93 CPU-s** at `-O3 -c` and
+**2.63 CPU-s** at `-fsyntax-only` — the gap showing the cost is
 instantiate-and-optimise work, not parsing.
 
-**Re-measured for this fix** (AppleClang 17.0.0, macOS, `-O3 -c`, a stub
-translation unit that only `#include`s the header, best of two; **not**
-isolated -- another build was running concurrently on this machine, so
-CPU-seconds is reported rather than wall-clock, and the numbers below are a
-lower bound, not a ceiling): the current header, using
-`BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION`, costs **7.81 CPU-s**;
-restoring the pre-fix `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` content
-(`git show origin/master:.../board_model.hpp`) costs **20.81 CPU-s** -- a
-**13.00 CPU-s** reduction per translation unit, on a different compiler and
-machine than the original measurement but the same mechanism and the same
-header. `-fsyntax-only` drops from 7.55 to 4.68 CPU-s (2.87 CPU-s), the same
-proportionally-smaller gap the original measurement found. The compiled
-object file corroborates it directly: the pre-fix stub's `.o` is
-**3,331,704 bytes** (7155 symbols, 1,348,458 `__TEXT` bytes); the post-fix
-stub's is **3,232 bytes** (24 symbols, 172 `__TEXT` bytes) -- the registrar's
-codecs, dispatch closures, and schema generator are simply absent from the
-object file once the registration is deferred to `board_model.cpp`.
+On AppleClang 17.0.0, macOS, `-O3 -c`, a stub translation unit that only
+`#include`s the header (best of two; not isolated — another build ran
+concurrently, so CPU-seconds rather than wall-clock, and a lower bound): the
+header written with `BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` costs
+**7.81 CPU-s**, the same header with `BRIDGE_REGISTER_MODEL`/
+`BRIDGE_REGISTER_ACTION` **20.81 CPU-s** — **13.00 CPU-s** per translation
+unit. `-fsyntax-only` is 4.68 against 7.55 CPU-s, the same proportionally
+smaller gap. The object file shows it directly: the stub's `.o` is
+**3,232 bytes** (24 symbols, 172 `__TEXT` bytes) with the declarations, and
+**3,331,704 bytes** (7155 symbols, 1,348,458 `__TEXT` bytes) with the
+registrars — the codecs, dispatch closures and schema generator are absent once
+the registration lives in the model's own `.cpp`.
 
 `BRIDGE_DECLARE_MODEL(M, NAME)` and `BRIDGE_DECLARE_ACTION(M, A, NAME, ...)`
 emit **only** the trait specialisation half of what
 `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` emit -- `ModelTraits<M>` /
-`ActionTraits<A>` -- which stays free to repeat per TU exactly as it always
-was (see ["Header placement is legal"](#header-placement-is-legal) above).
+`ActionTraits<A>` -- which stays free to repeat per TU (see
+["Header placement is legal"](#header-placement-is-legal) above).
 `BRIDGE_REGISTER_MODEL_SOURCE(M)` and `BRIDGE_REGISTER_ACTION_SOURCE(M, A)`
 emit the registrar half -- the same `registerModelOnce`/`registerActionOnce`/
 `registerActionExecutorOnce` calls `BRIDGE_REGISTER_MODEL`/
@@ -1092,17 +1095,17 @@ BRIDGE_REGISTER_MODEL_SOURCE(BoardModel)
 BRIDGE_REGISTER_ACTION_SOURCE(BoardModel, CreateSwimlane)
 ```
 
-`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` are unchanged and remain the
-right choice for a model whose registration cost is not worth splitting
-across two macro calls in two files -- this is a decomposition of the
-existing macros' expansion, not a replacement for them, and both shapes are
+`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` remain the right choice for a
+model whose registration cost is not worth splitting across two macro calls in
+two files -- the `DECLARE`/`SOURCE` pair is a decomposition of their
+expansion, not a replacement for them, and both shapes are
 usable in the same program (see [Failure modes](#failure-modes)'s
 last-write-wins entry if the same type is accidentally registered by both).
 
-#### The link-time canary: closing `BRIDGE_DECLARE_*`'s own new hazard
+#### The link-time canary for a missing registration
 
-Splitting declaration from registration introduces a mistake that could not
-previously happen: `BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` in the
+Splitting declaration from registration admits a mistake the combined macros
+cannot make: `BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` in the
 header with no matching `BRIDGE_REGISTER_MODEL_SOURCE`/
 `BRIDGE_REGISTER_ACTION_SOURCE` anywhere in the program -- an omitted `.cpp`,
 or a `.cpp` that exists but was never added to the target. Left unguarded,
@@ -1123,8 +1126,8 @@ requires an *explicit* instantiation to exist somewhere else in the link.
 macros that provide one. So:
 
 - **Declared and registered** (the normal case): the `.cpp`'s explicit
-  instantiation satisfies every header's `extern template` reference. Link
-  succeeds, exactly as before.
+  instantiation satisfies every header's `extern template` reference. The link
+  succeeds.
 - **Declared, never registered**: no explicit instantiation exists anywhere
   in the link. Every translation unit that included the header carries an
   unresolved reference to `modelSourceRegistrationRequired<M>` /
@@ -1185,10 +1188,10 @@ nothing in its own build able to satisfy the canary.
 
 **What the static-library case does -- untested, stated as inferred, not
 measured.** A registration-only `.cpp` built into a static-library member the
-linker never pulls in (the *other* entry in that same section) previously
-registered nothing and surfaced only as a runtime `"unknown model type"`. The
-canary's explicit instantiation lives in that same member, so every
-`BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` site now carries an `extern
+linker never pulls in (the *other* entry in that same section) would register
+nothing and surface only as a runtime `"unknown model type"`. The canary's
+explicit instantiation lives in that same member, so every
+`BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` site carries an `extern
 template` reference into it too -- but which of two outcomes that produces
 depends on link order, and this has not been built and checked either way:
 a linker that resolves a static archive by repeatedly rescanning it until no
@@ -1197,8 +1200,8 @@ in the *same* archive as its callers) would plausibly pull the member in on
 the strength of the canary reference alone, which would fix registration
 outright rather than merely fail loudly; one that scans archives once,
 left to right, without `--start-group`, would instead leave the reference
-unresolved and fail to *link*. Either outcome is better than the
-pre-canary silent runtime failure. The
+unresolved and fail to *link*. Either outcome is better than a silent runtime
+failure. The
 `--whole-archive`/`-force_load`/`/WHOLEARCHIVE` guidance in that section
 remains the guaranteed fix regardless of which applies.
 
@@ -1238,11 +1241,11 @@ all (a browser/WASM build in particular), and will never call regardless.
 Defining `MORPH_CLIENT_ONLY` (via the CMake option of the same name, which
 adds it to the `morph` target's `INTERFACE` compile definitions) suppresses
 both. `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` still specialise
-`ModelTraits<M>`/`ActionTraits<A>` (type-ids, JSON codecs) exactly as before —
+`ModelTraits<M>`/`ActionTraits<A>` (type-ids, JSON codecs) as in any build —
 only the two registrar bodies above disappear.
 
-**The third registrar needed the same treatment, contrary to first
-appearances.** `registerActionExecutorOnce<M, A>` routes through
+**The third registrar needs the same treatment, though it calls no model code
+itself.** `registerActionExecutorOnce<M, A>` routes through
 `BridgeHandler<Model>::execute<Action>()` → `Bridge::executeVia<Model, Action>`
 — and `executeVia` unconditionally installs an `ActionCall::localOp` function
 that calls `Model::execute(...)` directly, *regardless of which backend ends
@@ -1295,7 +1298,7 @@ exactly this mistake: a `MORPH_CLIENT_ONLY` build that somehow still ends up
 running `LocalBackend` gets a clear, immediate diagnostic instead of a
 "model not found" red herring.
 
-Off by default: the standard build (and every existing consumer) is unaffected.
+Off by default: the standard build registers every model.
 
 ### `BRIDGE_REGISTER_ACTION_FOR_CLIENT` — a header seam for `MORPH_CLIENT_ONLY`
 
@@ -1457,7 +1460,7 @@ correctly under `MORPH_CLIENT_ONLY`.
 | `registerModelOnce<M>(id)` | Static-init helper; returns `true`. |
 | `registerActionOnce<M, A>(modelId, actionId)` | Static-init helper; returns `true`. |
 | `registerActionExecutorOnce<M, A>(modelId, actionId)` | Static-init helper; only declared in `registry.hpp`, defined in `bridge.hpp`. |
-| `modelSourceRegistrationRequired<M>()` | Link-time canary: `BRIDGE_DECLARE_MODEL` calls it behind `extern template`; `BRIDGE_REGISTER_MODEL_SOURCE` is the only macro that explicitly instantiates it. See ["The link-time canary"](#the-link-time-canary-closing-bridge_declare_s-own-new-hazard). |
+| `modelSourceRegistrationRequired<M>()` | Link-time canary: `BRIDGE_DECLARE_MODEL` calls it behind `extern template`; `BRIDGE_REGISTER_MODEL_SOURCE` is the only macro that explicitly instantiates it. See ["The link-time canary"](#the-link-time-canary-for-a-missing-registration). |
 | `actionSourceRegistrationRequired<M, A>()` | Same canary, for `BRIDGE_DECLARE_ACTION`/`BRIDGE_REGISTER_ACTION_SOURCE`. |
 | `registrationPhaseFlag()` | The process-wide registration-phase `std::atomic<bool>`. See ["The registration-phase latch"](#the-registration-phase-latch). |
 | `noteRegistryRead(isProcessRegistry)` | Closes the latch on the first read of a process-level registry. Debug builds only; empty under `NDEBUG`. |
@@ -1471,16 +1474,16 @@ correctly under `MORPH_CLIENT_ONLY`.
 | Singleton registries | **Function-local `static` in `inline` functions** | Process-level singletons with no header-level `static` ordering issues; `inline` avoids ODR violations across translation units. |
 | Two registries for action execution | **`ActionDispatcher` (server) vs `ActionExecuteRegistry` (client)** | `ActionDispatcher` calls `Model::execute()` directly on an owned `IModelHolder` — the server-side path. `ActionExecuteRegistry` goes through `BridgeHandler<Model>` — sessions, backend switches, and completions work identically to hand-written call sites. Both are populated by the same macro. |
 | `registerActionExecutorOnce` forward-declared in `registry.hpp` | **Defined in `bridge.hpp`** | Avoids a `registry.hpp` → `bridge.hpp` include cycle. `bridge.hpp` already includes `registry.hpp`. The cost: every translation unit that uses `BRIDGE_REGISTER_ACTION` must also include `bridge.hpp` or the link fails. |
-| `HasLoggableFlag` backward compatibility | **Defaults to `Loggable::Yes` when `loggable` is absent** | Hand-written `ActionTraits` specialisations in tests predate the member; forcing them to add it would be churn. The default of `Yes` also means new actions are captured automatically — only pure queries opt out. |
+| `loggable` is optional | **Defaults to `Loggable::Yes` when `loggable` is absent** | A hand-written `ActionTraits` specialisation (as tests use) need not spell it. The default of `Yes` also means new actions are captured automatically — only pure queries opt out. |
 | Action validation is a property of the action | **`ActionValidator<Action>`, not `ActionValidator<Model, Action>`** | Different actions on the same model have different readiness requirements; keeping the predicate next to the action keeps the GUI side oblivious to model internals. |
 | `Loggable` is a strong enum | **`Loggable::No` / `Loggable::Yes`**, not bare `bool` | Registration call sites read as intent rather than an unexplained `false`. |
 | `ModelFactory::create` attaches the default log | **Single construction path for all topologies** | "Set the log once in `main()`" works uniformly across local and remote topologies. Callers that need a specific identity call `attachActionLog` again afterward. |
 | `setOutboxManaged` opt-out | **Suppress `recordIfAttached`, not `hasActionLog()`** | A store-backed model that logs inside its own transaction (see `journal.md`'s transactional outbox) must stop the framework's auto-append without losing "a log is attached" as a fact holders can still query. |
 | `coalesce` defaults to `false` | **Every execution is a distinct, permanent fact** | The right default for anything resembling a business event. Only actions where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via `morph::flows::FlowSession::set`) opt in. |
-| `ActionDispatcher` keeps one record per pair, not four maps | **`ActionEntry` in a single `unordered_map`** | The four sub-maps were keyed identically and filled by one function, so the lockstep was real but unstated; and `RemoteServer::handle` reached three of them per request. One record makes the invariant structural and the three reads one table each. |
+| `ActionDispatcher` keeps one record per pair, not a map per facet | **`ActionEntry` in a single `unordered_map`** | Separate maps would be keyed identically and filled by one function, so their lockstep would be real but unstated, and `RemoteServer` would probe several per request. One record makes the invariant structural and every read one probe of one table. |
 | Enforcing the "no registration after `main`" precondition | **A debug-build latch and an `assert`, not a mutex** | Documented alone the constraint is unenforceable, and a violation's only symptom is intermittent map corruption. A latch closed by the first singleton read costs nothing in a release build and turns the `dlopen` scenario into an abort with a message. Synchronising the registries instead would put a lock on a per-request read path to legalise a startup-only operation — a trade nobody has measured. |
 | `register*Once` stays `noexcept` | **Keep it, and record why** | The only caller is a namespace-scope initialiser, where an escaping exception already calls `std::terminate` ([basic.start.dynamic]). Removing `noexcept` changes nothing about an OOM at static init and adds a dead unwind path. See ["Why all four are `noexcept` while allocating"](#why-all-four-are-noexcept-while-allocating). |
-| Registry lookups are heterogeneous | **Transparent `PairKeyHash`/`PairKeyEqual`, `find(PairKeyView)`** | Every caller already holds `string_view`s; materialising the stored `pair<string, string>` to hash it allocated for any id past the SSO buffer, measured at 2 allocations per lookup. The transparent hash routes both overloads through one `string_view` body so lookup and stored hashes cannot drift apart — a drift that would report a registered action as unknown with no diagnostic. |
+| Registry lookups are heterogeneous | **Transparent `PairKeyHash`/`PairKeyEqual`, `find(PairKeyView)`** | Every caller already holds `string_view`s; materialising the stored `pair<string, string>` to hash it allocates for any id past the SSO buffer, measured at 2 allocations per lookup. The transparent hash routes both overloads through one `string_view` body so lookup and stored hashes cannot drift apart — a drift that would report a registered action as unknown with no diagnostic. |
 
 ## Thread safety
 
@@ -1512,7 +1515,7 @@ Documented alone, the constraint above is unenforced: nothing would detect a
 post-`main` registration, so a caller could violate it silently and discover it
 as intermittent map corruption with no diagnostic anywhere.
 
-`registry.hpp` now carries a one-way latch over the registration phase:
+`registry.hpp` carries a one-way latch over the registration phase:
 
 | Symbol | Kind | Behaviour |
 |---|---|---|
@@ -1555,23 +1558,23 @@ The enforcement is proven rather than asserted, per `AGENTS.md`:
 then calls each registrar, and requires the child to die on `SIGABRT`. Each of
 the three is paired with a control that runs the same registrar with the latch
 *open* and requires a normal exit — without it, a registrar that aborted for
-some unrelated reason would look identical. Both halves were watched failing
-against a mutated fix (the three asserts rewritten to `assert(true && ...)`,
-and separately `noteRegistryRead` emptied).
+some unrelated reason would look identical. Both halves fail against a mutated
+implementation (the three asserts rewritten to `assert(true && ...)`, and
+separately `noteRegistryRead` emptied).
 
 ## Failure modes
 
 | Situation | Behaviour | Where |
 |---|---|---|
-| Two registrations for the same `(modelId, actionId)` (or same `modelId`) | **Silent last-write-wins.** `ActionDispatcher::registerAction` overwrites the whole `ActionEntry` under the key; `ModelRegistryFactory::registerModel` does `insert_or_assign`. No diagnostic; the surviving entry is whichever initialiser ran last, and static-init order across TUs is unspecified. | `registry.hpp` |
-| Two **distinct C++ types** registered under one string id | Same silent overwrite — the string id, not the type, is the key. The second type's runner/factory shadows the first. This is the collision hazard behind the string-vocabulary limitation below. | `registry.hpp` |
+| The **same** C++ type registered twice under one `(modelId, actionId)` (or `modelId`) | **Last-write-wins, by design.** `ActionDispatcher::registerAction` overwrites the whole `ActionEntry` under the key; `ModelRegistryFactory::registerModel` does `insert_or_assign`. This is how every including translation unit can register, and how a custom factory overrides the default one; the surviving entry is whichever ran last, and static-init order across TUs is unspecified. | `registry.hpp` |
+| Two **distinct C++ types** registered under one string id | **Refused.** `DuplicateRegistrationError` (a `std::logic_error`) names the id and both types. From a static-init registrar there is no caller to catch it, so the helper prints the message to `stderr` and aborts before `main`. See [One id, one type](#one-id-one-type). | `registry.hpp` (`detail::claimId`) |
 | `dispatch` / `execute` with an unknown key | Throws `std::runtime_error` **at runtime** — `"unknown action: …"` from `ActionDispatcher::dispatch` for an unknown `(modelId, actionId)`, `"unknown action for executeJson: …"` from `ActionExecuteRegistry::execute` for an unknown `(modelId, actionId, typeid(Sharing))` — which includes a *registered* action reached from a handler on a sharing tag other than `NoSharing`/`AllowShared`. The string-keyed remote path has **no compile-time completeness check** — a pair that was never registered is only discovered when a request for it arrives. | `ActionDispatcher::dispatch`, `ActionExecuteRegistry::execute` |
 | `dispatch` when the decoded action fails `ActionValidator<Action>::ready(...)` | Throws `morph::model::ValidationError` (a `std::runtime_error` subclass) **before** `Model::execute` runs — the action is never executed. Actions with no validator (the common case) are unaffected: `ready()` defaults to `true`. | `ActionDispatcher::registerAction`'s runner |
 | `create` with an unknown model id | Throws `std::runtime_error("unknown model type: …")` at runtime. | `ModelRegistryFactory::create` |
 | `coalesce` for an unknown pair | Does **not** throw — defaults to `false` (every entry kept). | `ActionDispatcher::coalesce` |
 | Allocation failure inside a `register*Once` helper during static init | `registerModelOnce` / `registerActionOnce` (and `registerActionResultOnce`, `registerActionExecutorOnce`) are declared `noexcept` yet allocate (they build `std::string` keys and grow the map). An OOM there raises an exception through a `noexcept` boundary, which calls `std::terminate` — the process aborts during static init. This is the intended outcome rather than an accepted defect: the same OOM without `noexcept` terminates anyway, because the caller is the dynamic initialiser of a non-local variable. See ["Why all four are `noexcept` while allocating"](#why-all-four-are-noexcept-while-allocating). | `registry.hpp` |
 | A `register*Once` call after the registration phase closes (e.g. a `dlopen`ed module registering once dispatch has begun) | **Debug build:** the `assert` fires and the process aborts with a message naming this hazard. **Release build:** unchanged — undefined behaviour, racing the map's internals against concurrent `find`s, with no diagnostic. The latch detects the violation; it does not make it safe. | `registry.hpp`, `bridge.hpp` — see ["The registration-phase latch"](#the-registration-phase-latch) |
-| `BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` used with no matching `BRIDGE_REGISTER_MODEL_SOURCE`/`BRIDGE_REGISTER_ACTION_SOURCE` anywhere in the same link | **Fails to link** — an unresolved external symbol naming `modelSourceRegistrationRequired<M>` / `actionSourceRegistrationRequired<M, A>`, before the program ever runs. Contrast the row above: this is the one registration mistake in this table that is *not* deferred to runtime. See ["The link-time canary"](#the-link-time-canary-closing-bridge_declare_s-own-new-hazard). | `registry.hpp` |
+| `BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION` used with no matching `BRIDGE_REGISTER_MODEL_SOURCE`/`BRIDGE_REGISTER_ACTION_SOURCE` anywhere in the same link | **Fails to link** — an unresolved external symbol naming `modelSourceRegistrationRequired<M>` / `actionSourceRegistrationRequired<M, A>`, before the program ever runs. Contrast the row above: this is the one registration mistake in this table that is *not* deferred to runtime. See ["The link-time canary"](#the-link-time-canary-for-a-missing-registration). | `registry.hpp` |
 
 Note the asymmetry the design accepts intentionally: the **typed local path**
 (`BridgeHandler::execute<Action>()`, `Model::execute(action)`) is checked by the
@@ -1586,10 +1589,12 @@ testing obligation, not a compile-time guarantee.
   vocabulary.** Every `NAME` passed to `BRIDGE_REGISTER_MODEL` /
   `BRIDGE_REGISTER_ACTION` lives in one flat namespace shared across the whole
   process and, implicitly, across the wire with every peer. There is no version
-  tag, no module qualifier, and — per [Failure modes](#failure-modes) — collisions
-  are silent last-write-wins. Two independently developed subsystems that both
-  register `"Update"` will clobber each other with no diagnostic. Mitigations the
-  design does **not** yet enforce but should be adopted by convention: an
+  tag and no module qualifier. A collision between two types is refused at
+  startup (see [Failure modes](#failure-modes)), but only within one process:
+  two independently developed subsystems that both name a model `"Account"`
+  cannot be linked into one program, and nothing detects a peer across the
+  wire that means something else by the same id. Mitigations the design does
+  **not** enforce but should be adopted by convention: an
   **id-namespacing convention** (e.g. `"bank.Account"` / `"bank.Account.Deposit"`
   prefixes per subsystem) to make collisions structurally unlikely, and a
   **startup self-check** that iterates the intended `(model, action)` set and
@@ -1600,7 +1605,7 @@ testing obligation, not a compile-time guarantee.
   A model/action registered via `BRIDGE_DECLARE_MODEL`/`BRIDGE_DECLARE_ACTION`
   plus `BRIDGE_REGISTER_MODEL_SOURCE`/`BRIDGE_REGISTER_ACTION_SOURCE` gets a
   **link-time**, not compile-time, version of this guarantee instead — see
-  ["The link-time canary"](#the-link-time-canary-closing-bridge_declare_s-own-new-hazard)
+  ["The link-time canary"](#the-link-time-canary-for-a-missing-registration)
   — but only for pairs that opt into the split macros; the combined
   `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` carry no such check, because
   for them declaration and registration are the same macro call and cannot
@@ -1613,14 +1618,14 @@ testing obligation, not a compile-time guarantee.
   next, and last-write-wins means test ordering can change behaviour. Contrast
   `journal::ScopedActionLog`, which deliberately provides scoped install/restore
   for exactly this reason; the registries have no equivalent.
-- **Per-call heap allocation on the hot path — fixed for `ActionDispatcher`,
-  still open for the other two.** `ActionDispatcher`'s lookups are
-  heterogeneous now (`PairKeyHash`/`PairKeyEqual` are transparent, and `find`
-  is given a `PairKeyView`), so `dispatch`, `coalesce`, `schemaFor` and
-  `requiredFieldsFor` build no key at all. `ModelRegistryFactory::create` and
-  `ActionExecuteRegistry::execute` still construct their keys to probe the map;
-  `ActionExecuteRegistry`'s key carries a `type_index` as well as the two ids,
-  so it is not the same change.
+- **Per-call heap allocation in `ModelRegistryFactory::create`.**
+  `ActionDispatcher`'s lookups are heterogeneous (`PairKeyHash`/`PairKeyEqual`
+  are transparent, and `find` is given a `PairKeyView`), so `dispatch`,
+  `coalesce`, `schemaFor` and `requiredFieldsFor` build no key at all, and
+  `ActionExecuteRegistry::execute` probes with its own transparent `KeyView`
+  ([bridge.md](bridge.md#actionexecuteregistry)). `ModelRegistryFactory::create`
+  still constructs a `std::string` to probe its map — once per instance
+  created, not per action.
 - **The `ActionDispatcher` / `ActionExecuteRegistry` split can silently
   diverge.** A single `BRIDGE_REGISTER_ACTION` populates both registries (one
   initialiser each). But they are independent maps consulted by different
@@ -1637,7 +1642,7 @@ testing obligation, not a compile-time guarantee.
   `BridgeHandler<M, MyOwnTag>` at compile time, and such a handler behaves as
   `NoSharing` everywhere *except* `executeJson`, which throws "unknown action"
   for an action that is registered. A concept constraining `Sharing` to the two
-  tags would turn that runtime surprise into a compile error; none exists today.
+  tags would turn that runtime surprise into a compile error; none exists.
 
 ## Record registry
 

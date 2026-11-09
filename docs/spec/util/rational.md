@@ -9,10 +9,10 @@ rounding error. The precision tag affects only decimal scaling
 (`Rational::fromFloat`) and rounding (`Rational::toDouble`, formatting); it
 never changes a stored value.
 
-Adapted from LASTRADA `JPMath/Rational.hpp`, with the `boxed` strong-type
-dependency replaced by a self-contained `DecimalPlaces` and a Glaze wire codec
-so the type round-trips through the morph JSON wire with its invariants restored
-on read.
+Adapted from LASTRADA `JPMath/Rational.hpp`. The strong types are
+self-contained (`DecimalPlaces`, `Numerator`, `Denominator`), and a Glaze wire
+codec round-trips the type through the morph JSON wire with its invariants
+restored on read. The header is `include/morph/util/rational.hpp`.
 
 ## Contents
 
@@ -29,6 +29,7 @@ on read.
 - [Wire and schema](#wire-and-schema)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
+- [Payload shape tag](#payload-shape-tag)
 - [Cross-references](#cross-references)
 - [Limitations](#limitations)
 
@@ -161,8 +162,9 @@ largest magnitude whose scaled numerator still fits `int64` is roughly
 At the maximum precision `dp = 18` the representable magnitude is only about
 **±9.2** — a value tagged with 18 decimal places has essentially spent its whole
 `int64` budget on the fractional part. `fromFloat` guards this edge explicitly,
-but the arithmetic operators downstream do **not** re-check it, so intermediate
-results that leave the envelope are UB regardless of the entry guard.
+but the arithmetic operators downstream do **not** re-check it: an intermediate
+result that leaves the envelope saturates (and logs), regardless of the entry
+guard.
 
 The `fromFloat` guard is **asymmetric** and half-ulp aware. After scaling in
 `long double` it rejects with `Overflow` when `scaled >= 2^63 - 0.5` or
@@ -224,9 +226,9 @@ operands' magnitudes, so a mixed-sign case whose cross-terms overflow still
 saturates in the mathematically correct direction.
 
 Saturation rather than an exception because these operators are used inside
-strand-bound model code and in `constexpr` expressions: throwing would change
-their contract for every existing caller, while leaving the overflow undefined
-is what this exists to stop. A clamped value is wrong, but it is *defined*
+strand-bound model code and in `constexpr` expressions, where a throwing
+`noexcept` operator would terminate, while leaving the overflow undefined is
+what saturation exists to stop. A clamped value is wrong, but it is *defined*
 wrong, and it is logged.
 
 **The operators keep `noexcept`,** including when the overflow path logs, and
@@ -234,9 +236,8 @@ they need no local guard to do it: `morph::log`'s helpers are themselves
 `noexcept` (`docs/spec/core/logger.md`, "Failure modes"), so an arithmetic
 operator cannot begin failing because logging failed. If the record cannot be
 emitted, the logging layer counts it in `morph::log::droppedLogRecords()`
-rather than propagating. Neither this function nor `CompletionState`'s
-destructor needs a local `try`/`catch` for it: the guarantee belongs to the
-logging layer, not to each of its callers.
+rather than propagating. The operators need no local `try`/`catch` for it: the
+guarantee belongs to the logging layer, not to each of its callers.
 
 `canonicalise` is total for the same reason. Negating the numerator unguarded
 would make a component of `INT64_MIN` undefined behaviour — reachable both by
@@ -268,30 +269,27 @@ multiplies, not the raw operands: cross-cancelling is what keeps most products
 in range, so checking beforehand would reject pairs that multiply perfectly
 well (`INT64_MAX/2 * 2/1` reduces to `INT64_MAX/1`).
 
-`checkedDiv` is the division member of the family, and it exists because
-division was the one operation with no exact-or-nothing form: `dividedBy`
-already returns `std::expected`, but only for the zero divisor, so a caller who
-checks *its* result is told a clamped quotient succeeded. `checkedDiv` is
-`checkedMul` against `rhs.reciprocal()` — the same operand pair `dividedBy`
-forms internally — and it folds both failure modes into the one channel:
-`DivisionByZero` propagated from `reciprocal`, `Overflow` from `checkedMul`.
-`dividedBy` itself saturates: `Quantity` already folds a
-failed division to `nullopt` (`docs/spec/error_handling.md`), and making `/` the
-sole operation that refuses to saturate would impose "overflow is fatal" on
-every caller, in-tree and out.
+`checkedDiv` is the exact-or-nothing form of division. `dividedBy` returns
+`std::expected`, but only for the zero divisor, so a caller who checks *its*
+result is told a clamped quotient succeeded. `checkedDiv` is `checkedMul`
+against `rhs.reciprocal()` — the same operand pair `dividedBy` forms internally
+— and it folds both failure modes into the one channel: `DivisionByZero`
+propagated from `reciprocal`, `Overflow` from `checkedMul`. `dividedBy` itself
+saturates: `Quantity` folds a failed division to `nullopt`
+([`../error_handling.md`](../error_handling.md)), and making `/` the sole
+operation that refuses to saturate would impose "overflow is fatal" on every
+caller.
 
 All four share one set of predicates (`addWouldOverflow`, `subWouldOverflow`,
 `mulWouldOverflow` — the last of which `checkedDiv` reaches through
 `checkedMul`), so the operators and the checked forms cannot disagree about
 what overflows.
 
-**The saturation log names its own site and its own remedy.** `dividedBy`
-reaches saturation through `operator*=`'s arithmetic, so the clamp used to be
-logged as `operator*=` — a function the division caller never invoked —
-alongside a fixed remedy list of `checkedAdd`/`checkedSub`/`checkedMul`, none
-of which is a division. Each site now supplies both strings: `dividedBy`
-reports itself and names `checkedDiv`, and `operator+=`/`-=`/`*=` name
-`checkedAdd`/`checkedSub`/`checkedMul` respectively.
+**The saturation log names its own site and its own remedy.** Each saturating
+site supplies both strings: `dividedBy` reports itself and names `checkedDiv`
+(although its arithmetic runs through `operator*=`, the division caller never
+invoked that), and `operator+=`/`-=`/`*=` name `checkedAdd`/`checkedSub`/
+`checkedMul` respectively.
 
 ## Mixed-type expressions (expected propagation)
 
@@ -347,13 +345,15 @@ Free functions in `morph::math`, found by ADL:
 | `floor` | `constexpr int64_t floor(Rational) noexcept` | Rounds toward negative infinity. |
 | `trunc` | `constexpr int64_t trunc(Rational) noexcept` | Truncates toward zero. |
 | `roundToDecimalPlaces` | `constexpr Rational roundToDecimalPlaces(Rational, DecimalPlaces, RoundingMode = HalfAwayFromZero) noexcept` | Rounds to a decimal scale **without leaving the `Rational` domain**. Changes the value, and tags the result at the requested precision. Saturates like the arithmetic operators. |
+| `checkedRoundToDecimalPlaces` | `constexpr std::optional<Rational> checkedRoundToDecimalPlaces(Rational, DecimalPlaces, RoundingMode) noexcept` | The same rounding, scaled up in 128 bits so it never saturates; empty only when the rounded value's canonical numerator does not fit `int64`. The mode has no default. |
 
-### `roundToDecimalPlaces` — the one helper that stays in the domain
+### `roundToDecimalPlaces` — rounding that stays in the domain
 
 `ceil`/`floor`/`trunc` all return `std::int64_t`: they round to *zero* decimal
 places and hand back an integer, so none of them can express "reduce this value
-to two decimals and keep it a `Rational`". `roundToDecimalPlaces` is that
-operation, and it is what makes a declared precision *enforceable* rather than
+to two decimals and keep it a `Rational`". `roundToDecimalPlaces` (and its
+checked form) is that operation, and it is what makes a declared precision
+*enforceable* rather than
 merely displayable — see
 [forms.md, "Advertised precision is enforced on dispatch"](../forms/forms.md#advertised-precision-is-enforced-on-dispatch),
 whose whole contract rests on it.
@@ -388,9 +388,16 @@ mode-aware first.
 
 **Saturation.** Step 3 multiplies by `10^places` through the saturating
 `operator*=`, so a value whose scaled form leaves `int64` range clamps to
-`±INT64_MAX` and logs at `error`, exactly like `+`/`-`/`*`. There is no
-`checkedRound`; a caller who must detect it range-checks first. Step 2 means
-this cannot happen for a value already representable at the target scale.
+`±INT64_MAX` and logs at `error`, exactly like `+`/`-`/`*`. Step 2 means this
+cannot happen for a value already representable at the target scale.
+
+**`checkedRoundToDecimalPlaces`** computes the scale-up and the tie in 128 bits
+and reduces by `gcd(magnitude, 10^places)` before asking whether the result
+fits, so a value whose *scaled* form passes `int64` but whose rounded result
+fits is still rounded exactly: `10/3` at 18 places is `3.333333333333333333`.
+It returns empty only when the rounded value itself is not representable, as
+for `28/3` at 18 places. A caller who must not show or store a clamped value
+uses it.
 
 ## Comparison
 
@@ -484,14 +491,19 @@ through `setWire`.
 | `isInteger()` | `bool` — `denominator == 1`. |
 | `isNegative()` | `bool` — `numerator < 0`. |
 
-### `Rational` — wire helpers
+### Checked arithmetic (free functions in `morph::math`)
 
-| Member | Signature |
+| Function | Signature |
 |---|---|
 | `checkedAdd(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact sum, or `Overflow`. |
 | `checkedSub(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact difference, or `Overflow`. |
 | `checkedMul(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact product, or `Overflow`. |
 | `checkedDiv(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact quotient, or `DivisionByZero`, or `Overflow`. `checkedMul` against `b.reciprocal()`; the form `dividedBy`/`operator/` do not provide, since those saturate and report success. |
+
+### `Rational` — wire helpers
+
+| Member | Signature |
+|---|---|
 | `setWire(Wire)` | `void noexcept` — rebuilds through the canonicalising constructor, clamping what it cannot represent and counting the clamp. |
 | `Wire::validate()` | `constexpr bool noexcept` — whether these raw values decode without being clamped. |
 | `WireClampScope` | Scoped observer: how many `Rational` values were clamped while decoding. |
@@ -533,7 +545,7 @@ expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
 | Comparison ignores precision | **Value-only `<=>` and `==`** | Two values equal in magnitude should compare equal regardless of how many decimals they claim. Precision is a display/rounding concern, not a value property. |
 | Max-precision propagation | **Result precision = max of operands** | A computation is never less precise than its most precise input. There is no in-place retag helper; a caller needing a different tag constructs a fresh `Rational` with the desired `DecimalPlaces`. |
 | Rounding mode is a parameter, defaulting to half away from zero | **`RoundingMode{HalfAwayFromZero, HalfEven}`, `HalfAwayFromZero` default** | A mode had to become visible once rounding became a *storage* operation rather than an implementation detail of display. The default follows morph's own formatter rather than the standards' `HALF_EVEN`, because the point of rounding on the dispatch path is that the stored value equals the displayed one; a `HalfEven` default would break that for every tie until the formatter learned the same mode. |
-| No `checkedRound` | **`roundToDecimalPlaces` saturates and logs** | Consistent with `+`/`-`/`*`/`/`: the `checked*` family covers the operations a caller is likely to drive with unbounded inputs. Rounding a value already representable at the target scale — the overwhelmingly common case, and every integer — takes a fast path that cannot overflow at all. |
+| `roundToDecimalPlaces` saturates; a separate checked form reports | **`roundToDecimalPlaces` saturates and logs; `checkedRoundToDecimalPlaces` returns `std::optional`** | The unchecked form is consistent with `+`/`-`/`*`/`/`, and rounding a value already representable at the target scale — the overwhelmingly common case, and every integer — takes a fast path that cannot overflow at all. The checked form is for a caller that must not carry on with a clamped value; it scales in 128 bits, so it fails only when the result itself does not fit. |
 | 128-bit cross-product comparison | **`detail::mulU64`** | Exact ordering over the full int64 range without overflow. Uses `unsigned __int128` when available (GCC/Clang), portable 32-bit limb decomposition on MSVC. |
 | Negation limitation | **`INT64_MIN` overflows** | Documented limitation. The wire codec clamps `INT64_MIN` components away for untrusted input. |
 | `fromFloat` not `constexpr` | **Uses `std::llround` / `std::isfinite`** | These standard library functions are not `constexpr`. The `fromFloat` overloads are `inline` out-of-class, `noexcept` but not `constexpr`. |
@@ -569,9 +581,7 @@ See [`journal/journal.md`](../journal/journal.md) for the fingerprint itself.
   `Rational`, which reads as "infallible" but means something narrower for
   out-of-envelope inputs: a reduced cross-term past ~2^63 is clamped to
   `±INT64_MAX/1` and logged at `error`, so the value is inexact and the caller
-  cannot tell from the return type. (This is *not* undefined behaviour; an
-  earlier revision of this document said it was, contradicting "The operators
-  saturate; they never overflow" a few dozen lines above.) The fallibility is
+  cannot tell from the return type. This is *not* undefined behaviour. The fallibility is
   inverted — `operator/`, whose only *reported* failure is a trivial
   divisor-is-zero check, returns `std::expected` yet saturates on overflow just
   like the others, while `+`/`-`/`*` report through the log; all four leave
@@ -594,7 +604,7 @@ See [`journal/journal.md`](../journal/journal.md) for the fingerprint itself.
 - **`roundToDecimalPlaces` saturates instead of reporting.** Reducing a very
   large value to a fine scale requires scaling by `10^places` first, and a
   scaled form past `int64` clamps to `±INT64_MAX` with an `error` log rather
-  than returning `std::expected`. There is no `checkedRound` counterpart. The
+  than reporting; `checkedRoundToDecimalPlaces` is the reporting form. The
   exact fast path (denominator already divides `10^places`) means this cannot
   fire for a value that is already representable at the target scale, so in
   practice it needs both a large magnitude *and* a genuine reduction.

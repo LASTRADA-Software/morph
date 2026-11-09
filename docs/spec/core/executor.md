@@ -29,9 +29,10 @@ threading, and serialisation semantics differ per implementation.
 
 ## Type overview
 
-There are thirteen types and one free function (with two overloads), split across
-`morph::exec` and `morph::exec::detail` (in `executor.hpp`, `strand.hpp`,
-`owner_strand.hpp` and `io_loop.hpp`), and `morph::qt` (in `qt/qt_executor.hpp`):
+The types and the one free function (`runningOn`, with two overloads) are split
+across `morph::exec` and `morph::exec::detail` (in `executor.hpp`, `strand.hpp`,
+`owner_strand.hpp`, `io_loop.hpp` and `core/detail/`), and `morph::qt` (in
+`qt/qt_executor.hpp`):
 
 | Type | Namespace | Purpose |
 |---|---|---|
@@ -39,6 +40,8 @@ There are thirteen types and one free function (with two overloads), split acros
 | `ThreadPoolExecutor` | `morph::exec` | Fixed-size thread pool, FIFO queue, task exceptions logged (never propagate). |
 | `MainThreadExecutor` | `morph::exec` | Collects tasks from any thread, drains on `runFor()` from the owning thread. |
 | `QtExecutor` | `morph::qt` | Posts tasks to a Qt event loop; they run on the configured context object's thread (the `QCoreApplication`/GUI thread by default). |
+| `InlineExecutor` | `morph::exec::detail` (in `executor.hpp`) | Runs each task at once on the posting thread; reached through `detail::inlineExecutor()`. Not serial, so never a `Completion`'s owner. |
+| `OwnerAffinity` | `morph::exec::detail` (in `core/detail/owner_affinity.hpp`) | The owner check a component that belongs to one executor makes; see [owner affinity](#owner-affinity). |
 | `ModelId` | `morph::exec::detail` | Opaque 64-bit identifier for a model instance, used as a strand key. |
 | `ModelIdHash` | `morph::exec::detail` | Hash functor so `ModelId` can be an `unordered_map` key. |
 | `ModelStrands` | `morph::exec::detail` | One strand per `ModelId` over an `IExecutor`: core-cpp's `core::async::KeyedStrands`, with what morph adds. Tasks with the same `ModelId` never overlap. |
@@ -52,9 +55,10 @@ There are thirteen types and one free function (with two overloads), split acros
 `IExecutor` and the two thread-based concrete executors live in the public
 `morph::exec` namespace. `QtExecutor` lives in `morph::qt` (in the separate
 `qt/qt_executor.hpp` header) because it depends on Qt; only the GUI/bridge layer
-pulls it in. `ModelStrands`, `CoreExecutorOver`, `TaskResumer`, `ModelId` and
-`ModelIdHash` live in `morph::exec::detail` because they are implementation
-details of the morph model framework, not general-purpose utilities.
+pulls it in. `ModelStrands`, `CoreExecutorOver`, `TaskResumer`, `ModelId`,
+`ModelIdHash`, `InlineExecutor`, `OwnerAffinity` and `OwnedState` live in
+`morph::exec::detail` because they are implementation details of the morph
+model framework, not general-purpose utilities.
 
 ## `IExecutor` — the abstract interface
 
@@ -63,9 +67,11 @@ asynchronous execution. Thread-safe. How a task's exception is handled is left
 to the implementation; the header's default wording says an exception "is
 silently swallowed unless the implementation documents otherwise", and every
 concrete executor here *does* document otherwise — the two thread-based ones
-catch and log, `QtExecutor` defers to Qt (see [Failure modes](#failure-modes)).
-No implementation lets a task exception escape `post()` (the task has not run
-yet when `post()` returns).
+catch and log, `QtExecutor` defers to Qt, `InlineExecutor` lets it reach the
+caller of `post()` (see [Failure modes](#failure-modes)).
+Apart from `InlineExecutor`, which runs the task inside `post()`, no
+implementation lets a task exception escape `post()` (the task has not run yet
+when `post()` returns).
 
 An executor is an identity: it is neither copyable nor movable, because it owns
 the adapter (`coreExecutor()`) that points back at it. See
@@ -113,10 +119,10 @@ from any thread are enqueued and only executed when the owning thread calls
 duration. It uses a condition-variable `wait_until` on the deadline, so it does
 **not** return early when the queue drains — while time remains it keeps waiting
 for newly posted tasks and only returns once the deadline is reached. If a task
-throws a `std::exception`, the exception is logged (via `morph::log::logError`,
-prefixed `"[main-thread] callback threw: "`) and execution continues with the
-next task. Note that only `std::exception`-derived exceptions are caught; any
-other thrown type propagates out of `runFor()`.
+throws, the exception is logged (via `morph::log::logError`: a
+`std::exception` as `"[main-thread] callback threw: " + what()`, any other type
+as `"[main-thread] callback threw unknown exception"`) and execution continues
+with the next task.
 
 Two additional step-oriented primitives sit alongside `runFor()` for callers
 that want deterministic, non-blocking control instead of a timed pump:
@@ -133,7 +139,7 @@ that want deterministic, non-blocking control instead of a timed pump:
   work from another thread the way `runFor()`'s `wait_until` does.
 
 All three share one dequeue-and-invoke step (pop under `_m`, then run outside
-the lock with the same `try`/catch `std::exception` logging), so the exception
+the lock with the same `try`/`catch` logging), so the exception
 handling and locking discipline described above apply identically to
 `runOnce()` and `drain()`.
 
@@ -165,9 +171,8 @@ delivered against a freed executor and read `_context` off freed memory.
 Each queued task therefore carries a weak observer of its executor's lifetime
 and does nothing if the executor is already gone.
 
-This is not a theoretical hazard. [`Bridge::executeVia`](bridge.md) chains
-three `Completion` objects per dispatched action, each settled from *inside*
-the previous one's delivered callback, so a caller waiting only on its own
+This is not a theoretical hazard. Wherever one `Completion` is settled from
+*inside* another's delivered callback, a caller waiting only on its own
 top-level completion can observe "done" while an intermediate post is still
 queued; when that stale event is finally pumped, its body calls `post()` for
 the next link. Without the guard this segfaults ordinary uninstrumented
@@ -224,9 +229,8 @@ lifetime of the model. It supports three-way comparison and can be used as an
 `unordered_map` key via `ModelIdHash`.
 
 The strands are core-cpp's `core::async::KeyedStrands<ModelId, ModelIdHash>`
-(`<core/async/KeyedStrands.hpp>`, since core-cpp 0.4.0), which was written after
-the `StrandExecutor` morph had here and replaces it. What it guarantees, core-cpp
-specifies and tests:
+(`<core/async/KeyedStrands.hpp>`). What it guarantees, core-cpp specifies and
+tests:
 
 - **One strand per key, made when the key gets work and retired when it runs
   out,** under the registry's lock, so a post that races a retirement never
@@ -270,7 +274,7 @@ What `ModelStrands` adds:
   returns at once.
 - **`close()`** closes every strand: queued work is dropped, a task running on
   another thread is waited for, and a later `post` is dropped too.
-- **`seal()`** (core-cpp 0.4.1) refuses the try-forms and keeps running what
+- **`seal()`** refuses the try-forms and keeps running what
   is queued: `trySubmit` and `runOnStrand`'s post are refused, so their
   callers run the work inline, while a plain `post` -- and a coroutine coming
   back through a plain submit -- is still queued until the close.
@@ -296,7 +300,7 @@ handler suspended past its backend's destruction can still ask whether the
 strands are closed.
 
 **Testing per-model ordering without naming `ModelStrands`/`ModelId`.**
-`RemoteServer` (see `backend.md`) owns its strands internally, but every
+`RemoteServer` (see [backend.md](backend.md)) owns its strands internally, but every
 task it ever dispatches — the top-level `handle()` post and every strand's turn
 alike — funnels through the single `IExecutor` the server was constructed with.
 A caller that wants a deterministic, hand-stepped interleaving harness against
@@ -343,8 +347,7 @@ ever seen. Retired strands kept for reuse are bounded at 32.
 
 ## Thread safety
 
-All four executors' `post()` methods are safe to call from any thread
-concurrently.
+Every executor's `post()` is safe to call from any thread concurrently.
 
 - `ThreadPoolExecutor` guards its queue and `_stop` flag with a single mutex
   `_m` and coordinates workers on `_cv`. Multiple workers pop under the lock, so
@@ -360,8 +363,8 @@ concurrently.
   only while a handler is enrolled. The net guarantee: tasks with the same
   `ModelId` never overlap; tasks with different keys may run in parallel on the
   base pool.
-- `QtExecutor` holds only a `QObject*` context pointer; its thread safety is
-  entirely Qt's. `QMetaObject::invokeMethod` with `Qt::QueuedConnection` is
+- `QtExecutor` holds a `QObject*` context pointer and its lifetime token; its
+  thread safety is Qt's. `QMetaObject::invokeMethod` with `Qt::QueuedConnection` is
   documented as safe to call from any thread, and the queued event is
   dispatched serially by the event loop of whichever thread owns the context
   object (`QCoreApplication`'s thread by default).
@@ -396,8 +399,8 @@ Every executor here states a scope around each task it runs, except
 Two consequences follow for coroutines (see
 [`coroutines.md`](coroutines.md#where-a-coroutine-resumes)). A `co_await` reads
 `ResumeTarget::current()`, so a coroutine that is run by hand inside a task of
-one of these executors now resumes on that executor, where before it resumed on
-the awaited `Completion`'s executor. And a coroutine started with `spawn` runs
+one of these executors resumes on that executor, not on the awaited
+`Completion`'s executor. And a coroutine started with `spawn` runs
 inside the adapter's scope, nested inside the executor's, so `runningOn` of the
 spawn executor is true in it while `currentExecutor()` names the adapter.
 
@@ -606,17 +609,15 @@ there answers at once with the current state.
 |---|---|
 | `ThreadPoolExecutor` | The worker `loop` catches it. `std::exception` is logged as `"[thread-pool] task threw: " + what()`; any other type is logged as `"[thread-pool] task threw unknown exception"`. The worker keeps looping. |
 | `ModelStrands` | `LoggedTask`, around every posted callable, catches it. `std::exception` is logged as `"[strand] task threw: " + what()`; any other type is logged as `"[strand] task threw unknown exception"`. The next task for the key proceeds. |
-| `MainThreadExecutor` | `runFor` catches **only** `std::exception`, logged as `"[main-thread] callback threw: " + what()`, then continues with the next task. **Any non-`std::exception` type propagates out of `runFor()`** and is the caller's problem. |
+| `MainThreadExecutor` | `runFor`, `runOnce` and `drain` catch it. `std::exception` is logged as `"[main-thread] callback threw: " + what()`; any other type as `"[main-thread] callback threw unknown exception"`. The pump continues with the next task, and `runOnce()` still returns `true`. |
+| `InlineExecutor` | Nothing catches it: the task runs inside `post()`, so the throw reaches the caller of `post()`. |
 | `QtExecutor` | No `try`/`catch` of its own. A throwing task propagates into whoever drives the target thread's event loop (`QCoreApplication::exec` by default, or the worker thread's loop for a custom context); Qt's default behaviour is to `std::terminate`. Tasks posted through it must not let exceptions escape. |
 | `IoLoop` | A task posted with `post()` or `weak().post()` is caught on the loop and logged as `"[io-loop] task threw: " + what()` (or `"[io-loop] task threw an unknown exception"`); the loop goes on. `runAndWait()` catches it on the loop and rethrows it to the waiter instead, inline or not. |
 
 All logging goes through `morph::log::logError`. The design principle: a task
 failure must never kill a worker/strand or abort sibling tasks, but it must also
-never be *invisible*. Previously these exceptions were swallowed silently; they
-are now logged. `ThreadPoolExecutor` and `ModelStrands` catch `(...)` and so
-contain every exception type; `MainThreadExecutor` deliberately narrows its
-`catch` to `std::exception` (a non-standard throw surfaces on the drain thread
-rather than being hidden).
+never be *invisible*. `ThreadPoolExecutor`, `MainThreadExecutor`, `ModelStrands`
+and `IoLoop::post` catch `(...)` and so contain every exception type.
 
 ## API reference
 
@@ -662,7 +663,7 @@ rather than being hidden).
 | Member | Signature | Notes |
 |---|---|---|
 | `post` | `void post(std::function<void()> task) override` | Enqueues; notifies waiters. Thread-safe. Not executed until `runFor()`/`runOnce()`/`drain()`, each of which runs a task inside a scope naming this executor. |
-| `runFor` | `void runFor(std::chrono::milliseconds timeout)` | Runs tasks until the `timeout` deadline (blocks for new tasks while time remains; does not return early on an empty queue). Must be called from the owning thread. `std::exception`s logged and skipped; other exception types propagate. |
+| `runFor` | `void runFor(std::chrono::milliseconds timeout)` | Runs tasks until the `timeout` deadline (blocks for new tasks while time remains; does not return early on an empty queue). Must be called from the owning thread. A throwing task is logged and skipped. |
 | `runOnce` | `bool runOnce()` | Dequeues and runs at most one pending task; returns immediately, never blocks. Returns `true` if a task ran, `false` if the queue was empty. Must be called from the owning thread. |
 | `drain` | `void drain()` | Runs tasks until the queue is empty; no wall-clock timeout, does not wait for externally posted tasks. Must be called from the owning thread. |
 
@@ -670,7 +671,7 @@ rather than being hidden).
 
 | Member | Signature | Notes |
 |---|---|---|
-| ctor | `explicit QtExecutor(QObject* context = QCoreApplication::instance())` | Stores `context` as the `invokeMethod` target. Defaults to the application instance (GUI thread). `nullptr` makes `post()` a no-op (matches `QMetaObject::invokeMethod`'s handling of a null target). |
+| ctor | `explicit QtExecutor(QObject* context = QCoreApplication::instance())` | Stores `context` as the `invokeMethod` target. Defaults to the application instance (GUI thread). With a null `context`, `QMetaObject::invokeMethod` delivers nothing, so `post()` drops the task. |
 | `post` | `void post(std::function<void()> fn) override` | Posts `fn` to `context`'s event loop via `QMetaObject::invokeMethod(context, ..., Qt::QueuedConnection)`; runs on whichever thread owns `context` at dispatch time, inside a scope naming this executor. Thread-safe; returns immediately. |
 
 ### `ModelId` (`morph::exec::detail`)
@@ -694,7 +695,7 @@ rather than being hidden).
 | dtor | `~ModelStrands()` | Closes the strands: drops what is queued, waits for a task running on another thread. |
 | `post` | `template <typename F> void post(ModelId key, F&& task)` | Queues on `key`'s strand. FIFO per key, concurrent across keys. Thread-safe. One allocation; the throw is logged. Dropped once closed. |
 | `runOnStrand` | `template <typename F> void runOnStrand(ModelId key, F task)` | Runs here on `key`'s strand, posts off it, runs here once closed. |
-| `trySubmit` | `bool trySubmit(ModelId key, std::coroutine_handle<> handle)` | Queues a resumption unless closed. |
+| `trySubmit` | `bool trySubmit(ModelId key, std::coroutine_handle<> handle)` / `bool trySubmit(ModelId key, core::async::ParkedWork& work)` | Queues a resumption unless sealed or closed; the `ParkedWork` form keeps the work's claim. |
 | `runningHere` / `runningAnyHere` | `bool runningHere(ModelId key) const noexcept` / `bool runningAnyHere() const noexcept` | Whether the calling thread is inside a task of `key`'s strand / of any. |
 | `idle` | `bool idle() const` | Nothing queued or running. |
 | `drain` | `void drain()` | Blocks until idle, where threads exist. Not from a task of these strands. |
@@ -708,22 +709,22 @@ rather than being hidden).
 | Decision | Choice | Why |
 |---|---|---|
 | Task signature | `std::function<void()>` | Simple, universal. Every executor accepts the same callable type. No return value, no cancellation. |
-| Exception handling | **Caught and logged, never propagated out of a worker/strand** | A task failure must not crash unrelated tasks *or* vanish. `ThreadPoolExecutor` and `ModelStrands` catch `(...)` and log via `morph::log::logError`; `MainThreadExecutor` narrows its catch to `std::exception` so a non-standard throw surfaces on the synchronous drain thread. See [Failure modes](#failure-modes). |
+| Exception handling | **Caught and logged, never propagated out of a worker/strand** | A task failure must not crash unrelated tasks *or* vanish. `ThreadPoolExecutor`, `MainThreadExecutor` and `ModelStrands` catch `(...)` and log via `morph::log::logError`. See [Failure modes](#failure-modes). |
 | ThreadPoolExecutor drain-on-dtor | **Drain the queue, then join** | Workers run every already-queued task before exiting, so a strand's queued turn still runs, and finds its strand closed, as long as the pool outlives the strands. There is no public `waitIdle`/graceful-shutdown API; tasks posted after destruction begins may be lost, so the caller must still synchronise teardown order externally. |
 | MainThreadExecutor's `runFor` | **Wall-clock deadline** | Lets the caller batch-process tasks without spinning. The condition-variable wait avoids busy-waiting. |
-| MainThreadExecutor's `runOnce`/`drain` | **Thin wrappers sharing `runFor`'s dequeue-and-invoke step, added alongside it** | `runOnce()` steps exactly one task without blocking; `drain()` loops `runOnce()` until the queue is empty. Neither waits on new tasks from other threads, unlike `runFor()`'s deadline-scoped wait — this gives event-loop integrations and tests deterministic, non-blocking single-step control without replacing `runFor()`'s existing behavior. |
+| MainThreadExecutor's `runOnce`/`drain` | **Thin wrappers sharing `runFor`'s dequeue-and-invoke step** | `runOnce()` steps exactly one task without blocking; `drain()` loops `runOnce()` until the queue is empty. Neither waits on new tasks from other threads, unlike `runFor()`'s deadline-scoped wait — this gives event-loop integrations and tests deterministic, non-blocking single-step control beside `runFor()`'s timed pump. |
 | ModelId zero | **Reserved — "not bound"** | A natural sentinel for optional/uninitialised model handles. |
-| The strand | **core-cpp's `KeyedStrands`**, not morph's own | morph's `StrandExecutor` became core-cpp's `Strand` and `KeyedStrands` in 0.4.0, which the other Contour Terminal projects share; morph keeps only what is morph's: the adapter, the throw policy and the Task handler's context. Its two fixed races (a post racing the drain, a recycled strand under the wrong key) are core-cpp's to keep fixed now, in its own race tests. |
+| The strand | **core-cpp's `KeyedStrands`**, not morph's own | The other Contour Terminal projects share core-cpp's `Strand` and `KeyedStrands`, and core-cpp's own race tests cover them (a post racing the drain, a recycled strand under the wrong key); morph keeps only what is morph's: the adapter, the throw policy and the Task handler's context. |
 | `ModelStrands` in `detail` | **Not a general-purpose utility** | Exists only for the morph model framework's per-model serialisation. The `ModelId` key is specific to model instances. |
 | Closing drops, `drain` waits | **Seal, drain, close, in `teardown`** | core-cpp's strands drop queued work when closed, so that a strand can be destroyed from one of its own tasks. A backend whose queued work must run seals first, so that nothing arriving after the drain is queued only to be dropped, and drains before it closes. |
 | No `std::future` / return value | **Fire-and-forget only** | Executors schedule side-effect tasks. Callers that need results use shared state or futures externally. |
 | No `std::executor` conformance | **Custom interface, not `std::executor`** | C++26 `std::executor` is not yet widely available. This is a minimal in-house abstraction. |
-| `QtExecutor` via `invokeMethod`, not a `QObject` subclass | **Near-stateless free-standing `IExecutor`, target configurable via ctor** | Uses `QMetaObject::invokeMethod(context, fn, Qt::QueuedConnection)`, so callers need no custom `QObject`, event type, or slot — they only optionally supply a `QObject*` to pick the target thread. Defaults to `QCoreApplication::instance()` so existing GUI-thread call sites are unaffected. Keeps the type a drop-in `IExecutor` holding a single pointer, with Qt's event loop as the sole dispatcher. |
+| `QtExecutor` via `invokeMethod`, not a `QObject` subclass | **Near-stateless free-standing `IExecutor`, target configurable via ctor** | Uses `QMetaObject::invokeMethod(context, fn, Qt::QueuedConnection)`, so callers need no custom `QObject`, event type, or slot — they only optionally supply a `QObject*` to pick the target thread. Defaults to `QCoreApplication::instance()`, the GUI thread most callers want. Keeps the type a drop-in `IExecutor` holding a context pointer and a lifetime token, with Qt's event loop as the sole dispatcher. |
 | `QtExecutor` in a separate `morph::qt` header | **Isolate the Qt dependency** | The core executor family (`executor.hpp`, `strand.hpp`) stays Qt-free; only the GUI/bridge layer includes `qt/qt_executor.hpp`. Backends depend on `IExecutor`, never on Qt. |
 
 ## Limitations
 
-These are honest, known gaps — accepted trade-offs, not bugs:
+These are known gaps — accepted trade-offs, not bugs:
 
 - **Unbounded queues / no backpressure.** `ThreadPoolExecutor`, `MainThreadExecutor`,
   and each strand's queue are all unbounded. A producer that
@@ -757,11 +758,12 @@ the hang described above, caught at compile time instead of at teardown. See [co
 - [`completion.md`](completion.md) — `Completion<T>` marshals its `.then` /
   `.onError` callbacks through an `IExecutor`; the executor is *how* async
   results land on the right thread.
-- `error_handling.md` — the framework-wide error-propagation story that the
-  per-task logging here plugs into (currently also summarised under
-  *Error propagation* in `../../ARCHITECTURE.md`).
-- `concurrency_and_lifetimes.md` — the broader threading and teardown-ordering
-  model; the "destroy the backend before the base pool" rule above is a concrete instance
-  of it (see also *Thread safety* in `../../ARCHITECTURE.md`).
+- [`error_handling.md`](../error_handling.md) — the framework-wide
+  error-propagation story that the per-task logging here plugs into (also
+  summarised under *Error propagation* in [ARCHITECTURE.md](../../ARCHITECTURE.md)).
+- [`concurrency_and_lifetimes.md`](../concurrency_and_lifetimes.md) — the
+  broader threading and teardown-ordering model; the "destroy the backend before
+  the base pool" rule above is a concrete instance of it (see also *Thread
+  safety* in [ARCHITECTURE.md](../../ARCHITECTURE.md)).
 - [`bridge.md`](bridge.md) — the bridge wires backends to a GUI executor and a
   strand-backed dispatcher; it is the primary consumer of these types.

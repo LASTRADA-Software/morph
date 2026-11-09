@@ -3,9 +3,6 @@
 Design spec for `include/morph/table/`: the toolkit-free engine that sorts,
 filters and maps the view of a table's rows, the `TableQuery` a server-mode
 list action receives, and the selection and cell-edit state a table keeps.
-The program-level design is spec 7
-(`docs/superpowers/specs/2026-10-08-table-engine-design.md`); this file is the
-reference for the code as it is.
 
 Read this before changing anything under `include/morph/table/`, and before
 writing a renderer list model or a server list action against it.
@@ -113,7 +110,7 @@ or a stop request and resumes from the same place.
 
 ## Filters
 
-`FilterSpec` is data, glaze-readable in spec 7 §6's shape:
+`FilterSpec` is data, glaze-readable in this shape:
 `{ "columns": { id: { "combine", "include", "exclude" } }, "groups": [ { "columns", "combine", "include" } ] }`.
 A `FilterEntry` sets exactly one operator.
 
@@ -283,7 +280,9 @@ edited included; the next repair holds them again.
 ## Server mode
 
 - `TableQuery { sort, filters, page }`, `PageRequest { offset = 0, limit = 200 }`,
-  `Page<Row> { rows, total, offset }` — glaze-readable, in spec 7 §9's shape.
+  `Page<Row> { rows, total, offset }` — glaze-readable under those member
+  names. A sort key is `{ "column", "dir" }` with `dir` `"asc"` or `"desc"`;
+  `total` is optional.
 - `validate(query, columns, limits, mayRead)` applies `QueryLimits`:
   `page.limit` is clamped to `maxLimit` (1,000); a negative limit, an offset
   outside `[0, maxOffset]`, too many sort keys, filtered columns, entries,
@@ -379,9 +378,9 @@ after the `CellEdits` is destroyed is ignored.
 
 AMD Ryzen 5 7600X (6 cores, 12 threads), Linux, GCC 16.2.1, Release (`-O3`),
 `morph_table_tests "[.benchmark]"`, on the code as shipped. The machine also
-hosts CI runners, which were busy: load average 14.4 during the run. An
-earlier revision measured on the idle machine (load 2.6) ran 1.5 to 2 times
-faster, so read these as an upper bound. Median and 10th-90th percentile,
+hosts CI runners, which were busy: load average 14.4 during the run. On the
+idle machine (load 2.6) the same scenarios ran 1.5 to 2 times faster, so read
+these as an upper bound. Median and 10th-90th percentile,
 milliseconds; keys are built inside every timing.
 
 | Scenario | 1,000 rows | 10,000 rows | 100,000 rows |
@@ -452,16 +451,17 @@ against `wire::decode` both ways.
   insert into 100,000 rows), and applying a `Deferred` repair lays out and
   diffs on the owner (10 to 55 ms at 100,000 rows).
 - `RowsSource` cannot name a date column's text format.
-
-- `query_rows_source.hpp` (`QueryRowsSource`, a source over a
-  `morph::reactive` query's rows, diffing a refetch by key) needs the reactive
-  module, which is not on `master` yet.
-- The `table` document node (spec 5 §9, spec 7 §12), its renderer list model,
-  and the mounting measurement belong to the UI document interpreter.
+- There is no `QueryRowsSource` (a source over a `morph::reactive` query's
+  rows, diffing a refetch by key). It is the one header of this module that
+  would include the reactive runtime.
+- The document interpreter does not yet lower a model-backed `table` node onto
+  this engine ([`../ui/interpreter.md`, "Not yet lowered"](../ui/interpreter.md#not-yet-lowered));
+  the engine's renderer list model and its mounting measurement belong there.
 
 ## Cross-references
 
-- Spec 7: `docs/superpowers/specs/2026-10-08-table-engine-design.md`.
+- `docs/superpowers/specs/2026-10-08-table-engine-design.md` — the
+  program-level design this module implements.
 - [../core/callback_scope.md](../core/callback_scope.md) — the lifetime gate on
   every completion.
 - [../core/executor.md](../core/executor.md) — owner and worker executors.

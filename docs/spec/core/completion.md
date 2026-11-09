@@ -192,7 +192,7 @@ re-thrown solely to extract a message:
   `[orphan] unhandled unknown exception`.
 
 The `logError` calls need no local guard: `morph::log`'s helpers are
-`noexcept` (`logger.md`, "Failure modes"), which is what makes them safe to
+`noexcept` ([logger.md, "Failure modes"](logger.md#failure-modes)), which is what makes them safe to
 call from an implicitly-`noexcept` destructor at all. The **variadic** overload
 is used deliberately — it formats inside that guarantee, whereas building the
 message by concatenation at the call site would allocate outside it and could
@@ -328,9 +328,8 @@ no delivery, so its handlers would never run. `executeJson`'s decode and
 validation failures settle synchronously, which is why it builds its
 `Completion` before decoding.
 
-**Cost.** One post per settle, even with no handler attached yet; a settle with
-handlers attached costs the same one post it did when delivery was a closure
-built under a lock. A late attach costs one post per handler.
+**Cost.** One post per settle, even with no handler attached yet, and however
+many handlers are attached. A late attach costs one post per handler.
 
 ## Failure modes
 
@@ -360,7 +359,7 @@ throw — they are silent by construction.
   A `ready` state with neither engaged would make **both** arms no-ops, and the
   completion could then never resolve for anybody. `setException(nullptr)`
   substituting a `std::runtime_error` is what keeps that state unreachable (see
-  [Setting a value or exception](#setting-a-value-or-exception)); this bullet
+  [Shared state — `CompletionState<T>`](#shared-state--completionstatet)); this bullet
   depends on it staying so.
 
 - **Null-executor error drop, but no silencing.** With `cbExec == nullptr`, no
@@ -394,18 +393,16 @@ reply, or a server that hangs. In those cases *no reply of any kind* comes back,
 so no layer below the caller has anything to resolve the `Completion` with.
 
 (A frame refused by `QtWebSocketServerConfig::messagesPerSecond`'s rate limiter
-used to belong on that list. It no longer does: the transport answers it with an
-`err "rate limited"` addressed to the frame's own `callId`, so the caller's
-`Completion` fails rather than hanging. A deadline is still worth arming for the
-two cases above, which no reply can cover.)
+is not among them: the transport answers it with an `err "rate limited"`
+addressed to the frame's own `callId`, so the caller's `Completion` fails rather
+than hanging.)
 
 `Bridge::setExecuteDeadline(std::chrono::milliseconds)` closes that hole.
 
 **Opt-in, default disabled.** The deadline defaults to
-`std::chrono::milliseconds{0}`, which means "no deadline" and reproduces the
-pre-existing behavior exactly — a `Bridge` that never calls the setter behaves
-as it always did, and spawns no extra thread. The current value is readable via
-`Bridge::executeDeadline()`.
+`std::chrono::milliseconds{0}`, which means "no deadline": a `Bridge` that never
+calls the setter arms no timer and creates no scheduler. The current value is
+readable via `Bridge::executeDeadline()`.
 
 **Single-threaded WebAssembly.** `TimeoutScheduler` keeps its deadlines as
 timers on an `exec::IoLoop` — a core-cpp `core::net::PlatformLoop`; `Bridge`'s
@@ -511,8 +508,8 @@ interacts with this file's own machinery:
   the receiver, not a silently dropped error.
 - **A refused handler is destroyed, not leaked.** The wrapper and its captures
   are released with the posted closure, on the delivery executor.
-- **The ungated spellings are unchanged and undeprecated.** `then(fn)` /
-  `onError(fn)` behave exactly as before; `thenDetached(fn)` /
+- **The ungated spellings stay, undeprecated.** `then(fn)` /
+  `onError(fn)` attach with no gate; `thenDetached(fn)` /
   `onErrorDetached(fn)` are the same attachments under a name that says the
   omission was deliberate and keeps it greppable in review.
 
@@ -572,13 +569,12 @@ that will never signal.
 
 ## `detail::ISettleSink` — where a backend settles one dispatch
 
-`IBackend::execute` hands its caller a `Completion<std::shared_ptr<void>>`. For
-`Bridge::executeVia` that was never the shape it wanted: it already owns the
-typed `CompletionState<R>` its caller holds, so the erased completion existed
-only to be forwarded into the typed one by a `.then`/`.onError` pair. The
-forwarding cost six heap allocations of the 14.06 a local round trip took —
-the erased state, the two closures, their two handler vectors, and one of the
-two posted settle tasks.
+`IBackend::execute` hands its caller a `Completion<std::shared_ptr<void>>`.
+That is not the shape `Bridge::executeVia` wants: it already owns the typed
+`CompletionState<R>` its caller holds, so an erased completion would exist only
+to be forwarded into the typed one by a `.then`/`.onError` pair — an extra
+state, two closures, their two handler vectors and a second posted settle task
+per call. `IBackend::executeInto` settles a sink the caller supplies instead.
 
 `ISettleSink` is the narrow half of `CompletionState<std::shared_ptr<void>>`:
 the two calls a backend actually makes on the completion it produced.
@@ -586,7 +582,7 @@ the two calls a backend actually makes on the completion it produced.
 | Symbol | Kind | Purpose |
 |---|---|---|
 | `detail::ISettleSink` | abstract class | `settleValue(std::shared_ptr<void>)` / `settleException(const std::exception_ptr&)`. Nothing else. |
-| `detail::CompletionSettleSink` | class | The adapter that *is* a `CompletionState<std::shared_ptr<void>>`, for callers that still want the `Completion`-returning shape. `LocalBackend::execute` uses one to serve itself from `executeInto`. |
+| `detail::CompletionSettleSink` | class | The adapter over a `CompletionState<std::shared_ptr<void>>`, for callers that want the `Completion`-returning shape. `LocalBackend::execute` uses one to serve itself from `executeInto`. |
 
 ### Contract for implementers
 
@@ -602,7 +598,7 @@ the two calls a backend actually makes on the completion it produced.
   twice and the `std::size_t` counter reads `18446744073709551615`.
 - **Deliberately not `noexcept`.** `CompletionState::setValue` is not either —
   it builds a `std::function` for the posted callback — and promising more here
-  would turn a `bad_alloc` into a `std::terminate` that today it is not.
+  would turn a `bad_alloc` into a `std::terminate`.
 
 See [`backend.md`, `IBackend::executeInto`](backend.md#executeinto--settling-the-callers-own-completion) and
 [`bridge.md`, "`BridgeSink`"](bridge.md#bridgesink--the-typed-state-the-backend-settles).
@@ -640,7 +636,7 @@ for the same argument applied to the journal codec.
 | No lock | **Settle claims atomically and posts its delivery; the handler side is owned by `cbExec`** | Producer and consumer never touch the same mutable field: the outcome is write-once and published by a release store, and the handler lists are touched only on the owner, ordered by its queue. One post per settle is the price, paid even with no handler attached. |
 | Settle stores, owner delivers | **The claimant stores the outcome where it settles; only delivery is posted** | A completion settled synchronously — a `LocalBackend` bind on the owner's thread outside its tasks — is readable at once by `takeSettled`, so a handler over such a backend is bound when its constructor returns. Storing on the owner would make it look unsettled until the owner next ran. |
 | Late attach | **Posted, never run inside `then()`** | An earlier handler may still be in a queued `deliver()`; running a later one inline would overtake it. |
-| Orphan detection | **Destructor logs through `logError`** | Prevents silent loss of error information when a `Completion` is destroyed without an `onError` handler. The exception is re-thrown just to extract a message (`what()` for a `std::exception`, a generic string otherwise), which is logged; the `logError` call is itself wrapped in an empty `catch (...)` so the `noexcept` destructor never lets an exception escape. |
+| Orphan detection | **Destructor logs through `logError`** | Prevents silent loss of error information when a `Completion` is destroyed without an `onError` handler. The exception is re-thrown just to extract a message (`what()` for a `std::exception`, a generic string otherwise), which is logged through `logError`'s variadic overload; that overload is `noexcept`, so the destructor needs no guard of its own (see [Orphan detection](#orphan-detection)). |
 | No executor callback | **`cbExec == nullptr` disables posting and attaching** | A `Completion` without an executor is a write-only endpoint — the producer can set a value or error, but no callback is ever invoked. An abandoned *error* is not silenced, though: an attach sets nothing on such a state, so the error still reaches the destructor's orphan logger. |
 | First-result-wins | **`setValue`/`setException` claim `settled` with an atomic exchange; the loser returns** | An asynchronous operation should complete exactly once; subsequent calls are silently ignored, before they allocate a post. |
 | Move-only handle | **`Completion` is move-only, `CompletionState` is shared via `shared_ptr`** | The handle is owned by one consumer at a time; the shared state is owned jointly by the producer and any consumer that has moved the handle. |

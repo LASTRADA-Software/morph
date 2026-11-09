@@ -46,7 +46,8 @@ A derived async resource: the result of fetching whatever its tracked key names.
   `std::function<Completion<R>(A const&)>` fetcher, whose `Completion` must deliver on the runtime's owner.
   The fetcher is the test seam, the way to query a non-bridge source, and the path the document
   interpreter takes: its fetcher is model-free JSON dispatch through the client's query cache, which shares
-  one request and one value among queries with equal keys (spec 5 §5, "The query cache");
+  one request and one value among queries with equal keys
+  ([`../ui/interpreter.md`, "Queries and the cache"](../ui/interpreter.md#queries-and-the-cache));
 - a tracked key, `std::function<std::optional<A>()>`;
 - optionally `QueryOptions` ([Timed refresh](#timed-refresh), [Debounce](#debounce)).
 
@@ -227,12 +228,13 @@ and the handler are borrowed.
 ### Concurrency
 
 `run(action)` issues, queues or refuses one call, as `MutationOptions::concurrency` says for a run that
-arrives while another is in flight. The modes are the document's (spec 5 §5):
+arrives while another is in flight. The modes are the ones a document's mutation declaration names
+([`../ui/document.md`, "Declarations"](../ui/document.md#declarations)):
 
 | `Concurrency` | A run while another is in flight | Replies applied |
 |---|---|---|
 | `Exclusive` (default) | Refused: `run` returns `false`, nothing is sent. A second click on a pending button does nothing. | The one in flight |
-| `Serial` | Queued, and sent when the previous run of the same `serialKey` settles, a failure included. An empty `serialKey` puts every run in one queue. | Each, in order |
+| `Serial` | Queued, and sent when the previous run of the same `serialKey` settles, a failure included. `serialKey` maps the action to its queue's name; left unset, every run shares one queue. | Each, in order |
 | `Latest` | Sent | Only the newest run's reply; an older reply only stops counting as pending |
 | `Parallel` | Sent | Each, as it arrives |
 

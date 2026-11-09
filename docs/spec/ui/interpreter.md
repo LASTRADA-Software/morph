@@ -372,7 +372,7 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
 - **The shown root's `pageEdge`.** `Screen::pageEdge()` is a tracked read that starts at the view's root and, while the
   node is a `switch`, moves to the case shown now (the default when none matches) when that case holds exactly one node
   and declares no scope of its own; it answers that node's `pageEdge`, and `false` for any other node or a case of
-  several nodes. A `byWidth` switch and a nested one are seen through, and the answer follows a width or state change.
+  several nodes. A switch on the width class and a nested one are seen through, and the answer follows a width or state change.
 - **The shown root.** `pageEdge()` and `headJoined()` share one walk, `shownRoot()`: the node the screen shows as its
   root, seen through `switch`es as above. `Screen::headJoined()` answers that node's `headJoined`.
 - **The head's placement.** `Screen::leadPlacement()` is a tracked read of the document's `leadPlacement` as a

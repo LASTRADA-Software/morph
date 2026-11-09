@@ -15,8 +15,8 @@ promise), [wire.md](core/wire.md) (the `Envelope`/`kind` contract; its
 wire's own versioning and deprecation-window discipline — the independent
 axis described below), `docs/spec/pinned_facts.toml` and
 [CONTRIBUTING.md](../../CONTRIBUTING.md#quality-gates) (the pinned-facts
-drift guard this policy's still-manual public-surface check could grow into
-once it gains a symbol roster — see "Known limitation" below), `AGENTS.md`
+drift guard; see "Known limitation" below for how it relates to a
+public-surface check), `AGENTS.md`
 (the "specs are the authoritative contract" rule this policy's major/minor/
 patch classification relies on).
 
@@ -41,23 +41,22 @@ cannot silently disagree.
 morph follows [Semantic Versioning 2.0.0](https://semver.org/). Per semver's
 own rule for major version `0`, **morph has not yet made a 1.0 compatibility
 promise**: any `0.x` release, including a patch release, may change anything
-without a major bump — `0.1.0` is still initial development. The rest of this
-document states the promise morph commits to **starting at 1.0.0**, published
-now so it is public and reviewable before it takes effect, rather than
-invented after the fact.
+without a major bump — `0.1.0` is initial development. The rest of this
+document states the promise morph commits to **starting at 1.0.0**; it is
+published ahead of 1.0 so it can be reviewed before it takes effect.
 
 ## The stable surface
 
 The stable surface is every non-`detail` symbol in morph's per-topic public
 namespaces, exactly as [ARCHITECTURE.md](../ARCHITECTURE.md)'s namespace map
-defines them: `morph::log`, `morph::exec`, `morph::async`, `morph::model`
-(traits and `Loggable`), `morph::backend` (`LocalBackend`/`RemoteServer`/
-`SimulatedRemoteBackend`), `morph::bridge`, `morph::offline`, `morph::session`,
+defines them (`morph::log`, `morph::exec`, `morph::async`, `morph::model`,
+`morph::backend`, `morph::bridge`, `morph::offline`, `morph::session`,
 `morph::journal`, `morph::math`, `morph::units`, `morph::time`, `morph::forms`,
-`morph::version`, `morph::qt` — plus the registration macros
-(`BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION`, `BRIDGE_REGISTER_VALIDATOR`),
-the `MORPH_VERSION*` macros above, and the wire `Envelope`/`kind` contract
-([wire.md](core/wire.md)).
+`morph::version`, `morph::qt`, and the rest of that table) — plus the
+registration macros (`BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION`,
+`BRIDGE_REGISTER_VALIDATOR`, `BRIDGE_REGISTER_RECORD`,
+`BRIDGE_REGISTER_EFFECTS`), the `MORPH_VERSION*` macros above, and the wire
+`Envelope`/`kind` contract ([wire.md](core/wire.md)).
 
 Every nested `detail` namespace is explicitly **not** part of the stable
 surface. A `detail` symbol can still appear in a public signature — e.g.
@@ -70,9 +69,11 @@ including a patch.
 
 ## Semantic versioning applies to source compatibility, not ABI
 
-morph is **header-only** ([ARCHITECTURE.md](../ARCHITECTURE.md)): there is no
-shared-object ABI to preserve, and none is promised — every consumer
-recompiles against the headers on every release. What semantic versioning
+morph's core is **header-only**, and its optional compiled parts (the Qt
+integration, the frontends, the generic client) are static libraries
+([ARCHITECTURE.md](../ARCHITECTURE.md)): there is no shared-object ABI to
+preserve, and none is promised — every consumer recompiles against the
+headers on every release. What semantic versioning
 governs here is **source** compatibility of the stable surface — whether a
 consumer's existing `#include`s and call sites still compile and behave the
 same:
@@ -104,8 +105,8 @@ major release:
    ```
 
    e.g. `[[deprecated("removed in 2.0.0; use morph::bridge::NewThing instead")]]`.
-   a gate removed on 2026-09-23 enforces this exact shape in CI (the
-   `deprecation-lint` job) — see "What CI enforces today" below.
+   Review enforces this shape; no CI job checks it (see "What CI enforces
+   today" below).
 2. It keeps working, unchanged, for **at least one full minor release**.
 3. Its impending removal is recorded in the affected spec's
    Status/Limitations section.
@@ -144,11 +145,6 @@ The C++ API version (this document) and the **wire protocol version**
   `PATCH` values `tests/CMakeLists.txt` forwards from `CMakeLists.txt`'s
   `project(morph VERSION ...)`, so the header and the build system cannot
   silently drift apart.
-- **Deprecation markers are well-formed.** The `deprecation-lint` job
-  (`.github/workflows/ci.yml`) runs a gate removed on 2026-09-23
-  against `include/morph`, failing the build if any `[[deprecated("...")]]`
-  message does not name both a target removal version and a replacement in
-  the shape given above.
 - **Every public symbol is documented.** The existing Doxygen job (`AGENTS.md`,
   `.github/workflows/docs.yml`) already runs with `WARN_AS_ERROR =
   FAIL_ON_WARNINGS`, failing the build if any public symbol — including every
@@ -159,29 +155,27 @@ The C++ API version (this document) and the **wire protocol version**
 - **Individual mechanical facts cannot silently drift.**
   `docs/spec/pinned_facts.toml` pins specific mechanical facts that recur
   across specs — key constants, enum cardinalities, canonical error/reply
-  strings — and two checks enforce them: `tests/test_pinned_facts.cpp`
-  (real code vs. the manifest) and a gate removed on 2026-09-23 (the
-  spec prose vs. the manifest). This is a narrower, already-shipped relative
-  of the gap described next: it pins individual facts a human names in the
-  manifest, not an enumerated roster of every symbol on the stable surface.
+  strings — and `tests/test_pinned_facts.cpp` checks the real code against
+  the manifest. Nothing checks the spec prose against the manifest; keeping
+  them consistent is the author's job. The manifest pins individual facts a
+  human names, not an enumerated roster of every symbol on the stable
+  surface.
 
-## Known limitation: no automated public-surface diff yet
+Not enforced by CI: the shape of `[[deprecated("...")]]` messages, and the
+public-surface classification described next.
 
-There is currently **no CI check that fails a pull request for removing or
-renaming a stable public symbol without a major-version bump** —
-classifying a change as major/minor/patch is manual (author and reviewer
-judgement) today. The pinned-facts drift guard described above
-(`docs/spec/pinned_facts.toml`, `tests/test_pinned_facts.cpp`,
-a gate removed on 2026-09-23) has landed since this policy was first
-drafted, and its manifest-plus-generated-header pattern is a plausible
-foundation to build on: it already proves out "a human-pinned fact, checked
-against the real code, at CI time." But its manifest format is flat
-`KEY = value` scalar facts named one at a time, not an enumerated inventory
-of every symbol on the stable surface — growing it into a public-symbol
-diff (one entry per stable symbol, a CI job that fails on an unlisted
-removal or rename) is new work that has not been done, not something that
-falls out of the existing manifest for free. Until that work lands, this one
-piece of the policy is enforced by review discipline alone.
+## Known limitation: no automated public-surface diff
+
+There is **no CI check that fails a pull request for removing or renaming a
+stable public symbol without a major-version bump** — classifying a change as
+major/minor/patch is author and reviewer judgement. The pinned-facts drift
+guard (`docs/spec/pinned_facts.toml`, `tests/test_pinned_facts.cpp`) shows
+the pattern such a check could use — a human-pinned fact checked against the
+real code at CI time — but its manifest holds flat `KEY = value` scalar facts
+named one at a time, not an inventory of every stable symbol. A public-symbol
+diff (one entry per stable symbol, a CI job that fails on an unlisted removal
+or rename) would be new work. Until it exists, this piece of the policy is
+enforced by review alone.
 
 ## Non-goals
 

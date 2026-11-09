@@ -12,15 +12,15 @@ exactly right when a form is fixed at compile time. It is wrong the moment form
 decimal places and whose version 2 declares one has two definitions of one
 compiled action, and nothing in the compiled type can tell them apart.
 
-Before this header the only way out was for the application to patch a
+Without a framework seam the application's only way out is to patch a
 **second, app-private key** beside the framework's — `x-versionDecimalPlaces`
 next to `x-decimalPlaces` — and re-implement the check by hand in the model.
 That is worse than either key alone: a renderer is handed two numbers for one
-concept with no way to know which is true. Bounds fared worse still. A
-specification range could only be served as an `x-specHigh` no framework code
-read, so a value outside the range a form had just advertised passed
-`validate()` and is stored with nothing anywhere recording that it was out of
-range.
+concept with no way to know which is true. Bounds are worse still. A
+specification range can then only be served as an app key such as `x-specHigh`
+that no framework code reads, so a value outside the range a form has just
+advertised passes `validate()` and is stored with nothing recording that it was
+out of range.
 
 ## What it is
 
@@ -70,9 +70,9 @@ Added to the renderer contract in [forms.md](forms.md#renderer-contract-the-sche
 
 | Key | Where | Meaning |
 |---|---|---|
-| `x-decimalPlaces` | property node | **Overwritten** with the instance's precision when one is declared. Same meaning as always — the entry granularity — now sourced from data. |
+| `x-decimalPlaces` | property node | **Overwritten** with the instance's precision when one is declared. Same meaning as the compiled key — the entry granularity — sourced from data. |
 | `x-minimum` / `x-maximum` | property node | The instance's inclusive bounds, as `{"num","den","dp"}` — the same node shape a `Rational` takes on the wire, so a renderer parses a bound exactly the way it parses the value it bounds. Distinct from `x-min`/`x-max`, which are a *slider track* and are never checked. |
-| `x-instanceConstraints` | top-level | Array of the wire field names whose keys came from instance data rather than from the compiled type. **This is what makes a decorated schema self-describing**: without it a renderer could not tell an instance-sourced `x-decimalPlaces` from a compiled one, which is the ambiguity the two-key workaround created in the first place. |
+| `x-instanceConstraints` | top-level | Array of the wire field names whose keys came from instance data rather than from the compiled type. **This is what makes a decorated schema self-describing**: without it a renderer could not tell an instance-sourced `x-decimalPlaces` from a compiled one, which is the ambiguity an app-private second key would reintroduce. |
 
 Emitted only when at least one declared field actually exists on the schema; a
 schema with no decorations carries no `x-instanceConstraints` key.
@@ -116,7 +116,7 @@ Decoration never throws and never mangles. A schema that is not readable JSON,
 or that has no `properties` object, is returned verbatim; a constraint naming a
 field the schema has no property for is skipped. This is the same "an
 application's declaration mistake is not worth a crash" rule `formLayout` and
-`fieldSpans` already follow in `mergeSchemaExtras`.
+`fieldSpans` follow in `mergeSchemaExtras`.
 
 ## Design decisions
 
@@ -129,7 +129,7 @@ result is the finding the laboratory exists to report — refusing it would
 destroy the observation — while a reading finer than the method supports is a
 claim about the instrument and must be refused rather than rounded. A framework
 that picked one would be wrong for the other. What the framework guarantees is
-that the violation is *nameable*, which is precisely what was missing.
+that the violation is *nameable*.
 
 ### Why dispatch cannot apply these automatically
 
