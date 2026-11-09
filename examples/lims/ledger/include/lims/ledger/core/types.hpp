@@ -30,6 +30,12 @@ enum class PeriodState : std::uint8_t {
     Closed,   ///< Frozen: nothing more is recorded in it.
 };
 
+/// @brief Where a journal entry stands.
+enum class EntryState : std::uint8_t {
+    Draft,   ///< Made and not yet in the balances; it is only ever posted.
+    Posted,  ///< In the balances and immutable; a correction is a reversal.
+};
+
 }  // namespace lims
 
 LIMS_DEFINE_STRONG_ID_WIRE(AccountId);
@@ -53,4 +59,13 @@ struct glz::meta<lims::PeriodState> {
 
     /// @brief The enumerator ⇄ name mapping glaze reads and writes.
     static constexpr auto value = glz::enumerate(Open, Closing, Closed);
+};
+
+/// @brief Reflects `EntryState` as its enumerator name.
+template <>
+struct glz::meta<lims::EntryState> {
+    using enum lims::EntryState;
+
+    /// @brief The enumerator ⇄ name mapping glaze reads and writes.
+    static constexpr auto value = glz::enumerate(Draft, Posted);
 };

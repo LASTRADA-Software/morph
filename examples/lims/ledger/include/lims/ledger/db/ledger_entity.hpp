@@ -34,4 +34,41 @@ struct PeriodRecord {
     Light::Field<int, Light::SqlRealName{"state"}> state{0};  // 3
 };
 
+/// @brief One journal entry's header.
+struct EntryRecord {
+    static constexpr std::string_view TableName = "ledger_entries";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"period_id"}> period{0};                                 // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"date_ms"}> dateMs{0};                                   // 3
+    /// @brief `EntryState` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"state"}> state{0};                                          // 4
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"source_key"}> sourceKey;              // 5
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"source_reference"}> sourceReference;  // 6
+    Light::Field<Light::SqlAnsiString<255>, Light::SqlRealName{"memo"}> memo;                         // 7
+    /// @brief `CurrencyCode` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"currency"}> currency{0};                                 // 8
+    Light::Field<std::int64_t, Light::SqlRealName{"rate_num"}> rateNum{1};                         // 9
+    Light::Field<std::int64_t, Light::SqlRealName{"rate_den"}> rateDen{1};                         // 10
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"reverses_id"}> reversesId;       // 11
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"reversed_by_id"}> reversedById;  // 12
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"created_by"}> createdBy;            // 13
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"posted_by"}> postedBy;              // 14
+};
+
+/// @brief One line of one entry.
+struct EntryLineRecord {
+    static constexpr std::string_view TableName = "ledger_entry_lines";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"entry_id"}> entry{0};                                   // 1
+    Light::Field<int, Light::SqlRealName{"position"}> position{0};                                         // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"account_id"}> account{0};                               // 3
+    /// @brief `PostingSide` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"side"}> side{0};                        // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"amount_num"}> amountNum{0};    // 5
+    Light::Field<std::int64_t, Light::SqlRealName{"amount_den"}> amountDen{1};    // 6
+    Light::Field<std::int64_t, Light::SqlRealName{"company_num"}> companyNum{0};  // 7
+    Light::Field<std::int64_t, Light::SqlRealName{"company_den"}> companyDen{1};  // 8
+};
+
 }  // namespace lims::db

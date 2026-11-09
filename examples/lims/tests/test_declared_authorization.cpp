@@ -366,7 +366,8 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
                    lims::HeaderSection, lims::SamplingSection, lims::TurbiditySection, lims::NitrateSection,
                    lims::ClearOptionalMeasurement, lims::SelectProject, lims::AddIgnitionTest,
                    lims::RecordIgnitionValues, lims::DeleteIgnitionTest, lims::SetValueLimit, lims::CreateAccount,
-                   lims::OpenPeriod, lims::BeginClosePeriod>;
+                   lims::OpenPeriod, lims::BeginClosePeriod, lims::CreateDraftEntry, lims::PostEntry,
+                   lims::ReverseEntry>;
     std::set<std::string_view> listed;
     std::set<std::string_view> declared;
     std::apply(
@@ -441,6 +442,9 @@ TEST_CASE("declared authorization: the edge's table lists every declared role, a
     CHECK(lims::app::requiredRole("AssignRole") == lims::LimsRole::Supervisor);
     CHECK(lims::app::requiredRole("RevokeRole") == lims::LimsRole::Supervisor);
     CHECK(lims::app::requiredRole("SetValueLimit") == lims::LimsRole::Supervisor);
+    CHECK(lims::app::requiredRole("CreateDraftEntry") == lims::LimsRole::Accountant);
+    CHECK(lims::app::requiredRole("PostEntry") == lims::LimsRole::Accountant);
+    CHECK(lims::app::requiredRole("ReverseEntry") == lims::LimsRole::Accountant);
     // Some role, whichever: declared, but no specific role.
     CHECK(lims::app::requirementFor("CaptureConcentration").has_value());
     CHECK_FALSE(lims::app::requiredRole("CaptureConcentration").has_value());
