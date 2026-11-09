@@ -620,7 +620,7 @@ TEST_CASE("Every refused action kind is named in the trail, not lumped as unread
                     lims::ValidationError);
     CHECK_THROWS_AS(
         bench.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "no such conflict"}),
-        lims::NotFound);
+        lims::Forbidden);
 
     std::vector<lims::AuditStepKind> refusedKinds;
     for (const auto& step : bench.execute(lims::GetAuditTrail{}).steps) {

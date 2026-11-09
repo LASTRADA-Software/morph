@@ -735,6 +735,9 @@ ConflictView SampleModel::execute(const ResolveConflict& action) {
         if (!action.validate()) {
             throw ValidationError{"ResolveConflict: a conflict and a stated reason are required"};
         }
+        // Before the conflict is looked up: a conflict that does not exist holds no role, so a caller without one
+        // learns nothing about which conflicts exist.
+        requireAuthorized(action);
         Lightweight::DataMapper mapper;
         auto rows = mapper.Query<db::OfflineConflictRecord>()
                         .Where(::Lightweight::FieldNameOf<&db::OfflineConflictRecord::id>, "=", *action.conflictId)

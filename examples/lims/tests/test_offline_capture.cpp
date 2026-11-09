@@ -368,7 +368,7 @@ TEST_CASE("Applying a conflict anyway rebases it onto the current version", "[li
     CHECK(*reader.execute(lims::GetSample{}).version == versionBefore + 1);
 }
 
-TEST_CASE("Resolving needs a stated reason and a conflict that exists", "[lims][offline][resolution]") {
+TEST_CASE("Resolving needs a stated reason and a conflict the caller may see", "[lims][offline][resolution]") {
     lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
@@ -377,7 +377,7 @@ TEST_CASE("Resolving needs a stated reason and a conflict that exists", "[lims][
     CHECK_THROWS_AS(model.execute(lims::ResolveConflict{.note = "no id"}), lims::ValidationError);
     CHECK_THROWS_AS(
         model.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "no such conflict"}),
-        lims::NotFound);
+        lims::Forbidden);
 }
 
 // ── Replay's own guards ────────────────────────────────────────────────────

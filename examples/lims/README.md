@@ -771,11 +771,12 @@ declares `Supervisor` at the site's company.
 Every write on a sample declares that the caller holds some role, whichever, at the sample's site (a role at the
 site's company counts): `RegisterSample` at the site its payload names, the lifecycle transitions and
 `CaptureConcentration` at the site of the sample the handler is attached to, and `QueuedCapture` at the site of the
-sample it names. A principal of another company is refused on all of them. `QueuedCapture` replays as the operator who
+sample it names, and `ResolveConflict` at the site of the sample the conflict belongs to. A principal of another
+company is refused on all of them. `QueuedCapture` replays as the operator who
 captured the reading (decision 13), so the check applies to that operator at replay time: an operator who has lost
 their role at the site is refused when the queue reaches the server, whatever role they held when they took the
 reading. The check runs before the site or sample is looked up, so a caller without a role at the named site gets
-`Forbidden` whether or not it exists. `ResolveConflict` and the sample-entry actions remain open, listed in
+`Forbidden` whether or not it exists. The sample-entry actions remain open, listed in
 `lims::app::openMutatingActions`; ignition tests are open because they belong to no site (decision 22).
 
 **Hypothesis 6 (authorization cannot see the payload) is confirmed for this instance.**

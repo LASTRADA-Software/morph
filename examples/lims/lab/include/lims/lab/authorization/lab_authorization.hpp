@@ -67,6 +67,18 @@ struct Authorization<QueuedCapture> {
     [[nodiscard]] static Scope scopeOf(QueuedCapture const& action) { return siteScopeOfSample(action.sampleId); }
 };
 
+/// @brief Resolving an offline-capture conflict needs some role at the site of the conflict's sample.
+template <>
+struct Authorization<ResolveConflict> {
+    /// @brief Any role is enough.
+    static constexpr bool anyRole = true;
+
+    /// @brief The site of the sample the payload's conflict belongs to.
+    /// @param action The action.
+    /// @return That site; an empty site when the conflict or its sample does not exist, which holds no role.
+    [[nodiscard]] static Scope scopeOf(ResolveConflict const& action);
+};
+
 /// @brief Registering a sample needs some role at the site the payload names.
 template <>
 struct Authorization<RegisterSample> {

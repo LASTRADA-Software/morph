@@ -196,6 +196,37 @@ struct LabWrite {
     std::function<void(lims::SampleModel&, Bench const&, std::string const&)> run;
 };
 
+/// @brief Flags an open conflict on the bench's sample, as the offline replay does.
+/// @param bench The bench.
+/// @return The conflict's id.
+[[nodiscard]] lims::ConflictId flagConflict(Bench const& bench) {
+    Lightweight::DataMapper mapper;
+    lims::db::OfflineConflictRecord row;
+    row.sample = static_cast<std::uint64_t>(*bench.sample);
+    row.baseVersion = 1;
+    row.serverVersion = 2;
+    row.reason = static_cast<int>(lims::ConflictReason::StaleBase);
+    row.status = static_cast<int>(lims::ConflictStatus::Open);
+    row.payload = Lightweight::SqlDynamicAnsiString<4096>{std::string{"{}"}};
+    row.detectedBy = Lightweight::SqlAnsiString<64>{std::string{"fiona"}};
+    row.detectedAt = 1;
+    row.resolvedBy = Lightweight::SqlAnsiString<64>{std::string{}};
+    row.resolutionNote = Lightweight::SqlAnsiString<255>{std::string{}};
+    mapper.Create(row);
+    return lims::ConflictId{static_cast<std::int64_t>(row.id.Value())};
+}
+
+/// @brief The status of every conflict row.
+/// @return The statuses, in id order.
+[[nodiscard]] std::vector<int> conflictStatuses() {
+    Lightweight::DataMapper mapper;
+    std::vector<int> statuses;
+    for (auto const& row : mapper.Query<lims::db::OfflineConflictRecord>().All()) {
+        statuses.push_back(row.status.Value());
+    }
+    return statuses;
+}
+
 /// @brief Every write on a sample, one per action: the registration, each lifecycle edge, a capture and a replay.
 /// @return The table.
 [[nodiscard]] std::vector<LabWrite> labWrites() {
@@ -233,6 +264,12 @@ struct LabWrite {
                                                .capturedBy = who,
                                                .operationKey = lims::OperationKey{"op-" + who},
                                                .capture = reading(bench)});
+         }},
+        {"ResolveConflict", SampleState::Registered,
+         [](lims::SampleModel& model, Bench const& bench, std::string const&) {
+             model.execute(lims::ResolveConflict{.conflictId = flagConflict(bench),
+                                                 .resolution = lims::ConflictResolution::DiscardStale,
+                                                 .note = "duplicate"});
          }},
     };
 }
@@ -612,6 +649,8 @@ TEST_CASE("declared authorization: a caller without a role at the site is refuse
                                                       .operationKey = lims::OperationKey{"op-ghost"},
                                                       .capture = reading(bench)}),
                     lims::Forbidden);
+    CHECK_THROWS_AS(model.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "ghost"}),
+                    lims::Forbidden);
 }
 
 // The replay runs as the operator who captured the reading, so the check is about that operator when the queue
@@ -638,8 +677,8 @@ TEST_CASE("declared authorization: a queued capture is judged on the operator's 
                       Catch::Matchers::ContainsSubstring("does not hold any role at site"));
 }
 
-// Mutation: drop the requirement from RegisterSample or ReceiveSample (eve's call is recorded in that mode). The
-// edge lets eve through, as she holds a role somewhere; only the model, which sees the site, refuses her.
+// Mutation: drop the requirement from RegisterSample, ReceiveSample or ResolveConflict (eve's call is recorded in that
+// mode). The edge lets eve through, as she holds a role somewhere; only the model, which sees the site, refuses her.
 TEST_CASE("declared authorization: the model refuses a write at another company's site on every backend",
           "[lims][authorization][lab][matrix]") {
     auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
@@ -666,6 +705,16 @@ TEST_CASE("declared authorization: the model refuses a write at another company'
     CHECK_THROWS_WITH(awaitQt(handler.execute(lims::ReceiveSample{})),
                       Catch::Matchers::ContainsSubstring("does not hold any role at site"));
     CHECK(sampleTables() == before);
+
+    // A conflict on a sample of the other company's site is refused the same way, and stays open.
+    auto const conflict = flagConflict(bench);
+    BridgeHandler<lims::SampleModel, AllowShared> resolver{rig.bridge(0), rig.executor()};
+    awaitQt(resolver.execute(lims::OpenSample{.sampleId = bench.sample}));
+    CHECK_THROWS_WITH(
+        awaitQt(resolver.execute(lims::ResolveConflict{
+            .conflictId = conflict, .resolution = lims::ConflictResolution::DiscardStale, .note = "not mine"})),
+        Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+    CHECK(conflictStatuses() == std::vector<int>{static_cast<int>(lims::ConflictStatus::Open)});
 }
 
 // ── Hypothesis 6 ───────────────────────────────────────────────────────────

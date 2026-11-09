@@ -36,6 +36,20 @@ Scope siteScopeOfSample(SampleId sample) {
     return samples.empty() ? Scope{SiteId{}} : Scope{SiteId::fromOptional(samples.front().siteId.Value())};
 }
 
+Scope Authorization<ResolveConflict>::scopeOf(ResolveConflict const& action) {
+    if (!action.conflictId.hasValue()) {
+        return Scope{SiteId{}};
+    }
+    Lightweight::DataMapper mapper;
+    auto const conflicts =
+        mapper.Query<db::OfflineConflictRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::OfflineConflictRecord::id>, "=", *action.conflictId)
+            .All();
+    return conflicts.empty()
+               ? Scope{SiteId{}}
+               : siteScopeOfSample(SampleId{static_cast<std::int64_t>(conflicts.front().sample.Value())});
+}
+
 Scope Authorization<VerifyResult>::scopeOf(VerifyResult const& action) {
     Lightweight::DataMapper mapper;
     auto const results = resultRows(mapper, action.resultId);
