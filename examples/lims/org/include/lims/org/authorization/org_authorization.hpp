@@ -3,6 +3,7 @@
 
 #include "lims/org/authorization/declared.hpp"
 #include "lims/org/dto/company_dto.hpp"
+#include "lims/org/dto/limit_dto.hpp"
 #include "lims/org/dto/role_dto.hpp"
 
 /// @file
@@ -56,5 +57,9 @@ struct Authorization<RevokeRole> {
     /// @return Its scope; an empty company scope when there is no such assignment.
     [[nodiscard]] static Scope scopeOf(RevokeRole const& action);
 };
+
+/// @brief A value limit is set by a supervisor at its company.
+template <>
+struct Authorization<SetValueLimit> : CompanyRule<SetValueLimit, LimsRole::Supervisor> {};
 
 }  // namespace lims

@@ -46,4 +46,16 @@ LIGHTWEIGHT_SQL_MIGRATION(20261109000003, "Create org_role_assignments") {
         .RequiredColumn("granted_by", Varchar(64))
         .RequiredColumn("granted_at", Bigint());
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20261110000001, "Create org_value_limits") {
+    plan.CreateTableIfNotExists("org_value_limits")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("principal", Varchar(64))
+        .RequiredForeignKey("company_id", Bigint(),
+                            SqlForeignKeyReferenceDefinition{.tableName = "org_companies", .columnName = "id"})
+        .RequiredColumn("limit_num", Bigint())
+        .RequiredColumn("limit_den", Bigint())
+        .RequiredColumn("set_by", Varchar(64))
+        .RequiredColumn("set_at", Bigint());
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

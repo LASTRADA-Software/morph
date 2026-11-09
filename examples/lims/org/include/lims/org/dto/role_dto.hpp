@@ -26,9 +26,12 @@ namespace lims {
 /// an implicit hierarchy is the kind of thing that quietly grants somebody
 /// the second pair of eyes on their own work.
 enum class LimsRole : std::uint8_t {
-    Analyst,     ///< May capture results.
-    Verifier,    ///< May verify somebody else's results.
-    Supervisor,  ///< May grant and revoke roles.
+    Analyst,          ///< May capture results.
+    Verifier,         ///< May verify somebody else's results.
+    Supervisor,       ///< May grant and revoke roles, and set value limits.
+    Accountant,       ///< May keep a company's ledger: accounts, periods, entries and rates.
+    BillingClerk,     ///< May keep a company's billing: prices, clients, invoices and billing runs.
+    InvoiceApprover,  ///< May approve somebody else's invoice up to their value limit.
 };
 
 /// @brief The stable ascii name of @p role, as it appears in a token claim and
@@ -43,6 +46,12 @@ enum class LimsRole : std::uint8_t {
             return "verifier";
         case LimsRole::Supervisor:
             return "supervisor";
+        case LimsRole::Accountant:
+            return "accountant";
+        case LimsRole::BillingClerk:
+            return "billing-clerk";
+        case LimsRole::InvoiceApprover:
+            return "invoice-approver";
         default:
             return "unknown";
     }
@@ -158,7 +167,8 @@ struct glz::meta<lims::LimsRole> {
     using enum lims::LimsRole;
 
     /// @brief The enumerator ⇄ name mapping glaze reads and writes.
-    static constexpr auto value = glz::enumerate(Analyst, Verifier, Supervisor);
+    static constexpr auto value =
+        glz::enumerate(Analyst, Verifier, Supervisor, Accountant, BillingClerk, InvoiceApprover);
 };
 
 BRIDGE_REGISTER_RECORD(lims::RoleAssignmentView, "Org_RoleAssignment")

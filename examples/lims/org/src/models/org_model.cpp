@@ -16,6 +16,7 @@
 #include "lims/org/authorization/org_authorization.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
+#include "lims/org/core/money.hpp"
 #include "lims/org/db/org_entity.hpp"
 
 namespace lims {
@@ -59,7 +60,7 @@ constexpr int kMaxMonth = static_cast<int>(Month::December);
 }
 
 /// @brief The highest stored value of `LimsRole`.
-constexpr int kMaxRole = static_cast<int>(LimsRole::Supervisor);
+constexpr int kMaxRole = static_cast<int>(LimsRole::InvoiceApprover);
 
 /// @brief The highest stored value of `ScopeKind`.
 constexpr int kMaxScopeKind = static_cast<int>(ScopeKind::Site);
@@ -154,6 +155,24 @@ void addOnce(std::vector<LimsRole>& roles, LimsRole role) {
         roles.push_back(role);
     }
 }
+
+/// @brief Maps a value-limit row to its view, its limit at @p currency's decimals.
+/// @param row The row.
+/// @param currency The company's base currency.
+/// @return The view.
+[[nodiscard]] ValueLimitView toView(db::ValueLimitRecord const& row, CurrencyCode currency) {
+    return ValueLimitView{
+        .id = ValueLimitId{static_cast<std::int64_t>(row.id.Value())},
+        .principal = std::string{row.principal.Value().ToStringView()},
+        .company = CompanyId{static_cast<std::int64_t>(row.company.Value())},
+        .limit = Amount{::morph::math::Rational{::morph::math::Numerator{row.limitNum.Value()},
+                                                ::morph::math::Denominator{row.limitDen.Value()},
+                                                ::morph::math::DecimalPlaces{decimalsOf(currency)}}},
+        .setBy = std::string{row.setBy.Value().ToStringView()},
+        .setAt = timestampFromMillis(row.setAt.Value()),
+    };
+}
+
 }  // namespace
 
 CompanyView OrgModel::execute(const CreateCompany& action) {
@@ -463,6 +482,97 @@ std::optional<SiteView> OrgModel::findSite(SiteId site) {
         return std::nullopt;
     }
     return toView(rows.front());
+}
+
+std::optional<CompanyView> OrgModel::findCompany(CompanyId company) {
+    if (!company.hasValue()) {
+        return std::nullopt;
+    }
+    Lightweight::DataMapper mapper;
+    auto const rows = mapper.Query<db::CompanyRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::CompanyRecord::id>, "=", *company)
+                          .All();
+    if (rows.empty()) {
+        return std::nullopt;
+    }
+    return toView(rows.front());
+}
+
+ValueLimitView OrgModel::execute(const SetValueLimit& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"SetValueLimit: a principal, a company and a limit are required"};
+    }
+    requireRoleSomewhere<SetValueLimit>();
+    auto const company = findCompany(action.company);
+    if (!company.has_value()) {
+        throw NotFound{"SetValueLimit: company " + std::to_string(*action.company) + " does not exist"};
+    }
+    requireAuthorized(action);
+    auto const& limit = *action.limit;
+    if (limit.numerator < 0 || !fitsCurrency(limit, company->baseCurrency)) {
+        throw ValidationError{"SetValueLimit: a limit is a non-negative amount in " +
+                              std::string{currencyName(company->baseCurrency)}};
+    }
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto rows = mapper.Query<db::ValueLimitRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::principal>, "=", action.principal)
+                    .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::company>, "=", *action.company)
+                    .All();
+    db::ValueLimitRecord row = rows.empty() ? db::ValueLimitRecord{} : rows.front();
+    row.principal = Lightweight::SqlAnsiString<64>{action.principal};
+    row.company = static_cast<std::uint64_t>(*action.company);
+    row.limitNum = limit.numerator;
+    row.limitDen = limit.denominator;
+    row.setBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
+    row.setAt = nowMillis();
+    if (rows.empty()) {
+        mapper.Create(row);
+    } else {
+        mapper.Update(row);
+    }
+    sqlTxn.Commit();
+    return toView(row, company->baseCurrency);
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+ListValueLimitsResult OrgModel::execute(const ListValueLimits& action) {
+    static_cast<void>(action);
+    auto const visible = visibleCompanies(currentPrincipal());
+    Lightweight::DataMapper mapper;
+    ListValueLimitsResult result;
+    for (auto const& row : mapper.Query<db::ValueLimitRecord>().All()) {
+        CompanyId const company{static_cast<std::int64_t>(row.company.Value())};
+        if (std::ranges::find(visible, company) == visible.end()) {
+            continue;
+        }
+        auto const view = findCompany(company);
+        if (!view.has_value()) {
+            continue;
+        }
+        result.limits.push_back(toView(row, view->baseCurrency));
+    }
+    std::ranges::sort(result.limits, {}, [](ValueLimitView const& limit) { return *limit.id; });
+    return result;
+}
+
+std::optional<::morph::math::Rational> OrgModel::valueLimit(std::string_view principal, CompanyId company) {
+    auto const view = findCompany(company);
+    if (!view.has_value()) {
+        return std::nullopt;
+    }
+    Lightweight::DataMapper mapper;
+    auto const rows =
+        mapper.Query<db::ValueLimitRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::principal>, "=", std::string{principal})
+            .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::company>, "=", *company)
+            .All();
+    if (rows.empty()) {
+        return std::nullopt;
+    }
+    return *toView(rows.front(), view->baseCurrency).limit;
 }
 
 }  // namespace lims

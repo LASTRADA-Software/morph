@@ -113,6 +113,20 @@ concept DeclaresSeparation = DeclaresRule<Action> && requires(Action const& acti
     { Authorization<Action>::firstPerformerOf(action) } -> std::convertible_to<std::optional<std::string>>;
 };
 
+/// @brief A rule needing @p Role at the company the action's `company` field names: the shape most ERP actions have.
+/// @tparam Action An action with a `CompanyId company` member.
+/// @tparam Role The role.
+template <typename Action, LimsRole Role>
+struct CompanyRule {
+    /// @brief The role.
+    static constexpr LimsRole role = Role;
+
+    /// @brief The company the payload names.
+    /// @param action The action.
+    /// @return Its company.
+    [[nodiscard]] static Scope scopeOf(Action const& action) { return Scope{action.company}; }
+};
+
 /// @brief What a declared rule decides.
 enum class Verdict : std::uint8_t {
     Allowed,      ///< Every declared condition holds.

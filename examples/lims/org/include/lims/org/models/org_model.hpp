@@ -4,11 +4,13 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/util/rational.hpp>
 #include <optional>
 #include <string_view>
 #include <vector>
 
 #include "lims/org/dto/company_dto.hpp"
+#include "lims/org/dto/limit_dto.hpp"
 #include "lims/org/dto/role_dto.hpp"
 
 /// @file
@@ -126,6 +128,33 @@ public:
     /// @param site The site.
     /// @return It, or nothing when @p site is empty or names no site.
     [[nodiscard]] static std::optional<SiteView> findSite(SiteId site);
+
+    /// @brief Sets a principal's value limit at a company, replacing any they had there.
+    /// @param action The principal, the company and the limit.
+    /// @return The limit as stored.
+    /// @throws ValidationError if the request is malformed, or the limit is negative or does not fit the company's
+    ///         currency.
+    /// @throws NotFound if the company does not exist.
+    /// @throws Forbidden if the caller is not a supervisor at the company.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    ValueLimitView execute(const SetValueLimit& action);
+
+    /// @brief Lists the value limits at the companies the caller can see.
+    /// @param action Carries nothing.
+    /// @return The limits, by id.
+    ListValueLimitsResult execute(const ListValueLimits& action);
+
+    /// @brief @p principal's value limit at @p company.
+    /// @param principal The principal.
+    /// @param company The company.
+    /// @return The limit in the company's base currency; nothing when they have none.
+    [[nodiscard]] static std::optional<::morph::math::Rational> valueLimit(std::string_view principal,
+                                                                           CompanyId company);
+
+    /// @brief The company with @p company's id, for a module that keeps books in its currency.
+    /// @param company The company.
+    /// @return It, or nothing when @p company is empty or names no company.
+    [[nodiscard]] static std::optional<CompanyView> findCompany(CompanyId company);
 };
 
 }  // namespace lims
@@ -150,4 +179,7 @@ BRIDGE_REGISTER_EFFECTS(lims::RevokeRole, ::morph::effects::changes<lims::RoleAs
                         ::morph::effects::changes<lims::SiteView>)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListRoleAssignments, "ListRoleAssignments", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListUsers, "ListUsers", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::SetValueLimit, "SetValueLimit")
+BRIDGE_REGISTER_EFFECTS(lims::SetValueLimit, ::morph::effects::changes<lims::ValueLimitView>)
+BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListValueLimits, "ListValueLimits", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
