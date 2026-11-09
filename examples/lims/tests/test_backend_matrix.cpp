@@ -84,12 +84,12 @@ constexpr std::string_view kSecret = "lims-matrix-test-secret-at-least-32-bytes"
     return ctx;
 }
 
-/// @brief This rung's real authorizer, wired to the same `lims_operators`
-///        query the model reads.
+/// @brief This rung's real authorizer, wired to the same role assignments
+///        the models read.
 /// @return The authorizer, for `BackendRig`'s `Socket` mode.
 [[nodiscard]] std::shared_ptr<lims::auth::LimsAuthorizer> makeAuthorizer() {
     return std::make_shared<lims::auth::LimsAuthorizer>(
-        std::string{kSecret}, [](std::string_view principal) { return lims::SampleModel::rolesOf(principal); });
+        std::string{kSecret}, [](std::string_view principal) { return lims::OrgModel::rolesAnywhere(principal); });
 }
 
 }  // namespace
@@ -204,6 +204,45 @@ TEST_CASE("OrgModel over the full backend-mode matrix: a company, its site and a
     const auto registered = awaitQt(
         bench.execute(lims::RegisterSample{.siteId = site.id, .clientId = client.clientId, .reference = "OS-1"}));
     CHECK(registered.siteId == site.id);
+}
+
+TEST_CASE("OrgModel over the full backend-mode matrix: assign, list and revoke a role", "[lims][matrix][org][roles]") {
+    const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    DbFixture fixture;
+    // The server edge refuses AssignRole to a caller holding no supervisor role, and does not mirror the model's
+    // bootstrap carve-out, so alice is appointed before the rig starts.
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+
+    BackendRig rig{mode, 1, makeAuthorizer()};
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "alice"));
+
+    auto org = rig.client<lims::OrgModel>(0);
+    const auto bob = awaitQt(org.execute(lims::AssignRole{
+        .principal = "bob", .role = lims::LimsRole::Verifier, .company = {}, .site = lims::test::seededSite()}));
+    REQUIRE(bob.id.hasValue());
+    CHECK(bob.scopeKind == lims::ScopeKind::Site);
+    CHECK(bob.site == lims::test::seededSite());
+    CHECK_FALSE(bob.company.hasValue());
+    CHECK(bob.grantedBy == "alice");
+
+    const auto assignments = awaitQt(org.execute(lims::ListRoleAssignments{})).assignments;
+    REQUIRE(assignments.size() == 3);
+    CHECK(assignments.back().id == bob.id);
+    CHECK(assignments.back().principal == "bob");
+    CHECK(assignments.back().role == lims::LimsRole::Verifier);
+
+    const auto users = awaitQt(org.execute(lims::ListUsers{})).users;
+    REQUIRE(users.size() == 3);
+    CHECK(users[0].id == "alice");
+    CHECK(users[1].id == "bob");
+    CHECK(users[1].roles == std::vector<lims::LimsRole>{lims::LimsRole::Verifier});
+    CHECK(users[2].id == "lab-supervisor");
+
+    CHECK(awaitQt(org.execute(lims::RevokeRole{.assignmentId = bob.id})).assignmentId == bob.id);
+    CHECK(awaitQt(org.execute(lims::ListRoleAssignments{})).assignments.size() == 2);
+    CHECK(lims::OrgModel::rolesAnywhere("bob").empty());
 }
 
 TEST_CASE("Two connections attached to one sample share the instance", "[lims][matrix][socket-only]") {

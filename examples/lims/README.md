@@ -477,17 +477,17 @@ second pair of eyes on their own work without anyone deciding they should be.
 `AllowAllAuthorizer` because a role gate needs an
 authenticated principal: a non-authenticating authorizer makes `RemoteServer`
 *clear* `Context::principal` before dispatch, leaving nothing to key on. Roles
-come from the `lims_operators` table, not the token's `roles` claim — a token
+come from the `org_role_assignments` table, not the token's `roles` claim — a token
 lives for its expiry, so a role revoked mid-shift would keep working until it
 aged out.
 
 **The bootstrap carve-out.** A lab with no supervisor cannot appoint its
-first one, so the first `GrantRole` is allowed whoever makes it. The exception
-closes the instant any supervisor exists and the grant is journaled like every
-other, so it is visible in the trail rather than a back door.
+first one, so the first `AssignRole` is allowed whoever makes it. The exception
+closes the instant any supervisor exists and the assignment is journaled like every
+other, so it is visible in the journal rather than a back door.
 `LimsAuthorizer` deliberately does *not* mirror the carve-out — duplicating a
 security exception is how the two copies drift — which means the very first
-grant must be made locally, never remotely against an empty lab.
+assignment must be made locally, never remotely against an empty lab.
 
 **Publishing requires verification.** A four-eyes control nothing depends on
 is theatre, so `PublishSample` refuses while any captured result is
@@ -690,7 +690,27 @@ A registration names its site, and a missing site is a validation error, not a d
 would be visible to nobody once lists are scoped. Sample entry refuses a save without one as `noSite`, a reply like
 its other refusals.
 
+### 23. A role is held in a scope: a company or a site
+
+A role assignment is `(principal, role, scope)`, kept by `lims/org` in `org_role_assignments`, and made with
+`OrgModel`'s `AssignRole` and `RevokeRole`. A role held at a company holds at every site of the company; a role held
+at a site holds there only. Roles themselves stay non-hierarchical (decision 16): the scope is the only thing that
+nests. Grants made before scopes existed were for the whole lab, so the migration moves them to the seeded company.
+
+The bootstrap carve-out moves with the action: the first assignment on a lab with no supervisor anywhere is allowed,
+and the carve-out closes as soon as any supervisor exists. Revoking the last supervisor's assignment is refused,
+because it would reopen that carve-out to whoever acted next.
+
+Assignments are not a sample's history, so a sample's audit trail no longer shows them; they are journaled by the
+framework's dispatcher like any other action of `OrgModel`. A `GrantRole` entry an older build wrote into a sample's
+journal reconstructs as an `Unreadable` step, as any entry this build cannot interpret does (decision 17).
+
 ## Findings raised by this rung
+
+- **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so
+  moving `lims_operators` into `org_role_assignments` is one `RawSql` `INSERT ... SELECT`
+  (`lab/src/db/schema.cpp`, migration `20261109000004`), under IMPLEMENTATION.md rule 4's escape tier. Upstream: a
+  search of LASTRADA-Software/Lightweight's issues for "migration insert select" finds none for this; none was filed.
 
 - **`ModelKey` rejected strong id types. Closed upstream.** `BRIDGE_MODEL_KEY`
   routes the key through `keyToString`, whose concept admitted only

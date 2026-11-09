@@ -483,7 +483,7 @@ TEST_CASE("Results can only be captured while a sample is in progress", "[lims][
 
     // Publishing needs the second pair of eyes first (README §6): a sample
     // whose readings nobody has verified cannot be released to the client.
-    model.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
+    lims::test::grant("bob", lims::LimsRole::Verifier);
     const auto captured = model.execute(lims::ListResults{}).results;
     REQUIRE(captured.size() == 1);
     {

@@ -2,7 +2,7 @@
 //
 // ladder_lims_server: serves lims' screens and models over a Qt WebSocket, behind `LimsAuthorizer`. A client signs in
 // on the public login screen; the token it gets is what every later call carries, and the role-gated actions check
-// the roles `GrantRole` gave its principal.
+// the roles `AssignRole` gave its principal.
 //
 // Environment: LIMS_TOKEN_SECRET (required, non-empty), LIMS_PORT (default 8771), LIMS_DB (default lims.db).
 // LIMS_CHAT_CONFIG names a chat configuration file (docs/spec/ui/chat.md), which turns the screens' chat on; one that
@@ -35,6 +35,7 @@
 #include "lims/lab/models/ignition_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/org/models/auth_model.hpp"
+#include "lims/org/models/org_model.hpp"
 
 namespace {
 
@@ -99,7 +100,7 @@ int main(int argc, char** argv) {
             workers,
             std::make_shared<lims::auth::LimsAuthorizer>(
                 secret, morph::session::hmacSha256,
-                [](std::string_view principal) { return lims::SampleModel::rolesOf(principal); }),
+                [](std::string_view principal) { return lims::OrgModel::rolesAnywhere(principal); }),
             config);
         morph::qt::QtWebSocketServer socket{*server, port};
         if (!socket.listen()) {

@@ -29,6 +29,7 @@
 #include "lims/lab/models/analysis_catalog_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/org/models/auth_model.hpp"
+#include "lims/org/models/org_model.hpp"
 #include "lims_screens.hpp"
 #include "lims_test_support.hpp"
 
@@ -215,7 +216,7 @@ TEST_CASE("lims screens: signing in to a server opens sample registration", "[li
     app.serverAuthorizer = [] {
         return std::make_shared<lims::auth::LimsAuthorizer>(
             "lims-local-development", morph::session::hmacSha256,
-            [](std::string_view principal) { return lims::SampleModel::rolesOf(principal); });
+            [](std::string_view principal) { return lims::OrgModel::rolesAnywhere(principal); });
     };
     ScreenHarness harness{app, std::string{lims::screens::kLogin}, RigMode::Simulated, {}, LocalSetup{}};
     harness.edit("username", "tech");

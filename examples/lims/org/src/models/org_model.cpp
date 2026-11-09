@@ -4,8 +4,12 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <algorithm>
 #include <cstdint>
+#include <map>
 #include <morph/session/session.hpp>
+#include <optional>
 #include <string>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include "lims/org/core/errors.hpp"
@@ -52,6 +56,119 @@ constexpr int kMaxMonth = static_cast<int>(Month::December);
     };
 }
 
+/// @brief The highest stored value of `LimsRole`.
+constexpr int kMaxRole = static_cast<int>(LimsRole::Supervisor);
+
+/// @brief The highest stored value of `ScopeKind`.
+constexpr int kMaxScopeKind = static_cast<int>(ScopeKind::Site);
+
+/// @brief The role an assignment row stores.
+/// @param row The row.
+/// @return The role.
+/// @throws ValidationError if the row stores a role outside its enumeration.
+[[nodiscard]] LimsRole roleOf(db::RoleAssignmentRecord const& row) {
+    int const role = row.role.Value();
+    if (role < 0 || role > kMaxRole) {
+        throw ValidationError{"role assignment " + std::to_string(row.id.Value()) +
+                              " stores a role outside its range"};
+    }
+    return static_cast<LimsRole>(role);
+}
+
+/// @brief The scope kind an assignment row stores.
+/// @param row The row.
+/// @return The kind.
+/// @throws ValidationError if the row stores a scope kind outside its enumeration.
+[[nodiscard]] ScopeKind scopeKindOf(db::RoleAssignmentRecord const& row) {
+    int const kind = row.scopeKind.Value();
+    if (kind < 0 || kind > kMaxScopeKind) {
+        throw ValidationError{"role assignment " + std::to_string(row.id.Value()) +
+                              " stores a scope kind outside its range"};
+    }
+    return static_cast<ScopeKind>(kind);
+}
+
+/// @brief Maps an assignment row to its view.
+/// @param row The row.
+/// @return The view.
+/// @throws ValidationError if the row stores a role or a scope kind outside its enumeration.
+[[nodiscard]] RoleAssignmentView toView(db::RoleAssignmentRecord const& row) {
+    auto const kind = scopeKindOf(row);
+    return RoleAssignmentView{
+        .id = RoleAssignmentId{static_cast<std::int64_t>(row.id.Value())},
+        .principal = std::string{row.principal.Value().ToStringView()},
+        .role = roleOf(row),
+        .scopeKind = kind,
+        .company = kind == ScopeKind::Company ? CompanyId{row.scopeId.Value()} : CompanyId{},
+        .site = kind == ScopeKind::Site ? SiteId{row.scopeId.Value()} : SiteId{},
+        .grantedBy = std::string{row.grantedBy.Value().ToStringView()},
+        .grantedAt = timestampFromMillis(row.grantedAt.Value()),
+    };
+}
+
+/// @brief The scope an assignment action names.
+/// @param action A validated assignment.
+/// @return Its company or its site.
+[[nodiscard]] Scope scopeOf(AssignRole const& action) {
+    return action.company.hasValue() ? Scope{action.company} : Scope{action.site};
+}
+
+/// @brief The kind and id an assignment row stores for @p scope.
+/// @param scope A scope holding a value.
+/// @return The kind and the id.
+[[nodiscard]] std::pair<ScopeKind, std::int64_t> storedScope(Scope const& scope) {
+    if (auto const* company = std::get_if<CompanyId>(&scope)) {
+        return {ScopeKind::Company, **company};
+    }
+    return {ScopeKind::Site, *std::get<SiteId>(scope)};
+}
+
+/// @brief Whether @p scope names a company or a site that exists.
+/// @param mapper The open mapper.
+/// @param scope The scope.
+/// @return Whether it does.
+[[nodiscard]] bool scopeExists(Lightweight::DataMapper& mapper, Scope const& scope) {
+    if (auto const* company = std::get_if<CompanyId>(&scope)) {
+        return company->hasValue() && !mapper.Query<db::CompanyRecord>()
+                                           .Where(::Lightweight::FieldNameOf<&db::CompanyRecord::id>, "=", **company)
+                                           .All()
+                                           .empty();
+    }
+    return OrgModel::findSite(std::get<SiteId>(scope)).has_value();
+}
+
+/// @brief Throws `Forbidden` unless the authenticated principal is a supervisor in @p scope.
+/// @param scope The scope.
+void requireSupervisorIn(Scope const& scope) {
+    auto const& principal = ::morph::session::current()->principal;
+    auto const held = OrgModel::rolesIn(principal, scope);
+    if (std::ranges::find(held, LimsRole::Supervisor) == held.end()) {
+        throw Forbidden{"'" + principal + "' does not hold the supervisor role at " + scopeName(scope)};
+    }
+}
+
+/// @brief Every assignment of @p principal, by id.
+/// @param mapper The open mapper.
+/// @param principal The principal.
+/// @return The rows.
+[[nodiscard]] std::vector<db::RoleAssignmentRecord> assignmentsOf(Lightweight::DataMapper& mapper,
+                                                                  std::string_view principal) {
+    auto rows =
+        mapper.Query<db::RoleAssignmentRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::principal>, "=", std::string{principal})
+            .All();
+    std::ranges::sort(rows, {}, [](db::RoleAssignmentRecord const& row) { return row.id.Value(); });
+    return rows;
+}
+
+/// @brief Appends @p role to @p roles unless it is there already.
+/// @param roles The roles so far.
+/// @param role The role.
+void addOnce(std::vector<LimsRole>& roles, LimsRole role) {
+    if (std::ranges::find(roles, role) == roles.end()) {
+        roles.push_back(role);
+    }
+}
 }  // namespace
 
 CompanyView OrgModel::execute(const CreateCompany& action) {
@@ -123,6 +240,134 @@ ListSitesResult OrgModel::execute(const ListSites& action) {
     }
     std::ranges::sort(result.sites, {}, [](SiteView const& site) { return *site.id; });
     return result;
+}
+
+RoleAssignmentView OrgModel::execute(const AssignRole& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"AssignRole: a principal and exactly one of a company or a site are required"};
+    }
+    Scope const scope = scopeOf(action);
+    Lightweight::DataMapper mapper;
+    if (!scopeExists(mapper, scope)) {
+        throw NotFound{"AssignRole: " + scopeName(scope) + " does not exist"};
+    }
+    // A lab with no supervisor anywhere cannot appoint its first one any other way. The exception closes as soon as
+    // one exists, and the assignment names who made it.
+    if (supervisorExists()) {
+        requireSupervisorIn(scope);
+    }
+    auto const [kind, id] = storedScope(scope);
+    for (auto const& row : assignmentsOf(mapper, action.principal)) {
+        if (row.role.Value() == static_cast<int>(action.role) && row.scopeKind.Value() == static_cast<int>(kind) &&
+            row.scopeId.Value() == id) {
+            return toView(row);
+        }
+    }
+    db::RoleAssignmentRecord row;
+    row.principal = Lightweight::SqlAnsiString<64>{action.principal};
+    row.role = static_cast<int>(action.role);
+    row.scopeKind = static_cast<int>(kind);
+    row.scopeId = id;
+    row.grantedBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
+    row.grantedAt = nowMillis();
+    mapper.Create(row);
+    return toView(row);
+}
+
+RevokeRoleResult OrgModel::execute(const RevokeRole& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"RevokeRole: an assignment is required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto rows = mapper.Query<db::RoleAssignmentRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::id>, "=", *action.assignmentId)
+                    .All();
+    if (rows.empty()) {
+        throw NotFound{"RevokeRole: assignment " + std::to_string(*action.assignmentId) + " does not exist"};
+    }
+    auto const view = toView(rows.front());
+    requireSupervisorIn(view.scopeKind == ScopeKind::Company ? Scope{view.company} : Scope{view.site});
+    if (view.role == LimsRole::Supervisor &&
+        mapper.Query<db::RoleAssignmentRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::role>, "=",
+                       static_cast<int>(LimsRole::Supervisor))
+                .All()
+                .size() == 1) {
+        throw Conflict{"RevokeRole: the last supervisor's assignment cannot be revoked"};
+    }
+    mapper.Delete(rows.front());
+    return RevokeRoleResult{.assignmentId = action.assignmentId};
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+ListRoleAssignmentsResult OrgModel::execute(const ListRoleAssignments& action) {
+    static_cast<void>(action);
+    Lightweight::DataMapper mapper;
+    ListRoleAssignmentsResult result;
+    for (auto const& row : mapper.Query<db::RoleAssignmentRecord>().All()) {
+        result.assignments.push_back(toView(row));
+    }
+    std::ranges::sort(result.assignments, {}, [](RoleAssignmentView const& view) { return *view.id; });
+    return result;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+ListUsersResult OrgModel::execute(const ListUsers& action) {
+    static_cast<void>(action);
+    auto const assignments = execute(ListRoleAssignments{}).assignments;
+    std::map<std::string, std::vector<LimsRole>> byPrincipal;
+    for (auto const& assignment : assignments) {
+        addOnce(byPrincipal[assignment.principal], assignment.role);
+    }
+    ListUsersResult result;
+    for (auto& [principal, roles] : byPrincipal) {
+        result.users.push_back(UserView{.id = principal, .roles = std::move(roles)});
+    }
+    return result;
+}
+
+std::vector<LimsRole> OrgModel::rolesIn(std::string_view principal, Scope const& scope) {
+    std::optional<std::int64_t> company;
+    std::optional<std::int64_t> site;
+    if (auto const* asCompany = std::get_if<CompanyId>(&scope)) {
+        company = asCompany->value;
+    } else if (auto const found = findSite(std::get<SiteId>(scope))) {
+        site = *found->id;
+        company = *found->companyId;
+    }
+    Lightweight::DataMapper mapper;
+    std::vector<LimsRole> roles;
+    for (auto const& row : assignmentsOf(mapper, principal)) {
+        auto const kind = scopeKindOf(row);
+        bool const covers = (kind == ScopeKind::Company && company == row.scopeId.Value()) ||
+                            (kind == ScopeKind::Site && site == row.scopeId.Value());
+        if (covers) {
+            addOnce(roles, roleOf(row));
+        }
+    }
+    return roles;
+}
+
+std::vector<LimsRole> OrgModel::rolesAnywhere(std::string_view principal) {
+    Lightweight::DataMapper mapper;
+    std::vector<LimsRole> roles;
+    for (auto const& row : assignmentsOf(mapper, principal)) {
+        addOnce(roles, roleOf(row));
+    }
+    return roles;
+}
+
+bool OrgModel::supervisorExists() {
+    Lightweight::DataMapper mapper;
+    return !mapper.Query<db::RoleAssignmentRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::role>, "=",
+                       static_cast<int>(LimsRole::Supervisor))
+                .All()
+                .empty();
 }
 
 std::optional<SiteView> OrgModel::findSite(SiteId site) {

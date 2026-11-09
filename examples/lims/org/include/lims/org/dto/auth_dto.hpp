@@ -5,7 +5,7 @@
 
 /// @file
 /// lims' development sign-in: a username in, a signed session token out. There is no password: the rung has no user
-/// store, and a person's roles come from `GrantRole`, which the authoriser reads on every role-gated call.
+/// store, and a person's roles come from `AssignRole`, which the authoriser reads on every role-gated call.
 
 namespace lims {
 

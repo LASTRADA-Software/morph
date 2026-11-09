@@ -247,28 +247,6 @@ public:
     /// @throws NotFound if there is no working copy, or no such project.
     HeaderView execute(const SelectProject& action);
 
-    /// @brief Every role @p principal currently holds.
-    ///
-    /// Static because `lims::auth::LimsAuthorizer` wires its own `RoleLookup`
-    /// to the very same query: one source of truth for what a principal may
-    /// do, read by both enforcement points.
-    /// @param principal The principal to look up.
-    /// @return The roles held, in grant order.
-    [[nodiscard]] static std::vector<LimsRole> rolesOf(std::string_view principal);
-
-    /// @brief Grants a role to a principal.
-    ///
-    /// Requires `LimsRole::Supervisor`, except on a lab that has no supervisor
-    /// yet, where the first grant is allowed so the system can be bootstrapped.
-    /// The exception closes the instant any supervisor exists, and the
-    /// bootstrap grant is journaled like every other one.
-    /// @param action The principal and the role.
-    /// @return Every role that principal now holds.
-    /// @throws ValidationError if no principal is named.
-    /// @throws Forbidden if the caller is not a supervisor and one already exists.
-    /// @throws EmptyPrincipalError if no principal is authenticated.
-    RoleGrantResult execute(const GrantRole& action);
-
     /// @brief Records the four-eyes verification of one captured result.
     ///
     /// Both halves of the control are enforced here, because only one of them
@@ -514,7 +492,6 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListConflicts, "ListConflicts", 
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ResolveConflict, "ResolveConflict")
 BRIDGE_REGISTER_EFFECTS(lims::ResolveConflict, ::morph::effects::changes<lims::ConflictView>,
                         ::morph::effects::changes<lims::ResultView>, ::morph::effects::changes<lims::SampleView>)
-BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GrantRole, "GrantRole")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::VerifyResult, "VerifyResult")
 BRIDGE_REGISTER_EFFECTS(lims::VerifyResult, ::morph::effects::changes<lims::VerificationView>)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListVerifications, "ListVerifications", ::morph::model::Loggable::No)

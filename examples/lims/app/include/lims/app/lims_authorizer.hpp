@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include "lims/lab/dto/verification_dto.hpp"
+#include "lims/org/dto/role_dto.hpp"
 
 /// @file
 /// This rung's one `IAuthorizer`: the coarse, type-level half of the
@@ -37,13 +37,11 @@
 ///
 /// @par Where the roles come from
 /// From a caller-supplied `RoleLookup`, which production wires to the
-/// `lims_operators` table — the same table `SampleModel` reads. One source of
-/// truth, two enforcement points. Deliberately *not* the token's own `roles`
-/// claim: a token is minted once and lives for its expiry, so a role revoked
-/// mid-shift would keep working until the token aged out, which in a
-/// 21 CFR Part 11-framed lab is the wrong default. The claim is still
-/// available and a deployment that wants token-carried roles can supply a
-/// `RoleLookup` that reads it.
+/// `org_role_assignments` table, through `OrgModel::rolesAnywhere` — the same
+/// table every model's own check reads. One source of truth, two enforcement points. Deliberately *not* the token's
+/// own `roles` claim: a token is minted once and lives for its expiry, so a role revoked mid-shift would keep working
+/// until the token aged out, which in a 21 CFR Part 11-framed lab is the wrong default. The claim is still available
+/// and a deployment that wants token-carried roles can supply a `RoleLookup` that reads it.
 
 namespace lims::auth {
 
@@ -65,7 +63,7 @@ using RoleLookup = std::function<std::vector<LimsRole>(std::string_view principa
 /// @param actionType The action type id from the dispatch envelope.
 /// @return `true` when the action is role-gated.
 [[nodiscard]] inline bool requiresSupervisorRole(std::string_view actionType) noexcept {
-    return actionType == "GrantRole";
+    return actionType == "AssignRole" || actionType == "RevokeRole";
 }
 
 /// @brief This rung's authorizer: a signed-token gate plus a role check on the
@@ -99,14 +97,14 @@ public:
     /// @brief Allows the call iff the token verifies **and** the caller holds
     ///        whatever role the action requires.
     ///
-    /// The bootstrap carve-out `SampleModel::execute(GrantRole)` implements —
-    /// the first grant on a lab with no supervisor — is deliberately **not**
+    /// The bootstrap carve-out `OrgModel::execute(AssignRole)` implements —
+    /// the first assignment on a lab with no supervisor — is deliberately **not**
     /// mirrored here. This layer cannot see whether the lab has a supervisor
     /// yet without a second lookup, and duplicating a security exception in two
     /// places is how the two copies drift; the model's own check is the one
     /// that decides, and it runs on every path including this one. The
     /// practical consequence is stated in the rung README: the very first
-    /// `GrantRole` must be made locally (or by a principal already holding
+    /// `AssignRole` must be made locally (or by a principal already holding
     /// `Supervisor`), never remotely against an empty lab.
     /// @param ctx        Per-call session (its `token` is verified upstream).
     /// @param modelType  Target model type id.

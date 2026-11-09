@@ -35,4 +35,15 @@ LIGHTWEIGHT_SQL_MIGRATION(20261109000001, "Create org_companies and org_sites, s
         .Set("company_id", lims::db::kSeededCompanyId)
         .Set("name", std::string{"Main site"});
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20261109000003, "Create org_role_assignments") {
+    plan.CreateTableIfNotExists("org_role_assignments")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("principal", Varchar(64))
+        .RequiredColumn("role", Integer())
+        .RequiredColumn("scope_kind", Integer())
+        .RequiredColumn("scope_id", Bigint())
+        .RequiredColumn("granted_by", Varchar(64))
+        .RequiredColumn("granted_at", Bigint());
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

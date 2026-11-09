@@ -4,6 +4,7 @@
 #include <string>
 
 #include "lims/lab/db/database.hpp"
+#include "lims/org/core/types.hpp"
 #include "lims/org/db/org_entity.hpp"
 
 namespace lims::db {
@@ -191,5 +192,18 @@ LIGHTWEIGHT_SQL_MIGRATION(20261109000002, "Give every lims_samples row its site"
                                              .columnName = "id"});
     // Every sample that predates sites was registered at the one place the lab had, which is the seeded site.
     plan.Update("lims_samples").Set("site_id", lims::db::kSeededSiteId).WhereExpression("site_id IS NULL");
+}
+
+// Must run after org's org_role_assignments migration (20261109000003), which creates the table this fills.
+LIGHTWEIGHT_SQL_MIGRATION(20261109000004, "Move lims_operators into org_role_assignments at the seeded company") {
+    // A role granted before roles were scoped was granted for the whole lab, which is the seeded company. Copying rows
+    // between tables is INSERT ... SELECT, which Lightweight's migration builder cannot express (its Insert takes
+    // literal values only), so this statement is raw SQL, the escape tier rule 4 allows with a finding recorded.
+    static_assert(static_cast<int>(lims::ScopeKind::Company) == 0 && lims::db::kSeededCompanyId == 1,
+                  "the statement spells the company scope kind and the seeded company's id as literals");
+    plan.RawSql(
+        "INSERT INTO org_role_assignments (principal, role, scope_kind, scope_id, granted_by, granted_at) "
+        "SELECT principal, role, 0, 1, granted_by, granted_at FROM lims_operators");
+    plan.DropTable("lims_operators");
 }
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

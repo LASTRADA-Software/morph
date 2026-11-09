@@ -36,4 +36,20 @@ struct SiteRecord {
     Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;                              // 2
 };
 
+/// @brief One principal's role in one scope. The single source of truth for what a principal may do, read by the
+///        server edge's authorizer and by every model's own check.
+struct RoleAssignmentRecord {
+    static constexpr std::string_view TableName = "org_role_assignments";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"principal"}> principal;                     // 1
+    /// @brief `LimsRole` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"role"}> role{0};  // 2
+    /// @brief `ScopeKind` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"scope_kind"}> scopeKind{0};  // 3
+    /// @brief The company's or the site's id, as `scope_kind` says.
+    Light::Field<std::int64_t, Light::SqlRealName{"scope_id"}> scopeId{0};               // 4
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"granted_by"}> grantedBy;  // 5
+    Light::Field<std::int64_t, Light::SqlRealName{"granted_at"}> grantedAt{0};           // 6
+};
+
 }  // namespace lims::db

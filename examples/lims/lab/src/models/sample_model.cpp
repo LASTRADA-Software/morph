@@ -148,8 +148,6 @@ namespace {
                 step.kind = AuditStepKind::OfflineReplay;
             } else if (entry.actionType == "ResolveConflict") {
                 step.kind = AuditStepKind::ConflictResolved;
-            } else if (entry.actionType == "GrantRole") {
-                step.kind = AuditStepKind::RoleGranted;
             }
         }
         return step;
@@ -177,9 +175,6 @@ namespace {
         } else if (entry.actionType == "ResolveConflict") {
             static_cast<void>(::morph::model::ActionTraits<ResolveConflict>::resultFromJson(entry.result));
             step.kind = AuditStepKind::ConflictResolved;
-        } else if (entry.actionType == "GrantRole") {
-            static_cast<void>(::morph::model::ActionTraits<GrantRole>::resultFromJson(entry.result));
-            step.kind = AuditStepKind::RoleGranted;
         } else {
             step.detail = "unrecognised action id '" + entry.actionType + "'";
         }
@@ -747,19 +742,6 @@ ConflictView SampleModel::execute(const ResolveConflict& action) {
     }
 }
 
-std::vector<LimsRole> SampleModel::rolesOf(std::string_view principal) {
-    Lightweight::DataMapper mapper;
-    auto rows = mapper.Query<db::OperatorRecord>()
-                    .Where(::Lightweight::FieldNameOf<&db::OperatorRecord::principal>, "=", std::string{principal})
-                    .All();
-    std::vector<LimsRole> roles;
-    roles.reserve(rows.size());
-    for (const auto& row : rows) {
-        roles.push_back(static_cast<LimsRole>(row.role.Value()));
-    }
-    return roles;
-}
-
 void SampleModel::requireEveryResultVerified() const {
     Lightweight::DataMapper mapper;
     for (const auto& result : mapper.Query<db::ResultRecord>()
@@ -777,51 +759,9 @@ void SampleModel::requireEveryResultVerified() const {
 
 void SampleModel::requireRole(LimsRole role) {
     const auto& principal = ::morph::session::current()->principal;
-    const auto held = rolesOf(principal);
+    const auto held = OrgModel::rolesAnywhere(principal);
     if (std::ranges::find(held, role) == held.end()) {
         throw Forbidden{"'" + principal + "' does not hold the " + std::string{roleName(role)} + " role"};
-    }
-}
-
-RoleGrantResult SampleModel::execute(const GrantRole& action) {
-    requirePrincipal();
-    try {
-        if (!action.validate()) {
-            throw ValidationError{"GrantRole: a principal is required"};
-        }
-
-        Lightweight::DataMapper mapper;
-        // The bootstrap carve-out, and its exact boundary: a lab with no
-        // supervisor at all has no way to appoint its first one, so the first
-        // grant is permitted. The moment *any* supervisor exists the exception
-        // is gone -- and the bootstrap grant is journaled like every other, so
-        // it is visible in the audit trail rather than a silent back door.
-        const auto supervisors = mapper.Query<db::OperatorRecord>()
-                                     .Where(::Lightweight::FieldNameOf<&db::OperatorRecord::role>, "=",
-                                            static_cast<int>(LimsRole::Supervisor))
-                                     .All();
-        if (!supervisors.empty()) {
-            requireRole(LimsRole::Supervisor);
-        }
-
-        // Idempotent: granting a role twice is not an error and does not
-        // produce two rows a revoke would then have to chase.
-        const auto existing = rolesOf(action.principal);
-        if (std::ranges::find(existing, action.role) == existing.end()) {
-            db::OperatorRecord row;
-            row.principal = Lightweight::SqlAnsiString<64>{action.principal};
-            row.role = static_cast<int>(action.role);
-            row.grantedBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
-            row.grantedAt = nowMillis();
-            mapper.Create(row);
-        }
-
-        RoleGrantResult result{.principal = action.principal, .roles = rolesOf(action.principal)};
-        _journal.recordSuccess<SampleModel>(action, result, nowMillis());
-        return result;
-    } catch (const LimsError& error) {
-        _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
-        throw;
     }
 }
 

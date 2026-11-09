@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "lims/lab/dto/sample_dto.hpp"
+#include "lims/org/dto/role_dto.hpp"
 
 /// @file
 /// Verification and the audit trail (README build order §6).
@@ -30,64 +31,6 @@
 ///    the result being acted on. This one can only live in the model.
 
 namespace lims {
-
-/// @brief What a principal is permitted to do.
-///
-/// A closed set, so an `enum class` rather than free-form strings
-/// (`examples/IMPLEMENTATION.md` rule 3). Roles are not hierarchical: a
-/// supervisor who must also verify is granted `Verifier` explicitly, because
-/// an implicit hierarchy is the kind of thing that quietly grants somebody
-/// the second pair of eyes on their own work.
-enum class LimsRole : std::uint8_t {
-    Analyst,     ///< May capture results.
-    Verifier,    ///< May verify somebody else's results.
-    Supervisor,  ///< May grant and revoke roles.
-};
-
-/// @brief The stable ascii name of @p role, as it appears in a token claim and
-///        in the journal.
-/// @param role The role to name.
-/// @return Its wire name.
-[[nodiscard]] constexpr std::string_view roleName(LimsRole role) noexcept {
-    switch (role) {
-        case LimsRole::Analyst:
-            return "analyst";
-        case LimsRole::Verifier:
-            return "verifier";
-        case LimsRole::Supervisor:
-            return "supervisor";
-        default:
-            return "unknown";
-    }
-}
-
-/// @brief Grants @p role to @p principal.
-///
-/// Requires the caller to hold `Supervisor` — except on a lab with no
-/// supervisor yet, where the first grant is allowed so the system can be
-/// bootstrapped at all. That exception is deliberately narrow (it closes the
-/// instant any supervisor exists) and is journaled like every other grant, so
-/// it is visible in the audit trail rather than a silent back door.
-struct GrantRole {
-    /// @brief The principal to grant to.
-    std::string principal;
-
-    /// @brief The role to grant.
-    LimsRole role = LimsRole::Analyst;
-
-    /// @brief Whether this grant is well-formed.
-    /// @return `true` when a principal is named.
-    [[nodiscard]] bool validate() const noexcept { return !principal.empty(); }
-};
-
-/// @brief The roles one principal now holds.
-struct RoleGrantResult {
-    /// @brief The principal granted to.
-    std::string principal;
-
-    /// @brief Every role they hold, in grant order.
-    std::vector<LimsRole> roles;
-};
 
 /// @brief The four-eyes verification of one captured result.
 ///
@@ -144,7 +87,6 @@ enum class AuditStepKind : std::uint8_t {
     ResultVerified,       ///< A reading passed four-eyes verification.
     OfflineReplay,        ///< A queued field update was applied or flagged.
     ConflictResolved,     ///< A human decided a flagged conflict.
-    RoleGranted,          ///< A principal was granted a role.
     /// @brief The journal holds an entry this build cannot interpret.
     ///
     /// **Never silently dropped.** An audit trail that quietly omits what it
@@ -209,15 +151,6 @@ struct AuditTrailResult {
 
 }  // namespace lims
 
-/// @brief Reflects `LimsRole` as its enumerator name.
-template <>
-struct glz::meta<lims::LimsRole> {
-    using enum lims::LimsRole;
-
-    /// @brief The enumerator ⇄ name mapping glaze reads and writes.
-    static constexpr auto value = glz::enumerate(Analyst, Verifier, Supervisor);
-};
-
 /// @brief Reflects `AuditStepKind` as its enumerator name.
 template <>
 struct glz::meta<lims::AuditStepKind> {
@@ -225,7 +158,7 @@ struct glz::meta<lims::AuditStepKind> {
 
     /// @brief The enumerator ⇄ name mapping glaze reads and writes.
     static constexpr auto value = glz::enumerate(LifecycleTransition, ResultCaptured, ResultVerified, OfflineReplay,
-                                                 ConflictResolved, RoleGranted, Unreadable);
+                                                 ConflictResolved, Unreadable);
 };
 
 /// @brief Reflects `AuditOutcome` as its enumerator name.
