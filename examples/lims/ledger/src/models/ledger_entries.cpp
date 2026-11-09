@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
@@ -555,28 +556,73 @@ PeriodView LedgerModel::execute(const ClosePeriod& action) {
     };
 }
 
-PostingResult LedgerModel::record(PostingRequest const& request) {
-    if (!request.company.hasValue() || !request.date.hasValue() || request.sourceKey.empty() ||
-        request.sourceKey.size() > 128 || request.sourceReference.size() > 128 || !request.rate.hasValue()) {
-        throw ValidationError{"record: a company, a date, a source key and a rate are required"};
+namespace {
+
+/// @brief Whether entry @p entry, as recorded, is what @p request asks for: everything that reaches the books.
+///
+/// Amounts and the rate compare by value, so a figure written with other decimals is the same figure; the
+/// entry's author and generated memo are not part of the request.
+/// @param mapper The open mapper.
+/// @param entry The recorded entry.
+/// @param request The request.
+/// @return Whether they agree.
+/// @throws NotFound if the entry is gone.
+[[nodiscard]] bool recordedAs(Lightweight::DataMapper& mapper, std::int64_t entry, PostingRequest const& request) {
+    auto const stored = toView(mapper, loadWritten(mapper, entry));
+    if (millisOf(stored.date) != millisOf(request.date) || stored.sourceReference != request.sourceReference ||
+        stored.currency != request.currency || *stored.rate != *request.rate ||
+        stored.lines.size() != request.lines.size()) {
+        return false;
     }
-    CurrencyCode const base = companyCurrency(request.company);
-    requireRate("record", *request.rate, request.currency, base);
-    requireBalanced("record", request.lines, request.currency, base, request.rate);
+    return std::ranges::all_of(std::views::zip(stored.lines, request.lines), [](auto const& pair) {
+        auto const& [recorded, asked] = pair;
+        return recorded.accountCode == asked.accountCode && recorded.side == asked.side &&
+               *recorded.amount == *asked.amount && *recorded.companyAmount == *asked.companyAmount;
+    });
+}
+
+/// @brief Answers a request whose source key is already recorded.
+/// @param mapper The open mapper.
+/// @param sources The posting sources.
+/// @param scope The company's scope.
+/// @param request The request.
+/// @return The first entry when the request is the one recorded; nothing when the key is new.
+/// @throws Conflict if the key is recorded for a different request.
+[[nodiscard]] std::optional<PostingResult> answerKnown(Lightweight::DataMapper& mapper, PostingSources const& sources,
+                                                       std::string const& scope, PostingRequest const& request) {
+    auto const known = sources.lookup(scope, request.sourceKey);
+    if (!known.has_value()) {
+        return std::nullopt;
+    }
+    auto const entry = std::stoll(*known);
+    if (!recordedAs(mapper, entry, request)) {
+        throw Conflict{"record: source key " + request.sourceKey +
+                       " is already recorded for a different posting; a corrected document needs a new key"};
+    }
+    return PostingResult{.entryId = JournalEntryId{entry}};
+}
+
+/// @brief One try at recording @p request, in its own transaction.
+/// @param request The checked request.
+/// @param base The company's currency.
+/// @return The entry.
+[[nodiscard]] PostingResult recordOnce(PostingRequest const& request, CurrencyCode base) {
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    PostingSources sources{mapper};
+    std::string const scope = std::to_string(*request.company);
+    // The key is looked up before anything that can change between calls (the dated rate, the period's state), so
+    // an identical repeat answers the first entry after either has changed.
+    if (auto const answer = answerKnown(mapper, sources, scope, request)) {
+        return *answer;
+    }
     if (request.currency != base) {
-        auto const dated = rateOn(request.company, request.currency, base, request.date);
+        auto const dated = LedgerModel::rateOn(request.company, request.currency, base, request.date);
         if (!dated.has_value() || *dated != *request.rate) {
             throw ValidationError{"record: the rate is not the ledger's " +
                                   std::string{currencyName(request.currency)} + "/" + std::string{currencyName(base)} +
                                   " rate on the posting's date"};
         }
-    }
-    Lightweight::DataMapper mapper;
-    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    PostingSources sources{mapper};
-    std::string const scope = std::to_string(*request.company);
-    if (auto const known = sources.lookup(scope, request.sourceKey)) {
-        return PostingResult{.entryId = JournalEntryId{std::stoll(*known)}};
     }
     auto const period = periodOf(mapper, request.company, request.date);
     requireRecordable(period, true, "record");
@@ -589,6 +635,27 @@ PostingResult LedgerModel::record(PostingRequest const& request) {
     sources.record(scope, request.sourceKey, std::to_string(entryId));
     sqlTxn.Commit();
     return PostingResult{.entryId = JournalEntryId{entryId}};
+}
+
+}  // namespace
+
+PostingResult LedgerModel::record(PostingRequest const& request) {
+    if (!request.company.hasValue() || !request.date.hasValue() || request.sourceKey.empty() ||
+        request.sourceKey.size() > 128 || request.sourceReference.size() > 128 || !request.rate.hasValue()) {
+        throw ValidationError{"record: a company, a date, a source key and a rate are required"};
+    }
+    CurrencyCode const base = companyCurrency(request.company);
+    requireRate("record", *request.rate, request.currency, base);
+    requireBalanced("record", request.lines, request.currency, base, request.rate);
+    try {
+        return recordOnce(request, base);
+    } catch (Lightweight::SqlException const&) {
+        // A concurrent first call with this key committed between this call's lookup and its write (the unique
+        // key refuses the second row), and this call's transaction is rolled back. The second try finds the
+        // winner's row and answers it, or reports the key's different body; a failure that is not that race fails
+        // again and surfaces.
+        return recordOnce(request, base);
+    }
 }
 
 std::optional<::morph::math::Rational> LedgerModel::rateOn(CompanyId /*company*/, CurrencyCode /*from*/,

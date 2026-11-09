@@ -889,6 +889,13 @@ supervisors of its company and to the principal it belongs to, not to every hold
   the original between the read and the mark, which fails with the guard removed; the post guard's condition has no
   such seam, so only its zero-row handling is tested.
 
+- **A source key is bound to one posting body.** The ledger records a posting once per company and source key. A
+  repeat of the same request (date, source reference, currency, rate, and every line's account, side and amounts,
+  compared by value) answers the first entry and writes nothing, even after the dated rate or the period has
+  changed; a repeat with a different body is a `Conflict`, because answering the first entry would tell the poster
+  its changed document was booked. Two simultaneous first calls with one key record one entry: the unique index
+  refuses the second row, that call rolls back and answers as a repeat.
+
 - **SQLite foreign keys are not enforced on the lims connection.** `PRAGMA foreign_keys` answers 0 there (measured by
   a test), so the foreign keys the ledger migration declares (line to entry, line to account, entry to period) are
   declared but not enforced. What keeps a line on its own company's chart is the company filter in the ledger's

@@ -133,13 +133,19 @@ public:
     /// Not itself an action: postings reach it only from a module's document, through the app's wiring. Checks what
     /// a hand-made entry is checked for, and that the request's rate is the ledger's rate on its date (one when the
     /// currencies are the same). The source key is recorded in the entry's own transaction, so a repeated request
-    /// answers the first entry and writes nothing.
+    /// answers the first entry and writes nothing. A key is looked up before the dated rate, the period or the
+    /// accounts are checked, so an identical repeat answers the first entry whatever has changed since. Two
+    /// simultaneous first calls with one key record one entry and both answer it.
+    ///
+    /// A repeated key must repeat the request: its date, source reference, currency, rate and every line's account,
+    /// side and amounts, compared by value. A key recorded for another request is refused; a corrected document
+    /// takes a new key.
     /// @param request The request.
     /// @return The entry; the first one recorded under the request's key when it is repeated.
     /// @throws ValidationError if the request is malformed, does not balance, or names a rate other than the dated
     ///         one.
     /// @throws NotFound if the company, the period of its date or an account does not exist.
-    /// @throws Conflict if the period is closed.
+    /// @throws Conflict if the period is closed, or if the source key is already recorded for a different request.
     [[nodiscard]] static PostingResult record(PostingRequest const& request);
 
     /// @brief The ledger's rate for converting @p from into @p to on a date.

@@ -5,15 +5,19 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlStatement.hpp>
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <map>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -837,6 +841,20 @@ namespace {
     return Rational{Numerator{minor}, Denominator{100}, DecimalPlaces{2}};
 }
 
+/// @brief The rows of the posting-source table.
+/// @return How many there are.
+[[nodiscard]] std::size_t sourceRows() {
+    Lightweight::DataMapper mapper;
+    return mapper.Query<lims::db::PostingSourceRecord>().All().size();
+}
+
+/// @brief The rows of the entry-line table.
+/// @return How many there are.
+[[nodiscard]] std::size_t lineRows() {
+    Lightweight::DataMapper mapper;
+    return mapper.Query<lims::db::EntryLineRecord>().All().size();
+}
+
 }  // namespace
 
 // Mutation: drop the replay-ledger lookup from record (the retried posting makes a second entry).
@@ -917,6 +935,134 @@ TEST_CASE("ledger entries: the database refuses a second row for one source key"
     duplicate.sourceKey = Lightweight::SqlAnsiString<128>{"billing.invoice:1"};
     duplicate.entry = Lightweight::SqlAnsiString<32>{"99"};
     CHECK_THROWS(mapper.Create(duplicate));
+}
+
+// Mutation: drop the comparison from answerKnown (a different body under a recorded key answers the first entry).
+TEST_CASE("ledger entries: a recorded key with a different body is a Conflict, an identical repeat is not",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    auto const base = posting("k", 100);
+    auto const first = lims::LedgerModel::record(base);
+    REQUIRE(entryCount() == 1U);
+    auto const sources = sourceRows();
+    auto const lines = lineRows();
+
+    SECTION("an identical repeat answers the first entry and adds no row to either table") {
+        CHECK(lims::LedgerModel::record(base).entryId == first.entryId);
+        CHECK(sourceRows() == sources);
+        CHECK(lineRows() == lines);
+    }
+    SECTION("an identical repeat with its amounts written at other decimals is still identical") {
+        auto repeat = base;
+        for (auto& each : repeat.lines) {
+            each.amount = money(100, 4);
+            each.companyAmount = money(100, 4);
+        }
+        CHECK(lims::LedgerModel::record(repeat).entryId == first.entryId);
+    }
+    SECTION("another amount") { CHECK_THROWS_AS(lims::LedgerModel::record(posting("k", 200)), lims::Conflict); }
+    SECTION("another source reference") {
+        auto changed = base;
+        changed.sourceReference = "other";
+        CHECK_THROWS_AS(lims::LedgerModel::record(changed), lims::Conflict);
+    }
+    SECTION("the sides exchanged between the lines") {
+        auto changed = base;
+        changed.lines = {line("1200", lims::PostingSide::Credit, 100), line("4000", lims::PostingSide::Debit, 100)};
+        CHECK_THROWS_AS(lims::LedgerModel::record(changed), lims::Conflict);
+    }
+    SECTION("another account on one line") {
+        auto changed = base;
+        changed.lines = {line("1200", lims::PostingSide::Debit, 100), line("6900", lims::PostingSide::Credit, 100)};
+        CHECK_THROWS_AS(lims::LedgerModel::record(changed), lims::Conflict);
+    }
+    SECTION("another date") {
+        auto changed = base;
+        changed.date = morph::time::Timestamp{lims::test::at(2026, 11, 11)};
+        CHECK_THROWS_AS(lims::LedgerModel::record(changed), lims::Conflict);
+    }
+    SECTION("the same lines in another order") {
+        auto changed = base;
+        std::swap(changed.lines.front(), changed.lines.back());
+        CHECK_THROWS_AS(lims::LedgerModel::record(changed), lims::Conflict);
+    }
+    CHECK(entryCount() == 1U);
+    CHECK(sourceRows() == sources);
+    CHECK(lineRows() == lines);
+}
+
+// Mutation: move the key lookup after the period check (a repeat into a since-closed period is refused).
+TEST_CASE("ledger entries: an identical repeat answers the first entry after its period has closed",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    auto const november = books();
+    auto const first = lims::LedgerModel::record(posting("k", 100));
+    forceState(november.id, lims::PeriodState::Closed);
+    CHECK(lims::LedgerModel::record(posting("k", 100)).entryId == first.entryId);
+    CHECK_THROWS_AS(lims::LedgerModel::record(posting("k", 200)), lims::Conflict);
+}
+
+// Mutation: drop the catch of the unique-key failure from record (the loser surfaces a database exception).
+TEST_CASE("ledger entries: simultaneous first calls with one key record one entry and both answer it",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    constexpr int kRounds = 20;
+    std::atomic<int> failures{0};
+    for (int round = 0; round < kRounds; ++round) {
+        auto const request = posting("race:" + std::to_string(round), 100);
+        std::atomic<bool> go{false};
+        std::int64_t answers[2] = {0, 0};
+        auto const call = [&](int slot) {
+            while (!go.load()) {
+                std::this_thread::yield();
+            }
+            try {
+                answers[slot] = *lims::LedgerModel::record(request).entryId;
+            } catch (...) {
+                ++failures;
+            }
+        };
+        std::thread a{call, 0};
+        std::thread b{call, 1};
+        go = true;
+        a.join();
+        b.join();
+        CHECK(answers[0] != 0);
+        CHECK(answers[0] == answers[1]);
+    }
+    CHECK(failures.load() == 0);
+    CHECK(entryCount() == static_cast<std::size_t>(kRounds));
+    CHECK(sourceRows() == static_cast<std::size_t>(kRounds));
+}
+
+// Mutation: replace the OutOfRange throw in ClosePeriod's freeze with `continue`.
+TEST_CASE("ledger entries: a total too large to freeze is OutOfRange and leaves the period closing",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    auto const november = books();
+    (void)lims::LedgerModel::record(posting("billing.invoice:1", 100));
+    (void)lims::LedgerModel::record(posting("billing.invoice:2", 100));
+    {
+        Lightweight::DataMapper mapper;
+        for (auto& row : mapper.Query<lims::db::EntryLineRecord>().All()) {
+            row.companyNum = std::numeric_limits<std::int64_t>::max();
+            row.companyDen = 1;
+            mapper.Update(row);
+        }
+    }
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    ledger.execute(lims::BeginClosePeriod{.periodId = november.id});
+    CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = november.id}), lims::OutOfRange);
+    Lightweight::DataMapper mapper;
+    CHECK(mapper.Query<lims::db::PeriodBalanceRecord>().All().empty());
+    auto const periods = mapper.Query<lims::db::PeriodRecord>()
+                             .Where(::Lightweight::FieldNameOf<&lims::db::PeriodRecord::id>, "=", *november.id)
+                             .All();
+    REQUIRE(periods.size() == 1U);
+    CHECK(periods.front().state.Value() == static_cast<int>(lims::PeriodState::Closing));
 }
 
 // Mutations: drop requireBalanced, requireRate or the malformed-request check from record; drop the
