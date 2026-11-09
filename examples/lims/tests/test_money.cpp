@@ -43,6 +43,9 @@ TEST_CASE("money: a poster rounds half-up to the currency's decimals", "[lims][m
     CHECK(lims::roundToCurrency(ratio(1004, 1000, 3), lims::CurrencyCode::EUR) == ratio(100, 100, 2));
     CHECK(lims::roundToCurrency(ratio(1005, 10, 1), lims::CurrencyCode::JPY) == ratio(101, 1, 0));
     CHECK(lims::roundToCurrency(ratio(1004, 10, 1), lims::CurrencyCode::JPY) == ratio(100, 1, 0));
+    // Equality ignores the decimal-places tag, so the tag is asserted on its own.
+    CHECK(lims::roundToCurrency(ratio(1005, 10, 1), lims::CurrencyCode::JPY).getDecimalPlaces() == DecimalPlaces{0});
+    CHECK(lims::roundToCurrency(ratio(1005, 1000, 3), lims::CurrencyCode::EUR).getDecimalPlaces() == DecimalPlaces{2});
     // Away from zero below it: a negative half rounds to the larger magnitude.
     CHECK(lims::roundToCurrency(ratio(-1005, 1000, 3), lims::CurrencyCode::EUR) == ratio(-101, 100, 2));
     // A value that already fits is unchanged.

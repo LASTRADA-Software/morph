@@ -852,8 +852,8 @@ is known only from its row. So the models check what the type cannot: amounts th
 amount fits its currency's minor unit (JPY has none). Posters round with `lims::roundToCurrency`, half away from zero
 — half-up for the positive amounts they round. Totals are summed with `lims::ExactSum`, which refuses an overflow
 instead of saturating, over `Rational` values rather than `Quantity` ones, because a `Quantity` records a provenance
-node per addition. The ids billing refers to (client, sample, analysis, result) moved from lab to org, unchanged on
-the wire and in the journal.
+node per addition while `MORPH_QUANTITY_PROVENANCE` is 1 (the default). The ids billing refers to (client, sample,
+analysis, result) moved from lab to org, unchanged on the wire and in the journal.
 
 ## Findings raised by this rung
 

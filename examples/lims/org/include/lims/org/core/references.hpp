@@ -6,7 +6,7 @@
 /// @file
 /// The ids of records one module owns and another refers to: lab's clients, samples, analysis definitions and
 /// results, which billing bills. Shared so a module that refers to one does not include its owner. The shape tags are
-/// part of every journal entry that carries one, so they are spelled exactly as lab first wrote them.
+/// part of every journal entry that carries one, and clients decode them, so they must not change.
 
 namespace lims {
 
