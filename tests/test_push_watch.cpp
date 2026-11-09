@@ -1766,3 +1766,41 @@ TEST_CASE("principal_change_discards_queued_changes", "[push][watch]") {
     CHECK(keys.size() == ::morph::backend::detail::kCoalesceKeyLimit);
     CHECK(std::ranges::find(keys, "7777") == keys.end());
 }
+
+// Mutation: leave a connection's window marked open after its event is sent -- the next change finds a window
+// "open" that has no timer and is never sent.
+TEST_CASE("a_second_burst_after_the_window_closed_is_sent_too", "[push][watch]") {
+    FanRig rig{std::chrono::milliseconds{0}, nullptr, std::chrono::milliseconds{20}};
+    auto const caller = rig.connect();
+    auto const cid = rig.connect();
+    rig.watch(cid, records({"T_FanRow"}));
+
+    rig.fanOut({rowChange({"1"})}, caller);
+    REQUIRE(::morph::testing::waitUntil([&] { return rig.wire(cid).changes().size() == 1U; }));
+    rig.fanOut({rowChange({"2"})}, caller);
+    REQUIRE(::morph::testing::waitUntil([&] { return rig.wire(cid).changes().size() == 2U; }));
+    CHECK(keysOf(rig.wire(cid).changes().back().records.front()) == std::vector<std::string>{"2"});
+}
+
+// Mutation: leave the window marked open when a queue is discarded -- changes queued afterwards never get a window.
+TEST_CASE("changes_after_a_discarded_queue_are_sent", "[push][watch]") {
+    auto const guard = std::make_shared<FlipGuard>();
+    FanRig rig{std::chrono::milliseconds{0}, guard, std::chrono::milliseconds{300}};
+    auto const caller = rig.connect();
+    auto const cid = rig.connect();
+    rig.watch(cid, records({"T_FanRow"}), "carol");
+    rig.fanOut({rowChange({"7777"})}, caller, "alice");
+
+    (void)rig.create(cid, {}, "dave");
+    rig.watch(cid, records({"T_FanRow"}), "dave");
+    rig.fanOut({rowChange({"1"})}, caller, "alice");
+
+    REQUIRE(::morph::testing::waitUntil(
+        [&] {
+            auto const bodies = rig.wire(cid).changes();
+            return std::ranges::any_of(bodies, [](auto const& body) {
+                return !body.records.empty() && keysOf(body.records.front()) == std::vector<std::string>{"1"};
+            });
+        },
+        ::morph::testing::WaitBudget{std::chrono::milliseconds{5000}}));
+}
