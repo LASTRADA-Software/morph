@@ -29,6 +29,7 @@
 #include "lims/org/dto/company_dto.hpp"
 #include "lims/org/models/auth_model.hpp"
 #include "lims/org/models/org_model.hpp"
+#include "org_screens.hpp"
 
 namespace lims::screens {
 
@@ -514,6 +515,10 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
     listed.push_back({.id = std::string{kSample}, .title = "Sample", .registered = screens.add(sampleScreen())});
     listed.push_back(
         {.id = std::string{kIgnition}, .title = "Ignition tests", .registered = screens.add(ignitionScreen())});
+    listed.push_back(
+        {.id = std::string{kCompanies}, .title = "Companies and sites", .registered = screens.add(companiesScreen())});
+    listed.push_back(
+        {.id = std::string{kAccess}, .title = "Users and roles", .registered = screens.add(accessScreen())});
     listed.push_back({.id = std::string{kLogin}, .title = "Sign in", .registered = screens.add(loginScreen())});
     for (Listed const& screen : listed) {
         if (!screen.registered) {

@@ -31,6 +31,12 @@ inline constexpr std::string_view kSample = "lims.sample";
 /// @brief Ignition tests: one section per test, each stored as it changes, so a chat's change applies at once.
 inline constexpr std::string_view kIgnition = "lims.ignition";
 
+/// @brief Companies and their sites: the lists, and a form to create each.
+inline constexpr std::string_view kCompanies = "lims.org.companies";
+
+/// @brief Users and their role assignments: the lists, a form to assign a role, and a revoke per assignment.
+inline constexpr std::string_view kAccess = "lims.org.access";
+
 /// @brief Sign-in, the one screen served before it: a successful login opens sample registration. In process the
 ///        client signs in its `--user` itself, so this is the server's way in.
 inline constexpr std::string_view kLogin = "lims.login";

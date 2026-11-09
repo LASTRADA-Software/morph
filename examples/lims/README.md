@@ -606,7 +606,7 @@ revisited then rather than treated as settled.
 ## The client
 
 lims' screens are UI documents served by the framework (spec 4), authored with the C++ builders in
-[`screens/lims_screens.cpp`](screens/lims_screens.cpp):
+[`screens/lims_screens.cpp`](screens/lims_screens.cpp) and [`screens/org_screens.cpp`](screens/org_screens.cpp):
 
 - **`lims.register`** registers a client, then a sample for it, through mutations over a private
   instance of `SampleModel`, and opens the new sample's lifecycle.
@@ -625,6 +625,11 @@ lims' screens are UI documents served by the framework (spec 4), authored with t
   whose built-in fallbacks are what a client without them shows. A "choose project" dialog picks from
   `ListProjects`, which the table engine sorts, filters and pages. The screen's identity is its sample,
   and it is dirty while the working copy holds unsaved edits.
+
+- **`lims.org.companies`** lists the companies and sites the viewer's roles reach and creates either through its
+  action's form.
+- **`lims.org.access`** lists the users and role assignments the viewer's roles reach, assigns a role through
+  `AssignRole`'s form (the first assignment on a lab with no supervisor needs none) and revokes one per row.
 
 Each action declares what it changes beside its registration (`BRIDGE_REGISTER_EFFECTS` in
 `lab/include/lims/lab/models/`): a transition updates its `Lims_Sample`, a capture changes `Lims_Result`, the sample-entry
@@ -785,6 +790,15 @@ refresh when its viewer's roles change; it refreshes on the next sample change o
 `include/morph/core/effects.hpp` (`addEffects`, the two-declarations check); not reproduced on a screen, because no
 Part A screen lists samples. A second module needing the same (billing's lines on a role change) makes it a framework
 gap to file against `include/morph`.
+
+### 27. The organisation is administered from two screens
+
+`lims.org.companies` lists the companies and sites the viewer can see and creates either; `lims.org.access` lists
+the users and role assignments the viewer can see, assigns a role and revokes one. Every form is its action's schema
+and every list refreshes from the declared effects of the action that changed it, so neither screen says what to
+refresh. A user is a principal holding an assignment: lims keeps no user store, and whoever signs in is a principal.
+A refused revoke (the last supervisor's) shows its reason in words. The screens are functional, not finished; the
+production GUI rebuilds them against the org mockups.
 
 ## Findings raised by this rung
 
