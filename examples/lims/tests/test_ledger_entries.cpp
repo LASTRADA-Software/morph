@@ -8,6 +8,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <cstddef>
+#include <map>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
@@ -119,7 +121,7 @@ lims::JournalEntryView accrual(lims::LedgerModel& ledger, morph::time::Timestamp
         .lines = {line("6900", lims::PostingSide::Debit, 5000), line("2200", lims::PostingSide::Credit, 5000)}});
 }
 
-/// @brief Sets November 2026's state directly: there is no action that closes a period yet.
+/// @brief Sets a period's state directly, past the actions that move it.
 /// @param period The period.
 /// @param state The state.
 void forceState(lims::PeriodId period, lims::PeriodState state) {
@@ -779,4 +781,357 @@ TEST_CASE("ledger entries: SQLite foreign-key enforcement on the lims connection
     REQUIRE(enforced.has_value());
     CAPTURE(*enforced);
     CHECK(*enforced == 0);
+}
+
+namespace {
+
+/// @brief A posting of @p minor from receivables to revenue on 10 November 2026.
+/// @param key The source key.
+/// @param minor The amount.
+/// @return The request.
+[[nodiscard]] lims::PostingRequest posting(std::string key, std::int64_t minor) {
+    return lims::PostingRequest{
+        .company = lims::test::seededCompany(),
+        .date = morph::time::Timestamp{lims::test::at(2026, 11, 10)},
+        .sourceKey = key,
+        .sourceReference = key,
+        .currency = lims::CurrencyCode::EUR,
+        .rate = one(),
+        .lines = {line("1200", lims::PostingSide::Debit, minor), line("4000", lims::PostingSide::Credit, minor)}};
+}
+
+/// @brief The entries of the seeded company.
+/// @return How many there are.
+[[nodiscard]] std::size_t entryCount() {
+    ScopedPrincipal const alice{"alice"};
+    return lims::LedgerModel{}.execute(lims::ListEntries{.company = lims::test::seededCompany()}).entries.size();
+}
+
+/// @brief The frozen totals of @p period, by account code.
+/// @param period The period.
+/// @return Each account's debit and credit total.
+[[nodiscard]] std::map<std::string, std::pair<Rational, Rational>> frozen(lims::PeriodId period) {
+    Lightweight::DataMapper mapper;
+    std::map<std::string, std::pair<Rational, Rational>> result;
+    for (auto const& row : mapper.Query<lims::db::PeriodBalanceRecord>()
+                               .Where(::Lightweight::FieldNameOf<&lims::db::PeriodBalanceRecord::period>, "=", *period)
+                               .All()) {
+        auto const accounts = mapper.Query<lims::db::AccountRecord>()
+                                  .Where(::Lightweight::FieldNameOf<&lims::db::AccountRecord::id>, "=",
+                                         static_cast<std::uint64_t>(row.account.Value()))
+                                  .All();
+        REQUIRE(accounts.size() == 1U);
+        result.emplace(
+            std::string{accounts.front().code.Value().ToStringView()},
+            std::pair{
+                Rational{Numerator{row.debitNum.Value()}, Denominator{row.debitDen.Value()}, DecimalPlaces{2}},
+                Rational{Numerator{row.creditNum.Value()}, Denominator{row.creditDen.Value()}, DecimalPlaces{2}}});
+    }
+    return result;
+}
+
+/// @brief @p minor minor units as a two-decimal value.
+/// @param minor The minor units.
+/// @return The value.
+[[nodiscard]] Rational cents(std::int64_t minor) {
+    return Rational{Numerator{minor}, Denominator{100}, DecimalPlaces{2}};
+}
+
+}  // namespace
+
+// Mutation: drop the replay-ledger lookup from record (the retried posting makes a second entry).
+TEST_CASE("ledger entries: a posting is recorded once per source key, and a retry answers the first entry",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    auto const first = lims::LedgerModel::record(posting("billing.invoice:1", 11900));
+    auto const retried = lims::LedgerModel::record(posting("billing.invoice:1", 11900));
+    CHECK(retried.entryId == first.entryId);
+    CHECK(entryCount() == 1U);
+    ScopedPrincipal const alice{"alice"};
+    auto const entry = lims::LedgerModel{}.execute(lims::GetEntry{.entryId = first.entryId});
+    CHECK(entry.state == lims::EntryState::Posted);
+    CHECK(entry.sourceKey == "billing.invoice:1");
+    CHECK(entry.postedBy == "posting");
+    // A different key is a different entry.
+    CHECK(lims::LedgerModel::record(posting("billing.invoice:2", 100)).entryId != first.entryId);
+    CHECK(entryCount() == 2U);
+}
+
+// Mutation: key the replay ledger's scope by a constant instead of the company (the other company's posting under
+// the same key answers the first company's entry).
+TEST_CASE("ledger entries: a source key is recorded once per company", "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    lims::CompanyId osaka;
+    {
+        ScopedPrincipal const alice{"alice"};
+        osaka = lims::OrgModel{}
+                    .execute(lims::CreateCompany{.name = "Osaka branch",
+                                                 .baseCurrency = lims::CurrencyCode::JPY,
+                                                 .fiscalYearStart = lims::Month::April})
+                    .id;
+        lims::OrgModel{}.execute(
+            lims::AssignRole{.principal = "dave", .role = lims::LimsRole::Accountant, .company = osaka, .site = {}});
+    }
+    auto const date = morph::time::Timestamp{lims::test::at(2026, 11, 10)};
+    {
+        ScopedPrincipal const dave{"dave"};
+        lims::LedgerModel ledger;
+        for (std::string const code : {"1200", "4000"}) {
+            ledger.execute(lims::CreateAccount{
+                .company = osaka, .code = code, .name = "Account " + code, .type = lims::AccountType::Asset});
+        }
+        ledger.execute(lims::OpenPeriod{.company = osaka, .month = date});
+    }
+    auto const mine = lims::LedgerModel::record(posting("shared-key", 100));
+    lims::PostingRequest yen{.company = osaka,
+                             .date = date,
+                             .sourceKey = "shared-key",
+                             .sourceReference = "shared-key",
+                             .currency = lims::CurrencyCode::JPY,
+                             .rate = one(),
+                             .lines = {{.accountCode = "1200",
+                                        .side = lims::PostingSide::Debit,
+                                        .amount = money(500, 0),
+                                        .companyAmount = money(500, 0)},
+                                       {.accountCode = "4000",
+                                        .side = lims::PostingSide::Credit,
+                                        .amount = money(500, 0),
+                                        .companyAmount = money(500, 0)}}};
+    auto const theirs = lims::LedgerModel::record(yen);
+    CHECK(theirs.entryId != mine.entryId);
+    CHECK(lims::LedgerModel::record(yen).entryId == theirs.entryId);
+    CHECK(entryCount() == 1U);
+}
+
+// Mutation: drop the unique index on (scope, source_key) from the migration.
+TEST_CASE("ledger entries: the database refuses a second row for one source key", "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    (void)lims::LedgerModel::record(posting("billing.invoice:1", 100));
+    Lightweight::DataMapper mapper;
+    lims::db::PostingSourceRecord duplicate;
+    duplicate.scope = Lightweight::SqlAnsiString<32>{std::to_string(*lims::test::seededCompany())};
+    duplicate.sourceKey = Lightweight::SqlAnsiString<128>{"billing.invoice:1"};
+    duplicate.entry = Lightweight::SqlAnsiString<32>{"99"};
+    CHECK_THROWS(mapper.Create(duplicate));
+}
+
+// Mutations: drop requireBalanced, requireRate or the malformed-request check from record; drop the
+// requireRecordable call from record; let accountIds ignore the company.
+TEST_CASE("ledger entries: a posting that is malformed, unbalanced or unplaceable is refused and writes nothing",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    CHECK_THROWS_AS(lims::LedgerModel::record(posting("billing.invoice:1", 0)), lims::ValidationError);
+    auto unbalanced = posting("billing.invoice:2", 100);
+    unbalanced.lines[1] = line("4000", lims::PostingSide::Credit, 99);
+    CHECK_THROWS_AS(lims::LedgerModel::record(unbalanced), lims::ValidationError);
+    auto badRate = posting("billing.invoice:3", 100);
+    badRate.rate = rateOf(1100000);
+    CHECK_THROWS_AS(lims::LedgerModel::record(badRate), lims::ValidationError);
+    auto noKey = posting("", 100);
+    CHECK_THROWS_AS(lims::LedgerModel::record(noKey), lims::ValidationError);
+    auto noCompany = posting("billing.invoice:4", 100);
+    noCompany.company = lims::CompanyId{};
+    CHECK_THROWS_AS(lims::LedgerModel::record(noCompany), lims::ValidationError);
+    auto unknownCompany = posting("billing.invoice:5", 100);
+    unknownCompany.company = lims::CompanyId{9999};
+    CHECK_THROWS_AS(lims::LedgerModel::record(unknownCompany), lims::NotFound);
+    auto unknown = posting("billing.invoice:6", 100);
+    unknown.lines[0].accountCode = "9999";
+    CHECK_THROWS_AS(lims::LedgerModel::record(unknown), lims::NotFound);
+    auto noPeriod = posting("billing.invoice:7", 100);
+    noPeriod.date = morph::time::Timestamp{lims::test::at(2026, 12, 1)};
+    CHECK_THROWS_AS(lims::LedgerModel::record(noPeriod), lims::NotFound);
+    // A foreign-currency posting needs a ledger rate for its date; the ledger holds none yet.
+    lims::PostingRequest usd = posting("billing.invoice:8", 100);
+    usd.currency = lims::CurrencyCode::USD;
+    usd.rate = rateOf(920000);
+    usd.lines = {valued("1200", lims::PostingSide::Debit, 100, 92),
+                 valued("4000", lims::PostingSide::Credit, 100, 92)};
+    CHECK_THROWS_AS(lims::LedgerModel::record(usd), lims::ValidationError);
+    CHECK(entryCount() == 0U);
+    // None of the refusals recorded its key: the same key records once the request is right.
+    CHECK_NOTHROW((void)lims::LedgerModel::record(posting("billing.invoice:7", 100)));
+    CHECK(entryCount() == 1U);
+}
+
+// Mutation: skip the draft check in ClosePeriod (the period closes with a draft in it).
+TEST_CASE("ledger entries: a period closes only without drafts, and nothing is recorded in it afterwards",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    auto const november = books();
+    (void)lims::LedgerModel::record(posting("billing.invoice:1", 1000));
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const draft = accrual(ledger, morph::time::Timestamp{lims::test::at(2026, 11, 12)});
+    // Not closing yet: ClosePeriod is refused even with no drafts to wait for.
+    CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = november.id}), lims::IllegalTransition);
+    ledger.execute(lims::BeginClosePeriod{.periodId = november.id});
+    // Closing: no new drafts, postings still recorded.
+    CHECK_THROWS_AS(accrual(ledger, morph::time::Timestamp{lims::test::at(2026, 11, 13)}), lims::Conflict);
+    (void)lims::LedgerModel::record(posting("billing.invoice:2", 2000));
+    CHECK_THROWS_WITH(ledger.execute(lims::ClosePeriod{.periodId = november.id}),
+                      Catch::Matchers::ContainsSubstring("draft"));
+    CHECK(frozen(november.id).empty());
+    ledger.execute(lims::PostEntry{.entryId = draft.id});
+    auto const closed = ledger.execute(lims::ClosePeriod{.periodId = november.id});
+    CHECK(closed.state == lims::PeriodState::Closed);
+    CHECK(closed.id == november.id);
+    CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = november.id}), lims::IllegalTransition);
+    // Closed: nothing new enters it.
+    CHECK_THROWS_AS(lims::LedgerModel::record(posting("billing.invoice:3", 3000)), lims::Conflict);
+    CHECK_THROWS_AS(accrual(ledger, morph::time::Timestamp{lims::test::at(2026, 11, 14)}), lims::Conflict);
+    CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = draft.id,
+                                                      .date = morph::time::Timestamp{lims::test::at(2026, 11, 30)}}),
+                    lims::Conflict);
+    // A retried posting from before the close still answers its entry.
+    CHECK_NOTHROW((void)lims::LedgerModel::record(posting("billing.invoice:2", 2000)));
+    CHECK(entryCount() == 3U);
+}
+
+// Mutations: skip the freeze loop in ClosePeriod (no rows); sum debits and credits into one side; drop the Closed
+// refusal from requireRecordable (the December reversal below would still pass, the November one would not).
+TEST_CASE("ledger entries: closing freezes each account's totals, and later entries do not change them",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    auto const november = books();
+    (void)lims::LedgerModel::record(posting("billing.invoice:1", 1000));
+    (void)lims::LedgerModel::record(posting("billing.invoice:2", 2000));
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const accrued = accrual(ledger, morph::time::Timestamp{lims::test::at(2026, 11, 12)});
+    ledger.execute(lims::PostEntry{.entryId = accrued.id});
+    auto const december = ledger.execute(lims::OpenPeriod{
+        .company = lims::test::seededCompany(), .month = morph::time::Timestamp{lims::test::at(2026, 12, 1)}});
+    ledger.execute(lims::BeginClosePeriod{.periodId = november.id});
+    ledger.execute(lims::ClosePeriod{.periodId = november.id});
+
+    auto const balances = frozen(november.id);
+    REQUIRE(balances.size() == 4U);
+    CHECK(balances.at("1200").first == cents(3000));
+    CHECK(balances.at("1200").second == cents(0));
+    CHECK(balances.at("4000").first == cents(0));
+    CHECK(balances.at("4000").second == cents(3000));
+    CHECK(balances.at("6900").first == cents(5000));
+    CHECK(balances.at("2200").second == cents(5000));
+
+    // December takes a reversal of a November entry; November's totals stay as they were.
+    auto const reversal = ledger.execute(
+        lims::ReverseEntry{.entryId = accrued.id, .date = morph::time::Timestamp{lims::test::at(2026, 12, 2)}});
+    CHECK(reversal.period == december.id);
+    auto inDecember = posting("billing.invoice:3", 700);
+    inDecember.date = morph::time::Timestamp{lims::test::at(2026, 12, 3)};
+    (void)lims::LedgerModel::record(inDecember);
+    auto const after = frozen(november.id);
+    REQUIRE(after.size() == 4U);
+    for (auto const& [code, totals] : balances) {
+        CAPTURE(code);
+        CHECK(after.at(code).first == totals.first);
+        CHECK(after.at(code).second == totals.second);
+    }
+    CHECK(frozen(december.id).empty());
+}
+
+// Mutation: drop the unique index on (period_id, account_id) from the migration.
+TEST_CASE("ledger entries: the database refuses two frozen rows for one account of a period", "[lims][ledger]") {
+    DbFixture fixture;
+    auto const november = books();
+    (void)lims::LedgerModel::record(posting("billing.invoice:1", 1000));
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    ledger.execute(lims::BeginClosePeriod{.periodId = november.id});
+    ledger.execute(lims::ClosePeriod{.periodId = november.id});
+    Lightweight::DataMapper mapper;
+    auto rows = mapper.Query<lims::db::PeriodBalanceRecord>().All();
+    REQUIRE_FALSE(rows.empty());
+    lims::db::PeriodBalanceRecord duplicate;
+    duplicate.period = rows.front().period.Value();
+    duplicate.account = rows.front().account.Value();
+    CHECK_THROWS(mapper.Create(duplicate));
+}
+
+// Mutation: sum a foreign line at its transaction amount instead of its company amount.
+TEST_CASE("ledger entries: frozen totals are in company currency", "[lims][ledger]") {
+    DbFixture fixture;
+    auto const november = books();
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const draft =
+        ledger.execute(lims::CreateDraftEntry{.company = lims::test::seededCompany(),
+                                              .date = morph::time::Timestamp{lims::test::at(2026, 11, 12)},
+                                              .memo = "usd",
+                                              .currency = lims::CurrencyCode::USD,
+                                              .rate = rateOf(920000),
+                                              .lines = {valued("1200", lims::PostingSide::Debit, 1000, 920),
+                                                        valued("4000", lims::PostingSide::Credit, 1000, 920)}});
+    ledger.execute(lims::PostEntry{.entryId = draft.id});
+    ledger.execute(lims::BeginClosePeriod{.periodId = november.id});
+    ledger.execute(lims::ClosePeriod{.periodId = november.id});
+    auto const balances = frozen(november.id);
+    REQUIRE(balances.size() == 2U);
+    CHECK(balances.at("1200").first == cents(920));
+    CHECK(balances.at("4000").second == cents(920));
+}
+
+// Mutations: delete requireRoleSomewhere or requireAuthorized from ClosePeriod; make periodCompany answer the
+// seeded company for every period; delete validate() from ClosePeriod.
+TEST_CASE("ledger entries: closing a period is an accountant's, at its company", "[lims][ledger]") {
+    DbFixture fixture;
+    auto const november = books();
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    lims::CompanyId osaka;
+    {
+        ScopedPrincipal const alice{"alice"};
+        osaka = lims::OrgModel{}
+                    .execute(lims::CreateCompany{.name = "Osaka branch",
+                                                 .baseCurrency = lims::CurrencyCode::JPY,
+                                                 .fiscalYearStart = lims::Month::April})
+                    .id;
+        lims::OrgModel{}.execute(
+            lims::AssignRole{.principal = "dave", .role = lims::LimsRole::Accountant, .company = osaka, .site = {}});
+        lims::LedgerModel{}.execute(lims::BeginClosePeriod{.periodId = november.id});
+    }
+    lims::LedgerModel ledger;
+    {
+        ScopedPrincipal const nobody{"nobody"};
+        for (auto const id : {november.id, lims::PeriodId{9999}}) {
+            CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = id}), lims::Forbidden);
+        }
+    }
+    {
+        ScopedPrincipal const dave{"dave"};
+        CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = november.id}), lims::Forbidden);
+        CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = lims::PeriodId{9999}}), lims::NotFound);
+        CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{}), lims::ValidationError);
+        auto const osakaPeriod = ledger.execute(
+            lims::OpenPeriod{.company = osaka, .month = morph::time::Timestamp{lims::test::at(2026, 11, 1)}});
+        ledger.execute(lims::BeginClosePeriod{.periodId = osakaPeriod.id});
+        CHECK(ledger.execute(lims::ClosePeriod{.periodId = osakaPeriod.id}).state == lims::PeriodState::Closed);
+    }
+    {
+        ScopedPrincipal const alice{"alice"};
+        CHECK(frozen(november.id).empty());
+    }
+}
+
+TEST_CASE("LedgerModel over the full backend-mode matrix: a period is begun and closed", "[lims][ledger][matrix]") {
+    auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    DbFixture fixture;
+    auto const november = books();
+    (void)lims::LedgerModel::record(posting("billing.invoice:1", 1000));
+    morph::session::TokenIssuer const issuer{std::string{kSecret}, morph::session::hmacSha256};
+    BackendRig rig{mode, 1, lims::test::limsAuthorizer(kSecret)};
+    rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "alice"));
+    auto ledger = rig.client<lims::LedgerModel>(0);
+    CHECK(awaitQt(ledger.execute(lims::BeginClosePeriod{.periodId = november.id})).state ==
+          lims::PeriodState::Closing);
+    auto const closed = awaitQt(ledger.execute(lims::ClosePeriod{.periodId = november.id}));
+    CHECK(closed.state == lims::PeriodState::Closed);
+    CHECK(closed.id == november.id);
+    CHECK(frozen(november.id).size() == 2U);
 }

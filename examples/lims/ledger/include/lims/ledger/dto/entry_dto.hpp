@@ -121,6 +121,16 @@ struct ListEntriesResult {
     std::vector<JournalEntryView> entries;
 };
 
+/// @brief `Closing → Closed`: freezes the period's balances. Refused while a draft remains in it.
+struct ClosePeriod {
+    /// @brief The period.
+    PeriodId periodId;
+
+    /// @brief Whether a period is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return periodId.hasValue(); }
+};
+
 }  // namespace lims
 
 BRIDGE_REGISTER_RECORD(lims::JournalEntryView, "Ledger_Entry")

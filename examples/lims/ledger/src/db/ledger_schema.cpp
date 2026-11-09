@@ -59,6 +59,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20261110000004, "Create ledger_entries, their lines, p
         .RequiredColumn("scope", Varchar(32))
         .RequiredColumn("source_key", Varchar(128))
         .RequiredColumn("entry", Varchar(32));
+    plan.CreateUniqueIndex("idx_ledger_posting_sources_scope_key", "ledger_posting_sources", {"scope", "source_key"});
     plan.CreateTableIfNotExists("ledger_period_balances")
         .PrimaryKeyWithAutoIncrement("id", Bigint())
         .RequiredForeignKey("period_id", Bigint(),
@@ -69,5 +70,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20261110000004, "Create ledger_entries, their lines, p
         .RequiredColumn("debit_den", Bigint())
         .RequiredColumn("credit_num", Bigint())
         .RequiredColumn("credit_den", Bigint());
+    plan.CreateUniqueIndex("idx_ledger_period_balances_period_account", "ledger_period_balances",
+                           {"period_id", "account_id"});
 }
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

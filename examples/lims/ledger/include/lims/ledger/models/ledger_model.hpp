@@ -4,6 +4,9 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/util/datetime.hpp>
+#include <morph/util/rational.hpp>
+#include <optional>
 
 #include "lims/ledger/dto/account_dto.hpp"
 #include "lims/ledger/dto/entry_dto.hpp"
@@ -98,6 +101,20 @@ public:
     /// @throws EmptyPrincipalError if no principal is authenticated.
     JournalEntryView execute(const ReverseEntry& action);
 
+    /// @brief `Closing → Closed`: freezes each account's totals in the period, in company currency.
+    ///
+    /// After this the period takes no draft, post or reversal, and its frozen totals no longer change.
+    /// @param action The period.
+    /// @return The period, closed.
+    /// @throws ValidationError if no period is named.
+    /// @throws NotFound if it does not exist.
+    /// @throws IllegalTransition if it is not closing.
+    /// @throws Conflict if a draft entry remains in it.
+    /// @throws OutOfRange if an account's total is too large to freeze exactly.
+    /// @throws Forbidden if the caller is not an accountant at its company.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    PeriodView execute(const ClosePeriod& action);
+
     /// @brief Reads one entry, when the caller can see its company.
     /// @param action The entry.
     /// @return The entry.
@@ -110,6 +127,31 @@ public:
     /// @return Its entries by id; none for a company the caller cannot see.
     /// @throws ValidationError if no company is named.
     ListEntriesResult execute(const ListEntries& action);
+
+    /// @brief Records a poster's request as a posted entry, once per company and source key.
+    ///
+    /// Not itself an action: postings reach it only from a module's document, through the app's wiring. Checks what
+    /// a hand-made entry is checked for, and that the request's rate is the ledger's rate on its date (one when the
+    /// currencies are the same). The source key is recorded in the entry's own transaction, so a repeated request
+    /// answers the first entry and writes nothing.
+    /// @param request The request.
+    /// @return The entry; the first one recorded under the request's key when it is repeated.
+    /// @throws ValidationError if the request is malformed, does not balance, or names a rate other than the dated
+    ///         one.
+    /// @throws NotFound if the company, the period of its date or an account does not exist.
+    /// @throws Conflict if the period is closed.
+    [[nodiscard]] static PostingResult record(PostingRequest const& request);
+
+    /// @brief The ledger's rate for converting @p from into @p to on a date.
+    /// @param company The company whose rates apply.
+    /// @param from The transaction currency.
+    /// @param to The company's currency.
+    /// @param on The date.
+    /// @return Company-currency units per transaction-currency unit; nothing when the ledger holds no rate valid on
+    ///         the date.
+    [[nodiscard]] static std::optional<::morph::math::Rational> rateOn(CompanyId company, CurrencyCode from,
+                                                                       CurrencyCode to,
+                                                                       ::morph::time::Timestamp const& on);
 };
 
 }  // namespace lims
@@ -131,6 +173,8 @@ BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::PostEntry, "PostEntry")
 BRIDGE_REGISTER_EFFECTS(lims::PostEntry, ::morph::effects::updates<lims::JournalEntryView>)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ReverseEntry, "ReverseEntry")
 BRIDGE_REGISTER_EFFECTS(lims::ReverseEntry, ::morph::effects::changes<lims::JournalEntryView>)
+BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ClosePeriod, "ClosePeriod")
+BRIDGE_REGISTER_EFFECTS(lims::ClosePeriod, ::morph::effects::updates<lims::PeriodView>)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::GetEntry, "GetEntry", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListEntries, "ListEntries", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

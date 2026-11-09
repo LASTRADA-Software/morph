@@ -42,6 +42,8 @@ Scope Authorization<BeginClosePeriod>::scopeOf(BeginClosePeriod const& action) {
     return periodCompany(action.periodId);
 }
 
+Scope Authorization<ClosePeriod>::scopeOf(ClosePeriod const& action) { return periodCompany(action.periodId); }
+
 Scope Authorization<PostEntry>::scopeOf(PostEntry const& action) { return entryCompany(action.entryId); }
 
 Scope Authorization<ReverseEntry>::scopeOf(ReverseEntry const& action) { return entryCompany(action.entryId); }

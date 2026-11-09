@@ -4,6 +4,8 @@
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
 #include <cstdint>
+#include <map>
+#include <morph/offline/replay_ledger.hpp>
 #include <morph/session/session.hpp>
 #include <optional>
 #include <ranges>
@@ -20,6 +22,7 @@
 #include "lims/org/core/calendar.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
+#include "lims/org/core/money.hpp"
 #include "lims/org/models/org_model.hpp"
 
 namespace lims {
@@ -293,6 +296,44 @@ void requireRate(std::string_view where, Rational const& rate, CurrencyCode tran
     }
 }
 
+/// @brief The posting sources of one company, as an `IReplayLedger` over `ledger_posting_sources`.
+///
+/// Constructed over the caller's open mapper for one `record()`, so a source key is recorded in the same transaction
+/// as the entry it produced. The payload is the entry's id, which a repeated request answers.
+class PostingSources final : public ::morph::offline::IReplayLedger {
+public:
+    /// @param mapper The caller's mapper. Borrowed: it must outlive this instance.
+    explicit PostingSources(Lightweight::DataMapper& mapper) : _mapper{mapper} {}
+
+protected:
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
+    [[nodiscard]] std::optional<std::string> doLookup(std::string_view scope, std::string_view opId) const override {
+        auto const rows =
+            _mapper.Query<db::PostingSourceRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::PostingSourceRecord::scope>, "=", std::string{scope})
+                .Where(::Lightweight::FieldNameOf<&db::PostingSourceRecord::sourceKey>, "=", std::string{opId})
+                .All();
+        if (rows.empty()) {
+            return std::nullopt;
+        }
+        return std::string{rows.front().entry.Value().ToStringView()};
+    }
+
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) -- scope/opId, not interchangeable
+    void doRecord(std::string_view scope, std::string_view opId, std::string payload) override {
+        db::PostingSourceRecord row;
+        row.scope = Lightweight::SqlAnsiString<32>{std::string{scope}};
+        row.sourceKey = Lightweight::SqlAnsiString<128>{std::string{opId}};
+        row.entry = Lightweight::SqlAnsiString<32>{payload};
+        _mapper.Create(row);
+    }
+
+private:
+    // Borrowed for one record(); never reseated.
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
+    Lightweight::DataMapper& _mapper;
+};
+
 }  // namespace
 
 // An action handler: the registry calls it on the instance, like every other.
@@ -444,6 +485,116 @@ ListEntriesResult LedgerModel::execute(const ListEntries& action) {
     }
     std::ranges::sort(result.entries, {}, [](JournalEntryView const& entry) { return *entry.id; });
     return result;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+PeriodView LedgerModel::execute(const ClosePeriod& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"ClosePeriod: a period is required"};
+    }
+    requireRoleSomewhere<ClosePeriod>();
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto periods = mapper.Query<db::PeriodRecord>()
+                       .Where(::Lightweight::FieldNameOf<&db::PeriodRecord::id>, "=", *action.periodId)
+                       .All();
+    if (periods.empty()) {
+        throw NotFound{"ClosePeriod: period " + std::to_string(*action.periodId) + " does not exist"};
+    }
+    requireAuthorized(action);
+    auto& period = periods.front();
+    if (period.state.Value() != static_cast<int>(PeriodState::Closing)) {
+        throw IllegalTransition{"ClosePeriod: a period is closed from closing, after its close has begun"};
+    }
+    auto const entries = mapper.Query<db::EntryRecord>()
+                             .Where(::Lightweight::FieldNameOf<&db::EntryRecord::period>, "=", *action.periodId)
+                             .All();
+    auto const drafts = std::ranges::count_if(entries, [](db::EntryRecord const& entry) {
+        return entry.state.Value() == static_cast<int>(EntryState::Draft);
+    });
+    if (drafts > 0) {
+        throw Conflict{"ClosePeriod: " + std::to_string(drafts) + " draft entries remain in the period"};
+    }
+    // Each account's totals in the period, in company currency, kept with the closed period.
+    auto const places = DecimalPlaces{decimalsOf(companyCurrency(CompanyId{period.companyId.Value()}))};
+    std::map<std::int64_t, std::pair<ExactSum, ExactSum>> totals;
+    for (auto const& entry : entries) {
+        for (auto const& line : mapper.Query<db::EntryLineRecord>()
+                                    .Where(::Lightweight::FieldNameOf<&db::EntryLineRecord::entry>, "=",
+                                           static_cast<std::int64_t>(entry.id.Value()))
+                                    .All()) {
+            auto& [debit, credit] = totals[line.account.Value()];
+            Rational const value{Numerator{line.companyNum.Value()}, Denominator{line.companyDen.Value()}, places};
+            if (!(line.side.Value() == static_cast<int>(PostingSide::Debit) ? debit : credit).add(value)) {
+                throw OutOfRange{"ClosePeriod: an account's total is too large to freeze exactly"};
+            }
+        }
+    }
+    for (auto const& [account, sums] : totals) {
+        db::PeriodBalanceRecord row;
+        row.period = static_cast<std::int64_t>(period.id.Value());
+        row.account = account;
+        row.debitNum = sums.first.total().numerator;
+        row.debitDen = sums.first.total().denominator;
+        row.creditNum = sums.second.total().numerator;
+        row.creditDen = sums.second.total().denominator;
+        mapper.Create(row);
+    }
+    period.state = static_cast<int>(PeriodState::Closed);
+    mapper.Update(period);
+    sqlTxn.Commit();
+    auto const start = timestampFromMillis(period.startMs.Value());
+    return PeriodView{
+        .id = PeriodId{static_cast<std::int64_t>(period.id.Value())},
+        .company = CompanyId{period.companyId.Value()},
+        .start = start,
+        .label = monthLabel(calendarMonthOf(start)),
+        .state = PeriodState::Closed,
+    };
+}
+
+PostingResult LedgerModel::record(PostingRequest const& request) {
+    if (!request.company.hasValue() || !request.date.hasValue() || request.sourceKey.empty() ||
+        request.sourceKey.size() > 128 || request.sourceReference.size() > 128 || !request.rate.hasValue()) {
+        throw ValidationError{"record: a company, a date, a source key and a rate are required"};
+    }
+    CurrencyCode const base = companyCurrency(request.company);
+    requireRate("record", *request.rate, request.currency, base);
+    requireBalanced("record", request.lines, request.currency, base, request.rate);
+    if (request.currency != base) {
+        auto const dated = rateOn(request.company, request.currency, base, request.date);
+        if (!dated.has_value() || *dated != *request.rate) {
+            throw ValidationError{"record: the rate is not the ledger's " +
+                                  std::string{currencyName(request.currency)} + "/" + std::string{currencyName(base)} +
+                                  " rate on the posting's date"};
+        }
+    }
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    PostingSources sources{mapper};
+    std::string const scope = std::to_string(*request.company);
+    if (auto const known = sources.lookup(scope, request.sourceKey)) {
+        return PostingResult{.entryId = JournalEntryId{std::stoll(*known)}};
+    }
+    auto const period = periodOf(mapper, request.company, request.date);
+    requireRecordable(period, true, "record");
+    auto const accounts = accountIds(mapper, request.company, request.lines);
+    auto header = headerFor(request.company, request.date, period, EntryState::Posted, request.currency, *request.rate,
+                            "posting");
+    header.sourceKey = Lightweight::SqlAnsiString<128>{request.sourceKey};
+    header.sourceReference = Lightweight::SqlAnsiString<128>{request.sourceReference};
+    std::int64_t const entryId = writeEntry(mapper, header, accounts, request.lines);
+    sources.record(scope, request.sourceKey, std::to_string(entryId));
+    sqlTxn.Commit();
+    return PostingResult{.entryId = JournalEntryId{entryId}};
+}
+
+std::optional<::morph::math::Rational> LedgerModel::rateOn(CompanyId /*company*/, CurrencyCode /*from*/,
+                                                           CurrencyCode /*to*/,
+                                                           ::morph::time::Timestamp const& /*on*/) {
+    return std::nullopt;
 }
 
 }  // namespace lims

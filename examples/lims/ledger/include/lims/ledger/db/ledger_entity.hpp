@@ -71,4 +71,27 @@ struct EntryLineRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"company_den"}> companyDen{1};  // 8
 };
 
+/// @brief A poster's source key, recorded once per company with the entry it produced.
+struct PostingSourceRecord {
+    static constexpr std::string_view TableName = "ledger_posting_sources";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    /// @brief The company id as text: the replay ledger's scope.
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"scope"}> scope;            // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"source_key"}> sourceKey;  // 2
+    /// @brief The entry's id as text: the replay ledger's payload.
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"entry"}> entry;  // 3
+};
+
+/// @brief One account's frozen totals in one closed period, in company currency.
+struct PeriodBalanceRecord {
+    static constexpr std::string_view TableName = "ledger_period_balances";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"period_id"}> period{0};                                 // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"account_id"}> account{0};                               // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"debit_num"}> debitNum{0};                               // 3
+    Light::Field<std::int64_t, Light::SqlRealName{"debit_den"}> debitDen{1};                               // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"credit_num"}> creditNum{0};                             // 5
+    Light::Field<std::int64_t, Light::SqlRealName{"credit_den"}> creditDen{1};                             // 6
+};
+
 }  // namespace lims::db

@@ -31,6 +31,18 @@ struct Authorization<BeginClosePeriod> {
     [[nodiscard]] static Scope scopeOf(BeginClosePeriod const& action);
 };
 
+/// @brief A period is closed by an accountant at its company.
+template <>
+struct Authorization<ClosePeriod> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::Accountant;
+
+    /// @brief The company of the period the payload names.
+    /// @param action The action.
+    /// @return It; an empty company when there is no such period.
+    [[nodiscard]] static Scope scopeOf(ClosePeriod const& action);
+};
+
 /// @brief A draft is made by an accountant at its company.
 template <>
 struct Authorization<CreateDraftEntry> : CompanyRule<CreateDraftEntry, LimsRole::Accountant> {};
