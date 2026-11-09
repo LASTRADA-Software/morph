@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# lims — rung 3 of the application ladder (examples/lims/README.md), built from modules: org (shared), lab, and app,
+# lims — rung 3 of the application ladder (examples/lims/README.md), built from modules: org and posting (shared), lab, and app,
 # which composes them. All target wiring lives in morph_add_rung() (cmake/morph_add_rung.cmake); this file calls it
 # and adds the compile checks that prove the module boundary.
 
 cmake_minimum_required(VERSION 3.25)
 
 morph_add_rung(NAME lims
-    MODULES org lab app
-    SHARED_MODULES org
+    MODULES org posting lab app
+    SHARED_MODULES org posting
+    USES lab:org
     APP_MODULE app)
 
 # A module's include path holds its own headers and the shared modules' only. Each probe compiles one include as part
@@ -37,4 +38,7 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
     _lims_boundary_probe(lab_includes_app lab fail lims/app/lims_authorizer.hpp)
     _lims_boundary_probe(org_includes_lab org fail lims/lab/models/sample_model.hpp)
     _lims_boundary_probe(lab_includes_org lab pass lims/org/core/errors.hpp)
+    _lims_boundary_probe(posting_includes_lab posting fail lims/lab/models/sample_model.hpp)
+    _lims_boundary_probe(lab_includes_posting lab fail lims/posting/posting.hpp)
+    _lims_boundary_probe(app_includes_posting app pass lims/posting/posting.hpp)
 endif()

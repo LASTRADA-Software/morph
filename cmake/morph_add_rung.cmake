@@ -21,7 +21,9 @@
 # Link rules, which make including another module's header a compile error:
 #   - a shared module links the shared modules named before it in SHARED_MODULES, and nothing else of the rung;
 #   - APP_MODULE links every other module;
-#   - every other module links the shared modules only.
+#   - every other module links the shared modules USES names for it (USES <module>:<shared>[,<shared>...]), or, when
+#     the rung gives no USES, every shared module. Once USES is given it must name every such module, so a module
+#     added later cannot fall back to linking everything unseen.
 # A module with sources is a STATIC library and is linked WHOLE_ARCHIVE, which keeps the schema translation units'
 # static registration; a module without sources (an INTERFACE library) has no archive and is linked plain, as is the
 # INTERFACE ladder_<rung>_lib. _morph_rung_has_archive is the one test that picks between the two, so every link
@@ -76,7 +78,7 @@
 function(morph_add_rung)
     set(options "")
     set(oneValueArgs NAME APP_MODULE)
-    set(multiValueArgs MODULES SHARED_MODULES)
+    set(multiValueArgs MODULES SHARED_MODULES USES)
     cmake_parse_arguments(RUNG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if(NOT RUNG_NAME)
@@ -97,6 +99,37 @@ function(morph_add_rung)
                 message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): shared module ${_shared} is not in MODULES")
             endif()
         endforeach()
+        foreach(_use IN LISTS RUNG_USES)
+            if(NOT _use MATCHES "^([A-Za-z0-9_]+):([A-Za-z0-9_,]+)$")
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES entry '${_use}' is not "
+                                    "<module>:<shared>[,<shared>...]")
+            endif()
+            set(_user "${CMAKE_MATCH_1}")
+            string(REPLACE "," ";" _used "${CMAKE_MATCH_2}")
+            if(NOT _user IN_LIST RUNG_MODULES OR _user IN_LIST RUNG_SHARED_MODULES OR _user STREQUAL RUNG_APP_MODULE)
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES names ${_user}, which is not a feature "
+                                    "module of MODULES")
+            endif()
+            if(DEFINED _uses_${_user})
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES names ${_user} twice")
+            endif()
+            foreach(_shared IN LISTS _used)
+                if(NOT _shared IN_LIST RUNG_SHARED_MODULES)
+                    message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): ${_user} uses ${_shared}, which is not in "
+                                        "SHARED_MODULES")
+                endif()
+            endforeach()
+            set(_uses_${_user} ${_used})
+        endforeach()
+        if(RUNG_USES)
+            foreach(_module IN LISTS RUNG_MODULES)
+                if(NOT _module IN_LIST RUNG_SHARED_MODULES AND NOT _module STREQUAL RUNG_APP_MODULE
+                   AND NOT DEFINED _uses_${_module})
+                    message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES is given but names nothing for "
+                                        "${_module}")
+                endif()
+            endforeach()
+        endif()
         foreach(_module IN LISTS RUNG_MODULES)
             if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${_module}/include")
                 message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): module ${_module} has no ${_module}/include")
@@ -109,8 +142,8 @@ function(morph_add_rung)
                                     "move it into a module")
             endif()
         endforeach()
-    elseif(RUNG_SHARED_MODULES OR RUNG_APP_MODULE)
-        message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): SHARED_MODULES and APP_MODULE need MODULES")
+    elseif(RUNG_SHARED_MODULES OR RUNG_APP_MODULE OR RUNG_USES)
+        message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): SHARED_MODULES, USES and APP_MODULE need MODULES")
     endif()
     # A rung builds nothing in a browser: its models need the SQLite ORM, and its screens reach a browser through the
     # generic client, which examples/client builds.
@@ -160,6 +193,8 @@ function(morph_add_rung)
                     endif()
                     list(APPEND _deps ${_shared})
                 endforeach()
+            elseif(RUNG_USES)
+                set(_deps ${_uses_${_module}})
             else()
                 set(_deps ${RUNG_SHARED_MODULES})
             endif()

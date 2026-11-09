@@ -216,6 +216,7 @@ lims is built from modules, each its own library with its own include directory 
 | Module | Holds | Links |
 |---|---|---|
 | `org/` (shared) | the error set, the model support every module uses, sign-in, companies and sites, role assignments, and declared authorization | nothing in lims |
+| `posting/` (shared) | the posting contract: `PostingRequest` and `PostingResult`, DTOs only | `org` |
 | `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
 | `app/` | the server edge's `LimsAuthorizer`, and the tables it reads: `declaredRequirements` and `openMutatingActions` | every module |
 
