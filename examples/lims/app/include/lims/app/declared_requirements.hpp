@@ -15,6 +15,41 @@
 
 namespace lims::app {
 
+/// @brief The actions that change data and deliberately declare no role: any authenticated principal may run them.
+///
+/// Listing an action here is a decision that it is open, made in one place. An action that changes data is either in
+/// `declaredRequirements()` or here; the declared-authorization suite fails for a mutating action of the org, sample
+/// or analysis-catalog model that is in neither, and for an id here that is also declared.
+/// @return The action ids.
+[[nodiscard]] inline std::array<std::string_view, 23> const& openMutatingActions() {
+    static constexpr std::array<std::string_view, 23> open{
+        "DefineAnalysis",
+        "ReviseAnalysis",
+        "RegisterClient",
+        "RegisterSample",
+        "ReceiveSample",
+        "StartWork",
+        "SubmitForVerification",
+        "ReturnForRework",
+        "PublishSample",
+        "RejectSample",
+        "CaptureConcentration",
+        "QueuedCapture",
+        "ResolveConflict",
+        "NewSample",
+        "LoadSample",
+        "SaveSample",
+        "DeleteSample",
+        "HeaderSection",
+        "SamplingSection",
+        "TurbiditySection",
+        "NitrateSection",
+        "ClearOptionalMeasurement",
+        "SelectProject",
+    };
+    return open;
+}
+
 /// @brief Every action a module declares a role for.
 /// @return The table.
 [[nodiscard]] inline std::array<RoleRequirement, 5> const& declaredRequirements() {

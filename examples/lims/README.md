@@ -463,8 +463,9 @@ self-conflict test caught it.
 The verifier must **hold the role** and must **not be the analyst who
 captured the reading**. Only the first is a type-level fact, so only the first
 can be checked before dispatch: `lims::auth::LimsAuthorizer` does it at the
-`RemoteServer` edge, and `SampleModel` re-does it on every dispatch path,
-because no authorizer runs in `Local` mode at all (decision 25 declares both). The second is a row-level
+`RemoteServer` edge, and `SampleModel` re-does it on every dispatch path
+(because no authorizer runs in `Local` mode at all), checking the role at the
+sample's site; decision 25 declares both rules. The second is a row-level
 fact `IAuthorizer` structurally cannot express — it is handed the model and
 action type ids and the caller's session, never the result — so it lives only
 in the model. Neither check stands in for the other, and both are tested.

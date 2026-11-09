@@ -2,29 +2,37 @@
 //
 // Declared authorization (lims/org) and its first separation-of-duties pair, lab's capture and verify.
 //
-// This file measures the split README decision 24 records: `IAuthorizer::authorize` is handed the model and action
+// This file measures the split README decision 25 records: `IAuthorizer::authorize` is handed the model and action
 // ids and never the payload, so the server edge can check that a principal holds a role somewhere, and only the
 // model, which has the payload, can check the scope and the pair. The "Hypothesis 6" cases below show a verifier whose
 // role is at another site passing the edge and being refused by the model, on every backend.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <morph/core/backend.hpp>
+#include <morph/core/effects.hpp>
+#include <morph/core/registry.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include "lims/app/declared_requirements.hpp"
 #include "lims/app/lims_authorizer.hpp"
 #include "lims/lab/authorization/lab_authorization.hpp"
+#include "lims/lab/db/lims_entity.hpp"
 #include "lims/lab/models/analysis_catalog_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/org/authorization/declared.hpp"
@@ -154,6 +162,78 @@ TEST_CASE("declared authorization: lab declares capture and verify as a pair", "
     STATIC_REQUIRE_FALSE(lims::DeclaresRule<lims::CaptureConcentration>);
     CHECK(Rule::role == lims::LimsRole::Verifier);
     CHECK(Rule::separatedFrom == "CaptureConcentration");
+    CHECK(Rule::separatedFrom == morph::model::ActionTraits<lims::CaptureConcentration>::typeId());
+}
+
+// Mutations: leave a declared action out of declaredRequirements() (its edge check is lost); leave a mutating action
+// out of both the table and openMutatingActions().
+TEST_CASE("declared authorization: every mutating action is declared or deliberately open", "[lims][authorization]") {
+    // Every mutating action of the org, sample and analysis-catalog models. The dispatcher check below fails when a
+    // registered mutating action is missing from this list.
+    using Mutating =
+        std::tuple<lims::CreateCompany, lims::CreateSite, lims::AssignRole, lims::RevokeRole, lims::DefineAnalysis,
+                   lims::ReviseAnalysis, lims::RegisterClient, lims::RegisterSample, lims::ReceiveSample,
+                   lims::StartWork, lims::SubmitForVerification, lims::ReturnForRework, lims::PublishSample,
+                   lims::RejectSample, lims::CaptureConcentration, lims::QueuedCapture, lims::ResolveConflict,
+                   lims::VerifyResult, lims::NewSample, lims::LoadSample, lims::SaveSample, lims::DeleteSample,
+                   lims::HeaderSection, lims::SamplingSection, lims::TurbiditySection, lims::NitrateSection,
+                   lims::ClearOptionalMeasurement, lims::SelectProject>;
+    std::set<std::string_view> listed;
+    std::set<std::string_view> declared;
+    std::apply(
+        [&](auto... action) {
+            (
+                [&] {
+                    using A = decltype(action);
+                    auto const id = morph::model::ActionTraits<A>::typeId();
+                    listed.insert(id);
+                    if constexpr (lims::DeclaresRule<A>) {
+                        declared.insert(id);
+                    }
+                }(),
+                ...);
+        },
+        Mutating{});
+
+    std::set<std::string_view> const open{lims::app::openMutatingActions().begin(),
+                                          lims::app::openMutatingActions().end()};
+    std::set<std::string_view> const inTable = [] {
+        std::set<std::string_view> ids;
+        for (auto const& requirement : lims::app::declaredRequirements()) {
+            ids.insert(requirement.actionType);
+        }
+        return ids;
+    }();
+
+    CHECK(inTable == declared);
+    for (auto const id : listed) {
+        CAPTURE(id);
+        CHECK((declared.contains(id) != open.contains(id)));
+    }
+    for (auto const id : open) {
+        CAPTURE(id);
+        CHECK(listed.contains(id));
+    }
+
+    // Everything registered that changes data is in the list above: a new mutating action cannot slip past it.
+    auto const& dispatcher = morph::model::detail::ActionDispatcher::instance();
+    std::size_t checked = 0;
+    for (std::string_view const model : {"OrgModel", "SampleModel", "AnalysisCatalogModel"}) {
+        for (auto const& id : dispatcher.actionsOf(model)) {
+            auto const effects = morph::effects::effectsOf(id);
+            bool const mutates =
+                effects.has_value() && std::ranges::any_of(*effects, [](morph::effects::Effect const& e) {
+                    return e.kind != morph::effects::Kind::None;
+                });
+            if (mutates) {
+                CAPTURE(id);
+                CHECK(listed.contains(id));
+                ++checked;
+            }
+        }
+    }
+    // RegisterClient writes a row but declares no effects, so only the list above covers it.
+    CHECK(checked == listed.size() - 1);
 }
 
 TEST_CASE("declared authorization: the edge's table lists every declared role, and nothing else",
@@ -217,6 +297,28 @@ TEST_CASE("declared authorization: the capturing analyst cannot verify, whatever
     lims::SampleModel verifier;
     CHECK_THROWS_WITH(verifier.execute(lims::VerifyResult{.resultId = lab.result}),
                       Catch::Matchers::ContainsSubstring("captured this result and cannot also verify it"));
+}
+
+// Mutation: treat a sample with no site as being at the seeded site (carol, a company verifier, may verify it).
+TEST_CASE("declared authorization: a sample with no site cannot be verified by anyone", "[lims][authorization]") {
+    DbFixture fixture;
+    auto const lab = twoSites();
+    {
+        Lightweight::DataMapper mapper;
+        auto rows = mapper.Query<lims::db::SampleRecord>().All();
+        REQUIRE(rows.size() == 1);
+        rows.front().siteId = std::nullopt;
+        mapper.Update(rows.front());
+    }
+    lims::test::grant("carol", lims::LimsRole::Verifier);
+    lims::test::grant("dave", lims::LimsRole::Verifier, lims::Scope{lims::test::seededSite()});
+    for (std::string const who : {"carol", "dave"}) {
+        CAPTURE(who);
+        ScopedPrincipal const principal{who};
+        lims::SampleModel verifier;
+        CHECK_THROWS_WITH(verifier.execute(lims::VerifyResult{.resultId = lab.result}),
+                          Catch::Matchers::ContainsSubstring("role at no site"));
+    }
 }
 
 // Mutation: check the role at the sample's company only (dave, a verifier at the sample's own site, is refused).
@@ -323,7 +425,9 @@ TEST_CASE("Hypothesis 6: on every backend, the model refuses what the edge let t
                    })};
     rig.bridge(0).setDefaultSession(signedAs(issuer, "bob"));
     auto verifier = rig.client<lims::SampleModel>(0);
-    CHECK_THROWS(awaitQt(verifier.execute(lims::VerifyResult{.resultId = lab.result})));
+    // The refusal's own words prove the model refused: any other failure of the call would not contain them.
+    CHECK_THROWS_WITH(awaitQt(verifier.execute(lims::VerifyResult{.resultId = lab.result})),
+                      Catch::Matchers::ContainsSubstring("does not hold the verifier role at site"));
     {
         ScopedPrincipal const alice{"alice"};
         lims::SampleModel reader;

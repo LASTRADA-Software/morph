@@ -21,8 +21,9 @@ struct Authorization<VerifyResult> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::Verifier;
 
-    /// @brief The pair's first half.
-    static constexpr std::string_view separatedFrom = "CaptureConcentration";
+    /// @brief The pair's first half: the registered id of `CaptureConcentration`, so the pair names an action that
+    ///        exists.
+    static constexpr std::string_view separatedFrom = ::morph::model::ActionTraits<CaptureConcentration>::typeId();
 
     /// @brief The refusal when the verifier captured the reading.
     static constexpr std::string_view sameActorRefusal = "captured this result and cannot also verify it";
