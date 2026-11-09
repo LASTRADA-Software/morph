@@ -73,6 +73,12 @@ public:
     /// @throws NotFound if this handler is not attached, or the sample is gone.
     SampleView execute(const GetSample& action);
 
+    /// @brief Lists the samples the caller can see: those at a site where they hold a role, there or at its company.
+    /// @param action The sort, filters and page.
+    /// @return The page.
+    /// @throws ValidationError if the query names a column the rows do not have, or exceeds the limits.
+    ::morph::table::Page<SampleView> execute(const ListSamples& action);
+
     /// @brief `Registered → Received`.
     /// @param action Carries no fields of its own.
     /// @return The sample's state after the transition.
@@ -456,6 +462,7 @@ BRIDGE_REGISTER_EFFECTS(lims::RegisterSample, ::morph::effects::changes<lims::Sa
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::OpenSample, "OpenSample", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_EFFECTS(lims::OpenSample, ::morph::effects::none)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetSample, "GetSample", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListSamples, "ListSamples", ::morph::model::Loggable::No)
 // A transition answers the sample as it now is.
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ReceiveSample, "ReceiveSample")
 BRIDGE_REGISTER_EFFECTS(lims::ReceiveSample, ::morph::effects::updates<lims::SampleView>)

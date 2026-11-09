@@ -37,6 +37,7 @@
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/org/authorization/declared.hpp"
 #include "lims/org/core/errors.hpp"
+#include "lims/org/db/org_entity.hpp"
 #include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/backend_rig.hpp"
@@ -339,7 +340,11 @@ TEST_CASE("declared authorization: while no supervisor exists anywhere, no compa
     lims::OrgModel org;
     CHECK_THROWS_AS(org.execute(lims::CreateCompany{.name = "Mallory Ltd"}), lims::Forbidden);
     CHECK_FALSE(lims::OrgModel::supervisorExists());
-    CHECK(org.execute(lims::ListCompanies{}).companies.size() == 1);
+    {
+        // Read from the table: mallory holds no role, so no list would show her the seeded company.
+        Lightweight::DataMapper mapper;
+        CHECK(mapper.Query<lims::db::CompanyRecord>().All().size() == 1);
+    }
     // The bootstrap assignment is still the first administrative act, and a company can be created after it.
     CHECK_NOTHROW(org.execute(lims::AssignRole{.principal = "mallory",
                                                .role = lims::LimsRole::Supervisor,

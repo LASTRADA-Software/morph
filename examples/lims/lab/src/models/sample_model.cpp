@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <morph/forms/instance_constraints.hpp>
 #include <morph/session/session.hpp>
+#include <morph/table/query.hpp>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -255,6 +256,27 @@ SampleView SampleModel::execute(const OpenSample& action) {
 SampleView SampleModel::execute(const GetSample& action) {
     static_cast<void>(action);
     return loadAttached();
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+::morph::table::Page<SampleView> SampleModel::execute(const ListSamples& action) {
+    auto const visible = OrgModel::visibleSites(currentPrincipal());
+    Lightweight::DataMapper mapper;
+    std::vector<SampleView> rows;
+    for (const auto& row : mapper.Query<db::SampleRecord>().All()) {
+        auto view = toView(row);
+        if (std::ranges::find(visible, view.siteId) != visible.end()) {
+            rows.push_back(std::move(view));
+        }
+    }
+    std::ranges::sort(rows, {}, [](SampleView const& sample) { return *sample.id; });
+    auto page = ::morph::table::apply<SampleView>(
+        rows, [](SampleView const& sample) { return ::morph::table::RowId{*sample.id}; }, action.query);
+    if (!page) {
+        throw ValidationError{"ListSamples: " + page.error().message};
+    }
+    return std::move(*page);
 }
 
 SampleView SampleModel::execute(const ReceiveSample& action) { return transition(action, SampleState::Received); }

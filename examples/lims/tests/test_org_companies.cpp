@@ -21,6 +21,7 @@ using morph::ladder::testkit::DbFixture;
 
 TEST_CASE("org: the first migration seeds one company with one site", "[lims][org]") {
     DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Analyst);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
 

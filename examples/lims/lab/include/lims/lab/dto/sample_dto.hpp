@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <glaze/glaze.hpp>
 #include <morph/core/records.hpp>
+#include <morph/table/query.hpp>
 #include <morph/util/datetime.hpp>
 #include <morph/util/tagged.hpp>
 #include <string>
@@ -171,6 +172,12 @@ struct GetSample {
     /// @brief Always ready: the action names nothing of its own.
     /// @return `true`.
     [[nodiscard]] bool validate() const noexcept { return true; }
+};
+
+/// @brief Lists the samples at the sites where the caller holds a role, through the table engine's query.
+struct ListSamples {
+    /// @brief The sort, filters and page.
+    ::morph::table::TableQuery query;
 };
 
 /// @brief `Registered → Received`: the container is physically in the lab.

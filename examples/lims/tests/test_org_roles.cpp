@@ -222,6 +222,8 @@ TEST_CASE("org roles: assignments made before roles were scoped migrate to the s
         }
     }
     probe.applyRest();
+    // The migrated alice supervises the seeded company, so she sees all three assignments.
+    ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
     auto const assignments = org.execute(lims::ListRoleAssignments{}).assignments;
     REQUIRE(assignments.size() == 3);
@@ -315,8 +317,10 @@ TEST_CASE("org roles: a company whose supervisor cannot be appointed is not crea
         Lightweight::SqlStatement stmt;
         (void)stmt.ExecuteDirect("DROP TRIGGER morph_fail_insert");
     }
-    CHECK(org.execute(lims::ListCompanies{}).companies.size() == 1);
-    CHECK(org.execute(lims::ListRoleAssignments{}).assignments.empty());
+    // Read straight from the tables: alice holds no role, so no list would show her anything.
+    Lightweight::DataMapper mapper;
+    CHECK(mapper.Query<lims::db::CompanyRecord>().All().size() == 1);
+    CHECK(mapper.Query<lims::db::RoleAssignmentRecord>().All().empty());
 }
 
 // Mutations: count supervisors across the whole table (the revoke at Osaka goes through because the seeded company

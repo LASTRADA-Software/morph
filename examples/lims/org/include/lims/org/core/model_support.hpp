@@ -3,7 +3,9 @@
 
 #include <chrono>
 #include <cstdint>
+#include <morph/session/session.hpp>
 #include <morph/util/datetime.hpp>
+#include <string>
 
 #include "clock.hpp"
 
@@ -31,6 +33,14 @@ inline void requirePrincipal() {
     if (ctx == nullptr || ctx->principal.empty()) {
         throw EmptyPrincipalError{};
     }
+}
+
+/// @brief The authenticated principal, or empty when there is none. A list answers an empty principal with nothing,
+///        since nobody holds a role in any scope.
+/// @return The principal.
+[[nodiscard]] inline std::string currentPrincipal() {
+    const auto* ctx = ::morph::session::current();
+    return ctx == nullptr ? std::string{} : ctx->principal;
 }
 
 /// @brief The current instant in epoch milliseconds, honouring a test's

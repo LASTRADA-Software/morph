@@ -23,7 +23,8 @@ namespace lims {
 /// lookups here.
 class OrgModel {
 public:
-    /// @brief Creates a company and appoints the caller its supervisor, in one transaction.
+    /// @brief Creates a company and appoints the caller its supervisor, in one transaction. Without a role there, the
+    ///        company would be invisible to everyone, its creator included.
     /// @param action Its name, base currency and fiscal-year start.
     /// @return The new company.
     /// @throws ValidationError if the name is empty or longer than 128 bytes.
@@ -31,9 +32,10 @@ public:
     /// @throws EmptyPrincipalError if no principal is authenticated.
     CompanyView execute(const CreateCompany& action);
 
-    /// @brief Lists the companies.
+    /// @brief Lists the companies the caller can see: those where they hold a role at the company or at one of its
+    ///        sites.
     /// @param action Carries nothing.
-    /// @return Every company, by id.
+    /// @return The companies the caller can see, by id.
     /// @throws ValidationError if a stored row holds a currency or month outside its enumeration.
     ListCompaniesResult execute(const ListCompanies& action);
 
@@ -46,9 +48,9 @@ public:
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SiteView execute(const CreateSite& action);
 
-    /// @brief Lists the sites.
+    /// @brief Lists the sites the caller can see: those where they hold a role at the site or at its company.
     /// @param action Carries nothing.
-    /// @return Every site, by id.
+    /// @return The sites the caller can see, by id.
     ListSitesResult execute(const ListSites& action);
 
     /// @brief Assigns a role to a principal in a company or a site. Assigning a role the principal already holds in
@@ -74,15 +76,15 @@ public:
     /// @throws EmptyPrincipalError if no principal is authenticated.
     RevokeRoleResult execute(const RevokeRole& action);
 
-    /// @brief Lists the role assignments.
+    /// @brief Lists the role assignments whose scope the caller can see.
     /// @param action Carries nothing.
-    /// @return Every assignment, by id.
+    /// @return The assignments whose scope the caller can see, by id.
     /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
     ListRoleAssignmentsResult execute(const ListRoleAssignments& action);
 
-    /// @brief Lists the users: the principals holding an assignment.
+    /// @brief Lists the users: the principals holding an assignment the caller can see.
     /// @param action Carries nothing.
-    /// @return Every user, by principal.
+    /// @return The principals holding an assignment the caller can see, by principal.
     /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
     ListUsersResult execute(const ListUsers& action);
 
@@ -99,6 +101,18 @@ public:
     /// @return The roles, each once, in the order first assigned.
     /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
     [[nodiscard]] static std::vector<LimsRole> rolesAnywhere(std::string_view principal);
+
+    /// @brief The sites @p principal can see: those where they hold a role at the site or at its company.
+    /// @param principal The principal.
+    /// @return The sites, by id.
+    /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
+    [[nodiscard]] static std::vector<SiteId> visibleSites(std::string_view principal);
+
+    /// @brief The companies @p principal can see: those where they hold a role at the company or at one of its sites.
+    /// @param principal The principal.
+    /// @return The companies, by id.
+    /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
+    [[nodiscard]] static std::vector<CompanyId> visibleCompanies(std::string_view principal);
 
     /// @brief Whether any principal holds `Supervisor` anywhere.
     /// @return Whether one does.
@@ -124,10 +138,12 @@ BRIDGE_REGISTER_EFFECTS(lims::CreateSite, ::morph::effects::changes<lims::SiteVi
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListSites, "ListSites", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::AssignRole, "AssignRole")
 BRIDGE_REGISTER_EFFECTS(lims::AssignRole, ::morph::effects::changes<lims::RoleAssignmentView>,
-                        ::morph::effects::changes<lims::UserView>)
+                        ::morph::effects::changes<lims::UserView>, ::morph::effects::changes<lims::CompanyView>,
+                        ::morph::effects::changes<lims::SiteView>)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::RevokeRole, "RevokeRole")
 BRIDGE_REGISTER_EFFECTS(lims::RevokeRole, ::morph::effects::changes<lims::RoleAssignmentView>,
-                        ::morph::effects::changes<lims::UserView>)
+                        ::morph::effects::changes<lims::UserView>, ::morph::effects::changes<lims::CompanyView>,
+                        ::morph::effects::changes<lims::SiteView>)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListRoleAssignments, "ListRoleAssignments", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListUsers, "ListUsers", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

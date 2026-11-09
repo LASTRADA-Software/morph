@@ -761,6 +761,26 @@ the ids it is given. No framework seam is designed from one instance. Billing's 
 with an approver's value limit, is instance 2: if the same hand-rolled guarantee recurs there, a framework seam is
 designed against both, and otherwise the guarantee is recorded as domain logic the models own.
 
+### 26. A list shows only what the caller's scopes reach
+
+`ListSamples`, `ListCompanies`, `ListSites`, `ListRoleAssignments` and `ListUsers` answer only records in scopes where
+the caller holds a role: a role at a company reaches the company and all its sites, a role at a site reaches that
+site and, through it, its company. Nobody, and an unauthenticated call, sees nothing. A company's creator is assigned
+`Supervisor` at it in the same transaction, since a company nobody holds a role in would be listed to nobody.
+
+Reading one record by id (`OpenSample`, `GetSample`, the per-sample lists) is not scope-filtered in Part A: those are
+not list queries, and an action that changes a record is authorized by its declaration (decision 25). Which records'
+*changes* reach a principal of another company is hypothesis 7, measured with billing.
+
+**Finding: a shared module's action cannot declare effects on another module's records.** Assigning or revoking a
+role changes which samples a principal sees, so `AssignRole` changes the rows `ListSamples` answers. But `AssignRole`
+belongs to `org`, which cannot name lab's `SampleView`, and a second `BRIDGE_REGISTER_EFFECTS` for the same action
+from `app` is refused as "declares different effects in two registrations". So a screen listing samples does not
+refresh when its viewer's roles change; it refreshes on the next sample change or reload. Inferred from reading
+`include/morph/core/effects.hpp` (`addEffects`, the two-declarations check); not reproduced on a screen, because no
+Part A screen lists samples. A second module needing the same (billing's lines on a role change) makes it a framework
+gap to file against `include/morph`.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so

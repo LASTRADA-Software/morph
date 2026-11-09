@@ -194,10 +194,14 @@ CompanyView OrgModel::execute(const CreateCompany& action) {
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ListCompaniesResult OrgModel::execute(const ListCompanies& action) {
     static_cast<void>(action);
+    auto const visible = visibleCompanies(currentPrincipal());
     Lightweight::DataMapper mapper;
     ListCompaniesResult result;
     for (auto const& row : mapper.Query<db::CompanyRecord>().All()) {
-        result.companies.push_back(toView(row));
+        auto view = toView(row);
+        if (std::ranges::find(visible, view.id) != visible.end()) {
+            result.companies.push_back(std::move(view));
+        }
     }
     std::ranges::sort(result.companies, {}, [](CompanyView const& company) { return *company.id; });
     return result;
@@ -235,10 +239,14 @@ SiteView OrgModel::execute(const CreateSite& action) {
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ListSitesResult OrgModel::execute(const ListSites& action) {
     static_cast<void>(action);
+    auto const visible = visibleSites(currentPrincipal());
     Lightweight::DataMapper mapper;
     ListSitesResult result;
     for (auto const& row : mapper.Query<db::SiteRecord>().All()) {
-        result.sites.push_back(toView(row));
+        auto view = toView(row);
+        if (std::ranges::find(visible, view.id) != visible.end()) {
+            result.sites.push_back(std::move(view));
+        }
     }
     std::ranges::sort(result.sites, {}, [](SiteView const& site) { return *site.id; });
     return result;
@@ -329,10 +337,19 @@ RevokeRoleResult OrgModel::execute(const RevokeRole& action) {
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ListRoleAssignmentsResult OrgModel::execute(const ListRoleAssignments& action) {
     static_cast<void>(action);
+    auto const principal = currentPrincipal();
+    auto const sites = visibleSites(principal);
+    auto const companies = visibleCompanies(principal);
     Lightweight::DataMapper mapper;
     ListRoleAssignmentsResult result;
     for (auto const& row : mapper.Query<db::RoleAssignmentRecord>().All()) {
-        result.assignments.push_back(toView(row));
+        auto view = toView(row);
+        bool const seen = view.scopeKind == ScopeKind::Company
+                              ? std::ranges::find(companies, view.company) != companies.end()
+                              : std::ranges::find(sites, view.site) != sites.end();
+        if (seen) {
+            result.assignments.push_back(std::move(view));
+        }
     }
     std::ranges::sort(result.assignments, {}, [](RoleAssignmentView const& view) { return *view.id; });
     return result;
@@ -352,6 +369,45 @@ ListUsersResult OrgModel::execute(const ListUsers& action) {
         result.users.push_back(UserView{.id = principal, .roles = std::move(roles)});
     }
     return result;
+}
+
+std::vector<SiteId> OrgModel::visibleSites(std::string_view principal) {
+    Lightweight::DataMapper mapper;
+    auto const assignments = assignmentsOf(mapper, principal);
+    std::vector<SiteId> visible;
+    for (auto const& site : mapper.Query<db::SiteRecord>().All()) {
+        auto const siteId = static_cast<std::int64_t>(site.id.Value());
+        auto const companyId = static_cast<std::int64_t>(site.company.Value());
+        bool const seen = std::ranges::any_of(assignments, [siteId, companyId](db::RoleAssignmentRecord const& row) {
+            auto const kind = scopeKindOf(row);
+            return (kind == ScopeKind::Site && row.scopeId.Value() == siteId) ||
+                   (kind == ScopeKind::Company && row.scopeId.Value() == companyId);
+        });
+        if (seen) {
+            visible.push_back(SiteId{siteId});
+        }
+    }
+    std::ranges::sort(visible, {}, [](SiteId const& site) { return *site; });
+    return visible;
+}
+
+std::vector<CompanyId> OrgModel::visibleCompanies(std::string_view principal) {
+    Lightweight::DataMapper mapper;
+    std::vector<CompanyId> visible;
+    for (auto const& row : assignmentsOf(mapper, principal)) {
+        if (scopeKindOf(row) == ScopeKind::Company) {
+            visible.emplace_back(row.scopeId.Value());
+        }
+    }
+    for (SiteId const site : visibleSites(principal)) {
+        if (auto const found = findSite(site)) {
+            visible.push_back(found->companyId);
+        }
+    }
+    std::ranges::sort(visible, {}, [](CompanyId const& company) { return *company; });
+    auto const duplicates = std::ranges::unique(visible);
+    visible.erase(duplicates.begin(), duplicates.end());
+    return visible;
 }
 
 std::vector<LimsRole> OrgModel::rolesIn(std::string_view principal, Scope const& scope) {

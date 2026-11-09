@@ -124,6 +124,7 @@ TEST_CASE("lims screens: the results screen opens on its sample", "[lims-screens
 TEST_CASE("lims screens: registration registers a client and a sample, then opens the sample's lifecycle",
           "[lims-screens]") {
     DbFixture fixture;
+    lims::test::grant("tech", lims::LimsRole::Analyst);
     ScreenHarness harness{
         limsApp(), std::string{lims::screens::kRegister}, RigMode::Local, {}, LocalSetup{.db = {}, .user = "tech"}};
     harness.edit("clientName", "Waterworks Ltd");
