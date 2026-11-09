@@ -24,6 +24,11 @@ struct Row2 {
     std::string code;
 };
 
+struct Row3 {
+    std::int64_t id{};
+    std::string name;
+};
+
 struct SkuId {
     std::string raw;
     SkuId() = default;
@@ -124,6 +129,7 @@ using namespace push_records_test;
 
 BRIDGE_REGISTER_RECORD(Row, "T_Row")
 BRIDGE_REGISTER_RECORD(Row2, "T_Row2", morph::record::key<&Row2::code>)
+BRIDGE_REGISTER_RECORD(Row3, "T_Row3", morph::record::key<&Row3::id>)
 BRIDGE_REGISTER_RECORD(Sku, "T_Sku")
 BRIDGE_REGISTER_RECORD(Report, "T_Report", morph::record::keyless, morph::record::derivedFrom<Row>)
 BRIDGE_REGISTER_RECORD(Secret, "T_Secret", morph::record::privateKeys)
@@ -178,6 +184,13 @@ TEST_CASE("record_named_key_member", "[push][records]") {
     REQUIRE(info != nullptr);
     REQUIRE(info->keyField == "code");
     REQUIRE(info->keyIsString);
+}
+
+TEST_CASE("record_named_numeric_key_member_is_not_a_string_key", "[push][records]") {
+    auto const* info = find("T_Row3");
+    REQUIRE(info != nullptr);
+    CHECK(info->keyField == "id");
+    CHECK_FALSE(info->keyIsString);
 }
 
 TEST_CASE("record_wrapped_key", "[push][records]") {
@@ -278,6 +291,7 @@ TEST_CASE("action_result_second_type_under_one_id_is_a_conflict", "[push][record
     bool const wasClosed = morph::model::registrationPhaseClosed();
     morph::model::detail::reopenRegistrationPhaseForTesting();
     static_cast<void>(morph::model::detail::registerActionResultOnce<ListRows>("T_WalkerConflict"));
+    static_cast<void>(morph::model::detail::registerActionResultOnce<CountRows>("T_WalkerConflict"));
     static_cast<void>(morph::model::detail::registerActionResultOnce<CountRows>("T_WalkerConflict"));
     if (wasClosed) {
         morph::model::closeRegistrationPhase();
