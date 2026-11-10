@@ -6,12 +6,14 @@
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cstdint>
 #include <glaze/glaze.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "billing_test_support.hpp"
 #include "lims/app/service_principals.hpp"
@@ -103,10 +105,40 @@ std::pair<lims::CompanyId, lims::SiteId> osaka() {
     return {company, site};
 }
 
+/// @brief The keys of every `Billing_Invoice` change @p connection was sent, each as the JSON it arrived as, and
+/// whether
+///        any such change named the record as a whole.
+struct InvoiceChangesHeard {
+    std::vector<std::string> keys;
+    bool asWhole = false;
+};
+
+/// @param connection A connection that watches `Billing_Invoice`.
+/// @return What its `Billing_Invoice` changes carried.
+[[nodiscard]] InvoiceChangesHeard invoiceChangesHeard(ServerConnection const& connection) {
+    InvoiceChangesHeard heard;
+    for (auto const& sent : connection.changes()) {
+        for (auto const& change : sent.records) {
+            if (change.record != "Billing_Invoice") {
+                continue;
+            }
+            if (!change.keys) {
+                heard.asWhole = true;
+                continue;
+            }
+            for (auto const& key : *change.keys) {
+                heard.keys.emplace_back(key.str);
+            }
+        }
+    }
+    return heard;
+}
+
 }  // namespace
 
-// Hypothesis 7 (decision 40). Mutation: none needed to fail it; the control (olga's own connection hears) fails if the
-// watch or the fan-out does nothing.
+// Hypothesis 7 (decision 40). The leak CHECK asserts a received event, not an absence: the only execute on the server
+// is the company-B CreateInvoice, so company A's connection has nothing else to have heard. The control (olga's own
+// connection hears) fails if the watch or the fan-out does nothing.
 TEST_CASE("Hypothesis 7: a company-B invoice change reaches a company-A connection watching invoices",
           "[lims][billing][h7]") {
     lims::test::LabFixture const fixture;
@@ -135,4 +167,59 @@ TEST_CASE("Hypothesis 7: a company-B invoice change reaches a company-A connecti
         }
     }
     CHECK(leaked);
+}
+
+// Hypothesis 7, an action that declares `updates<>`: approving a company-B invoice. The invoice is created and
+// submitted in process (no fan-out), so the approval is the only change the server fans out. Mutation: declare
+// `changes<InvoiceView>` instead of `updates<InvoiceView>` on ApproveInvoice; company A is then sent the record as a
+// whole and the key CHECKs fail.
+TEST_CASE("Hypothesis 7: a company-B invoice approval sends a company-A watcher the invoice's id",
+          "[lims][billing][h7]") {
+    lims::test::LabFixture const fixture;
+    auto const [companyB, siteB] = osaka();
+    lims::test::grant("carol", lims::LimsRole::BillingClerk);  // company A, the seeded company
+    lims::InvoiceId invoiceB;
+    {
+        ScopedPrincipal const sam{"sam"};
+        lims::OrgModel org;
+        org.execute(lims::AssignRole{
+            .principal = "ozzy", .role = lims::LimsRole::InvoiceApprover, .company = companyB, .site = {}});
+        org.execute(lims::SetValueLimit{
+            .principal = "ozzy", .company = companyB, .limit = lims::Amount{Rational{100000, DecimalPlaces{0}}}});
+    }
+    {
+        ScopedPrincipal const olga{"olga"};
+        lims::InvoiceModel invoices;
+        invoiceB =
+            invoices.execute(lims::CreateInvoice{.company = companyB, .site = siteB, .client = lims::ClientId{1}}).id;
+        static_cast<void>(invoices.execute(lims::SubmitInvoice{.invoiceId = invoiceB}));
+    }
+    BackendRig rig{Mode::Socket, 0, lims::test::limsAuthorizer(kSecret)};
+    auto const carol = rig.connect();
+    auto const olga = rig.connect();
+    auto const ozzy = rig.connect();
+    auto const ozzyModel = ozzy->registerModel("InvoiceModel", as("ozzy"));
+    REQUIRE(carol->watch({"Billing_Invoice"}, as("carol")).kind == "ok");
+    REQUIRE(olga->watch({"Billing_Invoice"}, as("olga")).kind == "ok");
+
+    auto const body = glz::write_json(lims::ApproveInvoice{.invoiceId = invoiceB}).value_or(std::string{});
+    REQUIRE(ozzy->execute(ozzyModel, "InvoiceModel", "ApproveInvoice", body, as("ozzy")).kind == "ok");
+
+    // The control: company B's own clerk is sent the invoice's key, so the approval was fanned out with keys.
+    REQUIRE(ServerConnection::eventually([&] { return olga->heardOf("Billing_Invoice"); }));
+    auto const own = invoiceChangesHeard(*olga);
+    REQUIRE(own.keys.size() == 1);
+    CHECK(own.keys.front() == std::to_string(*invoiceB));
+
+    bool const heard = ServerConnection::eventually([&] { return carol->heardOf("Billing_Invoice"); },
+                                                    std::chrono::milliseconds{1000});
+    auto const leaked = invoiceChangesHeard(*carol);
+    for (auto const& key : leaked.keys) {
+        UNSCOPED_INFO("sent to company A: Billing_Invoice with key " << key);
+    }
+    UNSCOPED_INFO("sent to company A: as a whole " << leaked.asWhole << ", heard " << heard);
+    REQUIRE(heard);
+    REQUIRE(leaked.keys.size() == 1);
+    CHECK(leaked.keys.front() == std::to_string(*invoiceB));
+    CHECK_FALSE(leaked.asWhole);
 }
