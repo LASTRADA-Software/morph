@@ -53,9 +53,9 @@ void pageHead(ui::Scope& screen, std::string_view module, ui::AnyHandle const& t
     return ui::call<std::string>("date", {instant, ui::AnyHandle{"medium"}});
 }
 
-/// @brief @p quantity followed by @p unit's symbol, in the session's locale.
-/// @param quantity The quantity.
-/// @param unit The unit's symbol.
+/// @brief @p quantity converted into @p unit and written with its symbol, in the session's locale.
+/// @param quantity A quantity value (a Decimal has no unit and yields null).
+/// @param unit The unit to convert into and show.
 /// @return The text: `0.250 L`.
 [[nodiscard]] inline ui::Handle<std::string> measure(ui::AnyHandle const& quantity, ui::AnyHandle const& unit) {
     return ui::call<std::string>("quantity", {quantity, unit});

@@ -75,6 +75,9 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
     if (auto added = served.addScreen(std::move(entry), (*registered)->text); !added) {
         return std::unexpected(std::move(added.error()));
     }
+    if (auto added = lims::screens::addApplicationDocument(served); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
     if (auto added = lims::screens::addCatalogues(served); !added) {
         return std::unexpected(std::move(added.error()));
     }
@@ -134,10 +137,12 @@ std::string formatted(morph::ui::MessageCatalogues const& catalogues, std::strin
 
 }  // namespace
 
-// What the shell shows today: no client installs the bundle's catalogues or a locale's number and date formats, so a
-// screen shows the evaluator's own forms (the amount at the currency's places followed by its code, an ISO day) and
-// every `t` shows its fallback. The catalogue case below measures the messages themselves.
-// Mutation: make statusWord show the enumerator's name (the state reads "FinishedWithFailures").
+// What the shell shows today: no client installs the bundle's catalogues or a locale's number formats, so a screen
+// shows the evaluator's own money form (the amount at the currency's places followed by its code) and every `t` shows
+// its fallback. The day follows the application document's date pattern. The catalogue case below measures the
+// messages themselves.
+// Mutations: make statusWord show the enumerator's name (the state reads "FinishedWithFailures"); leave
+// addApplicationDocument out of kitBundle (the day reads "2026-11-09").
 TEST_CASE("lims kit: money, balances, days and states as the shell shows them", "[lims-screens][kit]") {
     morph::ladder::testkit::DbFixture fixture;
     ScreenHarness harness{morph::client::LocalApp{.name = "lims-kit", .bundle = &kitBundle, .setUp = {}},
@@ -149,7 +154,7 @@ TEST_CASE("lims kit: money, balances, days and states as the shell shows them", 
     CHECK(harness.waitForText("eur", "13196.40 EUR"));
     CHECK(harness.waitForText("jpy", "1234567 JPY"));
     CHECK(harness.waitForText("credit", "13196.40 EUR Cr"));
-    CHECK(harness.waitForText("day", "2026-11-09"));
+    CHECK(harness.waitForText("day", "09-Nov-2026"));
     CHECK(harness.waitForText("state", "Finished with failures"));
     CHECK(harness.waitForText("argument", "Draft for Stadtwerke Köln"));
 }

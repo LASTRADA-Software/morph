@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// morph_lims_client links lims alone for local mode: the gallery and lims register actions under the same ids
-// (`ListSamples`, `ListAccounts`), and one process holds one registry, so the two cannot be linked into one client.
+// morph_lims_client links lims alone for local mode: lims registers `ListSamples` and `ListAccounts`, which
+// examples/forms and examples/bank register too, and the registry refuses one id on two action types, so lims cannot
+// be linked into morph_examples_client.
 
 #include <lims_screens.hpp>
 #include <morph/client/source.hpp>

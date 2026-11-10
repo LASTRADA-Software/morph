@@ -514,7 +514,8 @@ namespace {
 /// @brief Whether the environment variable LIMS_SCENARIO is `1`.
 /// @return True when the scenario is wanted.
 [[nodiscard]] bool scenarioWanted() {
-    // Read once, before any thread starts.
+    // Read during local set-up, when the process's other threads may already run; nothing in this process calls
+    // setenv, so the read does not race.
     char const* const value = std::getenv("LIMS_SCENARIO");  // NOLINT(concurrency-mt-unsafe)
     return value != nullptr && std::string_view{value} == "1";
 }
@@ -606,6 +607,11 @@ std::vector<std::string> allScreenIds() {
     return ids;
 }
 
+std::expected<void, morph::ui::Refusal> addApplicationDocument(morph::ui::UiRegistry& served) {
+    return served.addFile(morph::ui::BundleFile{.kind = "app", .id = "app", .bytes = R"({ "vocab": "ui/1", "id": "app",
+  "formatting": { "date": "dd-MMM-yyyy", "dateTime": "dd-MMM-yyyy HH:mm" } })"});
+}
+
 std::expected<void, morph::ui::Refusal> addCatalogues(morph::ui::UiRegistry& served) {
     for (std::string_view const locale : {"en", "de"}) {
         std::map<std::string, std::string> merged;
@@ -678,6 +684,9 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
         if (auto added = served.addScreen(std::move(entry), (*screen.registered)->text); !added) {
             return std::unexpected(std::move(added.error()));
         }
+    }
+    if (auto added = addApplicationDocument(served); !added) {
+        return std::unexpected(std::move(added.error()));
     }
     if (auto added = addCatalogues(served); !added) {
         return std::unexpected(std::move(added.error()));

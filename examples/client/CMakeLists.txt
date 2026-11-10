@@ -89,8 +89,8 @@ foreach(_morph_client IN LISTS _morph_clients)
     endif()
 endforeach()
 
-# lims alone, for scripts/shoot_lims.sh: morph_examples_client cannot open lims, because the gallery it also links
-# registers action ids lims registers (a process holds one registry).
+# lims alone, for scripts/shoot_lims.sh: morph_examples_client cannot open lims, because the registry refuses one action
+# id on two action types and examples/forms (`ListSamples`) and examples/bank (`ListAccounts`) register ids lims does.
 if(TARGET ladder_lims_screens AND NOT EMSCRIPTEN)
     add_executable(morph_lims_client main.cpp local_apps.hpp lims_apps.cpp)
     target_link_libraries(morph_lims_client PRIVATE morph::ladder_lims_screens morph::ladder_lims_lib morph::client)

@@ -69,6 +69,12 @@ struct ListedScreen {
 ///         the catalogue's own validation.
 [[nodiscard]] std::expected<void, morph::ui::Refusal> addCatalogues(morph::ui::UiRegistry& served);
 
+/// @brief Adds the application document to a bundle: the day and the date-and-time patterns every screen's `date`
+///        function writes (`09-Nov-2026`, `09-Nov-2026 14:30`), which the mockups show on screen.
+/// @param served The bundle under construction.
+/// @return Nothing, or the refusal of the document.
+[[nodiscard]] std::expected<void, morph::ui::Refusal> addApplicationDocument(morph::ui::UiRegistry& served);
+
 /// @brief Prepares lims to run in process: installs a token issuer with a development secret, which `LimsLogin` mints
 ///        its tokens with and a server installs at start-up, and, in a lab with no supervisor yet, makes @p user
 ///        Supervisor at the seeded company through the bootstrap `AssignRole`, so a fresh local client can register

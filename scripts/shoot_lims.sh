@@ -6,9 +6,11 @@
 #
 #   scripts/shoot_lims.sh OUT_DIR [CLIENT] [SCREEN...]
 #
-# CLIENT is the morph_lims_client binary (morph_examples_client cannot open lims: the gallery it also links registers
-# action ids lims registers), by default build/linux-everything/examples/client/morph_lims_client; pass `-` to take the
-# default when naming screens.
+# CLIENT is the morph_lims_client binary (morph_examples_client cannot open lims: the registry refuses one action id on
+# two action types, and examples/forms and examples/bank register ids lims registers), by default
+# build/linux-everything/examples/client/morph_lims_client; pass `-` to take the default when naming screens. The
+# script refuses a client older than any source under examples/lims or include/morph, since a grab from a stale client
+# looks right and is not.
 # SCREEN is a lims screen id; none names every screen of examples/lims/screens/grabs/*.tsv. Each row of those files is
 # tab-separated: screen id, mockup file (without `.dc.html`), the scenario person who signs in, then the heights of the
 # expanded grab, the compact grab and the mockup. Each shot runs in a fresh scratch directory with LIMS_SCENARIO=1. The
@@ -34,6 +36,13 @@ if [[ ! -x $client ]]; then
     echo "$0: no client at $client; build morph_lims_client or name it" >&2
     exit 2
 fi
+newest=$(find "$repo_root/examples/lims" "$repo_root/include/morph" "$repo_root/examples/client" -type f \
+    \( -name '*.cpp' -o -name '*.hpp' -o -name '*.json' -o -name '*.txt' -o -name '*.cmake' \) -newer "$client" \
+    -print -quit)
+if [[ -n $newest ]]; then
+    echo "$0: $client is older than $newest; rebuild morph_lims_client" >&2
+    exit 2
+fi
 mkdir -p "$out_dir"
 out_dir=$(cd "$out_dir" && pwd)
 mockups=$repo_root/examples/lims/design/mockups
@@ -47,6 +56,16 @@ for file in "$repo_root"/examples/lims/screens/grabs/*.tsv; do
 done
 
 wanted=("$@")
+for id in "${wanted[@]}"; do
+    found=0
+    for row in "${rows[@]}"; do
+        [[ ${row%%$'\t'*} == "$id" ]] && found=1
+    done
+    if [[ $found -eq 0 ]]; then
+        echo "$0: $id is in no grabs file" >&2
+        exit 1
+    fi
+done
 selected=0
 for row in "${rows[@]}"; do
     IFS=$'\t' read -r screen mockup person expanded compact mockup_height <<<"$row"
