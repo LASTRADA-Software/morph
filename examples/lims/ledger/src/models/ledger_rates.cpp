@@ -179,7 +179,9 @@ RateAnswer LedgerModel::execute(const GetRateOn& action) {
     }
     auto const visibleCompanies = OrgModel::visibleCompanies(currentPrincipal());
     if (std::ranges::find(visibleCompanies, action.query.company) == visibleCompanies.end()) {
-        return RateAnswer{};
+        // Not an empty answer: "no rate" would send a poster looking for missing data when the caller is missing a
+        // grant.
+        throw Forbidden{"GetRateOn: the caller may not see company " + std::to_string(*action.query.company)};
     }
     auto const rate = rateOn(action.query.company, action.query.from, action.query.to, action.query.on);
     return rate.has_value() ? RateAnswer{.rate = Rate{*rate}} : RateAnswer{};

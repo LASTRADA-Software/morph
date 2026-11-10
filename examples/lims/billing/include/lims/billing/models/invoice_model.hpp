@@ -97,20 +97,25 @@ public:
 
     /// @brief Posts an approved invoice to the ledger and numbers it.
     ///
-    /// Builds the invoice's posting (`postingFor`), valued at the ledger's rate on today's date for an invoice in
+    /// Builds the invoice's posting (`postingFor`), valued at the ledger's rate on the posting date for an invoice in
     /// another currency, and has the ledger record it through the installed `LedgerPort`: as the ledger's own action,
     /// which commits alone before billing's transaction, or through billing's open mapper, in billing's transaction.
     /// Billing then assigns the next number of the entry's fiscal year, marks the invoice posted with its entry, and
-    /// commits. The number is assigned in billing's commit, so no failure leaves a hole in the series. The ledger
-    /// records each invoice once, so a retry after a failure between the halves converges on the entry already
-    /// recorded.
+    /// commits. The number is assigned in billing's commit, so no failure leaves a hole in the series.
+    ///
+    /// A dispatched posting asks the ledger first for an entry under the invoice's key. One that exists is the first
+    /// commit of an attempt that failed before the second; the invoice is numbered against it, in the fiscal year of
+    /// its date, and nothing is built or recorded again. So a retry converges on that entry whatever the billing
+    /// settings, the rates or the day have become since, and fails only for what stops the second commit itself (a
+    /// busy database, an invoice posted meanwhile). The shared transaction leaves no entry behind a failure.
     /// @param action The invoice.
     /// @return The posted invoice.
-    /// @throws ValidationError if no invoice is named, no ledger is wired, or no rate is valid today.
+    /// @throws ValidationError if no invoice is named, no ledger is wired, or no rate is valid on the posting date.
     /// @throws NotFound if there is no such invoice.
     /// @throws Forbidden if the caller is not a billing clerk at the invoice's company.
     /// @throws IllegalTransition if the invoice is not approved.
-    /// @throws Conflict if the invoice was posted meanwhile, or the ledger refuses the entry (a closed period).
+    /// @throws Conflict if the invoice was posted meanwhile, the database was busy, or the ledger refuses the entry
+    ///         (a closed period).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     ::core::async::Task<InvoiceView> execute(PostInvoice action);
 

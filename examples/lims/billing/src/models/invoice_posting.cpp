@@ -22,16 +22,20 @@ namespace lims {
 
 namespace {
 
-/// @brief What a clerk is told when the database turned a posting away because another one is writing.
+/// @brief What a clerk is told when the database turned a posting away as busy. The busy can come from any writer,
+///        not only another posting of this invoice.
 /// @param invoiceId The invoice.
+/// @param entryRecorded Whether the ledger's entry is already committed.
 /// @return The refusal.
-[[nodiscard]] Conflict contended(std::int64_t invoiceId) {
-    return Conflict{"PostInvoice: invoice " + std::to_string(invoiceId) + " is being posted by another clerk"};
+[[nodiscard]] Conflict contended(std::int64_t invoiceId, bool entryRecorded) {
+    return Conflict{"PostInvoice: the books were busy; invoice " + std::to_string(invoiceId) +
+                    (entryRecorded ? " has its entry recorded and is not yet numbered, post it again"
+                                   : " was not posted, try again")};
 }
 
 /// @brief Numbers and posts the invoice in a transaction of its own: the second commit of a dispatched posting.
 /// @param invoiceId The invoice.
-/// @param posted The ledger's entry, already committed.
+/// @param posted The ledger's entry, already committed, in the fiscal year of whose date the invoice is numbered.
 /// @param author Who posts it.
 /// @return The posted invoice.
 /// @throws Conflict if the invoice was posted meanwhile or the database turned this posting away as busy.
@@ -47,7 +51,7 @@ namespace {
         if (!isBusy(error)) {
             throw;
         }
-        throw contended(invoiceId);
+        throw contended(invoiceId, true);
     }
     return invoiceView(mapper, invoiceId);
 }
@@ -73,7 +77,7 @@ namespace {
         if (!isBusy(error)) {
             throw;
         }
-        throw contended(invoiceId);
+        throw contended(invoiceId, false);
     }
     return invoiceView(mapper, invoiceId);
 }
@@ -103,6 +107,18 @@ namespace {
     if (!port.post || !port.postIn || !port.find || !port.rateOn) {
         throw ValidationError{"PostInvoice: no ledger is wired to post to"};
     }
+    std::string const sourceKey = "billing.invoice:" + std::to_string(*invoice.id);
+    if (port.mode == PostingMode::Dispatched) {
+        // An entry under this invoice's key is the first commit of an earlier attempt that failed before the second.
+        // The invoice is numbered against that entry as it stands, without building the posting again: the key is
+        // billing's own and the ledger looked it up in this invoice's company, and the entry was built from this
+        // invoice's totals, which are frozen once it is approved. Building it again from the billing settings and the
+        // rates of today would be refused by the ledger as a different posting after a change to either.
+        auto const earlier = co_await port.find(PostingQuery{.company = invoice.company, .sourceKey = sourceKey});
+        if (earlier.entryId.hasValue()) {
+            co_return numberAndCommit(*invoice.id, earlier, author);
+        }
+    }
     auto const company = OrgModel::findCompany(invoice.company);
     if (!company.has_value()) {
         throw NotFound{"PostInvoice: company " + std::to_string(*invoice.company) + " does not exist"};
@@ -111,23 +127,14 @@ namespace {
     if (!settings.has_value()) {
         throw NotFound{"PostInvoice: company " + std::to_string(*invoice.company) + " has no billing settings"};
     }
-    std::string const sourceKey = "billing.invoice:" + std::to_string(*invoice.id);
-    auto when = ::morph::ladder::now();
-    if (port.mode == PostingMode::Dispatched) {
-        // A retry repeats the request the ledger recorded, date included: the ledger answers a repeated key only for
-        // an identical request, so the entry's own date is the date to send, and its rate the rate on that date.
-        auto const earlier = co_await port.find(PostingQuery{.company = invoice.company, .sourceKey = sourceKey});
-        if (earlier.entryId.hasValue()) {
-            when = earlier.date;
-        }
-    }
+    auto const when = ::morph::ladder::now();
     ::morph::math::Rational rate{1, ::morph::math::DecimalPlaces{6}};
     if (invoice.currency != company->baseCurrency) {
         auto const dated = co_await port.rateOn(
             RateQuery{.company = invoice.company, .from = invoice.currency, .to = company->baseCurrency, .on = when});
         if (!dated.rate.hasValue()) {
             throw ValidationError{"PostInvoice: no " + std::string{currencyName(invoice.currency)} + "/" +
-                                  std::string{currencyName(company->baseCurrency)} + " rate today"};
+                                  std::string{currencyName(company->baseCurrency)} + " rate on the posting date"};
         }
         rate = *dated.rate;
     }
@@ -152,7 +159,7 @@ namespace {
         co_return postInOneTransaction(port, request, *invoice.id, author);
     }
     // The first commit: the ledger records the entry as its own action. Between it and the second, an entry exists
-    // for an invoice that is not posted; a retry converges on that entry, since the ledger records each key once.
+    // for an invoice that is not posted; a retry finds that entry above and numbers the invoice against it.
     PostingResult const posted = co_await port.post(std::move(request));
     co_return numberAndCommit(*invoice.id, posted, author);
 }

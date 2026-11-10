@@ -162,14 +162,16 @@ public:
     /// first entry's date and sends that.
     /// @param action The question.
     /// @return The entry and its date; an empty entry for a company the caller cannot see, or when the key is not
-    ///         recorded.
+    ///         recorded. The empty answer for an unseen company cannot mislead a poster: its next step, recording the
+    ///         posting, refuses the same caller with the reason.
     /// @throws ValidationError if no company or source key is named.
     PostingResult execute(const FindPosting& action);
 
     /// @brief Reads the rate valid on a date, as a poster asks it.
     /// @param action The question.
-    /// @return The rate; empty for a company the caller cannot see, or when no rate is valid on the date.
+    /// @return The rate; empty when no rate is valid on the date.
     /// @throws ValidationError if no company or date is named.
+    /// @throws Forbidden if the caller cannot see the company: a missing grant is not reported as a missing rate.
     RateAnswer execute(const GetRateOn& action);
 
     /// @brief Records a poster's request as a posted entry, once per company and source key, in a transaction of

@@ -1192,12 +1192,15 @@ designed against both.
 
 Three costs of the dispatched posting that only measuring showed:
 
-- **A retry must repeat the request, date included.** The ledger answers a repeated source key only for an identical
-  request, and the request is dated by the clock. A retry on another day would send another date and be refused as a
-  different posting. `PostInvoice` therefore asks the ledger first (`FindPosting`) for the entry under its key and, if
-  there is one, sends that entry's date, and values a foreign-currency invoice at the rate on that date. The retry then
-  converges on the recorded entry and numbers the invoice in the fiscal year of the entry's date, which can be the year
-  before the retry's. The shared transaction needs none of this: nothing outlives a failure.
+- **A retry numbers the invoice against the entry already recorded.** The ledger answers a repeated source key only
+  for an identical request, and a request built again is not identical once the day, the company's receivable account
+  or a back-dated rate has changed: the key comes from the invoice, so the ledger would refuse it for good. A dispatched
+  `PostInvoice` therefore asks the ledger first (`FindPosting`) for the entry under the invoice's key and, if there is
+  one, numbers and posts the invoice against that entry without building the posting again, in the fiscal year of the
+  entry's date, which can be the year before the retry's. What it relies on rather than checks: the key is billing's
+  own and is looked up in the invoice's company, and the entry was built from the invoice's totals, which cannot change
+  once it is approved. The retry then fails only for what stops the second commit itself (a busy database, the invoice
+  posted meanwhile). The shared transaction needs none of this: nothing outlives a failure.
 - **The ledger's transaction takes the write lock first.** SQLite turns a transaction that read and then wrote away at
   once, without waiting, when another holds the write lock, so two postings at once failed with a raw "database is
   locked". `recordPostingIn` opens with a statement that writes nothing and takes the lock, and a database that is
@@ -1210,7 +1213,10 @@ Three costs of the dispatched posting that only measuring showed:
 
 `SubmitInvoice` is a Task handler that awaits the same port's `GetRateOn` to value a foreign-currency invoice at the
 ledger's rate on the submission date, so the approver's limit is judged against its worth in the company's currency; it
-refuses with a `ValidationError` when no ledger is wired or no rate is valid.
+refuses with a `ValidationError` when no ledger is wired or no rate is valid. `GetRateOn` refuses a caller that cannot
+see the company (`Forbidden`) rather than answer "no rate": until an administrator grants `system:posting` the service
+role at a company, a foreign-currency submission there fails for the grant, not for missing data. `FindPosting` answers
+empty for such a caller, which cannot mislead, since recording the posting refuses the same caller with the reason.
 
 ### 40. An invoice change in one company reaches another company's watching clerk (hypothesis 7, first instance)
 

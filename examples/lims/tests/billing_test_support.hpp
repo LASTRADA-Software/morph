@@ -284,8 +284,10 @@ inline void billingSettings() {
 
 /// @brief Whether the posting principal holds the service role a `PostingRig` installs it with.
 enum class PostingRole : std::uint8_t {
-    Granted,   ///< `system:posting` holds `LimsRole::Service` at the seeded company.
-    Withheld,  ///< It holds no role: the ledger's rule has nothing to allow.
+    Granted,        ///< `system:posting` holds `LimsRole::Service` at the seeded company.
+    Withheld,       ///< It holds no role: the ledger's rule has nothing to allow.
+    ElsewhereOnly,  ///< It holds the role at another company only: the edge lets it through, the ledger's rule at the
+                    ///< seeded company refuses.
 };
 
 /// @brief A server, the posting principal's client on it and the ledger port installed over them, as the server
@@ -298,6 +300,14 @@ public:
     explicit PostingRig(PostingMode mode, PostingRole role = PostingRole::Granted) {
         if (role == PostingRole::Granted) {
             grantService(std::string{app::kPostingPrincipal});
+        } else if (role == PostingRole::ElsewhereOnly) {
+            grant("sam", LimsRole::Supervisor);
+            ScopedPrincipal const sam{"sam"};
+            auto const elsewhere = OrgModel{}.execute(CreateCompany{.name = "Osaka branch"}).id;
+            OrgModel{}.execute(AssignRole{.principal = std::string{app::kPostingPrincipal},
+                                          .role = LimsRole::Service,
+                                          .company = elsewhere,
+                                          .site = {}});
         }
         app::installLedgerPort(_client, mode);
     }

@@ -11,6 +11,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <functional>
+#include <morph/core/registry.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
@@ -125,9 +126,8 @@ TEST_CASE("invoice approval: submission records the deadline, the submitter and 
                     lims::Forbidden);
     CHECK_THROWS_AS(dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = lims::InvoiceId{9999}}),
                     lims::NotFound);
-    // A dispatch refuses an unnamed invoice before the handler runs.
-    CHECK_THROWS_WITH(dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{}),
-                      Catch::Matchers::ContainsSubstring("failed validation"));
+    // A dispatch refuses an unnamed invoice before the handler runs, with the registry's own error type.
+    CHECK_THROWS_AS(dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{}), morph::model::ValidationError);
     lims::InvoiceModel invoices;
     ScopedPrincipal const bea{"bea"};
     CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{}), lims::ValidationError);

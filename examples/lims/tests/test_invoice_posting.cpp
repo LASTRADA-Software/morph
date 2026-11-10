@@ -12,6 +12,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <memory>
 #include <morph/journal/action_log.hpp>
 #include <morph/session/session_auth.hpp>
@@ -20,6 +21,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "billing_test_support.hpp"
@@ -301,16 +303,19 @@ TEST_CASE("Hypothesis 1: what the shared transaction gives up of the ledger's ac
     lims::test::books();
     lims::test::billingSettings();
 
-    // Authorization, first, while the posting principal holds no role: the ledger's rule refuses — if it runs.
-    {
-        lims::test::PostingRig withheld{mode, lims::test::PostingRole::Withheld};
-        auto const invoice = lims::test::approvedInvoice("WW-1");
+    // Authorization, first. With no role anywhere the edge's role table refuses before the ledger's rule can run; with
+    // the role at another company only, the edge lets the posting through and the ledger's rule at this company
+    // refuses it. The refusals cross the dispatch as messages, not types, so each is matched by what it says.
+    for (auto const& [role, refusal] :
+         {std::pair{lims::test::PostingRole::Withheld, std::string_view{"unauthorized"}},
+          std::pair{lims::test::PostingRole::ElsewhereOnly, std::string_view{"does not hold the service role"}}}) {
+        lims::test::PostingRig withheld{mode, role};
+        auto const invoice = lims::test::approvedInvoice(role == lims::test::PostingRole::Withheld ? "WW-1" : "WW-3");
         if (dispatched) {
-            CHECK_THROWS(withheld.post(invoice));
+            CHECK_THROWS_WITH(withheld.post(invoice), Catch::Matchers::ContainsSubstring(std::string{refusal}));
             CHECK(entries().empty());
         } else {
             CHECK(withheld.post(invoice).state == lims::InvoiceState::Posted);
-            CHECK(entries().size() == 1U);
         }
     }
 
@@ -359,6 +364,87 @@ TEST_CASE("invoice posting: a retry numbers the invoice in the fiscal year of th
     auto const retried = posting.post(invoice);
     CHECK(retried.number == "INV-2026-000001");
     CHECK(entries().at(0).date == morph::time::Timestamp{lims::test::at(2026, 12, 31)});
+}
+
+// A retry numbers the invoice against the entry the failed attempt recorded, without building the posting again. The
+// ledger refuses a rebuilt posting whose accounts or rate differ from the recorded one, so a retry that rebuilt it
+// would be refused for good after either change. Mutation: build the posting before looking for the entry (the
+// retry is refused as a different posting).
+TEST_CASE("invoice posting: a retry converges on the recorded entry after the billing settings or the rates changed",
+          "[lims][billing][posting][h1]") {
+    enum class Change : std::uint8_t { ReceivableAccount, BackDatedRate };
+    auto const change = GENERATE(Change::ReceivableAccount, Change::BackDatedRate);
+    CAPTURE(change);
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    auto const rateFrom = [](unsigned day, std::int64_t hundredths) {
+        ScopedPrincipal const acc{"acc"};
+        lims::LedgerModel{}.execute(lims::SetExchangeRate{
+            .company = lims::test::seededCompany(),
+            .from = lims::CurrencyCode::USD,
+            .to = lims::CurrencyCode::EUR,
+            .validFrom = morph::time::Timestamp{lims::test::at(2026, 11, day)},
+            .rate = lims::Rate{exact(hundredths, 100, 6)},
+        });
+    };
+    rateFrom(1, 92);
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::Dispatched};
+    auto const invoice = lims::test::approvedInvoice(
+        "WW-1", change == Change::BackDatedRate ? lims::CurrencyCode::USD : lims::CurrencyCode::EUR);
+    {
+        FaultHookGuard const guard;
+        failAt("post.afterLedger");
+        CHECK_THROWS_WITH(posting.post(invoice), Catch::Matchers::ContainsSubstring("server stopped"));
+    }
+    REQUIRE(entries().size() == 1U);
+    auto const recorded = entries().at(0);
+
+    if (change == Change::ReceivableAccount) {
+        {
+            ScopedPrincipal const acc{"acc"};
+            lims::LedgerModel{}.execute(lims::CreateAccount{.company = lims::test::seededCompany(),
+                                                            .code = "1210",
+                                                            .name = "Account 1210",
+                                                            .type = lims::AccountType::Asset});
+        }
+        ScopedPrincipal const sam{"sam"};
+        auto settings = lims::PriceListModel::settingsOf(lims::test::seededCompany()).value();
+        lims::PriceListModel{}.execute(lims::SetBillingSettings{
+            .company = lims::test::seededCompany(),
+            .receivableAccount = "1210",
+            .revenueAccount = settings.revenueAccount,
+            .taxAccount = settings.taxAccount,
+            .roundingAccount = settings.roundingAccount,
+            .taxRate = settings.taxRate,
+            .approvalHours = settings.approvalHours,
+            .billingDay = settings.billingDay,
+        });
+    } else {
+        rateFrom(10, 95);
+    }
+
+    auto const retried = posting.post(invoice);
+    CHECK(retried.state == lims::InvoiceState::Posted);
+    CHECK(retried.number == "INV-2026-000001");
+    CHECK(retried.entry == recorded.id);
+    REQUIRE(entries().size() == 1U);
+    CHECK(entries().at(0).lines.size() == recorded.lines.size());
+    CHECK(entries().at(0).lines.at(0).accountCode == "1200");
+}
+
+// A missing grant is not a missing rate: the caller that cannot see the company is refused, not told there is none.
+// Mutation: answer an empty rate for an unseen company (the submission fails as "no rate values it").
+TEST_CASE("invoice posting: a rate asked by a caller that cannot see the company is refused, not answered empty",
+          "[lims][billing][posting]") {
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    lims::test::billingSettings();
+    lims::test::PostingRig const posting{PostingMode::Dispatched, lims::test::PostingRole::ElsewhereOnly};
+    CHECK_THROWS_WITH(lims::test::approvedInvoice("WW-1", lims::CurrencyCode::USD),
+                      Catch::Matchers::ContainsSubstring("GetRateOn: the caller may not see company"));
 }
 
 // Mutation: value a foreign-currency invoice at one in SubmitInvoice (carl's limit is judged against 47.60, not 43.79,
