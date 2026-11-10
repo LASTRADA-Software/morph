@@ -18,4 +18,15 @@ Scope Authorization<SetPrice>::scopeOf(SetPrice const& action) {
     return rows.empty() ? Scope{CompanyId{}} : Scope{CompanyId{rows.front().companyId.Value()}};
 }
 
+Scope Authorization<AdvanceBillingRun>::scopeOf(AdvanceBillingRun const& action) {
+    if (!action.runId.hasValue()) {
+        return Scope{CompanyId{}};
+    }
+    Lightweight::DataMapper mapper;
+    auto const rows = mapper.Query<db::BillingRunRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::id>, "=", *action.runId)
+                          .All();
+    return rows.empty() ? Scope{CompanyId{}} : Scope{CompanyId{rows.front().companyId.Value()}};
+}
+
 }  // namespace lims

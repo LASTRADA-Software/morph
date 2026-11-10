@@ -125,4 +125,30 @@ struct ConsumedEventRecord {
     Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"line"}> line;                               // 3
 };
 
+/// @brief One billing run: a company's invoices for one calendar month.
+struct BillingRunRecord {
+    static constexpr std::string_view TableName = "billing_runs";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 1
+    /// @brief The month, `YYYY-MM`.
+    Light::Field<Light::SqlAnsiString<7>, Light::SqlRealName{"label"}> label;  // 2
+    /// @brief `BillingRunState` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"state"}> state{0};                             // 3
+    Light::Field<std::int64_t, Light::SqlRealName{"started_at"}> startedAt{0};           // 4
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"started_by"}> startedBy;  // 5
+};
+
+/// @brief One (client, site) a run has to draft an invoice for: the run's cursor.
+struct BillingRunItemRecord {
+    static constexpr std::string_view TableName = "billing_run_items";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"run_id"}> runId{0};                                     // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"client_id"}> clientId{0};                               // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"site_id"}> siteId{0};                                   // 3
+    /// @brief 0 while pending, 1 once drafted.
+    Light::Field<int, Light::SqlRealName{"state"}> state{0};  // 4
+    /// @brief The invoice drafted for it; empty when the item was done and no line was left to invoice.
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"invoice_id"}> invoiceId;  // 5
+};
+
 }  // namespace lims::db

@@ -34,6 +34,7 @@
 #include <string>
 #include <string_view>
 
+#include "lims/app/billing_scheduler.hpp"
 #include "lims/app/event_wiring.hpp"
 #include "lims/app/internal_client.hpp"
 #include "lims/app/lims_authorizer.hpp"
@@ -120,6 +121,8 @@ int main(int argc, char** argv) {
         // that tears down safely: the timer stops first, `background` joins its thread, then the client releases its
         // bridge before `server` goes.
         lims::app::InternalClient events{*server, secret, std::string{lims::app::kEventsPrincipal}};
+        lims::app::InternalClient schedule{*server, secret, std::string{lims::app::kSchedulePrincipal}};
+        lims::app::BillingScheduler scheduler{schedule};
         morph::exec::ThreadPoolExecutor background{1};
         // Lab's events reach billing through this relay; a pass that fails is logged and retried on the next tick,
         // since the batch stays unmarked.
@@ -134,6 +137,21 @@ int main(int argc, char** argv) {
             });
         });
         relayTimer.start(1000);
+        // The billing schedule: once now, which resumes a run a restart interrupted, then every ten seconds, one batch
+        // per run per tick.
+        auto const tickSchedule = [&background, &scheduler] {
+            background.post([&scheduler] {
+                try {
+                    static_cast<void>(scheduler.tick());
+                } catch (std::exception const& error) {
+                    std::cerr << "lims-server: billing schedule: " << error.what() << '\n';
+                }
+            });
+        };
+        tickSchedule();
+        QTimer scheduleTimer;
+        QObject::connect(&scheduleTimer, &QTimer::timeout, tickSchedule);
+        scheduleTimer.start(10'000);
         int const code = QCoreApplication::exec();
         lims::auth::setTokenIssuer(nullptr);
         return code;

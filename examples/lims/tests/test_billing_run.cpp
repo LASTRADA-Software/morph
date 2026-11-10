@@ -1,0 +1,451 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// Hypothesis 4, first instance: the billing run starts on its day, advances one batch per scheduled tick so its
+// progress is seen, and a run interrupted mid-way resumes on the next tick without drafting any invoice twice. The
+// schedule dispatches through an internal client, as the server's does.
+
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlStatement.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <cstdint>
+#include <map>
+#include <morph/session/session_auth.hpp>
+#include <morph/util/rational.hpp>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "billing_test_support.hpp"
+#include "clock.hpp"
+#include "lims/app/billing_scheduler.hpp"
+#include "lims/app/internal_client.hpp"
+#include "lims/app/service_principals.hpp"
+#include "lims/billing/core/fault_hook.hpp"
+#include "lims/billing/models/billing_run_model.hpp"
+#include "lims/billing/models/invoice_model.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
+
+using lims::test::ScopedPrincipal;
+using morph::ladder::ScopedClockOverride;
+using morph::ladder::testkit::awaitQt;
+using morph::ladder::testkit::Mode;
+using morph::math::DecimalPlaces;
+using morph::math::Rational;
+
+namespace {
+
+/// @brief Clears the fault hook when the case ends, however it ends.
+struct FaultHookGuard {
+    FaultHookGuard() = default;
+    FaultHookGuard(FaultHookGuard const&) = delete;
+    FaultHookGuard& operator=(FaultHookGuard const&) = delete;
+    FaultHookGuard(FaultHookGuard&&) = delete;
+    FaultHookGuard& operator=(FaultHookGuard&&) = delete;
+    ~FaultHookGuard() { lims::setFaultHook({}); }
+};
+
+/// @brief Billing settings for @p company with billing day 25, set by @p supervisor.
+void settingsFor(lims::CompanyId company, std::string const& supervisor = "sam") {
+    if (supervisor == "sam") {
+        lims::test::grant("sam", lims::LimsRole::Supervisor);
+    }
+    ScopedPrincipal const sam{supervisor};
+    lims::PriceListModel{}.execute(lims::SetBillingSettings{
+        .company = company,
+        .receivableAccount = "1200",
+        .revenueAccount = "4000",
+        .taxAccount = "2200",
+        .roundingAccount = "6900",
+        .taxRate = lims::Rate{Rational{morph::math::Numerator{19}, morph::math::Denominator{100}, DecimalPlaces{6}}},
+        .approvalHours = lims::Count{Rational{48, DecimalPlaces{0}}},
+        .billingDay = lims::Count{Rational{25, DecimalPlaces{0}}},
+    });
+}
+
+/// @brief Three clients, each with one published, billable result at the seeded site; billing settings with billing
+///        day 25; the schedule principal holding the service role at the seeded company. The lines are relayed.
+/// @return The three clients' samples, in the order they were made.
+std::vector<lims::test::LabSample> threeClientsToBill() {
+    settingsFor(lims::test::seededCompany());
+    std::vector<lims::test::LabSample> labs;
+    for (std::string const reference : {"A-1", "B-1", "C-1"}) {
+        labs.push_back(lims::test::publishedSample(reference));
+        if (labs.size() == 1U) {
+            // The first call also makes the one price list, which prices every client.
+            lims::test::billingFor(labs.back().client);
+            continue;
+        }
+        ScopedPrincipal const bea{"bea"};
+        lims::PriceListModel{}.execute(lims::RegisterBillingClient{
+            .client = labs.back().client,
+            .company = lims::test::seededCompany(),
+            .name = "Client " + reference,
+            .currency = lims::CurrencyCode::EUR,
+        });
+    }
+    lims::test::relayLabEvents();
+    lims::test::grantService(std::string{lims::app::kSchedulePrincipal});
+    return labs;
+}
+
+/// @brief A server of the case's own and the schedule's client on it, as the server process holds them.
+struct ScheduleServer {
+    morph::ladder::testkit::BackendRig rig{Mode::Socket, 0, lims::test::limsAuthorizer(lims::test::kServiceSecret)};
+    lims::app::InternalClient client{rig.server(), lims::test::kServiceSecret,
+                                     std::string{lims::app::kSchedulePrincipal}};
+};
+
+/// @brief A batch of @p items.
+[[nodiscard]] lims::Count batchOf(std::int64_t items) { return lims::Count{Rational{items, DecimalPlaces{0}}}; }
+
+/// @brief A whole count.
+[[nodiscard]] Rational whole(std::int64_t value) { return Rational{value, DecimalPlaces{0}}; }
+
+/// @brief The seeded company's runs, as bea sees them.
+[[nodiscard]] std::vector<lims::BillingRunView> runs() {
+    ScopedPrincipal const bea{"bea"};
+    return lims::BillingRunModel{}.execute(lims::ListBillingRuns{.company = lims::test::seededCompany()}).runs;
+}
+
+/// @brief How many invoices each client has.
+[[nodiscard]] std::map<std::int64_t, int> invoicesPerClient() {
+    ScopedPrincipal const bea{"bea"};
+    std::map<std::int64_t, int> counts;
+    for (auto const& invoice :
+         lims::InvoiceModel{}.execute(lims::ListInvoices{.company = lims::test::seededCompany()}).invoices) {
+        ++counts[*invoice.client];
+    }
+    return counts;
+}
+
+/// @brief Runs @p sql on the fixture's database.
+void execute(std::string const& sql) {
+    Lightweight::SqlStatement statement;
+    static_cast<void>(statement.ExecuteDirect(sql));
+}
+
+}  // namespace
+
+// Mutation: let dueCompanies ignore an existing run for the month (the later tick starts a second run, refused with
+// Conflict, which the tick reports).
+TEST_CASE("Hypothesis 4: the billing run starts on its day of the month, once", "[lims][billing][run][h4]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScheduleServer server;
+    lims::app::BillingScheduler scheduler{server.client, batchOf(50)};
+    {
+        ScopedClockOverride const clock{lims::test::at(2026, 11, 24)};
+        CHECK(scheduler.tick().runs.empty());
+        CHECK(runs().empty());
+    }
+    {
+        ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+        static_cast<void>(scheduler.tick());
+        REQUIRE(runs().size() == 1U);
+        CHECK(runs().front().label == "2026-11");
+        CHECK(runs().front().state == lims::BillingRunState::Finished);
+        CHECK(runs().front().startedBy == lims::app::kSchedulePrincipal);
+    }
+    ScopedClockOverride const later{lims::test::at(2026, 11, 25, 15)};
+    static_cast<void>(scheduler.tick());
+    CHECK(runs().size() == 1U);
+    CHECK(invoicesPerClient().size() == 3U);
+}
+
+// Mutation: advance every running run to its end in one tick (the first tick answers 3 done, and the watcher hears
+// one change instead of three).
+TEST_CASE("billing run: each tick advances one batch, and a watching clerk sees the progress change",
+          "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    ScheduleServer server;
+    morph::session::TokenIssuer const issuer{std::string{lims::test::kServiceSecret}, morph::session::hmacSha256};
+    auto const watcher = server.rig.connect();
+    REQUIRE(watcher->watch({"Billing_Run"}, lims::test::signedAs(issuer, "bea")).kind == "ok");
+    lims::app::BillingScheduler scheduler{server.client, batchOf(1)};
+    std::size_t heard = 0;
+    for (std::int64_t done = 1; done <= 3; ++done) {
+        CAPTURE(done);
+        auto const ticked = scheduler.tick();
+        REQUIRE(ticked.runs.size() == 1U);
+        CHECK(*ticked.runs.front().done == whole(done));
+        CHECK(*ticked.runs.front().total == whole(3));
+        CHECK(morph::ladder::testkit::ServerConnection::eventually(
+            [&] { return watcher->changes().size() > heard && watcher->heardOf("Billing_Run"); }));
+        heard = watcher->changes().size();
+    }
+    CHECK(runs().front().state == lims::BillingRunState::Finished);
+}
+
+// Mutation: leave out the existing-run check in startRun (the second start fails on the unique index instead of with
+// Conflict).
+TEST_CASE("billing run: a clerk starts and advances a run by hand, item by item", "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    ScopedPrincipal const bea{"bea"};
+    lims::BillingRunModel model;
+    auto run = model.execute(lims::StartBillingRun{.company = lims::test::seededCompany()});
+    CHECK(*run.total == whole(3));
+    CHECK(*run.done == whole(0));
+    run = model.execute(lims::AdvanceBillingRun{.runId = run.id, .batch = batchOf(1)});
+    CHECK(*run.done == whole(1));
+    CHECK(run.state == lims::BillingRunState::Running);
+    run = model.execute(lims::AdvanceBillingRun{.runId = run.id, .batch = batchOf(5)});
+    CHECK(run.state == lims::BillingRunState::Finished);
+    CHECK_THROWS_AS(model.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}), lims::Conflict);
+    CHECK(runs().size() == 1U);
+}
+
+// Mutation: drop requireServicePrincipal from RunBillingSchedule (bea's tick starts the run).
+TEST_CASE("billing run: only the server's own client runs the schedule", "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    lims::test::grantService("bea");
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    ScopedPrincipal const bea{"bea"};
+    CHECK_THROWS_WITH(lims::BillingRunModel{}.execute(lims::RunBillingSchedule{.batch = batchOf(50)}),
+                      Catch::Matchers::ContainsSubstring("only the server's own clients"));
+    CHECK(runs().empty());
+}
+
+// Mutation: make serves() answer true for every company (the tick also starts Osaka's run, whose service role the
+// schedule principal does not hold).
+TEST_CASE("billing run: the schedule acts only for companies where its principal holds the service role",
+          "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    lims::CompanyId osaka;
+    {
+        ScopedPrincipal const sam{"sam"};
+        osaka = lims::OrgModel{}
+                    .execute(lims::CreateCompany{
+                        .name = "Osaka branch",
+                        .baseCurrency = lims::CurrencyCode::JPY,
+                        .fiscalYearStart = lims::Month::April,
+                    })
+                    .id;
+        lims::OrgModel{}.execute(
+            lims::AssignRole{.principal = "dave", .role = lims::LimsRole::Supervisor, .company = osaka, .site = {}});
+    }
+    settingsFor(osaka, "dave");
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    ScheduleServer server;
+    lims::app::BillingScheduler scheduler{server.client, batchOf(50)};
+    auto const osakaRuns = [&] {
+        ScopedPrincipal const dave{"dave"};
+        return lims::BillingRunModel{}.execute(lims::ListBillingRuns{.company = osaka}).runs;
+    };
+    auto const ticked = scheduler.tick();
+    REQUIRE(ticked.runs.size() == 1U);
+    CHECK(ticked.runs.front().company == lims::test::seededCompany());
+    CHECK(osakaRuns().empty());
+    {
+        ScopedPrincipal const sam{"sam"};
+        lims::OrgModel{}.execute(lims::AssignRole{
+            .principal = std::string{lims::app::kSchedulePrincipal},
+            .role = lims::LimsRole::Service,
+            .company = osaka,
+            .site = {},
+        });
+    }
+    auto const served = scheduler.tick();
+    REQUIRE(served.runs.size() == 1U);
+    CHECK(served.runs.front().company == osaka);
+    CHECK(osakaRuns().size() == 1U);
+}
+
+// Hypothesis 4. Mutation: draft an item outside the transaction that marks it done (the interrupted item's invoice
+// stays committed while the item stays pending, so two clients have an invoice after the failure instead of one).
+TEST_CASE("Hypothesis 4: a run interrupted mid-way resumes and drafts each client's invoice once",
+          "[lims][billing][run][h4]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    FaultHookGuard const guard;
+    int drafted = 0;
+    lims::setFaultHook([&drafted](std::string_view point) {
+        if (point == "run.afterInvoice" && ++drafted == 2) {
+            throw std::runtime_error{"server stopped during the billing run"};
+        }
+    });
+    {
+        ScheduleServer server;
+        lims::app::BillingScheduler scheduler{server.client, batchOf(50)};
+        CHECK_THROWS_WITH(scheduler.tick(), Catch::Matchers::ContainsSubstring("server stopped"));
+    }
+    REQUIRE(runs().size() == 1U);
+    CHECK(runs().front().state == lims::BillingRunState::Running);
+    CHECK(*runs().front().done == whole(1));
+    CHECK(invoicesPerClient().size() == 1U);
+
+    // The restart: the hook is gone, a new server and scheduler tick, and the run resumes where it stood.
+    lims::setFaultHook({});
+    ScheduleServer restarted;
+    lims::app::BillingScheduler scheduler{restarted.client, batchOf(50)};
+    ScopedClockOverride const later{lims::test::at(2026, 11, 25, 10)};
+    static_cast<void>(scheduler.tick());
+    REQUIRE(runs().size() == 1U);
+    CHECK(runs().front().state == lims::BillingRunState::Finished);
+    CHECK(*runs().front().done == whole(3));
+    auto const perClient = invoicesPerClient();
+    CHECK(perClient.size() == 3U);
+    for (auto const& [client, count] : perClient) {
+        CAPTURE(client);
+        CHECK(count == 1);
+    }
+}
+
+// Mutation: drop the `state = pending` condition from the item's update (the second section's trigger no longer
+// refuses the claim, and the invoice commits).
+TEST_CASE("billing run: an item another draft took stays pending, and the next advance judges it",
+          "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    auto const labs = threeClientsToBill();
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    std::int64_t const last = *labs.back().client;
+    ScheduleServer server;
+    lims::app::BillingScheduler scheduler{server.client, batchOf(50)};
+    SECTION("its lines were invoiced between the read and the claim") {
+        execute("CREATE TRIGGER other_draft AFTER INSERT ON billing_invoices WHEN NEW.client_id = " +
+                std::to_string(last) +
+                " BEGIN UPDATE billing_lines SET state = 2, invoice_id = 999 WHERE client_id = " +
+                std::to_string(last) + " AND state = 0; END");
+    }
+    SECTION("the item itself was finished by another advance") {
+        execute("CREATE TRIGGER other_advance AFTER INSERT ON billing_invoices WHEN NEW.client_id = " +
+                std::to_string(last) +
+                " BEGIN UPDATE billing_run_items SET state = 1 WHERE client_id = " + std::to_string(last) + "; END");
+    }
+    auto const ticked = scheduler.tick();
+    REQUIRE(ticked.runs.size() == 1U);
+    CHECK(*ticked.runs.front().done == whole(2));
+    CHECK(ticked.runs.front().state == lims::BillingRunState::Running);
+    CHECK(invoicesPerClient().size() == 2U);
+    CHECK_FALSE(invoicesPerClient().contains(last));
+
+    execute("DROP TRIGGER IF EXISTS other_draft");
+    execute("DROP TRIGGER IF EXISTS other_advance");
+    auto const resumed = scheduler.tick();
+    REQUIRE(resumed.runs.size() == 1U);
+    CHECK(resumed.runs.front().state == lims::BillingRunState::Finished);
+    CHECK(*resumed.runs.front().done == whole(3));
+    CHECK(invoicesPerClient().size() == 3U);
+}
+
+// Mutation: leave the item pending when draftInvoice answers no invoice (the run never finishes, 2 of 3).
+TEST_CASE("billing run: an item whose lines were invoiced since the run started is done without an invoice",
+          "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    auto const labs = threeClientsToBill();
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    ScopedPrincipal const bea{"bea"};
+    lims::BillingRunModel model;
+    auto run = model.execute(lims::StartBillingRun{.company = lims::test::seededCompany()});
+    execute("UPDATE billing_lines SET state = 2, invoice_id = 999 WHERE client_id = " +
+            std::to_string(*labs.front().client));
+    run = model.execute(lims::AdvanceBillingRun{.runId = run.id, .batch = batchOf(50)});
+    CHECK(run.state == lims::BillingRunState::Finished);
+    CHECK(*run.done == whole(3));
+    CHECK(invoicesPerClient().size() == 2U);
+}
+
+// Mutation: accept a batch of zero (the zero-batch advance returns a run with no progress instead of a refusal).
+TEST_CASE("billing run: a batch is a whole number of at least one, and a run must exist and be the caller's",
+          "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    ScopedPrincipal const bea{"bea"};
+    lims::BillingRunModel model;
+    auto const run = model.execute(lims::StartBillingRun{.company = lims::test::seededCompany()});
+    CHECK_THROWS_AS(model.execute(lims::AdvanceBillingRun{.runId = run.id, .batch = batchOf(0)}),
+                    lims::ValidationError);
+    CHECK_THROWS_AS(model.execute(lims::AdvanceBillingRun{.runId = run.id, .batch = batchOf(-3)}),
+                    lims::ValidationError);
+    CHECK_THROWS_AS(
+        model.execute(lims::AdvanceBillingRun{
+            .runId = run.id,
+            .batch = lims::Count{Rational{morph::math::Numerator{3}, morph::math::Denominator{2}, DecimalPlaces{0}}}}),
+        lims::ValidationError);
+    CHECK_THROWS_AS(model.execute(lims::AdvanceBillingRun{.runId = lims::BillingRunId{9999}, .batch = batchOf(1)}),
+                    lims::NotFound);
+    CHECK_THROWS_AS(model.execute(lims::StartBillingRun{}), lims::ValidationError);
+    CHECK(*runs().front().done == whole(0));
+}
+
+// Mutation: let a company without billing settings start a run (the NotFound check fails).
+TEST_CASE("billing run: a company without settings cannot start one, and only a clerk there may start or advance",
+          "[lims][billing][run][authorization]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    lims::CompanyId osaka;
+    {
+        ScopedPrincipal const sam{"sam"};
+        osaka = lims::OrgModel{}.execute(lims::CreateCompany{.name = "Osaka branch"}).id;
+        lims::OrgModel{}.execute(
+            lims::AssignRole{.principal = "dave", .role = lims::LimsRole::BillingClerk, .company = osaka, .site = {}});
+    }
+    {
+        ScopedPrincipal const dave{"dave"};
+        CHECK_THROWS_AS(lims::BillingRunModel{}.execute(lims::StartBillingRun{.company = osaka}), lims::NotFound);
+        CHECK_THROWS_AS(lims::BillingRunModel{}.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}),
+                        lims::Forbidden);
+    }
+    lims::BillingRunId seeded;
+    {
+        ScopedPrincipal const bea{"bea"};
+        seeded = lims::BillingRunModel{}.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}).id;
+    }
+    ScopedPrincipal const dave{"dave"};
+    CHECK_THROWS_AS(lims::BillingRunModel{}.execute(lims::AdvanceBillingRun{.runId = seeded, .batch = batchOf(1)}),
+                    lims::Forbidden);
+    CHECK(lims::BillingRunModel{}.execute(lims::ListBillingRuns{.company = lims::test::seededCompany()}).runs.empty());
+}
+
+// Mutation: make ListBillingRuns answer no runs (every case that lists runs fails; one dereferences the empty list
+// and crashes).
+TEST_CASE("BillingRunModel over the full backend-mode matrix: a run is started, advanced, ticked and listed",
+          "[lims][billing][matrix]") {
+    auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    morph::session::TokenIssuer const issuer{std::string{lims::test::kServiceSecret}, morph::session::hmacSha256};
+    morph::ladder::testkit::BackendRig rig{mode, 1, lims::test::limsAuthorizer(lims::test::kServiceSecret)};
+    auto client = rig.client<lims::BillingRunModel>(0);
+    lims::BillingRunId runId;
+    SECTION("a clerk starts, advances and lists") {
+        rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "bea"));
+        auto const started = awaitQt(client.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}));
+        CHECK(*started.total == whole(3));
+        CHECK(*started.done == whole(0));
+        runId = started.id;
+        auto const partway = awaitQt(client.execute(lims::AdvanceBillingRun{.runId = runId, .batch = batchOf(2)}));
+        CHECK(*partway.done == whole(2));
+        CHECK(partway.state == lims::BillingRunState::Running);
+    }
+    SECTION("the schedule's tick starts the run and a clerk finishes it") {
+        rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, std::string{lims::app::kSchedulePrincipal}));
+        auto const ticked = awaitQt(client.execute(lims::RunBillingSchedule{.batch = batchOf(2)})).runs;
+        REQUIRE(ticked.size() == 1U);
+        CHECK(*ticked.front().done == whole(2));
+        runId = ticked.front().id;
+        rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "bea"));
+        auto const finished = awaitQt(client.execute(lims::AdvanceBillingRun{.runId = runId, .batch = batchOf(5)}));
+        CHECK(finished.state == lims::BillingRunState::Finished);
+        CHECK(*finished.done == whole(3));
+    }
+    rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "bea"));
+    auto const listed = awaitQt(client.execute(lims::ListBillingRuns{.company = lims::test::seededCompany()})).runs;
+    REQUIRE(listed.size() == 1U);
+    CHECK(listed.front().id == runId);
+    CHECK(listed.front().label == "2026-11");
+}

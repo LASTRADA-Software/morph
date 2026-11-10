@@ -1034,6 +1034,38 @@ amount exactly; it cannot hold its currency. Purchase orders in a supplier's cur
 instance; a form that follows a record's currency is Part D's (`morph::forms::InstanceConstraints` serves
 per-instance decimals and is the existing seam to try there).
 
+### 34. The billing run is a cursor in billing's tables, ticked through an internal client by a timer in the server (hypothesis 4, first instance)
+
+A run belongs to a company and a calendar month (`YYYY-MM`), at most one per pair: `StartBillingRun` refuses a
+second with `Conflict`, and a unique index refuses the second of two starts that raced. Starting it writes one item per
+client and site with unbilled lines. Advancing it drafts one item's invoice and marks the item done in one
+transaction, so an interruption anywhere leaves every item wholly done or wholly pending, and resuming drafts only
+what is pending, so no invoice is drafted twice. An item is claimed by a conditional update that requires it still
+pending, and its invoice's lines by the update decision 33 describes; an item whose claim fails stays pending and the
+next advance judges it afresh, and one whose lines were all invoiced since the run started is done with no invoice.
+Progress is the run's done items of its total, counted from the items. A batch is a whole number of at least one.
+
+The schedule is one action, `RunBillingSchedule`: it starts the run of every company that is due (the day of the
+month has reached its billing day and the company has no run for the month) and advances every unfinished run by
+one batch. `lims::app::BillingScheduler` dispatches it through an internal client as `system:billing-schedule`; the
+server ticks it at start-up, which resumes a run a restart interrupted, and every ten seconds. One batch per tick,
+each tick a dispatch, is what makes progress observable: each tick's `changes<BillingRunView>` reaches a watching
+clerk, and `done` moves between ticks rather than jumping to the end inside one call. The schedule acts only for
+companies where its principal holds `LimsRole::Service`, so what it may do is in the role assignments. A failure
+other than a lost race (a currency mismatch, an invoice total that does not fit) leaves its item pending and ends
+the tick with the error, which the server logs; the same item fails the same way on every tick until its cause is
+fixed, and runs after it wait.
+
+**Hypothesis 4 is confirmed for this instance.** Measured in `tests/test_billing_run.cpp`: the run starts on its day
+and once; each tick advances one batch, and a clerk watching `Billing_Run` is told after each; a run failed after its
+first invoice shows 1 of 3 done, and a fresh server and scheduler after the "restart" finish it with one invoice per
+client. The dispatch is public (an internal client over decision 32's, `billing_scheduler.hpp` is 39 lines and
+`billing_scheduler.cpp` 12; `main.cpp` gains a client, a scheduler and a timer, 18 lines, and no lims code outside
+the tests installs a session by hand), but nothing in morph starts work on a schedule or resumes it: the trigger is
+a `QTimer` in the server, the resume is a cursor table of billing's own, and the tick is billing's own action, a
+scheduler per module. `TimeoutScheduler`, the one timer morph has, is a detail type. Approval escalation, the design's
+second candidate, is not scheduled work (decision 35), so this is the one instance Part B has.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so

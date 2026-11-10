@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "lims/billing/core/fault_hook.hpp"
 #include "lims/billing/core/invoice_math.hpp"
 #include "lims/billing/db/billing_entity.hpp"
 #include "lims/billing/db/billing_store.hpp"
@@ -142,6 +143,8 @@ std::optional<std::int64_t> draftInvoice(Lightweight::DataMapper& mapper, Compan
             throw Conflict{"line " + std::to_string(row.id.Value()) + " was invoiced meanwhile"};
         }
     }
+    // Inside the caller's transaction: a failure here takes the invoice row and the claimed lines back with it.
+    faultPoint("run.afterInvoice");
     return invoiceId;
 }
 

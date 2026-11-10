@@ -103,4 +103,25 @@ LIGHTWEIGHT_SQL_MIGRATION(20261110000009, "Create billing_invoices") {
         .Column("gross_company_den", Bigint())
         .Column("entry_id", Bigint());
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20261110000010, "Create billing_runs and billing_run_items") {
+    plan.CreateTableIfNotExists("billing_runs")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("label", Varchar(7))
+        .RequiredColumn("state", Integer())
+        .RequiredColumn("started_at", Bigint())
+        .RequiredColumn("started_by", Varchar(64));
+    // A company bills a month once: the index refuses the second of two starts that raced past the lookup.
+    plan.CreateUniqueIndex("idx_billing_runs_company_label", "billing_runs", {"company_id", "label"});
+    plan.CreateTableIfNotExists("billing_run_items")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("run_id", Bigint())
+        .RequiredColumn("client_id", Bigint())
+        .RequiredColumn("site_id", Bigint())
+        .RequiredColumn("state", Integer())
+        .Column("invoice_id", Bigint());
+    // A run holds one item per client and site, which is what makes "done of total" a count of distinct work.
+    plan.CreateUniqueIndex("idx_billing_run_items_unit", "billing_run_items", {"run_id", "client_id", "site_id"});
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)
