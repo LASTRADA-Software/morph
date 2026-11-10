@@ -47,4 +47,18 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
     _lims_boundary_probe(billing_includes_lab billing fail lims/lab/models/sample_model.hpp)
     _lims_boundary_probe(billing_includes_posting billing pass lims/posting/posting.hpp)
     _lims_boundary_probe(ledger_includes_billing ledger fail lims/billing/models/price_list_model.hpp)
+
+    # The composing code declaring one module's action's effect on another module's record: the probe adds a second
+    # effects registration for PostInvoice and must be refused; the control, without it, must resolve.
+    foreach(_variant IN ITEMS refused control)
+        add_executable(lims_cross_module_effects_${_variant} tests/compile_checks/cross_module_effects_probe.cpp)
+        target_link_libraries(lims_cross_module_effects_${_variant} PRIVATE ladder_lims_lib)
+        set_target_properties(lims_cross_module_effects_${_variant} PROPERTIES EXPORT_COMPILE_COMMANDS OFF)
+        add_test(NAME lims.cross_module_effects.${_variant} COMMAND lims_cross_module_effects_${_variant})
+    endforeach()
+    target_compile_definitions(lims_cross_module_effects_refused PRIVATE LIMS_PROBE_DECLARES_LEDGER_EFFECT=1)
+    set_tests_properties(lims.cross_module_effects.refused PROPERTIES LABELS ladder-lims
+        PASS_REGULAR_EXPRESSION "declares different effects in two registrations")
+    set_tests_properties(lims.cross_module_effects.control PROPERTIES LABELS ladder-lims
+        PASS_REGULAR_EXPRESSION "effects resolved")
 endif()

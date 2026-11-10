@@ -1212,6 +1212,29 @@ Three costs of the dispatched posting that only measuring showed:
 ledger's rate on the submission date, so the approver's limit is judged against its worth in the company's currency; it
 refuses with a `ValidationError` when no ledger is wired or no rate is valid.
 
+### 39. One module's write reaches another module's watcher only as that module's own dispatched action
+
+Two causes, measured apart in `tests/test_cross_module_effects.cpp` and by the `lims.cross_module_effects.*` probes.
+
+**(i) An action cannot declare an effect on another module's record — confirmed.** `PostInvoice` posting in one
+shared transaction (decision 38) writes the ledger's `Ledger_Entry` inside billing's action; an accountant watching
+`Ledger_Entry` is not told, while the ledger's own `CreateDraftEntry` on the same connection is heard. Billing cannot
+name the ledger's record (it does not include the ledger), and the composing code, which sees both, cannot add the
+declaration: a second `BRIDGE_REGISTER_EFFECTS` for `PostInvoice` makes the effects configuration refuse to resolve,
+"action `PostInvoice` declares different effects in two registrations" (the `refused` probe prints it; the `control`
+probe, without the second registration, resolves).
+
+**(ii) A write outside any action derives no changes — confirmed, and not a gap.** `RecordBillableLine` run in process
+outside any dispatch writes the line and no watcher of `Billing_Line` is told; the same write dispatched through the
+events client is heard. Changes are derived from executed actions by design, and the internal client is how a
+reaction becomes one (decision 32).
+
+This is the second place decision 26's finding appears — org's role changes not reaching lab's sample list was the
+first, inferred; billing's posting into the ledger is measured here — so cause (i) is a missing framework seam,
+filed against `include/morph`: a way for the code that composes modules to state that one module's action changes
+another module's records. A screen over these records, rather than a raw watching connection, was not measured; its
+refresh is driven by the same `changes` events, so it is inferred to behave the same.
+
 ### 40. An invoice change in one company reaches another company's watching clerk (hypothesis 7, first instance)
 
 **Hypothesis 7 is confirmed for invoices, and what leaks depends on the effect the action declares.** Measured in
