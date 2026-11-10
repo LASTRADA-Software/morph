@@ -52,14 +52,15 @@ public:
 
     /// @brief Gives this editor's lease up.
     /// @param action Carries nothing.
-    /// @return The lease as it was, its holder now empty; empty when this editor held none.
+    /// @return The lease as it stands after the release: its holder empty when the invoice is free, the other editor
+    ///         when one took over a lapsed lease; empty when this editor held none.
     InvoiceLeaseView execute(const ReleaseInvoice& action);
 
     /// @brief Takes a line off the leased draft and returns it to unbilled; renews the lease.
     /// @param action The line.
     /// @return The invoice with its totals recomputed.
     /// @throws ValidationError if no line is named.
-    /// @throws NotFound if the line is not on an invoice.
+    /// @throws NotFound if the line is not on an invoice, or on one of a company the caller cannot see.
     /// @throws IllegalTransition if the invoice is not a draft.
     /// @throws Conflict if this editor holds no live lease on the line's invoice, or the line was taken off meanwhile.
     /// @throws OutOfRange if a total does not fit.

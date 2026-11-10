@@ -25,6 +25,7 @@
 #include "lims/billing/models/price_list_model.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
+#include "lims/org/models/org_model.hpp"
 
 namespace lims {
 
@@ -41,15 +42,68 @@ constexpr std::int64_t kLeaseMillis = static_cast<std::int64_t>(15) * 60 * 1000;
     return std::format("{:016x}{:016x}", bits(device), bits(device));
 }
 
-/// @brief Whether @p error is two writers meeting: a unique index refusing the second, or SQLite's single writer
-///        turning one away.
+/// @brief Whether @p error is SQLite's single writer turning this one away.
+///
+/// The driver reports SQLite's primary result code as the native code: 5 for busy, 6 for locked. The message is the
+/// fallback for a driver that reports neither, and is limited to those two words: any other failure (a constraint, a
+/// missing table) is a defect and must surface as itself.
 /// @param error The failure.
-/// @return `true` for contention; any other failure is not the caller's to reinterpret.
-[[nodiscard]] bool isContention(Lightweight::SqlException const& error) {
+/// @return `true` when the database was busy or locked.
+[[nodiscard]] bool isBusy(Lightweight::SqlException const& error) {
+    constexpr int kSqliteBusy = 5;
+    constexpr int kSqliteLocked = 6;
+    constexpr int kPrimaryCodeMask = 0xFF;
+    int const code = static_cast<int>(error.info().nativeErrorCode) & kPrimaryCodeMask;
+    if (code == kSqliteBusy || code == kSqliteLocked) {
+        return true;
+    }
     std::string text = error.what();
     std::ranges::transform(text, text.begin(),
                            [](unsigned char letter) { return static_cast<char>(std::tolower(letter)); });
-    return text.contains("locked") || text.contains("busy") || text.contains("unique") || text.contains("constraint");
+    return text.contains("database is locked") || text.contains("database table is locked") || text.contains("busy");
+}
+
+/// @brief Whether the lease row of @p invoiceId is no longer as @p held read it, on a connection of its own.
+///
+/// A write that failed is another editor's doing only if that editor's row is there now; a failure that finds the
+/// row unchanged is not contention and is the caller's to surface as it is.
+/// @param invoiceId The invoice.
+/// @param held The lease rows as the caller read them before its write.
+/// @return `true` when a row appeared, vanished, or changed its token or expiry.
+[[nodiscard]] bool leaseMovedOn(std::int64_t invoiceId, std::vector<db::InvoiceLeaseRecord> const& held) {
+    Lightweight::DataMapper reader;
+    auto const now = reader.Query<db::InvoiceLeaseRecord>()
+                         .Where(::Lightweight::FieldNameOf<&db::InvoiceLeaseRecord::invoiceId>, "=", invoiceId)
+                         .All();
+    if (now.size() != held.size()) {
+        return true;
+    }
+    return !now.empty() && (now.front().token.Value().ToStringView() != held.front().token.Value().ToStringView() ||
+                            now.front().expiresAt.Value() != held.front().expiresAt.Value());
+}
+
+/// @brief The lease on @p invoiceId as it is now.
+/// @param mapper The mapper to read through.
+/// @param invoiceId The invoice.
+/// @return The live lease; its holder is empty when the invoice is free or the lease has lapsed.
+[[nodiscard]] InvoiceLeaseView currentLease(Lightweight::DataMapper& mapper, std::int64_t invoiceId) {
+    InvoiceLeaseView view{.invoice = InvoiceId{invoiceId}, .holder = {}, .expiresAt = {}};
+    auto const rows = mapper.Query<db::InvoiceLeaseRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::InvoiceLeaseRecord::invoiceId>, "=", invoiceId)
+                          .All();
+    if (!rows.empty() && rows.front().expiresAt.Value() > nowMillis()) {
+        view.holder = std::string{rows.front().holder.Value().ToStringView()};
+        view.expiresAt = timestampFromMillis(rows.front().expiresAt.Value());
+    }
+    return view;
+}
+
+/// @brief Whether the caller can see @p company.
+/// @param company The company.
+/// @return `true` when it is one of the caller's visible companies.
+[[nodiscard]] bool isVisible(CompanyId company) {
+    auto const companies = OrgModel::visibleCompanies(currentPrincipal());
+    return std::ranges::find(companies, company) != companies.end();
 }
 
 /// @brief Counts the rows a statement changed.
@@ -176,7 +230,9 @@ InvoiceLeaseView InvoiceEditModel::execute(const LeaseInvoice& action) {
         deleteLeases(mapper, _token, *action.invoiceId);
         sqlTxn.Commit();
     } catch (Lightweight::SqlException const& error) {
-        if (!isContention(error)) {
+        // Contention is decided by what the lease row says now, not by what the error says: a constraint failure
+        // that leaves the row as it was is a defect and surfaces as itself.
+        if (!isBusy(error) && !leaseMovedOn(*action.invoiceId, held)) {
             throw;
         }
         throw Conflict{"LeaseInvoice: invoice " + std::to_string(*action.invoiceId) +
@@ -193,14 +249,15 @@ InvoiceLeaseView InvoiceEditModel::execute(const LeaseInvoice& action) {
 InvoiceLeaseView InvoiceEditModel::execute(const ReleaseInvoice& action) {
     static_cast<void>(action);
     requirePrincipal();
-    InvoiceLeaseView view{.invoice = InvoiceId::fromOptional(_invoice), .holder = {}, .expiresAt = {}};
     if (!_invoice.has_value()) {
-        return view;
+        return InvoiceLeaseView{.invoice = {}, .holder = {}, .expiresAt = {}};
     }
+    std::int64_t const invoiceId = *_invoice;
     Lightweight::DataMapper mapper;
     deleteLeases(mapper, _token, std::nullopt);
     _invoice.reset();
-    return view;
+    // What is left, not what was assumed: after a takeover the lease is another editor's and the answer says so.
+    return currentLease(mapper, invoiceId);
 }
 
 InvoiceView InvoiceEditModel::execute(const RemoveInvoiceLine& action) {
@@ -208,18 +265,29 @@ InvoiceView InvoiceEditModel::execute(const RemoveInvoiceLine& action) {
     if (!action.validate()) {
         throw ValidationError{"RemoveInvoiceLine: a line is required"};
     }
+    // The line and its invoice are read on a mapper of their own, so the write transaction below opens with its first
+    // write (the lease renewal): a transaction that read first and wrote later could be turned away by a concurrent
+    // commit with a raw "database is locked" instead of a Conflict.
+    std::int64_t invoiceId = 0;
+    {
+        Lightweight::DataMapper reader;
+        auto const lines = reader.Query<db::BillableLineRecord>()
+                               .Where(::Lightweight::FieldNameOf<&db::BillableLineRecord::id>, "=", *action.line)
+                               .All();
+        if (lines.empty() || !lines.front().invoiceId.Value().has_value()) {
+            throw NotFound{"RemoveInvoiceLine: line " + std::to_string(*action.line) + " is not on an invoice"};
+        }
+        invoiceId = *lines.front().invoiceId.Value();
+        // A line of a company the caller cannot see is not found, as it would not be for a line that is on no invoice.
+        if (!isVisible(invoiceView(reader, invoiceId).company)) {
+            throw NotFound{"RemoveInvoiceLine: line " + std::to_string(*action.line) + " is not on an invoice"};
+        }
+    }
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    auto const lines = mapper.Query<db::BillableLineRecord>()
-                           .Where(::Lightweight::FieldNameOf<&db::BillableLineRecord::id>, "=", *action.line)
-                           .All();
-    if (lines.empty() || !lines.front().invoiceId.Value().has_value()) {
-        throw NotFound{"RemoveInvoiceLine: line " + std::to_string(*action.line) + " is not on an invoice"};
-    }
-    std::int64_t const invoiceId = *lines.front().invoiceId.Value();
+    requireOwnLease(mapper, invoiceId, _token);
     auto const invoice = invoiceView(mapper, invoiceId);
     requireDraft(invoice, "RemoveInvoiceLine");
-    requireOwnLease(mapper, invoiceId, _token);
     auto const settings = PriceListModel::settingsOf(invoice.company);
     if (!settings.has_value()) {
         throw NotFound{"RemoveInvoiceLine: company " + std::to_string(*invoice.company) + " has no billing settings"};

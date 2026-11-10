@@ -69,7 +69,8 @@ public:
     /// @throws NotFound if there is no such invoice.
     /// @throws Forbidden if the caller is not a billing clerk at the invoice's company.
     /// @throws IllegalTransition if the invoice is not a draft.
-    /// @throws Conflict if the invoice was submitted meanwhile.
+    /// @throws Conflict if the invoice was submitted or its totals changed meanwhile, or another editor holds a live
+    ///         lease on it (the submitter's own lease is no obstacle).
     /// @throws EmptyPrincipalError if no principal is authenticated.
     InvoiceView execute(const SubmitInvoice& action);
 

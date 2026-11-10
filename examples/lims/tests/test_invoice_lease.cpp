@@ -20,6 +20,7 @@
 #include "lims/billing/core/fault_hook.hpp"
 #include "lims/billing/models/invoice_edit_model.hpp"
 #include "lims/billing/models/invoice_model.hpp"
+#include "lims/org/models/org_model.hpp"
 #include "testkit/backend_rig.hpp"
 
 using lims::test::ScopedPrincipal;
@@ -211,7 +212,12 @@ TEST_CASE("invoice lease: only a draft is leased", "[lims][billing][lease]") {
         ScopedPrincipal const alice{"alice"};
         editor.execute(lims::LeaseInvoice{.invoiceId = invoice.id});
     }
-    lims::test::submit(invoice);
+    {
+        // The lease holder submits her own draft; her lease is no obstacle to it.
+        ScopedClockOverride const nine{lims::test::at(2026, 11, 10, 9)};
+        static_cast<void>(
+            lims::test::dispatchAs<lims::InvoiceModel>("alice", lims::SubmitInvoice{.invoiceId = invoice.id}));
+    }
     ScopedPrincipal const alice{"alice"};
     CHECK_THROWS_AS(editor.execute(lims::SetInvoiceReference{.reference = "late"}), lims::IllegalTransition);
     CHECK_THROWS_AS(editor.execute(lims::LeaseInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
@@ -312,4 +318,148 @@ TEST_CASE("Hypothesis 3: the lease lapses when the holder's connection closes", 
         [&] { return bob->execute(bobEditor, "InvoiceEditModel", "LeaseInvoice", lease, as("bob")).kind == "ok"; });
     CHECK(lapsed);
     CHECK(holderOf(invoice.id) == "bob");
+}
+
+// Mutation: classify every SqlException of the lease write as contention (a constraint failure that leaves the lease
+// row as it was is reported as "leased to another editor meanwhile").
+TEST_CASE("invoice lease: a write that fails for another reason than a second editor is not reported as one",
+          "[lims][billing][lease]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = draft();
+    FaultHookGuard const guard;
+    lims::setFaultHook([](std::string_view point, Lightweight::SqlConnection& connection) {
+        if (point == "invoice.beforeLeaseWrite") {
+            Lightweight::SqlStatement statement{connection};
+            (void)statement.ExecuteDirect(
+                "CREATE TRIGGER poison_lease BEFORE INSERT ON billing_invoice_leases BEGIN "
+                "SELECT RAISE(ABORT, 'CHECK constraint failed: poison'); END");
+        }
+    });
+    lims::InvoiceEditModel editor;
+    {
+        ScopedPrincipal const alice{"alice"};
+        CHECK_THROWS_AS(editor.execute(lims::LeaseInvoice{.invoiceId = invoice.id}), Lightweight::SqlException);
+    }
+    lims::setFaultHook({});
+    CHECK(holderOf(invoice.id).empty());
+}
+
+// Mutation: drop the gross conditions from SubmitInvoice's update (the stale gross is recorded as the approval's
+// amount and no Conflict is raised).
+TEST_CASE("invoice lease: a submission racing a line removal does not record the stale gross",
+          "[lims][billing][lease]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = draft();
+    FaultHookGuard const guard;
+    lims::setFaultHook([](std::string_view point, Lightweight::SqlConnection&) {
+        if (point == "invoice.beforeStateChange") {
+            Lightweight::SqlConnection other;
+            Lightweight::SqlStatement statement{other};
+            (void)statement.ExecuteDirect("UPDATE billing_invoices SET net_num = 0, gross_num = 0");
+        }
+    });
+    {
+        ScopedClockOverride const nine{lims::test::at(2026, 11, 10, 9)};
+        CHECK_THROWS_WITH(
+            lims::test::dispatchAs<lims::InvoiceModel>("bob", lims::SubmitInvoice{.invoiceId = invoice.id}),
+            Catch::Matchers::ContainsSubstring("meanwhile"));
+    }
+    lims::setFaultHook({});
+    ScopedPrincipal const bob{"bob"};
+    CHECK(lims::InvoiceModel{}.execute(lims::GetInvoice{.invoiceId = invoice.id}).state == lims::InvoiceState::Draft);
+}
+
+// Mutation: drop requireNoOtherEditor from SubmitInvoice (bob submits the draft alice is editing).
+TEST_CASE("invoice lease: a draft another clerk is editing is not submitted, the editor's own submission is fine",
+          "[lims][billing][lease]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = draft();
+    ScopedClockOverride const nine{lims::test::at(2026, 11, 10, 9)};
+    lims::InvoiceEditModel editor;
+    {
+        ScopedPrincipal const alice{"alice"};
+        editor.execute(lims::LeaseInvoice{.invoiceId = invoice.id});
+    }
+    CHECK_THROWS_WITH(lims::test::dispatchAs<lims::InvoiceModel>("bob", lims::SubmitInvoice{.invoiceId = invoice.id}),
+                      Catch::Matchers::ContainsSubstring("being edited by 'alice'"));
+    CHECK(lims::test::dispatchAs<lims::InvoiceModel>("alice", lims::SubmitInvoice{.invoiceId = invoice.id}).state ==
+          lims::InvoiceState::Submitted);
+}
+
+// Mutation: ReleaseInvoice answers a free lease whatever the row says.
+TEST_CASE("invoice lease: a release after a takeover answers the lease as it is, not as free",
+          "[lims][billing][lease]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = draft();
+    lims::InvoiceEditModel aliceEditor;
+    lims::InvoiceEditModel bobEditor;
+    {
+        ScopedClockOverride const nine{lims::test::at(2026, 11, 10, 9)};
+        ScopedPrincipal const alice{"alice"};
+        aliceEditor.execute(lims::LeaseInvoice{.invoiceId = invoice.id});
+    }
+    ScopedClockOverride const later{lims::test::at(2026, 11, 10, 10)};
+    {
+        ScopedPrincipal const bob{"bob"};
+        bobEditor.execute(lims::LeaseInvoice{.invoiceId = invoice.id});
+    }
+    ScopedPrincipal const alice{"alice"};
+    auto const released = aliceEditor.execute(lims::ReleaseInvoice{});
+    CHECK(released.holder == "bob");
+    CHECK(holderOf(invoice.id) == "bob");
+    // Bob's own release does free it.
+    ScopedPrincipal const bob{"bob"};
+    CHECK(bobEditor.execute(lims::ReleaseInvoice{}).holder.empty());
+}
+
+// Mutation: drop `deleteLeases(mapper, _token, *action.invoiceId)` from LeaseInvoice.
+TEST_CASE("invoice lease: leasing a second invoice releases the first", "[lims][billing][lease]") {
+    lims::test::LabFixture const fixture;
+    auto const first = draft();
+    auto const lab = lims::test::publishedSample("WW-2");
+    {
+        ScopedPrincipal const bea{"bea"};
+        lims::PriceListModel{}.execute(lims::RegisterBillingClient{
+            .client = lab.client,
+            .company = lims::test::seededCompany(),
+            .name = "Second Waterworks",
+            .currency = lims::CurrencyCode::EUR,
+        });
+    }
+    lims::test::relayLabEvents();
+    lims::InvoiceModel invoices;
+    ScopedPrincipal const alice{"alice"};
+    auto const second = invoices.execute(lims::CreateInvoice{
+        .company = lims::test::seededCompany(), .site = lims::test::seededSite(), .client = lab.client});
+    REQUIRE(*second.id != *first.id);
+    lims::InvoiceEditModel editor;
+    editor.execute(lims::LeaseInvoice{.invoiceId = first.id});
+    CHECK(holderOf(first.id) == "alice");
+    editor.execute(lims::LeaseInvoice{.invoiceId = second.id});
+    CHECK(holderOf(second.id) == "alice");
+    CHECK(holderOf(first.id).empty());
+}
+
+// Mutation: drop the visibility check from RemoveInvoiceLine (dave reads that the line is on a draft of another
+// company and which lease it lacks).
+TEST_CASE("invoice lease: an edit of a line of a company the caller cannot see is not found",
+          "[lims][billing][lease][authorization]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = draft();
+    REQUIRE(invoice.lines.size() == 1);
+    {
+        ScopedPrincipal const sam{"sam"};
+        lims::OrgModel org;
+        auto const osaka = org.execute(lims::CreateCompany{
+                                           .name = "Osaka branch",
+                                           .baseCurrency = lims::CurrencyCode::JPY,
+                                           .fiscalYearStart = lims::Month::April,
+                                       })
+                               .id;
+        org.execute(
+            lims::AssignRole{.principal = "dave", .role = lims::LimsRole::Supervisor, .company = osaka, .site = {}});
+    }
+    ScopedPrincipal const dave{"dave"};
+    lims::InvoiceEditModel editor;
+    CHECK_THROWS_AS(editor.execute(lims::RemoveInvoiceLine{.line = invoice.lines.front().id}), lims::NotFound);
 }

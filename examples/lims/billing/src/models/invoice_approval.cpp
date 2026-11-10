@@ -36,9 +36,30 @@ constexpr std::int64_t kMillisPerHour = 3'600'000;
     return *row;
 }
 
-/// @brief Runs @p update, a conditional update of invoice @p id from @p from, and counts the rows it changed.
+/// @brief Runs a conditional update of invoice @p invoiceId from @p from, and counts the rows it changed.
 ///
 /// A fault point sits between the caller's read and this write, so a test makes a concurrent action win it.
+/// @tparam Set Callable taking the update's query builder.
+/// @tparam Guard Callable taking the update's query builder, adding conditions on what the caller read.
+/// @param mapper The caller's mapper, inside its transaction.
+/// @param invoiceId The invoice.
+/// @param from The state the caller read and requires still.
+/// @param set Adds the columns to change.
+/// @param guard Adds the further columns the caller read and requires unchanged.
+/// @return Whether exactly one row matched.
+template <typename Set, typename Guard>
+[[nodiscard]] bool updateInvoiceIf(Lightweight::DataMapper& mapper, std::int64_t invoiceId, InvoiceState from,
+                                   Set const& set, Guard const& guard) {
+    faultPoint("invoice.beforeStateChange", mapper.Connection());
+    auto query = mapper.Connection().Query(db::InvoiceRecord::TableName).Update();
+    set(query);
+    (void)query.Where("id", "=", invoiceId).Where("state", "=", static_cast<int>(from));
+    guard(query);
+    Lightweight::SqlStatement statement{mapper.Connection()};
+    return statement.ExecuteDirect(query.ToSql()).NumRowsAffected() == 1U;
+}
+
+/// @brief Runs a conditional update of invoice @p invoiceId that requires only its state, from @p from.
 /// @tparam Set Callable taking the update's query builder.
 /// @param mapper The caller's mapper, inside its transaction.
 /// @param invoiceId The invoice.
@@ -48,12 +69,28 @@ constexpr std::int64_t kMillisPerHour = 3'600'000;
 template <typename Set>
 [[nodiscard]] bool updateInvoiceIf(Lightweight::DataMapper& mapper, std::int64_t invoiceId, InvoiceState from,
                                    Set const& set) {
-    faultPoint("invoice.beforeStateChange", mapper.Connection());
-    auto query = mapper.Connection().Query(db::InvoiceRecord::TableName).Update();
-    set(query);
-    (void)query.Where("id", "=", invoiceId).Where("state", "=", static_cast<int>(from));
-    Lightweight::SqlStatement statement{mapper.Connection()};
-    return statement.ExecuteDirect(query.ToSql()).NumRowsAffected() == 1U;
+    return updateInvoiceIf(mapper, invoiceId, from, set, [](auto&) {});
+}
+
+/// @brief Requires that no editor other than the caller holds a live lease on @p invoiceId.
+///
+/// A lease held by the submitter is not an obstacle: a clerk submits what they have been editing. The read runs on a
+/// connection of its own: the caller's transaction must open with its write, because a transaction that read first
+/// holds a shared lock that a concurrent editor's commit then waits on.
+/// @param invoiceId The invoice.
+/// @throws Conflict naming the holder if another principal's lease is live.
+void requireNoOtherEditor(std::int64_t invoiceId) {
+    Lightweight::DataMapper mapper;
+    auto const rows = mapper.Query<db::InvoiceLeaseRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::InvoiceLeaseRecord::invoiceId>, "=", invoiceId)
+                          .All();
+    if (rows.empty() || rows.front().expiresAt.Value() <= nowMillis()) {
+        return;
+    }
+    std::string const holder{rows.front().holder.Value().ToStringView()};
+    if (holder != ::morph::session::current()->principal) {
+        throw Conflict{"SubmitInvoice: invoice " + std::to_string(invoiceId) + " is being edited by '" + holder + "'"};
+    }
 }
 
 }  // namespace
@@ -73,6 +110,7 @@ InvoiceView InvoiceModel::execute(const SubmitInvoice& action) {
     if (row.state.Value() != static_cast<int>(InvoiceState::Draft)) {
         throw IllegalTransition{"SubmitInvoice: only a draft is submitted"};
     }
+    requireNoOtherEditor(static_cast<std::int64_t>(row.id.Value()));
     CompanyId const company{row.companyId.Value()};
     auto const currency = static_cast<CurrencyCode>(row.currency.Value());
     auto const companyView = OrgModel::findCompany(company);
@@ -93,16 +131,25 @@ InvoiceView InvoiceModel::execute(const SubmitInvoice& action) {
     std::int64_t const hours = hoursValue.numerator / hoursValue.denominator;
     std::int64_t const now = nowMillis();
     // The gross in the company's currency is what the approver's limit is judged against. Here the invoice is in that
-    // currency, so it is the invoice's own gross.
-    if (!updateInvoiceIf(mapper, static_cast<std::int64_t>(row.id.Value()), InvoiceState::Draft, [&](auto& query) {
-            query.Set("state", static_cast<int>(InvoiceState::Submitted))
-                .Set("submitted_by", ::morph::session::current()->principal)
-                .Set("submitted_at", now)
-                .Set("deadline_at", now + (hours * kMillisPerHour))
-                .Set("gross_company_num", row.grossNum.Value())
-                .Set("gross_company_den", row.grossDen.Value());
-        })) {
-        throw Conflict{"SubmitInvoice: invoice " + std::to_string(*action.invoiceId) + " was submitted meanwhile"};
+    // currency, so it is the invoice's own gross. The update also requires the gross to be the one read above: an edit
+    // that removed a line between the read and the write changed it, and recording the stale amount would judge the
+    // approver's limit against an invoice that no longer exists.
+    if (!updateInvoiceIf(
+            mapper, static_cast<std::int64_t>(row.id.Value()), InvoiceState::Draft,
+            [&](auto& query) {
+                query.Set("state", static_cast<int>(InvoiceState::Submitted))
+                    .Set("submitted_by", ::morph::session::current()->principal)
+                    .Set("submitted_at", now)
+                    .Set("deadline_at", now + (hours * kMillisPerHour))
+                    .Set("gross_company_num", row.grossNum.Value())
+                    .Set("gross_company_den", row.grossDen.Value());
+            },
+            [&](auto& query) {
+                (void)query.Where("gross_num", "=", row.grossNum.Value())
+                    .Where("gross_den", "=", row.grossDen.Value());
+            })) {
+        throw Conflict{"SubmitInvoice: invoice " + std::to_string(*action.invoiceId) +
+                       " was submitted or edited meanwhile"};
     }
     sqlTxn.Commit();
     return invoiceView(mapper, static_cast<std::int64_t>(row.id.Value()));

@@ -169,7 +169,7 @@ TEST_CASE("invoice approval: two clerks submitting one invoice at once cannot bo
         "gross_company_den = gross_den, deadline_at = 1, submitted_at = 1");
     ScopedClockOverride const clock{lims::test::at(2026, 11, 10)};
     CHECK_THROWS_WITH(lims::test::dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = invoice.id}),
-                      Catch::Matchers::ContainsSubstring("was submitted meanwhile"));
+                      Catch::Matchers::ContainsSubstring("was submitted or edited meanwhile"));
     lims::setFaultHook({});
     auto const after = read(invoice.id);
     CHECK(after.state == lims::InvoiceState::Submitted);

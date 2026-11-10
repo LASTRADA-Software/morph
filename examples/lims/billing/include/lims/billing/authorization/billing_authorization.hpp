@@ -57,8 +57,7 @@ template <>
 struct Authorization<CreateInvoice> : CompanyRule<CreateInvoice, LimsRole::BillingClerk> {};
 
 /// @brief A draft invoice is leased for editing by a billing clerk at its company. The edits themselves declare no
-/// role:
-///        they are refused without the editing instance's own live lease, which only this action grants.
+///        role: they are refused without the editing instance's own live lease, which only this action grants.
 template <>
 struct Authorization<LeaseInvoice> {
     /// @brief The role.

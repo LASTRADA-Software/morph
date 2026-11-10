@@ -1147,12 +1147,19 @@ one success and one `Conflict`. `ReleaseInvoice` declares `changes<InvoiceLeaseV
 `tests/test_invoice_lease.cpp` over a real `RemoteServer`: closing the holder's connection frees the lease, and the
 second clerk takes it without waiting for the timeout. The hook is the instance's destructor: `closeConnection`
 erases a private instance, and `~InvoiceEditModel` deletes its lease by token. What that costs, stated plainly: the
-release does database work in a destructor, on whatever thread drops the last reference (the server strand when a
-connection closes), and a failure there can only be logged; a crash that kills the process releases nothing, and the
+release does database work in a destructor, on whatever thread drops the last reference (inferred from
+`closeConnection`'s documentation, not measured: the server strand when a connection closes with nothing in flight,
+the model strand after the action when one is). On the server strand the blocking SQLite delete, up to the busy
+timeout, stalls routing for every connection, which is the cost a framework-level release hook would have to avoid. A
+failure there can only be logged; a crash that kills the process releases nothing, and the
 timeout is then the only lapse. And the lapse is not told: a second clerk watching `Billing_Lease` hears of a release
 but not of a lapse on disconnect, because the destructor is not an action and nothing derives a change from it —
-measured on the same second connection; the clerk learns of it only by asking. Lot reservation in Part C is the second
-instance.
+measured on the same second connection; the clerk learns of it only by asking. The lease guards the editor's own two edits, and
+`SubmitInvoice`, which refuses with `Conflict` naming the holder while another principal's lease on the draft is live
+(a submitter's own lease is no obstacle); no other `InvoiceModel` mutation consults it. Submission also writes
+conditionally on the gross it read, so a line removed between its read and its write is a `Conflict` and not a stale
+approval amount. A lease outlives submission and the holder's role until it lapses. Lot reservation in Part C is the
+second instance.
 
 ## Findings raised by this rung
 
