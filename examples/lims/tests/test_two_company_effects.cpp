@@ -170,9 +170,9 @@ TEST_CASE("Hypothesis 7: a company-B invoice change reaches a company-A connecti
 }
 
 // Hypothesis 7, an action that declares `updates<>`: approving a company-B invoice. The invoice is created and
-// submitted in process (no fan-out), so the approval is the only change the server fans out. Mutation: declare
-// `changes<InvoiceView>` instead of `updates<InvoiceView>` on ApproveInvoice; company A is then sent the record as a
-// whole and the key CHECKs fail.
+// submitted before the server starts (no fan-out reaches its watchers), so the approval is the only change the server
+// fans out. Mutation: declare `changes<InvoiceView>` instead of `updates<InvoiceView>` on ApproveInvoice; company A is
+// then sent the record as a whole and the key CHECKs fail.
 TEST_CASE("Hypothesis 7: a company-B invoice approval sends a company-A watcher the invoice's id",
           "[lims][billing][h7]") {
     lims::test::LabFixture const fixture;
@@ -192,8 +192,9 @@ TEST_CASE("Hypothesis 7: a company-B invoice approval sends a company-A watcher 
         lims::InvoiceModel invoices;
         invoiceB =
             invoices.execute(lims::CreateInvoice{.company = companyB, .site = siteB, .client = lims::ClientId{1}}).id;
-        static_cast<void>(invoices.execute(lims::SubmitInvoice{.invoiceId = invoiceB}));
     }
+    // SubmitInvoice is a Task handler: a direct execute only builds it, so the suite dispatches it.
+    static_cast<void>(lims::test::dispatchAs<lims::InvoiceModel>("olga", lims::SubmitInvoice{.invoiceId = invoiceB}));
     BackendRig rig{Mode::Socket, 0, lims::test::limsAuthorizer(kSecret)};
     auto const carol = rig.connect();
     auto const olga = rig.connect();
