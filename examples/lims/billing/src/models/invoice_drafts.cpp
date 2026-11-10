@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlStatement.hpp>
 #include <algorithm>
 #include <cstdint>
 #include <optional>
@@ -31,9 +32,7 @@ constexpr int kMaxCurrencyCode = static_cast<int>(CurrencyCode::JPY);
     return Amount{Rational{Numerator{numerator}, Denominator{denominator}, DecimalPlaces{decimalsOf(currency)}}};
 }
 
-[[nodiscard]] std::string text(auto const& field) {
-    return std::string{field.Value().ToStringView()};
-}
+[[nodiscard]] std::string text(auto const& field) { return std::string{field.Value().ToStringView()}; }
 
 [[nodiscard]] ::morph::time::Timestamp instant(std::int64_t millis) {
     return millis > 0 ? timestampFromMillis(millis) : ::morph::time::Timestamp{};
@@ -131,10 +130,17 @@ std::optional<std::int64_t> draftInvoice(Lightweight::DataMapper& mapper, Compan
     invoice.createdAt = nowMillis();
     mapper.Create(invoice);
     auto const invoiceId = static_cast<std::int64_t>(invoice.id.Value());
-    for (auto& row : rows) {
-        row.state = static_cast<int>(BillableLineState::Invoiced);
-        row.invoiceId = invoiceId;
-        mapper.Update(row);
+    // Only a line still Unbilled is claimed: a concurrent draft that took it first leaves nothing here to change, and
+    // fewer claimed lines than were read is a Conflict that rolls the invoice row back with it.
+    for (auto const& row : rows) {
+        auto query = mapper.Connection().Query(db::BillableLineRecord::TableName).Update();
+        query.Set("state", static_cast<int>(BillableLineState::Invoiced)).Set("invoice_id", invoiceId);
+        (void)query.Where("id", "=", static_cast<std::int64_t>(row.id.Value()))
+            .Where("state", "=", static_cast<int>(BillableLineState::Unbilled));
+        Lightweight::SqlStatement statement{mapper.Connection()};
+        if (statement.ExecuteDirect(query.ToSql()).NumRowsAffected() != 1U) {
+            throw Conflict{"line " + std::to_string(row.id.Value()) + " was invoiced meanwhile"};
+        }
     }
     return invoiceId;
 }
@@ -176,7 +182,7 @@ InvoiceView invoiceView(Lightweight::DataMapper& mapper, std::int64_t invoiceId)
         .submittedAt = instant(row.submittedAt.Value()),
         .approvalDeadline = instant(row.deadlineAt.Value()),
         .level = row.deadlineAt.Value() > 0 && nowMillis() >= row.deadlineAt.Value() ? ApprovalLevel::Company
-                                                                                      : ApprovalLevel::Site,
+                                                                                     : ApprovalLevel::Site,
         .entry = JournalEntryId::fromOptional(row.entryId.Value()),
     };
     auto lines = mapper.Query<db::BillableLineRecord>()

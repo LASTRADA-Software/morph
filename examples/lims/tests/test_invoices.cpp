@@ -4,6 +4,7 @@
 // record's, not the type's.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -13,6 +14,7 @@
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "billing_test_support.hpp"
@@ -38,6 +40,12 @@ namespace {
 
 [[nodiscard]] Rational exact(std::int64_t num, std::int64_t den, std::uint32_t places) {
     return Rational{Numerator{num}, Denominator{den}, DecimalPlaces{places}};
+}
+
+/// @brief Runs @p sql on the fixture's database.
+void execute(std::string const& sql) {
+    Lightweight::SqlStatement statement;
+    (void)statement.ExecuteDirect(sql);
 }
 
 /// @brief Settings for the seeded company with @p taxRate, set by sam.
@@ -222,6 +230,117 @@ TEST_CASE("invoices: a draft collects one client's unbilled lines at one site, i
     CHECK(listed.front().id == draft.id);
 }
 
+// Mutation: drop the `state = Unbilled` condition from the line update (the flipped line is taken again, the draft
+// commits, and the Conflict check fails).
+TEST_CASE("invoices: a line invoiced between the read and the write is a Conflict that leaves no invoice",
+          "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    auto const lab = billedSample();
+    insertLine(lab, lims::test::seededSite(), 9010, 500, lims::CurrencyCode::EUR);
+    ScopedPrincipal const bea{"bea"};
+    lims::InvoiceModel invoices;
+    auto const untouched = [&] {
+        CHECK(invoices.execute(lims::ListInvoices{.company = lims::test::seededCompany()}).invoices.empty());
+        auto const lines = linesOf(lab);
+        REQUIRE(lines.size() == 2U);
+        for (auto const& line : lines) {
+            CHECK(line.state == lims::BillableLineState::Unbilled);
+            CHECK_FALSE(line.invoice.hasValue());
+        }
+    };
+    SECTION("another draft takes the last line once this invoice row exists") {
+        execute(
+            "CREATE TRIGGER other_draft AFTER INSERT ON billing_invoices "
+            "BEGIN UPDATE billing_lines SET state = 2, invoice_id = 999 "
+            "WHERE id = (SELECT MAX(id) FROM billing_lines); END");
+        CHECK_THROWS_AS(invoices.execute(invoiceOf(lab)), lims::Conflict);
+        execute("DROP TRIGGER other_draft");
+        untouched();
+    }
+    SECTION("the second line's write fails after the first was written") {
+        execute(
+            "CREATE TRIGGER fail_second BEFORE UPDATE ON billing_lines WHEN OLD.id = (SELECT MAX(id) FROM "
+            "billing_lines) "
+            "BEGIN SELECT RAISE(ABORT, 'injected: the second line never landed'); END");
+        CHECK_THROWS(invoices.execute(invoiceOf(lab)));
+        execute("DROP TRIGGER fail_second");
+        untouched();
+    }
+}
+
+// Mutation: drop the company existence check (an unknown company is then refused as a site that is not its own).
+TEST_CASE("invoices: a company or a site that does not exist is not found", "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    auto const lab = billedSample();
+    ScopedPrincipal const bea{"bea"};
+    lims::InvoiceModel invoices;
+    CHECK_THROWS_WITH(invoices.execute(lims::CreateInvoice{
+                          .company = lims::CompanyId{9999}, .site = lims::test::seededSite(), .client = lab.client}),
+                      Catch::Matchers::ContainsSubstring("company 9999 does not exist"));
+    CHECK_THROWS_WITH(invoices.execute(lims::CreateInvoice{
+                          .company = lims::test::seededCompany(), .site = lims::SiteId{9999}, .client = lab.client}),
+                      Catch::Matchers::ContainsSubstring("site 9999 does not exist"));
+    CHECK_THROWS_AS(invoices.execute(lims::CreateInvoice{
+                        .company = lims::CompanyId{9999}, .site = lims::test::seededSite(), .client = lab.client}),
+                    lims::NotFound);
+    CHECK_THROWS_AS(invoices.execute(lims::CreateInvoice{
+                        .company = lims::test::seededCompany(), .site = lims::SiteId{9999}, .client = lab.client}),
+                    lims::NotFound);
+}
+
+TEST_CASE("invoices: a yen client's invoice has no decimals and its tax is rounded half-up to whole yen",
+          "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    settings(exact(10, 100, 6));
+    auto const lab = lims::test::publishedSample();
+    lims::test::billingFor(lab.client, lims::CurrencyCode::JPY);
+    lims::test::relayLabEvents();
+    // 4000 + 5 = 4005 yen at 10 % is 400.5, which rounds up to 401.
+    insertLine(lab, lims::test::seededSite(), 9020, 5, lims::CurrencyCode::JPY);
+    ScopedPrincipal const bea{"bea"};
+    lims::InvoiceModel invoices;
+    auto const draft = invoices.execute(invoiceOf(lab));
+    CHECK(draft.currency == lims::CurrencyCode::JPY);
+    REQUIRE(draft.lines.size() == 2U);
+    CHECK(*draft.net == exact(4005, 1, 0));
+    CHECK(*draft.tax == exact(401, 1, 0));
+    CHECK(*draft.gross == exact(4406, 1, 0));
+    CHECK((*draft.net).getDecimalPlaces() == DecimalPlaces{0});
+    CHECK((*draft.tax).getDecimalPlaces() == DecimalPlaces{0});
+    CHECK((*draft.gross).getDecimalPlaces() == DecimalPlaces{0});
+    for (auto const& line : draft.lines) {
+        CHECK((*line.amount).getDecimalPlaces() == DecimalPlaces{0});
+    }
+    auto const read = invoices.execute(lims::GetInvoice{.invoiceId = draft.id});
+    CHECK(*read.gross == exact(4406, 1, 0));
+    CHECK((*read.gross).getDecimalPlaces() == DecimalPlaces{0});
+}
+
+TEST_CASE("invoices: ListInvoices answers a company's invoices in id order", "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    auto const lab = billedSample();
+    lims::SiteId fieldLab;
+    {
+        lims::test::grant("sam", lims::LimsRole::Supervisor);
+        ScopedPrincipal const sam{"sam"};
+        fieldLab =
+            lims::OrgModel{}.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Field"}).id;
+    }
+    insertLine(lab, fieldLab, 9030, 500, lims::CurrencyCode::EUR);
+    ScopedPrincipal const bea{"bea"};
+    lims::InvoiceModel invoices;
+    // The field lab is drafted first although its site id is the larger one, so only the invoice id explains the
+    // order.
+    auto const first = invoices.execute(
+        lims::CreateInvoice{.company = lims::test::seededCompany(), .site = fieldLab, .client = lab.client});
+    auto const second = invoices.execute(invoiceOf(lab));
+    REQUIRE(*first.id < *second.id);
+    auto const listed = invoices.execute(lims::ListInvoices{.company = lims::test::seededCompany()}).invoices;
+    REQUIRE(listed.size() == 2U);
+    CHECK(listed.at(0).id == first.id);
+    CHECK(listed.at(1).id == second.id);
+}
+
 TEST_CASE("invoices: a company without billing settings cannot invoice", "[lims][billing][invoices]") {
     lims::test::LabFixture const fixture;
     auto const lab = lims::test::publishedSample();
@@ -334,6 +453,20 @@ TEST_CASE("Hypothesis 8: an amount's currency is a field the type does not see, 
     }
     for (auto const& line : linesOf(lab)) {
         CHECK(line.state == lims::BillableLineState::Unbilled);
+    }
+    // The type-level half, asserted directly: the two lines' amounts are one type and sum exactly. This fails if
+    // `Quantity` ever distinguishes currencies, and with it the verdict that only the model keeps them apart.
+    {
+        auto const lines = linesOf(lab);
+        REQUIRE(lines.size() == 2U);
+        static_assert(std::is_same_v<decltype(lines.at(0).amount), decltype(lines.at(1).amount)>);
+        lims::ExactSum sum;
+        for (auto const& line : lines) {
+            REQUIRE(line.amount.hasValue());
+            CHECK(sum.add(*line.amount));
+        }
+        CHECK(sum.total().numerator == 4040);
+        CHECK(sum.total().denominator == 1);
     }
     // The schema a JPY price list's price form is served with advertises two decimals, because the declared
     // precision is the type's; the model refuses fractional yen (test_price_lists.cpp) where the form allows it.

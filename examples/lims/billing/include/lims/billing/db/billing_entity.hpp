@@ -93,15 +93,15 @@ struct InvoiceRecord {
     /// @brief `CurrencyCode` as its underlying integer.
     Light::Field<int, Light::SqlRealName{"currency"}> currency{0};  // 4
     /// @brief `InvoiceState` as its underlying integer.
-    Light::Field<int, Light::SqlRealName{"state"}> state{0};                          // 5
-    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"number"}> number;      // 6
-    Light::Field<std::int64_t, Light::SqlRealName{"net_num"}> netNum{0};              // 7
-    Light::Field<std::int64_t, Light::SqlRealName{"net_den"}> netDen{1};              // 8
-    Light::Field<std::int64_t, Light::SqlRealName{"tax_num"}> taxNum{0};              // 9
-    Light::Field<std::int64_t, Light::SqlRealName{"tax_den"}> taxDen{1};              // 10
-    Light::Field<std::int64_t, Light::SqlRealName{"gross_num"}> grossNum{0};          // 11
-    Light::Field<std::int64_t, Light::SqlRealName{"gross_den"}> grossDen{1};          // 12
-    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"reference"}> reference;  // 13
+    Light::Field<int, Light::SqlRealName{"state"}> state{0};                                 // 5
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"number"}> number;             // 6
+    Light::Field<std::int64_t, Light::SqlRealName{"net_num"}> netNum{0};                     // 7
+    Light::Field<std::int64_t, Light::SqlRealName{"net_den"}> netDen{1};                     // 8
+    Light::Field<std::int64_t, Light::SqlRealName{"tax_num"}> taxNum{0};                     // 9
+    Light::Field<std::int64_t, Light::SqlRealName{"tax_den"}> taxDen{1};                     // 10
+    Light::Field<std::int64_t, Light::SqlRealName{"gross_num"}> grossNum{0};                 // 11
+    Light::Field<std::int64_t, Light::SqlRealName{"gross_den"}> grossDen{1};                 // 12
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"reference"}> reference;      // 13
     Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"created_by"}> createdBy;      // 14
     Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"submitted_by"}> submittedBy;  // 15
     Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"approved_by"}> approvedBy;    // 16

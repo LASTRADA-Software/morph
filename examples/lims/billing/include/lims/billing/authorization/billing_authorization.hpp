@@ -11,7 +11,8 @@
 
 /// @file
 /// The billing module's declared authorization: a company's billing settings are a supervisor's; its clients, price
-/// lists, prices and draft invoices are a billing clerk's, at that company; a billable line is recorded by a service principal.
+/// lists, prices and draft invoices are a billing clerk's, at that company; a billable line is recorded by a service
+/// principal.
 
 namespace lims {
 

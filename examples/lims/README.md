@@ -1014,8 +1014,10 @@ dedups by event id; the dedup table is the consumer's, which the design requires
 ### 33. An invoice is one client's lines at one site, in the client's currency; the type does not know which (hypothesis 8, invoice half of instance 2)
 
 `CreateInvoice` collects every unbilled line of a client at a site and marks them invoiced in the same transaction, so
-a second draft finds none (`Conflict`). The site must be a site of the named company, and the company must have billing
-settings and the client be registered for billing there. Tax is the company's flat rate on the net total, rounded
+a second draft finds none (`Conflict`). Each line is claimed by a conditional update that requires it still
+Unbilled, so a draft racing another for the same line is a `Conflict` too and its invoice row is rolled back with
+it. The site must be a site of the named company, and the company must have billing settings and the client be
+registered for billing there. Tax is the company's flat rate on the net total, rounded
 half-up once to the currency's decimals, and the gross is net plus tax; rounding each line's tax and summing would
 drift from the rate on the whole. The site is the invoice's because its approval is judged there (decision 35).
 Every sum, product and the tax are the checked operations (`ExactSum`, `checkedMul`, `checkedAdd`,
@@ -1047,6 +1049,7 @@ per-instance decimals and is the existing seam to try there).
   is the typed query tier, not raw SQL. The race is simulated, not run concurrently: the tests make a trigger mark
   the original between the read and the mark, which fails with the guard removed; the post guard's condition has no
   such seam, so only its zero-row handling is tested.
+  Billing's `draftInvoice` claims each line the same way (`state` is Unbilled) and counts the rows.
 
 - **A source key is bound to one posting body.** The ledger records a posting once per company and source key. A
   repeat of the same request (date, source reference, currency, rate, and every line's account, side and amounts,
