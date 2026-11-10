@@ -301,6 +301,20 @@ struct IModelHolder {
     /// @brief Returns `true` if `setOutboxManaged(true)` was called on this instance.
     [[nodiscard]] bool isOutboxManaged() const noexcept { return _outboxManaged; }
 
+    /// @brief Marks this instance as being reconstructed by `journal::replay()`: the execution sites skip every
+    ///        action's guard for it.
+    ///
+    /// Set by `replay()` on the holder it creates, for its dispatch loop, and cleared before it returns the holder.
+    /// Only `replay()` may call it: it is public because `replay()` is not a friend, and any other caller switches
+    /// the guards of that holder off. The mark is the holder's, not the thread's, so another holder dispatched to while a
+    /// replay runs is guarded as always.
+    /// @param reconstructing `true` while replay re-applies recorded entries to this instance.
+    void markReconstructing(bool reconstructing) noexcept { _reconstructing = reconstructing; }
+
+    /// @brief Whether `journal::replay()` is reconstructing this instance.
+    /// @return `true` between `markReconstructing(true)` and `markReconstructing(false)`.
+    [[nodiscard]] bool isReconstructing() const noexcept { return _reconstructing; }
+
     /// @brief Records @p entry if a log is attached and this instance is not
     ///        outbox-managed; no-op otherwise.
     ///
@@ -365,6 +379,7 @@ private:
     std::string _contextKey;
     ::core::platform::WallClockRef _wallClock{::core::platform::defaultSystemWallClock()};
     bool _outboxManaged{false};
+    bool _reconstructing{false};
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 

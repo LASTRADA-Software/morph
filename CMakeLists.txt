@@ -457,6 +457,7 @@ target_sources(morph
         include/morph/core/io_loop.hpp
         include/morph/core/timeout_scheduler.hpp
         include/morph/core/model.hpp
+        include/morph/core/action_guard.hpp
         include/morph/core/registry.hpp
         include/morph/core/records.hpp
         include/morph/core/effects.hpp
@@ -632,6 +633,7 @@ target_sources(morph
         include/morph/core/detail/owner_probe.hpp
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp
+        include/morph/core/detail/action_guard_core.hpp
         include/morph/core/detail/result_walker.hpp
         include/morph/core/detail/watch_table.hpp
         include/morph/core/detail/change_coalescer.hpp

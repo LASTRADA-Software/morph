@@ -84,6 +84,7 @@ add_executable(morph_tests
     test_remote_step_interleaving.cpp
     test_remote_execute_ordering.cpp
     test_action_validation.cpp
+    test_action_guard.cpp
     test_action_wire_rejection.cpp
     test_security_fixes.cpp
     test_bridge_lifetime.cpp
@@ -569,6 +570,53 @@ if(NOT MORPH_VETTED_HMAC_GUARD_DEFAULT_WORKS_UNGATED)
         "without MORPH_REQUIRE_VETTED_HMAC defined (regression: the default "
         "hmacSha256 argument must keep working when the option is off).")
 endif()
+
+# ── Action guard checks ──────────────────────────────────────────────────────
+# Proof that an action whose guard type is only declared where an execution site is instantiated, or whose guard has
+# no callable form, does not compile, and that the same action with a defined guard does -- see
+# docs/spec/core/action_guards.md. The probes are compiled, not linked.
+set(_morph_guard_try_target_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+unset(MORPH_ACTION_GUARD_INCOMPLETE_COMPILES CACHE)
+try_compile(MORPH_ACTION_GUARD_INCOMPLETE_COMPILES
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/action_guard_incomplete.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+)
+if(MORPH_ACTION_GUARD_INCOMPLETE_COMPILES)
+    message(FATAL_ERROR
+        "action guard check failed: compile_checks/action_guard_incomplete.cpp compiled although its guard type is "
+        "never defined (expected a compile failure -- a site compiled without the guard's definition would leave the "
+        "action unguarded).")
+endif()
+
+unset(MORPH_ACTION_GUARD_NO_FORM_COMPILES CACHE)
+try_compile(MORPH_ACTION_GUARD_NO_FORM_COMPILES
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/action_guard_no_form.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+)
+if(MORPH_ACTION_GUARD_NO_FORM_COMPILES)
+    message(FATAL_ERROR
+        "action guard check failed: compile_checks/action_guard_no_form.cpp compiled although its guard has no "
+        "callable check for the action (expected a compile failure -- the action would run unchecked).")
+endif()
+
+unset(MORPH_ACTION_GUARD_DEFINED_COMPILES CACHE)
+try_compile(MORPH_ACTION_GUARD_DEFINED_COMPILES
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/action_guard_defined.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+)
+if(NOT MORPH_ACTION_GUARD_DEFINED_COMPILES)
+    message(FATAL_ERROR
+        "action guard check failed: compile_checks/action_guard_defined.cpp failed to compile although its guard is "
+        "defined with a callable check (the probes above would pass for any broken include).")
+endif()
+
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_morph_guard_try_target_type}")
+unset(_morph_guard_try_target_type)
 
 # ── MORPH_CLIENT_ONLY guard check ────────────────────────────────────────────
 # Proof that MORPH_CLIENT_ONLY actually suppresses the two model-owning

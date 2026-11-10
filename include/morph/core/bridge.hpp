@@ -595,7 +595,7 @@ private:
 ///        `core::async::Task`: the local-path twin of `localOp`.
 ///
 /// Recomputes the action's computed fields and enforces its validator exactly
-/// as `localOp` does, starts the handler on the model's strand, and -- when its
+/// as `localOp` does, runs the action's guard as `localOp` does, starts the handler on the model's strand, and -- when its
 /// Task completes -- journals the outcome and reports it through @p done. See
 /// `docs/spec/core/coroutines.md`. Declared in every build, so `executeVia` can
 /// name it; a `MORPH_CLIENT_ONLY` build never instantiates it.
@@ -623,7 +623,11 @@ void localTaskOp(::morph::model::detail::IModelHolder& holder, std::shared_ptr<v
             throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
                                                   ::morph::model::ActionTraits<Action>::typeId()};
         }
-        task = holder.template into<Model>().execute(actionRef);
+        auto& model = holder.template into<Model>();
+        ::morph::model::detail::runGuardJournaled(holder, model, std::as_const(actionRef), [&] {
+            return ::morph::model::ActionTraits<Action>::toJson(actionRef);
+        });
+        task = model.execute(actionRef);
     } catch (...) {
         done(nullptr, std::current_exception());
         return;
@@ -2406,7 +2410,7 @@ private:
                 // (registry.hpp) — see that overload's doc comment for the full story,
                 // including why a rejected/throwing execute must not leave the audit
                 // trail silent, and why `Model::execute` is the only call inside the
-                // try that records Outcome::Failed.
+                // try that records Outcome::Failed (the guard ran just above, in its own).
 // MSVC's C4702 fires on the `return` below for any action whose handler never
 // returns -- a test double whose body is a bare `throw`, for instance. The
 // warning is correct for that instantiation and wrong as a verdict on this
@@ -2417,6 +2421,9 @@ private:
 #pragma warning(push)
 #pragma warning(disable : 4702)
 #endif
+                ::morph::model::detail::runGuardJournaled(holder, model, std::as_const(actionRef), [&] {
+                    return ::morph::model::ActionTraits<Action>::toJson(actionRef);
+                });
                 auto result = [&] {
                     try {
                         return std::make_shared<R>(model.execute(actionRef));
