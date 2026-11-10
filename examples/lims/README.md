@@ -1161,6 +1161,19 @@ conditionally on the gross it read, so a line removed between its read and its w
 approval amount. A lease outlives submission and the holder's role until it lapses. Lot reservation in Part C is the
 second instance.
 
+### 40. An invoice change in one company reaches another company's watching clerk (hypothesis 7, first instance)
+
+**Hypothesis 7 is confirmed for invoices.** Measured in `tests/test_two_company_effects.cpp` over a real
+`RemoteServer`: a clerk of the second company creates an invoice; the first company's clerk, watching `Billing_Invoice`
+on another connection, is sent a `changes` event naming the record without any key ("sent to company A:
+Billing_Invoice as a whole", printed by `-s`), so the event does not carry the new invoice's id. The server
+re-authorises a watcher by its principal, the model and the action that admitted the watch, not by the row's company,
+which only the model knows, so the first company learns that the second's invoices changed, and when. Their lists
+themselves stay scoped (decision 26; inferred, the refetch was not measured here): the refetch the event triggers
+answers only the first company's invoices. The event names the whole record, so `record::privateKeys` would have
+nothing to hide; hiding the event itself needs the fan-out to judge the row's company, which the model alone knows
+(inferred from the fan-out's documentation, not from a test). Stock in Part C is the second instance.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so
