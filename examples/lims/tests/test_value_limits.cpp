@@ -32,6 +32,7 @@ TEST_CASE("value limits: the business roles are named and stored after the first
     CHECK(lims::roleName(lims::LimsRole::Accountant) == "accountant");
     CHECK(lims::roleName(lims::LimsRole::BillingClerk) == "billing-clerk");
     CHECK(lims::roleName(lims::LimsRole::InvoiceApprover) == "invoice-approver");
+    CHECK(lims::roleName(lims::LimsRole::Service) == "service");
     CHECK(static_cast<int>(lims::LimsRole::Supervisor) == 2);
     CHECK(static_cast<int>(lims::LimsRole::InvoiceApprover) == 5);
 }

@@ -278,3 +278,21 @@ TEST_CASE("QtDrivenMainThreadExecutor's pending drain is inert after the executo
     REQUIRE_FALSE(morph::ladder::testkit::pumpUntil([] { return false; }, std::chrono::milliseconds{50}));
     CHECK_FALSE(taskRan);
 }
+
+// Mutation: drop EventsHello from the Socket-mode config (the server refuses the connection's events hello, so
+// takesEvents() is false, and the lims fan-out cases then hear nothing).
+TEST_CASE("BackendRig: connect() opens a closable connection on the Socket-mode server", "[testkit][rig]") {
+    morph::ladder::testkit::BackendRig rig{morph::ladder::testkit::Mode::Socket, 0};
+    auto first = rig.connect();
+    auto second = rig.connect();
+    CHECK(first->takesEvents());
+    CHECK(second->takesEvents());
+    CHECK(first->watch({}, {}).kind == "ok");
+    first->close();
+    first->close();  // idempotent
+    CHECK(second->watch({}, {}).kind == "ok");
+    CHECK_NOTHROW(rig.server());
+    morph::ladder::testkit::BackendRig local{morph::ladder::testkit::Mode::Local, 1};
+    CHECK_THROWS_AS(local.connect(), std::logic_error);
+    CHECK_THROWS_AS(local.server(), std::logic_error);
+}

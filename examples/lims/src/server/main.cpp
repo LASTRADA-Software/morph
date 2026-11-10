@@ -7,9 +7,13 @@
 // Environment: LIMS_TOKEN_SECRET (required, non-empty), LIMS_PORT (default 8771), LIMS_DB (default lims.db).
 // LIMS_CHAT_CONFIG names a chat configuration file (docs/spec/ui/chat.md), which turns the screens' chat on; one that
 // does not work stops the server, rather than leave it running with no chat and no word why.
+// The server's own clients act as `system:events` (and, from the billing schedule and the posting wiring,
+// `system:billing-schedule` and `system:posting`); each needs `LimsRole::Service` at every company it serves,
+// assigned by a supervisor like any role.
 
 #include <QCoreApplication>
 #include <QObject>
+#include <QTimer>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
@@ -30,7 +34,10 @@
 #include <string>
 #include <string_view>
 
+#include "lims/app/event_wiring.hpp"
+#include "lims/app/internal_client.hpp"
 #include "lims/app/lims_authorizer.hpp"
+#include "lims/app/service_principals.hpp"
 #include "lims/lab/db/database.hpp"
 #include "lims/lab/models/ignition_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
@@ -108,6 +115,25 @@ int main(int argc, char** argv) {
             return 1;
         }
         std::cout << "lims-server: listening on ws://127.0.0.1:" << socket.port() << '\n' << std::flush;
+        // The server's own clients, and one thread their blocking passes run on: a relay pass waits for billing's
+        // answers, and waiting on the Qt thread would stall every socket this server serves. Declared in the order
+        // that tears down safely: the timer stops first, `background` joins its thread, then the client releases its
+        // bridge before `server` goes.
+        lims::app::InternalClient events{*server, secret, std::string{lims::app::kEventsPrincipal}};
+        morph::exec::ThreadPoolExecutor background{1};
+        // Lab's events reach billing through this relay; a pass that fails is logged and retried on the next tick,
+        // since the batch stays unmarked.
+        QTimer relayTimer;
+        QObject::connect(&relayTimer, &QTimer::timeout, [&background, &events] {
+            background.post([&events] {
+                try {
+                    static_cast<void>(lims::app::relayLabEvents(events));
+                } catch (std::exception const& error) {
+                    std::cerr << "lims-server: event relay: " << error.what() << '\n';
+                }
+            });
+        });
+        relayTimer.start(1000);
         int const code = QCoreApplication::exec();
         lims::auth::setTokenIssuer(nullptr);
         return code;

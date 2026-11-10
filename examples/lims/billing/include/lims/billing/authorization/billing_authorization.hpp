@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include "lims/billing/dto/line_dto.hpp"
 #include "lims/billing/dto/price_dto.hpp"
 #include "lims/billing/dto/settings_dto.hpp"
+#include "lims/billing/models/invoice_model.hpp"
 #include "lims/billing/models/price_list_model.hpp"
 #include "lims/org/authorization/declared.hpp"
 
 /// @file
 /// The billing module's declared authorization: a company's billing settings are a supervisor's; its clients, price
-/// lists and prices are a billing clerk's, at that company.
+/// lists and prices are a billing clerk's, at that company; a billable line is recorded by a service principal.
 
 namespace lims {
 
@@ -34,6 +36,18 @@ struct Authorization<SetPrice> {
     /// @param action The action.
     /// @return It; an empty company when there is no such list.
     [[nodiscard]] static Scope scopeOf(SetPrice const& action);
+};
+
+/// @brief A billable line is recorded by a service principal holding the service role at the site's company.
+template <>
+struct Authorization<RecordBillableLine> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::Service;
+
+    /// @brief The site the published sample belongs to.
+    /// @param action The action.
+    /// @return It.
+    [[nodiscard]] static Scope scopeOf(RecordBillableLine const& action) { return Scope{action.site}; }
 };
 
 }  // namespace lims

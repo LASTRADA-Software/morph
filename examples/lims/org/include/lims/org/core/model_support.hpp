@@ -6,6 +6,7 @@
 #include <morph/session/session.hpp>
 #include <morph/util/datetime.hpp>
 #include <string>
+#include <string_view>
 
 #include "clock.hpp"
 #include "lims/org/core/errors.hpp"
@@ -42,6 +43,25 @@ inline void requirePrincipal() {
 [[nodiscard]] inline std::string currentPrincipal() {
     const auto* ctx = ::morph::session::current();
     return ctx == nullptr ? std::string{} : ctx->principal;
+}
+
+/// @brief The principal namespace reserved for the server's own clients; no sign-in yields a principal in it.
+inline constexpr std::string_view kServicePrincipalPrefix = "system:";
+
+/// @brief Whether @p principal is one of the server's own clients.
+/// @param principal The principal.
+/// @return `true` for `system:<name>` with a non-empty name.
+[[nodiscard]] inline bool isServicePrincipal(std::string_view principal) noexcept {
+    return principal.starts_with(kServicePrincipalPrefix) && principal.size() > kServicePrincipalPrefix.size();
+}
+
+/// @brief Throws `Forbidden` unless the authenticated principal is one of the server's own clients.
+/// @param action The action, for the refusal.
+/// @throws Forbidden when it is not.
+inline void requireServicePrincipal(std::string_view action) {
+    if (!isServicePrincipal(currentPrincipal())) {
+        throw Forbidden{std::string{action} + ": only the server's own clients send it"};
+    }
 }
 
 /// @brief The current instant in epoch milliseconds, honouring a test's

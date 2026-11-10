@@ -206,4 +206,17 @@ LIGHTWEIGHT_SQL_MIGRATION(20261109000004, "Move lims_operators into org_role_ass
         "SELECT principal, role, 0, 1, granted_by, granted_at FROM lims_operators");
     plan.DropTable("lims_operators");
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20261110000007, "Create lims_outbox") {
+    plan.CreateTableIfNotExists("lims_outbox")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("event_id", Varchar(128))
+        .RequiredColumn("event_type", Varchar(64))
+        .RequiredColumn("entity_key", Varchar(64))
+        .RequiredColumn("payload", Varchar(4096))
+        .RequiredColumn("principal", Varchar(64))
+        .RequiredColumn("recorded_at", Bigint());
+    // An event id names one result at one sample version, so it is written once; the index refuses a second row.
+    plan.CreateUniqueIndex("idx_lims_outbox_event", "lims_outbox", {"event_id"});
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

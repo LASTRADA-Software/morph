@@ -190,4 +190,18 @@ struct ReplayedOpRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"decided_at"}> decidedAt{0};    // 2
 };
 
+/// @brief One event lab committed and has not yet seen relayed: written in the transaction of the fact it reports,
+///        deleted once the relay has delivered it.
+struct LabOutboxRecord {
+    static constexpr std::string_view TableName = "lims_outbox";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    /// @brief `<module>.<event>:<aggregate id>:<aggregate version>`; the same for a redelivery.
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"event_id"}> eventId;         // 1
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"event_type"}> eventType;      // 2
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"entity_key"}> entityKey;      // 3
+    Light::Field<Light::SqlDynamicAnsiString<4096>, Light::SqlRealName{"payload"}> payload;  // 4
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"principal"}> principal;       // 5
+    Light::Field<std::int64_t, Light::SqlRealName{"recorded_at"}> recordedAt{0};             // 6
+};
+
 }  // namespace lims::db

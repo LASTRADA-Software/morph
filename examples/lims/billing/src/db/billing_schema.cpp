@@ -49,4 +49,30 @@ LIGHTWEIGHT_SQL_MIGRATION(20261110000006, "Create billing settings, clients, pri
     plan.CreateUniqueIndex("idx_billing_prices_list_analysis_client", "billing_prices",
                            {"price_list_id", "analysis_id", "client_id"});
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20261110000008, "Create billing_lines and billing_consumed_events") {
+    plan.CreateTableIfNotExists("billing_lines")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("site_id", Bigint())
+        .RequiredColumn("client_id", Bigint())
+        .RequiredColumn("sample_id", Bigint())
+        .RequiredColumn("result_id", Bigint())
+        .RequiredColumn("analysis_id", Bigint())
+        .RequiredColumn("published_at", Bigint())
+        .RequiredColumn("state", Integer())
+        .Column("amount_num", Bigint())
+        .Column("amount_den", Bigint())
+        .RequiredColumn("currency", Integer())
+        .Column("invoice_id", Bigint())
+        .RequiredColumn("event_id", Varchar(128));
+    plan.CreateTableIfNotExists("billing_consumed_events")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("scope", Varchar(32))
+        .RequiredColumn("event_id", Varchar(128))
+        .RequiredColumn("line", Varchar(32));
+    // An event is consumed once per scope: the index refuses the second of two deliveries that raced past the lookup.
+    plan.CreateUniqueIndex("idx_billing_consumed_events_scope_event", "billing_consumed_events",
+                           {"scope", "event_id"});
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

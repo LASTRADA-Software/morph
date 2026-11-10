@@ -15,6 +15,7 @@
 #include "lims/lab/authorization/lab_authorization.hpp"
 #include "lims/lab/db/lims_entity.hpp"
 #include "lims/lab/dto/analysis_dto.hpp"
+#include "lims/lab/events/lab_outbox_store.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
 #include "lims/org/models/org_model.hpp"
@@ -322,6 +323,11 @@ SampleView SampleModel::writeState(SampleState target) const {
     // never see the new state at the old version.
     row.version = row.version.Value() + 1;
     mapper.Update(row);
+    // The events go in the publication's own transaction: a published sample whose results were never announced, or
+    // an announcement of a publication that rolled back, would each bill wrongly.
+    if (target == SampleState::Published) {
+        writeAnalysisPublished(mapper, row, currentPrincipal());
+    }
     sqlTxn.Commit();
     return toView(row);
 }

@@ -959,6 +959,50 @@ force; a price is never changed (a second one for the same analysis and client i
 a new list with a later effective date. A client id is above zero wherever one is given, since 0 is the stored key of
 the list's own price.
 
+### 32. Lab's events reach billing through an outbox, morph's relay and a dispatched consumer (hypothesis 2, first instance)
+
+`PublishSample` writes one `lab.AnalysisPublished` row per result into `lims_outbox`, in the transaction that
+publishes, with the event id `lab.AnalysisPublished:<result>:<sample version>`; a unique index refuses a second row
+with the same id. `lims::app::relayLabEvents` runs one `morph::journal::OutboxRelay` pass: `drainOutbox` and
+`markRelayed` are lab's (`drainLabOutbox`, `markLabOutboxRelayed`, which deletes the delivered rows), and the sink is
+`lims::app::BillingEventSink`, which decodes the event and dispatches `RecordBillableLine` through
+`lims::app::InternalClient`. The client is a `Bridge` over `SimulatedRemoteBackend` into the server's own
+`RemoteServer`, acting as `system:events` with a token the server mints from its own secret, so the line is written
+inside a dispatch: authorized at the edge and by its declared rule (the service role at the site's company, and a
+`system:` principal, so a person given the role still cannot send it), journaled, and fanned out to watchers. A
+`system:` principal is one no sign-in yields (`LimsLogin` refuses the namespace) and holds `LimsRole::Service` at a
+company through `AssignRole` like any role; the server grants itself nothing. The bridge belongs to a one-thread
+executor of its own, where every call is issued and settled, so `call` may block a relay pass without blocking the
+thread that delivers its answer. A one-thread `ThreadPoolExecutor` works as the bridge's owner in the Release ladder build; a debug
+build's owner check was not run. Billing records each event id in
+`billing_consumed_events` through an `IReplayLedger`, in the line's transaction, so a redelivery answers the line it
+made; two deliveries that race past the lookup are settled by the unique index, whose loser answers the winner's
+line. A result with no price in force (or a client not registered for billing at the company) is billed `Unpriced`
+with no amount rather than refused, because a consumer that refuses an event stops the relay at it. The server relays
+once a second, on a background thread a `QTimer` posts to.
+
+**Hypothesis 2 is refuted for this instance.** The criterion, set before measuring, was the design's: each event
+received exactly once in effect across a restart, with only wiring code in `lims/app` and no per-consumer delivery
+loop or cursor. Measured in `tests/test_domain_events.cpp`: a relay that delivers and then dies before marking leaves
+one line and the event still in the outbox; a fresh relay over the same database redelivers it, billing answers the
+same line (same id), and the outbox is then empty. The delivery loop is `OutboxRelay`'s and the cursor is the
+outbox's own rows. What `lims/app` holds for this consumer is wiring: `BillingEventSink` (decode, dispatch, 53 lines
+with `relayLabEvents`), the relay's configuration, and the principal's names. The only `for` in `event_wiring.cpp` is
+`entries()`'s filter over what was delivered (the `IActionLog` read API, not delivery); a search of `app/` and billing
+for cursor, last id, position and offset finds nothing; billing's only delivery-related table is the replay ledger
+every consumer of an at-least-once source needs. The internal client is 170 lines in `app/` (115 header,
+55 source) and is shared by every background job. With the ledger lookup removed, the redelivery case fails (it no longer sees the same
+line), so the check does measure the guarantee.
+
+Not measured, and the limits of the verdict. One consumer reads this outbox. `OutboxRelay` has one sink and
+`markLabOutboxRelayed` deletes a batch whole, and `BillingEventSink` throws on an event type it does not consume
+(skipping it would lose it for its real consumer once it is deleted). So a second event type in `lims_outbox`, or a
+second consumer of the same event, needs a routing sink that fans one drained batch out to several consumers, which is
+wiring but has to be written; that is inferred from reading `OutboxRelay`, not measured, and the second instance
+decides it. A consumer that refuses an event holds back every event after it: `OutboxRelay` delivers in drain order
+and marks only a whole batch (measured, same file). Exactly-once here is at-least-once delivery plus a consumer that
+dedups by event id; the dedup table is the consumer's, which the design requires, and is what `IReplayLedger` is for.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so

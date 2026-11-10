@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "lims/org/core/errors.hpp"
+#include "lims/org/core/model_support.hpp"
 
 namespace lims {
 
@@ -17,8 +18,6 @@ namespace {
 
 // Far enough ahead that a development session never expires under a test.
 constexpr std::int64_t kTokenExpiresAtMs = 4102444800000;
-
-constexpr std::string_view kServicePrincipalPrefix = "system:";
 
 std::mutex& issuerMutex() {
     static std::mutex mutex;

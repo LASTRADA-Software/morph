@@ -3,6 +3,7 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 
 /// @file
@@ -59,6 +60,36 @@ struct PriceRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"client_id"}> clientId{0};    // 3
     Light::Field<std::int64_t, Light::SqlRealName{"amount_num"}> amountNum{0};  // 4
     Light::Field<std::int64_t, Light::SqlRealName{"amount_den"}> amountDen{1};  // 5
+};
+
+/// @brief One published result, to be billed.
+struct BillableLineRecord {
+    static constexpr std::string_view TableName = "billing_lines";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"site_id"}> siteId{0};                                   // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"client_id"}> clientId{0};                               // 3
+    Light::Field<std::int64_t, Light::SqlRealName{"sample_id"}> sampleId{0};                               // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"result_id"}> resultId{0};                               // 5
+    Light::Field<std::int64_t, Light::SqlRealName{"analysis_id"}> analysisId{0};                           // 6
+    Light::Field<std::int64_t, Light::SqlRealName{"published_at"}> publishedAt{0};                         // 7
+    /// @brief `BillableLineState` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"state"}> state{0};                                // 8
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"amount_num"}> amountNum;  // 9
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"amount_den"}> amountDen;  // 10
+    /// @brief `CurrencyCode` as its underlying integer; meaningful only when priced.
+    Light::Field<int, Light::SqlRealName{"currency"}> currency{0};                          // 11
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"invoice_id"}> invoiceId;  // 12
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"event_id"}> eventId;        // 13
+};
+
+/// @brief An event billing has consumed, with the line it made: one row per scope and event id.
+struct ConsumedEventRecord {
+    static constexpr std::string_view TableName = "billing_consumed_events";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"scope"}> scope;                             // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"event_id"}> eventId;                       // 2
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"line"}> line;                               // 3
 };
 
 }  // namespace lims::db

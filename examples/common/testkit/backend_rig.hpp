@@ -20,6 +20,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "testkit/server_connection.hpp"
+
 /// @file
 /// The dual/triple-mode fixture (examples/TESTING.md, "The dual-mode
 /// fixture"): one test body, parameterized by Catch2 GENERATE over Mode, runs
@@ -232,10 +234,13 @@ public:
             }
             case Mode::Socket: {
                 _workerPool = std::make_unique<::morph::exec::ThreadPoolExecutor>(4);
+                ::morph::backend::ServerConfig config;
+                // Lets a connection from connect() take events; a socket client never sends this kind.
+                config.services.push_back(std::make_shared<EventsHello>());
                 if (authorizer) {
-                    _server = std::make_shared<::morph::backend::RemoteServer>(*_workerPool, authorizer);
+                    _server = std::make_shared<::morph::backend::RemoteServer>(*_workerPool, authorizer, config);
                 } else {
-                    _server = std::make_shared<::morph::backend::RemoteServer>(*_workerPool);
+                    _server = std::make_shared<::morph::backend::RemoteServer>(*_workerPool, config);
                 }
 #ifdef QT_NO_SSL
                 _wsServer =
@@ -422,6 +427,27 @@ public:
             throw std::logic_error("BackendRig::url: only Mode::Socket runs a server; there is no URL in this mode");
         }
         return _url;
+    }
+
+    /// @brief The server the rig's clients reach, for an internal client of the application under test.
+    /// @return The server, owned by this rig.
+    /// @throws std::logic_error in `Local`/`LocalSingleThread`, which run no server.
+    [[nodiscard]] ::morph::backend::RemoteServer& server() {
+        if (_mode != Mode::Socket) {
+            throw std::logic_error("BackendRig::server: only Mode::Socket runs a server");
+        }
+        return *_server;
+    }
+
+    /// @brief Opens a connection on the rig's server in process: one a test can close while the others stay, and
+    ///        that keeps what the server sent it.
+    /// @return The connection; destroy it before this rig.
+    /// @throws std::logic_error in `Local`/`LocalSingleThread`, which run no server.
+    [[nodiscard]] std::unique_ptr<ServerConnection> connect() {
+        if (_mode != Mode::Socket) {
+            throw std::logic_error("BackendRig::connect: only Mode::Socket runs a server");
+        }
+        return std::make_unique<ServerConnection>(_server);
     }
 
 private:
