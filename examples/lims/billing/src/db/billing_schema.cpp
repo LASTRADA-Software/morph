@@ -124,4 +124,9 @@ LIGHTWEIGHT_SQL_MIGRATION(20261110000010, "Create billing_runs and billing_run_i
     // A run holds one item per client and site, which is what makes "done of total" a count of distinct work.
     plan.CreateUniqueIndex("idx_billing_run_items_unit", "billing_run_items", {"run_id", "client_id", "site_id"});
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20261110000011, "Add billing_run_items.error") {
+    // The refusal that failed an item, so a run's failure is visible and the item is not tried again.
+    plan.AlterTable("billing_run_items").AddNotRequiredColumn("error", Varchar(255));
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

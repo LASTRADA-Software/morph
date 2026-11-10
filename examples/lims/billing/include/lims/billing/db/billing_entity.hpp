@@ -145,10 +145,12 @@ struct BillingRunItemRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"run_id"}> runId{0};                                     // 1
     Light::Field<std::int64_t, Light::SqlRealName{"client_id"}> clientId{0};                               // 2
     Light::Field<std::int64_t, Light::SqlRealName{"site_id"}> siteId{0};                                   // 3
-    /// @brief 0 while pending, 1 once drafted.
+    /// @brief 0 while pending, 1 once drafted, 2 once it failed.
     Light::Field<int, Light::SqlRealName{"state"}> state{0};  // 4
     /// @brief The invoice drafted for it; empty when the item was done and no line was left to invoice.
     Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"invoice_id"}> invoiceId;  // 5
+    /// @brief The refusal that failed the item; empty otherwise.
+    Light::Field<std::optional<Light::SqlAnsiString<255>>, Light::SqlRealName{"error"}> error;  // 6
 };
 
 }  // namespace lims::db

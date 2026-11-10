@@ -6,6 +6,7 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlStatement.hpp>
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -13,6 +14,7 @@
 #include <map>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -23,10 +25,10 @@
 #include "lims/app/internal_client.hpp"
 #include "lims/app/service_principals.hpp"
 #include "lims/billing/core/fault_hook.hpp"
+#include "lims/billing/db/billing_entity.hpp"
 #include "lims/billing/models/billing_run_model.hpp"
 #include "lims/billing/models/invoice_model.hpp"
 #include "testkit/backend_rig.hpp"
-#include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
 
 using lims::test::ScopedPrincipal;
@@ -122,6 +124,29 @@ struct ScheduleServer {
     return counts;
 }
 
+/// @brief Each done item's invoice id by client id; empty for an item done with no invoice.
+[[nodiscard]] std::map<std::int64_t, std::optional<std::int64_t>> doneItemInvoices() {
+    Lightweight::DataMapper mapper;
+    std::map<std::int64_t, std::optional<std::int64_t>> result;
+    for (auto const& item : mapper.Query<lims::db::BillingRunItemRecord>().All()) {
+        if (item.state.Value() == 1) {
+            result[item.clientId.Value()] = item.invoiceId.Value();
+        }
+    }
+    return result;
+}
+
+/// @brief The client each invoice belongs to, by invoice id.
+[[nodiscard]] std::map<std::int64_t, std::int64_t> clientOfInvoice() {
+    ScopedPrincipal const bea{"bea"};
+    std::map<std::int64_t, std::int64_t> result;
+    for (auto const& invoice :
+         lims::InvoiceModel{}.execute(lims::ListInvoices{.company = lims::test::seededCompany()}).invoices) {
+        result[*invoice.id] = *invoice.client;
+    }
+    return result;
+}
+
 /// @brief Runs @p sql on the fixture's database.
 void execute(std::string const& sql) {
     Lightweight::SqlStatement statement;
@@ -179,6 +204,7 @@ TEST_CASE("billing run: each tick advances one batch, and a watching clerk sees 
             [&] { return watcher->changes().size() > heard && watcher->heardOf("Billing_Run"); }));
         heard = watcher->changes().size();
     }
+    REQUIRE(runs().size() == 1U);
     CHECK(runs().front().state == lims::BillingRunState::Finished);
 }
 
@@ -254,23 +280,29 @@ TEST_CASE("billing run: the schedule acts only for companies where its principal
             .site = {},
         });
     }
-    auto const served = scheduler.tick();
-    REQUIRE(served.runs.size() == 1U);
-    CHECK(served.runs.front().company == osaka);
-    CHECK(osakaRuns().size() == 1U);
+    static_cast<void>(scheduler.tick());
+    // Osaka has nothing to bill, so its run is finished as it starts.
+    REQUIRE(osakaRuns().size() == 1U);
+    CHECK(osakaRuns().front().state == lims::BillingRunState::Finished);
 }
 
 // Hypothesis 4. Mutation: draft an item outside the transaction that marks it done (the interrupted item's invoice
 // stays committed while the item stays pending, so two clients have an invoice after the failure instead of one).
+// Mutation: commit the draft before marking the item done, in a second transaction (the failure at
+// run.beforeItemDone leaves the invoice committed and the item pending; the resumed item is then done with no
+// invoice, which the invoice-id assertion catches). Mutation: let advanceRun walk every item instead of the pending
+// ones (the resume makes three draft attempts instead of two).
 TEST_CASE("Hypothesis 4: a run interrupted mid-way resumes and drafts each client's invoice once",
           "[lims][billing][run][h4]") {
+    auto const interruptedAt = GENERATE(std::string_view{"run.afterInvoice"}, std::string_view{"run.beforeItemDone"});
+    CAPTURE(interruptedAt);
     lims::test::LabFixture const fixture;
-    static_cast<void>(threeClientsToBill());
+    auto const labs = threeClientsToBill();
     ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
     FaultHookGuard const guard;
     int drafted = 0;
-    lims::setFaultHook([&drafted](std::string_view point) {
-        if (point == "run.afterInvoice" && ++drafted == 2) {
+    lims::setFaultHook([&drafted, interruptedAt](std::string_view point, Lightweight::SqlConnection&) {
+        if (point == interruptedAt && ++drafted == 2) {
             throw std::runtime_error{"server stopped during the billing run"};
         }
     });
@@ -284,12 +316,19 @@ TEST_CASE("Hypothesis 4: a run interrupted mid-way resumes and drafts each clien
     CHECK(*runs().front().done == whole(1));
     CHECK(invoicesPerClient().size() == 1U);
 
-    // The restart: the hook is gone, a new server and scheduler tick, and the run resumes where it stood.
-    lims::setFaultHook({});
+    // The restart: a new server and scheduler tick, and the run resumes where it stood. The hook now only counts
+    // the items the resume drafts: the done item is not walked again.
+    int attempts = 0;
+    lims::setFaultHook([&attempts](std::string_view point, Lightweight::SqlConnection&) {
+        if (point == "run.beforeItemDone") {
+            ++attempts;
+        }
+    });
     ScheduleServer restarted;
     lims::app::BillingScheduler scheduler{restarted.client, batchOf(50)};
     ScopedClockOverride const later{lims::test::at(2026, 11, 25, 10)};
     static_cast<void>(scheduler.tick());
+    CHECK(attempts == 2);
     REQUIRE(runs().size() == 1U);
     CHECK(runs().front().state == lims::BillingRunState::Finished);
     CHECK(*runs().front().done == whole(3));
@@ -299,6 +338,135 @@ TEST_CASE("Hypothesis 4: a run interrupted mid-way resumes and drafts each clien
         CAPTURE(client);
         CHECK(count == 1);
     }
+    // The cursor's own work: every done item names the invoice of its own client.
+    auto const items = doneItemInvoices();
+    auto const owners = clientOfInvoice();
+    REQUIRE(items.size() == 3U);
+    for (auto const& lab : labs) {
+        CAPTURE(*lab.client);
+        REQUIRE(items.contains(*lab.client));
+        auto const invoice = items.at(*lab.client);
+        REQUIRE(invoice.has_value());
+        std::int64_t const invoiceId = invoice.has_value() ? *invoice : 0;
+        REQUIRE(owners.contains(invoiceId));
+        CHECK(owners.at(invoiceId) == *lab.client);
+    }
+}
+
+// Mutation: catch only std::bad_alloc in draftItem's refusal handler, so a domain refusal escapes (the first tick
+// throws at the poison item and the case fails there).
+TEST_CASE("billing run: an item the domain refuses fails alone, is shown on the run, and holds nothing else up",
+          "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    lims::CompanyId osaka;
+    {
+        ScopedPrincipal const sam{"sam"};
+        osaka = lims::OrgModel{}.execute(lims::CreateCompany{.name = "Osaka branch"}).id;
+        lims::OrgModel{}.execute(lims::AssignRole{
+            .principal = std::string{lims::app::kSchedulePrincipal},
+            .role = lims::LimsRole::Service,
+            .company = osaka,
+            .site = {},
+        });
+    }
+    FaultHookGuard const guard;
+    int drafted = 0;
+    lims::setFaultHook([&drafted](std::string_view point, Lightweight::SqlConnection&) {
+        if (point == "run.afterInvoice" && ++drafted == 1) {
+            throw lims::ValidationError{"client 1 bills in another currency"};
+        }
+    });
+    ScheduleServer server;
+    morph::session::TokenIssuer const issuer{std::string{lims::test::kServiceSecret}, morph::session::hmacSha256};
+    auto const watcher = server.rig.connect();
+    REQUIRE(watcher->watch({"Billing_Run"}, lims::test::signedAs(issuer, "bea")).kind == "ok");
+    lims::app::BillingScheduler scheduler{server.client, batchOf(1)};
+
+    // The first tick starts the seeded company's run and meets the poison item.
+    auto const first = scheduler.tick();
+    REQUIRE(first.runs.size() == 1U);
+    CHECK(*first.runs.front().failed == whole(1));
+    CHECK(*first.runs.front().done == whole(0));
+    CHECK(first.runs.front().state == lims::BillingRunState::Running);
+    CHECK_THAT(first.runs.front().lastError, Catch::Matchers::ContainsSubstring("another currency"));
+    CHECK(morph::ladder::testkit::ServerConnection::eventually([&] { return watcher->heardOf("Billing_Run"); }));
+
+    // Osaka has an unfinished run of its own, with no item left to draft.
+    execute("INSERT INTO billing_runs (company_id, label, state, started_at, started_by) VALUES (" +
+            std::to_string(*osaka) + ", '2026-10', 0, 0, 'system:billing-schedule')");
+
+    // Osaka's run finishes in the tick after the poison item, while the seeded run is still drafting.
+    auto const second = scheduler.tick();
+    REQUIRE(second.runs.size() == 2U);
+    lims::BillingRunView seeded;
+    lims::BillingRunView other;
+    for (auto const& run : second.runs) {
+        (run.company == osaka ? other : seeded) = run;
+    }
+    CHECK(seeded.state == lims::BillingRunState::Running);
+    auto const third = scheduler.tick();
+    REQUIRE(third.runs.size() == 1U);
+    seeded = third.runs.front();
+    CHECK(other.state == lims::BillingRunState::Finished);
+    CHECK(seeded.state == lims::BillingRunState::FinishedWithFailures);
+    CHECK(*seeded.total == whole(3));
+    CHECK(*seeded.done == whole(2));
+    CHECK(*seeded.failed == whole(1));
+    CHECK_THAT(seeded.lastError, Catch::Matchers::ContainsSubstring("another currency"));
+    CHECK(invoicesPerClient().size() == 2U);
+
+    // The failure stays visible to a clerk reading the run afterwards, and the tick no longer advances it.
+    REQUIRE(runs().size() == 1U);
+    CHECK(runs().front().state == lims::BillingRunState::FinishedWithFailures);
+    CHECK(*runs().front().failed == whole(1));
+    CHECK(scheduler.tick().runs.empty());
+}
+
+// Mutation: leave out the unique-violation mapping in startRun (the start fails with the database's own error
+// instead of Conflict).
+TEST_CASE("billing run: a start that loses a race on the unique index is a Conflict", "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    // Another start's row appears between this one's lookup and its write. SQLite would make the other writer wait, so
+    // the row is written on this start's own connection, and rolls back with the refused start.
+    FaultHookGuard const guard;
+    lims::setFaultHook([](std::string_view point, Lightweight::SqlConnection& connection) {
+        if (point == "run.beforeStartWrite") {
+            lims::setFaultHook({});
+            Lightweight::SqlStatement statement{connection};
+            static_cast<void>(statement.ExecuteDirect(
+                "INSERT INTO billing_runs (company_id, label, state, started_at, started_by) VALUES (" +
+                std::to_string(*lims::test::seededCompany()) + ", '2026-11', 0, 0, 'racer')"));
+        }
+    });
+    ScopedPrincipal const bea{"bea"};
+    CHECK_THROWS_AS(lims::BillingRunModel{}.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}),
+                    lims::Conflict);
+    CHECK(runs().empty());
+}
+
+// Mutation: leave the run of an empty start Running (the run reads Running, 0 of 0).
+TEST_CASE("billing run: a run with nothing to draft is finished when it starts", "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    lims::CompanyId osaka;
+    {
+        ScopedPrincipal const sam{"sam"};
+        osaka = lims::OrgModel{}.execute(lims::CreateCompany{.name = "Osaka branch"}).id;
+        lims::OrgModel{}.execute(
+            lims::AssignRole{.principal = "dave", .role = lims::LimsRole::Supervisor, .company = osaka, .site = {}});
+        lims::OrgModel{}.execute(
+            lims::AssignRole{.principal = "dave", .role = lims::LimsRole::BillingClerk, .company = osaka, .site = {}});
+    }
+    settingsFor(osaka, "dave");
+    ScopedPrincipal const dave{"dave"};
+    auto const run = lims::BillingRunModel{}.execute(lims::StartBillingRun{.company = osaka});
+    CHECK(*run.total == whole(0));
+    CHECK(run.state == lims::BillingRunState::Finished);
 }
 
 // Mutation: drop the `state = pending` condition from the item's update (the second section's trigger no longer
@@ -376,6 +544,7 @@ TEST_CASE("billing run: a batch is a whole number of at least one, and a run mus
     CHECK_THROWS_AS(model.execute(lims::AdvanceBillingRun{.runId = lims::BillingRunId{9999}, .batch = batchOf(1)}),
                     lims::NotFound);
     CHECK_THROWS_AS(model.execute(lims::StartBillingRun{}), lims::ValidationError);
+    REQUIRE(runs().size() == 1U);
     CHECK(*runs().front().done == whole(0));
 }
 

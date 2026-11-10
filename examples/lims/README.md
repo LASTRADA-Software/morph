@@ -1039,8 +1039,10 @@ per-instance decimals and is the existing seam to try there).
 A run belongs to a company and a calendar month (`YYYY-MM`), at most one per pair: `StartBillingRun` refuses a
 second with `Conflict`, and a unique index refuses the second of two starts that raced. Starting it writes one item per
 client and site with unbilled lines. Advancing it drafts one item's invoice and marks the item done in one
-transaction, so an interruption anywhere leaves every item wholly done or wholly pending, and resuming drafts only
-what is pending, so no invoice is drafted twice. An item is claimed by a conditional update that requires it still
+transaction, so an interruption anywhere leaves every item wholly done or wholly pending. Two guarantees keep an
+invoice from being drafted twice, and they are separate: the claim of the invoice's lines (decision 33) is what
+refuses a second invoice for the same lines, and the cursor is what gives the run its progress and lets a resume skip
+the items already done instead of walking them again. An item is claimed by a conditional update that requires it still
 pending, and its invoice's lines by the update decision 33 describes; an item whose claim fails stays pending and the
 next advance judges it afresh, and one whose lines were all invoiced since the run started is done with no invoice.
 Progress is the run's done items of its total, counted from the items. A batch is a whole number of at least one.
@@ -1051,10 +1053,18 @@ one batch. `lims::app::BillingScheduler` dispatches it through an internal clien
 server ticks it at start-up, which resumes a run a restart interrupted, and every ten seconds. One batch per tick,
 each tick a dispatch, is what makes progress observable: each tick's `changes<BillingRunView>` reaches a watching
 clerk, and `done` moves between ticks rather than jumping to the end inside one call. The schedule acts only for
-companies where its principal holds `LimsRole::Service`, so what it may do is in the role assignments. A failure
-other than a lost race (a currency mismatch, an invoice total that does not fit) leaves its item pending and ends
-the tick with the error, which the server logs; the same item fails the same way on every tick until its cause is
-fixed, and runs after it wait.
+companies where its principal holds `LimsRole::Service`, so what it may do is in the role assignments.
+
+A refusal by the domain while drafting an item (a currency mismatch, an invoice total that does not fit) rolls that
+item's draft back and marks the item `failed` with the refusal's text; the item is skipped for the rest of the run,
+the other items and the other companies' runs go on, and the tick succeeds, so what it committed reaches the watching
+clerks. `BillingRunView` carries `failed` (a count) and `lastError` (the text of the failed item with the highest
+id). A run with no pending item left ends `Finished` when every item is done and `FinishedWithFailures` when any
+failed, so a failure stays visible on a run that has stopped; its failed items' lines stay unbilled and the next
+month's run picks them up. Any other exception (a database failure, a server stopping) is not the item's fault: it
+leaves the item pending, ends the tick with the error, which the server logs, and the next tick resumes. A run
+that starts with nothing to draft is `Finished` at once. A month the server was down for entirely gets no run; its
+lines go to the next month's run. The day is the UTC day, as is the month.
 
 **Hypothesis 4 is confirmed for this instance.** Measured in `tests/test_billing_run.cpp`: the run starts on its day
 and once; each tick advances one batch, and a clerk watching `Billing_Run` is told after each; a run failed after its
@@ -1063,7 +1073,10 @@ client. The dispatch is public (an internal client over decision 32's, `billing_
 `billing_scheduler.cpp` 12; `main.cpp` gains a client, a scheduler and a timer, 18 lines, and no lims code outside
 the tests installs a session by hand), but nothing in morph starts work on a schedule or resumes it: the trigger is
 a `QTimer` in the server, the resume is a cursor table of billing's own, and the tick is billing's own action, a
-scheduler per module. `TimeoutScheduler`, the one timer morph has, is a detail type. Approval escalation, the design's
+scheduler per module. morph's public timers are one-shot loop timers (`IoLoop::loop().addTimer`, which a component
+such as `offline::NetworkMonitor` re-arms itself) and `TimeoutScheduler` is a detail type; nothing is periodic or
+resumable. The verdict rests on where the hand-rolled code lives; the tests measure that the hand-rolled guarantee
+holds. Approval escalation, the design's
 second candidate, is not scheduled work (decision 35), so this is the one instance Part B has.
 
 ## Findings raised by this rung

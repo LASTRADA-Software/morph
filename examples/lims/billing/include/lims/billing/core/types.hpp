@@ -41,8 +41,9 @@ enum class ApprovalLevel : std::uint8_t {
 
 /// @brief Where a billing run stands.
 enum class BillingRunState : std::uint8_t {
-    Running,   ///< Drafting invoices.
-    Finished,  ///< Every client has been considered.
+    Running,               ///< Drafting invoices.
+    Finished,              ///< Every client has been considered and every item is drafted.
+    FinishedWithFailures,  ///< Every item has been tried and at least one failed; its lines wait for the next month.
 };
 
 }  // namespace lims
@@ -93,5 +94,5 @@ struct glz::meta<lims::BillingRunState> {
     using enum lims::BillingRunState;
 
     /// @brief The enumerator ⇄ name mapping glaze reads and writes.
-    static constexpr auto value = glz::enumerate(Running, Finished);
+    static constexpr auto value = glz::enumerate(Running, Finished, FinishedWithFailures);
 };

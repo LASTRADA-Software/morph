@@ -30,6 +30,10 @@ struct BillingRunView {
     Count total;
     /// @brief How many of them are drafted.
     Count done;
+    /// @brief How many items failed and are skipped for the rest of the run.
+    Count failed;
+    /// @brief The text of the last failed item's refusal; empty when none failed.
+    std::string lastError;
     /// @brief When it started.
     ::morph::time::Timestamp startedAt;
     /// @brief Who started it.

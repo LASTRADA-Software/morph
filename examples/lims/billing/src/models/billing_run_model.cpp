@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "lims/billing/authorization/billing_authorization.hpp"
+#include "lims/billing/core/fault_hook.hpp"
 #include "lims/billing/db/billing_entity.hpp"
 #include "lims/billing/db/billing_store.hpp"
 #include "lims/billing/models/price_list_model.hpp"
@@ -30,7 +31,10 @@ using ::morph::math::Rational;
 
 constexpr int kItemPending = 0;
 constexpr int kItemDone = 1;
-constexpr int kMaxRunState = static_cast<int>(BillingRunState::Finished);
+constexpr int kItemFailed = 2;
+constexpr int kMaxRunState = static_cast<int>(BillingRunState::FinishedWithFailures);
+/// @brief The longest error text an item stores.
+constexpr std::size_t kMaxErrorLength = 255;
 
 /// @brief A batch's size as a whole number of items.
 /// @param batch The batch.
@@ -81,6 +85,21 @@ constexpr int kMaxRunState = static_cast<int>(BillingRunState::Finished);
                            .All();
     auto const done = static_cast<std::size_t>(std::ranges::count_if(
         items, [](db::BillingRunItemRecord const& item) { return item.state.Value() == kItemDone; }));
+    // The error of the failed item with the highest id, which is the one the run met last.
+    std::size_t failed = 0;
+    std::string lastError;
+    std::int64_t lastFailed = -1;
+    for (auto const& item : items) {
+        if (item.state.Value() != kItemFailed) {
+            continue;
+        }
+        ++failed;
+        if (auto const itemId = static_cast<std::int64_t>(item.id.Value());
+            itemId > lastFailed && item.error.Value()) {
+            lastFailed = itemId;
+            lastError = std::string{item.error.Value()->ToStringView()};
+        }
+    }
     return BillingRunView{
         .id = BillingRunId{runId},
         .company = CompanyId{row.companyId.Value()},
@@ -88,9 +107,20 @@ constexpr int kMaxRunState = static_cast<int>(BillingRunState::Finished);
         .state = static_cast<BillingRunState>(state),
         .total = countOf(items.size()),
         .done = countOf(done),
+        .failed = countOf(failed),
+        .lastError = std::move(lastError),
         .startedAt = timestampFromMillis(row.startedAt.Value()),
         .startedBy = std::string{row.startedBy.Value().ToStringView()},
     };
+}
+
+/// @brief The runs of @p company for the month @p label.
+[[nodiscard]] std::vector<db::BillingRunRecord> runsOf(Lightweight::DataMapper& mapper, CompanyId company,
+                                                       std::string const& label) {
+    return mapper.Query<db::BillingRunRecord>()
+        .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::companyId>, "=", *company)
+        .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::label>, "=", label)
+        .All();
 }
 
 /// @brief Starts @p company's run for the month of now, in the caller's transaction: the run, and one pending item per
@@ -99,20 +129,9 @@ constexpr int kMaxRunState = static_cast<int>(BillingRunState::Finished);
 /// @throws Conflict if the company already ran this month.
 [[nodiscard]] std::int64_t startRun(Lightweight::DataMapper& mapper, CompanyId company, std::string const& author) {
     std::string const label = monthLabel(calendarMonthOf(::morph::ladder::now()));
-    if (!mapper.Query<db::BillingRunRecord>()
-             .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::companyId>, "=", *company)
-             .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::label>, "=", label)
-             .All()
-             .empty()) {
+    if (!runsOf(mapper, company, label).empty()) {
         throw Conflict{"company " + std::to_string(*company) + " already ran " + label};
     }
-    db::BillingRunRecord run;
-    run.companyId = *company;
-    run.label = Lightweight::SqlAnsiString<7>{label};
-    run.state = static_cast<int>(BillingRunState::Running);
-    run.startedAt = nowMillis();
-    run.startedBy = Lightweight::SqlAnsiString<64>{author};
-    mapper.Create(run);
     std::set<std::pair<std::int64_t, std::int64_t>> pairs;
     for (auto const& line : mapper.Query<db::BillableLineRecord>()
                                 .Where(::Lightweight::FieldNameOf<&db::BillableLineRecord::companyId>, "=", *company)
@@ -120,6 +139,24 @@ constexpr int kMaxRunState = static_cast<int>(BillingRunState::Finished);
                                        static_cast<int>(BillableLineState::Unbilled))
                                 .All()) {
         pairs.emplace(line.clientId.Value(), line.siteId.Value());
+    }
+    db::BillingRunRecord run;
+    run.companyId = *company;
+    run.label = Lightweight::SqlAnsiString<7>{label};
+    // A run with nothing to draft has nothing left to do, so it never reads as running.
+    run.state = static_cast<int>(pairs.empty() ? BillingRunState::Finished : BillingRunState::Running);
+    run.startedAt = nowMillis();
+    run.startedBy = Lightweight::SqlAnsiString<64>{author};
+    faultPoint("run.beforeStartWrite", mapper.Connection());
+    try {
+        mapper.Create(run);
+    } catch (std::exception const&) {
+        // Another start slipped in between the lookup above and this write, and the unique index refused this one.
+        // Anything else is not a lost race and propagates.
+        if (!runsOf(mapper, company, label).empty()) {
+            throw Conflict{"company " + std::to_string(*company) + " already ran " + label};
+        }
+        throw;
     }
     auto const runId = static_cast<std::int64_t>(run.id.Value());
     for (auto const& [client, site] : pairs) {
@@ -133,19 +170,33 @@ constexpr int kMaxRunState = static_cast<int>(BillingRunState::Finished);
     return runId;
 }
 
+/// @brief Marks @p item failed with @p reason, if it is still pending.
+void failItem(Lightweight::DataMapper& mapper, db::BillingRunItemRecord const& item, std::string reason) {
+    reason.resize(std::min(reason.size(), kMaxErrorLength));
+    auto query = mapper.Connection().Query(db::BillingRunItemRecord::TableName).Update();
+    query.Set("state", kItemFailed).Set("error", reason);
+    (void)query.Where("id", "=", static_cast<std::int64_t>(item.id.Value())).Where("state", "=", kItemPending);
+    Lightweight::SqlStatement statement{mapper.Connection()};
+    static_cast<void>(statement.ExecuteDirect(query.ToSql()));
+}
+
 /// @brief Drafts @p item's invoice and marks the item done, in one transaction.
 ///
 /// The invoice and the item's being done are one fact: a run resumed after a failure here drafts the item again from
 /// scratch, and one resumed after the commit skips it. The item is claimed by a conditional update that requires it
 /// still pending, so two advances of one run cannot both finish an item and the second one's invoice rolls back.
-/// @return `true` when this call drafted it; `false` when another draft took its lines or it first, so it stays for
-///         the next advance to judge.
-[[nodiscard]] bool draftItem(Lightweight::DataMapper& mapper, db::BillingRunItemRecord const& item, CompanyId company,
-                             std::string const& author) {
+///
+/// A lost claim leaves the item pending for the next advance to judge. A refusal by the domain (a currency mismatch,
+/// a total that does not fit) rolls the draft back and marks the item failed with the refusal's text, so one poison
+/// item neither repeats on every tick nor holds up the items and runs after it. Any other exception, such as a
+/// database failure or a server stopping, is not the item's fault and propagates with the item still pending.
+void draftItem(Lightweight::DataMapper& mapper, db::BillingRunItemRecord const& item, CompanyId company,
+               std::string const& author) {
     try {
         Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
         auto const invoice =
             draftInvoice(mapper, company, SiteId{item.siteId.Value()}, ClientId{item.clientId.Value()}, author);
+        faultPoint("run.beforeItemDone", mapper.Connection());
         auto query = mapper.Connection().Query(db::BillingRunItemRecord::TableName).Update();
         query.Set("state", kItemDone);
         if (invoice.has_value()) {
@@ -157,27 +208,38 @@ constexpr int kMaxRunState = static_cast<int>(BillingRunState::Finished);
             throw Conflict{"billing run item " + std::to_string(item.id.Value()) + " was drafted meanwhile"};
         }
         sqlTxn.Commit();
-        return true;
     } catch (Conflict const&) {
         // The transaction rolled back with the unwinding, so the item is exactly as it was: pending.
-        return false;
+        return;
+    } catch (LimsError const& refusal) {
+        // Rolled back likewise; the failure is recorded outside the draft's transaction, which is gone.
+        failItem(mapper, item, refusal.what());
     }
 }
 
-/// @brief Drafts up to @p items pending items of run @p runId, and finishes the run when none is left.
+/// @brief Drafts up to @p items pending items of run @p runId, and ends the run when none is left: Finished when every
+///        item is done, FinishedWithFailures when any failed.
+///
+/// The caller has read the run in the same call and no action deletes one, so it exists.
 void advanceRun(Lightweight::DataMapper& mapper, std::int64_t runId, CompanyId company, std::int64_t items,
                 std::string const& author) {
     for (auto const& item : pendingItems(mapper, runId)) {
         if (items-- == 0) {
             break;
         }
-        static_cast<void>(draftItem(mapper, item, company, author));
+        draftItem(mapper, item, company, author);
     }
     if (pendingItems(mapper, runId).empty()) {
+        auto const failed = !mapper.Query<db::BillingRunItemRecord>()
+                                 .Where(::Lightweight::FieldNameOf<&db::BillingRunItemRecord::runId>, "=", runId)
+                                 .Where(::Lightweight::FieldNameOf<&db::BillingRunItemRecord::state>, "=", kItemFailed)
+                                 .All()
+                                 .empty();
         auto runs = mapper.Query<db::BillingRunRecord>()
                         .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::id>, "=", runId)
                         .All();
-        runs.front().state = static_cast<int>(BillingRunState::Finished);
+        runs.front().state =
+            static_cast<int>(failed ? BillingRunState::FinishedWithFailures : BillingRunState::Finished);
         mapper.Update(runs.front());
     }
 }
@@ -193,11 +255,7 @@ void advanceRun(Lightweight::DataMapper& mapper, std::int64_t runId, CompanyId c
             continue;
         }
         auto const company = settings.companyId.Value();
-        if (mapper.Query<db::BillingRunRecord>()
-                .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::companyId>, "=", company)
-                .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::label>, "=", label)
-                .All()
-                .empty()) {
+        if (runsOf(mapper, CompanyId{company}, label).empty()) {
             due.emplace_back(company);
         }
     }

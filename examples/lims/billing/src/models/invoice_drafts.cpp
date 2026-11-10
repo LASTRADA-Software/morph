@@ -144,7 +144,7 @@ std::optional<std::int64_t> draftInvoice(Lightweight::DataMapper& mapper, Compan
         }
     }
     // Inside the caller's transaction: a failure here takes the invoice row and the claimed lines back with it.
-    faultPoint("run.afterInvoice");
+    faultPoint("run.afterInvoice", mapper.Connection());
     return invoiceId;
 }
 
