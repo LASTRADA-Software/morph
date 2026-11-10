@@ -58,10 +58,38 @@ struct PostingRequest {
     std::vector<PostingLine> lines;
 };
 
+/// @brief What a poster asks the ledger before it retries: the entry already recorded under a source key.
+struct PostingQuery {
+    /// @brief The company whose books are asked.
+    CompanyId company;
+    /// @brief The poster's source key.
+    std::string sourceKey;
+};
+
 /// @brief What the ledger recorded.
 struct PostingResult {
     /// @brief The journal entry.
     JournalEntryId entryId;
+    /// @brief Its date: the request's, or, for a repeated key, the first request's.
+    ::morph::time::Timestamp date;
+};
+
+/// @brief What a poster asks the ledger before it converts: the rate from one currency to another valid on a date.
+struct RateQuery {
+    /// @brief The company whose rates are asked.
+    CompanyId company;
+    /// @brief The currency converted from.
+    CurrencyCode from = CurrencyCode::EUR;
+    /// @brief The currency converted to.
+    CurrencyCode to = CurrencyCode::EUR;
+    /// @brief The date the rate must be valid on.
+    ::morph::time::Timestamp on;
+};
+
+/// @brief The ledger's answer to a `RateQuery`.
+struct RateAnswer {
+    /// @brief Units of `to` per unit of `from`; empty when no rate is valid on the date.
+    Rate rate;
 };
 
 }  // namespace lims

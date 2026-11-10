@@ -3,6 +3,7 @@
 // The posting contract: what a poster hands the ledger, and what it gets back. DTOs only.
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <glaze/glaze.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
@@ -62,8 +63,8 @@ TEST_CASE("posting contract: a request round-trips through JSON with its zero-de
 }
 
 TEST_CASE("posting contract: a result names the entry", "[lims][posting]") {
-    lims::PostingResult const result{.entryId = lims::JournalEntryId{9}};
+    lims::PostingResult const result{.entryId = lims::JournalEntryId{9}, .date = {}};
     auto const json = glz::write_json(result);
     REQUIRE(json.has_value());
-    CHECK(*json == R"({"entryId":9})");
+    CHECK_THAT(*json, Catch::Matchers::ContainsSubstring(R"("entryId":9)"));
 }

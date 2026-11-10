@@ -125,6 +125,18 @@ struct Authorization<ApproveInvoice> {
     [[nodiscard]] static std::array<std::optional<std::string>, 2> firstPerformersOf(ApproveInvoice const& action);
 };
 
+/// @brief An approved invoice is posted by a billing clerk at its company.
+template <>
+struct Authorization<PostInvoice> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::BillingClerk;
+
+    /// @brief The company of the invoice the payload names.
+    /// @param action The action.
+    /// @return It; an empty company when there is no such invoice.
+    [[nodiscard]] static Scope scopeOf(PostInvoice const& action);
+};
+
 /// @brief A billing run is started by a billing clerk at its company.
 template <>
 struct Authorization<StartBillingRun> : CompanyRule<StartBillingRun, LimsRole::BillingClerk> {};

@@ -3,6 +3,7 @@
 #include <Lightweight/SqlStatement.hpp>
 #include <algorithm>
 #include <cstdint>
+#include <format>
 #include <optional>
 #include <string>
 #include <vector>
@@ -12,8 +13,10 @@
 #include "lims/billing/db/billing_entity.hpp"
 #include "lims/billing/db/billing_store.hpp"
 #include "lims/billing/models/price_list_model.hpp"
+#include "lims/org/core/calendar.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
+#include "lims/org/models/org_model.hpp"
 
 namespace lims {
 
@@ -146,6 +149,66 @@ std::optional<std::int64_t> draftInvoice(Lightweight::DataMapper& mapper, Compan
     // Inside the caller's transaction: a failure here takes the invoice row and the claimed lines back with it.
     faultPoint("run.afterInvoice", mapper.Connection());
     return invoiceId;
+}
+
+std::string assignNumberAndPost(Lightweight::DataMapper& mapper, std::int64_t invoiceId, PostingResult const& entry,
+                                std::string const& author) {
+    // Conditional on the state the caller read: of two postings of one invoice, the second finds it posted and
+    // changes nothing, so no number is spent on it.
+    auto post = mapper.Connection().Query(db::InvoiceRecord::TableName).Update();
+    post.Set("state", static_cast<int>(InvoiceState::Posted)).Set("posted_by", author).Set("entry_id", *entry.entryId);
+    (void)post.Where("id", "=", invoiceId).Where("state", "=", static_cast<int>(InvoiceState::Approved));
+    {
+        Lightweight::SqlStatement statement{mapper.Connection()};
+        if (statement.ExecuteDirect(post.ToSql()).NumRowsAffected() != 1U) {
+            throw Conflict{"PostInvoice: invoice " + std::to_string(invoiceId) + " was posted meanwhile"};
+        }
+    }
+    auto const invoices = mapper.Query<db::InvoiceRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::id>, "=", invoiceId)
+                              .All();
+    if (invoices.empty()) {
+        throw NotFound{"invoice " + std::to_string(invoiceId) + " does not exist"};
+    }
+    CompanyId const company{invoices.front().companyId.Value()};
+    auto const companyView = OrgModel::findCompany(company);
+    if (!companyView.has_value()) {
+        throw NotFound{"company " + std::to_string(*company) + " does not exist"};
+    }
+    auto const fiscalYear = static_cast<std::int64_t>(fiscalYearOf(entry.date, companyView->fiscalYearStart));
+    auto const series = mapper.Query<db::NumberSeriesRecord>()
+                            .Where(::Lightweight::FieldNameOf<&db::NumberSeriesRecord::companyId>, "=", *company)
+                            .Where(::Lightweight::FieldNameOf<&db::NumberSeriesRecord::fiscalYear>, "=", fiscalYear)
+                            .All();
+    std::int64_t const number = series.empty() ? 1 : series.front().nextNumber.Value();
+    if (series.empty()) {
+        db::NumberSeriesRecord row;
+        row.companyId = *company;
+        row.fiscalYear = fiscalYear;
+        row.nextNumber = number + 1;
+        mapper.Create(row);
+    } else {
+        // Conditional on the number read, so a database that does not serialise writers still spends each number once.
+        auto advance = mapper.Connection().Query(db::NumberSeriesRecord::TableName).Update();
+        advance.Set("next_number", number + 1);
+        (void)advance.Where("company_id", "=", *company)
+            .Where("fiscal_year", "=", fiscalYear)
+            .Where("next_number", "=", number);
+        Lightweight::SqlStatement statement{mapper.Connection()};
+        if (statement.ExecuteDirect(advance.ToSql()).NumRowsAffected() != 1U) {
+            throw Conflict{"PostInvoice: the number series moved on meanwhile"};
+        }
+    }
+    std::string formatted = std::format("INV-{}-{:06}", fiscalYear, number);
+    auto numbered = mapper.Connection().Query(db::InvoiceRecord::TableName).Update();
+    numbered.Set("number", formatted);
+    (void)numbered.Where("id", "=", invoiceId);
+    {
+        Lightweight::SqlStatement statement{mapper.Connection()};
+        static_cast<void>(statement.ExecuteDirect(numbered.ToSql()));
+    }
+    faultPoint("post.beforeCommit", mapper.Connection());
+    return formatted;
 }
 
 bool escalated(db::InvoiceRecord const& invoice) {

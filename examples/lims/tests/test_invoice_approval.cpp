@@ -117,15 +117,19 @@ TEST_CASE("invoice approval: submission records the deadline, the submitter and 
     // 09:00 on 10 November plus the company's 48 approval hours.
     CHECK(submitted.approvalDeadline == morph::time::Timestamp{lims::test::at(2026, 11, 12)});
     CHECK(submitted.submittedAt == morph::time::Timestamp{lims::test::at(2026, 11, 10)});
+    // A Task handler: only a dispatch drives it.
+    using lims::test::dispatchAs;
+    CHECK_THROWS_AS(dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = invoice.id}),
+                    lims::IllegalTransition);
+    CHECK_THROWS_AS(dispatchAs<lims::InvoiceModel>("paula", lims::SubmitInvoice{.invoiceId = invoice.id}),
+                    lims::Forbidden);
+    CHECK_THROWS_AS(dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = lims::InvoiceId{9999}}),
+                    lims::NotFound);
+    // A dispatch refuses an unnamed invoice before the handler runs.
+    CHECK_THROWS_WITH(dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{}),
+                      Catch::Matchers::ContainsSubstring("failed validation"));
     lims::InvoiceModel invoices;
     ScopedPrincipal const bea{"bea"};
-    CHECK_THROWS_AS(invoices.execute(lims::SubmitInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
-    {
-        ScopedPrincipal const paula{"paula"};
-        CHECK_THROWS_AS(invoices.execute(lims::SubmitInvoice{.invoiceId = invoice.id}), lims::Forbidden);
-    }
-    CHECK_THROWS_AS(invoices.execute(lims::SubmitInvoice{.invoiceId = lims::InvoiceId{9999}}), lims::NotFound);
-    CHECK_THROWS_AS(invoices.execute(lims::SubmitInvoice{}), lims::ValidationError);
     CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{}), lims::ValidationError);
     CHECK(read(invoice.id).submittedBy == "bea");
 }
@@ -138,8 +142,9 @@ TEST_CASE("invoice approval: only a submitted invoice is approved, and only a bi
     {
         ScopedPrincipal const carl{"carl"};
         CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
-        CHECK_THROWS_AS(invoices.execute(lims::SubmitInvoice{.invoiceId = invoice.id}), lims::Forbidden);
     }
+    CHECK_THROWS_AS(lims::test::dispatchAs<lims::InvoiceModel>("carl", lims::SubmitInvoice{.invoiceId = invoice.id}),
+                    lims::Forbidden);
     CHECK(read(invoice.id).state == lims::InvoiceState::Draft);
 }
 
@@ -150,9 +155,7 @@ TEST_CASE(
     lims::test::LabFixture const fixture;
     auto const invoice = lims::test::draftedInvoice();
     execute("UPDATE billing_invoices SET currency = " + std::to_string(static_cast<int>(lims::CurrencyCode::JPY)));
-    lims::InvoiceModel invoices;
-    ScopedPrincipal const bea{"bea"};
-    CHECK_THROWS_WITH(invoices.execute(lims::SubmitInvoice{.invoiceId = invoice.id}),
+    CHECK_THROWS_WITH(lims::test::dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = invoice.id}),
                       Catch::Matchers::ContainsSubstring("no rate values it in EUR"));
     CHECK(read(invoice.id).state == lims::InvoiceState::Draft);
 }

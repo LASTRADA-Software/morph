@@ -115,6 +115,19 @@ struct ApproveInvoice {
     static constexpr bool explicitSubmit = true;
 };
 
+/// @brief Posts an approved invoice to the ledger and numbers it.
+struct PostInvoice {
+    /// @brief The invoice.
+    InvoiceId invoiceId;
+
+    /// @brief Whether an invoice is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return invoiceId.hasValue(); }
+
+    /// @brief Sent by its button, never per keystroke.
+    static constexpr bool explicitSubmit = true;
+};
+
 /// @brief Lists the submitted invoices the caller could approve now.
 struct ListPendingApprovals {
     /// @brief Whether the query is well-formed.

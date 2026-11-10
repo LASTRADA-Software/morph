@@ -147,9 +147,36 @@ public:
     /// @throws ValidationError if no company is named.
     ListEntriesResult execute(const ListEntries& action);
 
-    /// @brief Records a poster's request as a posted entry, once per company and source key.
+    /// @brief Records a posting the app's posting client sends, once per company and source key.
+    /// @param action The request.
+    /// @return The entry and its date; the first one recorded under the request's key when it is repeated.
+    /// @throws ValidationError, NotFound, Conflict as `record`.
+    /// @throws Forbidden if the caller is not one of the server's own clients (only the server's own clients send
+    ///         it), or holds no service role at the request's company.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    PostingResult execute(const RecordPosting& action);
+
+    /// @brief Reads the entry recorded under a source key, as a poster asks it before it retries.
     ///
-    /// Not itself an action: postings reach it only from a module's document, through the app's wiring. Checks what
+    /// A repeated key must repeat the request, date included, so a poster that retries after a failure reads the
+    /// first entry's date and sends that.
+    /// @param action The question.
+    /// @return The entry and its date; an empty entry for a company the caller cannot see, or when the key is not
+    ///         recorded.
+    /// @throws ValidationError if no company or source key is named.
+    PostingResult execute(const FindPosting& action);
+
+    /// @brief Reads the rate valid on a date, as a poster asks it.
+    /// @param action The question.
+    /// @return The rate; empty for a company the caller cannot see, or when no rate is valid on the date.
+    /// @throws ValidationError if no company or date is named.
+    RateAnswer execute(const GetRateOn& action);
+
+    /// @brief Records a poster's request as a posted entry, once per company and source key, in a transaction of
+    ///        its own.
+    ///
+    /// Not itself an action: `RecordPosting` is, and calls it. Postings reach it from a module's document through
+    /// the app's wiring; `recordPostingIn` is the same recording through a caller's open mapper. Checks what
     /// a hand-made entry is checked for, and that the request's rate is the ledger's rate on its date (one when the
     /// currencies are the same). The source key is recorded in the entry's own transaction, so a repeated request
     /// answers the first entry and writes nothing. A key is looked up before the dated rate, the period or the
@@ -219,4 +246,8 @@ BRIDGE_REGISTER_EFFECTS(lims::SetExchangeRate, ::morph::effects::changes<lims::E
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListExchangeRates, "ListExchangeRates", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::GetEntry, "GetEntry", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListEntries, "ListEntries", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::RecordPosting, "RecordPosting")
+BRIDGE_REGISTER_EFFECTS(lims::RecordPosting, ::morph::effects::changes<lims::JournalEntryView>)
+BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::FindPosting, "FindPosting", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::GetRateOn, "GetRateOn", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

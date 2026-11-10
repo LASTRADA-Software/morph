@@ -76,4 +76,16 @@ struct Authorization<ReverseEntry> {
 template <>
 struct Authorization<SetExchangeRate> : CompanyRule<SetExchangeRate, LimsRole::Accountant> {};
 
+/// @brief A posting is recorded by a service principal holding the service role at its company.
+template <>
+struct Authorization<RecordPosting> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::Service;
+
+    /// @brief The request's company.
+    /// @param action The action.
+    /// @return It.
+    [[nodiscard]] static Scope scopeOf(RecordPosting const& action) { return Scope{action.request.company}; }
+};
+
 }  // namespace lims

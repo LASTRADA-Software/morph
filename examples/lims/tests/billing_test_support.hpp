@@ -7,16 +7,20 @@
 #include <morph/util/rational.hpp>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "clock.hpp"
 #include "lims/app/event_wiring.hpp"
 #include "lims/app/internal_client.hpp"
+#include "lims/app/ledger_wiring.hpp"
 #include "lims/app/service_principals.hpp"
+#include "lims/billing/core/ledger_port.hpp"
 #include "lims/billing/models/invoice_model.hpp"
 #include "lims/billing/models/price_list_model.hpp"
 #include "lims/lab/models/analysis_catalog_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
+#include "lims/ledger/models/ledger_model.hpp"
 #include "lims/org/dto/limit_dto.hpp"
 #include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
@@ -108,12 +112,18 @@ inline void billingFor(ClientId client, CurrencyCode currency = CurrencyCode::EU
         .name = "Waterworks Ltd",
         .currency = currency,
     });
-    auto const list = prices.execute(CreatePriceList{
-        .company = seededCompany(),
-        .name = std::string{currencyName(currency)} + " list",
-        .currency = currency,
-        .validFrom = ::morph::time::Timestamp{at(2026, 1, 1, 0)},
-    });
+    // A second client of the same currency shares the list the first one made.
+    PriceListView list;
+    try {
+        list = prices.execute(CreatePriceList{
+            .company = seededCompany(),
+            .name = std::string{currencyName(currency)} + " list",
+            .currency = currency,
+            .validFrom = ::morph::time::Timestamp{at(2026, 1, 1, 0)},
+        });
+    } catch (Conflict const&) {
+        return;
+    }
     std::int64_t const price = currency == CurrencyCode::JPY ? 4000 : 40;
     for (std::int64_t analysis = 1; analysis <= 20; ++analysis) {
         prices.execute(SetPrice{
@@ -135,6 +145,16 @@ inline void grantService(std::string const& principal, Scope scope = Scope{seede
     auto const held = OrgModel::rolesIn(principal, scope);
     if (std::ranges::find(held, LimsRole::Service) == held.end()) {
         grant(principal, LimsRole::Service, scope);
+    }
+}
+
+/// @brief Gives @p principal @p role at the seeded company, unless it holds it there already.
+/// @param principal The principal.
+/// @param role The role.
+inline void grantIfAbsent(std::string const& principal, LimsRole role) {
+    auto const held = OrgModel::rolesIn(principal, Scope{seededCompany()});
+    if (std::ranges::find(held, role) == held.end()) {
+        static_cast<void>(grant(principal, role));
     }
 }
 
@@ -225,6 +245,120 @@ inline InvoiceView draftedInvoice() {
 inline void submit(InvoiceView const& invoice) {
     ::morph::ladder::ScopedClockOverride const clock{at(2026, 11, 10)};
     static_cast<void>(dispatchAs<InvoiceModel>("bea", SubmitInvoice{.invoiceId = invoice.id}));
+}
+
+/// @brief The seeded company's books: accounts 1200, 2200, 4000, 6900 and November 2026 open, made by `acc`, an
+///        accountant there.
+inline void books() {
+    grant("acc", LimsRole::Accountant);
+    ScopedPrincipal const acc{"acc"};
+    LedgerModel ledger;
+    for (auto const& [code, type] : std::vector<std::pair<std::string, AccountType>>{
+             {"1200", AccountType::Asset},
+             {"2200", AccountType::Liability},
+             {"4000", AccountType::Revenue},
+             {"6900", AccountType::Expense},
+         }) {
+        ledger.execute(
+            CreateAccount{.company = seededCompany(), .code = code, .name = "Account " + code, .type = type});
+    }
+    ledger.execute(OpenPeriod{.company = seededCompany(), .month = ::morph::time::Timestamp{at(2026, 11, 1)}});
+}
+
+/// @brief The seeded company's billing settings, 19 % tax, 48 approval hours, billing day 25, set by `sam`.
+inline void billingSettings() {
+    grant("sam", LimsRole::Supervisor);
+    ScopedPrincipal const sam{"sam"};
+    PriceListModel{}.execute(SetBillingSettings{
+        .company = seededCompany(),
+        .receivableAccount = "1200",
+        .revenueAccount = "4000",
+        .taxAccount = "2200",
+        .roundingAccount = "6900",
+        .taxRate = Rate{::morph::math::Rational{::morph::math::Numerator{19}, ::morph::math::Denominator{100},
+                                                ::morph::math::DecimalPlaces{6}}},
+        .approvalHours = Count{::morph::math::Rational{48, ::morph::math::DecimalPlaces{0}}},
+        .billingDay = Count{::morph::math::Rational{25, ::morph::math::DecimalPlaces{0}}},
+    });
+}
+
+/// @brief Whether the posting principal holds the service role a `PostingRig` installs it with.
+enum class PostingRole : std::uint8_t {
+    Granted,   ///< `system:posting` holds `LimsRole::Service` at the seeded company.
+    Withheld,  ///< It holds no role: the ledger's rule has nothing to allow.
+};
+
+/// @brief A server, the posting principal's client on it and the ledger port installed over them, as the server
+///        process wires them; two socket clients for the clerks. The port is uninstalled when it goes.
+class PostingRig {
+public:
+    /// @brief Installs the port in @p mode.
+    /// @param mode Which way `PostInvoice` posts.
+    /// @param role Whether the posting principal holds the service role.
+    explicit PostingRig(PostingMode mode, PostingRole role = PostingRole::Granted) {
+        if (role == PostingRole::Granted) {
+            grantService(std::string{app::kPostingPrincipal});
+        }
+        app::installLedgerPort(_client, mode);
+    }
+    ~PostingRig() { setLedgerPort({}); }
+    PostingRig(PostingRig const&) = delete;
+    PostingRig& operator=(PostingRig const&) = delete;
+    PostingRig(PostingRig&&) = delete;
+    PostingRig& operator=(PostingRig&&) = delete;
+
+    /// @brief The server and its clients.
+    /// @return The rig.
+    [[nodiscard]] ::morph::ladder::testkit::BackendRig& rig() noexcept { return _rig; }
+
+    /// @brief Posts @p invoice as @p principal over socket client @p index, as a clerk's screen sends it.
+    /// @param invoice The invoice.
+    /// @param principal Who posts it.
+    /// @param index The socket client.
+    /// @return The posted invoice.
+    /// @throws std::exception the posting's refusal or failure.
+    InvoiceView post(InvoiceView const& invoice, std::string const& principal = "bea", std::size_t index = 0) {
+        ::morph::session::TokenIssuer const issuer{std::string{kServiceSecret}, ::morph::session::hmacSha256};
+        _rig.bridge(index).setDefaultSession(signedAs(issuer, principal));
+        auto clerk = _rig.client<InvoiceModel>(index);
+        return ::morph::ladder::testkit::awaitQt(clerk.execute(PostInvoice{.invoiceId = invoice.id}));
+    }
+
+private:
+    ::morph::ladder::testkit::BackendRig _rig{::morph::ladder::testkit::Mode::Socket, 2,
+                                              limsAuthorizer(kServiceSecret)};
+    app::InternalClient _client{_rig.server(), kServiceSecret, std::string{app::kPostingPrincipal}};
+};
+
+/// @brief An approved invoice for one published sample in @p currency: drafted and submitted by `bea`, approved by
+///        `carl`, an approver at the company with a limit of 1000. Needs `billingSettings()` first, and a
+///        `PostingRig` when @p currency is not the company's.
+/// @param reference The sample's reference, distinct per invoice.
+/// @param currency The client's currency.
+/// @return The invoice.
+inline InvoiceView approvedInvoice(std::string const& reference = "WW-1", CurrencyCode currency = CurrencyCode::EUR) {
+    {
+        ScopedPrincipal const sam{"sam"};
+        OrgModel{}.execute(SetValueLimit{
+            .principal = "carl",
+            .company = seededCompany(),
+            .limit = Amount{::morph::math::Rational{1000, ::morph::math::DecimalPlaces{2}}},
+        });
+    }
+    grantIfAbsent("carl", LimsRole::InvoiceApprover);
+    auto const lab = publishedSample(reference);
+    billingFor(lab.client, currency);
+    relayLabEvents();
+    InvoiceId invoiceId;
+    {
+        ScopedPrincipal const bea{"bea"};
+        invoiceId = InvoiceModel{}
+                        .execute(CreateInvoice{.company = seededCompany(), .site = seededSite(), .client = lab.client})
+                        .id;
+    }
+    static_cast<void>(dispatchAs<InvoiceModel>("bea", SubmitInvoice{.invoiceId = invoiceId}));
+    ScopedPrincipal const carl{"carl"};
+    return InvoiceModel{}.execute(ApproveInvoice{.invoiceId = invoiceId});
 }
 
 }  // namespace lims::test

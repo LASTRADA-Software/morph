@@ -385,11 +385,11 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
                    lims::ClearOptionalMeasurement, lims::SelectProject, lims::AddIgnitionTest,
                    lims::RecordIgnitionValues, lims::DeleteIgnitionTest, lims::SetValueLimit, lims::CreateAccount,
                    lims::OpenPeriod, lims::BeginClosePeriod, lims::CreateDraftEntry, lims::PostEntry,
-                   lims::ReverseEntry, lims::ClosePeriod, lims::SetExchangeRate, lims::SetBillingSettings,
-                   lims::RegisterBillingClient, lims::CreatePriceList, lims::SetPrice, lims::RecordBillableLine,
-                   lims::CreateInvoice, lims::LeaseInvoice, lims::RemoveInvoiceLine, lims::SetInvoiceReference,
-                   lims::ReleaseInvoice, lims::SubmitInvoice, lims::ApproveInvoice, lims::StartBillingRun,
-                   lims::AdvanceBillingRun, lims::RunBillingSchedule>;
+                   lims::ReverseEntry, lims::ClosePeriod, lims::SetExchangeRate, lims::RecordPosting,
+                   lims::SetBillingSettings, lims::RegisterBillingClient, lims::CreatePriceList, lims::SetPrice,
+                   lims::RecordBillableLine, lims::CreateInvoice, lims::LeaseInvoice, lims::RemoveInvoiceLine,
+                   lims::SetInvoiceReference, lims::ReleaseInvoice, lims::SubmitInvoice, lims::ApproveInvoice,
+                   lims::PostInvoice, lims::StartBillingRun, lims::AdvanceBillingRun, lims::RunBillingSchedule>;
     std::set<std::string_view> listed;
     std::set<std::string_view> declared;
     std::apply(
@@ -487,6 +487,8 @@ TEST_CASE("declared authorization: the edge's table lists every declared role, a
     CHECK(lims::app::requiredRole("LeaseInvoice") == lims::LimsRole::BillingClerk);
     CHECK(lims::app::requiredRole("SubmitInvoice") == lims::LimsRole::BillingClerk);
     CHECK(lims::app::requiredRole("ApproveInvoice") == lims::LimsRole::InvoiceApprover);
+    CHECK(lims::app::requiredRole("PostInvoice") == lims::LimsRole::BillingClerk);
+    CHECK(lims::app::requiredRole("RecordPosting") == lims::LimsRole::Service);
     CHECK(lims::app::requiredRole("StartBillingRun") == lims::LimsRole::BillingClerk);
     CHECK(lims::app::requiredRole("AdvanceBillingRun") == lims::LimsRole::BillingClerk);
     CHECK(lims::app::requiredRole("RunBillingSchedule") == lims::LimsRole::Service);

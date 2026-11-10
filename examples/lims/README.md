@@ -1162,6 +1162,56 @@ submission writes conditionally on the gross it read (a line removed in between 
 amount) and the editor's later edits fail their draft check. A lease outlives submission and the holder's role until
 it lapses. Lot reservation in Part C is the second instance.
 
+### 38. Posting an invoice: two commits in sequence keep each module's action; one transaction gives the ledger's up (hypothesis 1, first instance)
+
+`PostInvoice` builds the invoice's `PostingRequest` (`lims::postingFor`: receivable debit, revenue and tax credits,
+each converted at the ledger's dated rate and rounded half-up on its own, and a line to the company's rounding account
+for the difference, whole yen in a yen company) and hands it to the ledger through the port the app installs
+(`lims::app::installLedgerPort`). Billing then assigns the next number of the company's fiscal-year series
+(`INV-<fiscal year>-<six digits>`, the fiscal year of the entry's date, named by the calendar year it begins in),
+marks the invoice posted with its entry, and commits. The number is assigned in billing's commit, so no failure leaves
+a hole in the series. The port reaches the ledger one of two ways, and both were measured in
+`tests/test_invoice_posting.cpp`. Dispatched, the ledger's half is `RecordPosting`, the ledger's own action, sent by
+the app's internal client as `system:posting`: it is authorized by its declared rule (the service role at the
+company), journaled, and its `Ledger_Entry` change reaches a watching accountant, and it commits alone, so a failure
+before billing's commit leaves the ledger holding an entry for an invoice that is approved, unnumbered and unposted.
+In one shared transaction, the port writes the entry through billing's own mapper (`recordPostingIn`) and both halves
+commit once: a failure at either fault point leaves nothing, and no hole. The server posts dispatched.
+
+**Hypothesis 1 is confirmed, with the workaround's cost.** The database can make the two halves one fact, and lims
+did, with seams that exist, which is the design's refutation condition on its letter. But only by not running the
+ledger's half as the ledger's action. Measured, in the shared transaction: no `Ledger_Entry` change reached the
+watching accountant (it did in the dispatched posting); the posting succeeded with the posting principal holding no
+role, where the dispatched posting was refused (at the server, by the declared role table or the ledger's rule; the
+test does not separate the two); and the journal holds no `LedgerModel` `RecordPosting` for it (it does for the
+dispatched posting). With the ledger's half as its action, the window is real: a failure at either fault point leaves
+the entry committed and the invoice approved, unnumbered and unposted, and no number is spent. What morph lacks is a
+way to run two models' actions as one fact while keeping each one's authorization, effects and journal. The server
+keeps the dispatched posting until that seam exists. Goods receipt in Part C is the second instance, and the seam is
+designed against both.
+
+Three costs of the dispatched posting that only measuring showed:
+
+- **A retry must repeat the request, date included.** The ledger answers a repeated source key only for an identical
+  request, and the request is dated by the clock. A retry on another day would send another date and be refused as a
+  different posting. `PostInvoice` therefore asks the ledger first (`FindPosting`) for the entry under its key and, if
+  there is one, sends that entry's date, and values a foreign-currency invoice at the rate on that date. The retry then
+  converges on the recorded entry and numbers the invoice in the fiscal year of the entry's date, which can be the year
+  before the retry's. The shared transaction needs none of this: nothing outlives a failure.
+- **The ledger's transaction takes the write lock first.** SQLite turns a transaction that read and then wrote away at
+  once, without waiting, when another holds the write lock, so two postings at once failed with a raw "database is
+  locked". `recordPostingIn` opens with a statement that writes nothing and takes the lock, and a database that is
+  still busy after the ledger's retry is a `Conflict`, as it is in billing's numbering transaction. Two clerks posting at
+  once get consecutive numbers; the test holds both postings between the halves so that their numbering transactions
+  overlap.
+- **Posting is conditional on the state it read.** The invoice moves from approved to posted by a conditional update,
+  and the series advances only from the number read, so a second posting of one invoice changes nothing and spends no
+  number.
+
+`SubmitInvoice` is a Task handler that awaits the same port's `GetRateOn` to value a foreign-currency invoice at the
+ledger's rate on the submission date, so the approver's limit is judged against its worth in the company's currency; it
+refuses with a `ValidationError` when no ledger is wired or no rate is valid.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so

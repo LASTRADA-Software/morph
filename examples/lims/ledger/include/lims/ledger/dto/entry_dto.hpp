@@ -121,6 +121,27 @@ struct ListEntriesResult {
     std::vector<JournalEntryView> entries;
 };
 
+/// @brief The ledger's half of a posting, as an action: records the request once per company and source key. Sent
+///        only by the app's posting client, as a service principal.
+struct RecordPosting {
+    /// @brief The request.
+    PostingRequest request;
+
+    /// @brief Whether a company and a source key are named.
+    /// @return `true` when they are.
+    [[nodiscard]] bool validate() const noexcept { return request.company.hasValue() && !request.sourceKey.empty(); }
+};
+
+/// @brief Reads the entry recorded under a source key, as a poster asks it before it retries.
+struct FindPosting {
+    /// @brief The question.
+    PostingQuery query;
+
+    /// @brief Whether a company and a source key are named.
+    /// @return `true` when they are.
+    [[nodiscard]] bool validate() const noexcept { return query.company.hasValue() && !query.sourceKey.empty(); }
+};
+
 /// @brief `Closing → Closed`: freezes the period's balances. Refused while a draft remains in it.
 struct ClosePeriod {
     /// @brief The period.

@@ -171,6 +171,20 @@ ListExchangeRatesResult LedgerModel::execute(const ListExchangeRates& action) {
     return result;
 }
 
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+RateAnswer LedgerModel::execute(const GetRateOn& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetRateOn: a company and a date are required"};
+    }
+    auto const visibleCompanies = OrgModel::visibleCompanies(currentPrincipal());
+    if (std::ranges::find(visibleCompanies, action.query.company) == visibleCompanies.end()) {
+        return RateAnswer{};
+    }
+    auto const rate = rateOn(action.query.company, action.query.from, action.query.to, action.query.on);
+    return rate.has_value() ? RateAnswer{.rate = Rate{*rate}} : RateAnswer{};
+}
+
 std::optional<::morph::math::Rational> LedgerModel::rateOn(CompanyId company, CurrencyCode from, CurrencyCode target,
                                                            ::morph::time::Timestamp const& date) {
     if (!company.hasValue() || !date.hasValue()) {

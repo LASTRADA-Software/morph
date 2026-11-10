@@ -3,12 +3,14 @@
 #include <Lightweight/SqlStatement.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
+#include <core/async/Task.hpp>
 #include <cstdint>
 #include <morph/session/session.hpp>
 #include <string>
 
 #include "lims/billing/authorization/billing_authorization.hpp"
 #include "lims/billing/core/fault_hook.hpp"
+#include "lims/billing/core/ledger_port.hpp"
 #include "lims/billing/db/billing_entity.hpp"
 #include "lims/billing/db/billing_store.hpp"
 #include "lims/billing/models/invoice_model.hpp"
@@ -97,14 +99,14 @@ void requireNoOtherEditor(std::int64_t invoiceId) {
 
 // An action handler: the registry calls it on the instance, like every other.
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
-InvoiceView InvoiceModel::execute(const SubmitInvoice& action) {
+::core::async::Task<InvoiceView> InvoiceModel::execute(SubmitInvoice action) {
     requirePrincipal();
     if (!action.validate()) {
         throw ValidationError{"SubmitInvoice: an invoice is required"};
     }
     requireRoleSomewhere<SubmitInvoice>();
-    Lightweight::DataMapper mapper;
-    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    // Taken before the first await: the session is the dispatch's, and a resumption may not run inside it.
+    std::string const principal = ::morph::session::current()->principal;
     auto const row = invoiceRecord(action.invoiceId, "SubmitInvoice");
     requireAuthorized(action);
     if (row.state.Value() != static_cast<int>(InvoiceState::Draft)) {
@@ -118,31 +120,56 @@ InvoiceView InvoiceModel::execute(const SubmitInvoice& action) {
         throw NotFound{"SubmitInvoice: company " + std::to_string(*company) + " does not exist"};
     }
     auto const base = companyView->baseCurrency;
-    if (currency != base) {
-        throw ValidationError{"SubmitInvoice: invoice " + std::to_string(*action.invoiceId) + " is in " +
-                              std::string{currencyName(currency)} + " and no rate values it in " +
-                              std::string{currencyName(base)}};
-    }
     auto const settings = PriceListModel::settingsOf(company);
     if (!settings.has_value()) {
         throw NotFound{"SubmitInvoice: company " + std::to_string(*company) + " has no billing settings"};
     }
+    // The gross in the company's currency is what the approver's limit is judged against. In the company's currency
+    // it is the invoice's own gross; in another it is that gross at the ledger's rate on the submission date, rounded
+    // half-up to the company currency's decimals.
+    std::int64_t grossCompanyNum = row.grossNum.Value();
+    std::int64_t grossCompanyDen = row.grossDen.Value();
+    if (currency != base) {
+        std::string const unvalued = "SubmitInvoice: invoice " + std::to_string(*action.invoiceId) + " is in " +
+                                     std::string{currencyName(currency)} + " and no rate values it in " +
+                                     std::string{currencyName(base)};
+        auto const& port = ledgerPort();
+        if (!port.rateOn) {
+            throw ValidationError{unvalued};
+        }
+        auto const dated = co_await port.rateOn(
+            RateQuery{.company = company, .from = currency, .to = base, .on = timestampFromMillis(nowMillis())});
+        if (!dated.rate.hasValue()) {
+            throw ValidationError{unvalued};
+        }
+        ::morph::math::Rational const gross{::morph::math::Numerator{row.grossNum.Value()},
+                                            ::morph::math::Denominator{row.grossDen.Value()},
+                                            ::morph::math::DecimalPlaces{decimalsOf(currency)}};
+        auto const converted = ::morph::math::checkedMul(gross, *dated.rate);
+        if (!converted.has_value()) {
+            throw OutOfRange{"SubmitInvoice: the gross is too large to convert exactly"};
+        }
+        auto const valued = roundToCurrency(*converted, base);
+        grossCompanyNum = valued.numerator;
+        grossCompanyDen = valued.denominator;
+    }
     auto const& hoursValue = *settings->approvalHours;
     std::int64_t const hours = hoursValue.numerator / hoursValue.denominator;
     std::int64_t const now = nowMillis();
-    // The gross in the company's currency is what the approver's limit is judged against. Here the invoice is in that
-    // currency, so it is the invoice's own gross. The update also requires the gross to be the one read above: an edit
-    // that removed a line between the read and the write changed it, and recording the stale amount would judge the
-    // approver's limit against an invoice that no longer exists.
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    // The update requires the invoice to be a draft with the gross read above: of two submissions, the second finds
+    // it submitted; an edit that removed a line while the rate was awaited changed the gross, and recording the
+    // converted stale amount would judge the approver's limit against an invoice that no longer exists.
     if (!updateInvoiceIf(
             mapper, static_cast<std::int64_t>(row.id.Value()), InvoiceState::Draft,
             [&](auto& query) {
                 query.Set("state", static_cast<int>(InvoiceState::Submitted))
-                    .Set("submitted_by", ::morph::session::current()->principal)
+                    .Set("submitted_by", principal)
                     .Set("submitted_at", now)
                     .Set("deadline_at", now + (hours * kMillisPerHour))
-                    .Set("gross_company_num", row.grossNum.Value())
-                    .Set("gross_company_den", row.grossDen.Value());
+                    .Set("gross_company_num", grossCompanyNum)
+                    .Set("gross_company_den", grossCompanyDen);
             },
             [&](auto& query) {
                 (void)query.Where("gross_num", "=", row.grossNum.Value())
@@ -152,7 +179,7 @@ InvoiceView InvoiceModel::execute(const SubmitInvoice& action) {
                        " was submitted or edited meanwhile"};
     }
     sqlTxn.Commit();
-    return invoiceView(mapper, static_cast<std::int64_t>(row.id.Value()));
+    co_return invoiceView(mapper, static_cast<std::int64_t>(row.id.Value()));
 }
 
 // An action handler: the registry calls it on the instance, like every other.

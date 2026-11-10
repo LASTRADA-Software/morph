@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <core/async/Task.hpp>
 #include <functional>
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
@@ -61,18 +62,23 @@ public:
     /// @brief Submits a draft invoice for approval.
     ///
     /// Records who submitted it, its gross in the company's currency, and the approval deadline: now plus the
-    /// company's approval hours. The state moves by a conditional update, so two clerks submitting one invoice at
-    /// once cannot both succeed.
+    /// company's approval hours. An invoice in another currency than its company's is valued at the ledger's rate
+    /// valid now, which the handler awaits, and the gross is rounded half-up to the company currency's decimals. The
+    /// state moves by a conditional update, so two clerks submitting one invoice at once cannot both succeed; the
+    /// update also requires the invoice to be as it was read, so a submission that awaited the rate while the invoice
+    /// was edited or submitted elsewhere changes nothing.
     /// @param action The invoice.
     /// @return The submitted invoice.
-    /// @throws ValidationError if no invoice is named, or the invoice is in another currency than its company's.
+    /// @throws ValidationError if no invoice is named, or the invoice is in another currency than its company's and
+    ///         no rate values it (no ledger is wired, or none is valid now).
     /// @throws NotFound if there is no such invoice.
     /// @throws Forbidden if the caller is not a billing clerk at the invoice's company.
     /// @throws IllegalTransition if the invoice is not a draft.
     /// @throws Conflict if the invoice was submitted or its totals changed meanwhile, or another editor holds a live
     ///         lease on it (the submitter's own lease is no obstacle).
+    /// @throws OutOfRange if the converted gross does not fit.
     /// @throws EmptyPrincipalError if no principal is authenticated.
-    InvoiceView execute(const SubmitInvoice& action);
+    ::core::async::Task<InvoiceView> execute(SubmitInvoice action);
 
     /// @brief Approves a submitted invoice.
     ///
@@ -88,6 +94,25 @@ public:
     /// @throws Conflict if the invoice was approved meanwhile.
     /// @throws EmptyPrincipalError if no principal is authenticated.
     InvoiceView execute(const ApproveInvoice& action);
+
+    /// @brief Posts an approved invoice to the ledger and numbers it.
+    ///
+    /// Builds the invoice's posting (`postingFor`), valued at the ledger's rate on today's date for an invoice in
+    /// another currency, and has the ledger record it through the installed `LedgerPort`: as the ledger's own action,
+    /// which commits alone before billing's transaction, or through billing's open mapper, in billing's transaction.
+    /// Billing then assigns the next number of the entry's fiscal year, marks the invoice posted with its entry, and
+    /// commits. The number is assigned in billing's commit, so no failure leaves a hole in the series. The ledger
+    /// records each invoice once, so a retry after a failure between the halves converges on the entry already
+    /// recorded.
+    /// @param action The invoice.
+    /// @return The posted invoice.
+    /// @throws ValidationError if no invoice is named, no ledger is wired, or no rate is valid today.
+    /// @throws NotFound if there is no such invoice.
+    /// @throws Forbidden if the caller is not a billing clerk at the invoice's company.
+    /// @throws IllegalTransition if the invoice is not approved.
+    /// @throws Conflict if the invoice was posted meanwhile, or the ledger refuses the entry (a closed period).
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    ::core::async::Task<InvoiceView> execute(PostInvoice action);
 
     /// @brief Lists the submitted invoices the caller could approve now, judged by the rule `ApproveInvoice` is.
     /// @param action The query.
@@ -144,6 +169,8 @@ BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::SubmitInvoice, "SubmitInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::SubmitInvoice, ::morph::effects::changes<lims::InvoiceView>)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ApproveInvoice, "ApproveInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::ApproveInvoice, ::morph::effects::updates<lims::InvoiceView>)
+BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::PostInvoice, "PostInvoice")
+BRIDGE_REGISTER_EFFECTS(lims::PostInvoice, ::morph::effects::updates<lims::InvoiceView>)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListPendingApprovals, "ListPendingApprovals",
                        ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::GetInvoice, "GetInvoice", ::morph::model::Loggable::No)

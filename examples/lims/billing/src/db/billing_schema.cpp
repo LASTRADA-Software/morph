@@ -139,4 +139,13 @@ LIGHTWEIGHT_SQL_MIGRATION(20261110000012, "Create billing_invoice_leases") {
     // An invoice has one lease: the index refuses the second of two takers that raced past the lookup.
     plan.CreateUniqueIndex("idx_billing_invoice_leases_invoice", "billing_invoice_leases", {"invoice_id"});
 }
+LIGHTWEIGHT_SQL_MIGRATION(20261110000013, "Create billing_number_series") {
+    plan.CreateTableIfNotExists("billing_number_series")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("fiscal_year", Bigint())
+        .RequiredColumn("next_number", Bigint());
+    // A company has one series per fiscal year: the index refuses a second first number.
+    plan.CreateUniqueIndex("idx_billing_number_series_year", "billing_number_series", {"company_id", "fiscal_year"});
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

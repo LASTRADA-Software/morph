@@ -37,8 +37,10 @@
 #include "lims/app/billing_scheduler.hpp"
 #include "lims/app/event_wiring.hpp"
 #include "lims/app/internal_client.hpp"
+#include "lims/app/ledger_wiring.hpp"
 #include "lims/app/lims_authorizer.hpp"
 #include "lims/app/service_principals.hpp"
+#include "lims/billing/core/ledger_port.hpp"
 #include "lims/lab/db/database.hpp"
 #include "lims/lab/models/ignition_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
@@ -123,6 +125,9 @@ int main(int argc, char** argv) {
         lims::app::InternalClient events{*server, secret, std::string{lims::app::kEventsPrincipal}};
         lims::app::InternalClient schedule{*server, secret, std::string{lims::app::kSchedulePrincipal}};
         lims::app::BillingScheduler scheduler{schedule};
+        lims::app::InternalClient posting{*server, secret, std::string{lims::app::kPostingPrincipal}};
+        // The posting mode decision 38 names.
+        lims::app::installLedgerPort(posting, lims::PostingMode::Dispatched);
         morph::exec::ThreadPoolExecutor background{1};
         // Lab's events reach billing through this relay; a pass that fails is logged and retried on the next tick,
         // since the batch stays unmarked.
@@ -153,6 +158,7 @@ int main(int argc, char** argv) {
         QObject::connect(&scheduleTimer, &QTimer::timeout, tickSchedule);
         scheduleTimer.start(10'000);
         int const code = QCoreApplication::exec();
+        lims::setLedgerPort({});
         lims::auth::setTokenIssuer(nullptr);
         return code;
     } catch (std::exception const& error) {

@@ -6,7 +6,6 @@
 #include <Lightweight/SqlStatement.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <exception>
 #include <format>
@@ -40,27 +39,6 @@ constexpr std::int64_t kLeaseMillis = static_cast<std::int64_t>(15) * 60 * 1000;
     std::random_device device;
     std::uniform_int_distribution<std::uint64_t> bits;
     return std::format("{:016x}{:016x}", bits(device), bits(device));
-}
-
-/// @brief Whether @p error is SQLite's single writer turning this one away.
-///
-/// The driver reports SQLite's primary result code as the native code: 5 for busy, 6 for locked. The message is the
-/// fallback for a driver that reports neither, and is limited to those two words: any other failure (a constraint, a
-/// missing table) is a defect and must surface as itself.
-/// @param error The failure.
-/// @return `true` when the database was busy or locked.
-[[nodiscard]] bool isBusy(Lightweight::SqlException const& error) {
-    constexpr int kSqliteBusy = 5;
-    constexpr int kSqliteLocked = 6;
-    constexpr int kPrimaryCodeMask = 0xFF;
-    int const code = static_cast<int>(error.info().nativeErrorCode) & kPrimaryCodeMask;
-    if (code == kSqliteBusy || code == kSqliteLocked) {
-        return true;
-    }
-    std::string text = error.what();
-    std::ranges::transform(text, text.begin(),
-                           [](unsigned char letter) { return static_cast<char>(std::tolower(letter)); });
-    return text.contains("database is locked") || text.contains("database table is locked") || text.contains("busy");
 }
 
 /// @brief Whether the lease row of @p invoiceId is no longer as @p held read it, on a connection of its own.

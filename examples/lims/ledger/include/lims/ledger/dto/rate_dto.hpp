@@ -9,6 +9,7 @@
 #include "lims/ledger/core/types.hpp"
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/types.hpp"
+#include "lims/posting/posting.hpp"
 
 /// @file
 /// Exchange rates as the wire sees them: entered by hand, per company and currency pair, from a date.
@@ -76,6 +77,16 @@ struct ListExchangeRates {
 struct ListExchangeRatesResult {
     /// @brief The rates.
     std::vector<ExchangeRateView> rates;
+};
+
+/// @brief Reads the rate valid on a date, as a poster asks it.
+struct GetRateOn {
+    /// @brief The question.
+    RateQuery query;
+
+    /// @brief Whether a company and a date are named.
+    /// @return `true` when they are.
+    [[nodiscard]] bool validate() const noexcept { return query.company.hasValue() && query.on.hasValue(); }
 };
 
 }  // namespace lims

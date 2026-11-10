@@ -19,6 +19,7 @@
 #include "lims/ledger/authorization/ledger_authorization.hpp"
 #include "lims/ledger/core/balance.hpp"
 #include "lims/ledger/db/ledger_entity.hpp"
+#include "lims/ledger/db/ledger_store.hpp"
 #include "lims/ledger/models/ledger_model.hpp"
 #include "lims/org/core/calendar.hpp"
 #include "lims/org/core/errors.hpp"
@@ -599,16 +600,33 @@ namespace {
         throw Conflict{"record: source key " + request.sourceKey +
                        " is already recorded for a different posting; a corrected document needs a new key"};
     }
-    return PostingResult{.entryId = JournalEntryId{entry}};
+    auto const first = loadEntry(mapper, entry);
+    if (!first.has_value()) {
+        throw NotFound{"record: entry " + std::to_string(entry) + " of source key " + request.sourceKey + " is gone"};
+    }
+    return PostingResult{.entryId = JournalEntryId{entry}, .date = timestampFromMillis(first->header.dateMs.Value())};
 }
 
-/// @brief One try at recording @p request, in its own transaction.
-/// @param request The checked request.
-/// @param base The company's currency.
-/// @return The entry.
-[[nodiscard]] PostingResult recordOnce(PostingRequest const& request, CurrencyCode base) {
-    Lightweight::DataMapper mapper;
-    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+}  // namespace
+
+PostingResult recordPostingIn(Lightweight::DataMapper& mapper, PostingRequest const& request) {
+    if (!request.company.hasValue() || !request.date.hasValue() || request.sourceKey.empty() ||
+        request.sourceKey.size() > 128 || request.sourceReference.size() > 128 || !request.rate.hasValue()) {
+        throw ValidationError{"record: a company, a date, a source key and a rate are required"};
+    }
+    CurrencyCode const base = companyCurrency(request.company);
+    requireRate("record", *request.rate, request.currency, base);
+    requireBalanced("record", request.lines, request.currency, base, request.rate);
+    // The transaction opens with a write, so it holds the database's write lock before it reads anything: a
+    // transaction that read first and wrote later is turned away at once with a raw "database is locked" when a
+    // concurrent one already holds the write lock, instead of waiting for it. The statement changes no row.
+    {
+        auto lock = mapper.Connection().Query(db::PostingSourceRecord::TableName).Update();
+        lock.Set("entry", std::string{});
+        (void)lock.Where("id", "=", 0);
+        Lightweight::SqlStatement statement{mapper.Connection()};
+        static_cast<void>(statement.ExecuteDirect(lock.ToSql()));
+    }
     PostingSources sources{mapper};
     std::string const scope = std::to_string(*request.company);
     // The key is looked up before anything that can change between calls (the dated rate, the period's state), so
@@ -633,29 +651,72 @@ namespace {
     header.sourceReference = Lightweight::SqlAnsiString<128>{request.sourceReference};
     std::int64_t const entryId = writeEntry(mapper, header, accounts, request.lines);
     sources.record(scope, request.sourceKey, std::to_string(entryId));
-    sqlTxn.Commit();
-    return PostingResult{.entryId = JournalEntryId{entryId}};
+    return PostingResult{.entryId = JournalEntryId{entryId}, .date = request.date};
 }
 
-}  // namespace
-
 PostingResult LedgerModel::record(PostingRequest const& request) {
-    if (!request.company.hasValue() || !request.date.hasValue() || request.sourceKey.empty() ||
-        request.sourceKey.size() > 128 || request.sourceReference.size() > 128 || !request.rate.hasValue()) {
-        throw ValidationError{"record: a company, a date, a source key and a rate are required"};
-    }
-    CurrencyCode const base = companyCurrency(request.company);
-    requireRate("record", *request.rate, request.currency, base);
-    requireBalanced("record", request.lines, request.currency, base, request.rate);
+    auto const attempt = [&request] {
+        Lightweight::DataMapper attemptMapper;
+        Lightweight::SqlTransaction sqlTxn{attemptMapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+        auto const result = recordPostingIn(attemptMapper, request);
+        sqlTxn.Commit();
+        return result;
+    };
     try {
-        return recordOnce(request, base);
+        return attempt();
     } catch (Lightweight::SqlException const&) {
         // A concurrent first call with this key committed between this call's lookup and its write (the unique
         // key refuses the second row), and this call's transaction is rolled back. The second try finds the
         // winner's row and answers it, or reports the key's different body; a failure that is not that race fails
         // again and surfaces.
-        return recordOnce(request, base);
+        try {
+            return attempt();
+        } catch (Lightweight::SqlException const& again) {
+            if (!isBusy(again)) {
+                throw;
+            }
+            throw Conflict{"record: the books are busy with another posting; try again"};
+        }
     }
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+PostingResult LedgerModel::execute(const FindPosting& action) {
+    if (!action.validate()) {
+        throw ValidationError{"FindPosting: a company and a source key are required"};
+    }
+    auto const visibleCompanies = OrgModel::visibleCompanies(currentPrincipal());
+    if (std::ranges::find(visibleCompanies, action.query.company) == visibleCompanies.end()) {
+        return PostingResult{};
+    }
+    Lightweight::DataMapper mapper;
+    PostingSources const sources{mapper};
+    auto const known = sources.lookup(std::to_string(*action.query.company), action.query.sourceKey);
+    if (!known.has_value()) {
+        return PostingResult{};
+    }
+    auto const entry = loadEntry(mapper, std::stoll(*known));
+    if (!entry.has_value()) {
+        return PostingResult{};
+    }
+    return PostingResult{
+        .entryId = JournalEntryId{std::stoll(*known)},
+        .date = timestampFromMillis(entry->header.dateMs.Value()),
+    };
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+PostingResult LedgerModel::execute(const RecordPosting& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"RecordPosting: a company and a source key are required"};
+    }
+    requireServicePrincipal("RecordPosting");
+    requireRoleSomewhere<RecordPosting>();
+    requireAuthorized(action);
+    return record(action.request);
 }
 
 }  // namespace lims

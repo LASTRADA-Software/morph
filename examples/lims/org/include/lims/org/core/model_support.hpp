@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <Lightweight/SqlError.hpp>
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <morph/session/session.hpp>
@@ -35,6 +38,27 @@ inline void requirePrincipal() {
     if (ctx == nullptr || ctx->principal.empty()) {
         throw EmptyPrincipalError{};
     }
+}
+
+/// @brief Whether @p error is SQLite's single writer turning this one away.
+///
+/// The driver reports SQLite's primary result code as the native code: 5 for busy, 6 for locked. The message is the
+/// fallback for a driver that reports neither, and is limited to those two words: any other failure (a constraint, a
+/// missing table) is a defect and must surface as itself.
+/// @param error The failure.
+/// @return `true` when the database was busy or locked.
+[[nodiscard]] inline bool isBusy(::Lightweight::SqlException const& error) {
+    constexpr int kSqliteBusy = 5;
+    constexpr int kSqliteLocked = 6;
+    constexpr unsigned int kPrimaryCodeMask = 0xFFU;
+    unsigned int const code = static_cast<unsigned int>(error.info().nativeErrorCode) & kPrimaryCodeMask;
+    if (code == kSqliteBusy || code == kSqliteLocked) {
+        return true;
+    }
+    std::string text = error.what();
+    std::ranges::transform(text, text.begin(),
+                           [](unsigned char letter) { return static_cast<char>(std::tolower(letter)); });
+    return text.contains("database is locked") || text.contains("database table is locked") || text.contains("busy");
 }
 
 /// @brief The authenticated principal, or empty when there is none. A list answers an empty principal with nothing,

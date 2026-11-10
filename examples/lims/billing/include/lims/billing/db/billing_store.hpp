@@ -9,6 +9,7 @@
 #include "lims/billing/db/billing_entity.hpp"
 #include "lims/billing/dto/invoice_dto.hpp"
 #include "lims/billing/dto/line_dto.hpp"
+#include "lims/posting/posting.hpp"
 
 /// @file
 /// Billing's ORM-level reads and writes shared by its models. Billing-internal: no model header includes it, so a
@@ -43,6 +44,22 @@ namespace lims {
 /// @throws NotFound if it does not exist.
 /// @throws ValidationError if a row holds a state or currency outside its enumeration.
 [[nodiscard]] InvoiceView invoiceView(Lightweight::DataMapper& mapper, std::int64_t invoiceId);
+
+/// @brief Numbers and posts invoice @p invoiceId in the caller's transaction: writes its row first, then takes the
+///        next number of the entry's fiscal year and records it.
+///
+/// The invoice's row is written before the series is read, so this transaction holds the database's write lock first
+/// and a second posting waits for it instead of reading the same next number. The fiscal year is the entry's
+/// date's, not the clock's: a retry converges on the entry the first attempt recorded, which may lie in the year
+/// before the retry's. Reaches the fault point `post.beforeCommit` once the number is written.
+/// @param mapper The caller's mapper, inside its transaction.
+/// @param invoiceId The invoice.
+/// @param entry The ledger's entry for it.
+/// @param author Who posts it.
+/// @return The invoice's number, such as `INV-2026-000001`.
+/// @throws NotFound if the invoice or its company does not exist.
+[[nodiscard]] std::string assignNumberAndPost(Lightweight::DataMapper& mapper, std::int64_t invoiceId,
+                                              PostingResult const& entry, std::string const& author);
 
 /// @brief The row of invoice @p invoice.
 /// @param invoice The invoice.

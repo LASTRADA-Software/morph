@@ -166,4 +166,15 @@ struct InvoiceLeaseRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"expires_at"}> expiresAt{0};  // 4
 };
 
+/// @brief The next invoice number of one company's fiscal year.
+struct NumberSeriesRecord {
+    static constexpr std::string_view TableName = "billing_number_series";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 1
+    /// @brief The calendar year the fiscal year begins in.
+    Light::Field<std::int64_t, Light::SqlRealName{"fiscal_year"}> fiscalYear{0};  // 2
+    /// @brief The number the next invoice takes.
+    Light::Field<std::int64_t, Light::SqlRealName{"next_number"}> nextNumber{1};  // 3
+};
+
 }  // namespace lims::db
