@@ -184,6 +184,16 @@ template <typename E>
     return ui::badge(statusWord<E>(value), tone);
 }
 
+/// @brief The name a screen shows for a person: their display name from a users list, or their login where the list
+///        holds no row for them or the row has no name.
+///
+/// A screen names a person this way, through the `ListUsers` rows it already has, so no view grows a name field per
+/// person it mentions.
+/// @param users The rows of a `ListUsers` result.
+/// @param principal The person's login.
+/// @return The text.
+[[nodiscard]] ui::Handle<std::string> personName(ui::AnyHandle const& users, ui::AnyHandle const& principal);
+
 /// @brief An error banner over @p message, shown only while it is engaged.
 /// @param message The text.
 /// @return The banner.

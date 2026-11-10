@@ -376,13 +376,13 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
     // Every mutating action of the org, sample, analysis-catalog and ignition models. The dispatcher check below fails
     // when a registered mutating action is missing from this list.
     using Mutating =
-        std::tuple<lims::CreateCompany, lims::CreateSite, lims::AssignRole, lims::RevokeRole, lims::DefineAnalysis,
-                   lims::ReviseAnalysis, lims::RegisterClient, lims::RegisterSample, lims::ReceiveSample,
-                   lims::StartWork, lims::SubmitForVerification, lims::ReturnForRework, lims::PublishSample,
-                   lims::RejectSample, lims::CaptureConcentration, lims::QueuedCapture, lims::ResolveConflict,
-                   lims::VerifyResult, lims::NewSample, lims::LoadSample, lims::SaveSample, lims::DeleteSample,
-                   lims::HeaderSection, lims::SamplingSection, lims::TurbiditySection, lims::NitrateSection,
-                   lims::ClearOptionalMeasurement, lims::SelectProject, lims::AddIgnitionTest,
+        std::tuple<lims::CreateCompany, lims::CreateSite, lims::AssignRole, lims::RevokeRole, lims::SetDisplayName,
+                   lims::DefineAnalysis, lims::ReviseAnalysis, lims::RegisterClient, lims::RegisterSample,
+                   lims::ReceiveSample, lims::StartWork, lims::SubmitForVerification, lims::ReturnForRework,
+                   lims::PublishSample, lims::RejectSample, lims::CaptureConcentration, lims::QueuedCapture,
+                   lims::ResolveConflict, lims::VerifyResult, lims::NewSample, lims::LoadSample, lims::SaveSample,
+                   lims::DeleteSample, lims::HeaderSection, lims::SamplingSection, lims::TurbiditySection,
+                   lims::NitrateSection, lims::ClearOptionalMeasurement, lims::SelectProject, lims::AddIgnitionTest,
                    lims::RecordIgnitionValues, lims::DeleteIgnitionTest, lims::SetValueLimit, lims::CreateAccount,
                    lims::OpenPeriod, lims::BeginClosePeriod, lims::CreateDraftEntry, lims::PostEntry,
                    lims::ReverseEntry, lims::ClosePeriod, lims::SetExchangeRate, lims::RecordPosting,

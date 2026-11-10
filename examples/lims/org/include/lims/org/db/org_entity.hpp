@@ -52,6 +52,14 @@ struct RoleAssignmentRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"granted_at"}> grantedAt{0};           // 6
 };
 
+/// @brief One principal's display name: at most one row per principal.
+struct PersonRecord {
+    static constexpr std::string_view TableName = "org_people";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"principal"}> principal;                     // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"display_name"}> displayName;               // 2
+};
+
 /// @brief One principal's value limit at one company: at most one row per pair.
 struct ValueLimitRecord {
     static constexpr std::string_view TableName = "org_value_limits";

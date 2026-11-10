@@ -21,14 +21,16 @@ namespace lims::app {
 ///
 /// The ignition-test actions are open because an ignition test belongs to no site: there is no scope to judge a role
 /// in. The invoice editor's edits and its release are open because the editing instance's own live lease is what
-/// permits them, and only `LeaseInvoice`, which declares a role, grants one.
+/// permits them, and only `LeaseInvoice`, which declares a role, grants one. `SetDisplayName` is open because its
+/// rule, the person or a supervisor of a company they hold a role in, relates two principals, which a role and a
+/// scope cannot state; the org model checks it.
 ///
 /// Listing an action here is a decision that it is open, made in one place. An action that changes data is either in
 /// `declaredRequirements()` or here; the declared-authorization suite fails for a mutating action of the org, sample,
 /// analysis-catalog or ignition model that is in neither, and for an id here that is also declared.
 /// @return The action ids.
-[[nodiscard]] inline std::array<std::string_view, 17> const& openMutatingActions() {
-    static constexpr std::array<std::string_view, 17> open{
+[[nodiscard]] inline std::array<std::string_view, 18> const& openMutatingActions() {
+    static constexpr std::array<std::string_view, 18> open{
         "DefineAnalysis",
         "ReviseAnalysis",
         "RegisterClient",
@@ -46,6 +48,7 @@ namespace lims::app {
         "RemoveInvoiceLine",
         "SetInvoiceReference",
         "ReleaseInvoice",
+        "SetDisplayName",
     };
     return open;
 }

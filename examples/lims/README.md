@@ -1289,6 +1289,15 @@ calls them hypothesis 10's in its Part D text; they are hypothesis 9's (an actio
 document layout), and hypothesis 10 is the large lists; the design's sentence now says 9. `IMPLEMENTATION.md` rule 2
 exempts lims's look, and only lims's.
 
+### 51. A person has a display name, kept by org beside the principal
+
+A principal is a login; org keeps a display name per principal (`org_people`), set by the person or by a supervisor of
+one of their companies (`SetDisplayName`), and every user view carries it. Screens name a person by mapping a
+principal through the users list (`kit::personName`), and fall back to the login where no name is set; a refusal that
+names a person carries the name the server resolved (`OrgModel::displayNameOf`). The rule relates two principals,
+which the declared table's role and scope cannot say, so the model checks it and the action is listed as open. A
+person who holds no role anywhere is named by no supervisor, because no company is theirs yet; they name themselves.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so

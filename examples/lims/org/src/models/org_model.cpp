@@ -175,6 +175,30 @@ void addOnce(std::vector<LimsRole>& roles, LimsRole role) {
 
 }  // namespace
 
+UserView OrgModel::userViewOf(std::string_view principal) {
+    UserView view{.id = std::string{principal}, .displayName = {}, .roles = {}};
+    for (auto const& assignment : execute(ListRoleAssignments{}).assignments) {
+        if (assignment.principal == principal) {
+            addOnce(view.roles, assignment.role);
+        }
+    }
+    Lightweight::DataMapper mapper;
+    auto const row = mapper.Query<db::PersonRecord>()
+                         .Where(::Lightweight::FieldNameOf<&db::PersonRecord::principal>, "=", std::string{principal})
+                         .First();
+    if (row.has_value()) {
+        view.displayName = std::string{row->displayName.Value().ToStringView()};
+    }
+    return view;
+}
+
+bool OrgModel::supervisesAnyCompanyOf(std::string_view caller, std::string_view person) {
+    return std::ranges::any_of(visibleCompanies(person), [caller](CompanyId const& company) {
+        auto const held = rolesIn(caller, Scope{company});
+        return std::ranges::find(held, LimsRole::Supervisor) != held.end();
+    });
+}
+
 CompanyView OrgModel::execute(const CreateCompany& action) {
     requirePrincipal();
     if (!action.validate()) {
@@ -383,11 +407,79 @@ ListUsersResult OrgModel::execute(const ListUsers& action) {
     for (auto const& assignment : assignments) {
         addOnce(byPrincipal[assignment.principal], assignment.role);
     }
+    // Every name in one query, beside the assignments, rather than one lookup per user.
+    Lightweight::DataMapper mapper;
+    std::map<std::string, std::string> names;
+    for (auto const& person : mapper.Query<db::PersonRecord>().All()) {
+        names.emplace(std::string{person.principal.Value().ToStringView()},
+                      std::string{person.displayName.Value().ToStringView()});
+    }
     ListUsersResult result;
     for (auto& [principal, roles] : byPrincipal) {
-        result.users.push_back(UserView{.id = principal, .roles = std::move(roles)});
+        auto const name = names.find(principal);
+        result.users.push_back(UserView{.id = principal,
+                                        .displayName = name == names.end() ? std::string{} : name->second,
+                                        .roles = std::move(roles)});
     }
     return result;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+UserView OrgModel::execute(const GetSignedInUser& action) {
+    static_cast<void>(action);
+    requirePrincipal();
+    return userViewOf(currentPrincipal());
+}
+
+UserView OrgModel::execute(const SetDisplayName& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{
+            "SetDisplayName: a principal of at most 64 bytes and a display name of at most 128 bytes are required"};
+    }
+    std::string const caller = currentPrincipal();
+    if (caller != action.principal && !supervisesAnyCompanyOf(caller, action.principal)) {
+        throw Forbidden{
+            "SetDisplayName: only the person, or a supervisor of a company they hold a role in, names them"};
+    }
+    Lightweight::DataMapper mapper;
+    auto const findRow = [&mapper, &action] {
+        return mapper.Query<db::PersonRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::PersonRecord::principal>, "=", action.principal)
+            .First();
+    };
+    auto existing = findRow();
+    if (!existing.has_value()) {
+        db::PersonRecord row;
+        row.principal = Lightweight::SqlAnsiString<64>{action.principal};
+        row.displayName = Lightweight::SqlAnsiString<128>{action.displayName};
+        try {
+            mapper.Create(row);
+            return userViewOf(action.principal);
+        } catch (Lightweight::SqlException const&) {
+            // A concurrent first naming won the unique index. When its row is there now, this naming updates it;
+            // when it is not, the failure was something else and surfaces as itself.
+            existing = findRow();
+            if (!existing.has_value()) {
+                throw;
+            }
+        }
+    }
+    existing->displayName = Lightweight::SqlAnsiString<128>{action.displayName};
+    mapper.Update(*existing);
+    return userViewOf(action.principal);
+}
+
+std::string OrgModel::displayNameOf(std::string_view principal) {
+    Lightweight::DataMapper mapper;
+    auto const row = mapper.Query<db::PersonRecord>()
+                         .Where(::Lightweight::FieldNameOf<&db::PersonRecord::principal>, "=", std::string{principal})
+                         .First();
+    if (!row.has_value() || row->displayName.Value().ToStringView().empty()) {
+        return std::string{principal};
+    }
+    return std::string{row->displayName.Value().ToStringView()};
 }
 
 std::vector<SiteId> OrgModel::visibleSites(std::string_view principal) {

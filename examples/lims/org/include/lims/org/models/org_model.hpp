@@ -6,6 +6,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -90,6 +91,29 @@ public:
     /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
     ListUsersResult execute(const ListUsers& action);
 
+    /// @brief Names a person. Allowed for the person themselves, and for a supervisor of a company in which the person
+    ///        holds a role (at the company or at one of its sites). Naming a person again replaces the name; two first
+    ///        namings of one principal leave one row, the later one's name.
+    /// @param action The principal and the name.
+    /// @return The person's user view as it now reads.
+    /// @throws ValidationError if the principal or the name is empty or too long.
+    /// @throws Forbidden if the caller is neither the person nor a supervisor of a company in which they hold a role.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    UserView execute(const SetDisplayName& action);
+
+    /// @brief The caller's own user view.
+    /// @param action Carries nothing.
+    /// @return The caller's roles anywhere they can be seen, and their display name; both empty for a caller who
+    ///         holds nothing and was never named.
+    /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    UserView execute(const GetSignedInUser& action);
+
+    /// @brief The name to show for @p principal.
+    /// @param principal The principal.
+    /// @return Their display name, or @p principal itself when none is set.
+    [[nodiscard]] static std::string displayNameOf(std::string_view principal);
+
     /// @brief The roles @p principal holds in @p scope. In a site, that is the roles held at the site and at its
     ///        company; in a company, the roles held at the company.
     /// @param principal The principal.
@@ -155,6 +179,22 @@ public:
     /// @param company The company.
     /// @return It, or nothing when @p company is empty or names no company.
     [[nodiscard]] static std::optional<CompanyView> findCompany(CompanyId company);
+
+private:
+    /// @brief @p principal's user view as the caller may see it: the roles of the assignments the caller can see, and
+    ///        the stored display name.
+    /// @param principal The principal.
+    /// @return The view.
+    /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
+    [[nodiscard]] UserView userViewOf(std::string_view principal);
+
+    /// @brief Whether @p caller is a supervisor of a company in which @p person holds a role, at the company or at
+    ///        one of its sites.
+    /// @param caller The would-be namer.
+    /// @param person The person to be named.
+    /// @return Whether they are.
+    /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
+    [[nodiscard]] static bool supervisesAnyCompanyOf(std::string_view caller, std::string_view person);
 };
 
 }  // namespace lims
@@ -179,6 +219,9 @@ BRIDGE_REGISTER_EFFECTS(lims::RevokeRole, ::morph::effects::changes<lims::RoleAs
                         ::morph::effects::changes<lims::SiteView>)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListRoleAssignments, "ListRoleAssignments", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListUsers, "ListUsers", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::SetDisplayName, "SetDisplayName")
+BRIDGE_REGISTER_EFFECTS(lims::SetDisplayName, ::morph::effects::changes<lims::UserView>)
+BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::GetSignedInUser, "GetSignedInUser", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::SetValueLimit, "SetValueLimit")
 BRIDGE_REGISTER_EFFECTS(lims::SetValueLimit, ::morph::effects::changes<lims::ValueLimitView>)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListValueLimits, "ListValueLimits", ::morph::model::Loggable::No)

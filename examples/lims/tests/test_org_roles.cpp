@@ -551,3 +551,76 @@ TEST_CASE("auth: sign-in refuses a malformed or reserved principal and needs an 
     CHECK_THROWS_AS(auth.execute(lims::LimsLogin{.username = "alice"}), lims::ValidationError);
     lims::auth::setTokenIssuer(previous);
 }
+
+// Mutation: answer UserView without its displayName in ListUsers (the check for "Dr. Anna Meyer" fails).
+TEST_CASE("org: a supervisor names a person, and the users list carries the name", "[lims][org]") {
+    DbFixture fixture;
+    lims::test::grant("sam", lims::LimsRole::Supervisor);
+    lims::test::grant("anna", lims::LimsRole::Analyst);
+    ScopedPrincipal const sam{"sam"};
+    lims::OrgModel org;
+    CHECK(org.execute(lims::SetDisplayName{.principal = "anna", .displayName = "Dr. Anna Meyer"}).displayName ==
+          "Dr. Anna Meyer");
+    auto const users = org.execute(lims::ListUsers{}).users;
+    auto const anna = std::ranges::find(users, std::string{"anna"}, &lims::UserView::id);
+    REQUIRE(anna != users.end());
+    CHECK(anna->displayName == "Dr. Anna Meyer");
+    CHECK(lims::OrgModel::displayNameOf("anna") == "Dr. Anna Meyer");
+    CHECK(lims::OrgModel::displayNameOf("nobody") == "nobody");
+}
+
+// Mutation: drop the self-or-supervisor check from SetDisplayName (rita renames anna).
+TEST_CASE("org: a person names themselves; nobody else but a supervisor of their company names them", "[lims][org]") {
+    DbFixture fixture;
+    lims::test::grant("anna", lims::LimsRole::Analyst);
+    lims::test::grant("rita", lims::LimsRole::Analyst);
+    {
+        ScopedPrincipal const anna{"anna"};
+        CHECK(lims::OrgModel{}
+                  .execute(lims::SetDisplayName{.principal = "anna", .displayName = "Anna Meyer"})
+                  .displayName == "Anna Meyer");
+        CHECK(lims::OrgModel{}.execute(lims::GetSignedInUser{}).displayName == "Anna Meyer");
+    }
+    ScopedPrincipal const rita{"rita"};
+    CHECK_THROWS_AS(lims::OrgModel{}.execute(lims::SetDisplayName{.principal = "anna", .displayName = "Someone"}),
+                    lims::Forbidden);
+}
+
+// Mutation: make SetDisplayName insert a second row for a person already named (the users list then carries the
+// first name, or the unique index refuses); drop the length check (the 129-byte name reaches the table).
+TEST_CASE("org: naming a person again replaces the name, and an empty or oversized name is refused", "[lims][org]") {
+    DbFixture fixture;
+    lims::test::grant("sam", lims::LimsRole::Supervisor);
+    lims::test::grant("anna", lims::LimsRole::Analyst);
+    ScopedPrincipal const sam{"sam"};
+    lims::OrgModel org;
+    static_cast<void>(org.execute(lims::SetDisplayName{.principal = "anna", .displayName = "Anna M."}));
+    CHECK(org.execute(lims::SetDisplayName{.principal = "anna", .displayName = "Dr. Anna Meyer"}).displayName ==
+          "Dr. Anna Meyer");
+    CHECK(lims::OrgModel::displayNameOf("anna") == "Dr. Anna Meyer");
+    CHECK_THROWS_AS(org.execute(lims::SetDisplayName{.principal = "anna", .displayName = ""}), lims::ValidationError);
+    CHECK_THROWS_AS(org.execute(lims::SetDisplayName{.principal = "anna", .displayName = std::string(129, 'x')}),
+                    lims::ValidationError);
+    CHECK(org.execute(lims::SetDisplayName{.principal = "anna", .displayName = "Tobias Krüger"}).displayName ==
+          "Tobias Krüger");
+}
+
+// Mutation: let a supervisor of any company name anyone (sam names a person who holds a role only elsewhere).
+TEST_CASE("org: a supervisor names only people who hold a role in a company they supervise", "[lims][org]") {
+    DbFixture fixture;
+    lims::test::grant("sam", lims::LimsRole::Supervisor);
+    lims::test::grant("zed", lims::LimsRole::Supervisor);
+    {
+        ScopedPrincipal const zed{"zed"};
+        lims::OrgModel org;
+        auto const other = org.execute(lims::CreateCompany{
+            .name = "Elsewhere", .baseCurrency = lims::CurrencyCode::EUR, .fiscalYearStart = lims::Month::January});
+        static_cast<void>(org.execute(
+            lims::AssignRole{.principal = "bob", .role = lims::LimsRole::Analyst, .company = other.id, .site = {}}));
+    }
+    ScopedPrincipal const sam{"sam"};
+    lims::OrgModel org;
+    CHECK_THROWS_AS(org.execute(lims::SetDisplayName{.principal = "bob", .displayName = "Bob"}), lims::Forbidden);
+    CHECK_THROWS_AS(org.execute(lims::SetDisplayName{.principal = "stranger", .displayName = "Stranger"}),
+                    lims::Forbidden);
+}
