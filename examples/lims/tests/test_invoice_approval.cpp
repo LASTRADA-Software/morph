@@ -1,0 +1,321 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// Invoice approval. Hypothesis 5: an approval that lasts days and passes between principals is ordinary actions and
+// the declared authorization. Hypothesis 6, second instance: billing's create/approve and submit/approve pairs and the
+// approver's value limit, which the server edge cannot see. Escalation at a deadline, which the design listed as
+// hypothesis 4's second instance, with nothing scheduled.
+
+#include <Lightweight/SqlConnection.hpp>
+#include <Lightweight/SqlStatement.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+#include <functional>
+#include <morph/session/session_auth.hpp>
+#include <morph/util/rational.hpp>
+#include <string>
+#include <string_view>
+
+#include "billing_test_support.hpp"
+#include "clock.hpp"
+#include "lims/app/service_principals.hpp"
+#include "lims/billing/core/fault_hook.hpp"
+#include "lims/billing/models/billing_run_model.hpp"
+#include "lims/billing/models/invoice_model.hpp"
+#include "lims/org/dto/limit_dto.hpp"
+#include "testkit/backend_rig.hpp"
+#include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
+
+using lims::test::ScopedPrincipal;
+using morph::ladder::ScopedClockOverride;
+using morph::ladder::testkit::awaitQt;
+using morph::ladder::testkit::BackendRig;
+using morph::ladder::testkit::Mode;
+using morph::math::DecimalPlaces;
+using morph::math::Rational;
+
+namespace {
+
+constexpr std::string_view kSecret = "lims-invoice-approval-test-secret-32-bytes";
+
+/// @brief Clears the fault hook when the case ends, however it ends.
+struct FaultHookGuard {
+    FaultHookGuard() = default;
+    FaultHookGuard(FaultHookGuard const&) = delete;
+    FaultHookGuard& operator=(FaultHookGuard const&) = delete;
+    FaultHookGuard(FaultHookGuard&&) = delete;
+    FaultHookGuard& operator=(FaultHookGuard&&) = delete;
+    ~FaultHookGuard() { lims::setFaultHook({}); }
+};
+
+/// @brief Runs @p sql on the fixture's database.
+void execute(std::string const& sql) {
+    Lightweight::SqlStatement statement;
+    (void)statement.ExecuteDirect(sql);
+}
+
+/// @brief Makes @p sql run on a connection of its own, committed, when the next invoice state change is about to be
+///        written, as a concurrent action that committed first would have.
+void raceWith(std::string sql) {
+    lims::setFaultHook([sql = std::move(sql)](std::string_view point, Lightweight::SqlConnection&) {
+        if (point == "invoice.beforeStateChange") {
+            Lightweight::SqlConnection other;
+            Lightweight::SqlStatement statement{other};
+            (void)statement.ExecuteDirect(sql);
+        }
+    });
+}
+
+[[nodiscard]] lims::InvoiceView read(lims::InvoiceId id) {
+    ScopedPrincipal const bea{"bea"};
+    return lims::InvoiceModel{}.execute(lims::GetInvoice{.invoiceId = id});
+}
+
+}  // namespace
+
+// Mutation: drop the separation-of-duties members from Authorization<ApproveInvoice> (bea approves her own invoice).
+TEST_CASE("invoice approval: four eyes and a value limit, judged in the model", "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+    lims::InvoiceModel invoices;
+    {
+        ScopedPrincipal const bea{"bea"};
+        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+                          Catch::Matchers::ContainsSubstring("created this invoice"));
+    }
+    {
+        ScopedPrincipal const tom{"tom"};
+        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+                          Catch::Matchers::ContainsSubstring("value limit"));
+    }
+    {
+        ScopedPrincipal const nobody{"nora"};
+        CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}), lims::Forbidden);
+    }
+    ScopedPrincipal const paula{"paula"};
+    auto const approved = invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id});
+    CHECK(approved.state == lims::InvoiceState::Approved);
+    CHECK(approved.approvedBy == "paula");
+    CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
+}
+
+// Mutation: drop `submitted_by` from the submission's update (the row records no submitter).
+TEST_CASE("invoice approval: submission records the deadline, the submitter and the company-currency gross",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    CHECK(invoice.state == lims::InvoiceState::Draft);
+    lims::test::submit(invoice);
+    auto const submitted = read(invoice.id);
+    CHECK(submitted.state == lims::InvoiceState::Submitted);
+    CHECK(submitted.submittedBy == "bea");
+    // 09:00 on 10 November plus the company's 48 approval hours.
+    CHECK(submitted.approvalDeadline == morph::time::Timestamp{lims::test::at(2026, 11, 12)});
+    CHECK(submitted.submittedAt == morph::time::Timestamp{lims::test::at(2026, 11, 10)});
+    lims::InvoiceModel invoices;
+    ScopedPrincipal const bea{"bea"};
+    CHECK_THROWS_AS(invoices.execute(lims::SubmitInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
+    {
+        ScopedPrincipal const paula{"paula"};
+        CHECK_THROWS_AS(invoices.execute(lims::SubmitInvoice{.invoiceId = invoice.id}), lims::Forbidden);
+    }
+    CHECK_THROWS_AS(invoices.execute(lims::SubmitInvoice{.invoiceId = lims::InvoiceId{9999}}), lims::NotFound);
+    CHECK_THROWS_AS(invoices.execute(lims::SubmitInvoice{}), lims::ValidationError);
+    CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{}), lims::ValidationError);
+    CHECK(read(invoice.id).submittedBy == "bea");
+}
+
+TEST_CASE("invoice approval: only a submitted invoice is approved, and only a billing clerk submits",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::InvoiceModel invoices;
+    {
+        ScopedPrincipal const carl{"carl"};
+        CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
+        CHECK_THROWS_AS(invoices.execute(lims::SubmitInvoice{.invoiceId = invoice.id}), lims::Forbidden);
+    }
+    CHECK(read(invoice.id).state == lims::InvoiceState::Draft);
+}
+
+// Mutation: drop the currency check from SubmitInvoice (a yen invoice is submitted with a gross no rate valued).
+TEST_CASE(
+    "invoice approval: an invoice in another currency than its company's is not submitted before a rate values it",
+    "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    execute("UPDATE billing_invoices SET currency = " + std::to_string(static_cast<int>(lims::CurrencyCode::JPY)));
+    lims::InvoiceModel invoices;
+    ScopedPrincipal const bea{"bea"};
+    CHECK_THROWS_WITH(invoices.execute(lims::SubmitInvoice{.invoiceId = invoice.id}),
+                      Catch::Matchers::ContainsSubstring("no rate values it in EUR"));
+    CHECK(read(invoice.id).state == lims::InvoiceState::Draft);
+}
+
+// Mutation: drop the state condition from the conditional update (the clerk who lost the race overwrites the winner's
+// submitter and no Conflict is raised).
+TEST_CASE("invoice approval: two clerks submitting one invoice at once cannot both succeed",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    FaultHookGuard const guard;
+    raceWith(
+        "UPDATE billing_invoices SET state = 1, submitted_by = 'ann', gross_company_num = gross_num, "
+        "gross_company_den = gross_den, deadline_at = 1, submitted_at = 1");
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 10)};
+    CHECK_THROWS_WITH(lims::test::dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = invoice.id}),
+                      Catch::Matchers::ContainsSubstring("was submitted meanwhile"));
+    lims::setFaultHook({});
+    auto const after = read(invoice.id);
+    CHECK(after.state == lims::InvoiceState::Submitted);
+    CHECK(after.submittedBy == "ann");
+}
+
+// Mutation: drop the state condition from the conditional update (the loser overwrites the winner's approver and no
+// Conflict is raised).
+TEST_CASE("invoice approval: two approvers approving one invoice at once cannot both succeed",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+    FaultHookGuard const guard;
+    raceWith("UPDATE billing_invoices SET state = 2, approved_by = 'carl'");
+    {
+        ScopedPrincipal const paula{"paula"};
+        CHECK_THROWS_WITH(lims::InvoiceModel{}.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+                          Catch::Matchers::ContainsSubstring("was approved meanwhile"));
+    }
+    lims::setFaultHook({});
+    auto const after = read(invoice.id);
+    CHECK(after.state == lims::InvoiceState::Approved);
+    CHECK(after.approvedBy == "carl");
+}
+
+// Escalation, which the design listed as hypothesis 4's second instance: nothing is scheduled. Mutation: judge the
+// scope at the site whatever the time (paula still approves after the deadline, and carl's pending list stays as it
+// was).
+TEST_CASE(
+    "Hypothesis 4 (mis-framed for escalation): an approval past its deadline goes to a company-scoped approver, "
+    "with nothing scheduled",
+    "[lims][billing][approval][h4]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
+    lims::InvoiceModel invoices;
+    auto const pendingFor = [&invoices](std::string principal) {
+        ScopedPrincipal const as{std::move(principal)};
+        return invoices.execute(lims::ListPendingApprovals{}).invoices.size();
+    };
+    {
+        ScopedClockOverride const before{lims::test::at(2026, 11, 12, 8)};
+        CHECK(pendingFor("paula") == 1U);
+        CHECK(pendingFor("carl") == 1U);  // a company role holds at the site
+        CHECK(pendingFor("tom") == 0U);   // over his limit
+        CHECK(pendingFor("bea") == 0U);   // she created it
+        ScopedPrincipal const bea{"bea"};
+        CHECK(invoices.execute(lims::GetInvoice{.invoiceId = invoice.id}).level == lims::ApprovalLevel::Site);
+    }
+    ScopedClockOverride const after{lims::test::at(2026, 11, 12, 10)};
+    CHECK(pendingFor("paula") == 0U);
+    CHECK(pendingFor("carl") == 1U);
+    {
+        ScopedPrincipal const paula{"paula"};
+        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+                          Catch::Matchers::ContainsSubstring("at company"));
+    }
+    ScopedPrincipal const carl{"carl"};
+    CHECK(invoices.execute(lims::GetInvoice{.invoiceId = invoice.id}).level == lims::ApprovalLevel::Company);
+    CHECK(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}).state == lims::InvoiceState::Approved);
+}
+
+// Hypothesis 5. Mutation: drop `submitted_by` from the submission's update (the approval made over a second rig, after
+// the first is gone, finds no submitter on the row).
+TEST_CASE("Hypothesis 5: an approval lasts across days, principals and restarts as ordinary actions",
+          "[lims][billing][approval][h5]") {
+    auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    morph::session::TokenIssuer const issuer{std::string{kSecret}, morph::session::hmacSha256};
+    {
+        ScopedClockOverride const monday{lims::test::at(2026, 11, 10)};
+        BackendRig rig{mode, 1, lims::test::limsAuthorizer(kSecret)};
+        rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "bea"));
+        auto clerk = rig.client<lims::InvoiceModel>(0);
+        CHECK(awaitQt(clerk.execute(lims::SubmitInvoice{.invoiceId = invoice.id})).state ==
+              lims::InvoiceState::Submitted);
+    }
+    // The server restarted; another principal, a day later, on another connection.
+    ScopedClockOverride const tuesday{lims::test::at(2026, 11, 11, 15)};
+    BackendRig rig{mode, 1, lims::test::limsAuthorizer(kSecret)};
+    rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "paula"));
+    auto approver = rig.client<lims::InvoiceModel>(0);
+    auto const approved = awaitQt(approver.execute(lims::ApproveInvoice{.invoiceId = invoice.id}));
+    CHECK(approved.state == lims::InvoiceState::Approved);
+    CHECK(approved.submittedBy == "bea");
+    CHECK(approved.approvedBy == "paula");
+}
+
+// Hypothesis 6, second instance: the edge sees (principal, model, action) and allows; the model sees the invoice.
+// Mutation: drop requireAuthorized from ApproveInvoice (bea's self-approval succeeds over every backend).
+TEST_CASE("Hypothesis 6: the edge lets an invoice's creator through to approve it, and the model refuses",
+          "[lims][billing][approval][h6]") {
+    auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
+    morph::session::TokenIssuer const issuer{std::string{kSecret}, morph::session::hmacSha256};
+    auto const authorizer = lims::test::limsAuthorizer(kSecret);
+    CHECK(authorizer->authorize(lims::test::signedAs(issuer, "bea"), "InvoiceModel", "ApproveInvoice"));
+    CHECK(authorizer->authorize(lims::test::signedAs(issuer, "tom"), "InvoiceModel", "ApproveInvoice"));
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+    BackendRig rig{mode, 1, authorizer};
+    rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "bea"));
+    auto client = rig.client<lims::InvoiceModel>(0);
+    CHECK_THROWS_WITH(awaitQt(client.execute(lims::ApproveInvoice{.invoiceId = invoice.id})),
+                      Catch::Matchers::ContainsSubstring("created this invoice"));
+    rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "tom"));
+    CHECK_THROWS_WITH(awaitQt(client.execute(lims::ApproveInvoice{.invoiceId = invoice.id})),
+                      Catch::Matchers::ContainsSubstring("value limit"));
+}
+
+// Mutation: drop the SubmitInvoice pair from Authorization<ApproveInvoice> (bea approves the invoice she submitted).
+TEST_CASE("invoice approval: an invoice the billing run drafted still needs a second person to approve it",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const lab = lims::test::approvalSetUp();
+    lims::test::grantService(std::string{lims::app::kSchedulePrincipal});
+    lims::InvoiceId id;
+    {
+        // What one schedule tick does for this company, called as its principal; the billing run's suite measures the
+        // dispatch.
+        ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+        ScopedPrincipal const schedule{std::string{lims::app::kSchedulePrincipal}};
+        static_cast<void>(lims::BillingRunModel{}.execute(
+            lims::RunBillingSchedule{.batch = lims::Count{Rational{50, DecimalPlaces{0}}}}));
+        auto const drafted =
+            lims::InvoiceModel{}.execute(lims::ListInvoices{.company = lims::test::seededCompany()}).invoices;
+        REQUIRE(drafted.size() == 1U);
+        CHECK(drafted[0].createdBy == lims::app::kSchedulePrincipal);
+        CHECK(drafted[0].client == lab.client);
+        id = drafted[0].id;
+    }
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25, 10)};
+    static_cast<void>(lims::test::dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = id}));
+    lims::InvoiceModel invoices;
+    {
+        ScopedPrincipal const bea{"bea"};
+        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = id}),
+                          Catch::Matchers::ContainsSubstring("submitted this invoice"));
+    }
+    ScopedPrincipal const carl{"carl"};
+    auto const approved = invoices.execute(lims::ApproveInvoice{.invoiceId = id});
+    CHECK(approved.state == lims::InvoiceState::Approved);
+    CHECK(approved.submittedBy == "bea");
+    CHECK(approved.approvedBy == "carl");
+}

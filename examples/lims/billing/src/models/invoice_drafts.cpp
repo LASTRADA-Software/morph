@@ -148,6 +148,20 @@ std::optional<std::int64_t> draftInvoice(Lightweight::DataMapper& mapper, Compan
     return invoiceId;
 }
 
+std::optional<db::InvoiceRecord> findInvoiceRecord(InvoiceId invoice) {
+    if (!invoice.hasValue()) {
+        return std::nullopt;
+    }
+    Lightweight::DataMapper mapper;
+    auto rows = mapper.Query<db::InvoiceRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::id>, "=", *invoice)
+                    .All();
+    if (rows.empty()) {
+        return std::nullopt;
+    }
+    return rows.front();
+}
+
 InvoiceView invoiceView(Lightweight::DataMapper& mapper, std::int64_t invoiceId) {
     auto const rows = mapper.Query<db::InvoiceRecord>()
                           .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::id>, "=", invoiceId)

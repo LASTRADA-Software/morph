@@ -89,6 +89,39 @@ struct GetInvoice {
     [[nodiscard]] bool validate() const noexcept { return invoiceId.hasValue(); }
 };
 
+/// @brief Submits a draft invoice for approval.
+struct SubmitInvoice {
+    /// @brief The invoice.
+    InvoiceId invoiceId;
+
+    /// @brief Whether an invoice is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return invoiceId.hasValue(); }
+
+    /// @brief Sent by its button, never per keystroke.
+    static constexpr bool explicitSubmit = true;
+};
+
+/// @brief Approves a submitted invoice.
+struct ApproveInvoice {
+    /// @brief The invoice.
+    InvoiceId invoiceId;
+
+    /// @brief Whether an invoice is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return invoiceId.hasValue(); }
+
+    /// @brief Sent by its button, never per keystroke.
+    static constexpr bool explicitSubmit = true;
+};
+
+/// @brief Lists the submitted invoices the caller could approve now.
+struct ListPendingApprovals {
+    /// @brief Whether the query is well-formed.
+    /// @return Always `true`: it names nothing.
+    [[nodiscard]] bool validate() const noexcept { return true; }
+};
+
 /// @brief Lists a company's invoices.
 struct ListInvoices {
     /// @brief The company.

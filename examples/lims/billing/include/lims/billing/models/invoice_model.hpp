@@ -57,6 +57,41 @@ public:
     /// @throws EmptyPrincipalError if no principal is authenticated.
     InvoiceView execute(const CreateInvoice& action);
 
+    /// @brief Submits a draft invoice for approval.
+    ///
+    /// Records who submitted it, its gross in the company's currency, and the approval deadline: now plus the
+    /// company's approval hours. The state moves by a conditional update, so two clerks submitting one invoice at
+    /// once cannot both succeed.
+    /// @param action The invoice.
+    /// @return The submitted invoice.
+    /// @throws ValidationError if no invoice is named, or the invoice is in another currency than its company's.
+    /// @throws NotFound if there is no such invoice.
+    /// @throws Forbidden if the caller is not a billing clerk at the invoice's company.
+    /// @throws IllegalTransition if the invoice is not a draft.
+    /// @throws Conflict if the invoice was submitted meanwhile.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    InvoiceView execute(const SubmitInvoice& action);
+
+    /// @brief Approves a submitted invoice.
+    ///
+    /// The approver holds the invoice approver role at the invoice's site before its deadline and at its company
+    /// from the deadline on, has a value limit there that covers the invoice's gross, and neither created nor
+    /// submitted it. The state moves by a conditional update, so two approvers acting at once cannot both succeed.
+    /// @param action The invoice.
+    /// @return The approved invoice.
+    /// @throws ValidationError if no invoice is named, or the submission recorded no company-currency gross.
+    /// @throws NotFound if there is no such invoice.
+    /// @throws IllegalTransition if the invoice is not submitted.
+    /// @throws Forbidden if the caller may not approve it.
+    /// @throws Conflict if the invoice was approved meanwhile.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    InvoiceView execute(const ApproveInvoice& action);
+
+    /// @brief Lists the submitted invoices the caller could approve now, judged by the rule `ApproveInvoice` is.
+    /// @param action The query.
+    /// @return The invoices by id.
+    ListInvoicesResult execute(const ListPendingApprovals& action);
+
     /// @brief Reads one invoice.
     /// @param action The invoice.
     /// @return It, with its lines.
@@ -96,6 +131,12 @@ BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListBillableLines, "ListBillabl
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::CreateInvoice, "CreateInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::CreateInvoice, ::morph::effects::changes<lims::InvoiceView>,
                         ::morph::effects::changes<lims::BillableLineView>)
+BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::SubmitInvoice, "SubmitInvoice")
+BRIDGE_REGISTER_EFFECTS(lims::SubmitInvoice, ::morph::effects::updates<lims::InvoiceView>)
+BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ApproveInvoice, "ApproveInvoice")
+BRIDGE_REGISTER_EFFECTS(lims::ApproveInvoice, ::morph::effects::updates<lims::InvoiceView>)
+BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListPendingApprovals, "ListPendingApprovals",
+                       ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::GetInvoice, "GetInvoice", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListInvoices, "ListInvoices", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

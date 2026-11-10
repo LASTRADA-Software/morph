@@ -3,19 +3,25 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "clock.hpp"
 #include "lims/app/event_wiring.hpp"
 #include "lims/app/internal_client.hpp"
 #include "lims/app/service_principals.hpp"
+#include "lims/billing/models/invoice_model.hpp"
 #include "lims/billing/models/price_list_model.hpp"
 #include "lims/lab/models/analysis_catalog_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
+#include "lims/org/dto/limit_dto.hpp"
+#include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/backend_rig.hpp"
+#include "testkit/pump.hpp"
 
 /// @file
 /// A sample with verified results, ready to publish or published, and a client set up to be billed: what every
@@ -142,6 +148,83 @@ inline std::size_t relayLabEvents() {
                                              limsAuthorizer(kServiceSecret)};
     app::InternalClient events{rig.server(), kServiceSecret, std::string{app::kEventsPrincipal}};
     return app::relayLabEvents(events);
+}
+
+/// @brief Runs @p action on a fresh @p Model as @p principal through an in-process bridge, as a client's call runs.
+///
+/// A handler that is a coroutine (a Task handler) is only built by a direct `execute`; a dispatch drives it, so a
+/// suite sends such an action this way.
+/// @tparam Model The model.
+/// @tparam Action The action.
+/// @param principal Who sends it.
+/// @param action The action.
+/// @return Its result.
+/// @throws std::exception the action's failure.
+template <typename Model, typename Action>
+auto dispatchAs(std::string const& principal, Action action) {
+    ::morph::ladder::testkit::BackendRig rig{::morph::ladder::testkit::Mode::Local, 1};
+    ::morph::session::TokenIssuer const issuer{std::string{kServiceSecret}, ::morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(signedAs(issuer, principal));
+    auto handler = rig.client<Model>(0);
+    return ::morph::ladder::testkit::awaitQt(handler.execute(std::move(action)));
+}
+
+/// @brief Billing settings for the seeded company (19 % tax, 48 approval hours, billing day 25), value limits as
+///        invoice approver: paula 100 and tom 10 at the seeded site, carl 1000 and bea 1000 at the company. Also
+///        one published, relayed sample of a client billed in EUR. Set at 09:00 on 10 November 2026.
+/// @return The sample.
+inline LabSample approvalSetUp() {
+    ::morph::ladder::ScopedClockOverride const clock{at(2026, 11, 10)};
+    grant("sam", LimsRole::Supervisor);
+    {
+        ScopedPrincipal const sam{"sam"};
+        PriceListModel{}.execute(SetBillingSettings{
+            .company = seededCompany(),
+            .receivableAccount = "1200",
+            .revenueAccount = "4000",
+            .taxAccount = "2200",
+            .roundingAccount = "6900",
+            .taxRate = Rate{::morph::math::Rational{::morph::math::Numerator{19}, ::morph::math::Denominator{100},
+                                                    ::morph::math::DecimalPlaces{6}}},
+            .approvalHours = Count{::morph::math::Rational{48, ::morph::math::DecimalPlaces{0}}},
+            .billingDay = Count{::morph::math::Rational{25, ::morph::math::DecimalPlaces{0}}}});
+        OrgModel org;
+        auto const limit = [&org](std::string principal, std::int64_t units) {
+            org.execute(
+                SetValueLimit{.principal = std::move(principal),
+                              .company = seededCompany(),
+                              .limit = Amount{::morph::math::Rational{units, ::morph::math::DecimalPlaces{2}}}});
+        };
+        limit("paula", 100);
+        limit("carl", 1000);
+        limit("tom", 10);
+        limit("bea", 1000);
+    }
+    grant("paula", LimsRole::InvoiceApprover, Scope{seededSite()});
+    grant("tom", LimsRole::InvoiceApprover, Scope{seededSite()});
+    grant("carl", LimsRole::InvoiceApprover);
+    grant("bea", LimsRole::InvoiceApprover);
+    auto lab = publishedSample();
+    billingFor(lab.client);
+    relayLabEvents();
+    return lab;
+}
+
+/// @brief `approvalSetUp`, and the client's invoice drafted by bea at the seeded site (gross 47.60).
+/// @return The invoice.
+inline InvoiceView draftedInvoice() {
+    auto const lab = approvalSetUp();
+    ::morph::ladder::ScopedClockOverride const clock{at(2026, 11, 10)};
+    ScopedPrincipal const bea{"bea"};
+    return InvoiceModel{}.execute(
+        CreateInvoice{.company = seededCompany(), .site = seededSite(), .client = lab.client});
+}
+
+/// @brief Submits @p invoice as bea at 09:00 on 10 November, dispatched as a client sends it.
+/// @param invoice The invoice.
+inline void submit(InvoiceView const& invoice) {
+    ::morph::ladder::ScopedClockOverride const clock{at(2026, 11, 10)};
+    static_cast<void>(dispatchAs<InvoiceModel>("bea", SubmitInvoice{.invoiceId = invoice.id}));
 }
 
 }  // namespace lims::test

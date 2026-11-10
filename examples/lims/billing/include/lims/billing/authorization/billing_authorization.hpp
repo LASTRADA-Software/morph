@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <array>
+#include <morph/core/registry.hpp>
+#include <morph/util/rational.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
+
 #include "lims/billing/dto/invoice_dto.hpp"
 #include "lims/billing/dto/line_dto.hpp"
 #include "lims/billing/dto/price_dto.hpp"
@@ -13,8 +20,9 @@
 
 /// @file
 /// The billing module's declared authorization: a company's billing settings are a supervisor's; its clients, price
-/// lists, prices, draft invoices and billing runs are a billing clerk's, at that company; a billable line is recorded
-/// by a service principal, and the billing schedule is run by one.
+/// lists, prices, draft invoices, their submission and billing runs are a billing clerk's, at that company; an invoice
+/// is approved by an invoice approver within a value limit, who is not the one who created or submitted it; a billable
+/// line is recorded by a service principal, and the billing schedule is run by one.
 
 namespace lims {
 
@@ -45,6 +53,62 @@ struct Authorization<SetPrice> {
 /// @brief An invoice is drafted by a billing clerk at its company.
 template <>
 struct Authorization<CreateInvoice> : CompanyRule<CreateInvoice, LimsRole::BillingClerk> {};
+
+/// @brief An invoice is submitted by a billing clerk at its company.
+template <>
+struct Authorization<SubmitInvoice> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::BillingClerk;
+
+    /// @brief The company of the invoice the payload names.
+    /// @param action The action.
+    /// @return It; an empty company when there is no such invoice.
+    [[nodiscard]] static Scope scopeOf(SubmitInvoice const& action);
+};
+
+/// @brief An invoice is approved by an invoice approver who neither created nor submitted it and whose value limit
+///        covers it: at the invoice's site while its approval is within its deadline, at its company after. The
+///        scope moving from site to company at the deadline is the escalation.
+template <>
+struct Authorization<ApproveInvoice> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::InvoiceApprover;
+
+    /// @brief The pairs: whoever created the invoice, and whoever submitted it, may not also approve it.
+    static constexpr std::array<SeparatedFrom, 2> separations{
+        SeparatedFrom{
+            .action = ::morph::model::ActionTraits<CreateInvoice>::typeId(),
+            .refusal = "created this invoice and cannot also approve it",
+        },
+        SeparatedFrom{
+            .action = ::morph::model::ActionTraits<SubmitInvoice>::typeId(),
+            .refusal = "submitted this invoice and cannot also approve it",
+        },
+    };
+
+    /// @brief The invoice's site before its deadline, its company from the deadline on.
+    /// @param action The action.
+    /// @return The scope; an empty company when there is no such invoice.
+    [[nodiscard]] static Scope scopeOf(ApproveInvoice const& action);
+
+    /// @brief The invoice's gross in its company's currency, as its submission recorded it.
+    /// @param action The action.
+    /// @return The amount; zero when there is no such invoice.
+    /// @throws ValidationError when the submission recorded no company-currency gross.
+    [[nodiscard]] static ::morph::math::Rational amountOf(ApproveInvoice const& action);
+
+    /// @brief @p principal's value limit at the company of @p scope.
+    /// @param principal The principal.
+    /// @param scope The scope `scopeOf` gave.
+    /// @return The limit, or nothing.
+    [[nodiscard]] static std::optional<::morph::math::Rational> limitOf(std::string_view principal,
+                                                                        Scope const& scope);
+
+    /// @brief Who created the invoice and who submitted it, in `separations`' order.
+    /// @param action The action.
+    /// @return The two; each empty when there is no such invoice or no submission.
+    [[nodiscard]] static std::array<std::optional<std::string>, 2> firstPerformersOf(ApproveInvoice const& action);
+};
 
 /// @brief A billing run is started by a billing clerk at its company.
 template <>

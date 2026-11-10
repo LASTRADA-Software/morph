@@ -1079,6 +1079,55 @@ resumable. The verdict rests on where the hand-rolled code lives; the tests meas
 holds. Approval escalation, the design's
 second candidate, is not scheduled work (decision 35), so this is the one instance Part B has.
 
+### 35. Invoice approval is ordinary actions on the invoice's row, and escalation is its deadline (hypothesis 5; hypothesis 4 mis-framed for escalation)
+
+`SubmitInvoice` and `ApproveInvoice` move an invoice from draft to submitted to approved; the state, who submitted and
+approved it, the approval deadline and the gross in company currency are columns of its row. The deadline is the
+submission time plus the company's approval hours. Before it, the approver's role is judged at the invoice's site (a
+role at the company holds there too); from it, only at the company: an approver at the site no longer can, and
+`ListPendingApprovals` shows the invoice to whoever could approve it now, through the same declared rule
+(`authorizationFactsOf`). The design's lifecycle names no way back from submitted, so there is none. Each transition is
+a conditional update that requires the state the action read, and a statement that matches no row is a `Conflict`, so
+two clerks submitting one invoice, or two approvers approving it, cannot both succeed. Approving an invoice that is
+not submitted is an `IllegalTransition` for everyone, asked before the rule so that it never names who created it.
+A foreign-currency invoice has no value in its company's currency until the ledger's dated rate values it, so
+`SubmitInvoice` refuses one.
+
+**Hypothesis 5 is refuted for this instance.** Measured in `tests/test_invoice_approval.cpp`: an invoice submitted
+by one principal on one rig is approved by another a day later on a new rig, in `Local`, `LocalSingleThread` and
+`Socket` mode; four eyes and the value limit hold. The lifecycle needed no state outside the row and no code shared
+with lab's verification but the declared authorization (`lims::Authorization`, `requireAuthorized`,
+`authorizationFactsOf`, `authorizationVerdict`). Requisition approval in Part C is the second instance.
+
+**Hypothesis 4 is mis-framed for escalation.** The design listed approval escalation as hypothesis 4's second
+instance, but escalation is not scheduled work: it is a deadline the rule reads when an approver acts or lists, so
+nothing has to start at the deadline or resume after a restart. Measured in the same file with the clock before and
+after the deadline. The one consequence is an effects question, not a scheduling one, measured in
+`screens/tests/test_lims_approval_inbox.cpp`: a site approver's inbox, mounted before the deadline, still lists the
+invoice after it, and shows the escalation only when it asks again, because no action ran and so no effect was
+declared or fanned out. Hypothesis 4 therefore has one instance in this design, the billing run (decision 34), and
+the design's row says so. Part C's requisition escalation is expected to take this shape.
+
+### 36. Billing's approval pairs and the approver's value limit are declared, and checked in the model (hypothesis 6, second instance)
+
+`Authorization<ApproveInvoice>` declares the invoice approver role in a scope its payload's invoice decides (site or,
+past the deadline, company), a value limit (the invoice's gross in company currency, recorded at submission, against
+the approver's limit at that company, `SetValueLimit`), and two separation-of-duties pairs: with `CreateInvoice`, and
+with `SubmitInvoice`, so an invoice the billing run drafted, its creator the schedule's service principal, still
+needs a second person. `lims/org/authorization/declared.hpp` holds a form for several pairs (`separations`,
+`firstPerformersOf`) beside lab's single one, and `authorizationFactsOf` gathers the facts a rule is judged on so the
+pending list and `requireAuthorized` judge by the same ones. The limit is compared with the invoice's gross by an exact
+comparison; no sum or conversion happens in the check, and a submission that recorded no company-currency gross
+refuses the approval.
+
+**Hypothesis 6 is confirmed for its second instance.** Measured in `tests/test_invoice_approval.cpp`:
+`LimsAuthorizer` allows both the invoice's creator and an approver over their limit (it sees the principal, the model
+and the action), and the model refuses both, in every mode; the clerk who submitted a run-drafted invoice is refused
+too. The same hand-rolled guarantee recurred: each declared action's handler calls `requireRoleSomewhere` and
+`requireAuthorized` itself (32 and 28 call sites in the modules' sources), the edge's table restates every
+declaration by hand (37 entries), and the coverage test lists every mutating action by hand because nothing
+enumerates a model's actions publicly. Together they are the case for a framework seam.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so

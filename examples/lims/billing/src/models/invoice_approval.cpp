@@ -1,0 +1,166 @@
+// SPDX-License-Identifier: Apache-2.0
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlStatement.hpp>
+#include <Lightweight/SqlTransaction.hpp>
+#include <algorithm>
+#include <cstdint>
+#include <morph/session/session.hpp>
+#include <string>
+
+#include "lims/billing/authorization/billing_authorization.hpp"
+#include "lims/billing/core/fault_hook.hpp"
+#include "lims/billing/db/billing_entity.hpp"
+#include "lims/billing/db/billing_store.hpp"
+#include "lims/billing/models/invoice_model.hpp"
+#include "lims/billing/models/price_list_model.hpp"
+#include "lims/org/core/errors.hpp"
+#include "lims/org/core/model_support.hpp"
+#include "lims/org/models/org_model.hpp"
+
+namespace lims {
+
+namespace {
+
+constexpr std::int64_t kMillisPerHour = 3'600'000;
+
+/// @brief The row of @p invoice.
+/// @param invoice The invoice.
+/// @param action The action's name, for the refusal.
+/// @return The row.
+/// @throws NotFound if there is no such invoice.
+[[nodiscard]] db::InvoiceRecord invoiceRecord(InvoiceId invoice, char const* action) {
+    auto row = findInvoiceRecord(invoice);
+    if (!row.has_value()) {
+        throw NotFound{std::string{action} + ": invoice " + std::to_string(*invoice) + " does not exist"};
+    }
+    return *row;
+}
+
+/// @brief Runs @p update, a conditional update of invoice @p id from @p from, and counts the rows it changed.
+///
+/// A fault point sits between the caller's read and this write, so a test makes a concurrent action win it.
+/// @tparam Set Callable taking the update's query builder.
+/// @param mapper The caller's mapper, inside its transaction.
+/// @param invoiceId The invoice.
+/// @param from The state the caller read and requires still.
+/// @param set Adds the columns to change.
+/// @return Whether exactly one row matched.
+template <typename Set>
+[[nodiscard]] bool updateInvoiceIf(Lightweight::DataMapper& mapper, std::int64_t invoiceId, InvoiceState from,
+                                   Set const& set) {
+    faultPoint("invoice.beforeStateChange", mapper.Connection());
+    auto query = mapper.Connection().Query(db::InvoiceRecord::TableName).Update();
+    set(query);
+    (void)query.Where("id", "=", invoiceId).Where("state", "=", static_cast<int>(from));
+    Lightweight::SqlStatement statement{mapper.Connection()};
+    return statement.ExecuteDirect(query.ToSql()).NumRowsAffected() == 1U;
+}
+
+}  // namespace
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+InvoiceView InvoiceModel::execute(const SubmitInvoice& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"SubmitInvoice: an invoice is required"};
+    }
+    requireRoleSomewhere<SubmitInvoice>();
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto const row = invoiceRecord(action.invoiceId, "SubmitInvoice");
+    requireAuthorized(action);
+    if (row.state.Value() != static_cast<int>(InvoiceState::Draft)) {
+        throw IllegalTransition{"SubmitInvoice: only a draft is submitted"};
+    }
+    CompanyId const company{row.companyId.Value()};
+    auto const currency = static_cast<CurrencyCode>(row.currency.Value());
+    auto const companyView = OrgModel::findCompany(company);
+    if (!companyView.has_value()) {
+        throw NotFound{"SubmitInvoice: company " + std::to_string(*company) + " does not exist"};
+    }
+    auto const base = companyView->baseCurrency;
+    if (currency != base) {
+        throw ValidationError{"SubmitInvoice: invoice " + std::to_string(*action.invoiceId) + " is in " +
+                              std::string{currencyName(currency)} + " and no rate values it in " +
+                              std::string{currencyName(base)}};
+    }
+    auto const settings = PriceListModel::settingsOf(company);
+    if (!settings.has_value()) {
+        throw NotFound{"SubmitInvoice: company " + std::to_string(*company) + " has no billing settings"};
+    }
+    auto const& hoursValue = *settings->approvalHours;
+    std::int64_t const hours = hoursValue.numerator / hoursValue.denominator;
+    std::int64_t const now = nowMillis();
+    // The gross in the company's currency is what the approver's limit is judged against. Here the invoice is in that
+    // currency, so it is the invoice's own gross.
+    if (!updateInvoiceIf(mapper, static_cast<std::int64_t>(row.id.Value()), InvoiceState::Draft, [&](auto& query) {
+            query.Set("state", static_cast<int>(InvoiceState::Submitted))
+                .Set("submitted_by", ::morph::session::current()->principal)
+                .Set("submitted_at", now)
+                .Set("deadline_at", now + (hours * kMillisPerHour))
+                .Set("gross_company_num", row.grossNum.Value())
+                .Set("gross_company_den", row.grossDen.Value());
+        })) {
+        throw Conflict{"SubmitInvoice: invoice " + std::to_string(*action.invoiceId) + " was submitted meanwhile"};
+    }
+    sqlTxn.Commit();
+    return invoiceView(mapper, static_cast<std::int64_t>(row.id.Value()));
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+InvoiceView InvoiceModel::execute(const ApproveInvoice& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"ApproveInvoice: an invoice is required"};
+    }
+    requireRoleSomewhere<ApproveInvoice>();
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto const row = invoiceRecord(action.invoiceId, "ApproveInvoice");
+    // Before the rule, so approving an approved invoice is an IllegalTransition for everyone and not a refusal that
+    // names who created it.
+    if (row.state.Value() != static_cast<int>(InvoiceState::Submitted)) {
+        throw IllegalTransition{"ApproveInvoice: only a submitted invoice is approved"};
+    }
+    requireAuthorized(action);
+    if (!updateInvoiceIf(mapper, static_cast<std::int64_t>(row.id.Value()), InvoiceState::Submitted, [](auto& query) {
+            query.Set("state", static_cast<int>(InvoiceState::Approved))
+                .Set("approved_by", ::morph::session::current()->principal);
+        })) {
+        throw Conflict{"ApproveInvoice: invoice " + std::to_string(*action.invoiceId) + " was approved meanwhile"};
+    }
+    sqlTxn.Commit();
+    return invoiceView(mapper, static_cast<std::int64_t>(row.id.Value()));
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+ListInvoicesResult InvoiceModel::execute(const ListPendingApprovals& action) {
+    static_cast<void>(action);
+    std::string const principal = currentPrincipal();
+    ListInvoicesResult result;
+    if (principal.empty()) {
+        return result;
+    }
+    Lightweight::DataMapper mapper;
+    auto const rows = mapper.Query<db::InvoiceRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::state>, "=",
+                                 static_cast<int>(InvoiceState::Submitted))
+                          .All();
+    for (auto const& row : rows) {
+        ApproveInvoice const approve{.invoiceId = InvoiceId{static_cast<std::int64_t>(row.id.Value())}};
+        try {
+            if (authorizationVerdict(authorizationFactsOf(approve, principal).facts) == Verdict::Allowed) {
+                result.invoices.push_back(invoiceView(mapper, static_cast<std::int64_t>(row.id.Value())));
+            }
+        } catch (ValidationError const&) {
+            continue;  // no company-currency value: nobody can approve it, so it is nobody's to act on
+        }
+    }
+    std::ranges::sort(result.invoices, {}, [](InvoiceView const& invoice) { return *invoice.id; });
+    return result;
+}
+
+}  // namespace lims

@@ -44,4 +44,9 @@ namespace lims {
 /// @throws ValidationError if a row holds a state or currency outside its enumeration.
 [[nodiscard]] InvoiceView invoiceView(Lightweight::DataMapper& mapper, std::int64_t invoiceId);
 
+/// @brief The row of invoice @p invoice.
+/// @param invoice The invoice.
+/// @return It, or nothing when there is no such invoice.
+[[nodiscard]] std::optional<db::InvoiceRecord> findInvoiceRecord(InvoiceId invoice);
+
 }  // namespace lims

@@ -2,7 +2,9 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <morph/core/registry.hpp>
 #include <morph/session/session.hpp>
@@ -47,6 +49,9 @@ namespace lims {
 ///   `static constexpr std::string_view sameActorRefusal` (the refusal's words) and
 ///   `static std::optional<std::string> firstPerformerOf(Action const&)` (who performed the first half on the same
 ///   subject) — a separation-of-duties pair: the principal may not be that performer;
+/// - `static constexpr std::array<SeparatedFrom, N> separations` and
+///   `static std::array<std::optional<std::string>, N> firstPerformersOf(Action const&)` — several pairs, each
+///   with its own refusal, answered in the same order: the principal may not be any of those performers;
 /// - `static constexpr bool notOnSelf = true` and `static std::string subjectOf(Action const&)` — the principal the
 ///   action is done to: the caller may not be that principal, so nobody sets their own limit or grants themselves a
 ///   role.
@@ -200,7 +205,84 @@ void requireRoleSomewhere() {
     }
 }
 
+/// @brief One separation-of-duties pair of an action with several: the first half's action id and the refusal.
+struct SeparatedFrom {
+    /// @brief The first half's registered action id.
+    std::string_view action;
+    /// @brief What the refusal says after the principal's name, such as "created this invoice and cannot also
+    ///        approve it".
+    std::string_view refusal;
+};
+
+/// @brief Whether @p Action declares several separation-of-duties pairs: `separations`, and `firstPerformersOf`
+///        answering who performed each pair's first half on the same subject, in the same order.
+/// @tparam Action The action type.
+template <typename Action>
+concept DeclaresSeparations = DeclaresRule<Action> && requires(Action const& action) {
+    { Authorization<Action>::separations.size() } -> std::convertible_to<std::size_t>;
+    { Authorization<Action>::firstPerformersOf(action)[0] } -> std::convertible_to<std::optional<std::string>>;
+};
+
+/// @brief A rule's facts for one action and principal, with where it was judged and the words a same-actor refusal
+///        uses.
+struct JudgedFacts {
+    /// @brief The facts.
+    AuthorizationFacts facts;
+    /// @brief The scope, in words: "at company 2", or "in any scope".
+    std::string where;
+    /// @brief The refusal's words when the verdict is `SameActor`; empty without a pair.
+    std::string sameActorRefusal;
+};
+
 namespace detail {
+
+/// @brief Gathers what @p Action's rule judges @p principal on, in @p scope or, when there is none, in any scope.
+/// @tparam Action A declared action.
+/// @param action The action.
+/// @param principal The principal.
+/// @param scope The scope the rule is judged in; empty for a rule that needs the role in some scope.
+/// @return The facts, where they were judged, and a same-actor refusal's words.
+template <typename Action>
+[[nodiscard]] JudgedFacts judgedFactsIn(Action const& action, std::string const& principal,
+                                        std::optional<Scope> const& scope) {
+    using Rule = Authorization<Action>;
+    JudgedFacts judged{.facts = AuthorizationFacts{.principal = principal,
+                                                   .required = declaredRole<Action>(),
+                                                   .held = {},
+                                                   .firstPerformer = std::nullopt,
+                                                   .notOnSelfSubject = std::nullopt,
+                                                   .amount = std::nullopt,
+                                                   .limit = std::nullopt},
+                       .where = "in any scope",
+                       .sameActorRefusal = {}};
+    if (scope.has_value()) {
+        judged.facts.held = OrgModel::rolesIn(principal, *scope);
+        judged.where = "at " + scopeName(*scope);
+        if constexpr (DeclaresValueLimit<Action>) {
+            judged.facts.amount = Rule::amountOf(action);
+            judged.facts.limit = Rule::limitOf(principal, *scope);
+        }
+    } else {
+        judged.facts.held = OrgModel::rolesAnywhere(principal);
+    }
+    if constexpr (DeclaresSeparation<Action>) {
+        judged.facts.firstPerformer = Rule::firstPerformerOf(action);
+        judged.sameActorRefusal = std::string{Rule::sameActorRefusal};
+    } else if constexpr (DeclaresSeparations<Action>) {
+        auto const performers = Rule::firstPerformersOf(action);
+        for (std::size_t pair = 0; pair < performers.size(); ++pair) {
+            if (performers.at(pair) == principal) {
+                judged.facts.firstPerformer = performers.at(pair);
+                judged.sameActorRefusal = std::string{Rule::separations.at(pair).refusal};
+                break;
+            }
+        }
+    }
+    if constexpr (DeclaresNotOnSelf<Action>) {
+        judged.facts.notOnSelfSubject = Rule::subjectOf(action);
+    }
+    return judged;
+}
 
 /// @brief Judges @p action against its declaration in @p scope, or in any scope when there is none.
 /// @tparam Action A declared action.
@@ -209,57 +291,51 @@ namespace detail {
 /// @throws Forbidden with the reason, in words, when the verdict is not `Allowed`.
 template <typename Action>
 void judge(Action const& action, std::optional<Scope> const& scope) {
-    using Rule = Authorization<Action>;
     std::string const principal = ::morph::session::current()->principal;
-    auto const role = declaredRole<Action>();
-    AuthorizationFacts facts{.principal = principal,
-                             .required = role,
-                             .held = {},
-                             .firstPerformer = std::nullopt,
-                             .notOnSelfSubject = std::nullopt,
-                             .amount = std::nullopt,
-                             .limit = std::nullopt};
-    std::string where = "in any scope";
-    if (scope.has_value()) {
-        facts.held = OrgModel::rolesIn(principal, *scope);
-        where = "at " + scopeName(*scope);
-        if constexpr (DeclaresValueLimit<Action>) {
-            facts.amount = Rule::amountOf(action);
-            facts.limit = Rule::limitOf(principal, *scope);
-        }
-    } else {
-        facts.held = OrgModel::rolesAnywhere(principal);
-    }
-    if constexpr (DeclaresSeparation<Action>) {
-        facts.firstPerformer = Rule::firstPerformerOf(action);
-    }
-    if constexpr (DeclaresNotOnSelf<Action>) {
-        facts.notOnSelfSubject = Rule::subjectOf(action);
-    }
+    auto const judged = judgedFactsIn(action, principal, scope);
     std::string const actionType{::morph::model::ActionTraits<Action>::typeId()};
-    Verdict const verdict = authorizationVerdict(facts);
+    Verdict const verdict = authorizationVerdict(judged.facts);
     if (verdict == Verdict::Allowed) {
         return;
     }
     if (verdict == Verdict::MissingRole) {
-        throw Forbidden{actionType + ": '" + principal + "' does not hold " + roleWords(role) + " " + where};
+        throw Forbidden{actionType + ": '" + principal + "' does not hold " + roleWords(declaredRole<Action>()) + " " +
+                        judged.where};
     }
     if (verdict == Verdict::OnSelf) {
         throw Forbidden{actionType + ": '" + principal + "' may not do this to themselves"};
     }
     if (verdict == Verdict::NoLimit) {
-        throw Forbidden{actionType + ": '" + principal + "' has no value limit " + where};
+        throw Forbidden{actionType + ": '" + principal + "' has no value limit " + judged.where};
     }
     if (verdict == Verdict::OverLimit) {
-        throw Forbidden{actionType + ": the amount is above '" + principal + "''s value limit " + where};
+        throw Forbidden{actionType + ": the amount is above '" + principal + "''s value limit " + judged.where};
     }
-    if constexpr (DeclaresSeparation<Action>) {
-        throw Forbidden{actionType + ": '" + principal + "' " + std::string{Rule::sameActorRefusal}};
+    if (!judged.sameActorRefusal.empty()) {
+        throw Forbidden{actionType + ": '" + principal + "' " + judged.sameActorRefusal};
     }
     throw Forbidden{actionType + ": refused"};
 }
 
 }  // namespace detail
+
+/// @brief Gathers what @p Action's rule judges @p principal on, from the declaration and the payload.
+///
+/// `requireAuthorized` judges by these facts, and a list that shows what a principal could do now asks for the same
+/// ones, so the rule is evaluated in one place.
+/// @tparam Action A declared action whose scope the payload names, or that needs none.
+/// @param action The action.
+/// @param principal The principal.
+/// @return The facts, where they were judged, and a same-actor refusal's words.
+template <typename Action>
+    requires DeclaresRule<Action> && (!DeclaresModelScope<Action>)
+[[nodiscard]] JudgedFacts authorizationFactsOf(Action const& action, std::string const& principal) {
+    if constexpr (DeclaresScope<Action>) {
+        return detail::judgedFactsIn(action, principal, std::optional<Scope>{Authorization<Action>::scopeOf(action)});
+    } else {
+        return detail::judgedFactsIn(action, principal, std::nullopt);
+    }
+}
 
 /// @brief Checks @p action against its declaration, as the authenticated principal.
 ///

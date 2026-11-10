@@ -369,7 +369,8 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
                    lims::OpenPeriod, lims::BeginClosePeriod, lims::CreateDraftEntry, lims::PostEntry,
                    lims::ReverseEntry, lims::ClosePeriod, lims::SetExchangeRate, lims::SetBillingSettings,
                    lims::RegisterBillingClient, lims::CreatePriceList, lims::SetPrice, lims::RecordBillableLine,
-                   lims::CreateInvoice, lims::StartBillingRun, lims::AdvanceBillingRun, lims::RunBillingSchedule>;
+                   lims::CreateInvoice, lims::SubmitInvoice, lims::ApproveInvoice, lims::StartBillingRun,
+                   lims::AdvanceBillingRun, lims::RunBillingSchedule>;
     std::set<std::string_view> listed;
     std::set<std::string_view> declared;
     std::apply(
@@ -463,6 +464,8 @@ TEST_CASE("declared authorization: the edge's table lists every declared role, a
     CHECK(lims::app::requiredRole("SetPrice") == lims::LimsRole::BillingClerk);
     CHECK(lims::app::requiredRole("RecordBillableLine") == lims::LimsRole::Service);
     CHECK(lims::app::requiredRole("CreateInvoice") == lims::LimsRole::BillingClerk);
+    CHECK(lims::app::requiredRole("SubmitInvoice") == lims::LimsRole::BillingClerk);
+    CHECK(lims::app::requiredRole("ApproveInvoice") == lims::LimsRole::InvoiceApprover);
     CHECK(lims::app::requiredRole("StartBillingRun") == lims::LimsRole::BillingClerk);
     CHECK(lims::app::requiredRole("AdvanceBillingRun") == lims::LimsRole::BillingClerk);
     CHECK(lims::app::requiredRole("RunBillingSchedule") == lims::LimsRole::Service);
