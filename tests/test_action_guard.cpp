@@ -3,23 +3,23 @@
 // Action guards: a check an action declares (`using guard = ...;`), which the framework runs on the decoded action on
 // every execution site, after the validator and before Model::execute.
 
+#include <array>
 #include <atomic>
-#include <chrono>
-#include <future>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
-#include <array>
+#include <chrono>
 #include <core/async/Task.hpp>
 #include <cstdint>
+#include <future>
 #include <memory>
 #include <morph/core/action_guard.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/coroutine.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
+#include <morph/forms/forms.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/journal.hpp>
-#include <morph/forms/forms.hpp>
 #include <morph/session/session.hpp>
 #include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
@@ -387,7 +387,8 @@ TEST_CASE("action guard: executeChecked validates, guards and returns execute's 
     guard_test::resetCounters();
     guard_test::LineModel lines;
     guard_test::Line line;
-    line.qty = morph::math::Rational{morph::math::Numerator{3}, morph::math::Denominator{1}, morph::math::DecimalPlaces{2}};
+    line.qty =
+        morph::math::Rational{morph::math::Numerator{3}, morph::math::Denominator{1}, morph::math::DecimalPlaces{2}};
     line.price =
         morph::math::Rational{morph::math::Numerator{5}, morph::math::Denominator{1}, morph::math::DecimalPlaces{2}};
     line.total =
@@ -439,8 +440,7 @@ TEST_CASE("action guard: a Task handler's refusal is journaled", "[guard][corout
         morph::exec::ThreadPoolExecutor pool{2};
         auto const strands = std::make_shared<morph::exec::detail::ModelStrands>(pool);
         morph::exec::detail::ModelId const key{21};
-        auto executor =
-            std::make_shared<morph::exec::detail::TaskResumer>(strands, key, morph::session::Context{});
+        auto executor = std::make_shared<morph::exec::detail::TaskResumer>(strands, key, morph::session::Context{});
         auto holder = morph::model::detail::defaultRegistry().create("T_GuardAsyncAccount");
         holder->attachActionLog(log, std::string{});
         std::promise<std::exception_ptr> outcome;

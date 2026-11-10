@@ -306,8 +306,8 @@ struct IModelHolder {
     ///
     /// Set by `replay()` on the holder it creates, for its dispatch loop, and cleared before it returns the holder.
     /// Only `replay()` may call it: it is public because `replay()` is not a friend, and any other caller switches
-    /// the guards of that holder off. The mark is the holder's, not the thread's, so another holder dispatched to while a
-    /// replay runs is guarded as always.
+    /// the guards of that holder off. The mark is the holder's, not the thread's, so another holder dispatched to
+    /// while a replay runs is guarded as always.
     /// @param reconstructing `true` while replay re-applies recorded entries to this instance.
     void markReconstructing(bool reconstructing) noexcept { _reconstructing = reconstructing; }
 

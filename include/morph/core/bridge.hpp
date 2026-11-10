@@ -595,10 +595,9 @@ private:
 ///        `core::async::Task`: the local-path twin of `localOp`.
 ///
 /// Recomputes the action's computed fields and enforces its validator exactly
-/// as `localOp` does, runs the action's guard as `localOp` does, starts the handler on the model's strand, and -- when its
-/// Task completes -- journals the outcome and reports it through @p done. See
-/// `docs/spec/core/coroutines.md`. Declared in every build, so `executeVia` can
-/// name it; a `MORPH_CLIENT_ONLY` build never instantiates it.
+/// as `localOp` does, runs the action's guard as `localOp` does, starts the handler on the model's strand, and -- when
+/// its Task completes -- journals the outcome and reports it through @p done. See `docs/spec/core/coroutines.md`.
+/// Declared in every build, so `executeVia` can name it; a `MORPH_CLIENT_ONLY` build never instantiates it.
 /// @tparam Model  Concrete model type.
 /// @tparam Action Concrete action type.
 /// @param holder      The model instance; kept alive by @p done's owner until it has run.

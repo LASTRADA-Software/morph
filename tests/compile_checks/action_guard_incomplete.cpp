@@ -18,7 +18,6 @@ struct Model {
     int execute(Probe const&) { return 0; }
 };
 
-
 }  // namespace probe
 
 BRIDGE_REGISTER_MODEL(probe::Model, "P_GuardModel")
