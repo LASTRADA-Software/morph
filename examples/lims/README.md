@@ -1226,14 +1226,21 @@ probe, without the second registration, resolves).
 
 **(ii) A write outside any action derives no changes — confirmed, and not a gap.** `RecordBillableLine` run in process
 outside any dispatch writes the line and no watcher of `Billing_Line` is told; the same write dispatched through the
-events client is heard. Changes are derived from executed actions by design, and the internal client is how a
-reaction becomes one (decision 32).
+events client is heard. Changes are derived from executed actions by design: the backend fans out "after an
+`execute` succeeds" (`docs/spec/core/backend.md`, Fan-out), and effects "are declared, not computed"
+(`docs/KEEPING-SCREENS-CURRENT.md`). The internal client is how a reaction becomes an action (decision 32).
 
-This is the second place decision 26's finding appears — org's role changes not reaching lab's sample list was the
-first, inferred; billing's posting into the ledger is measured here — so cause (i) is a missing framework seam,
-filed against `include/morph`: a way for the code that composes modules to state that one module's action changes
-another module's records. A screen over these records, rather than a raw watching connection, was not measured; its
-refresh is driven by the same `changes` events, so it is inferred to behave the same.
+The measured miss exists only in the shared-transaction mode. The shipped server posts dispatched, and there the
+ledger's half runs as the ledger's own `RecordPosting`, which a watching accountant hears (decision 38's test). The
+shared transaction is itself the workaround for hypothesis 1's missing seam — two modules' actions as one fact, each
+keeping its effects — and if that seam lands this instance goes with it. The instance no other seam fixes is decision
+26's, still inferred: org's `AssignRole` changes which samples lab's list returns, a change of visibility rather than a
+write, which neither dispatching nor a multi-action seam would make lab's screen hear. The one existing mechanism that
+carries a change from one record to another, `record::derivedFrom`, is refused on a keyed record, and both
+`Ledger_Entry` and `SampleView` are keyed. So cause (i) is filed against `include/morph` as a missing seam: a way for
+the code that composes modules to state that one module's action changes another module's records. A screen over these
+records, rather than a raw watching connection, was not measured; its refresh is driven by the same `changes` events,
+so it is inferred to behave the same.
 
 ### 40. An invoice change in one company reaches another company's watching clerk (hypothesis 7, first instance)
 
