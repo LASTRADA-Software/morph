@@ -174,6 +174,18 @@ never look at the two remote-path callables. See
 [backend.md](backend.md), "Why the callables are function pointers", for the
 measurement and for the borrow contract that shape carries.
 
+**`localOp` and `localTaskOp` run the action's guard.** After the validator
+and immediately before `Model::execute` (for a `Task` handler, before the Task
+is created), both call `ActionGuard<Action>::check` when the action declares
+one, under the call's session on the model's strand, in a `try` of its own: a
+refusal resolves the `Completion` through `onError` and is journaled as
+`Outcome::Failed` when the session names a principal, exactly as the server's
+runners do, so a guarded action is refused identically on `LocalBackend` and on
+every remote topology. Each compares, once per action type, its own view of
+whether the action is guarded with the one its registration recorded, and
+throws `std::logic_error` naming the action when they differ. See
+[action_guards.md](action_guards.md).
+
 **`localOp` is compiled — and so needs `Model::execute`'s definition to
 link — every time `executeVia<Model, Action>` is instantiated, regardless of
 which backend ends up installed at runtime.** Only `LocalBackend::execute`

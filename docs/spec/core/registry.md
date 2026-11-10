@@ -669,6 +669,16 @@ class ActionDispatcher {
   failure — is stamped with `detail::actionPayloadSchema<Action>()` in
   `LogEntry::schema`, and the same value is filed under `(modelId, actionId)`
   for `schemaFor()`.
+- **Action guards.** Both runners — `runHandler` for an ordinary handler and
+  `runTaskHandler` for a `Task` handler — run the action's guard
+  (`ActionGuard<Action>::check`, when the action declares one) after the
+  validator and immediately before `Model::execute`, on the model's strand under
+  the execute's session, in a `try` of its own: a refusal is journaled as
+  `Outcome::Failed` when the session names a principal, and propagates as a
+  throw from `execute` would. The guard is skipped while `journal::isReplaying()`
+  holds, and `evaluate` never runs it. `registerAction` records whether the
+  action is guarded in its `ActionEntry`, which `actionFacts(modelType)` reads.
+  See [action_guards.md](action_guards.md).
 - `dispatch` looks up the runner and invokes it; throws `std::runtime_error` for
   unknown pairs, and `std::logic_error` for a Task handler, whose result it
   cannot wait for.
