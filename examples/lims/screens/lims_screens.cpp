@@ -4,7 +4,10 @@
 
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <expected>
+#include <glaze/glaze.hpp>
+#include <map>
 #include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
@@ -20,6 +23,11 @@
 #include <utility>
 #include <vector>
 
+#include "billing_screens.hpp"
+#include "i18n_data.hpp"
+#include "inventory_screens.hpp"
+#include "lab_screens.hpp"
+#include "ledger_screens.hpp"
 #include "lims/lab/dto/analysis_dto.hpp"
 #include "lims/lab/dto/ignition_dto.hpp"
 #include "lims/lab/dto/offline_dto.hpp"
@@ -35,6 +43,9 @@
 #include "lims/org/models/auth_model.hpp"
 #include "lims/org/models/org_model.hpp"
 #include "org_screens.hpp"
+#include "scenario/scenario.hpp"
+#include "scenario/scenario_client.hpp"
+#include "shell_screens.hpp"
 
 namespace lims::screens {
 
@@ -498,84 +509,178 @@ ui::Screen loginScreen() {
 
 }  // namespace
 
+namespace {
+
+/// @brief Whether the environment variable LIMS_SCENARIO is `1`.
+/// @return True when the scenario is wanted.
+[[nodiscard]] bool scenarioWanted() {
+    // Read once, before any thread starts.
+    char const* const value = std::getenv("LIMS_SCENARIO");  // NOLINT(concurrency-mt-unsafe)
+    return value != nullptr && std::string_view{value} == "1";
+}
+
+/// @brief Appoints @p principal Supervisor at the seeded company by dispatching the ordinary bootstrap `AssignRole`
+///        as that person, through a bridge over a local backend that carries their session.
+/// @param principal The person to appoint.
+void appointFirstSupervisor(std::string_view principal) {
+    ScenarioClient client{principal};
+    static_cast<void>(client.call<OrgModel>(AssignRole{.principal = std::string{principal},
+                                                       .role = LimsRole::Supervisor,
+                                                       .company = OrgModel::seededCompany(),
+                                                       .site = {}}));
+}
+
+}  // namespace
+
 void prepareLocal(std::string_view user) {
     // A development secret: local mode signs nothing that leaves the process.
     auth::setTokenIssuer(
         std::make_shared<morph::session::TokenIssuer>("lims-local-development", morph::session::hmacSha256));
     // A fresh lab has no role assignments, and every write on a sample needs a role, so a fresh local client could
-    // register nothing. The first supervisor is appointed by dispatching the ordinary bootstrap `AssignRole` as the
-    // user, through a bridge over a local backend that carries the user's session: it applies only while the lab has
-    // no supervisor, names the user as its maker, and is journalled like any dispatched action. Once a lab has a
-    // supervisor, its roles are its own business and are left alone.
-    if (user.empty() || OrgModel::supervisorExists()) {
-        return;
+    // register nothing. The first supervisor is appointed by dispatching the ordinary bootstrap `AssignRole` as that
+    // person: it applies only while the lab has no supervisor, names the appointed person as its maker, and is
+    // journalled like any dispatched action. Once a lab has a supervisor, its roles are its own business and are
+    // left alone. The scenario appoints its lab director, whose roles then come from the scenario itself.
+    bool const scenario = scenarioWanted();
+    if (!OrgModel::supervisorExists()) {
+        if (scenario) {
+            appointFirstSupervisor("anna");
+        } else if (!user.empty()) {
+            appointFirstSupervisor(user);
+        }
     }
-    morph::exec::ThreadPoolExecutor workers{1};
-    morph::exec::MainThreadExecutor owner;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workers), owner};
-    morph::session::Context session;
-    session.principal = std::string{user};
-    bridge.setDefaultSession(std::move(session));
-    morph::bridge::BridgeHandler<OrgModel> org{bridge, &owner};
-    bool done = false;
-    std::exception_ptr failure;
-    org.execute(AssignRole{.principal = std::string{user},
-                           .role = LimsRole::Supervisor,
-                           .company = OrgModel::seededCompany(),
-                           .site = {}})
-        .then([&done](auto const&) { done = true; })
-        .onError([&done, &failure](std::exception_ptr error) {
-            failure = std::move(error);
-            done = true;
-        });
-    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{30};
-    while (!done && std::chrono::steady_clock::now() < deadline) {
-        owner.runFor(std::chrono::milliseconds{10});
+    if (scenario) {
+        seedScenario();
     }
-    if (failure) {
-        std::rethrow_exception(failure);
+}
+
+namespace {
+
+/// @brief The ids of the screens that predate the modules' files, in registration order.
+/// @return The ids.
+[[nodiscard]] std::vector<std::string_view> legacyScreenIds() {
+    return {kRegister, kLifecycle, kResults, kSample, kIgnition, kLogin};
+}
+
+/// @brief Registers the screens that predate the modules' files.
+/// @param screens The registry.
+/// @param listed The list the screens are appended to.
+void addLegacyScreens(ui::ScreenRegistry& screens, std::vector<ListedScreen>& listed) {
+    auto const list = [&](std::string_view id, std::string title, ui::Screen const& screen, bool isPublic = false) {
+        listed.push_back({.id = std::string{id},
+                          .module = {},
+                          .title = ui::Handle<std::string>{std::move(title)},
+                          .registered = screens.add(screen),
+                          .isPublic = isPublic});
+    };
+    list(kRegister, "Register a sample", registerScreen());
+    list(kLifecycle, "Lifecycle", lifecycleScreen());
+    list(kResults, "Results", resultsScreen());
+    list(kSample, "Sample", sampleScreen());
+    list(kIgnition, "Ignition tests", ignitionScreen());
+    list(kLogin, "Sign in", loginScreen(), true);
+}
+
+/// @brief The group a module's screens are listed under: the module's name, which the navigator shows as it is.
+/// @param module The module's id.
+/// @return The name in English.
+[[nodiscard]] std::string groupOf(std::string const& module) {
+    static std::map<std::string, std::string> const names{
+        {"org", "Organisation"}, {"lab", "Laboratory"},      {"billing", "Billing"},
+        {"ledger", "Ledger"},    {"inventory", "Inventory"}, {"shell", "Home"},
+    };
+    auto const found = names.find(module);
+    return found == names.end() ? module : found->second;
+}
+
+}  // namespace
+
+std::vector<std::string> allScreenIds() {
+    std::vector<std::string> ids;
+    for (auto const& module : {legacyScreenIds(), orgScreenIds(), labScreenIds(), billingScreenIds(),
+                               ledgerScreenIds(), inventoryScreenIds(), shellScreenIds()}) {
+        for (std::string_view const id : module) {
+            ids.emplace_back(id);
+        }
     }
-    if (!done) {
-        throw std::runtime_error{"lims: appointing the local user as the first supervisor did not finish within 30 s"};
+    return ids;
+}
+
+std::expected<void, morph::ui::Refusal> addCatalogues(morph::ui::UiRegistry& served) {
+    for (std::string_view const locale : {"en", "de"}) {
+        std::map<std::string, std::string> merged;
+        std::map<std::string, std::string> owner;
+        for (i18n::Embedded const& file : i18n::kEmbedded) {
+            if (file.locale != locale) {
+                continue;
+            }
+            std::string const name = std::string{locale} + "/" + std::string{file.module} + ".json";
+            std::map<std::string, std::string> messages;
+            std::string const bytes{reinterpret_cast<char const*>(file.bytes), file.size};
+            if (auto const failure = glz::read_json(messages, bytes)) {
+                return std::unexpected(morph::ui::Refusal{
+                    .document = "i18n/" + std::string{locale} + ".json",
+                    .path = {},
+                    .reason = name + " is not a flat object of messages: " + glz::format_error(failure, bytes)});
+            }
+            for (auto& [key, message] : messages) {
+                auto const [position, inserted] = owner.emplace(key, name);
+                if (!inserted) {
+                    return std::unexpected(morph::ui::Refusal{
+                        .document = "i18n/" + std::string{locale} + ".json",
+                        .path = {},
+                        .reason = "the key " + key + " is in both " + position->second + " and " + name});
+                }
+                merged.emplace(key, std::move(message));
+            }
+        }
+        std::string bytes;
+        if (auto const failure = glz::write_json(merged, bytes)) {
+            return std::unexpected(morph::ui::Refusal{.document = "i18n/" + std::string{locale} + ".json",
+                                                      .path = {},
+                                                      .reason = "the merged catalogue cannot be written"});
+        }
+        if (auto added = served.addFile(morph::ui::BundleFile{
+                .kind = "messages", .id = "i18n/" + std::string{locale} + ".json", .bytes = std::move(bytes)});
+            !added) {
+            return added;
+        }
     }
+    return {};
 }
 
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundle() {
     ui::ScreenRegistry screens;
-    struct Listed {
-        std::string id;
-        std::string title;
-        decltype(screens.add(registerScreen())) registered;
-    };
-    std::vector<Listed> listed;
-    listed.push_back(
-        {.id = std::string{kRegister}, .title = "Register a sample", .registered = screens.add(registerScreen())});
-    listed.push_back(
-        {.id = std::string{kLifecycle}, .title = "Lifecycle", .registered = screens.add(lifecycleScreen())});
-    listed.push_back({.id = std::string{kResults}, .title = "Results", .registered = screens.add(resultsScreen())});
-    listed.push_back({.id = std::string{kSample}, .title = "Sample", .registered = screens.add(sampleScreen())});
-    listed.push_back(
-        {.id = std::string{kIgnition}, .title = "Ignition tests", .registered = screens.add(ignitionScreen())});
-    listed.push_back(
-        {.id = std::string{kCompanies}, .title = "Companies and sites", .registered = screens.add(companiesScreen())});
-    listed.push_back(
-        {.id = std::string{kAccess}, .title = "Users and roles", .registered = screens.add(accessScreen())});
-    listed.push_back({.id = std::string{kLogin}, .title = "Sign in", .registered = screens.add(loginScreen())});
-    for (Listed const& screen : listed) {
+    std::vector<ListedScreen> listed;
+    addLegacyScreens(screens, listed);
+    addOrgScreens(screens, listed);
+    addLabScreens(screens, listed);
+    addBillingScreens(screens, listed);
+    addLedgerScreens(screens, listed);
+    addInventoryScreens(screens, listed);
+    addShellScreens(screens, listed);
+    for (ListedScreen const& screen : listed) {
         if (!screen.registered) {
             return std::unexpected(screen.registered.error());
         }
     }
     morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = std::string{kApplicationId}, .version = "1.0"},
                                  screens.catalog()};
-    for (Listed const& screen : listed) {
+    for (ListedScreen const& screen : listed) {
         morph::ui::CatalogEntry entry;
         entry.id = screen.id;
-        entry.title = screen.title;
-        entry.isPublic = screen.id == kLogin;
+        entry.title = screen.title.json();
+        entry.module = screen.module;
+        if (!screen.module.empty()) {
+            entry.group = groupOf(screen.module);
+        }
+        entry.isPublic = screen.isPublic;
         if (auto added = served.addScreen(std::move(entry), (*screen.registered)->text); !added) {
             return std::unexpected(std::move(added.error()));
         }
+    }
+    if (auto added = addCatalogues(served); !added) {
+        return std::unexpected(std::move(added.error()));
     }
     return served.build();
 }

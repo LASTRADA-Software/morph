@@ -137,6 +137,16 @@ Each builder returns a `Command`; `Commands` is a list, built from one command o
 
 `Command{json}` wraps a command no builder spells.
 
+## Width class
+
+`widthClass(scope)` is the width class a screen lays out for: the client's `{"env": "widthClass"}`, and `expanded`
+where no client sets it, declared as a `let` named `widthClass` (so a screen calls it once and reads the handle).
+`byWidth(width, compact, expanded)` is a `switchOn` over that handle with one case, `compact`, and the expanded layout
+as its fallback. A client reports `compact` below 80 units of width; `medium` therefore takes the expanded layout:
+the designs draw two layouts, and a screen that wants a third switches on the handle itself. Both live in the
+library because every screen of a design-led application reads the width the same way; an application that copied
+them would copy the fallback with them.
+
 ## View nodes
 
 Every kind of the kind table has a builder whose options struct holds the kind's own keys:

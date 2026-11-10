@@ -12,6 +12,38 @@ morph_add_rung(NAME lims
     USES lab:org ledger:org,posting billing:org,posting
     APP_MODULE app)
 
+# The screens' sources below screens/ (the kit and the scenario) and the catalogues. morph_add_rung globs only
+# screens/*.cpp, so the subdirectories are added here. The catalogues' bytes are embedded by a script run at build
+# time, so a catalogue edit rebuilds one translation unit and needs no reconfigure.
+if(TARGET ladder_lims_screens)
+    file(GLOB _lims_screen_subsources CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/screens/kit/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/screens/scenario/*.cpp")
+    target_sources(ladder_lims_screens PRIVATE ${_lims_screen_subsources})
+    file(GLOB _lims_catalogues CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/screens/i18n/*/*.json")
+    set(_lims_i18n_header "${CMAKE_CURRENT_BINARY_DIR}/generated/i18n_data.hpp")
+    add_custom_command(
+        OUTPUT "${_lims_i18n_header}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+        COMMAND ${CMAKE_COMMAND} "-DOUT=${_lims_i18n_header}" "-DROOT=${CMAKE_CURRENT_SOURCE_DIR}/screens/i18n"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/screens/i18n/embed.cmake"
+        DEPENDS ${_lims_catalogues} "${CMAKE_CURRENT_SOURCE_DIR}/screens/i18n/embed.cmake"
+        COMMENT "lims: embedding the message catalogues"
+        VERBATIM)
+    target_sources(ladder_lims_screens PRIVATE "${_lims_i18n_header}")
+    target_include_directories(ladder_lims_screens PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+endif()
+
+# The screen tests read the catalogue files from the source tree. The target is created when the top-level directory
+# finishes configuring, so the definition is added by a call deferred behind that one.
+function(_lims_screen_test_definitions _dir)
+    if(TARGET ladder_lims_screen_tests)
+        target_compile_definitions(ladder_lims_screen_tests PRIVATE LIMS_I18N_DIR="${_dir}/screens/i18n")
+    endif()
+endfunction()
+cmake_language(EVAL CODE "
+    cmake_language(DEFER DIRECTORY [[${PROJECT_SOURCE_DIR}]] CALL _lims_screen_test_definitions
+        [[${CMAKE_CURRENT_SOURCE_DIR}]])")
+
 # Each probe compiles one include as part of one module, and its test builds it: a probe that crosses the
 # boundary must fail with the compiler naming the header, and the control must build, which shows the probes compile
 # through the module's real include path.

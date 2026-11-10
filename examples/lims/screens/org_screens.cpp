@@ -122,4 +122,17 @@ ui::Screen accessScreen() {
     });
 }
 
+void addOrgScreens(ui::ScreenRegistry& screens, std::vector<ListedScreen>& listed) {
+    listed.push_back({.id = std::string{kCompanies},
+                      .module = "org",
+                      .title = ui::t("lims.org.companies.title", "Companies and sites"),
+                      .registered = screens.add(companiesScreen())});
+    listed.push_back({.id = std::string{kAccess},
+                      .module = "org",
+                      .title = ui::t("lims.org.access.title", "Users and roles"),
+                      .registered = screens.add(accessScreen())});
+}
+
+std::vector<std::string_view> orgScreenIds() { return {kCompanies, kAccess}; }
+
 }  // namespace lims::screens

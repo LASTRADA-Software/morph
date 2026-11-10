@@ -1,0 +1,10 @@
+{
+  "lims.credit": "Cr",
+  "lims.loading": "Loading…",
+  "lims.module.billing": "Billing",
+  "lims.module.inventory": "Inventory",
+  "lims.module.lab": "Laboratory",
+  "lims.module.ledger": "Ledger",
+  "lims.module.org": "Organisation",
+  "lims.module.shell": "Home"
+}

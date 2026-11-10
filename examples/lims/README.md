@@ -1162,6 +1162,19 @@ submission writes conditionally on the gross it read (a line removed in between 
 amount) and the editor's later edits fail their draft check. A lease outlives submission and the holder's role until
 it lapses. Lot reservation in Part C is the second instance.
 
+### 50. lims's screens are held to committed mockups through a kit, two catalogues and side-by-side grabs
+
+Every screen formats money, balances, days, quantities and states through `screens/kit/`, so no screen shows a raw
+id, an enum name or an unformatted number; English and German catalogues, kept per module and merged into the bundle,
+must hold the same keys. The width-class helpers are morph's (`ui::widthClass`, `ui::byWidth`): the gallery held the
+first copy and lims needed the second. `LIMS_SCENARIO=1` seeds the mockups' scenario through the models, and
+`scripts/shoot_lims.sh` grabs each screen at both widths beside its mockup; each module's screens, scenario,
+catalogue and grabs live in files of their own, so screen tasks merge without touching each other's lists. The design
+names the invoice editor, the goods-receipt dialog and the print view as hypothesis 9's instances in its table and
+calls them hypothesis 10's in its Part D text; they are hypothesis 9's (an action spanning several models, a
+document layout), and hypothesis 10 is the large lists; the design's sentence now says 9. `IMPLEMENTATION.md` rule 2
+exempts lims's look, and only lims's.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so

@@ -51,7 +51,8 @@ ships with. Two binding companion documents:
 
 **Audience.** The primary audience of every rung is morph's own regression
 suite. No rung is a showcase: [`IMPLEMENTATION.md`](IMPLEMENTATION.md) rule 2's
-zero-styling rule applies to all three.
+zero-styling rule applies to bookmarks and bank; lims is held to its mockups
+instead, for the reason rule 2 gives.
 
 **Design questions are answered in writing.** Each rung README names the
 design questions its features raise and records the answer, with the

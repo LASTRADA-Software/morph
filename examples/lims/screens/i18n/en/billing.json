@@ -1,0 +1,7 @@
+{
+  "lims.billing.draftFor": "Draft for {$client}",
+  "lims.status.InvoiceState.Approved": "Approved",
+  "lims.status.InvoiceState.Draft": "Draft",
+  "lims.status.InvoiceState.Posted": "Posted",
+  "lims.status.InvoiceState.Submitted": "Waiting for approval"
+}
