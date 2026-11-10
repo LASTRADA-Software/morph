@@ -37,8 +37,8 @@ namespace lims::app {
 
 /// @brief Every action a module declares a role, or some role, for.
 /// @return The table.
-[[nodiscard]] inline std::array<RoleRequirement, 31> const& declaredRequirements() {
-    static constexpr std::array<RoleRequirement, 31> requirements{
+[[nodiscard]] inline std::array<RoleRequirement, 32> const& declaredRequirements() {
+    static constexpr std::array<RoleRequirement, 32> requirements{
         requirementOf<VerifyResult>(),
         requirementOf<CreateCompany>(),
         requirementOf<CreateSite>(),
@@ -70,6 +70,7 @@ namespace lims::app {
         requirementOf<CreatePriceList>(),
         requirementOf<SetPrice>(),
         requirementOf<RecordBillableLine>(),
+        requirementOf<CreateInvoice>(),
     };
     return requirements;
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include "lims/billing/dto/invoice_dto.hpp"
 #include "lims/billing/dto/line_dto.hpp"
 #include "lims/billing/dto/price_dto.hpp"
 #include "lims/billing/dto/settings_dto.hpp"
@@ -10,7 +11,7 @@
 
 /// @file
 /// The billing module's declared authorization: a company's billing settings are a supervisor's; its clients, price
-/// lists and prices are a billing clerk's, at that company; a billable line is recorded by a service principal.
+/// lists, prices and draft invoices are a billing clerk's, at that company; a billable line is recorded by a service principal.
 
 namespace lims {
 
@@ -37,6 +38,10 @@ struct Authorization<SetPrice> {
     /// @return It; an empty company when there is no such list.
     [[nodiscard]] static Scope scopeOf(SetPrice const& action);
 };
+
+/// @brief An invoice is drafted by a billing clerk at its company.
+template <>
+struct Authorization<CreateInvoice> : CompanyRule<CreateInvoice, LimsRole::BillingClerk> {};
 
 /// @brief A billable line is recorded by a service principal holding the service role at the site's company.
 template <>

@@ -1011,6 +1011,27 @@ decides it. A consumer that refuses an event holds back every event after it: `O
 and marks only a whole batch (measured, same file). Exactly-once here is at-least-once delivery plus a consumer that
 dedups by event id; the dedup table is the consumer's, which the design requires, and is what `IReplayLedger` is for.
 
+### 33. An invoice is one client's lines at one site, in the client's currency; the type does not know which (hypothesis 8, invoice half of instance 2)
+
+`CreateInvoice` collects every unbilled line of a client at a site and marks them invoiced in the same transaction, so
+a second draft finds none (`Conflict`). The site must be a site of the named company, and the company must have billing
+settings and the client be registered for billing there. Tax is the company's flat rate on the net total, rounded
+half-up once to the currency's decimals, and the gross is net plus tax; rounding each line's tax and summing would
+drift from the rate on the whole. The site is the invoice's because its approval is judged there (decision 35).
+Every sum, product and the tax are the checked operations (`ExactSum`, `checkedMul`, `checkedAdd`,
+`roundToCurrency`): an invoice whose lines, tax or gross do not fit an `int64` is refused as `OutOfRange` and leaves
+its lines unbilled, never saturated. `GetInvoice` answers `NotFound` for an invoice of a company the caller cannot
+see, and `ListInvoices` lists nothing for one.
+
+**Hypothesis 8's runtime-currency half is confirmed for invoices.** Measured in `tests/test_invoices.cpp`: with the
+currency known only from the record, the amount is a `Quantity` over the one money unit, so a yen line among a euro
+client's lines is refused by `draftInvoice`, not by the type, and the served schema of a JPY price's form still
+advertises `x-decimalPlaces: 2`, because the declared precision is the type's. What keeps currencies apart is model
+code: `draftInvoice` refuses a line in another currency and `fitsCurrency` refuses fractional yen. `Quantity` holds the
+amount exactly; it cannot hold its currency. Purchase orders in a supplier's currency (Part C) are the second
+instance; a form that follows a record's currency is Part D's (`morph::forms::InstanceConstraints` serves
+per-instance decimals and is the existing seam to try there).
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so

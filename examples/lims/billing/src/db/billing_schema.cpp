@@ -75,4 +75,32 @@ LIGHTWEIGHT_SQL_MIGRATION(20261110000008, "Create billing_lines and billing_cons
     plan.CreateUniqueIndex("idx_billing_consumed_events_scope_event", "billing_consumed_events",
                            {"scope", "event_id"});
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20261110000009, "Create billing_invoices") {
+    plan.CreateTableIfNotExists("billing_invoices")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("site_id", Bigint())
+        .RequiredColumn("client_id", Bigint())
+        .RequiredColumn("currency", Integer())
+        .RequiredColumn("state", Integer())
+        .RequiredColumn("number", Varchar(32))
+        .RequiredColumn("net_num", Bigint())
+        .RequiredColumn("net_den", Bigint())
+        .RequiredColumn("tax_num", Bigint())
+        .RequiredColumn("tax_den", Bigint())
+        .RequiredColumn("gross_num", Bigint())
+        .RequiredColumn("gross_den", Bigint())
+        .RequiredColumn("reference", Varchar(128))
+        .RequiredColumn("created_by", Varchar(64))
+        .RequiredColumn("submitted_by", Varchar(64))
+        .RequiredColumn("approved_by", Varchar(64))
+        .RequiredColumn("posted_by", Varchar(64))
+        .RequiredColumn("created_at", Bigint())
+        .RequiredColumn("submitted_at", Bigint())
+        .RequiredColumn("deadline_at", Bigint())
+        .Column("gross_company_num", Bigint())
+        .Column("gross_company_den", Bigint())
+        .Column("entry_id", Bigint());
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

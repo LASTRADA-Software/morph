@@ -14,6 +14,7 @@
 
 #include "lims/billing/authorization/billing_authorization.hpp"
 #include "lims/billing/db/billing_entity.hpp"
+#include "lims/billing/db/billing_store.hpp"
 #include "lims/billing/models/price_list_model.hpp"
 #include "lims/org/core/calendar.hpp"
 #include "lims/org/core/errors.hpp"
@@ -23,14 +24,6 @@
 namespace lims {
 
 namespace {
-
-using ::morph::math::DecimalPlaces;
-using ::morph::math::Denominator;
-using ::morph::math::Numerator;
-using ::morph::math::Rational;
-
-constexpr int kMaxLineState = static_cast<int>(BillableLineState::Invoiced);
-constexpr int kMaxCurrencyCode = static_cast<int>(CurrencyCode::JPY);
 
 /// @brief The scope billing's consumed events are recorded in.
 constexpr std::string_view kLineEvents = "billing.lines";
@@ -72,43 +65,12 @@ private:
     Lightweight::DataMapper& _mapper;
 };
 
-/// @brief Maps a line row to its view.
-/// @param row The row.
-/// @return The view; `amount` is set only when both halves of the price are stored.
-/// @throws ValidationError if the row stores a state or currency outside its enumeration.
-[[nodiscard]] BillableLineView toView(db::BillableLineRecord const& row) {
-    int const state = row.state.Value();
-    int const currency = row.currency.Value();
-    if (state < 0 || state > kMaxLineState) {
-        throw ValidationError{"billable line " + std::to_string(row.id.Value()) + " stores a state outside its range"};
-    }
-    if (currency < 0 || currency > kMaxCurrencyCode) {
-        throw ValidationError{"billable line " + std::to_string(row.id.Value()) +
-                              " stores a currency outside its range"};
-    }
-    auto const code = static_cast<CurrencyCode>(currency);
-    BillableLineView view{
-        .id = BillableLineId{static_cast<std::int64_t>(row.id.Value())},
-        .company = CompanyId{row.companyId.Value()},
-        .site = SiteId{row.siteId.Value()},
-        .client = ClientId{row.clientId.Value()},
-        .sample = SampleId{row.sampleId.Value()},
-        .result = ResultId{row.resultId.Value()},
-        .analysis = AnalysisId{row.analysisId.Value()},
-        .publishedAt = timestampFromMillis(row.publishedAt.Value()),
-        .state = static_cast<BillableLineState>(state),
-        .amount = {},
-        .currency = code,
-        .invoice = InvoiceId::fromOptional(row.invoiceId.Value()),
-        .eventId = std::string{row.eventId.Value().ToStringView()},
-    };
-    auto const numerator = row.amountNum.Value();
-    auto const denominator = row.amountDen.Value();
-    if (numerator.has_value() && denominator.has_value()) {
-        view.amount =
-            Amount{Rational{Numerator{*numerator}, Denominator{*denominator}, DecimalPlaces{decimalsOf(code)}}};
-    }
-    return view;
+/// @brief Whether the caller can see @p company.
+/// @param company The company.
+/// @return `true` when it is one of the caller's visible companies.
+[[nodiscard]] bool isVisible(CompanyId company) {
+    auto const companies = OrgModel::visibleCompanies(currentPrincipal());
+    return std::ranges::find(companies, company) != companies.end();
 }
 
 /// @brief The line @p lineId.
@@ -123,7 +85,7 @@ private:
     if (rows.empty()) {
         throw NotFound{"billable line " + std::to_string(lineId) + " does not exist"};
     }
-    return toView(rows.front());
+    return billableLineView(rows.front());
 }
 
 /// @brief The line an earlier delivery of @p eventId made.
@@ -172,7 +134,7 @@ private:
     ConsumedEvents consumed{mapper};
     consumed.record(kLineEvents, action.eventId, std::to_string(row.id.Value()));
     sqlTxn.Commit();
-    return toView(row);
+    return billableLineView(row);
 }
 
 }  // namespace
@@ -224,7 +186,7 @@ ListBillableLinesResult InvoiceModel::execute(const ListBillableLines& action) {
     auto const companies = OrgModel::visibleCompanies(currentPrincipal());
     Lightweight::DataMapper mapper;
     for (auto const& row : mapper.Query<db::BillableLineRecord>().All()) {
-        auto const view = toView(row);
+        auto const view = billableLineView(row);
         if (std::ranges::find(companies, view.company) == companies.end() ||
             (action.company.hasValue() && view.company != action.company) ||
             (action.client.hasValue() && view.client != action.client) ||
@@ -234,6 +196,72 @@ ListBillableLinesResult InvoiceModel::execute(const ListBillableLines& action) {
         result.lines.push_back(view);
     }
     std::ranges::sort(result.lines, {}, [](BillableLineView const& line) { return *line.id; });
+    return result;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+InvoiceView InvoiceModel::execute(const CreateInvoice& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"CreateInvoice: a company, a site and a client are required"};
+    }
+    requireRoleSomewhere<CreateInvoice>();
+    if (!OrgModel::findCompany(action.company).has_value()) {
+        throw NotFound{"CreateInvoice: company " + std::to_string(*action.company) + " does not exist"};
+    }
+    auto const site = OrgModel::findSite(action.site);
+    if (!site.has_value()) {
+        throw NotFound{"CreateInvoice: site " + std::to_string(*action.site) + " does not exist"};
+    }
+    if (site->companyId != action.company) {
+        throw ValidationError{"CreateInvoice: site " + std::to_string(*action.site) + " is not a site of company " +
+                              std::to_string(*action.company)};
+    }
+    requireAuthorized(action);
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto const invoice = draftInvoice(mapper, action.company, action.site, action.client, currentPrincipal());
+    if (!invoice.has_value()) {
+        throw Conflict{"CreateInvoice: client " + std::to_string(*action.client) + " has no unbilled lines at site " +
+                       std::to_string(*action.site)};
+    }
+    sqlTxn.Commit();
+    return invoiceView(mapper, *invoice);
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+InvoiceView InvoiceModel::execute(const GetInvoice& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetInvoice: an invoice is required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto const view = invoiceView(mapper, *action.invoiceId);
+    if (!isVisible(view.company)) {
+        throw NotFound{"GetInvoice: invoice " + std::to_string(*action.invoiceId) + " does not exist"};
+    }
+    return view;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+ListInvoicesResult InvoiceModel::execute(const ListInvoices& action) {
+    if (!action.validate()) {
+        throw ValidationError{"ListInvoices: a company is required"};
+    }
+    ListInvoicesResult result;
+    if (!isVisible(action.company)) {
+        return result;
+    }
+    Lightweight::DataMapper mapper;
+    auto const rows = mapper.Query<db::InvoiceRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::companyId>, "=", *action.company)
+                          .All();
+    for (auto const& row : rows) {
+        result.invoices.push_back(invoiceView(mapper, static_cast<std::int64_t>(row.id.Value())));
+    }
+    std::ranges::sort(result.invoices, {}, [](InvoiceView const& invoice) { return *invoice.id; });
     return result;
 }
 

@@ -6,6 +6,7 @@
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
+#include "lims/billing/dto/invoice_dto.hpp"
 #include "lims/billing/dto/line_dto.hpp"
 
 /// @file
@@ -40,6 +41,35 @@ public:
     /// @throws ValidationError if a row holds a state or currency outside its enumeration.
     ListBillableLinesResult execute(const ListBillableLines& action);
 
+    /// @brief Drafts an invoice over every unbilled line of a client at a site, in the client's currency.
+    ///
+    /// The lines are marked invoiced in the same transaction, so a second draft finds none. Tax is the company's flat
+    /// rate on the net total, rounded half-up once.
+    /// @param action The company, site and client.
+    /// @return The draft, with its lines and totals.
+    /// @throws ValidationError if the invoice is not fully named, the site is not the company's, or a line is in
+    ///         another currency than the client is billed in.
+    /// @throws NotFound if the company or site does not exist, the company has no billing settings, or the client
+    ///         is not billed there.
+    /// @throws Forbidden if the caller is not a billing clerk at the company.
+    /// @throws Conflict if the client has no unbilled line at the site.
+    /// @throws OutOfRange if a total does not fit.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    InvoiceView execute(const CreateInvoice& action);
+
+    /// @brief Reads one invoice.
+    /// @param action The invoice.
+    /// @return It, with its lines.
+    /// @throws ValidationError if no invoice is named.
+    /// @throws NotFound if there is no such invoice, or it is of a company the caller cannot see.
+    InvoiceView execute(const GetInvoice& action);
+
+    /// @brief Lists a company's invoices.
+    /// @param action The company.
+    /// @return Its invoices by id; none when the caller cannot see the company.
+    /// @throws ValidationError if no company is named.
+    ListInvoicesResult execute(const ListInvoices& action);
+
     /// @brief Stores the line of an event, answering the line an earlier or concurrent delivery made.
     ///
     /// The seam under `RecordBillableLine` after its checks. Two deliveries of one event race on the unique index of
@@ -63,4 +93,9 @@ BRIDGE_REGISTER_MODEL(lims::InvoiceModel, "InvoiceModel")
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::RecordBillableLine, "RecordBillableLine")
 BRIDGE_REGISTER_EFFECTS(lims::RecordBillableLine, ::morph::effects::changes<lims::BillableLineView>)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListBillableLines, "ListBillableLines", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::CreateInvoice, "CreateInvoice")
+BRIDGE_REGISTER_EFFECTS(lims::CreateInvoice, ::morph::effects::changes<lims::InvoiceView>,
+                        ::morph::effects::changes<lims::BillableLineView>)
+BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::GetInvoice, "GetInvoice", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListInvoices, "ListInvoices", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

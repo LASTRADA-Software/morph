@@ -83,6 +83,39 @@ struct BillableLineRecord {
     Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"event_id"}> eventId;        // 13
 };
 
+/// @brief One invoice.
+struct InvoiceRecord {
+    static constexpr std::string_view TableName = "billing_invoices";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"site_id"}> siteId{0};                                   // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"client_id"}> clientId{0};                               // 3
+    /// @brief `CurrencyCode` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"currency"}> currency{0};  // 4
+    /// @brief `InvoiceState` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"state"}> state{0};                          // 5
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"number"}> number;      // 6
+    Light::Field<std::int64_t, Light::SqlRealName{"net_num"}> netNum{0};              // 7
+    Light::Field<std::int64_t, Light::SqlRealName{"net_den"}> netDen{1};              // 8
+    Light::Field<std::int64_t, Light::SqlRealName{"tax_num"}> taxNum{0};              // 9
+    Light::Field<std::int64_t, Light::SqlRealName{"tax_den"}> taxDen{1};              // 10
+    Light::Field<std::int64_t, Light::SqlRealName{"gross_num"}> grossNum{0};          // 11
+    Light::Field<std::int64_t, Light::SqlRealName{"gross_den"}> grossDen{1};          // 12
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"reference"}> reference;  // 13
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"created_by"}> createdBy;      // 14
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"submitted_by"}> submittedBy;  // 15
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"approved_by"}> approvedBy;    // 16
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"posted_by"}> postedBy;        // 17
+    /// @brief Epoch milliseconds; 0 until it happens.
+    Light::Field<std::int64_t, Light::SqlRealName{"created_at"}> createdAt{0};      // 18
+    Light::Field<std::int64_t, Light::SqlRealName{"submitted_at"}> submittedAt{0};  // 19
+    Light::Field<std::int64_t, Light::SqlRealName{"deadline_at"}> deadlineAt{0};    // 20
+    /// @brief The gross in the company's currency, set at submission.
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"gross_company_num"}> grossCompanyNum;  // 21
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"gross_company_den"}> grossCompanyDen;  // 22
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"entry_id"}> entryId;                   // 23
+};
+
 /// @brief An event billing has consumed, with the line it made: one row per scope and event id.
 struct ConsumedEventRecord {
     static constexpr std::string_view TableName = "billing_consumed_events";
