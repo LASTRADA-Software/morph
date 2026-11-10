@@ -176,14 +176,17 @@ measurement and for the borrow contract that shape carries.
 
 **`localOp` and `localTaskOp` run the action's guard.** After the validator
 and immediately before `Model::execute` (for a `Task` handler, before the Task
-is created), both call `ActionGuard<Action>::check` when the action declares
-one, under the call's session on the model's strand, in a `try` of its own: a
-refusal resolves the `Completion` through `onError` and is journaled as
-`Outcome::Failed` when the session names a principal, exactly as the server's
-runners do, so a guarded action is refused identically on `LocalBackend` and on
-every remote topology. Each compares, once per action type, its own view of
-whether the action is guarded with the one its registration recorded, and
-throws `std::logic_error` naming the action when they differ. See
+is created), both run the guard the action declares (`Action::guard`), under
+the call's session on the model's strand, through the same
+`detail::runGuardJournaled` the server's runners use: a refusal resolves the
+`Completion` through `onError`, is journaled as `Outcome::Failed` exactly as a
+throw from `execute` is, and reaches the model's `onGuardRefused` when it
+declares one, so a guarded action is refused identically on `LocalBackend` and
+on every remote topology. In `localOp` the guard's call sits with the
+`execute` call inside the `MORPH_CLIENT_ONLY` exclusion. `evaluate` and
+`journal::replay()` never reach these two sites — the first runs no execution
+site at all, the second dispatches through the server's runner, which skips the
+guard for the holder replay reconstructs. See
 [action_guards.md](action_guards.md).
 
 **`localOp` is compiled — and so needs `Model::execute`'s definition to
