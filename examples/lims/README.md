@@ -1154,12 +1154,13 @@ timeout, stalls routing for every connection, which is the cost a framework-leve
 failure there can only be logged; a crash that kills the process releases nothing, and the
 timeout is then the only lapse. And the lapse is not told: a second clerk watching `Billing_Lease` hears of a release
 but not of a lapse on disconnect, because the destructor is not an action and nothing derives a change from it —
-measured on the same second connection; the clerk learns of it only by asking. The lease guards the editor's own two edits, and
-`SubmitInvoice`, which refuses with `Conflict` naming the holder while another principal's lease on the draft is live
-(a submitter's own lease is no obstacle); no other `InvoiceModel` mutation consults it. Submission also writes
-conditionally on the gross it read, so a line removed between its read and its write is a `Conflict` and not a stale
-approval amount. A lease outlives submission and the holder's role until it lapses. Lot reservation in Part C is the
-second instance.
+measured on the same second connection; the clerk learns of it only by asking. The lease guards the editor's own two
+edits, and `SubmitInvoice`, which refuses with `Conflict` naming the holder when it finds another principal's live
+lease on the draft (a submitter's own lease is no obstacle); no other `InvoiceModel` mutation consults it. That check
+and the submission's write are two steps, so a lease taken between them is not refused; nothing is lost by it, because
+submission writes conditionally on the gross it read (a line removed in between is a `Conflict`, not a stale approval
+amount) and the editor's later edits fail their draft check. A lease outlives submission and the holder's role until
+it lapses. Lot reservation in Part C is the second instance.
 
 ## Findings raised by this rung
 
