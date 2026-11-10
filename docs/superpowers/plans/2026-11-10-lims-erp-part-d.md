@@ -4,7 +4,7 @@
 
 **Goal:** Build lims's GUI to the standard of a commercial product — Part D of `docs/superpowers/specs/2026-11-09-lims-erp-design.md` — as ui/1 documents written with the C++ authoring API and served by the lims server, one screen per committed mockup in `examples/lims/design/mockups/`, each meeting the production criteria and matching its mockup in side-by-side grabs; and, on the way, measure hypotheses 9 and 10 and build in morph every vocabulary or frontend change a mockup needs that ui/1 cannot say.
 
-**Architecture:** The screens stay in `examples/lims/screens/`, one source file per module (`org_screens.cpp`, `lab_screens.cpp`, `billing_screens.cpp`, `ledger_screens.cpp`, `inventory_screens.cpp`, `shell_screens.cpp`) over a small kit (`screens/kit/`: the width class, the page head, money, dates, people's names, status words, refusal banners) and message catalogues kept per module (`screens/i18n/<locale>/<module>.json`, merged into the bundle's `i18n/en.json` and `i18n/de.json`), registered by `lims::screens::bundle()` through one `add<Module>Screens` function per module with each catalog entry's module and group. Every screen reads and writes only through the models' actions and stays current through declared effects. Where a mockup asks for something ui/1 cannot say, the change is made in `include/morph` (and the frontends under `src/`), specified in `docs/spec/`, reviewed once, tested in `tests/`, built through the Doxygen docs target, and the screen then uses it; no screen carries a workaround. Every framework change this plan already knows of is a task of its own (Tasks 2's helpers, 4, 6, 8–12, 17 and 20), separate from the lims tasks that use it; a gap found while building a screen is added to the framework task its subject belongs to (or a new framework task in the same branch) before the screen is called done.
+**Architecture:** The screens stay in `examples/lims/screens/`, one source file per module (`org_screens.cpp`, `lab_screens.cpp`, `billing_screens.cpp`, `ledger_screens.cpp`, `inventory_screens.cpp`, `shell_screens.cpp`) over a small kit (`screens/kit/`: the width class, the page head, money, dates, people's names, status words, refusal banners) and message catalogues kept per module (`screens/i18n/<locale>/<module>.json`, merged into the bundle's `i18n/en.json` and `i18n/de.json`), registered by `lims::screens::bundle()` through one `add<Module>Screens` function per module with each catalog entry's module and group. Every screen reads and writes only through the models' actions and stays current through declared effects. Where a mockup asks for something ui/1 cannot say, the change is made in `include/morph` (and the frontends under `src/`), specified in `docs/spec/`, reviewed once, tested in `tests/`, built through the Doxygen docs target, and the screen then uses it; no screen carries a workaround. Every framework change this plan already knows of is a task of its own (Tasks 2's helpers, 4, 4a, 6, 8–12, 17 and 20), separate from the lims tasks that use it; a gap found while building a screen is added to the framework task its subject belongs to (or a new framework task in the same branch) before the screen is called done.
 
 **Tech Stack:** C++23, CMake ≥ 3.25 (Ninja), morph (header-only) with its ui/1 authoring API (`morph/ui/author.hpp`), Qt 6 Quick (the reference frontend), the terminal frontend, Catch2, the examples' screen harness (`examples/common/testkit/screen_harness.hpp`), headless Firefox for the mockups' grabs, Doxygen for the docs build.
 
@@ -17,18 +17,19 @@ Part D's task 1, the mockups, is done (commit `327a3a480`). Part B Task 14 is in
 | Part D task | Half | Waits for | Never in flight with |
 |---|---|---|---|
 | 1. Mockups | — | — | **done** (`327a3a480`) |
-| 2. Screen kit, catalogues, scenario, grabs | framework (`ui::widthClass`, `ui::byWidth`) and new lims screen files | nothing — **the next lane to open** | the other framework tasks (4, 6, 8–12, 20) |
+| 2. Screen kit, catalogues, scenario, grabs | framework (`ui::widthClass`, `ui::byWidth`) and new lims screen files | nothing — **the next lane to open** | the other framework tasks (4, 4a, 6, 8–12, 20) |
 | 3. People's names | lims (org) | Part B Task 14 committed (it edits `declared_requirements.hpp`, `test_declared_authorization.cpp`) | Part C Tasks 1 and 2 (`role_dto.hpp`, `org_schema.cpp`, `org_model.cpp`); Part B Task 19 |
 | 4. Refusals in words: framework | framework | Task 2 (both edit `author.hpp`) | **Part B Task 18 — Task 4 lands before it starts** (both edit `registry.hpp`'s failure path and `bridge.hpp`'s `localOp`/`localTaskOp`), or after Part B Task 19; Task 20 (`registry.hpp`); the other framework tasks |
+| 4a. Catalogues and locale formats reach the client (closes #1098) | framework (`ui/locale_table.hpp`, `expression.hpp`'s `money`, `Session::setLocale`, `catalogue.hpp`, `navigator.hpp`, `src/client/shell.cpp`, `client/source.hpp`) and `test_lims_kit.cpp` | Tasks 2 and 4 (the interpreter, `expression.hpp`, `catalogue.md`, `expressions.md`); **lands before Tasks 6, 7, 12 and 13** | the other framework tasks (2, 4, 6, 8–12, 20); Task 3 (`test_lims_kit.cpp`) |
 | 5. Refusals in words: lims | lims | Tasks 2, 3, 4; Part B Task 14 committed (`invoice_edit_model.cpp`, `invoice_approval.cpp`) | Part B Task 19 |
-| 6. Application shell: framework | framework | nothing | the other framework tasks |
-| 7. Application shell: lims | lims | Tasks 2, 3, 5, 6; Part B Task 14 committed (`invoice_model.hpp`, `ledger_model.hpp`); Part C Task 2 (inventory's count and inbox source) | Part C Task 2 (`org_model.cpp`); Part B Task 19 |
+| 6. Application shell: framework | framework | Task 4a (`navigator.hpp`, `src/client/shell.cpp`, `client/client.md`; the principal menu switches the locale 4a makes visible) | the other framework tasks |
+| 7. Application shell: lims | lims | Tasks 2, 3, 4a, 5, 6; Part B Task 14 committed (`invoice_model.hpp`, `ledger_model.hpp`); Part C Task 2 (inventory's count and inbox source) | Part C Task 2 (`org_model.cpp`); Part B Task 19 |
 | 8. Per-record decimals in an input | framework | Task 4 | the other framework tasks |
 | 9. A step's second line | framework | Task 8 | the other framework tasks |
 | 10. Bars in a chart | framework | Task 9 | the other framework tasks |
 | 11. A table row that spans rows | framework | Task 10 | the other framework tasks |
-| 12. A document page, its regions, a locale scope | framework | Task 11 | the other framework tasks |
-| 13. Org screens (31, 32) | lims | Tasks 2, 3, 5, 7, 8; Part C Task 2 (a limit per role) | Part C Task 2; Part B Task 19 |
+| 12. A document page, its regions, a locale scope | framework | Task 11; Task 4a (`localeScope` takes its facts from the locale table) | the other framework tasks |
+| 13. Org screens (31, 32) | lims | Tasks 2, 3, 4a, 5, 7, 8; Part C Task 2 (a limit per role) | Part C Task 2; Part B Task 19 |
 | 14. Lab screens (14–18) | lims | Tasks 2, 5, 7, 9, and 18 (`ListSamples` moves first; Task 17's refuted verdict where Task 18 is skipped); Part C Task 5 (`applyCapture`) | Part C Task 5; Task 18; Part B Task 19 |
 | 15. Billing screens (19–21, 23); hypothesis 9, first instance | lims | Tasks 5, 7, 8, 9; Part B Task 14; Part B Task 19, or Part B Task 17's no-seam branch (it edits `billing_authorization.*` and the declared tables) | Part B Task 19 |
 | 16. Invoice print view (22); hypothesis 9, document instance | lims | Tasks 12, 15 | Part B Task 19 |
@@ -47,13 +48,13 @@ Part D's task 1, the mockups, is done (commit `327a3a480`). Part B Task 14 is in
 | Wave | Lane B (Part B) | Lane C | Lane D |
 |---|---|---|---|
 | 1 — now | B14 (on the branch) and B16 (in a worktree), both in flight | — | **D2** (the next lane to open) |
-| 2 — B14 and D2 landed | B15 → B17 (spec only) | D3 → C1 → C2 → C3 | D4 (lands before B18 starts) → D6 → D5 |
+| 2 — B14 and D2 landed | B15 → B17 (spec only) | D3 → C1 → C2 → C3 | D4 (lands before B18 starts) → D4a (after D3 has landed: both edit `test_lims_kit.cpp`) → D6 → D5 |
 | 3 | B18 (after D4) → B19 (a barrier: see above) | C7 (needs B16; a new test and the README) → D17 → D20 | D8 → D9 → D10 → D11 → D12, serially |
 | 4 — B19 landed | B20 | C4 → C5 → C6 | D7 → D13 → D15 → D16 |
 | 5 | — | C8 (specs and plans), then its seam plans | D18 → D19 → D14 (after C5) |
 | 6 | — | C9 | D21 → D22 (after C8's lease and units seams) → D23 |
 
-**Pairs that are never in flight together:** C5 ‖ D14 (`applyCapture`, `CaptureConcentration`); C1 ‖ D3 and C2 ‖ D3 (`role_dto.hpp`, `org_schema.cpp`, `org_model.cpp`); C2 ‖ D7 and C2 ‖ D13 (`org_model.cpp`); D4 ‖ B18 (`registry.hpp`, `bridge.hpp`: D4 lands first); B19 ‖ any task that edits a lims model, DTO or declared table (C1–C6, D3, D5, D7, D13–D16, D18, D19, D21, D22); D14 ‖ D18 (`ListSamples`); D20 ‖ Part C Task 8's fan-out and lease seam implementations (`remote.hpp`); D4 ‖ D20 (`registry.hpp`); any two of D2, D4, D6, D8–D12 and D20 (`include/morph/ui`, `include/morph/core`, the interpreter, both frontends). D17 changes only `include/morph/table` and may run beside the widget tasks.
+**Pairs that are never in flight together:** C5 ‖ D14 (`applyCapture`, `CaptureConcentration`); C1 ‖ D3 and C2 ‖ D3 (`role_dto.hpp`, `org_schema.cpp`, `org_model.cpp`); C2 ‖ D7 and C2 ‖ D13 (`org_model.cpp`); D3 ‖ D4a (`test_lims_kit.cpp`); D4 ‖ B18 (`registry.hpp`, `bridge.hpp`: D4 lands first); B19 ‖ any task that edits a lims model, DTO or declared table (C1–C6, D3, D5, D7, D13–D16, D18, D19, D21, D22); D14 ‖ D18 (`ListSamples`); D20 ‖ Part C Task 8's fan-out and lease seam implementations (`remote.hpp`); D4 ‖ D20 (`registry.hpp`); any two of D2, D4, D4a, D6, D8–D12 and D20 (`include/morph/ui`, `include/morph/core`, the interpreter, `src/client/shell.cpp`, both frontends; D4a and D6 both edit `navigator.hpp`, `src/client/shell.cpp` and `client/client.md`, D4a, D4 and D12 the interpreter and `expression.hpp`, so D4a runs strictly between D4 and D6). D17 changes only `include/morph/table` and may run beside the widget tasks.
 
 ## Global Constraints
 
@@ -67,7 +68,7 @@ Copied from the design, `examples/IMPLEMENTATION.md`, `AGENTS.md`, the mockups' 
   9. "**ui/1 has no action spanning several models, and no document layout.** Downloads (`downloadToFile`), charts, display text and `sum`/`count` exist." / "Both dialogs and the print view built in ui/1 as it stands, meeting the production criteria". Instances: invoice editor (Task 15); goods-receipt dialog (Task 22); invoice print view (Tasks 12 and 16).
   10. "**Lists and reports run over rows already in memory.** `table::Query` pages with limits (1,000 rows a page, offset 10⁷, totals counted to 100,000), but `apply` runs over rows the model has loaded, and no total above the cap is shown; a report that totals a large table (a trial balance) likewise loads every row it adds up." / "A list over 10⁶ database rows meeting the production criteria without loading them, with its total shown; and a trial balance over 10⁷ posted lines answering exactly without loading them all". Instances: journal entries and the trial balance over them (Tasks 17–18); stock movements (Task 22).
 - **What Parts B and C hand to Part D:** a JPY price's form advertises two decimals (decision 33), as a yen order's does (decision 44); an approvals inbox is not told when a deadline passes (decisions 35, 43; filed against `include/morph`); a lease's or a reservation's lapse on disconnect is not told to a waiting clerk or bench (decisions 37, 47). Part D meets each: the per-record decimals of an input are Task 8, the frontend half of hypothesis 8, built on `morph::forms::InstanceConstraints` (Part C Task 8's runtime-units spec, if written, names Task 8 as its frontend half and does not specify it again); the deadline effect is Task 20; the told lapse is Part C Task 8's connection-lease seam, which Task 22 waits for when it was specified, and which Task 22 adds as a framework task of its own in this branch when Part C Task 8 recorded none.
-- **ui/1 work (user, standing):** "ideally we want to be able to generate these designs using declarative ui" — classify every visual difference by the framework change needed to express the mockup; prefer a vocabulary or frontend change over a screen workaround, and make a screen fix only where the vocabulary already expresses the design. A difference found by a comparison that needs a framework addition is designed and implemented in the same branch, never parked; only a genuinely environmental difference (a font not installed on this machine) stays out. Verify by side-by-side grabs (`morph_examples_client --grab-size WxH --grab f.png`) against the mockups rendered with headless Firefox.
+- **ui/1 work (user, standing):** "ideally we want to be able to generate these designs using declarative ui" — classify every visual difference by the framework change needed to express the mockup; prefer a vocabulary or frontend change over a screen workaround, and make a screen fix only where the vocabulary already expresses the design. A difference found by a comparison that needs a framework addition is designed and implemented in the same branch, never parked; only a genuinely environmental difference (a font not installed on this machine) stays out. Verify by side-by-side grabs (`scripts/shoot_lims.sh`, which runs `morph_lims_client --grab-size WxH --grab f.png` and refuses a client older than the screens' sources) against the mockups rendered with headless Firefox; Build lims rebuilds `morph_lims_client` first.
 - **Decide, don't ask (user, standing):** no design questions to the user; take the recommended answer, record it in the task's README decision, and go on.
 - **Rule 2 (IMPLEMENTATION.md):** "Screens never say what to refresh. Every action that changes data declares its effects … The rung's bundle loads with no refusal and no warning." `docs/KEEPING-SCREENS-CURRENT.md`'s checklist for every action a screen adds or changes.
 - **Rule 5 (IMPLEMENTATION.md):** screen tests are part of the suite; every screen is mounted by the render smoke at both width classes.
@@ -79,7 +80,7 @@ Copied from the design, `examples/IMPLEMENTATION.md`, `AGENTS.md`, the mockups' 
 ## Build and test commands
 
 - Configure: `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock cmake --preset linux-everything`
-- Build lims: `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock cmake --build build/linux-everything --target ladder_lims_tests ladder_lims_screen_tests ladder_lims_render_smoke ladder_lims_server morph_examples_client -j10`
+- Build lims: `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock cmake --build build/linux-everything --target ladder_lims_tests ladder_lims_screen_tests ladder_lims_render_smoke ladder_lims_server morph_lims_client -j10` (`morph_lims_client` is the client `scripts/shoot_lims.sh` grabs with; `morph_examples_client` cannot open lims)
 - Model suite: `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock timeout 300 build/linux-everything/examples/lims/ladder_lims_tests "[<tag>]"`
 - Framework suite (every framework task): `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock cmake --build build/linux-everything --target morph_tests -j10` and `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock timeout 300 build/linux-everything/tests/morph_tests "[<tag>]"` (the target and path are `tests/CMakeLists.txt`'s; use what it names if they differ). A change under `src/` (a frontend) also builds the Qt Quick and terminal frontends' own suites, which `tests/CMakeLists.txt` names.
 - Docs build (every framework task, after its last header change): `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock cmake -S . -B build/docs -G Ninja -DMORPH_BUILD_DOCUMENTATION=ON -DMORPH_BUILD_TESTS=OFF -DMORPH_BUILD_EXAMPLES=OFF` then `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock cmake --build build/docs --target doc`. Expected: the target builds with no warning (CI runs it with `WARN_AS_ERROR = FAIL_ON_WARNINGS`). Beside it, the headers a task changed are compiled through a clang TU that includes them, so Clang's `-Wdocumentation` sees them too (GCC does not).
@@ -672,6 +673,286 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 
 ---
 
+### Task 4a: Catalogues and locale formats reach the client (framework)
+
+**Waits for** Task 4 (both edit the interpreter, `expression.hpp`, `docs/spec/ui/catalogue.md` and `docs/spec/ui/expressions.md`) and Task 2 (it changes Task 2's `test_lims_kit.cpp` back to the brief's expectations, and Task 2's fix declares lims's `formatting.date`). **Lands before** Tasks 6 (both edit `navigator.hpp`, `src/client/shell.cpp` and `docs/spec/client/client.md`; Task 6's principal menu switches the locale this task makes visible), 7 (lims's shell catalogues), 12 (`localeScope` takes its facts from this task's locale table) and 13 (the first screen to assert `€10,000.00`). **Never in flight with** the other framework tasks (2, 4, 6, 8–12, 20), nor with Task 3 (both edit `test_lims_kit.cpp`). Closes #1098.
+
+**Files:**
+- Create: `docs/spec/ui/locale_table.md`, `include/morph/ui/locale_table.hpp`, `tests/test_ui_locale_table.cpp`, `tests/client/test_shell_locale.cpp`
+- Modify: `include/morph/ui/expression.hpp` (`FormatContext::currency`; `money`'s third argument and its symbol forms; the function table's `money` row), `include/morph/ui/interpreter.hpp` (`Session::setLocale` installs the locale's facts; `Session::setDatePatterns` records that the application declared its patterns), `include/morph/ui/catalogue.hpp` (`catalogTitlesIn`, `catalogLabel`), `include/morph/ui/navigator.hpp` (`NavigatorOptions::label`, the headings through it, `nav_title_<id>`, `relabel()`), `include/morph/client/source.hpp` and `src/client/source.cpp` (`Source::catalogues()`), `include/morph/client/shell.hpp` (`ShellOptions::locale`, `ShellOptions::onLocale`, `ApplicationHost::setLocale`, `ApplicationHost::setLocaleSink`), `src/client/shell.cpp` (installs the catalogues and the initial locale, labels the navigator, follows a locale change and a reload), `tests/client/CMakeLists.txt` (the new file), `tests/CMakeLists.txt` (if it names files), `docs/spec/ui/catalogue.md`, `docs/spec/ui/expressions.md`, `docs/spec/ui/workspace.md`, `docs/spec/client/client.md`, `docs/spec/README.md`, `examples/lims/screens/tests/test_lims_kit.cpp` (back to the brief's expectations), and any other rung's screen test whose expected text changes from the C forms to `en`'s (fixed in place, as examples are)
+
+**Interfaces:**
+- Consumes: `ui::MessageCatalogues` (`lookup`, `provider`, `problems`, `locales`), `ui::loadCatalogues(Manifest const&, files)`, `ui::catalogTitle(entry, catalogues, locale)`, `ui::catalogTitles(entry, catalogues)`, `ui::parseMessage`, `ui::LoadedBundle` (`manifest`, `files`; held by `client::Source::_loaded`), `ui::Session` (`setLocale`, `setTranslations`, `setDatePatterns`, `formattingNow`), `ui::FormatContext`, `render::NumericLocale`, `render::formatCanonicalNumber`, `ui::currencyDigits`, `ui::InterpreterHost::setLocale` (`host.hpp` forwards a document's `setLocale` to the application host), `client::mountShell`, `ui::Navigator`, `ui::ShellFrame::navigator()`, `ScreenHarness` (`examples/common/testkit/screen_harness.hpp`, already on `morph_client_tests`' include path).
+- Produces: in `include/morph/ui/locale_table.hpp` (namespace `morph::ui`): `enum class SymbolPlacement : std::uint8_t { Before, After }`; `struct CurrencySymbol { std::string_view code; std::string_view symbol; }`; `struct CurrencyFacts { SymbolPlacement placement = SymbolPlacement::After; std::span<CurrencySymbol const> symbols; }` (empty `symbols`: every currency by its code, today's form); `struct LocaleFacts { std::string_view tag; render::NumericLocale numeric; CurrencyFacts currency; std::string_view datePattern; std::string_view dateTimePattern; }`; `[[nodiscard]] std::span<LocaleFacts const> localeTable() noexcept` (`en`, `de`); `[[nodiscard]] LocaleFacts const* findLocaleFacts(std::string_view tag) noexcept` (the exact tag, then each shorter one, `de-AT` → `de`; null when none); `[[nodiscard]] LocaleFacts const& localeFacts(std::string_view tag) noexcept` (`findLocaleFacts`, else `en`'s); `enum class MoneyForm : std::uint8_t { Symbol, Code }`; `[[nodiscard]] std::string placeCurrency(std::string_view number, std::string_view currency, CurrencyFacts const& facts, render::NumericLocale const& numeric, MoneyForm form)`. `ui::FormatContext::currency` (`CurrencyFacts`, default empty). `money(x, currency, form?)` with `form` `"symbol"` (the default) or `"code"`. In `catalogue.hpp`: `[[nodiscard]] std::vector<std::string> catalogTitlesIn(CatalogEntry const& entry, MessageCatalogues const* catalogues, std::string_view locale)` (the title in @p locale first, then the other locales' titles not equal to it); `[[nodiscard]] std::string catalogLabel(MessageCatalogues const& catalogues, std::string_view text, std::string_view locale)` (@p text's message in @p locale when the catalogues hold it as a key, else @p text). `NavigatorOptions::label` (`std::function<std::string(std::string_view text)>`; empty shows the text as written); `void Navigator::relabel()`. `[[nodiscard]] ui::MessageCatalogues client::Source::catalogues() const`. `client::ShellOptions::locale` (`std::string`, the locale the shell starts in; empty is `en`) and `client::ShellOptions::onLocale` (`std::function<void(std::string const& locale)>`, called after each `setLocale`, for the client to store the choice). `void client::ApplicationHost::setLocale(std::string const& locale) override`; `void client::ApplicationHost::setLocaleSink(std::function<void(std::string const&)> sink)`.
+
+A bundle's catalogues are served, hash-verified and listed in the manifest, but no client reads them: `mountShell` creates a `Session` and never calls `setTranslations`, so every `t` shows its fallback. `Session::setLocale` changes only `FormatContext::locale`; `numeric` stays the C spelling and `money` always writes `<number> <CODE>`, so `setLocale("de")` changes nothing a person sees. The navigator resolves titles with no catalogues (`catalogTitles(entry, nullptr)`) and draws `module` and `group` as written. Each is mechanism every application needs unchanged, so each is morph's: the shell installs what the bundle carries, and a locale table morph owns gives the facts a locale writes numbers, money and dates with. The date pattern itself is not this task's: the app document's `formatting.date` already sets it, and lims declares it in Task 2.
+
+- [ ] **Step 1: The spec, and one review**
+
+`docs/spec/ui/locale_table.md` states, present tense, with complete reasoning:
+
+- *What the table holds:* per locale, its `NumericLocale` (`en`: `.` and `,`; `de`: `,` and `.`), its currency facts (where the symbol stands, and the symbols it writes: `EUR` `€`, `USD` `$`, `GBP` `£`, `JPY` `¥`, `CHF` `CHF`, in both), and its default date and date-and-time patterns (`de`: `dd.MM.yyyy` and `dd.MM.yyyy HH:mm`, the DIN 5008 numeric form; `en`: none, so ISO stays, because English has no one convention — `11/10/2026` reads two ways — and ISO is what the client writes today). The table is data in the header, compiled in, with static storage, since `NumericLocale` holds views.
+- *Lookup:* `findLocaleFacts` tries the exact tag, then each shorter one (`de-AT`, then `de`), as a catalogue lookup does; `localeFacts` answers `en`'s where none matches. The shell reports a locale with no facts once, as a problem (`no formatting facts for locale `pl`; numbers, money and dates use en's`), rather than switching silently.
+- *Who installs them:* `Session::setLocale(tag)` installs `localeFacts(tag)`: its `numeric`, its `currency`, and its date patterns *only while the application declared none* (`Session::setDatePatterns` records that it did; the app document's `formatting.date` is the on-screen pattern for the whole application, in every locale). A `Session` constructed alone keeps `FormatContext`'s defaults (the C spelling, money by code, ISO) until `setLocale` is called — interpreter tests and embedders that call `setFormatting` keep what they set — and the client shell always calls `setLocale` before the first mount. Task 12's `localeScope` reads the same table and states in its own spec whether a scope's locale pattern wins over the application's inside the scope (Task 16's German invoice shows `31.10.2026`).
+- *Both frontends:* Qt Quick and the terminal read the session's `FormatContext`; neither consults `QLocale` or the C library's locale, so the two write the same text. `QLocale` may not override the table: two frontends that disagree on `1.234,50` make a screen test's expectation frontend-dependent.
+- *`money`'s forms:* in `en` the symbol stands before the amount, `€13,196.40`, `¥1,234,567`, and a symbol ending in a letter is followed by a no-break space, `CHF 2,450.35`; in `de` it follows the amount after a no-break space, `13.196,40 €`, `1.234.567 ¥`, `2.450,35 CHF`. A negative amount's sign stands first in both, `-€13.00`, `-13,00 €`. A currency the locale lists no symbol for is written by its code, `5.00 XTS`. The code form stays available as `money(x, currency, "code")`, `13,196.40 EUR`, because an invoice line or an export names the currency unambiguously where `$` does not; `"symbol"` is the default because the mockups and the production criteria show symbols. A default `FormatContext` (no currency facts) writes today's `13196.40 EUR`, so the expression corpus's expectations hold.
+- *`MMM` under `de`:* stays the English abbreviation (`Nov`), as `expressions.md`'s date patterns already state: a localized month name would read back differently per locale, and an application that wants a German month declares a numeric pattern.
+- *Alternatives considered:* `QLocale`/ICU as the source (the terminal frontend has neither, and the two frontends would diverge); CLDR in full (a dependency and megabytes for two shipped locales; the table grows a row per locale an application ships); facts in the bundle (each application would restate what a locale is; it stays possible later as an override); the locale's date pattern winning over the app's (an application that regulates its date form — lims's `dd-MMM-yyyy` — would lose it under `de`).
+
+Update `docs/spec/ui/catalogue.md` ("Switching locale": the client shell installs the provider from `Source::catalogues()` at start and after a reload that changed a catalogue, and reports `problems()`; this answers the question the spec left open of who installs it), `docs/spec/ui/expressions.md` ("Formatting": `money`'s third argument and its forms; `number` and `quantity` take the table's separators through `setLocale`), `docs/spec/ui/workspace.md` ("Navigator and pins": headings through `NavigatorOptions::label` — the group's label, or the module's when there is no group, so a module id is never drawn as written once a label is given; titles through `NavigatorOptions::titles`, the active locale's first; the title text's test id `nav_title_<id>`; `relabel()`), `docs/spec/client/client.md` ("The shell": catalogues, the initial locale from `ShellOptions::locale`, `onLocale`, the navigator's labels, relabelling on a locale change), and index `locale_table.md` in `docs/spec/README.md`. One independent review (default model) with `expression.hpp`'s `FormatContext` and `money`, `Session::setLocale`/`setDatePatterns`, `catalogue.hpp`, `navigator.hpp`, `src/client/shell.cpp`'s `start` and `buildFrame`, #1098 and `.superpowers/sdd/d-task-2-review1.md` ("Framework work this exposes") as its material; address every finding.
+
+- [ ] **Step 2: Write the failing framework tests**
+
+`tests/test_ui_locale_table.cpp`, tagged `[ui][locale]`, over the interpreter's `morph::ui::testing::Harness` (`tests/ui_interpreter_support.hpp`, as `tests/test_ui_catalogue.cpp` uses it):
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+//
+// The locale table: which facts a locale tag finds, and what `number` and `money` write once `Session::setLocale`
+// has installed them.
+
+#include <catch2/catch_test_macros.hpp>
+#include <morph/ui/locale_table.hpp>
+#include <string>
+
+#include "ui_interpreter_support.hpp"
+
+namespace {
+
+constexpr char const* kAmounts = R"({
+  "vocab": "ui/1", "id": "amounts",
+  "view": { "kind": "column", "children": [
+    { "kind": "text", "testId": "eur",
+      "text": { "fn": "money", "args": [{ "lit": { "num": 1319640, "den": 100, "dp": 2 } }, "EUR"] } },
+    { "kind": "text", "testId": "jpy", "text": { "fn": "money", "args": [1234567, "JPY"] } },
+    { "kind": "text", "testId": "chf",
+      "text": { "fn": "money", "args": [{ "lit": { "num": 245035, "den": 100, "dp": 2 } }, "CHF"] } },
+    { "kind": "text", "testId": "debt",
+      "text": { "fn": "money", "args": [{ "lit": { "num": -1300, "den": 100, "dp": 2 } }, "EUR"] } },
+    { "kind": "text", "testId": "unlisted", "text": { "fn": "money", "args": [5, "XTS"] } },
+    { "kind": "text", "testId": "code",
+      "text": { "fn": "money", "args": [{ "lit": { "num": 1319640, "den": 100, "dp": 2 } }, "EUR", "code"] } },
+    { "kind": "text", "testId": "number",
+      "text": { "fn": "number", "args": [{ "lit": { "num": 12345675, "den": 10, "dp": 1 } }] } } ] } })";
+
+}  // namespace
+
+// Mutation: drop the shorter-tag step from findLocaleFacts (de-AT finds nothing and falls back to en).
+TEST_CASE("locale table: a tag finds its facts, then its language's, else none", "[ui][locale]") {
+    REQUIRE(morph::ui::findLocaleFacts("en") != nullptr);
+    CHECK(morph::ui::findLocaleFacts("en")->tag == "en");
+    REQUIRE(morph::ui::findLocaleFacts("de-AT") != nullptr);
+    CHECK(morph::ui::findLocaleFacts("de-AT")->tag == "de");
+    CHECK(morph::ui::findLocaleFacts("pl") == nullptr);
+    CHECK(morph::ui::localeFacts("pl").tag == "en");
+}
+
+// Mutations: skip the table switch in Session::setLocale (en reads 13196.40 EUR); ignore the placement in
+// placeCurrency (de reads €13.196,40).
+TEST_CASE("locale table: setLocale changes how numbers and money are written", "[ui][locale]") {
+    morph::ui::testing::Harness h;
+    auto const screen = h.mount(kAmounts);
+    // A session nobody set a locale on keeps the evaluator's own forms.
+    CHECK(h.text("eur") == "13196.40 EUR");
+
+    h.session.setLocale("en");
+    h.settle();
+    CHECK(h.text("eur") == "€13,196.40");
+    CHECK(h.text("jpy") == "¥1,234,567");
+    CHECK(h.text("chf") == "CHF 2,450.35");
+    CHECK(h.text("debt") == "-€13.00");
+    CHECK(h.text("unlisted") == "5.00 XTS");
+    CHECK(h.text("code") == "13,196.40 EUR");
+    CHECK(h.text("number") == "1,234,567.5");
+
+    h.session.setLocale("de");
+    h.settle();
+    CHECK(h.text("eur") == "13.196,40 €");
+    CHECK(h.text("jpy") == "1.234.567 ¥");
+    CHECK(h.text("chf") == "2.450,35 CHF");
+    CHECK(h.text("debt") == "-13,00 €");
+    CHECK(h.text("code") == "13.196,40 EUR");
+    CHECK(h.text("number") == "1.234.567,5");
+}
+
+// Mutation: let setLocale install the locale's date pattern although the application declared one (the declared
+// case reads 09.11.2026).
+TEST_CASE("locale table: a locale's date pattern applies only where the application declared none", "[ui][locale]") {
+    morph::ui::testing::Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "day",
+      "view": { "kind": "text", "testId": "day", "text": { "fn": "date", "args": ["2026-11-09T09:00:00Z"] } } })");
+    h.session.setLocale("de");
+    h.settle();
+    CHECK(h.text("day") == "09.11.2026");
+    h.session.setDatePatterns("dd-MMM-yyyy", "dd-MMM-yyyy HH:mm");
+    h.session.setLocale("en");
+    h.session.setLocale("de");
+    h.settle();
+    CHECK(h.text("day") == "09-Nov-2026");
+}
+```
+
+The harness's `mount`, `text` and `settle` are `ui_interpreter_support.hpp`'s; use what it declares if they differ. Add the file to `tests/CMakeLists.txt` if it names files.
+
+`tests/client/test_shell_locale.cpp`, tagged `[client][shell][locale]`, over `ScreenHarness` in `RigMode::Local` (if linking it pulls a library `morph_client_tests` lacks, mount through `client::mountShell` over `client::LocalSource` exactly as `tests/client/test_shell.cpp`'s first case does — the shell under test is the same):
+
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+//
+// The client shell installs a bundle's message catalogues and its locale's formatting facts: a screen's `t` and
+// `money` follow `setLocale`, the navigator's titles and headings are the catalogue's words in the active locale, and
+// a locale with no facts is reported.
+
+// First, ahead of every header that brings view.hpp (GCC's -Wshadow; see test_shell.cpp).
+// clang-format off
+#include <morph/ui/value.hpp>
+// clang-format on
+
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <expected>
+#include <memory>
+#include <morph/client/source.hpp>
+#include <morph/ui/service.hpp>
+#include <string>
+#include <string_view>
+#include <testkit/screen_harness.hpp>
+#include <utility>
+#include <vector>
+
+namespace ui = morph::ui;
+using morph::examples::testing::RigMode;
+using morph::examples::testing::ScreenHarness;
+
+namespace {
+
+constexpr std::string_view kScreen = R"({
+  "vocab": "ui/1", "id": "probe.words",
+  "view": { "kind": "column", "children": [
+    { "kind": "text", "testId": "hello", "text": { "t": "probe.hello", "fallback": "Fallback" } },
+    { "kind": "text", "testId": "eur",
+      "text": { "fn": "money", "args": [{ "lit": { "num": 1319640, "den": 100, "dp": 2 } }, "EUR"] } },
+    { "kind": "button", "testId": "german", "label": "Deutsch", "onClick": { "setLocale": "de" } },
+    { "kind": "button", "testId": "polish", "label": "Polski", "onClick": { "setLocale": "pl" } } ] } })";
+
+constexpr char const* kEn =
+    R"({"probe.group.main": "Main work", "probe.hello": "Hello", "probe.words.title": "Words and amounts"})";
+constexpr char const* kDe =
+    R"({"probe.group.main": "Hauptarbeit", "probe.hello": "Hallo", "probe.words.title": "Wörter und Beträge"})";
+
+/// The one screen, listed for a signed-in person under a group that is a catalogue key, with both catalogues.
+/// @return It, or the refusal.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> wordsBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::CatalogEntry entry;
+    entry.id = "probe.words";
+    entry.title = *ui::parseJson(R"({"t": "probe.words.title", "fallback": "Words"})");
+    entry.module = "probe";
+    entry.group = "probe.group.main";
+    if (auto added = served.addScreen(std::move(entry), std::string{kScreen}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    for (auto const& [id, bytes] : {std::pair{"i18n/en.json", kEn}, std::pair{"i18n/de.json", kDe}}) {
+        auto added = served.addFile(ui::BundleFile{.kind = "messages", .id = id, .bytes = bytes, .isPublic = false});
+        if (!added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    return served.build();
+}
+
+/// The navigator's title text for @p screenId, or empty.
+std::string navTitle(ScreenHarness const& harness, std::string const& screenId) {
+    return harness.text("nav_title_" + screenId).value_or("");
+}
+
+}  // namespace
+
+// Mutations: drop the shell's setTranslations call (hello reads "Fallback"); skip the table switch in
+// Session::setLocale (eur reads "13196.40 EUR"); build the navigator's titles with catalogTitles instead of
+// catalogTitlesIn (the English title reads "Wörter und Beträge", de sorting first); give the navigator no label
+// (the heading reads "probe.group.main"); leave relabel out of the shell's locale sink (the German heading reads
+// "Main work").
+TEST_CASE("Client shell: a bundle's catalogues and the locale's formats reach the screen and the navigator",
+          "[client][shell][locale]") {
+    ScreenHarness harness{morph::client::LocalApp{.name = "probe", .bundle = &wordsBundle}, "probe.words",
+                          RigMode::Local};
+    CHECK(harness.waitForText("hello", "Hello"));
+    CHECK(harness.waitForText("eur", "€13,196.40"));
+    CHECK(navTitle(harness, "probe.words") == "Words and amounts");
+    CHECK(harness.text("navigator_group_probe/probe.group.main") == "Main work");
+
+    harness.click("german");
+    CHECK(harness.waitForText("hello", "Hallo"));
+    CHECK(harness.waitForText("eur", "13.196,40 €"));
+    CHECK(harness.waitFor([&harness] { return navTitle(harness, "probe.words") == "Wörter und Beträge"; }));
+    CHECK(harness.text("navigator_group_probe/probe.group.main") == "Hauptarbeit");
+    CHECK(harness.problems().empty());
+}
+
+// Mutation: drop the shell's report of a locale with no facts (problems stays empty).
+TEST_CASE("Client shell: a locale with no formatting facts is reported, and written as en's",
+          "[client][shell][locale]") {
+    ScreenHarness harness{morph::client::LocalApp{.name = "probe", .bundle = &wordsBundle}, "probe.words",
+                          RigMode::Local};
+    harness.click("polish");
+    CHECK(harness.waitFor([&harness] {
+        return std::ranges::any_of(harness.problems(), [](std::string const& line) {
+            return line.contains("no formatting facts for locale `pl`");
+        });
+    }));
+    // No `pl` catalogue: the `t` shows the fallback; the amount is written as en writes it.
+    CHECK(harness.waitForText("hello", "Fallback"));
+    CHECK(harness.waitForText("eur", "€13,196.40"));
+}
+```
+
+Add `test_shell_locale.cpp` to `morph_client_tests` in `tests/client/CMakeLists.txt`. Two further cases in the same file, written the same way: `ShellOptions::locale = "de"` mounts the screen in German from the first frame (through `client::mountShell`, since `ScreenHarness` does not pass it; mutation: start the session in `en` whatever the option), and `ShellOptions::onLocale` is called with `de` after the button (mutation: never call it). Run them: they fail to compile until Step 3 adds the names.
+
+- [ ] **Step 3: Implement**
+
+To the spec, every public symbol with complete `@param`/`@tparam`/`@return`:
+
+- `include/morph/ui/locale_table.hpp`: the table as `inline constexpr` arrays (`kEnglishSymbols`, `kGermanSymbols`, `kLocaleTable`), `findLocaleFacts` walking the tag as `MessageCatalogues::find` does, `localeFacts`, and `placeCurrency`: the code form when `form == MoneyForm::Code`, `facts.symbols` is empty, or @p currency is not listed (`number + " " + currency`); otherwise the sign (a leading `numeric.negativeSign`, or `-` when that is empty) taken off and put first, then `symbol` and the digits (`Before`, with `" "` between them when the symbol's last byte is an ASCII letter) or the digits, `" "` and `symbol` (`After`).
+- `expression.hpp`: `FormatContext::currency`; the `money` row takes 2 to 3 arguments, the third a string; `FunctionId::Money` writes `ui::placeCurrency(render::formatCanonicalNumber(*text, context.numeric), *currency, context.currency, context.numeric, form)`, a third argument other than `"symbol"` or `"code"` a mismatch ("`money`'s form is \"symbol\" or \"code\"").
+- `interpreter.hpp`: `Session::setLocale` installs `localeFacts(locale)`'s `numeric` and `currency` in the same `setFormatting` call as the locale, and its date patterns while `_declaredDatePatterns` is false; `setDatePatterns` sets `_declaredDatePatterns` when either pattern is non-empty.
+- `catalogue.hpp`: `catalogTitlesIn` and `catalogLabel` (a key the catalogues hold for @p locale is parsed with `parseMessage` and formatted with no arguments; anything else is @p text).
+- `navigator.hpp`: `NavigatorOptions::label`; the heading is `label(group)`, or `label(module)` when the group is empty (no `module / group` join), and as written when `label` is empty; the title text gets `setTestId("nav_title_" + entry.id)`; `relabel()` re-reads every entry's titles and every heading and keeps the pins, the current entry, the badges and the search text, then calls the on-changed handler so `menuEntries()` follows.
+- `source.hpp`/`source.cpp`: `Source::catalogues()` is `ui::loadCatalogues(_loaded->manifest, _loaded->files)`, an empty `MessageCatalogues` before a bundle; confirm `LocalSource` fills `files` with the catalogues' bytes (the shell test fails on `hello` otherwise).
+- `shell.hpp`/`shell.cpp`: `ApplicationHost::setLocale` calls the sink; in `start`, right after the session is made, `installCatalogues()` (`_catalogues = _source->catalogues()`, each of its `problems()` reported, `_session->setTranslations(_catalogues.provider())`) and `applyLocale(_options.locale.empty() ? "en" : _options.locale)` (`_session->setLocale`, and the report when `findLocaleFacts` finds nothing); the sink, set once in `start`, reports a locale with no facts, calls `_frame->navigator().relabel()` and `showActiveTitle()`, then `_options.onLocale`. `buildFrame` sets `frame.navigator.titles` to `catalogTitlesIn(entry, &_catalogues, <the session's locale>)` and `frame.navigator.label` to `catalogLabel(_catalogues, text, <the session's locale>)`, each reading `_session->formattingNow().locale` when called. `reloadChanged` reinstalls the catalogues and relabels when the poll's changed ids include an `i18n/` file (read `src/client/source.cpp`'s poll for what those ids are; if catalogue ids are not among them, reinstall on every changed digest). Every other place the shell draws a catalog title (`grep -n "catalogTitle\|\.title" src/client/shell.cpp`) resolves it the same way.
+
+Run: the framework suite `"[locale]"`, `"[catalogue]"` and `"[ui]"`; `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock cmake --build build/linux-everything --target morph_client_tests -j10` and `flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock timeout 300 build/linux-everything/tests/client/morph_client_tests "[client]"` (the path is the build tree's; use where the target lands); the Qt Quick and terminal frontends' suites; the expression corpus (`tests/ui/corpus/expressions.json`'s `money` rows still answer `1234.50 EUR`: a default `FormatContext` has no currency facts). Expected: all pass. Run each mutation named in the two files once, confirm its case fails, restore it (and `touch` the restored file).
+
+- [ ] **Step 4: lims's kit test back to the brief, and every rung green**
+
+In `examples/lims/screens/tests/test_lims_kit.cpp`, the case "lims kit: money, balances, days and states as the shell shows them" becomes the brief's "lims kit: money, balances, days and states in words, in English and German" (Task 2's Step 1 text): drop the comment saying no client installs the catalogues; assert `€13,196.40`, `¥1,234,567`, `€13,196.40 Cr`, the day as lims's declared pattern writes it (`09-Nov-2026`), `Waiting for approval` and `Draft for Stadtwerke Köln`; click `german`; assert `13.196,40 €`, `1.234.567 ¥`, `13.196,40 € H` (each with the no-break space `money` writes, spelled ` `), the day still `09-Nov-2026` (the application's pattern holds in every locale; `09.11.2026` would need lims to declare no pattern), `Wartet auf Freigabe` and `Entwurf für Stadtwerke Köln`. Its mutations stay the brief's.
+
+Run: Build lims, Screen suite `"[kit]"`, Render smoke, then Everything labelled for every rung (`flock /tmp/claude-1000/-home-yaraslau-repo-morph/b1b73e49-c41d-4e27-bb68-b8c0cfacf145/scratchpad/morph-build.lock ctest --test-dir build/linux-everything -j6 -L ladder --output-on-failure`). A rung's screen test whose expectation was the C form and is now `en`'s (`1234.50` → `1,234.50`, `12.00 EUR` → `€12.00`) is changed to what the shell now writes, in place; a failure of any other kind is a defect of this task and is fixed here. Expected: all pass.
+
+- [ ] **Step 5: The Docs build, the issue, commit**
+
+Run the Docs build. Expected: no warning; `locale_table.hpp`, `catalogue.hpp`, `navigator.hpp`, `shell.hpp` and `source.hpp` also compiled through a clang TU that includes them (`-Wdocumentation`). Then add a comment to #1098 stating what this task measured (the shell case's output, on the revision committed) and that the money symbol and the date's on-screen pattern are settled as `locale_table.md` states.
+
+```bash
+cd /home/yaraslau/repo/morph
+git add docs/spec include/morph src tests examples
+git commit -m "Install a bundle's catalogues and a locale's number, money and date facts in the client shell
+
+The shell reads the verified catalogues and installs them; setLocale installs the
+locale's separators, currency symbols and default date pattern from a table morph
+owns (en, de); the navigator's titles and headings are the catalogue's words.
+
+Closes #1098
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
+```
+
+`git add examples` stages only the rung tests Step 4 changed; check `git status` first and add those paths by name if another lane has work under `examples/`.
+
+---
+
 ### Task 5: Refusals in words (lims)
 
 **Waits for** Tasks 2, 3 and 4, and Part B Task 14 committed (`invoice_edit_model.cpp`, `invoice_approval.cpp`). **Never in flight with** Part B Task 19.
@@ -721,7 +1002,7 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 
 ### Task 6: The application shell (framework)
 
-**Waits for** nothing. Changes no file under `examples/`. **Never in flight with** the other framework tasks.
+**Waits for** Task 4a (both edit `navigator.hpp`, `src/client/shell.cpp` and `docs/spec/client/client.md`, and the principal menu's locale switch needs 4a's facts to show anything). Changes no file under `examples/`. **Never in flight with** the other framework tasks.
 
 **Files:**
 - Create: `docs/spec/ui/shell_parts.md`, `include/morph/ui/shell_parts.hpp`, `tests/test_ui_shell_parts.cpp`
@@ -758,7 +1039,7 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 
 ### Task 7: The application shell (lims)
 
-**Waits for** Tasks 2, 3, 5 and 6; Part B Task 14 committed (`invoice_model.hpp`, `ledger_model.hpp`); Part C Task 2 (the requisitions count and inbox source; it also edits `org_model.cpp`). **Never in flight with** Part C Task 2 or Part B Task 19.
+**Waits for** Tasks 2, 3, 4a, 5 and 6; Part B Task 14 committed (`invoice_model.hpp`, `ledger_model.hpp`); Part C Task 2 (the requisitions count and inbox source; it also edits `org_model.cpp`). **Never in flight with** Part C Task 2 or Part B Task 19.
 
 **Files:**
 - Create: `examples/lims/org/include/lims/org/dto/shell_dto.hpp`, `examples/lims/screens/shell_parts.cpp`
@@ -940,7 +1221,7 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 
 ### Task 12: A document page, its regions and a locale scope (framework; hypothesis 9, the document instance)
 
-**Waits for** Task 11. **Never in flight with** the other framework tasks. Changes no file under `examples/`.
+**Waits for** Task 11, and Task 4a (`localeScope` takes its facts from 4a's locale table, `ui::localeFacts`). **Never in flight with** the other framework tasks. Changes no file under `examples/`.
 
 **Files:**
 - Create: `docs/spec/ui/document_page.md`, `tests/test_ui_document_page.cpp`
@@ -976,7 +1257,7 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 ---
 ### Task 13: Org — companies and sites, users and roles (mockups 31, 32)
 
-**Waits for** Tasks 2, 3, 5, 7 and 8, and Part C Task 2 (a value limit per role; it also edits `org_model.cpp`). **Never in flight with** Part C Task 2 or Part B Task 19.
+**Waits for** Tasks 2, 3, 4a, 5, 7 and 8, and Part C Task 2 (a value limit per role; it also edits `org_model.cpp`). **Never in flight with** Part C Task 2 or Part B Task 19.
 
 **Files:**
 - Modify: `examples/lims/screens/org_screens.hpp`/`.cpp` (both screens rebuilt to their mockups; `addOrgScreens`' catalog entries), `examples/lims/screens/tests/test_lims_org_screens.cpp`, `examples/lims/screens/scenario/org_scenario.cpp` (the requisition approver limits and the org records the mockups show), the org catalogue files (`i18n/en/org.json`, `i18n/de/org.json`), `examples/lims/screens/grabs/org.tsv`, `examples/lims/org/include/lims/org/core/errors.hpp` (`kOrgRefusalCodes`), `examples/lims/org/src/models/org_model.cpp` (the last-supervisor refusal's code), `examples/lims/README.md` (decision 54)
@@ -1824,7 +2105,7 @@ Run: Build lims, Everything labelled for the rung, the Docs build, Render smoke 
 
 ```bash
 cd /home/yaraslau/repo/morph
-client=$(realpath "$(find build/linux-everything -name morph_examples_client -type f -perm -u+x | head -n 1)")
+client=$(realpath "$(find build/linux-everything -name morph_lims_client -type f -perm -u+x | head -n 1)")
 test -x "$client" || { echo "no client built"; exit 1; }
 for screen in $(grep -ho '"lims\.[a-z.-]*"' examples/lims/screens/*_screens.hpp | tr -d '"' | sort -u); do
     scratch=$(mktemp -d)
@@ -1843,7 +2124,7 @@ Expected: no `FAILED` line — every screen mounts on the terminal without a pro
 
 - [ ] **Step 3: The production criteria, per screen**
 
-For each of the 22 screens, a row in decision 62's table: loading, empty and error states (by test name), refusals in words (by refusal code), no raw ids, logins or enum names (the screen tests' checks and the grabs), money and quantities in English and German (one screen per module grabbed under `de`: the examples' client gains `--locale TAG`, which sets the session's locale before the first mount as the shell's principal menu would — `examples/client/main.cpp`, beside `--grab-size`, fixed in place as an example — and `scripts/shoot_lims.sh` passes it when `LIMS_LOCALE` is set), lists of 10,000 rows (the screens whose lists can reach it, by the stress measurement that covers each), keyboard and labels (the no-empty-accessible-name check over every screen, and the three interactive runs), both widths (render smoke), currency (by test). A criterion a screen does not meet is fixed before this step is done.
+For each of the 22 screens, a row in decision 62's table: loading, empty and error states (by test name), refusals in words (by refusal code), no raw ids, logins or enum names (the screen tests' checks and the grabs), money and quantities in English and German (one screen per module grabbed under `de`: the examples' client, which `morph_lims_client` is built from, gains `--locale TAG`, passed as `ShellOptions::locale` (Task 4a) so the session starts in that locale as the shell's principal menu would set it — `examples/client/main.cpp`, beside `--grab-size`, fixed in place as an example — and `scripts/shoot_lims.sh` passes it when `LIMS_LOCALE` is set), lists of 10,000 rows (the screens whose lists can reach it, by the stress measurement that covers each), keyboard and labels (the no-empty-accessible-name check over every screen, and the three interactive runs), both widths (render smoke), currency (by test). A criterion a screen does not meet is fixed before this step is done.
 
 - [ ] **Step 4: Every Part D hypothesis has a recorded outcome**
 
