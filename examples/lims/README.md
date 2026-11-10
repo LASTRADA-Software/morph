@@ -1218,6 +1218,36 @@ see the company (`Forbidden`) rather than answer "no rate": until an administrat
 role at a company, a foreign-currency submission there fails for the grant, not for missing data. `FindPosting` answers
 empty for such a caller, which cannot mislead, since recording the posting refuses the same caller with the reason.
 
+### 39. One module's write reaches another module's watcher only as that module's own dispatched action
+
+Two causes, measured apart in `tests/test_cross_module_effects.cpp` and by the `lims.cross_module_effects.*` probes.
+
+**(i) An action cannot declare an effect on another module's record — confirmed.** `PostInvoice` posting in one
+shared transaction (decision 38) writes the ledger's `Ledger_Entry` inside billing's action; an accountant watching
+`Ledger_Entry` is not told, while the ledger's own `CreateDraftEntry` on the same connection is heard. Billing cannot
+name the ledger's record (it does not include the ledger), and the composing code, which sees both, cannot add the
+declaration: a second `BRIDGE_REGISTER_EFFECTS` for `PostInvoice` makes the effects configuration refuse to resolve,
+"action `PostInvoice` declares different effects in two registrations" (the `refused` probe prints it; the `control`
+probe, without the second registration, resolves).
+
+**(ii) A write outside any action derives no changes — confirmed, and not a gap.** `RecordBillableLine` run in process
+outside any dispatch writes the line and no watcher of `Billing_Line` is told; the same write dispatched through the
+events client is heard. Changes are derived from executed actions by design: the backend fans out "after an
+`execute` succeeds" (`docs/spec/core/backend.md`, Fan-out), and effects "are declared, not computed"
+(`docs/KEEPING-SCREENS-CURRENT.md`). The internal client is how a reaction becomes an action (decision 32).
+
+The measured miss exists only in the shared-transaction mode. The shipped server posts dispatched, and there the
+ledger's half runs as the ledger's own `RecordPosting`, which a watching accountant hears (decision 38's test). The
+shared transaction is itself the workaround for hypothesis 1's missing seam — two modules' actions as one fact, each
+keeping its effects — and if that seam lands this instance goes with it. The instance no other seam fixes is decision
+26's, still inferred: org's `AssignRole` changes which samples lab's list returns, a change of visibility rather than a
+write, which neither dispatching nor a multi-action seam would make lab's screen hear. The one existing mechanism that
+carries a change from one record to another, `record::derivedFrom`, is refused on a keyed record, and both
+`Ledger_Entry` and `SampleView` are keyed. So cause (i) is filed against `include/morph` as a missing seam: a way for
+the code that composes modules to state that one module's action changes another module's records. A screen over these
+records, rather than a raw watching connection, was not measured; its refresh is driven by the same `changes` events,
+so it is inferred to behave the same.
+
 ### 40. An invoice change in one company reaches another company's watching clerk (hypothesis 7, first instance)
 
 **Hypothesis 7 is confirmed for invoices, and what leaks depends on the effect the action declares.** Measured in
