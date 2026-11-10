@@ -146,6 +146,8 @@ struct ListRoleAssignmentsResult {
 struct UserView {
     /// @brief The principal.
     std::string id;
+    /// @brief Their display name; empty when none is set, and a screen then shows the login.
+    std::string displayName;
     /// @brief Every role they hold somewhere, in the order first assigned.
     std::vector<LimsRole> roles;
 };
@@ -161,6 +163,33 @@ struct ListUsers {
 struct ListUsersResult {
     /// @brief The users.
     std::vector<UserView> users;
+};
+
+/// @brief Names a person: sets the display name screens show for a principal.
+///
+/// Allowed for the person themselves, and for a supervisor of a company in which the person holds a role. The rule
+/// relates two principals, which the declared role-and-scope table cannot state, so the model checks it.
+struct SetDisplayName {
+    /// @brief Whose name.
+    std::string principal;
+    /// @brief The name to show.
+    std::string displayName;
+
+    /// @brief Whether the request is well-formed.
+    /// @return `true` when a principal of 1 to 64 bytes and a display name of 1 to 128 bytes are named.
+    [[nodiscard]] bool validate() const noexcept {
+        return !principal.empty() && principal.size() <= 64 && !displayName.empty() && displayName.size() <= 128;
+    }
+
+    /// @brief Sent by its button, never per keystroke.
+    static constexpr bool explicitSubmit = true;
+};
+
+/// @brief The caller's own user view: their roles and their display name.
+struct GetSignedInUser {
+    /// @brief Always ready.
+    /// @return `true`.
+    [[nodiscard]] bool validate() const noexcept { return true; }
 };
 
 }  // namespace lims

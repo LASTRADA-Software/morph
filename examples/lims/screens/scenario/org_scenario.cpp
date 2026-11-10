@@ -77,6 +77,20 @@ void seedOrgScenario() {
     atSite("kenji", LimsRole::Analyst, osaka.id);
     atCompany("kenji", LimsRole::BillingClerk, japan.id);
     // Tobias Krüger, stores, holds no role yet: the inventory module's roles are written with the inventory scenario.
+
+    // The names. Julia supervises both companies, so she names everyone who holds a role in one; Tobias holds none
+    // yet, so no supervisor may name him and he names himself.
+    auto const named = [&julia](std::string const& login, std::string const& name) {
+        static_cast<void>(julia.call<OrgModel>(SetDisplayName{.principal = login, .displayName = name}));
+    };
+    named("anna", "Dr. Anna Meyer");
+    named("manpreet", "Manpreet Kaur");
+    named("lena", "Lena Fischer");
+    named("markus", "Markus Weber");
+    named("julia", "Julia Schneider");
+    named("kenji", "Kenji Sato");
+    ScenarioClient tobias{"tobias"};
+    static_cast<void>(tobias.call<OrgModel>(SetDisplayName{.principal = "tobias", .displayName = "Tobias Krüger"}));
 }
 
 }  // namespace lims::screens

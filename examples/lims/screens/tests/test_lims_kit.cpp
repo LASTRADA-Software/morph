@@ -2,6 +2,7 @@
 //
 // The screen kit: money, balances, days and states in words, in English and German, and catalogues that agree.
 
+#include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <expected>
@@ -23,6 +24,9 @@
 
 #include "kit/kit.hpp"
 #include "lims/billing/core/types.hpp"
+#include "lims/org/models/org_model.hpp"
+#include "scenario/org_scenario.hpp"
+#include "scenario/scenario_client.hpp"
 #include "screen_test_support.hpp"
 
 namespace {
@@ -79,6 +83,35 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
         return std::unexpected(std::move(added.error()));
     }
     if (auto added = lims::screens::addCatalogues(served); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
+/// @brief A screen showing people's names from a users list: one who is named, one who is not, and one who is not in
+///        the list at all.
+/// @return The bundle.
+std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> namesBundle() {
+    ui::ScreenRegistry screens;
+    auto registered = screens.add(ui::screen("test.names", [](ui::Scope& screen) {
+        auto const org = screen.model<lims::OrgModel>("org");
+        auto const users = screen.query<lims::ListUsers>("users", org);
+        auto const rows = users.value().at(&lims::ListUsersResult::users);
+        return ui::column({
+            ui::text({.text = kit::personName(rows, "anna")}).testId("named"),
+            ui::text({.text = kit::personName(rows, "nameless")}).testId("unnamed"),
+            ui::text({.text = kit::personName(rows, "nobody")}).testId("absent"),
+        });
+    }));
+    if (!registered) {
+        return std::unexpected(registered.error());
+    }
+    morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = "lims-names-test", .version = "1.0"},
+                                 screens.catalog()};
+    morph::ui::CatalogEntry entry;
+    entry.id = "test.names";
+    entry.title = "Names";
+    if (auto added = served.addScreen(std::move(entry), (*registered)->text); !added) {
         return std::unexpected(std::move(added.error()));
     }
     return served.build();
@@ -211,4 +244,39 @@ TEST_CASE("lims kit: each module's catalogues hold the same keys in both locales
             CHECK(english.contains(key));
         }
     }
+}
+
+// Mutations: make personName answer the principal always ("named" reads "anna"); drop the non-empty-name condition
+// from its filter (a person with no name reads as the empty string, not the login).
+TEST_CASE("lims kit: a person is shown by their display name, and by their login where they have none",
+          "[lims-screens][kit]") {
+    morph::ladder::testkit::DbFixture fixture;
+    {
+        // The first supervisor is appointed by the bootstrap assignment, as local mode does before the scenario.
+        lims::screens::ScenarioClient anna{"anna"};
+        static_cast<void>(anna.call<lims::OrgModel>(lims::AssignRole{.principal = "anna",
+                                                                     .role = lims::LimsRole::Supervisor,
+                                                                     .company = lims::OrgModel::seededCompany(),
+                                                                     .site = {}}));
+    }
+    lims::screens::seedOrgScenario();
+    {
+        // A person who holds a role and was never named: the scenario names everyone it creates.
+        lims::screens::ScenarioClient julia{"julia"};
+        auto const companies = julia.call<lims::OrgModel>(lims::ListCompanies{}).companies;
+        auto const analytik =
+            std::ranges::find(companies, std::string{"Rheinlab Analytik GmbH"}, &lims::CompanyView::name);
+        REQUIRE(analytik != companies.end());
+        static_cast<void>(julia.call<lims::OrgModel>(lims::AssignRole{
+            .principal = "nameless", .role = lims::LimsRole::Analyst, .company = analytik->id, .site = {}}));
+    }
+    ScreenHarness harness{morph::client::LocalApp{.name = "lims-names", .bundle = &namesBundle, .setUp = {}},
+                          "test.names",
+                          RigMode::Local,
+                          {},
+                          morph::client::LocalSetup{.db = {}, .user = "julia"}};
+    lims::screens::test::reportProblems(harness);
+    CHECK(harness.waitForText("named", "Dr. Anna Meyer"));
+    CHECK(harness.waitForText("unnamed", "nameless"));
+    CHECK(harness.waitForText("absent", "nobody"));
 }

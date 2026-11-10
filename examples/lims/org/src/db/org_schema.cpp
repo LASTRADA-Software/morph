@@ -61,4 +61,12 @@ LIGHTWEIGHT_SQL_MIGRATION(20261110000001, "Create org_value_limits") {
 LIGHTWEIGHT_SQL_MIGRATION(20261110000002, "One org_value_limits row per principal and company") {
     plan.CreateUniqueIndex("idx_org_value_limits_principal_company", "org_value_limits", {"principal", "company_id"});
 }
+LIGHTWEIGHT_SQL_MIGRATION(20261130000001, "Give people a display name") {
+    plan.CreateTableIfNotExists("org_people")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("principal", Varchar(64))
+        .RequiredColumn("display_name", Varchar(128));
+    // One name per person: the index settles two first namings of one principal.
+    plan.CreateUniqueIndex("idx_org_people_principal", "org_people", {"principal"});
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

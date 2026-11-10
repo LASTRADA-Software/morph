@@ -34,6 +34,16 @@ ui::Handle<std::string> balance(ui::AnyHandle const& amount, ui::AnyHandle const
                     money(amount, currency));
 }
 
+ui::Handle<std::string> personName(ui::AnyHandle const& users, ui::AnyHandle const& principal) {
+    // Only rows that carry a name are kept, so the first of them is the person's name and an empty list (no row, or a
+    // row with no name) falls through to the login.
+    auto const named = ui::filter<UserView>(users, "person", [&principal](ui::Handle<UserView> const& person) {
+        return ui::eq(person.at(&UserView::id), principal) && ui::ne(person.at(&UserView::displayName), "");
+    });
+    return ui::Handle<std::string>::raw(
+        ui::coalesce({ui::call("first", {named}).at("displayName"), principal}).json());
+}
+
 ui::Node errorBanner(ui::AnyHandle const& message) {
     return ui::banner({.tone = ui::AnyHandle{"err"}, .text = message}).visible(ui::engaged(message));
 }
