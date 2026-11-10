@@ -1212,6 +1212,34 @@ Three costs of the dispatched posting that only measuring showed:
 ledger's rate on the submission date, so the approver's limit is judged against its worth in the company's currency; it
 refuses with a `ValidationError` when no ledger is wired or no rate is valid.
 
+### 40. An invoice change in one company reaches another company's watching clerk (hypothesis 7, first instance)
+
+**Hypothesis 7 is confirmed for invoices, and what leaks depends on the effect the action declares.** Measured in
+`tests/test_two_company_effects.cpp` over a real `RemoteServer`, with the first company's clerk watching
+`Billing_Invoice` on a connection of her own and the second company's clerk watching it on another as the control:
+
+- `CreateInvoice` declares `changes<InvoiceView>`. Company B creates an invoice; company A is sent the record without
+  any key ("sent to company A: Billing_Invoice as a whole", printed by `-s`). It learns that the second company's
+  invoices changed, and when.
+- `ApproveInvoice` declares `updates<InvoiceView>`. Company B approves an invoice; company A is sent the record with
+  the invoice's id ("sent to company A: Billing_Invoice with key 1", the same key company B's own clerk is sent).
+  `Billing_Invoice` is registered without `record::privateKeys`, so nothing strips the key. Declaring
+  `changes<InvoiceView>` on `ApproveInvoice` instead makes the same case fail (the approval is then sent as a whole
+  record to both companies).
+
+This is the framework's documented design and not a defect: record events are type-level, a watch is admitted and
+re-authorised by whether its principal may still run some action that returns the record, and nothing in that path
+sees the row. docs/spec/security.md, "What an event reveals": "Those keys are ids of rows the recipient could list
+through some action returning that record, but not necessarily the same rows: a model may filter rows per principal";
+`privateKeys` is the documented way to withhold them. Leaving `privateKeys` off a tenant-owned record therefore
+discloses its ids across tenants whenever an action declares `updates<>` on it. The lists stay scoped by the
+company in `ListInvoices`' payload and the visibility check the model runs on it (inferred from the handler; the
+refetch was not measured here). Hiding
+the event itself needs a row-company judgement in the fan-out, which only the model has (inferred from the fan-out's
+documentation). If Part C's stock instance needs the same workaround (per-company record names, or `privateKeys` on a
+tenant-owned record), a per-tenant scoping seam for record events becomes an enhancement against `include/morph`;
+until then it is not filed.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so
