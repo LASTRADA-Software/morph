@@ -973,8 +973,8 @@ inside a dispatch: authorized at the edge and by its declared rule (the service 
 `system:` principal is one no sign-in yields (`LimsLogin` refuses the namespace) and holds `LimsRole::Service` at a
 company through `AssignRole` like any role; the server grants itself nothing. The bridge belongs to a one-thread
 executor of its own, where every call is issued and settled, so `call` may block a relay pass without blocking the
-thread that delivers its answer. A one-thread `ThreadPoolExecutor` works as the bridge's owner in the Release ladder build; a debug
-build's owner check was not run. Billing records each event id in
+thread that delivers its answer. That owner is an `OwnerStrand` over a one-thread pool, because a `Completion`'s
+owner must be serial and a bare `ThreadPoolExecutor` is not, even with one worker. Billing records each event id in
 `billing_consumed_events` through an `IReplayLedger`, in the line's transaction, so a redelivery answers the line it
 made; two deliveries that race past the lookup are settled by the unique index, whose loser answers the winner's
 line. A result with no price in force (or a client not registered for billing at the company) is billed `Unpriced`
@@ -986,13 +986,21 @@ received exactly once in effect across a restart, with only wiring code in `lims
 loop or cursor. Measured in `tests/test_domain_events.cpp`: a relay that delivers and then dies before marking leaves
 one line and the event still in the outbox; a fresh relay over the same database redelivers it, billing answers the
 same line (same id), and the outbox is then empty. The delivery loop is `OutboxRelay`'s and the cursor is the
-outbox's own rows. What `lims/app` holds for this consumer is wiring: `BillingEventSink` (decode, dispatch, 53 lines
+outbox's own rows. What `lims/app` holds for this consumer is wiring: `BillingEventSink` (decode, dispatch, 55 lines
 with `relayLabEvents`), the relay's configuration, and the principal's names. The only `for` in `event_wiring.cpp` is
 `entries()`'s filter over what was delivered (the `IActionLog` read API, not delivery); a search of `app/` and billing
 for cursor, last id, position and offset finds nothing; billing's only delivery-related table is the replay ledger
-every consumer of an at-least-once source needs. The internal client is 170 lines in `app/` (115 header,
-55 source) and is shared by every background job. With the ledger lookup removed, the redelivery case fails (it no longer sees the same
-line), so the check does measure the guarantee.
+every consumer of an at-least-once source needs. The internal client is 177 lines in `app/` (118 header, 59 source) and
+is shared by every background job. With `lineOfEvent` made always empty, the redelivery is refused at the unique index
+and the relay throws, so the redelivery case fails (three checks); with the lookups and the unique index both removed,
+the restart no longer leaves one line (measured: the redelivery case fails on its line count). The consumer-side
+idempotence code billing hand-wrote is separate from that wiring and counted apart: about 70 lines, being the
+`ConsumedEvents` adapter (36), `lineOfEvent` (14), the race catch in `storeLine` (11) and the table and unique index in
+the migration (8). `billing_consumed_events` duplicates `billing_lines.event_id`; a unique index on the line's own
+event id would let the line be the dedup record. The verdict stands (the design requires idempotent consumers and
+excludes only a delivery loop or cursor), and Part C's second consumer is to be compared against this cost: if it
+copies the adapter, the lookup and the race catch, that is a framework seam to promote, a ledger morph provides over a
+consumer's own table.
 
 Not measured, and the limits of the verdict. One consumer reads this outbox. `OutboxRelay` has one sink and
 `markLabOutboxRelayed` deletes a batch whole, and `BillingEventSink` throws on an event type it does not consume

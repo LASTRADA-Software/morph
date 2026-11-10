@@ -8,6 +8,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/owner_strand.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <optional>
@@ -58,7 +59,7 @@ public:
     /// @return Its result.
     /// @throws std::exception the server's refusal or the action's failure.
     template <typename Model, typename Action>
-    ::morph::model::ActionTraits<Action>::Result call(Action action);
+    typename ::morph::model::ActionTraits<Action>::Result call(Action action);
 
     /// @brief The principal it acts as.
     /// @return It.
@@ -69,7 +70,9 @@ private:
     void onOwner(std::function<void()> const& task);
 
     std::string _principal;
-    ::morph::exec::ThreadPoolExecutor _owner{1};
+    // A strand over the one-thread pool: the bridge's owner must be serial, which a pool reports it is not.
+    ::morph::exec::ThreadPoolExecutor _pool{1};
+    ::morph::exec::OwnerStrand _owner{_pool};
     std::optional<::morph::bridge::Bridge> _bridge;
 };
 
@@ -95,7 +98,7 @@ template <typename Model, typename Action>
 }
 
 template <typename Model, typename Action>
-::morph::model::ActionTraits<Action>::Result InternalClient::call(Action action) {
+typename ::morph::model::ActionTraits<Action>::Result InternalClient::call(Action action) {
     using Result = ::morph::model::ActionTraits<Action>::Result;
     auto settled = std::make_shared<std::promise<Result>>();
     auto answer = settled->get_future();

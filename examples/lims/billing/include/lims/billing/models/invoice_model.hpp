@@ -44,6 +44,7 @@ public:
     ///
     /// The seam under `RecordBillableLine` after its checks. Two deliveries of one event race on the unique index of
     /// consumed events: the loser's write fails and rolls back, and it then finds the winner's line and answers it.
+    /// This is not an action: it checks nothing, so a caller must already have authorized the event.
     /// @param action The event, already validated and authorized.
     /// @param company The company that bills it.
     /// @param betweenLookupAndWrite Called once the lookup found no earlier delivery and before the write; a test
