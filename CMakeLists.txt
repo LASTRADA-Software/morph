@@ -585,6 +585,7 @@ target_sources(morph
         include/morph/table/filter.hpp
         include/morph/table/view_change.hpp
         include/morph/table/engine.hpp
+        include/morph/table/plan_conformance.hpp
         include/morph/table/query.hpp
         include/morph/table/selection.hpp
         include/morph/table/edits.hpp

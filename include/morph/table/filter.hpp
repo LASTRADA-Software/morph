@@ -26,6 +26,7 @@
 #include <core/async/StopToken.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <expected>
 #include <map>
 #include <morph/table/data_source.hpp>
@@ -147,6 +148,8 @@ public:
         std::array<double, 2> reals{};
         /// @brief Text operand: folded, or raw when `caseSensitive`.
         std::string text;
+        /// @brief The operands as the filter spec gave them (`Between` uses both); empty for `IsEmpty` and `NotEmpty`.
+        std::array<std::string, 2> operands;
     };
 
     /// @brief One column's compiled filter.
@@ -481,6 +484,7 @@ struct RawEntry {
     }
     std::size_t const operands = out.op == CompiledFilter::Op::Between ? 2 : 1;
     for (std::size_t slot = 0; slot < operands; ++slot) {
+        out.operands.at(slot) = std::string{raw->values.at(slot)};
         if (!parseOperand(info, services, raw->values.at(slot), slot, out)) {
             return std::unexpected(TableError{.code = TableErrorCode::InvalidValue,
                                               .column = info.id,
@@ -634,6 +638,28 @@ struct RawEntry {
         }
     }
     return out;
+}
+
+/// @brief `compileFilter`, with an exception from the collator or the date parser returned as `ServiceFailed`.
+///
+/// The one compile step `apply`, `Engine` and `planQuery` share, so a throwing service is an error value in all three.
+/// @param spec     The filter.
+/// @param columns  The table's columns.
+/// @param services The collator and date parser; null members mean their defaults.
+/// @return The compiled filter, or the first error.
+[[nodiscard]] inline std::expected<CompiledFilter, TableError> compileFilterGuarded(
+    FilterSpec const& spec, std::span<ColumnInfo const> columns, Services const& services) {
+    auto const failed = [](std::string const& what) {
+        return std::unexpected(
+            TableError{.code = TableErrorCode::ServiceFailed, .column = {}, .message = "a service failed: " + what});
+    };
+    try {
+        return compileFilter(spec, columns, services);
+    } catch (std::exception const& error) {
+        return failed(error.what());
+    } catch (...) {
+        return failed("unknown exception");
+    }
 }
 
 /// @brief Evaluates a compiled filter over a candidate list, column at a time,

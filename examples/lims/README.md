@@ -1289,6 +1289,29 @@ calls them hypothesis 10's in its Part D text; they are hypothesis 9's (an actio
 document layout), and hypothesis 10 is the large lists; the design's sentence now says 9. `IMPLEMENTATION.md` rule 2
 exempts lims's look, and only lims's.
 
+### 58. The journal and the trial balance [load every row they page or total] (hypothesis 10, first instance)
+
+**Hypothesis 10 is confirmed for the journal and the trial balance.** Measured in `tests/test_ledger_scale.cpp` on the
+`linux-everything` Release build (clang `-O3`, SQLite on disk, one process, rows written through `DataMapper` in
+transactions of 10,000): `ListEntries` over 10^6 posted two-line entries took 527,574 ms with every entry loaded
+(resident memory 46 MB to 1,907 MB, peak 46 MB to 2,777 MB), and a page of 50 through `table::apply` over what it
+returned took 140 ms. A trial balance over 10^7 posted lines (5 * 10^6 entries of up to 10^9 minor units) took
+168,209 ms and peaked at 10,857 MB; its totals equal the independently accumulated `int64` sums exactly, so it
+answers, but by loading every line, which is not the production criterion. The inference in decision 30 (about 11 s at
+10^7) was a time estimate that assumed the lines fit in memory; the measured time is 168 s and the memory it left out is
+10.9 GB. `ListEntries` makes about five queries per entry, so most of its time is that pattern; one flat read of the
+narrow rows was not measured. Writing the rows took 25 s and 121 s. Not measured: other hardware, other databases.
+
+The first case's run was 592 s against a 600 s ctest limit, so a case named for a 10^6 or 10^7 table has a 1,800 s
+limit (`cmake/morph_add_rung.cmake`); both are `Stress:` cases and outside `ctest -L ladder -LE stress`.
+
+morph gained the database-page seam (`docs/spec/table/database_pages.md`): `table::planQuery`, a validated plan a model
+translates into its own query; `Page::totalKind`, a total that is the count or a lower bound; and
+`table::conformanceFailures`, which holds the translation to `apply`'s pages. It covers the journal's list. The trial
+balance is a sum, not a page: it computes its rows in the store and pages them with `apply` or with a plan over the
+aggregate, which the seam does not describe. The ledger's move onto the seam, and its run of the conformance helper
+against SQLite, are the next ledger task's.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so

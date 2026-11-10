@@ -77,17 +77,25 @@ struct TableQuery {
     [[nodiscard]] static constexpr std::string_view schemaMarker() noexcept { return "x-table"; }
 };
 
+/// @brief What a page's `total` says about the filtered view.
+enum class TotalKind : std::uint8_t {
+    Exact,    ///< `total` is the count of the filtered view.
+    AtLeast,  ///< `total` is a lower bound: the view has at least that many rows.
+};
+
 /// @brief One page of a list action's reply.
 /// @tparam Row The row type.
 template <typename Row>
 struct Page {
     /// @brief The rows, in view order.
     std::vector<Row> rows;
-    /// @brief Rows in the whole filtered view; absent when the server did not
-    ///        count them or the count is above its cap.
+    /// @brief Rows in the whole filtered view, or a lower bound (see `totalKind`);
+    ///        absent when the server did not count them.
     std::optional<std::int64_t> total;
     /// @brief The view row of `rows[0]`.
     std::int64_t offset = 0;
+    /// @brief Whether `total` is the count or a lower bound; meaningful only when `total` is present.
+    TotalKind totalKind = TotalKind::Exact;
 };
 
 /// @brief The bounds a server applies to every `TableQuery`, an untrusted body.
@@ -297,7 +305,7 @@ struct PageRows {
     // a collator that is not safe to share clones itself here, so concurrent
     // calls never fold on the one the caller passed.
     auto services = options.services.forTask();
-    auto filter = compileFilter(checked->filters, columns, services);
+    auto filter = compileFilterGuarded(checked->filters, columns, services);
     if (!filter) {
         return std::unexpected(std::move(filter.error()));
     }
@@ -341,6 +349,245 @@ struct PageRows {
         out.rows.push_back(view[static_cast<std::size_t>(i)]);
     }
     return out;
+}
+
+// ── Query plans ─────────────────────────────────────────────────────────────
+
+/// @brief What a sort or a filter on a column is used for, as `planQuery`'s `translatable` predicate sees it.
+enum class PlanUse : std::uint8_t {
+    Sort,    ///< The column orders the view.
+    Filter,  ///< The column is filtered.
+};
+
+/// @brief The operators a planned condition carries.
+using FilterOp = CompiledFilter::Op;
+
+/// @brief A planned operand, typed by its column's kind: `Rational` for integer, key, decimal and quantity columns
+///        (quantities in the canonical unit), `double` for numbers, `int64` for dates (days), date-times (UTC
+///        seconds) and booleans (0 or 1), `string` for text (folded, or raw for a case-sensitive condition), and
+///        empty when the operator takes no operand.
+using PlannedOperand = std::variant<std::monostate, std::int64_t, math::Rational, double, std::string>;
+
+/// @brief One sort key of a plan.
+struct PlannedSortKey {
+    /// @brief The column's id.
+    std::string column;
+    /// @brief How the column orders.
+    ColumnKind kind = ColumnKind::Text;
+    /// @brief For a `Custom` column, its comparator's name; empty otherwise.
+    std::string comparator;
+    /// @brief The key's direction.
+    SortDirection dir = SortDirection::Ascending;
+};
+
+/// @brief One condition of a plan: an operator and its parsed operands on one column.
+struct PlannedCondition {
+    /// @brief The column's id.
+    std::string column;
+    /// @brief The column's kind.
+    ColumnKind kind = ColumnKind::Text;
+    /// @brief The operator.
+    FilterOp op = FilterOp::IsEmpty;
+    /// @brief The operand, typed by `kind`.
+    PlannedOperand value;
+    /// @brief `Between`'s second operand, typed by `kind`; empty otherwise.
+    PlannedOperand upper;
+    /// @brief The operand as the request gave it (`Between`: the first).
+    std::string text;
+    /// @brief `Between`'s second operand as the request gave it.
+    std::string upperText;
+    /// @brief Whether text operators compare the text as given rather than folded.
+    bool caseSensitive = false;
+};
+
+/// @brief The conditions on one column.
+struct PlannedColumnFilter {
+    /// @brief The column's id.
+    std::string column;
+    /// @brief How `include` entries combine.
+    Combine combine = Combine::Any;
+    /// @brief Conditions a row must meet; empty means none.
+    std::vector<PlannedCondition> include;
+    /// @brief Conditions that reject a row when any matches; empty for a group's columns.
+    std::vector<PlannedCondition> exclude;
+};
+
+/// @brief A filter over several columns: a row matches when the group's entries match on any of its columns.
+struct PlannedGroup {
+    /// @brief The columns, each with the entries that apply to it; `combine` is the group's.
+    std::vector<PlannedColumnFilter> columns;
+};
+
+/// @brief A `TableQuery` validated and normalised for translation into a store's own query.
+struct QueryPlan {
+    /// @brief The sort chain, most significant key first. A store-backed model appends its row key, ascending, to
+    ///        this (or uses it alone when this is empty) so the order is total.
+    std::vector<PlannedSortKey> sort;
+    /// @brief The column filters, ANDed, in evaluation order.
+    std::vector<PlannedColumnFilter> filters;
+    /// @brief The groups, ANDed with `filters`.
+    std::vector<PlannedGroup> groups;
+    /// @brief The first view row wanted, within `[0, QueryLimits::maxOffset]`.
+    std::int64_t offset = 0;
+    /// @brief The rows wanted, clamped to `QueryLimits::maxLimit`; zero asks for the count only.
+    std::int64_t limit = 0;
+    /// @brief `QueryLimits::totalCap`: a count above it may be reported as a lower bound.
+    std::int64_t totalCap = 0;
+};
+
+namespace detail {
+
+/// @brief The operand a compiled entry holds in @p slot, typed by the column's kind.
+/// @param kind  The column's kind.
+/// @param entry The compiled entry.
+/// @param slot  0, or 1 for `Between`'s second operand.
+/// @return The operand.
+[[nodiscard]] inline PlannedOperand plannedOperand(ColumnKind kind, CompiledFilter::Entry const& entry,
+                                                   std::size_t slot) {
+    switch (kind) {
+        case ColumnKind::Integer:
+        case ColumnKind::Key:
+        case ColumnKind::Decimal:
+        case ColumnKind::Quantity:
+            return entry.exact.at(slot);
+        case ColumnKind::Number:
+            return entry.reals.at(slot);
+        case ColumnKind::Date:
+        case ColumnKind::DateTime:
+        case ColumnKind::Bool:
+            return entry.ints.at(slot);
+        case ColumnKind::Text:
+            return slot == 0 ? PlannedOperand{entry.text} : PlannedOperand{};
+        case ColumnKind::Custom:
+        default:
+            return {};
+    }
+}
+
+/// @brief A compiled entry as a planned condition.
+/// @param info  The column.
+/// @param entry The entry.
+/// @return The condition.
+[[nodiscard]] inline PlannedCondition plannedCondition(ColumnInfo const& info, CompiledFilter::Entry const& entry) {
+    PlannedCondition out{.column = info.id,
+                         .kind = info.kind,
+                         .op = entry.op,
+                         .value = {},
+                         .upper = {},
+                         .text = entry.operands[0],
+                         .upperText = entry.operands[1],
+                         .caseSensitive = entry.caseSensitive};
+    if (entry.op != FilterOp::IsEmpty && entry.op != FilterOp::NotEmpty) {
+        out.value = plannedOperand(info.kind, entry, 0);
+        if (entry.op == FilterOp::Between) {
+            out.upper = plannedOperand(info.kind, entry, 1);
+        }
+    }
+    return out;
+}
+
+/// @brief A compiled column filter as a planned one.
+/// @param columns The table's columns.
+/// @param filter  The compiled filter.
+/// @return The planned filter.
+[[nodiscard]] inline PlannedColumnFilter plannedColumnFilter(std::span<ColumnInfo const> columns,
+                                                             CompiledFilter::Column const& filter) {
+    auto const& info = columns[filter.column];
+    PlannedColumnFilter out{.column = info.id, .combine = filter.combine, .include = {}, .exclude = {}};
+    for (auto const& entry : filter.include) {
+        out.include.push_back(plannedCondition(info, entry));
+    }
+    for (auto const& entry : filter.exclude) {
+        out.exclude.push_back(plannedCondition(info, entry));
+    }
+    return out;
+}
+
+/// @brief The first sort or filter column of @p query that @p translatable refuses.
+/// @param query        The validated query.
+/// @param translatable The model's predicate; empty accepts everything.
+/// @return The `Unavailable` error, or nothing.
+[[nodiscard]] inline std::optional<TableError> untranslatable(
+    TableQuery const& query, std::function<bool(std::string_view, PlanUse)> const& translatable) {
+    if (!translatable) {
+        return std::nullopt;
+    }
+    auto const refuse = [](std::string const& column, std::string_view use) {
+        return TableError{.code = TableErrorCode::Unavailable,
+                          .column = column,
+                          .message = "column " + column + " cannot be " + std::string{use} + " by this table"};
+    };
+    for (auto const& key : query.sort) {
+        if (!translatable(key.column, PlanUse::Sort)) {
+            return refuse(key.column, "sorted");
+        }
+    }
+    for (auto const& [column, filter] : query.filters.columns) {
+        if (!translatable(column, PlanUse::Filter) && (!filter.include.empty() || !filter.exclude.empty())) {
+            return refuse(column, "filtered");
+        }
+    }
+    for (auto const& group : query.filters.groups) {
+        for (auto const& column : group.columns) {
+            if (!translatable(column, PlanUse::Filter)) {
+                return refuse(column, "filtered");
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace detail
+
+/// @brief Validates @p query and normalises it into a plan a model translates into its own query.
+///
+/// In order: `validate`, the `translatable` refusal, the guarded compile step `apply` also uses, and a pure
+/// projection of the compiled filter. A refusal is therefore the value `apply` returns for the same query, except
+/// the `Unavailable` of `translatable`, which only a model gives. `apply` over the same rows is the oracle the
+/// model's pages are held to (`conformanceFailures`).
+/// @param query        The request body's table query.
+/// @param columns      The row schema's columns.
+/// @param limits       The bounds of `validate`.
+/// @param mayRead      Whether the principal may read a column; empty allows every column.
+/// @param services     The collator and date parser operands are compiled with; null members mean their defaults.
+/// @param translatable Whether the model can sort or filter a column; empty accepts all. A column it refuses is
+///                     `Unavailable`, naming the column.
+/// @return The plan, or the typed error the client shows.
+[[nodiscard]] inline std::expected<QueryPlan, TableError> planQuery(
+    TableQuery const& query, std::span<ColumnInfo const> columns, QueryLimits const& limits = {},
+    std::function<bool(std::string_view)> const& mayRead = {}, Services const& services = {},
+    std::function<bool(std::string_view, PlanUse)> const& translatable = {}) {
+    auto checked = validate(query, columns, limits, mayRead);
+    if (!checked) {
+        return std::unexpected(std::move(checked.error()));
+    }
+    if (auto error = detail::untranslatable(*checked, translatable)) {
+        return std::unexpected(std::move(*error));
+    }
+    auto compiled = compileFilterGuarded(checked->filters, columns, services.forTask());
+    if (!compiled) {
+        return std::unexpected(std::move(compiled.error()));
+    }
+    QueryPlan plan;
+    plan.offset = checked->page.offset;
+    plan.limit = checked->page.limit;
+    plan.totalCap = limits.totalCap;
+    for (auto const& key : checked->sort) {
+        auto const& info = columns[*detail::findColumn(columns, key.column)];
+        plan.sort.push_back(
+            PlannedSortKey{.column = info.id, .kind = info.kind, .comparator = info.comparator, .dir = key.dir});
+    }
+    for (auto const& filter : compiled->columns()) {
+        plan.filters.push_back(detail::plannedColumnFilter(columns, filter));
+    }
+    for (auto const& group : compiled->groups()) {
+        PlannedGroup planned;
+        for (auto const& filter : group.columns) {
+            planned.columns.push_back(detail::plannedColumnFilter(columns, filter));
+        }
+        plan.groups.push_back(std::move(planned));
+    }
+    return plan;
 }
 
 // ── Typed rows ──────────────────────────────────────────────────────────────
@@ -718,7 +965,7 @@ public:
         auto const lastPage = ((_visibleFirst + std::max<std::int64_t>(_visibleCount, 1) - 1) / _pageSize) + 1;
         std::vector<PageFetch> out;
         for (auto page = firstPage; page <= lastPage; ++page) {
-            if (_total && page * _pageSize >= *_total) {
+            if (exactTotal() && page * _pageSize >= *_total) {
                 break;
             }
             if (_complete.contains(page) || std::ranges::find(_inFlight, page) != _inFlight.end()) {
@@ -751,6 +998,7 @@ public:
         _inFlight.erase(flight);
         if (page.total) {
             _total = page.total;
+            _totalKind = page.totalKind;
         }
         _error.reset();
         auto& rows = _pages[index];
@@ -762,7 +1010,7 @@ public:
                         std::make_move_iterator(page.rows.begin() + static_cast<std::ptrdiff_t>(take)));
         }
         auto const end = (index * _pageSize) + static_cast<std::int64_t>(rows.size());
-        if (std::cmp_greater_equal(rows.size(), _pageSize) || (_total && end >= *_total) || replyEmpty) {
+        if (std::cmp_greater_equal(rows.size(), _pageSize) || (exactTotal() && end >= *_total) || replyEmpty) {
             _complete.insert(index);
         }
         evict();
@@ -790,6 +1038,7 @@ public:
         _complete.clear();
         _inFlight.clear();
         _total.reset();
+        _totalKind = TotalKind::Exact;
         _error.reset();
     }
 
@@ -815,6 +1064,11 @@ public:
     /// @brief The view's total rows, when a reply of this query reported it.
     /// @return The total.
     [[nodiscard]] std::optional<std::int64_t> total() const noexcept { return _total; }
+
+    /// @brief Whether `total()` is the count of the view or a lower bound, as the latest reply that carried a total
+    ///        said.
+    /// @return The kind; `Exact` while no total is known.
+    [[nodiscard]] TotalKind totalKind() const noexcept { return _totalKind; }
 
     /// @brief The last error, until a reply clears it.
     /// @return The error, or nothing.
@@ -849,7 +1103,11 @@ private:
     std::map<std::int64_t, std::vector<Row>> _pages;
     std::set<std::int64_t> _complete;
     std::vector<std::int64_t> _inFlight;
+    // Whether a known total bounds the view; a lower bound does not.
+    [[nodiscard]] bool exactTotal() const noexcept { return _total && _totalKind == TotalKind::Exact; }
+
     std::optional<std::int64_t> _total;
+    TotalKind _totalKind = TotalKind::Exact;
     std::optional<TableError> _error;
     std::int64_t _visibleFirst = 0;
     std::int64_t _visibleCount = 0;
