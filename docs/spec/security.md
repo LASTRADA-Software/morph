@@ -97,7 +97,11 @@ application. Be explicit about the boundary:
 - **Local-path authorization.** `LocalBackend` installs the session
   context around each action but never calls the authorizer (the authorizer is a remote-only gate,
   `remote.hpp` `dispatchExecute` is the sole call site). Security-critical checks
-  must be enforced inside the model so they hold in both modes.
+  must be enforced inside the model so they hold in both modes. A check that
+  reads the payload or the instance is declared as the action's guard
+  ([core/action_guards.md](core/action_guards.md)), which the framework runs on
+  both paths before `Model::execute`. The authorizer's id-level answer still
+  admits watches, which run no action and so no guard.
 
 ## The trust boundary: `Context` is untrusted input
 

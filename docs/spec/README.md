@@ -116,7 +116,10 @@ before writing a durability test
 
 **Identity**
 [`session/session.md`](session/session.md) ·
-[`security.md`](security.md)
+[`security.md`](security.md) ·
+[`core/action_guards.md`](core/action_guards.md) — the per-action check the
+framework runs on the decoded action, on every dispatch path, before
+`Model::execute`
 
 **Schema-driven UI**
 [`forms/forms.md`](forms/forms.md) ·
