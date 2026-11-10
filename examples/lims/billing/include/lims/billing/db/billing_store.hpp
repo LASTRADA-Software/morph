@@ -49,4 +49,12 @@ namespace lims {
 /// @return It, or nothing when there is no such invoice.
 [[nodiscard]] std::optional<db::InvoiceRecord> findInvoiceRecord(InvoiceId invoice);
 
+/// @brief Whether the approval of @p invoice is past its deadline, so only an approver at its company can approve it.
+///
+/// The one predicate the approval rule's scope and the view's level share; a submitted invoice's deadline is
+/// positive, and a draft has none. Reads the clock.
+/// @param invoice The invoice's row.
+/// @return True from the deadline instant on.
+[[nodiscard]] bool escalated(db::InvoiceRecord const& invoice);
+
 }  // namespace lims

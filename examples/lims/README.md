@@ -1091,7 +1091,10 @@ a conditional update that requires the state the action read, and a statement th
 two clerks submitting one invoice, or two approvers approving it, cannot both succeed. Approving an invoice that is
 not submitted is an `IllegalTransition` for everyone, asked before the rule so that it never names who created it.
 A foreign-currency invoice has no value in its company's currency until the ledger's dated rate values it, so
-`SubmitInvoice` refuses one.
+`SubmitInvoice` refuses one. `SubmitInvoice` declares `changes<InvoiceView>` and not `updates`: it moves a row into the
+approvers' filtered list, which held no entry for its key, and `updates` refetches only the entries that hold the key.
+An action that moves a row into a filtered list declares `changes`; `screens/tests/test_lims_approval_inbox.cpp`
+mounts an inbox showing no pending invoice, submits, and waits for the invoice to appear.
 
 **Hypothesis 5 is refuted for this instance.** Measured in `tests/test_invoice_approval.cpp`: an invoice submitted
 by one principal on one rig is approved by another a day later on a new rig, in `Local`, `LocalSingleThread` and
@@ -1104,8 +1107,9 @@ instance, but escalation is not scheduled work: it is a deadline the rule reads 
 nothing has to start at the deadline or resume after a restart. Measured in the same file with the clock before and
 after the deadline. The one consequence is an effects question, not a scheduling one, measured in
 `screens/tests/test_lims_approval_inbox.cpp`: a site approver's inbox, mounted before the deadline, still lists the
-invoice after it, and shows the escalation only when it asks again, because no action ran and so no effect was
-declared or fanned out. Hypothesis 4 therefore has one instance in this design, the billing run (decision 34), and
+invoice after it, and shows the escalation only when it asks again. The cause is inferred, not measured: no action
+ran, so no effect was declared or fanned out. What the test does measure is that a poll on the inbox would tell it. Hypothesis 4 therefore has one
+instance in this design, the billing run (decision 34), and
 the design's row says so. Part C's requisition escalation is expected to take this shape.
 
 ### 36. Billing's approval pairs and the approver's value limit are declared, and checked in the model (hypothesis 6, second instance)

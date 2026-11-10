@@ -22,7 +22,9 @@
 #include "lims/billing/core/fault_hook.hpp"
 #include "lims/billing/models/billing_run_model.hpp"
 #include "lims/billing/models/invoice_model.hpp"
+#include "lims/org/dto/company_dto.hpp"
 #include "lims/org/dto/limit_dto.hpp"
+#include "lims/org/models/org_model.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
@@ -232,9 +234,10 @@ TEST_CASE(
     CHECK(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}).state == lims::InvoiceState::Approved);
 }
 
-// Hypothesis 5. Mutation: drop `submitted_by` from the submission's update (the approval made over a second rig, after
-// the first is gone, finds no submitter on the row).
-TEST_CASE("Hypothesis 5: an approval lasts across days, principals and restarts as ordinary actions",
+// Hypothesis 5. The approval's state is in the invoice's row, which a second rig reads; state kept in the process
+// would also pass, since the rigs share it. Mutation: drop `submitted_by` from the submission's update (the approval
+// made over a second rig finds no submitter on the row).
+TEST_CASE("Hypothesis 5: an approval lasts across days, principals and rigs as ordinary actions",
           "[lims][billing][approval][h5]") {
     auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
@@ -249,7 +252,7 @@ TEST_CASE("Hypothesis 5: an approval lasts across days, principals and restarts 
         CHECK(awaitQt(clerk.execute(lims::SubmitInvoice{.invoiceId = invoice.id})).state ==
               lims::InvoiceState::Submitted);
     }
-    // The server restarted; another principal, a day later, on another connection.
+    // Another rig, as a restarted server would be; another principal, a day later, on another connection.
     ScopedClockOverride const tuesday{lims::test::at(2026, 11, 11, 15)};
     BackendRig rig{mode, 1, lims::test::limsAuthorizer(kSecret)};
     rig.bridge(0).setDefaultSession(lims::test::signedAs(issuer, "paula"));
@@ -318,4 +321,106 @@ TEST_CASE("invoice approval: an invoice the billing run drafted still needs a se
     CHECK(approved.state == lims::InvoiceState::Approved);
     CHECK(approved.submittedBy == "bea");
     CHECK(approved.approvedBy == "carl");
+}
+
+namespace {
+
+/// @brief Sets @p principal's value limit at the seeded company to @p amount, as the supervisor.
+void setLimit(std::string principal, Rational amount) {
+    ScopedPrincipal const sam{"sam"};
+    lims::OrgModel{}.execute(lims::SetValueLimit{
+        .principal = std::move(principal), .company = lims::test::seededCompany(), .limit = lims::Amount{amount}});
+}
+
+}  // namespace
+
+// Mutations: compare with >= (a limit equal to the gross is refused); read a missing limit as unlimited (dora
+// approves); compare the deadline with > (paula still approves at the deadline instant).
+TEST_CASE("invoice approval: the edges of the limit and of the deadline", "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);  // the gross is 47.60, the deadline 09:00 on 12 November
+    lims::InvoiceModel invoices;
+    SECTION("a limit equal to the gross allows") {
+        setLimit("paula", Rational{morph::math::Numerator{4760}, morph::math::Denominator{100}, DecimalPlaces{2}});
+        ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+        ScopedPrincipal const paula{"paula"};
+        CHECK(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}).state == lims::InvoiceState::Approved);
+    }
+    SECTION("a limit a cent below the gross refuses") {
+        setLimit("paula", Rational{morph::math::Numerator{4759}, morph::math::Denominator{100}, DecimalPlaces{2}});
+        ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+        ScopedPrincipal const paula{"paula"};
+        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+                          Catch::Matchers::ContainsSubstring("value limit"));
+    }
+    SECTION("an approver with the role and no limit is refused") {
+        lims::test::grant("dora", lims::LimsRole::InvoiceApprover, lims::Scope{lims::test::seededSite()});
+        ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+        ScopedPrincipal const dora{"dora"};
+        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+                          Catch::Matchers::ContainsSubstring("has no value limit"));
+        CHECK(invoices.execute(lims::ListPendingApprovals{}).invoices.empty());
+    }
+    SECTION("at the deadline instant the approval is at the company") {
+        ScopedClockOverride const clock{lims::test::at(2026, 11, 12)};
+        {
+            ScopedPrincipal const paula{"paula"};
+            CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+                              Catch::Matchers::ContainsSubstring("at company"));
+            CHECK(invoices.execute(lims::ListPendingApprovals{}).invoices.empty());
+        }
+        ScopedPrincipal const carl{"carl"};
+        CHECK(invoices.execute(lims::GetInvoice{.invoiceId = invoice.id}).level == lims::ApprovalLevel::Company);
+    }
+}
+
+// A company whose base currency has no decimals: the gross and the limits are whole yen, and the limit equal to the
+// gross allows. Mutation: compare with >= (carl's limit equals the gross and is refused).
+TEST_CASE("invoice approval: a company billing in yen is judged against whole-yen limits",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    execute("UPDATE org_companies SET base_currency = " + std::to_string(static_cast<int>(lims::CurrencyCode::JPY)));
+    execute("UPDATE billing_invoices SET currency = " + std::to_string(static_cast<int>(lims::CurrencyCode::JPY)) +
+            ", gross_num = 5000, gross_den = 1");
+    setLimit("paula", Rational{4999, DecimalPlaces{0}});
+    setLimit("carl", Rational{5000, DecimalPlaces{0}});
+    lims::test::submit(invoice);
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+    lims::InvoiceModel invoices;
+    {
+        ScopedPrincipal const paula{"paula"};
+        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+                          Catch::Matchers::ContainsSubstring("value limit"));
+    }
+    ScopedPrincipal const carl{"carl"};
+    CHECK(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}).state == lims::InvoiceState::Approved);
+}
+
+// The list is prefiltered by the companies the caller sees, and the verdict refuses the rest too; this pins the
+// outcome, which no single mutation of either alone changes.
+TEST_CASE("invoice approval: the pending list holds nothing of a company the caller cannot see",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+    lims::InvoiceModel invoices;
+    {
+        ScopedPrincipal const carl{"carl"};
+        CHECK(invoices.execute(lims::ListPendingApprovals{}).invoices.size() == 1U);
+    }
+    lims::CompanyId other;
+    {
+        ScopedPrincipal const sam{"sam"};
+        other = lims::OrgModel{}
+                    .execute(lims::CreateCompany{.name = "Elsewhere",
+                                                 .baseCurrency = lims::CurrencyCode::EUR,
+                                                 .fiscalYearStart = lims::Month::January})
+                    .id;
+    }
+    execute("UPDATE billing_invoices SET company_id = " + std::to_string(*other));
+    ScopedPrincipal const carl{"carl"};
+    CHECK(invoices.execute(lims::ListPendingApprovals{}).invoices.empty());
 }

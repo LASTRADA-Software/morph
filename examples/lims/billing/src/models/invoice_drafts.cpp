@@ -148,6 +148,10 @@ std::optional<std::int64_t> draftInvoice(Lightweight::DataMapper& mapper, Compan
     return invoiceId;
 }
 
+bool escalated(db::InvoiceRecord const& invoice) {
+    return invoice.deadlineAt.Value() > 0 && nowMillis() >= invoice.deadlineAt.Value();
+}
+
 std::optional<db::InvoiceRecord> findInvoiceRecord(InvoiceId invoice) {
     if (!invoice.hasValue()) {
         return std::nullopt;
@@ -198,8 +202,7 @@ InvoiceView invoiceView(Lightweight::DataMapper& mapper, std::int64_t invoiceId)
         .postedBy = text(row.postedBy),
         .submittedAt = instant(row.submittedAt.Value()),
         .approvalDeadline = instant(row.deadlineAt.Value()),
-        .level = row.deadlineAt.Value() > 0 && nowMillis() >= row.deadlineAt.Value() ? ApprovalLevel::Company
-                                                                                     : ApprovalLevel::Site,
+        .level = escalated(row) ? ApprovalLevel::Company : ApprovalLevel::Site,
         .entry = JournalEntryId::fromOptional(row.entryId.Value()),
     };
     auto lines = mapper.Query<db::BillableLineRecord>()

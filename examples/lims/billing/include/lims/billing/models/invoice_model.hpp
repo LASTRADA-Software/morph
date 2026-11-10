@@ -132,7 +132,7 @@ BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::CreateInvoice, "CreateInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::CreateInvoice, ::morph::effects::changes<lims::InvoiceView>,
                         ::morph::effects::changes<lims::BillableLineView>)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::SubmitInvoice, "SubmitInvoice")
-BRIDGE_REGISTER_EFFECTS(lims::SubmitInvoice, ::morph::effects::updates<lims::InvoiceView>)
+BRIDGE_REGISTER_EFFECTS(lims::SubmitInvoice, ::morph::effects::changes<lims::InvoiceView>)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ApproveInvoice, "ApproveInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::ApproveInvoice, ::morph::effects::updates<lims::InvoiceView>)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListPendingApprovals, "ListPendingApprovals",

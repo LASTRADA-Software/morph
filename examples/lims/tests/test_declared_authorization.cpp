@@ -352,6 +352,24 @@ TEST_CASE("declared authorization: lab declares capture and verify as a pair", "
     CHECK(Rule::separatedFrom == morph::model::ActionTraits<lims::CaptureConcentration>::typeId());
 }
 
+// Mutation: name an action that is not registered in one of ApproveInvoice's `separations`.
+TEST_CASE("declared authorization: every several-pairs separation names a registered action",
+          "[lims][authorization]") {
+    STATIC_REQUIRE(lims::DeclaresSeparations<lims::ApproveInvoice>);
+    STATIC_REQUIRE_FALSE(lims::DeclaresSeparation<lims::ApproveInvoice>);
+    using Rule = lims::Authorization<lims::ApproveInvoice>;
+    auto const& dispatcher = morph::model::detail::ActionDispatcher::instance();
+    std::set<std::string> registered;
+    for (std::string_view const model : {"OrgModel", "SampleModel", "LedgerModel", "PriceListModel", "InvoiceModel"}) {
+        auto const actions = dispatcher.actionsOf(model);
+        registered.insert(actions.begin(), actions.end());
+    }
+    for (auto const& pair : Rule::separations) {
+        CAPTURE(pair.action);
+        CHECK(registered.contains(std::string{pair.action}));
+    }
+}
+
 // Mutations: leave a declared action out of declaredRequirements() (its edge check is lost); leave a mutating action
 // out of both the table and openMutatingActions().
 TEST_CASE("declared authorization: every mutating action is declared or deliberately open", "[lims][authorization]") {

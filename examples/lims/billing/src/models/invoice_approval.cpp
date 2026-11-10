@@ -144,19 +144,26 @@ ListInvoicesResult InvoiceModel::execute(const ListPendingApprovals& action) {
     if (principal.empty()) {
         return result;
     }
+    auto const visible = OrgModel::visibleCompanies(principal);
     Lightweight::DataMapper mapper;
     auto const rows = mapper.Query<db::InvoiceRecord>()
                           .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::state>, "=",
                                  static_cast<int>(InvoiceState::Submitted))
                           .All();
     for (auto const& row : rows) {
+        if (std::ranges::find(visible, CompanyId{row.companyId.Value()}) == visible.end()) {
+            continue;
+        }
         ApproveInvoice const approve{.invoiceId = InvoiceId{static_cast<std::int64_t>(row.id.Value())}};
+        bool allowed = false;
         try {
-            if (authorizationVerdict(authorizationFactsOf(approve, principal).facts) == Verdict::Allowed) {
-                result.invoices.push_back(invoiceView(mapper, static_cast<std::int64_t>(row.id.Value())));
-            }
+            allowed = authorizationVerdict(authorizationFactsOf(approve, principal).facts) == Verdict::Allowed;
         } catch (ValidationError const&) {
             continue;  // no company-currency value: nobody can approve it, so it is nobody's to act on
+        }
+        if (allowed) {
+            // A row that does not map is reported, not dropped from every inbox.
+            result.invoices.push_back(invoiceView(mapper, static_cast<std::int64_t>(row.id.Value())));
         }
     }
     std::ranges::sort(result.invoices, {}, [](InvoiceView const& invoice) { return *invoice.id; });

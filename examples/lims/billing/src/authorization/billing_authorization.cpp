@@ -42,8 +42,7 @@ Scope Authorization<ApproveInvoice>::scopeOf(ApproveInvoice const& action) {
     if (!row.has_value()) {
         return Scope{CompanyId{}};
     }
-    bool const escalated = row->deadlineAt.Value() > 0 && nowMillis() >= row->deadlineAt.Value();
-    return escalated ? Scope{CompanyId{row->companyId.Value()}} : Scope{SiteId{row->siteId.Value()}};
+    return escalated(*row) ? Scope{CompanyId{row->companyId.Value()}} : Scope{SiteId{row->siteId.Value()}};
 }
 
 ::morph::math::Rational Authorization<ApproveInvoice>::amountOf(ApproveInvoice const& action) {

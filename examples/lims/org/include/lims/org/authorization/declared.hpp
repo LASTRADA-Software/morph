@@ -246,6 +246,9 @@ template <typename Action>
 [[nodiscard]] JudgedFacts judgedFactsIn(Action const& action, std::string const& principal,
                                         std::optional<Scope> const& scope) {
     using Rule = Authorization<Action>;
+    // Only one form is read, so a rule declaring both would have the other ignored without a word.
+    static_assert(!(DeclaresSeparation<Action> && DeclaresSeparations<Action>),
+                  "an authorization declares one separation of duties pair or `separations`, not both");
     JudgedFacts judged{.facts = AuthorizationFacts{.principal = principal,
                                                    .required = declaredRole<Action>(),
                                                    .held = {},
