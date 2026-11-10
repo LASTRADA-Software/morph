@@ -8,19 +8,36 @@
 
 **Tech Stack:** C++23, CMake ≥ 3.25 (Ninja), morph (header-only), LASTRADA Lightweight ORM over SQLite, glaze, Catch2, Qt 6 (Core; `QTimer` in the server).
 
-**Dependencies on Part B.** Part B's README decisions end at 37 today; 38–41 are reserved for Part B Tasks 14 (decision 38, hypothesis 1's first instance: posting an invoice), 15 (39, cross-module effects), 16 (40, hypothesis 7's first instance) and 17 (41, hypothesis 6 resolved). Part C's decisions start at 42 and its migrations at `20261120000001`.
+**README decision numbers.** The lims README holds decisions up to 37 (Part B Task 13, the lease). Part B Tasks 14, 15, 16 and 17 record decisions **38, 39, 40 and 41** (posting an invoice, hypothesis 1's first instance; cross-module effects; hypothesis 7's first instance; hypothesis 6 resolved) — this numbering overrides the numbers the Part B plan's own task text gives them (37–40), so a Part B lane writes "### 38. Posting an invoice", not a second 37. Every reference to a Part B decision in this plan and in Part D's uses 38–41. Part C's decisions are 42–49, Part D's 50 and on. Part C's migrations start at `20261120000001`.
 
-| Part C task | Waits for | Can start |
+**Dependencies, and what never runs together.** Part B Task 14 is in flight on the branch: `billing_test_support.hpp`, `test_declared_authorization.cpp`, `declared_requirements.hpp`, `billing_authorization.*` and the billing and ledger models are modified and uncommitted there. Part B Task 16 is in flight in a worktree.
+
+| Part C task | Waits for | Never in flight with |
 |---|---|---|
-| 1. Inventory module, items, lots, stock | nothing | **now** |
-| 2. Requisitions and their approval | Task 1 | as soon as Task 1 lands — parallel with Part B |
-| 3. Suppliers and purchase orders in the supplier's currency | Task 2 | after Task 2 — parallel with Part B |
-| 4. Goods receipt posted to the ledger | Task 3 **and Part B Task 14** (the posting port, `recordPostingIn`, `GetRateOn`, decision 38) | after Part B Task 14 |
-| 5. `lab.ResultCaptured` becomes a consumption | Task 1; its Step 8 (posting the cost) also waits for Task 4 | Steps 1–7 as soon as Task 1 lands — parallel with Part B |
-| 6. Lot reservation per sample | Task 5 | after Task 5's Step 7 — parallel with Part B |
-| 7. Stock changes across companies | Task 1 **and Part B Task 16** (decision 40) | after Part B Task 16 |
-| 8. The seams both instances call for | Tasks 2–7 and Part B Tasks 14–17 | last |
-| 9. Part C's definition of done | everything above | last |
+| 1. Inventory module, items, lots, stock | **Part B Task 14 committed** (this task moves `dispatchAs`/`kServiceSecret` out of `billing_test_support.hpp` and edits `test_declared_authorization.cpp` and `declared_requirements.hpp`); Part D Task 3 landed (both edit `role_dto.hpp`) | Part D Task 3; Part B Task 19 |
+| 2. Requisitions and their approval | Task 1 (and so Part B Task 14 committed: it edits `billing_authorization.cpp` and `billing_test_support.hpp`) | Part D Tasks 3, 7 and 13 (`org_model.cpp`, `org_schema.cpp`); Part B Task 19 |
+| 3. Suppliers and purchase orders in the supplier's currency | Task 2 | Part B Task 19 |
+| 4. Goods receipt posted to the ledger | Task 3 and Part B Task 14 (the posting port, `recordPostingIn`, `GetRateOn`, decision 38) | Part B Task 19 |
+| 5. `lab.ResultCaptured` becomes a consumption | Task 1; its Step 8 (posting the cost) also waits for Task 4 | **Part D Task 14** (both edit `applyCapture`; Part D Task 14 runs after this task); Part B Task 19 |
+| 6. Lot reservation per sample | Task 5's Step 7 | Part B Task 19 |
+| 7. Stock changes across companies | Task 1 and Part B Task 16 (decision 40) | — (a new test and the README) |
+| 8. The seams both instances call for | Tasks 2–7 and Part B Tasks 14–17 | its scoped fan-out and connection-lease seam implementations never run beside Part D Task 20 (`remote.hpp`'s fan-out) |
+| 9. Part C's definition of done | everything above, and the execution of every plan Task 8 wrote | — |
+
+"Part B Task 19" applies only if Part B Task 17 takes the seam branch (the action guard): Task 19 rewrites every lims model `.cpp` and the declared tables, so no task that edits a lims model, DTO or declared table is in flight while it runs. Part D Task 22 waits for Task 8's connection-lease and runtime-units seams to be implemented (or recorded as none); Part D Task 8 is the frontend half of hypothesis 8 that Task 8's runtime-units spec names and does not specify again.
+
+**Schedule.** Three lanes at most, one compile at a time. This is the same schedule Part D's plan states; Lane B is the Part B lane.
+
+| Wave | Lane B (Part B) | Lane C | Lane D |
+|---|---|---|---|
+| 1 — now | B14 (on the branch) and B16 (in a worktree), both in flight | — | **D2** (the next lane to open) |
+| 2 — B14 and D2 landed | B15 → B17 (spec only) | D3 → C1 → C2 → C3 | D4 (lands before B18 starts) → D6 → D5 |
+| 3 | B18 (after D4) → B19 (a barrier: see above) | C7 (needs B16; a new test and the README) → D17 → D20 | D8 → D9 → D10 → D11 → D12, serially |
+| 4 — B19 landed | B20 | C4 → C5 → C6 | D7 → D13 → D15 → D16 |
+| 5 | — | C8 (specs and plans), then its seam plans | D18 → D19 → D14 (after C5) |
+| 6 | — | C9 | D21 → D22 (after C8's lease and units seams) → D23 |
+
+**Pairs that are never in flight together:** C5 ‖ D14 (`applyCapture`, `CaptureConcentration`); C1 ‖ D3 and C2 ‖ D3 (`role_dto.hpp`, `org_schema.cpp`, `org_model.cpp`); C2 ‖ D7 and C2 ‖ D13 (`org_model.cpp`); D4 ‖ B18 (`registry.hpp`, `bridge.hpp`: D4 lands first); B19 ‖ any task that edits a lims model, DTO or declared table (C1–C6, D3, D5, D7, D13–D16, D18, D19, D21, D22); D14 ‖ D18 (`ListSamples`); D20 ‖ C8's fan-out and lease seam implementations (`remote.hpp`); D4 ‖ D20 (`registry.hpp`); any two of Part D's framework tasks (D2, D4, D6, D8–D12, D20). Migration ids (B `20261110…`, C `20261120…`, D `20261130…`) do not collide; README decisions are reserved per task and inserted at their number's place.
 
 Authorization in every task follows whatever decision 41 (Part B Task 17) left: if the action guard landed (Part B Tasks 18–19), an action declares its `Authorization<Action>` and the guard runs it, and the handler calls neither `requireRoleSomewhere` nor `requireAuthorized`; otherwise the handler calls both, in Part A's order. The code below shows the second form, which is what the tree holds today; a lane that finds the guard in place drops the two calls and keeps everything else. Read `billing/src/models/invoice_approval.cpp` before the first handler to see which form is current.
 
@@ -118,6 +135,8 @@ Module dependency after Part C: `org` → nothing; `posting` → `org`; `lab` �
 ---
 
 ### Task 1: The inventory module — items, units, locations, lots and stock on hand
+
+**Waits for** Part B Task 14 committed and Part D Task 3 landed (see the dependency table). **Never in flight with** Part D Task 3 or Part B Task 19.
 
 **Files:**
 - Create: `examples/lims/inventory/include/.clang-tidy`, `examples/lims/inventory/include/lims/inventory/core/types.hpp`, `…/core/units.hpp`, `…/core/fault_hook.hpp`, `…/dto/stock_dto.hpp`, `…/db/inventory_entity.hpp`, `…/db/inventory_store.hpp`, `…/models/stock_model.hpp`, `…/authorization/inventory_authorization.hpp`, `examples/lims/inventory/src/core/units.cpp`, `…/src/core/fault_hook.cpp`, `…/src/db/inventory_schema.cpp`, `…/src/db/inventory_store.cpp`, `…/src/models/stock_model.cpp`, `…/src/authorization/inventory_authorization.cpp`, `examples/lims/tests/inventory_test_support.hpp`, `examples/lims/tests/test_stock.cpp`, the five probes in `examples/lims/tests/compile_checks/`
@@ -752,13 +771,13 @@ namespace lims::inventory {
 }
 ```
 
-`changedRows` is the two lines `invoice_edit_model.cpp` has (`SqlStatement{mapper.Connection()}.ExecuteDirect(sql).NumRowsAffected()`). `lotView` reads the reserved quantity as zero until Task 6 adds the reservations table (Task 6 changes it to the live sum).
+`changedRows` is the two lines `invoice_edit_model.cpp` has (`SqlStatement{mapper.Connection()}.ExecuteDirect(sql).NumRowsAffected()`), copied: it is a Lightweight-usage helper, not a morph seam, so the copy is recorded in the README finding "A conditional UPDATE is the query builder, not the DataMapper" (Step 9) rather than filed. `lotView` reads the reserved quantity as zero until Task 6 adds the reservations table (Task 6 changes it to the live sum).
 
 - [ ] **Step 6: The DTOs and the model**
 
 `dto/stock_dto.hpp`, every struct with a `validate()` (as billing's DTOs), registered records at the end:
 
-- `SetInventorySettings { CompanyId company; std::string stockAccount, grniAccount, consumptionAccount, roundingAccount; Count approvalHours; }` (each account 1–16 bytes; hours ≥ 1), `explicitSubmit = true` → `InventorySettingsView` (the same fields and `InventorySettingsId`-free: keyed by `company`); `GetInventorySettings { CompanyId company; }` → `InventorySettingsView`.
+- `SetInventorySettings { CompanyId company; std::string stockAccount, grniAccount, consumptionAccount, roundingAccount; Count approvalHours; }` (each account 1–16 bytes; 1 ≤ hours ≤ 8760, a year, so the deadline's `now + hours × 3,600,000` ms cannot overflow), `explicitSubmit = true` → `InventorySettingsView` (the same fields and `InventorySettingsId`-free: keyed by `company`); `GetInventorySettings { CompanyId company; }` → `InventorySettingsView`.
 - `CreateItem { CompanyId company; std::string code; std::string name; StockUnit unit = StockUnit::piece; }` (code 1–32, name 1–128) → `ItemView { ItemId id; CompanyId company; std::string code; std::string name; StockUnit unit; }`; `ListItems { CompanyId company; }` → `ListItemsResult { std::vector<ItemView> items; }`.
 - `CreateLocation { SiteId site; std::string name; }` → `LocationView { LocationId id; CompanyId company; SiteId site; std::string name; }`; `ListLocations { CompanyId company; }` → `ListLocationsResult { std::vector<LocationView> locations; }`.
 - `RecordOpeningLot { ItemId item; LocationId location; std::string lotNumber; ::morph::time::Timestamp expiresAt; Measure quantity; StockUnit unit = StockUnit::piece; Amount unitCost; }` (lot number 1–32; quantity and cost engaged) → `LotStockView`.
@@ -900,7 +919,7 @@ Run: Build lims, then Model suite `"[inventory]"`, then Model suite `"[authoriza
 
 - [ ] **Step 9: Record decision 42 and the module**
 
-In the README's Modules table add `| \`inventory/\` | items with a stock unit, locations at a site, lots with an expiry, stock on hand per lot and the movements that change it | \`org\`, \`posting\` |`, and append:
+In the README's finding "A conditional UPDATE is the query builder, not the DataMapper", add one sentence: "Billing and inventory each hold the two-line helper that executes the builder's statement and counts the rows (`changedRows`); it is Lightweight usage, not a morph seam, so it is copied rather than promoted." In the README's Modules table add `| \`inventory/\` | items with a stock unit, locations at a site, lots with an expiry, stock on hand per lot and the movements that change it | \`org\`, \`posting\` |`, and append:
 
 ```markdown
 ### 42. Stock is held in the item's unit, and a quantity's unit travels beside it
@@ -936,6 +955,8 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 
 ---
 ### Task 2: Requisitions — four eyes, a value limit per role, and a deadline that escalates (hypothesis 5, second instance)
+
+**Waits for** Task 1. **Never in flight with** Part D Tasks 3, 7 and 13 (`org_model.cpp`, `org_schema.cpp`) or Part B Task 19.
 
 **Files:**
 - Create: `examples/lims/inventory/include/lims/inventory/dto/requisition_dto.hpp`, `…/models/procurement_model.hpp`, `examples/lims/inventory/src/models/requisitions.cpp`, `examples/lims/tests/test_requisitions.cpp`
@@ -1110,8 +1131,8 @@ TEST_CASE("requisitions: the requester cannot approve her own requisition", "[li
 }
 
 // Mutation: make Authorization<ApproveRequisition>::limitOf read the invoice approver's limit (tom's purchase limit of
-// 10.00 is never consulted; with no invoice limit he has none and is refused for the wrong reason, which the message
-// check catches).
+// 10.00 is never consulted; his invoice limit of 1,000,000.00 covers the requisition, so he approves it and the
+// refusal check fails).
 TEST_CASE("requisitions: the value limit is the approver's limit for this role", "[lims][inventory][requisition]") {
     DbFixture fixture;
     auto const setUp = lims::test::requisitionSetUp();
@@ -1244,26 +1265,44 @@ TEST_CASE("Hypothesis 5: a requisition submitted on one rig is approved on anoth
 }
 
 // The second time this is measured (decision 35 is the first): nothing tells an open inbox that a deadline passed.
-// Control mutation: submit a second requisition after the clock passes the deadline (julia's connection hears that
-// change, which shows the check can see one).
+// The witness is anna, a site approver, whose pending list loses the requisition at the deadline. The control is in
+// the case: after the silence, a requisition raised through the server reaches the same connection, so the
+// connection can hear a change of the record and the silence before it is the measurement. Mutation: watch a record
+// name no record has ("Inventory_Requisitions"): the silence still holds, and the control's CHECK fails.
 TEST_CASE("requisitions: an approver's open inbox is not told when a deadline passes",
           "[lims][inventory][requisition][effects]") {
     DbFixture fixture;
     auto const setUp = lims::test::requisitionSetUp();
     static_cast<void>(submitted(setUp.draft));
     BackendRig rig{Mode::Socket, 0, lims::test::limsAuthorizer(kSecret)};
-    auto const julia = rig.connect();
-    REQUIRE(julia->watch({"Inventory_Requisition"}, as("julia")).kind == "ok");
-    auto const heardBefore = julia->changes().size();
+    auto const anna = rig.connect();
+    REQUIRE(anna->watch({"Inventory_Requisition"}, as("anna")).kind == "ok");
+    {
+        ScopedClockOverride const before{at(2026, 11, 11)};
+        REQUIRE(pendingFor("anna") == std::vector<std::int64_t>{*setUp.draft.id});
+    }
+    auto const heardBefore = anna->changes().size();
     ScopedClockOverride const past{at(2026, 11, 12, 10)};
-    bool const told = ServerConnection::eventually([&] { return julia->changes().size() > heardBefore; },
+    bool const told = ServerConnection::eventually([&] { return anna->changes().size() > heardBefore; },
                                                    std::chrono::milliseconds{1000});
     CHECK_FALSE(told);
     CHECK(pendingFor("anna").empty());
+    // The control: a change of the same record, made through the server after the deadline, is heard.
+    auto const rita = rig.connect();
+    auto const procurement = rita->registerModel("ProcurementModel", as("rita"));
+    REQUIRE(procurement != 0);
+    auto const body = glz::write_json(lims::CreateRequisition{
+                                          .company = lims::test::seededCompany(),
+                                          .site = lims::test::seededSite(),
+                                          .reason = "control"})
+                          .value_or(std::string{});
+    REQUIRE(rita->execute(procurement, "ProcurementModel", "CreateRequisition", body, as("rita")).kind == "ok");
+    CHECK(ServerConnection::eventually([&] { return anna->changes().size() > heardBefore; },
+                                       std::chrono::milliseconds{1000}));
 }
 ```
 
-Add `#include <mutex>` and `#include <exception>` to the includes. `dispatchAs` with a mode is Task 1's.
+Add `#include <mutex>` and `#include <exception>` to the includes. `dispatchAs` with a mode is Task 1's. `registerModel` and `execute` are `ServerConnection`'s, as `test_invoice_lease.cpp` uses them; if the server refuses a private instance of the unkeyed `ProcurementModel`, execute on the shared instance the way `test_two_company_effects.cpp` (Part B Task 16) does.
 
 - [ ] **Step 2: Run it and see it fail**
 
@@ -1571,7 +1610,7 @@ Each out-of-line function reads the requisition on its own mapper, as billing's 
 
 - [ ] **Step 6: Build and run**
 
-Run: Build lims, Model suite `"[requisition]"`, `"[authorization]"`, `"[billing]"` (the billing suites set limits with a role now), Everything labelled for the rung, then the GCC shadow sweep. Expected (the h5 case inferred from decision 35's instance; the effects case inferred from effects being derived from executed actions only, which decision 35 measured once): all pass. If `CHECK_FALSE(told)` fails, the passing deadline was told: change it to `CHECK(told)`, read from the `changes` body what carried it, and use that in Step 7. If the two-approvers case reports other failures, read them: a raw SQLite error means Step 4's busy-to-Conflict helper is needed; add it and run again. Run each mutation named in the file once and restore it.
+Run: Build lims, Model suite `"[requisition]"`, `"[authorization]"`, `"[billing]"` (the billing suites set limits with a role now), Everything labelled for the rung, then the GCC shadow sweep. Expected (the h5 case inferred from decision 35's instance; the effects case inferred from effects being derived from executed actions only, which decision 35 measured once): all pass. If `CHECK_FALSE(told)` fails, the passing deadline was told: change it to `CHECK(told)`, read from the `changes` body what carried it, and use that in Step 7. If the control's `CHECK` fails, the connection hears nothing at all and the silence measured nothing: fix the watch (the record name, anna's authorization at the site) before reading the verdict. If the two-approvers case reports other failures, read them: a raw SQLite error means Step 4's busy-to-Conflict helper is needed; add it and run again. Run each mutation named in the file once and restore it.
 
 - [ ] **Step 7: File the deadline gap — its second place — and record decision 43**
 
@@ -1594,8 +1633,9 @@ Measured on <commit>, twice, in two lims modules:
 - `examples/lims/screens/tests/test_lims_approval_inbox.cpp`: a site approver's inbox mounted before an invoice's
   deadline still lists it after the deadline.
 - `examples/lims/tests/test_requisitions.cpp`, "an approver's open inbox is not told when a deadline passes": a
-  connection watching `Inventory_Requisition` hears nothing within 1 s of the clock passing a requisition's deadline,
-  while a submission after the deadline is heard (the control).
+  site approver's connection watching `Inventory_Requisition` hears nothing within 1 s of the clock passing a
+  requisition's deadline, while a requisition raised through the server after the deadline is heard on the same
+  connection (the control, in the case's body).
 
 Not verified: any non-lims consumer. The cause is inferred from reading `include/morph/core/remote.hpp`'s fan-out,
 which derives changes from executed actions only.
@@ -1631,8 +1671,9 @@ and the limit hold. The lifecycle needed no state outside the row, and shares no
 declared authorization: the two lifecycles each wrote their own transition helper, pending list and escalation
 predicate (`requisitions.cpp`, [n] lines; `invoice_approval.cpp`, 220). Escalation is again a deadline the rule
 reads, not scheduled work (decision 35); and again an approver's open inbox is not told when the deadline passes —
-measured on a watching connection, with a submission after the deadline as the control that the connection hears a
-change. That is the same gap in a second module, so it is filed against `include/morph`.
+measured on a site approver's watching connection, with a requisition raised after the deadline, in the same case, as
+the control that the connection hears a change. That is the same gap in a second module, so it is filed against
+`include/morph`; Part D Task 20 builds the deadline effect.
 
 **Declared authorization, third module.** [If decision 41 kept it domain logic:] The rule is declared once beside the
 action (`inventory_authorization.hpp`) and checked in the model by the same two calls lab and billing make; the
@@ -1761,7 +1802,8 @@ using morph::math::Denominator;
 using morph::math::Numerator;
 using morph::math::Rational;
 
-// Mutation: sum line totals with operator+ in the order total (the over-range case answers a saturated total).
+// Mutation: multiply with Rational's operator* in orderLineTotal instead of checkedMul (the over-range case answers a
+// saturated total instead of OutOfRange).
 TEST_CASE("purchase orders: a line total is quantity times unit price, rounded half-up once", "[lims][inventory][order]") {
     Rational const twoAndAThird{Numerator{7}, Denominator{3}, DecimalPlaces{6}};
     Rational const price{Numerator{1001}, Denominator{100}, DecimalPlaces{2}};
@@ -1945,14 +1987,16 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 - Modify: every includer of the billing port header (`grep -rln 'billing/core/ledger_port.hpp' examples/lims`), `examples/lims/app/include/lims/app/ledger_wiring.hpp`/`.cpp` (one port for both posters), `…/core/stock_math.hpp`/`.cpp` (`receiptPostingFor`), `…/db/inventory_entity.hpp` (`ReceiptRecord`, `ReceiptNumberRecord`, `ReceiptLotRecord`), `…/src/db/inventory_schema.cpp` (migration `20261120000006`), `…/db/inventory_store.hpp`/`.cpp` (`createLot`), `…/models/procurement_model.hpp` (`ReceiveGoods`, `GetReceipt`, `ListReceipts`), `…/authorization/inventory_authorization.hpp`/`.cpp`, `examples/lims/tests/inventory_test_support.hpp` (`inventoryBooks`, `ReceiptRig`), `declared_requirements.hpp`, `test_declared_authorization.cpp`, `examples/lims/README.md` (Modules row for `posting`, decision 45)
 
 **Interfaces:**
-- Consumes: from Part B Task 14 — `lims::PostingMode`, `lims::LedgerPort { PostingMode mode; post; postIn; rateOn; }`, `lims::setLedgerPort`, `lims::ledgerPort`, `lims::RateQuery`, `lims::RateAnswer`, `lims::app::installLedgerPort(InternalClient&, PostingMode)`, `lims::test::books()`, `lims::test::PostingRig`; `PurchaseOrderView`, `orderLineTotal`, `inventory::moveLot`, `fiscalYearOf`, `roundToCurrency`, `ExactSum`, `inventoryFaultPoint`.
+- Consumes: from Part B Task 14 — `lims::PostingMode`, `lims::LedgerPort { PostingMode mode; post; postIn; find; rateOn; }`, `lims::PostingQuery`, `lims::setLedgerPort`, `lims::ledgerPort`, `lims::RateQuery`, `lims::RateAnswer`, `lims::app::installLedgerPort(InternalClient&, PostingMode)`, `lims::test::books()`, `lims::test::PostingRig`; `PurchaseOrderView`, `orderLineTotal`, `inventory::moveLot`, `fiscalYearOf`, `roundToCurrency`, `ExactSum`, `inventoryFaultPoint`.
 - Produces: `posting/include/lims/posting/ledger_port.hpp` holding `PostingMode`, `LedgerPort`, `setLedgerPort` and `ledgerPort` unchanged in name and shape (inline storage, since `posting` is header-only); `ReceiptId` (`lims.receiptId`); `ReceiptLineInput { OrderLineId orderLine; std::string lotNumber; ::morph::time::Timestamp expiresAt; Measure quantity; StockUnit unit; }`; `ReceiveGoods { PurchaseOrderId order; LocationId location; ::morph::time::Timestamp date; std::vector<ReceiptLineInput> lines; }` → `ReceiptView { ReceiptId id; std::string number; PurchaseOrderId order; CompanyId company; CurrencyCode currency; Amount value; Amount companyValue; std::vector<LotId> lots; JournalEntryId entry; ::morph::time::Timestamp date; std::string receivedBy; }` (a Task handler); `GetReceipt { ReceiptId receiptId; }`, `ListReceipts { CompanyId company; }` → `ListReceiptsResult`; record `Inventory_Receipt`; `struct lims::ReceiptToPost { CompanyId company; CurrencyCode companyCurrency; CurrencyCode currency; Rational rate; Timestamp date; std::string sourceKey; std::string sourceReference; std::vector<Rational> lineValues; std::string stockAccount; std::string grniAccount; std::string roundingAccount; }`; `PostingRequest lims::receiptPostingFor(ReceiptToPost const&)`; test helpers `void lims::test::inventoryBooks()`, `class lims::test::ReceiptRig`.
 
 A goods receipt takes delivery against an open order: each line names an order line, a new lot (number and expiry), a location and a quantity in any unit of the item's dimension, converted to the stock unit; one order line may arrive as several lots. The receipt is valued at the order's prices in the supplier's currency — each line's value is its quantity times the line's unit price, rounded half-up once — and posted: a debit to the company's stock account per receipt line, valued in company currency at the ledger's rate on the receipt's date and rounded per line, against one credit to goods received not invoiced for the total, rounded once; where the per-line rounding leaves a company-currency difference, an explicit line to the rounding account carries it (the mockups' CHF receipt loses a cent this way). A lot's unit cost is its line's company-currency value divided by its quantity, exactly. The receipt's number, `GR-<fiscal year>-<six digits>`, is gap-free per company and fiscal year.
 
 The atomic step is hypothesis 1's: the receipt (lots, movements, order lines, number) and the ledger's entry. It is built in the mode decision 38 put the server in, and measured both ways as Task 14 measured the invoice:
 
-- **Dispatched**: the ledger records first, as its own `RecordPosting` dispatched by `system:posting`, under the source key `inventory.receipt:<order id>:<ordinal>` — the order's next receipt ordinal, read before the call, so a retry of the same delivery names the same key and the ledger answers the entry it recorded (a retry with other lines is the ledger's `Conflict`: "a source key is bound to one posting body"). Inventory then creates the lots, moves the order lines, assigns the number and commits. Between the two commits an entry exists for goods not on hand.
+- **Dispatched**: the ledger records first, as its own `RecordPosting` dispatched by `system:posting`, under the source key `inventory.receipt:<order id>:<ordinal>` — the order's next receipt ordinal, read before the call, so a retry of the same delivery names the same key and the ledger answers the entry it recorded (a retry with another body is the ledger's `Conflict`: "a source key is bound to one posting body"). Inventory then creates the lots, moves the order lines, assigns the number and commits. Between the two commits an entry exists for goods not on hand.
+
+  Two rules keep a failed dispatched attempt from stranding the order, as Part B Task 14 found for invoices (`invoice_posting.cpp`: `find` first, then a retry that repeats the request the ledger recorded). *Every refusal is raised before the ledger call*: the order's state, the location, the conversions, the over-receipt check, the rate, and the lot numbers — each line's number must be new for its item (`inventory::lotNumberTaken`, on a mapper of its own) and the request must not name one number twice — so after the ledger call only a lost race (a `Conflict`) or an infrastructure failure can stop the receipt. *The posting body carries no lot number*: its lines are the stock debits per receipt line, the credit and the rounding line, and `sourceReference` is `receipt <order id>/<ordinal>`, so a retry that corrects only a lot number (after another lot took it in a race) repeats the same body and converges on the recorded entry. Before computing the request the action calls `ledgerPort().find(PostingQuery{company, sourceKey})`; when an entry exists under the key and no receipt holds it, the attempt is a retry of a stranded delivery, and a retry whose body differs (another quantity, another line split) is refused with `Conflict` "receipt <ordinal> of order <id> was posted as entry <n> with other lines; receive it again as first sent", naming the entry an accountant can reverse — never a second entry and never a silent move to the next ordinal.
 - **One shared transaction**: the port writes the entry through inventory's own mapper (`postIn`) inside inventory's transaction; one commit.
 
 The port moves to the shared `posting` module because two posters now reach it: one port, installed once by the app, rather than two copies of the same struct in billing and inventory. It stays lims's — the posting contract is domain wiring — and its move is not a framework seam.
@@ -1985,6 +2029,7 @@ Run: Build lims, Model suite `"[posting]"`. Expected: billing's posting cases pa
 ```bash
 cd /home/yaraslau/repo/morph
 git add -A examples/lims/posting examples/lims/billing examples/lims/app examples/lims/src/server/main.cpp examples/lims/tests
+# posting.hpp's @file comment is updated in Step 6, with the decision.
 git commit -m "Move lims's ledger port into the shared posting module for its second poster
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -2154,15 +2199,17 @@ TEST_CASE("goods receipt: one order line arrives as two lots, one entered in mil
     CHECK(now.state == lims::OrderState::Received);
 }
 
-TEST_CASE("goods receipt: refused without a rate, for a duplicate lot, and beyond what was ordered",
-          "[lims][inventory][receipt]") {
+// Mutation: ask for the rate after the ledger call (the refused attempt leaves an entry: the entry count check fails).
+TEST_CASE("goods receipt: refused without a rate on its date", "[lims][inventory][receipt]") {
     DbFixture fixture;
     lims::test::books();  // no CHF rate
     auto const opened = lims::test::openOrder(lims::CurrencyCode::CHF);
     lims::test::ReceiptRig const rig{lims::PostingMode::Dispatched};
+    auto const entriesBefore = entryCount();
     CHECK_THROWS_WITH(receiveTwoLots(opened.order, opened.stock.coldRoom),
                       Catch::Matchers::ContainsSubstring("no CHF/EUR rate"));
     CHECK(lotCount() == 0);
+    CHECK(entryCount() == entriesBefore);
 }
 
 // Mutation: drop the received-quantity condition from the order line's update (the second receipt of the same 2 L is
@@ -2196,6 +2243,7 @@ TEST_CASE("goods receipt: a duplicate lot and a receipt beyond what was ordered 
 Then the hypothesis cases, which are Task 14's three `[h1]` cases over a receipt instead of an invoice — read `test_invoice_posting.cpp` and write each with the same structure and the same assertions:
 
 - `Hypothesis 1: a dispatched receipt that fails after the ledger leaves an entry for goods not on hand, and its retry converges` (`[h1]`): `ReceiptRig{Dispatched}`; an inventory fault hook that throws at `receipt.afterLedger`; `receiveTwoLots` throws; `entryCount()` grew by one, `lotCount() == 0`; hook removed, `receiveTwoLots` again succeeds with `GR-2026-000001` and `entry` equal to the entry the failed attempt left; `entryCount()` unchanged by the retry. Mutation: compute the source key's ordinal after the ledger call (the retry records a second entry).
+- `goods receipt: a dispatched receipt whose lot was taken after the ledger call is received again with another lot number` (`[receipt]`): `ReceiptRig{Dispatched}`; an inventory fault hook at `receipt.afterLedger` that records an opening lot `MK-1101` of the reagent (the race the pre-ledger check cannot see); `receiveTwoLots` throws a `Conflict` naming `MK-1101`; `entryCount()` grew by one, `lotCount()` is the race's one lot; hook removed, the same delivery with `MK-1103` in place of `MK-1101` succeeds as `GR-2026-000001` with `entry` equal to the stranded entry, and `entryCount()` is unchanged by it. Then a third attempt on a fresh order that strands an entry and retries with 1500 mL instead of 1000 mL is refused with the `Conflict` naming the entry. Mutation: put the lot number in `sourceReference` (the corrected retry is the ledger's `Conflict` and the order is stranded).
 - `Hypothesis 1: a receipt in one shared transaction that fails leaves nothing and no hole` (`[h1]`): `ReceiptRig{SharedTransaction}`; the same fault point; nothing in the ledger, no lot, no number consumed — the next receipt is `GR-2026-000001`. Mutation: commit inventory's transaction before `postIn` (the failure leaves the receipt).
 - `Hypothesis 1: what a receipt in one shared transaction gives up` (`[h1]`): over a Socket rig, an accountant's connection watches `Ledger_Entry`; in `Dispatched` it hears the receipt's entry, in `SharedTransaction` it does not (`eventually` with a 1 s budget, `CHECK_FALSE`); revoke `system:posting`'s service role and receive again: `Dispatched` is refused by the ledger's rule, `SharedTransaction` succeeds. Mutation: in `SharedTransaction`, dispatch a no-op `RecordPosting` repeat after the commit (the connection hears it — the control).
 - `goods receipt: numbers are gap-free per company and fiscal year` (`[receipt]`): two receipts in November 2026 are `…000001` and `…000002`; with the seeded company's fiscal year starting in January, a receipt dated 2 January 2027 is `GR-2027-000001`. Mutation: take the number before the ledger call in Dispatched mode (a failed receipt consumes one, and the retry is `…000002`).
@@ -2299,11 +2347,11 @@ PostingRequest receiptPostingFor(ReceiptToPost const& receipt) {
 
 `ReceiveGoods` in `goods_receipt.cpp` is a Task handler, the shape of Task 14's `PostInvoice` (`core::async::Task<ReceiptView> execute(ReceiveGoods action);` in `procurement_model.hpp`, `#include <core/async/Task.hpp>`):
 
-1. `requirePrincipal`; validate (an order, a location, a date, at least one line, each with an order line, a lot number of 1–32 bytes, an expiry and a quantity); `requireRoleSomewhere`; read the order, its lines, the location and the company on a mapper of their own; `requireAuthorized`; the order must be `Open` or `PartlyReceived` (`IllegalTransition`); the location must be at the order's site (`ValidationError`); each line's quantity is converted to the item's stock unit and must be positive; the received quantities per order line, added to what it has received (`checkedAdd`), must not exceed what was ordered (`ValidationError` "more than was ordered"); each line's value is `orderLineTotal(quantity, unitPrice, currency)`.
+1. `requirePrincipal`; validate (an order, a location, a date, at least one line, each with an order line, a lot number of 1–32 bytes, an expiry and a quantity; no lot number twice in the request); `requireRoleSomewhere`; read the order, its lines, the location and the company on a mapper of their own; `requireAuthorized`; the order must be `Open` or `PartlyReceived` (`IllegalTransition`); the location must be at the order's site (`ValidationError`); each line's quantity is converted to the item's stock unit and must be positive; the received quantities per order line, added to what it has received (`checkedAdd`), must not exceed what was ordered (`ValidationError` "more than was ordered"); each lot number must be new for its item (`inventory::lotNumberTaken`; `Conflict` naming the number); each line's value is `orderLineTotal(quantity, unitPrice, currency)`. Every refusal the action raises is raised here or in step 2, before the ledger is called.
 2. The rate: one when the order is in the company's currency; otherwise `co_await ledgerPort().rateOn(RateQuery{company, order currency, base, date})`, refusing with `ValidationError` "no CHF/EUR rate on 09-Nov-2026" (the date as the screens show it, `dd-Mon-yyyy`) when none is valid.
-3. The ordinal: one plus the order's receipts so far, read on a mapper of its own; the source key `inventory.receipt:<order id>:<ordinal>`; the request is `receiptPostingFor` with the settings' accounts.
+3. The ordinal: one plus the order's receipts so far, read on a mapper of its own; the source key `inventory.receipt:<order id>:<ordinal>`; the request is `receiptPostingFor` with the settings' accounts and `sourceReference` `receipt <order id>/<ordinal>` (no lot number in the body). In `Dispatched` mode, `co_await ledgerPort().find(PostingQuery{company, sourceKey})` first: an entry under the key with no receipt holding it is a stranded attempt, and the retry posts the request as computed — the ledger answers the recorded entry for an identical body, and a differing body's `Conflict` is turned into the `Conflict` naming the entry (above).
 4. `PostingMode::SharedTransaction`: one mapper and transaction; the first write is the order lines' conditional updates (`received` as read, `Conflict` on zero rows); then `postIn`; `inventoryFaultPoint("receipt.afterLedger", …)`; then the lots (`createLot` + `moveLot(Receipt)`), the receipt row with its number (the series row's conditional update on `next`; a missing row inserted, the unique index settling two first receipts of a year), the receipt-lot rows, the order's state, commit.
-5. `PostingMode::Dispatched`: `co_await ledgerPort().post(request)`; `inventoryFaultPoint("receipt.afterLedger", …)` on a fresh mapper's connection; then step 4's writes without `postIn`, in one transaction, with `entry_id` the answer's.
+5. `PostingMode::Dispatched`: `co_await ledgerPort().post(request)`; `inventoryFaultPoint("receipt.afterLedger", …)` on a fresh mapper's connection; then step 4's writes without `postIn`, in one transaction, with `entry_id` the answer's. A lot number taken by a concurrent receipt or opening lot between step 1's check and this write is the unique index's refusal, answered as `Conflict` naming the number; the entry stays bound to the key, and the retry with another number converges on it.
 
 Factor step 4's writes into `std::int64_t recordReceipt(Lightweight::DataMapper&, ReceiptInput const&, std::optional<JournalEntryId>)` in the same file so both modes share them. Move the lot creation out of `RecordOpeningLot` into `inventory::createLot(mapper, item, location, number, expires, unitCost)` (the unique-index `Conflict` with it), and call it from both.
 
@@ -2314,12 +2362,12 @@ BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ReceiveGoods, "ReceiveGoods
 BRIDGE_REGISTER_EFFECTS(lims::ReceiveGoods, ::morph::effects::changes<lims::ReceiptView>,
                         ::morph::effects::changes<lims::LotStockView>,
                         ::morph::effects::changes<lims::StockMovementView>,
-                        ::morph::effects::updates<lims::PurchaseOrderView>)
+                        ::morph::effects::changes<lims::PurchaseOrderView>)
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::GetReceipt, "GetReceipt", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListReceipts, "ListReceipts", ::morph::model::Loggable::No)
 ```
 
-The entry a shared-transaction receipt makes is the ledger's `Ledger_Entry`, which inventory cannot name; that is decision 39's subject and is not worked around here. `Authorization<ReceiveGoods>`: `StockKeeper` at the order's company (`scopeOf` reads the order). Declared table and coverage case as before.
+`changes<PurchaseOrderView>`, not `updates`: a receipt can move an order from open to received, out of a filtered list of open orders (Part D Task 22's), and a row leaving a filtered list is the same refetch problem as one entering it. The entry a shared-transaction receipt makes is the ledger's `Ledger_Entry`, which inventory cannot name; that is decision 39's subject and is not worked around here. `Authorization<ReceiveGoods>`: `StockKeeper` at the order's company (`scopeOf` reads the order). Declared table and coverage case as before.
 
 - [ ] **Step 5: Build and run**
 
@@ -2327,7 +2375,7 @@ Run: Build lims, Model suite `"[receipt]"`, `"[posting]"`, `"[authorization]"`, 
 
 - [ ] **Step 6: Record decision 45**
 
-In the Modules table, `posting/`'s row becomes "the posting contract: `PostingRequest` and `PostingResult`, and the port a poster reaches the ledger through". Then, keeping the paragraph Step 5's measurement selects and filling its brackets:
+In the Modules table, `posting/`'s row becomes "the posting contract: `PostingRequest` and `PostingResult`, and the port a poster reaches the ledger through". The design defines `posting` as "request and result DTOs only", and `posting.hpp`'s `@file` comment says so: change that comment to say the module holds the posting contract's DTOs and the port both posters reach the ledger through, and why the port is here (one port, installed once, for two posters), and record the amendment in decision 45's first paragraph (the sentence below). Then, keeping the paragraph Step 5's measurement selects and filling its brackets:
 
 ```markdown
 ### 45. A goods receipt posts its value as an invoice does, and meets the same choice (hypothesis 1, second instance)
@@ -2335,13 +2383,17 @@ In the Modules table, `posting/`'s row becomes "the posting contract: `PostingRe
 `ReceiveGoods` takes a delivery against an open order: each line a new lot at a location of the order's site, its
 quantity converted to the item's unit, several lots to one order line allowed, and never more than was ordered. The
 receipt is valued at the order's prices in the supplier's currency, each line rounded half-up once, and posted
-through the one ledger port the app installs (which now lives in `posting`, because two posters reach it): a debit to
+through the one ledger port the app installs (which now lives in `posting`, because two posters reach it — an
+amendment of the design's "request and result DTOs only" for that module): a debit to
 stock per line, converted at the ledger's rate on the receipt's date and rounded per line, against one credit to goods
 received not invoiced for the total, rounded once, and a line to the rounding account for what the per-line rounding
 left. A lot's unit cost is its line's company-currency value over its quantity, exactly. The number,
 `GR-<fiscal year>-<six digits>`, is gap-free per company and fiscal year, assigned in inventory's commit. A receipt is
-refused without a rate on its date, for a lot number the item already has, and beyond what was ordered; two receipts
-against the last of an order line give one receipt and one `Conflict`.
+refused without a rate on its date, for a lot number the item already has, and beyond what was ordered, each before
+the ledger is called; two receipts against the last of an order line give one receipt and one `Conflict`. A dispatched
+attempt that fails after the ledger call is retried under the same source key with the same body — the body carries
+no lot number, so a corrected lot number converges on the recorded entry — and a retry with other lines is refused
+naming the entry, never posted twice.
 
 [One of, the same three as decision 38:]
 
@@ -2371,7 +2423,7 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 ---
 ### Task 5: `lab.ResultCaptured` becomes a consumption from the first-expiring lot (hypothesis 2, second instance)
 
-Steps 1–7 wait only for Task 1. **Step 8 (posting the consumption's cost) waits for Task 4** and so for Part B Task 14.
+Steps 1–7 wait only for Task 1. **Step 8 (posting the consumption's cost) waits for Task 4** and so for Part B Task 14. **Never in flight with Part D Task 14**: both edit `sample_model.cpp`'s `applyCapture` (this task writes the event after `mapper.Update(sampleRow)`; Part D Task 14 adds the reason refusal in the loop that deletes the earlier answer and changes `CaptureConcentration`'s fingerprint). Part D Task 14 runs after this task has landed.
 
 **Files:**
 - Create: `examples/lims/inventory/include/lims/inventory/dto/recipe_dto.hpp`, `…/dto/consumption_dto.hpp`, `examples/lims/inventory/src/models/consumption.cpp`, `examples/lims/tests/test_consumption.cpp`
@@ -3322,7 +3374,10 @@ for a lot is ordered by its `reservation_version`, the first write of each reser
 on the version read: two benches racing for the last lot give one reservation and a `Conflict` naming the holder —
 measured over ten rounds of two threads with both benches alive, with no other failure. A capture consumes its
 sample's reservation first and never another sample's. Inventory cannot check that a reserved sample exists: no module
-reads another's tables, and the bench's role at the named site is what authorizes the reservation.
+reads another's tables, and the bench's role at the named site is what authorizes the reservation. The design says
+"assigning analyses to a sample reserves the lots"; here reservation is a bench action of its own, a deviation: the
+assignment is lab's, inventory cannot see it, and the dependency rule forbids lab calling inventory, so the bench
+reserves when it assigns.
 
 **Hypothesis 3 is [refuted | confirmed] for its second instance, [through the same hook].** Measured in
 `tests/test_reservation.cpp` over a real `RemoteServer`: closing the holder's connection [frees the reservation, and
@@ -3520,7 +3575,7 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 - Modify: `docs/spec/README.md` (the index), the spec each new one names as its neighbour, `examples/lims/README.md` (decision 49)
 
 **Interfaces:**
-- Consumes: decisions 32–48 and their measured numbers; `include/morph/core/remote.hpp`, `include/morph/core/registry.hpp`, `include/morph/core/bridge.hpp`, `include/morph/core/backend.hpp`, `include/morph/journal/outbox.hpp`, `include/morph/offline/replay_ledger.hpp`, `include/morph/core/shared_instances.hpp` (or wherever `docs/spec/core/shared_instances.md` points), `include/morph/util/quantity.hpp`, `include/morph/forms/forms.hpp`.
+- Consumes: decisions 32–48 and their measured numbers; `include/morph/core/remote.hpp`, `include/morph/core/registry.hpp`, `include/morph/core/bridge.hpp`, `include/morph/core/backend.hpp`, `include/morph/journal/outbox.hpp`, `include/morph/offline/replay_ledger.hpp`, the shared-instance code `docs/spec/core/shared_instances.md` points to, `include/morph/util/quantity.hpp`, `include/morph/forms/forms.hpp`.
 - Produces: for each hypothesis whose two instances needed the same hand-rolled guarantee, a reviewed spec under `docs/spec/` and its implementation plan; for each that did not, its disposition in decision 49.
 
 The design's rule: "Each confirmed hypothesis is designed (a spec under `docs/spec/`, one independent review) and implemented in `include/morph` in the same branch, before the part holding its second instance is called done." Each seam is a framework change across the dispatch path, the fan-out or the unit type, each the size of Part B's action-guard tasks or larger, so each gets a plan of its own, written once its spec is reviewed, and Task 9 does not call Part C done until those plans are executed. The domain stays in lims: a seam runs a mechanism and knows no account, lot, invoice, currency or role.
@@ -3537,7 +3592,7 @@ For each row, read the two decisions and apply the condition. Write the outcome,
 | 7 | decisions 40, 48 | both confirmed: a company-B change reached a company-A connection | refuted: no seam |
 | 8 | decisions 33, 42, 44 | confirmed for invoices and orders: an amount's unit or currency is a row's fact the type cannot carry, checked by hand in each place | refuted: what served the record's currency |
 
-The deadline effect Task 2 filed (an open inbox not told when a deadline passes) is Part D's to specify and build: its consumer is the approvals inbox, and Part D's plan holds that task.
+The deadline effect Task 2 filed (an open inbox not told when a deadline passes) is Part D's to specify and build: its consumer is the approvals inbox, and Part D's Task 20 holds it. Its implementation changes the server's fan-out, as the scoped fan-out and connection-lease seams below do: the plans Step 5 writes for those seams say that their implementations never run beside Part D Task 20.
 
 - [ ] **Step 2: Write each selected spec**
 
@@ -3555,9 +3610,9 @@ What each must decide, at least:
 - *Consumer dedup (hypothesis 2).* A consume-once primitive over a consumer's own table: the lookup outside the write's transaction (the rollback-journal lesson), the record inside it, the race settled by a unique index and answered with the winner's result, generic over the consumer's result; where it sits beside `IReplayLedger` and `OutboxRelay`; and whether the routing sink (`LabEventRouter`) belongs with it (an outbox with several event types and several consumers is a morph shape, not a lims one).
 - *Connection leases (hypothesis 3).* A lease a model takes for a connection: released when the connection closes as an action the server dispatches on the model's strand (so its effects fan out and the lapse is told), not as database work in a destructor on the server strand; the timeout as a fact the lease's reader evaluates, as both instances do now; what a crash releases (the timeout only).
 - *Scoped fan-out (hypothesis 7).* A record's scope declared beside it (`BRIDGE_REGISTER_RECORD`) and asked of each watcher before a change is sent, so a change in a scope the watcher cannot see reaches no connection; what "a scope the watcher can see" is as a callback the application gives (lims answers from `OrgModel::visibleCompanies`), never a role or a company in morph; its cost per change and per watcher.
-- *Runtime units (hypothesis 8).* An amount whose unit (a currency, a stock unit) is a value known at run time: how it is carried on the wire and in a form (`morph::forms::InstanceConstraints` already serves per-instance decimals: read it first and say what it lacks), how two amounts of different units refuse to combine, how a dated conversion fits (`UnitTraits::convert` takes no date), and what `Quantity`'s compile-time unit keeps doing.
+- *Runtime units (hypothesis 8).* An amount whose unit (a currency, a stock unit) is a value known at run time: how it is carried on the wire, how two amounts of different units refuse to combine, how a dated conversion fits (`UnitTraits::convert` takes no date), and what `Quantity`'s compile-time unit keeps doing. Its form and input half is **not** this spec's: `morph::forms::InstanceConstraints` already serves per-instance decimals on a decorated schema, and Part D Task 8 gives ui/1 the client half (an input's and a form field's decimals bound to the record's); the spec names Part D Task 8 as its frontend half, cites `docs/spec/forms/instance_constraints.md`, and does not specify either again.
 
-Add each spec to `docs/spec/README.md`'s index, and one paragraph to the neighbouring spec it extends (`core/remote.md` for scoped fan-out; `core/backend.md` for cross-model work; `journal/journal.md` for consumer dedup; `core/shared_instances.md` for leases; `util/quantity_type.md` for runtime units) pointing to it.
+Add each spec to `docs/spec/README.md`'s index, and one paragraph to the neighbouring spec it extends (`core/backend.md` and `core/registry.md`, where `fanOut` is specified, for scoped fan-out; `core/backend.md` for cross-model work; `journal/journal.md` for consumer dedup; `core/shared_instances.md` for leases; `util/quantity_type.md` for runtime units) pointing to it.
 
 - [ ] **Step 3: One independent review per spec**
 
@@ -3576,7 +3631,7 @@ Claude-Session: https://claude.ai/code/session_01No1NznqxEBvjhZBaBRLCd6"
 
 - [ ] **Step 5: Write each seam's implementation plan**
 
-For each reviewed spec, use superpowers:writing-plans to write `docs/superpowers/plans/<today>-morph-<seam>.md`: the framework change with its tests in `tests/`, then one task per lims instance moving onto it and deleting the hand-rolled code (each lims instance's measuring test stays and must still pass, now asserting the refuted outcome where the seam refutes the hypothesis), then the README decision's update. Follow this plan's Global Constraints. Commit the plans:
+For each reviewed spec, use superpowers:writing-plans to write `docs/superpowers/plans/<today>-morph-<seam>.md`: the framework change with its tests in `tests/`, its `docs/spec/` update, and the Docs build (`cmake -S . -B build/docs -G Ninja -DMORPH_BUILD_DOCUMENTATION=ON -DMORPH_BUILD_TESTS=OFF -DMORPH_BUILD_EXAMPLES=OFF`, then `cmake --build build/docs --target doc`, both under the build lock; CI runs Doxygen with `WARN_AS_ERROR = FAIL_ON_WARNINGS`) as a step of every framework task; then one task per lims instance moving onto it and deleting the hand-rolled code (each lims instance's measuring test stays and must still pass, now asserting the refuted outcome where the seam refutes the hypothesis), then the README decision's update. Each plan states which Part D tasks it must not run beside (the fan-out and lease seams: Part D Task 20) and that Part D Task 22 waits for the lease and units seams. Follow this plan's Global Constraints. Commit the plans:
 
 ```bash
 cd /home/yaraslau/repo/morph
@@ -3691,6 +3746,6 @@ Not tasks; what the Part D plan starts from.
 
 - **The inventory screens' models:** `StockModel` (stock on hand with reserved quantities, a lot's movements as a `table::TableQuery` page — hypothesis 10's second instance, which Part D measures), `ProcurementModel` (requisitions with their approval route and deadline, suppliers, purchase orders, goods receipts) and `ReservationModel` (the sample detail's reservations, with the refusal naming the holder).
 - **The goods-receipt dialog's action** is one inventory action (`ReceiveGoods`) over one model; its posting preview is the ledger's, read through `GetRateOn` and the receipt's own lines. Whether the dialog needs ui/1 to span several models is Part D's measurement of hypothesis 9.
-- **The approvals inbox across modules** lists invoices (`ListPendingApprovals`) and requisitions (`ListPendingRequisitions`); a deadline passing is not told to an open inbox in either (decisions 35, 43; filed), which Part D's deadline-effects task builds.
-- **The lapse of a reservation and of an invoice lease** is not told to a waiting bench or clerk (decisions 37, 47) unless Task 8's connection-lease seam was specified and built.
-- **A yen order's form** advertises two decimals (decision 44), as a yen price's does (decision 33), unless Task 8's runtime-units seam was built.
+- **The approvals inbox across modules** lists invoices (`ListPendingApprovals`) and requisitions (`ListPendingRequisitions`); a deadline passing is not told to an open inbox in either (decisions 35, 43; filed), which Part D Task 20 builds and Part D Task 21 adopts.
+- **The lapse of a reservation and of an invoice lease** is not told to a waiting bench or clerk (decisions 37, 47) unless Task 8's connection-lease seam was specified and built; Part D Task 22 waits for it, or adds it as a framework task of its own when Task 8 recorded none.
+- **A yen order's form** advertises two decimals (decision 44), as a yen price's does (decision 33); Part D Task 8 gives ui/1 per-record decimals on `InstanceConstraints`' terms, and Task 8's runtime-units seam, if built, covers the wire and the arithmetic.
