@@ -1,0 +1,10 @@
+{
+  "lims.credit": "H",
+  "lims.loading": "Wird geladen…",
+  "lims.module.billing": "Fakturierung",
+  "lims.module.inventory": "Lager",
+  "lims.module.lab": "Labor",
+  "lims.module.ledger": "Hauptbuch",
+  "lims.module.org": "Organisation",
+  "lims.module.shell": "Start"
+}

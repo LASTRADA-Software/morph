@@ -109,6 +109,12 @@ not building UIs; we are proving morph can drive them.
 - **Zero styling effort.** Default Qt Quick controls, default fonts, no
   theming, no animations, no custom drawing. A rung that looks pretty has
   spent effort in the wrong place.
+  lims is exempt from the zero-styling clause, and only lims: its GUI is built
+  to a commercial product's standard against committed mockups
+  (`examples/lims/design/mockups/`), because the limit it looks for is where the
+  declarative UI stops reaching production quality, which a minimal screen
+  never meets. Its look is still a ui/1 document with no hand-written QML and
+  no per-screen client code; bookmarks and bank keep minimalism.
 
 ## 3. Type discipline: strong types only
 

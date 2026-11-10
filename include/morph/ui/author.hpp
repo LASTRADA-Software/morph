@@ -4291,6 +4291,26 @@ private:
     return node.raw("cases", std::move(parts)).put("default", fallback).done();
 }
 
+/// @brief The width class a screen lays out for: the client's `{"env": "widthClass"}`, and `expanded` where no
+///        client sets it.
+///
+/// A screen draws a compact layout below 80 units and the expanded one otherwise; `medium` takes the expanded one
+/// unless the screen switches on it itself.
+/// @param screen The screen's scope.
+/// @return The width class, a `let` named `widthClass`.
+[[nodiscard]] inline AnyHandle widthClass(Scope& screen) {
+    return screen.let("widthClass", coalesce({env("widthClass"), AnyHandle{"expanded"}}));
+}
+
+/// @brief The compact layout when @p width is `compact`, the expanded one otherwise.
+/// @param width    The width class, as `widthClass` answers it.
+/// @param compact  The compact layout.
+/// @param expanded The expanded layout.
+/// @return The switch.
+[[nodiscard]] inline Node byWidth(AnyHandle const& width, Nodes compact, Nodes const& expanded) {
+    return switchOn(width, {Case{"compact", std::move(compact)}}, expanded);
+}
+
 /// @brief A page of a `tabs` node.
 struct Tab {
     /// @brief The tab's key, which `selected` and `onChoose` name; empty for none. Every tab has one when the node

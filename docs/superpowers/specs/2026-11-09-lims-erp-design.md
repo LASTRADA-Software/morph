@@ -212,7 +212,7 @@ to exempt lims's look and to say why; bookmarks and bank keep minimalism.
 | org | companies and sites, users and role assignments |
 
 The invoice editor (lines and totals from billing, the lease, approval), the goods-receipt dialog (order and new lots)
-and the cross-module inbox are the deliberate tests of hypothesis 10; the print view is laid out as a document.
+and the cross-module inbox are the deliberate tests of hypothesis 9; the print view is laid out as a document.
 
 ## Expected strain points
 

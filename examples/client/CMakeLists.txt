@@ -89,6 +89,29 @@ foreach(_morph_client IN LISTS _morph_clients)
     endif()
 endforeach()
 
+# lims alone, for scripts/shoot_lims.sh: morph_examples_client cannot open lims, because the registry refuses one action
+# id on two action types and examples/forms (`ListSamples`) and examples/bank (`ListAccounts`) register ids lims does.
+if(TARGET ladder_lims_screens AND NOT EMSCRIPTEN)
+    add_executable(morph_lims_client main.cpp local_apps.hpp lims_apps.cpp)
+    target_link_libraries(morph_lims_client PRIVATE morph::ladder_lims_screens morph::ladder_lims_lib morph::client)
+    if(_morph_client_qt_quick)
+        target_link_libraries(morph_lims_client PRIVATE morph::qt_quick)
+    endif()
+    if(_morph_client_tui)
+        target_link_libraries(morph_lims_client PRIVATE morph::tui)
+    endif()
+    target_compile_definitions(morph_lims_client PRIVATE
+        MORPH_CLIENT_HAS_QT_QUICK=${_morph_client_qt_quick}
+        MORPH_CLIENT_HAS_TUI=${_morph_client_tui})
+    apply_warnings(morph_lims_client)
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(morph_lims_client ${AF_SANITIZER})
+    endif()
+    if(AF_COVERAGE)
+        apply_coverage(morph_lims_client)
+    endif()
+endif()
+
 # The client binary itself, end to end: the gallery opened in local mode under Qt Quick, offscreen, quits with 0 once
 # its screen mounted without a problem.
 if(MORPH_BUILD_TESTS AND _morph_client_qt_quick)
