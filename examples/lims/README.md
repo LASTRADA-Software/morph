@@ -1107,10 +1107,10 @@ instance, but escalation is not scheduled work: it is a deadline the rule reads 
 nothing has to start at the deadline or resume after a restart. Measured in the same file with the clock before and
 after the deadline. The one consequence is an effects question, not a scheduling one, measured in
 `screens/tests/test_lims_approval_inbox.cpp`: a site approver's inbox, mounted before the deadline, still lists the
-invoice after it, and shows the escalation only when it asks again. The cause is inferred, not measured: no action
-ran, so no effect was declared or fanned out. What the test does measure is that a poll on the inbox would tell it. Hypothesis 4 therefore has one
-instance in this design, the billing run (decision 34), and
-the design's row says so. Part C's requisition escalation is expected to take this shape.
+invoice after it, and shows the escalation only when it asks again. What the test measures is that the open inbox is
+not told: it is checked after the harness advances past the deadline. The cause is inferred, not measured: no action
+ran, so no effect was declared or fanned out. Hypothesis 4 therefore has one instance in this design, the billing run
+(decision 34), and the design's row says so. Part C's requisition escalation is expected to take this shape.
 
 ### 36. Billing's approval pairs and the approver's value limit are declared, and checked in the model (hypothesis 6, second instance)
 
