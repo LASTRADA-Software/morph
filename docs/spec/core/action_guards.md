@@ -76,6 +76,10 @@ the first execution site instantiated for that pair. An action without a
 guard header in the program; an action that is deliberately open says so by
 declaring nothing.
 
+`DeclaresGuard` also matches a `guard` alias an action inherits from a base
+class, so a family of actions may share one declaration in a common base; that
+is intended, and the one-definition argument below holds for it as well.
+
 One guard type may serve many actions through member templates, each form
 constrained to the actions it applies to:
 
@@ -204,7 +208,12 @@ the strand, under the execute's session, for a refusal that is a
 `std::exception`. It is detected structurally per action, as
 `onBackendChanged` is, and a model without it is never called. What it records,
 and whether it records a refusal of nobody, is the model's. A throw from it
-propagates in place of the refusal.
+propagates in place of the refusal: the holder's `Failed` entry carries the
+refusal's `what()`, while the caller receives the hook's exception.
+
+The hook may write. It receives the model non-`const` and a model that keeps its
+own trail writes that trail in it. "A guard changes nothing" is a rule for
+`check`, which receives the model `const`, not for `onGuardRefused`.
 
 ## Where it does not run
 
@@ -215,11 +224,13 @@ propagates in place of the refusal.
   committed facts and abort the reconstruction. `replay()` marks that holder
   as reconstructing (`IModelHolder::markReconstructing`) for its dispatch loop
   and clears the mark before it returns the holder, and the four sites skip the
-  guard for a holder so marked. The skip belongs to the holder, not the thread:
-  any other dispatch during a replay — a nested dispatch from inside a replayed
-  `execute` onto another holder, a live call an executor runs inline — runs its
-  guard as always. `SessionLog::undoLast()` replays, so it is covered by the
-  same mark. Replay is synchronous, so a `Task` handler is never replayed.
+  guard for a holder so marked. Only `replay()` may call `markReconstructing`:
+  it is a public mutator of a `detail` class, and any other code holding a
+  holder could switch its guards off with it. The skip belongs to the holder,
+  not the thread: any other dispatch during a replay — a nested dispatch from
+  inside a replayed `execute` onto another holder, a live call an executor runs
+  inline — runs its guard as always. `SessionLog::undoLast()` replays, so it is
+  covered by the same mark. Replay is synchronous, so a `Task` handler is never replayed.
 - **`ActionDispatcher::evaluate`.** An evaluation answers whether a body is
   ready to dispatch — precision, bounds, computed fields, validator — with no
   model instance and nothing changed. It does not run the guard, so `ready`
