@@ -246,6 +246,29 @@ InvoiceView InvoiceModel::execute(const GetInvoice& action) {
 
 // An action handler: the registry calls it on the instance, like every other.
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+InvoiceLeaseView InvoiceModel::execute(const GetInvoiceLease& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetInvoiceLease: an invoice is required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto const invoice = invoiceView(mapper, *action.invoiceId);
+    if (!isVisible(invoice.company)) {
+        throw NotFound{"GetInvoiceLease: invoice " + std::to_string(*action.invoiceId) + " does not exist"};
+    }
+    InvoiceLeaseView view{.invoice = action.invoiceId, .holder = {}, .expiresAt = {}};
+    auto const rows =
+        mapper.Query<db::InvoiceLeaseRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::InvoiceLeaseRecord::invoiceId>, "=", *action.invoiceId)
+            .All();
+    if (!rows.empty() && rows.front().expiresAt.Value() > nowMillis()) {
+        view.holder = std::string{rows.front().holder.Value().ToStringView()};
+        view.expiresAt = timestampFromMillis(rows.front().expiresAt.Value());
+    }
+    return view;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ListInvoicesResult InvoiceModel::execute(const ListInvoices& action) {
     if (!action.validate()) {
         throw ValidationError{"ListInvoices: a company is required"};

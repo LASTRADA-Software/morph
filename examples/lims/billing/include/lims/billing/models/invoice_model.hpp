@@ -7,6 +7,7 @@
 #include <morph/core/registry.hpp>
 
 #include "lims/billing/dto/invoice_dto.hpp"
+#include "lims/billing/dto/lease_dto.hpp"
 #include "lims/billing/dto/line_dto.hpp"
 
 /// @file
@@ -99,6 +100,13 @@ public:
     /// @throws NotFound if there is no such invoice, or it is of a company the caller cannot see.
     InvoiceView execute(const GetInvoice& action);
 
+    /// @brief Reads who holds an invoice's edit lease.
+    /// @param action The invoice.
+    /// @return The lease; its holder is empty when the invoice is free or its lease has lapsed.
+    /// @throws ValidationError if no invoice is named.
+    /// @throws NotFound if there is no such invoice, or it is of a company the caller cannot see.
+    InvoiceLeaseView execute(const GetInvoiceLease& action);
+
     /// @brief Lists a company's invoices.
     /// @param action The company.
     /// @return Its invoices by id; none when the caller cannot see the company.
@@ -138,5 +146,6 @@ BRIDGE_REGISTER_EFFECTS(lims::ApproveInvoice, ::morph::effects::updates<lims::In
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListPendingApprovals, "ListPendingApprovals",
                        ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::GetInvoice, "GetInvoice", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::GetInvoiceLease, "GetInvoiceLease", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListInvoices, "ListInvoices", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

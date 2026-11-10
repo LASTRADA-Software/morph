@@ -1132,6 +1132,28 @@ too. The same hand-rolled guarantee recurred: each declared action's handler cal
 declaration by hand (37 entries), and the coverage test lists every mutating action by hand because nothing
 enumerates a model's actions publicly. Together they are the case for a framework seam.
 
+### 37. A draft invoice is leased to its editor, and the lease lapses with the editor's instance (hypothesis 3, first instance)
+
+`InvoiceEditModel` is one private instance per editor. `LeaseInvoice` writes a lease row — the invoice, the holder,
+the instance's token, an expiry fifteen minutes after the last edit — and refuses another editor's live lease in words
+naming its holder; `GetInvoiceLease` shows the holder to anyone who can see the invoice. Each edit (removing a line,
+setting the client reference) requires the instance's own live lease and renews it in the same conditional update. An
+expired lease is free to the next `LeaseInvoice`, so the timeout needs no timer. Taking a lease is a write conditional
+on the row as it was read, and the table has a unique index on the invoice, so two editors taking one lease at once give
+one success and one `Conflict`. `ReleaseInvoice` declares `changes<InvoiceLeaseView>`, so a second clerk watching
+`Billing_Lease` is told when the holder lets go — measured on a second connection.
+
+**Hypothesis 3 is refuted for this instance, through an existing hook that is not a lease hook.** Measured in
+`tests/test_invoice_lease.cpp` over a real `RemoteServer`: closing the holder's connection frees the lease, and the
+second clerk takes it without waiting for the timeout. The hook is the instance's destructor: `closeConnection`
+erases a private instance, and `~InvoiceEditModel` deletes its lease by token. What that costs, stated plainly: the
+release does database work in a destructor, on whatever thread drops the last reference (the server strand when a
+connection closes), and a failure there can only be logged; a crash that kills the process releases nothing, and the
+timeout is then the only lapse. And the lapse is not told: a second clerk watching `Billing_Lease` hears of a release
+but not of a lapse on disconnect, because the destructor is not an action and nothing derives a change from it —
+measured on the same second connection; the clerk learns of it only by asking. Lot reservation in Part C is the second
+instance.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so

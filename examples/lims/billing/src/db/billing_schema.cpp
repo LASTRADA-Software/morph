@@ -129,4 +129,14 @@ LIGHTWEIGHT_SQL_MIGRATION(20261110000011, "Add billing_run_items.error") {
     // The refusal that failed an item, so a run's failure is visible and the item is not tried again.
     plan.AlterTable("billing_run_items").AddNotRequiredColumn("error", Varchar(255));
 }
+LIGHTWEIGHT_SQL_MIGRATION(20261110000012, "Create billing_invoice_leases") {
+    plan.CreateTableIfNotExists("billing_invoice_leases")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("invoice_id", Bigint())
+        .RequiredColumn("holder", Varchar(64))
+        .RequiredColumn("token", Varchar(32))
+        .RequiredColumn("expires_at", Bigint());
+    // An invoice has one lease: the index refuses the second of two takers that raced past the lookup.
+    plan.CreateUniqueIndex("idx_billing_invoice_leases_invoice", "billing_invoice_leases", {"invoice_id"});
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

@@ -37,6 +37,11 @@ Scope Authorization<SubmitInvoice>::scopeOf(SubmitInvoice const& action) {
     return Scope{row.has_value() ? CompanyId{row->companyId.Value()} : CompanyId{}};
 }
 
+Scope Authorization<LeaseInvoice>::scopeOf(LeaseInvoice const& action) {
+    auto const row = findInvoiceRecord(action.invoiceId);
+    return Scope{row.has_value() ? CompanyId{row->companyId.Value()} : CompanyId{}};
+}
+
 Scope Authorization<ApproveInvoice>::scopeOf(ApproveInvoice const& action) {
     auto const row = findInvoiceRecord(action.invoiceId);
     if (!row.has_value()) {

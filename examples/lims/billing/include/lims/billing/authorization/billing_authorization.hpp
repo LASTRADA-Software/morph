@@ -9,20 +9,22 @@
 #include <string_view>
 
 #include "lims/billing/dto/invoice_dto.hpp"
+#include "lims/billing/dto/lease_dto.hpp"
 #include "lims/billing/dto/line_dto.hpp"
 #include "lims/billing/dto/price_dto.hpp"
 #include "lims/billing/dto/run_dto.hpp"
 #include "lims/billing/dto/settings_dto.hpp"
 #include "lims/billing/models/billing_run_model.hpp"
+#include "lims/billing/models/invoice_edit_model.hpp"
 #include "lims/billing/models/invoice_model.hpp"
 #include "lims/billing/models/price_list_model.hpp"
 #include "lims/org/authorization/declared.hpp"
 
 /// @file
 /// The billing module's declared authorization: a company's billing settings are a supervisor's; its clients, price
-/// lists, prices, draft invoices, their submission and billing runs are a billing clerk's, at that company; an invoice
-/// is approved by an invoice approver within a value limit, who is not the one who created or submitted it; a billable
-/// line is recorded by a service principal, and the billing schedule is run by one.
+/// lists, prices, draft invoices, their editing lease, their submission and billing runs are a billing clerk's, at
+/// that company; an invoice is approved by an invoice approver within a value limit, who is not the one who created or
+/// submitted it; a billable line is recorded by a service principal, and the billing schedule is run by one.
 
 namespace lims {
 
@@ -53,6 +55,20 @@ struct Authorization<SetPrice> {
 /// @brief An invoice is drafted by a billing clerk at its company.
 template <>
 struct Authorization<CreateInvoice> : CompanyRule<CreateInvoice, LimsRole::BillingClerk> {};
+
+/// @brief A draft invoice is leased for editing by a billing clerk at its company. The edits themselves declare no
+/// role:
+///        they are refused without the editing instance's own live lease, which only this action grants.
+template <>
+struct Authorization<LeaseInvoice> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::BillingClerk;
+
+    /// @brief The company of the invoice the payload names.
+    /// @param action The action.
+    /// @return It; an empty company when there is no such invoice.
+    [[nodiscard]] static Scope scopeOf(LeaseInvoice const& action);
+};
 
 /// @brief An invoice is submitted by a billing clerk at its company.
 template <>

@@ -153,4 +153,17 @@ struct BillingRunItemRecord {
     Light::Field<std::optional<Light::SqlAnsiString<255>>, Light::SqlRealName{"error"}> error;  // 6
 };
 
+/// @brief The lease of one draft invoice: who may edit it, and which editing instance holds it.
+struct InvoiceLeaseRecord {
+    static constexpr std::string_view TableName = "billing_invoice_leases";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"invoice_id"}> invoiceId{0};                             // 1
+    /// @brief The principal who took the lease.
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"holder"}> holder;  // 2
+    /// @brief Names the editing instance, so a second instance of one principal is another editor.
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"token"}> token;  // 3
+    /// @brief Epoch milliseconds the lease lapses at.
+    Light::Field<std::int64_t, Light::SqlRealName{"expires_at"}> expiresAt{0};  // 4
+};
+
 }  // namespace lims::db
