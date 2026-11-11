@@ -749,10 +749,19 @@ ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
         }
 
         // A new operation needs the operator to hold some role at the sample's site now, at replay time, not when
-        // the reading was taken: no role anywhere is Forbidden, a missing sample NotFound, the wrong site Forbidden.
+        // the reading was taken: no role anywhere is Forbidden, and so are a missing sample and the wrong site, which
+        // the operator must not be able to tell apart.
         requireRoleSomewhere<QueuedCapture>();
         Lightweight::DataMapper mapper;
-        const auto sample = toView(loadSample(mapper, *action.sampleId));
+        std::optional<SampleView> found;
+        try {
+            found = toView(loadSample(mapper, *action.sampleId));
+        } catch (const NotFound&) {
+            // A missing sample resolves to no scope, which holds no role: refused as the guard refuses its own.
+            ::lims::detail::judge(action, std::optional<Scope>{Scope{}});
+            throw;
+        }
+        const auto& sample = *found;
         requireAuthorized(action);
         const auto serverVersion = SampleVersion{*sample.version};
 

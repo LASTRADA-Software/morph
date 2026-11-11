@@ -335,6 +335,7 @@ TEST_CASE("Every state the sample was ever in is reconstructible from the journa
     CHECK(sawVerification);
 }
 
+// Mutation: remove `SampleModel::onGuardRefused` (no refused step appears).
 TEST_CASE("A refused attempt appears in the trail, marked refused", "[lims][audit]") {
     lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
@@ -491,6 +492,8 @@ TEST_CASE("A verification appears in the sample's own audit trail", "[lims][audi
     CHECK(sawVerification);
 }
 
+// A guard refusal reaches the sample's own trail through `SampleModel::onGuardRefused`.
+// Mutation: remove `SampleModel::onGuardRefused` (no refused step appears).
 TEST_CASE("A refused verification appears in the trail, marked refused", "[lims][audit]") {
     lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};

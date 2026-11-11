@@ -2,10 +2,10 @@
 //
 // Declared authorization (lims/org) and its first separation-of-duties pair, lab's capture and verify.
 //
-// This file measures the split README decision 25 records: `IAuthorizer::authorize` is handed the model and action
-// ids and never the payload, so the server edge can check that a principal holds a role somewhere, and only the
-// model, which has the payload, can check the scope and the pair. The "Hypothesis 6" cases below show a verifier whose
-// role is at another site passing the edge and being refused by the model, on every backend.
+// `IAuthorizer::authorize` is handed the model and action ids and never the payload, so the server edge can check
+// that a principal holds a role somewhere, and only the action's guard, which sees the decoded action, can check the
+// scope and the pair. The "Hypothesis 6" cases below show a verifier whose role is at another site passing the edge
+// and being refused by the guard, on every backend.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <algorithm>
@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <glaze/glaze.hpp>
 #include <memory>
 #include <morph/core/action_guard.hpp>
 #include <morph/core/backend.hpp>
@@ -23,6 +24,7 @@
 #include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/core/wire.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
@@ -381,101 +383,72 @@ TEST_CASE("declared authorization: every several-pairs separation names a regist
     }
 }
 
-// Mutations: leave a declared action out of declaredRequirements() (its edge check is lost); leave a mutating action
-// out of both the table and openMutatingActions().
-TEST_CASE("declared authorization: every mutating action is declared or deliberately open", "[lims][authorization]") {
-    // Every mutating action of the org, sample, analysis-catalog and ignition models. The dispatcher check below fails
-    // when a registered mutating action is missing from this list.
-    using Mutating =
-        std::tuple<lims::CreateCompany, lims::CreateSite, lims::AssignRole, lims::RevokeRole, lims::SetDisplayName,
-                   lims::DefineAnalysis, lims::ReviseAnalysis, lims::RegisterClient, lims::RegisterSample,
-                   lims::ReceiveSample, lims::StartWork, lims::SubmitForVerification, lims::ReturnForRework,
-                   lims::PublishSample, lims::RejectSample, lims::CaptureConcentration, lims::QueuedCapture,
-                   lims::ResolveConflict, lims::VerifyResult, lims::NewSample, lims::LoadSample, lims::SaveSample,
-                   lims::DeleteSample, lims::HeaderSection, lims::SamplingSection, lims::TurbiditySection,
-                   lims::NitrateSection, lims::ClearOptionalMeasurement, lims::SelectProject, lims::AddIgnitionTest,
-                   lims::RecordIgnitionValues, lims::DeleteIgnitionTest, lims::SetValueLimit, lims::CreateAccount,
-                   lims::OpenPeriod, lims::BeginClosePeriod, lims::CreateDraftEntry, lims::PostEntry,
-                   lims::ReverseEntry, lims::ClosePeriod, lims::SetExchangeRate, lims::RecordPosting,
-                   lims::SetBillingSettings, lims::RegisterBillingClient, lims::CreatePriceList, lims::SetPrice,
-                   lims::RecordBillableLine, lims::CreateInvoice, lims::LeaseInvoice, lims::RemoveInvoiceLine,
-                   lims::SetInvoiceReference, lims::ReleaseInvoice, lims::SubmitInvoice, lims::ApproveInvoice,
-                   lims::PostInvoice, lims::StartBillingRun, lims::AdvanceBillingRun, lims::RunBillingSchedule,
-                   lims::SetInventorySettings, lims::CreateItem, lims::CreateLocation, lims::RecordOpeningLot>;
-    std::set<std::string_view> listed;
-    std::set<std::string_view> declared;
-    std::apply(
-        [&](auto const&... action) {
-            (
-                [&] {
-                    using A = std::remove_cvref_t<decltype(action)>;
-                    auto const typeId = morph::model::ActionTraits<A>::typeId();
-                    listed.insert(typeId);
-                    if constexpr (lims::DeclaresRule<A>) {
-                        declared.insert(typeId);
-                    }
-                }(),
-                ...);
-        },
-        Mutating{});
+static_assert(lims::DeclaresCheckedInHandler<lims::QueuedCapture>);
+static_assert(!morph::model::DeclaresGuard<lims::QueuedCapture>);
+static_assert(lims::DeclaresModelScope<lims::SaveSample> && morph::model::DeclaresGuard<lims::SaveSample>);
 
+// Mutations: remove `using guard` from one declared action (it is neither guarded, open nor a declared read); register
+// a read without `Loggable::No` (it matches no class); leave a declared action out of declaredRequirements() (the
+// table and the guarded set disagree); remove one model from the `listed` set (its declared actions fail the
+// cross-check). `LimsAuth` is deliberately not listed: its actions are sign-in, which the edge exempts and which
+// declare no rule. If the cross-check names it, that is the reason; it is excepted by name, never by loosening the
+// check.
+TEST_CASE("declared authorization: every lims action is guarded, deliberately open, or a declared read",
+          "[lims][authorization]") {
     std::set<std::string_view> const open{lims::app::openMutatingActions().begin(),
                                           lims::app::openMutatingActions().end()};
-    std::set<std::string_view> const inTable = [] {
-        std::set<std::string_view> ids;
-        for (auto const& requirement : lims::app::declaredRequirements()) {
-            ids.insert(requirement.actionType);
+    std::set<std::string_view> const checkedInHandler{"QueuedCapture"};
+    std::set<std::string_view> inTable;
+    for (auto const& requirement : lims::app::declaredRequirements()) {
+        inTable.insert(requirement.actionType);
+    }
+    std::set<std::string> registered;
+    auto const& dispatcher = morph::model::detail::defaultDispatcher();
+    for (std::string_view const model :
+         {"OrgModel", "SampleModel", "AnalysisCatalogModel", "IgnitionModel", "LedgerModel", "LedgerReportModel",
+          "PriceListModel", "InvoiceModel", "InvoiceEditModel", "BillingRunModel", "StockModel"}) {
+        for (auto const& actionId : dispatcher.actionsOf(model)) {
+            CAPTURE(model, actionId);
+            registered.insert(actionId);
+            bool const guarded = morph::model::isGuarded(model, actionId);
+            bool const isOpen = open.contains(actionId);
+            bool const inHandler = checkedInHandler.contains(actionId);
+            // A read is registered `Loggable::No` and declares no change: a query of a ui document must declare no
+            // effect, since a declaration, `none` included, makes the action a mutation there. A writer is loggable
+            // unless it says otherwise, so an undeclared writer matches no class here and fails.
+            auto const effects = morph::effects::effectsOf(actionId);
+            bool const declaredRead =
+                !dispatcher.isLoggable(model, actionId) &&
+                (!effects.has_value() || std::ranges::all_of(*effects, [](morph::effects::Effect const& effect) {
+                    return effect.kind == morph::effects::Kind::None;
+                }));
+            CHECK(int{guarded} + int{isOpen} + int{inHandler} + int{declaredRead} == 1);
+            CHECK(inTable.contains(actionId) == (guarded || inHandler));
         }
-        return ids;
-    }();
-
-    CHECK(inTable == declared);
-    for (auto const actionId : listed) {
-        CAPTURE(actionId);
-        CHECK((declared.contains(actionId) != open.contains(actionId)));
     }
     for (auto const actionId : open) {
         CAPTURE(actionId);
-        CHECK(listed.contains(actionId));
+        CHECK(registered.contains(std::string{actionId}));
     }
-
-    // What this proves: every action of the four models that declares an effect other than None is in the list
-    // above, and the list holds nothing else but the effect-less actions named here. It does not prove that an
-    // action registered without effects is non-mutating; such an action is only caught by this list being written
-    // out by hand, which is why RegisterClient, the one effect-less writer, is named.
-    std::set<std::string_view> const effectless{"RegisterClient"};
-    auto const& dispatcher = morph::model::detail::ActionDispatcher::instance();
-    std::set<std::string> withEffects;
-    for (std::string_view const model : {
-             "OrgModel",
-             "SampleModel",
-             "AnalysisCatalogModel",
-             "IgnitionModel",
-             "LedgerModel",
-             "PriceListModel",
-             "InvoiceModel",
-             "InvoiceEditModel",
-             "BillingRunModel",
-             "StockModel",
-         }) {
-        for (auto const& actionId : dispatcher.actionsOf(model)) {
-            auto const effects = morph::effects::effectsOf(actionId);
-            bool const mutates =
-                effects.has_value() && std::ranges::any_of(*effects, [](morph::effects::Effect const& effect) {
-                    return effect.kind != morph::effects::Kind::None;
-                });
-            if (mutates) {
-                withEffects.emplace(actionId);
-            }
-        }
-    }
-    std::set<std::string> expected{listed.begin(), listed.end()};
-    for (auto const actionId : effectless) {
+    // The model list above is by hand, and the framework cannot enumerate models: a module added later (procurement)
+    // would escape the loop. Every id the application declares must therefore be
+    // registered under one of the listed models, so an unlisted model that declares a rule fails here.
+    std::set<std::string_view> const listed{"OrgModel",        "SampleModel",  "AnalysisCatalogModel",
+                                            "IgnitionModel",   "LedgerModel",  "LedgerReportModel",
+                                            "PriceListModel",  "InvoiceModel", "InvoiceEditModel",
+                                            "BillingRunModel", "StockModel"};
+    auto const underListedModel = [&](std::string_view actionId) {
+        auto const models = dispatcher.modelsOf(actionId);
+        return std::ranges::any_of(models, [&](std::string const& model) { return listed.contains(model); });
+    };
+    for (auto const actionId : inTable) {
         CAPTURE(actionId);
-        CHECK(listed.contains(actionId));
-        expected.erase(std::string{actionId});
+        CHECK(underListedModel(actionId));
     }
-    CHECK(withEffects == expected);
+    for (auto const actionId : open) {
+        CAPTURE(actionId);
+        CHECK(underListedModel(actionId));
+    }
 }
 
 TEST_CASE("declared authorization: the edge's table lists every declared role, and nothing else",
@@ -737,12 +710,15 @@ void checkGhostWrites(Bench const& bench, std::string const& who) {
 }
 
 // The order of every scoped lab write: a caller with no role anywhere is Forbidden before any lookup, so learns
-// nothing about which ids exist. A caller with a role somewhere is refused in words for an id that names nothing,
-// because the guard judges the scope the id resolves to, and a missing row resolves to none; only the replay, which
-// judges its own rule, and a handler attached to nothing, answer NotFound.
-// Mutation: look the row up before asking for the role (mallory learns that sample 9999 does not exist).
-TEST_CASE("declared authorization: no role anywhere is Forbidden, a missing row NotFound, the wrong site Forbidden",
-          "[lims][authorization][lab]") {
+// nothing about which ids exist. A caller with a role somewhere is refused in words for an id that names nothing, the
+// same refusal as for one at a site they hold nothing in, because the scope a missing row resolves to is none. The
+// replay, which judges its own rule, refuses a missing sample the same way; only a handler attached to nothing, which
+// names no id, answers NotFound.
+// Mutation: look the row up before asking for the role (mallory learns that sample 9999 does not exist); let the
+// replay answer NotFound for a missing sample (eve is told it does not exist).
+TEST_CASE(
+    "declared authorization: an id that names nothing and a scope the caller holds nothing in are both Forbidden",
+    "[lims][authorization][lab]") {
     DbFixture fixture;
     auto const bench = benchIn(lims::SampleState::InProgress);
     static_cast<void>(rivalWithEve());
@@ -759,7 +735,7 @@ TEST_CASE("declared authorization: no role anywhere is Forbidden, a missing row 
     }
     {
         ScopedPrincipal const eve{"eve"};
-        checkGhostWrites<lims::Forbidden, lims::NotFound>(bench, "eve");
+        checkGhostWrites<lims::Forbidden, lims::Forbidden>(bench, "eve");
         lims::SampleModel unattached;
         CHECK_THROWS_AS(::morph::model::executeChecked(unattached, lims::ReceiveSample{}), lims::NotFound);
         CHECK_THROWS_AS(::morph::model::executeChecked(unattached, reading(bench)), lims::NotFound);
@@ -954,8 +930,7 @@ TEST_CASE("declared authorization: a principal holding a role at both sites may 
     CHECK(sampleRow(stored) == std::pair{std::string{"WW-A"}, std::optional{*second}});
 }
 
-// Mutation: leave the refusal out of SaveSample's or DeleteSample's catch (eve's refused rewrite or delete is missing
-// from the sample's trail).
+// Mutation: remove `SampleModel::onGuardRefused` (no refused step appears).
 TEST_CASE("declared authorization: a refused rewrite or delete of a stored sample appears in its audit trail",
           "[lims][authorization][lab][entry][audit]") {
     DbFixture fixture;
@@ -993,6 +968,71 @@ TEST_CASE("declared authorization: a refused rewrite or delete of a stored sampl
     auto const saves = refusedSteps("SaveSample");
     REQUIRE(saves.size() == 1);
     CHECK(saves.front().principal == "eve");
+}
+
+// The nine writes on a sample the handler holds judge the scope the model resolves from its sample or working copy,
+// not a scope the payload names. A role held only at another site of the same company is no role here.
+// Mutation: make `DeclaredRuleGuard`'s model form judge no scope (an empty loop): every one is allowed.
+TEST_CASE("declared authorization: the nine model-scoped writes are refused to a role at another site",
+          "[lims][authorization][lab][entry]") {
+    std::set<std::string_view> const modelScoped{"ReceiveSample",       "StartWork",     "SubmitForVerification",
+                                                 "ReturnForRework",     "PublishSample", "RejectSample",
+                                                 "CaptureConcentration"};
+    auto writes = labWrites();
+    std::erase_if(writes, [&](LabWrite const& write) { return !modelScoped.contains(write.name); });
+    REQUIRE(writes.size() == 7);
+    // SaveSample and DeleteSample, the two entry writes, are the other two.
+    auto const index = GENERATE_COPY(Catch::Generators::range(std::size_t{0}, writes.size() + 2));
+    DbFixture fixture;
+    auto const bench = benchIn(index < writes.size() ? writes[index].from : lims::SampleState::Registered);
+    auto const stored = savedEntry(bench.client);
+    lims::test::grant("sam", lims::LimsRole::Supervisor);
+    lims::SiteId otherSite;
+    {
+        ScopedPrincipal const sam{"sam"};
+        lims::OrgModel org;
+        otherSite = org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Field lab"}).id;
+    }
+    lims::test::grant("ned", lims::LimsRole::Analyst, lims::Scope{otherSite});
+    auto const before = sampleTables();
+
+    ScopedPrincipal const ned{"ned"};
+    lims::SampleModel model;
+    if (index < writes.size()) {
+        CAPTURE(writes[index].name);
+        CHECK_THROWS_WITH(runWrite(writes[index], bench, "ned"),
+                          Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+    } else {
+        auto const loaded = model.execute(lims::LoadSample{.id = stored});
+        if (index == writes.size()) {
+            fillHeader(model, loaded.clientId, loaded.reference, otherSite);
+            CHECK_THROWS_WITH(::morph::model::executeChecked(model, lims::SaveSample{}),
+                              Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+        } else {
+            CHECK_THROWS_WITH(::morph::model::executeChecked(model, lims::DeleteSample{}),
+                              Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+        }
+    }
+    CHECK(sampleTables() == before);
+}
+
+// An incomplete working copy is judged by the guard before the handler reports what it lacks: a caller who holds no
+// role is refused, and one who holds a role is told in the result what is missing.
+// Mutation: remove `using guard` from SaveSample (mallory is told `noClient`).
+TEST_CASE("declared authorization: a role-less caller is refused before an incomplete save is described",
+          "[lims][authorization][lab][entry]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Analyst);
+    {
+        ScopedPrincipal const mallory{"mallory"};
+        lims::SampleModel model;
+        model.execute(lims::NewSample{});
+        CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::SaveSample{}), lims::Forbidden);
+    }
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    model.execute(lims::NewSample{});
+    CHECK(::morph::model::executeChecked(model, lims::SaveSample{}).error == lims::SaveError::noClient);
 }
 
 // Mutation: drop the requirement from RegisterSample, ReceiveSample or ResolveConflict (eve's call is recorded in that
@@ -1051,8 +1091,8 @@ TEST_CASE("Hypothesis 6: the server edge allows a verifier whose role is at anot
     CHECK_FALSE(authorizer.authorize(signedAs(issuer, "mallory"), "SampleModel", "VerifyResult"));
 }
 
-// Mutation: drop requireAuthorized from VerifyResult (bob's verification is recorded in every mode).
-TEST_CASE("Hypothesis 6: on every backend, the model refuses what the edge let through", "[lims][authorization][h6]") {
+// Mutation: remove `using guard` from VerifyResult (bob's verification is recorded in every mode).
+TEST_CASE("Hypothesis 6: on every backend, the guard refuses what the edge let through", "[lims][authorization][h6]") {
     auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
@@ -1067,7 +1107,7 @@ TEST_CASE("Hypothesis 6: on every backend, the model refuses what the edge let t
                    })};
     rig.bridge(0).setDefaultSession(signedAs(issuer, "bob"));
     auto verifier = rig.client<lims::SampleModel>(0);
-    // The refusal's own words prove the model refused: any other failure of the call would not contain them.
+    // The refusal's own words prove the guard refused: any other failure of the call would not contain them.
     CHECK_THROWS_WITH(awaitQt(verifier.execute(lims::VerifyResult{.resultId = lab.result})),
                       Catch::Matchers::ContainsSubstring("does not hold the verifier role at site"));
     {
@@ -1081,4 +1121,50 @@ TEST_CASE("Hypothesis 6: on every backend, the model refuses what the edge let t
     rig.bridge(0).setDefaultSession(signedAs(issuer, "carol"));
     auto const recorded = awaitQt(verifier.execute(lims::VerifyResult{.resultId = lab.result}));
     CHECK(recorded.verifiedBy == "carol");
+}
+
+// ── Watches ────────────────────────────────────────────────────────────────
+
+namespace {
+
+/// @brief Whether a watch on @p record by @p who was admitted: the reply is `ok` either way, and names the records it
+///        refused.
+/// @param connection The connection the watch is sent on.
+/// @param record The record's wire name.
+/// @param session Who watches.
+/// @return `true` when the reply refuses nothing.
+[[nodiscard]] bool watchAdmitted(morph::ladder::testkit::ServerConnection& connection, std::string const& record,
+                                 morph::session::Context const& session) {
+    auto const reply = connection.watch({record}, session);
+    if (reply.kind != "ok") {
+        return false;
+    }
+    morph::wire::WatchReply refused;
+    if (glz::read_json(refused, reply.body)) {
+        return false;
+    }
+    return refused.refusedRecords.empty();
+}
+
+}  // namespace
+
+// A watch runs no action and so no guard: the edge's role answer is the read gate. Mutations: make the role branch of
+// `LimsAuthorizer::authorize` admit (mallory is admitted to `Ledger_Entry`, which `PostEntry` holds); make `holdsAny`
+// return true for a principal with no role (mallory is admitted to both records, through `GetEntry` and `GetInvoice`,
+// which declare no rule). Dropping the role branch altogether changes nothing here: a declared action then falls to
+// the same "holds some role" answer.
+TEST_CASE("declared authorization: a principal with no role cannot watch the ledger or the invoices",
+          "[lims][authorization][watch]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Accountant);
+    lims::test::grant("carl", lims::LimsRole::InvoiceApprover);
+    morph::session::TokenIssuer const issuer{std::string{kSecret}, morph::session::hmacSha256};
+    BackendRig rig{Mode::Socket, 0, lims::test::limsAuthorizer(kSecret)};
+    auto const connection = rig.connect();
+    for (std::string const record : {"Ledger_Entry", "Billing_Invoice"}) {
+        CAPTURE(record);
+        CHECK_FALSE(watchAdmitted(*connection, record, signedAs(issuer, "mallory")));
+        CHECK(watchAdmitted(*connection, record, signedAs(issuer, "alice")));
+        CHECK(watchAdmitted(*connection, record, signedAs(issuer, "carl")));
+    }
 }

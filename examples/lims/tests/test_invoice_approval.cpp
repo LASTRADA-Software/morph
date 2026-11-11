@@ -324,7 +324,8 @@ TEST_CASE("Hypothesis 5: an approval lasts across days, principals and rigs as o
 }
 
 // Hypothesis 6, second instance: the edge sees (principal, model, action) and allows; the model sees the invoice.
-// Mutation: drop requireAuthorized from ApproveInvoice (bea's self-approval succeeds over every backend).
+// Mutation: remove `using guard` from ApproveInvoice and its in-transaction `requireAuthorized` (either alone leaves
+// the refusal: bea's self-approval succeeds over every backend only with both gone).
 TEST_CASE("Hypothesis 6: the edge lets an invoice's creator through to approve it, and the model refuses",
           "[lims][billing][approval][h6]") {
     auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);

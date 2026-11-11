@@ -277,6 +277,7 @@ no authenticated principal must produce no entry at all, because an audit
 entry naming nobody is the failure mode this README's own "Expected strain
 points" calls disqualifying. Both halves are tested and both fail if the
 ordering is swapped.
+Once refusals are the framework guard's, the sample's trail keeps this through `SampleModel::onGuardRefused` (decision 41).
 
 ### 5. The base version moves with **every** content change (§2, §3)
 
@@ -804,12 +805,7 @@ be checked where the payload is decoded and the rows are readable: in the model,
 `LimsAuthorizer` and refused by the model in `Local`, `LocalSingleThread` and `Socket` mode alike, and a verifier at
 the sample's company goes through the same edge and the same model.
 
-This is instance 1 of 2. What it shows about a seam: a declaration is data apart from `scopeOf` and `firstPerformerOf`,
-which read the module's own rows, so a framework check would have to run after decoding and call back into the
-module for those; and the edge needs a second, app-composed table, because it cannot reach the declarations through
-the ids it is given. No framework seam is designed from one instance. Billing's create-and-approve pair in Part B,
-with an approver's value limit, is instance 2: if the same hand-rolled guarantee recurs there, a framework seam is
-designed against both, and otherwise the guarantee is recorded as domain logic the models own.
+This is instance 1 of 2; with billing's approval pairs and value limit as the second, the check is the framework's action guard (decision 41).
 
 ### 26. A list shows only what the caller's scopes reach
 
@@ -1276,6 +1272,99 @@ the event itself needs a row-company judgement in the fan-out, which only the mo
 documentation). If Part C's stock instance needs the same workaround (per-company record names, or `privateKeys` on a
 tenant-owned record), a per-tenant scoping seam for record events becomes an enhancement against `include/morph`;
 until then it is not filed.
+
+### 41. Declared authorization is the framework's action guard (hypothesis 6, resolved)
+
+Every action with a `lims::Authorization` rule declares `using guard = ::lims::DeclaredRuleGuard;`
+(`docs/spec/core/action_guards.md`), and the framework runs that guard on the decoded action on every dispatch path,
+after its validator and before the handler: the principal, the role somewhere, then the rule — in the scope the
+payload names, or, for the nine writes on a sample the handler holds (the six transitions, `CaptureConcentration`,
+`SaveSample`, `DeleteSample`), in every scope the model resolves from its attached sample or working copy, read
+`const` before the handler runs. The rules stay lims's. No handler calls the check, with two kinds of exception:
+`QueuedCapture` declares no guard and keeps its check, because it answers a redelivery before the role (decision 25);
+and `BeginClosePeriod`, `PostEntry`, `ReverseEntry`, `ClosePeriod`, `SubmitInvoice` and `ApproveInvoice` judge their
+rule again inside the write's transaction, because the scope, the recorded gross and the performers are read with the
+rows the write commits, and the guard runs outside that transaction. The first role assignment on a lab with no
+supervisor is exempt in the guard (`Authorization<AssignRole>::bootstrapOpen`).
+
+**Unknown ids.** A caller who names a row that does not exist, and holds a role somewhere, is refused in words rather
+than told the row is missing, because the guard runs before the handler looks the row up and a missing row resolves to
+a scope that holds no role. The rule applied throughout is that an id that names nothing and one the caller has no
+role over are refused with the same exception type, `Forbidden`, so the type does not tell them apart. The cases that
+changed from `NotFound` to `Forbidden`: `VerifyResult` and `ResolveConflict` of an unknown id; `SaveSample` naming a
+missing site or updating a sample whose row is gone; `DeleteSample` of a sample whose row is gone; `RegisterSample` at a
+missing site; `CreateSite`, `CreateItem`, `CreateLocation`, `CreateInvoice`, `SetExchangeRate` and the price-list
+writes naming a missing company or list; `OpenPeriod`, `BeginClosePeriod`, `ClosePeriod`, `PostEntry` and
+`ReverseEntry` of an unknown id; `AdvanceBillingRun` and `SubmitInvoice` of an unknown run or invoice; `RevokeRole` of an unknown assignment; and `QueuedCapture` of a missing sample, whose replay judges its own
+rule and used to be the one scoped write that still answered `NotFound` where the sample's site was refused. Decision 23
+promised `NotFound` for these; it now holds only for a handler attached to nothing, which names no id. The words of the
+refusal still differ in one respect: a rule judged in a scope the payload names says "at site 3", a missing row
+resolved by the model says "at no site", so a caller who reads the words, not the type, can tell a missing sample from
+one at a site they hold nothing in. That is the same disclosure the wrong-site refusal made before the guard, and it is
+not closed here.
+
+**`ApproveInvoice` is judged in a fixed order**, and it differs from the other rules because an approval is the one
+write whose refusal must reveal nothing about an invoice outside the approver's reach: first the role, held where the
+invoice is visible (`Forbidden`, with the same words for an unknown id and for another company's invoice, naming
+neither the scope nor the invoice); then the invoice's state (`IllegalTransition`); then separation of duties and the
+value limit. This is done through the rule's optional `checkState` hook, which runs once the role is held. An approver
+therefore learns the state of an invoice only if they could see it.
+
+**`SaveSample`'s `SaveError` now follows the guard.** The handler used to describe an incomplete working copy in the
+result (`noClient`, `noReference`, `noProject`, `noSite`) before it asked for any role. The guard now runs first, so a
+caller who holds no role is refused with `Forbidden` and is not told what the copy lacks; a caller who holds a role
+somewhere still gets the in-band `SaveError`, and a header that names no site contributes no scope, so `noSite` is
+still answered by the handler. The rule is the one above: nothing about the model's contents reaches a caller the
+guard would not let write.
+
+A guard's refusal is journaled by the framework as any refused execute is, whatever the principal, wherever a holder
+carries a log. The sample's own audit trail hears a refusal through `SampleModel::onGuardRefused`, which records what
+the handlers recorded before — a refused verification or transition — and never an unauthenticated attempt, so
+decision 4 holds for the trail.
+
+**The edge keeps its per-id role table** (`declaredRequirements`): on the server it refuses a principal without the
+role before decoding, and it is what admits watches, which run no action and so no guard. `authorize` is not told
+whether it answers an execute or a watch, and `RemoteServer` admits a watch on a record when the principal is
+authorized for some action holding that record, and a watch on a model's instances when it is authorized for any of the
+model's actions, so the table is not narrowed.
+
+**The watch measurement.** `RemoteServer` answers a watch with an `ok` reply that names the records it refused, so
+refusal is read from the reply's body, not its kind. Measured over a socket backend with `mallory`, who holds no role,
+and `alice`, an accountant, watching `Ledger_Entry` and `Billing_Invoice`, against the edge as it stood before this
+change (a test-local copy of that `authorize` body):
+
+```
+BASEMEASURE record=Ledger_Entry principal=mallory kind=ok body={"refusedRecords":[],"refusedInstances":[]}
+BASEMEASURE record=Ledger_Entry principal=alice kind=ok body={"refusedRecords":[],"refusedInstances":[]}
+BASEMEASURE record=Billing_Invoice principal=mallory kind=ok body={"refusedRecords":[],"refusedInstances":[]}
+BASEMEASURE record=Billing_Invoice principal=alice kind=ok body={"refusedRecords":[],"refusedInstances":[]}
+```
+
+The per-id answer admitted a principal with no role to both records, as reading the code predicted:
+`effects::actionsHolding` counts every action whose result holds a record, reads included, so `Ledger_Entry` is held by
+`GetEntry`, `ListEntries` and `ListEntriesPage`, and `Billing_Invoice` by `GetInvoice`, `ListInvoices` and
+`ListPendingApprovals`, which declare no rule, and the edge answered `true` for them after the signature check. The
+edge's answer for every action of the ledger, ledger-report, price-list, invoice, invoice-edit and billing-run models
+that declares no rule is therefore "holds some role anywhere" (`holdsAny`), reads included; the sign-in exemptions stay
+first. The tightening closes **executing** `GetEntry`, `GetInvoice` and the list actions by id for a principal with no
+role as well as watching them: the leak was never specific to watches. No existing case changed: the full ladder-lims suite passed with the tightened edge, so no case read these models as a role-less principal. The lab, org
+and inventory models keep the open answer for their reads (`GetSample`, `ListSamples` and the rest): a watch on a
+sample, a company or a stock record is still admitted to any signed-in principal, and what a caller sees there is
+narrowed by the handlers' own visibility rules (decision 26); that is not changed here.
+
+Coverage of "every action is guarded, deliberately open, or a declared read" is proved by enumerating the dispatcher
+(`morph::model::isGuarded`, `effects::effectsOf`) over the org, sample, analysis-catalog, ignition, ledger, ledger-report,
+price-list, invoice, invoice-edit, billing-run and stock models, failing closed: a read is
+registered `Loggable::No` and declares no effect (48 of the models' actions; `ListAnalyses` and `GetAnalysisVersion`
+gained `Loggable::No` for it), and a writer is loggable unless it says otherwise, so an undeclared writer matches no
+class and fails. A read cannot instead declare `effects::none`: in a ui document a query's action must declare no
+effect, and `none` is a declaration, so the action would run as a mutation (measured: the lims render smoke failed with
+"a query reads, so its action declares no effects; `ListSites` declares `none`, so it runs as a mutation"). The table is proved to list exactly the guarded actions and `QueuedCapture`. `LimsAuth`'s sign-in is not listed:
+the edge exempts it and it declares no rule.
+
+**Hypothesis 6 is resolved by the seam** for execution: a declared rule that sees the payload or the instance is
+checked once, by the framework, for every module. It is not resolved for reads: watch admission still needs the
+edge's id-level answer.
 
 ### 42. Stock is held in the item's unit, and a quantity's unit travels beside it
 
