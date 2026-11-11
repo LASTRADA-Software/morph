@@ -397,6 +397,11 @@ inline Catalog corpusCatalog() {
                 "x-unitAlternatives":[{"id":"g","display":"g","decimals":1,"num":1,"den":1000}],"x-order":0}},
               "required":["mass"]})"};
         }
+        // A plain number shown and entered at 2 places.
+        if (action == "Lims_MeasureTemperature") {
+            return std::string{R"({"type":"object","title":"Measure","properties":{
+              "reading":{"type":"number","title":"Reading","x-displayDecimals":2,"x-order":0}}})"};
+        }
         if (action != "Lims_CaptureConcentration") {
             return std::nullopt;
         }

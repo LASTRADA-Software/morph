@@ -208,15 +208,19 @@ namespace detail::engine {
 /// @param spec    The field.
 /// @param text    The trimmed draft.
 /// @param context The locale and messages.
+/// @param places  The field's places when a record gives it its own; they bound the accepted fraction digits in place
+///                of `spec.displayDecimals`.
 /// @return The encoding.
-[[nodiscard]] inline Encoding encodeNumber(FieldSpec const& spec, std::string_view text, ValueContext const& context) {
+[[nodiscard]] inline Encoding encodeNumber(FieldSpec const& spec, std::string_view text, ValueContext const& context,
+                                           std::optional<std::uint32_t> places = std::nullopt) {
     auto const canonical = render::normalizeLocaleNumber(text, context.locale);
     if (!canonical || !isCanonicalDecimal(*canonical)) {
         return std::unexpected(fieldError("malformed", context));
     }
     auto const dot = canonical->find('.');
-    std::size_t const places = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
-    if (spec.displayDecimals && places > *spec.displayDecimals) {
+    std::size_t const typed = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
+    auto const allowed = places ? places : spec.displayDecimals;
+    if (allowed && typed > *allowed) {
         return std::unexpected(fieldError("too-precise", context));
     }
     if (auto const violation = decimalBounds(spec, *canonical, context)) {
@@ -350,7 +354,8 @@ namespace detail::engine {
 /// @param draft   What the user typed, or what a control holds (an option's `valueJson`, `true`/`false`).
 /// @param unit    For a Decimal or Quantity, the index into `spec.units` the draft is typed in.
 /// @param context The locale, display zone and translations.
-/// @param places  For a Decimal or Quantity, the field's places when a record gives it its own (see `encodeExact`).
+/// @param places  For a Number, Decimal or Quantity, the field's places when a record gives it its own (see
+///                `encodeExact`).
 /// @return The encoding.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind.
 [[nodiscard]] inline Encoding encodeScalar(FieldSpec const& spec, std::string_view draft, std::size_t unit,
@@ -425,7 +430,7 @@ namespace detail::engine {
         case FieldKind::Slider:
             return spec.jsonType == "number" ? encodeNumber(spec, text, context) : encodeInteger(spec, text, context);
         case FieldKind::Number:
-            return encodeNumber(spec, text, context);
+            return encodeNumber(spec, text, context, places);
         case FieldKind::Decimal:
         case FieldKind::Quantity:
             return encodeExact(spec, text, unit, context, places);
@@ -444,8 +449,9 @@ namespace detail::engine {
 /// @param spec    The field.
 /// @param value   The wire value (JSON null and a mismatched shape decode to blank).
 /// @param context The locale and display zone.
-/// @param places  For a Decimal or Quantity, the field's places when a record gives it its own (see `encodeExact`);
-///                the value is shown at them rather than at the schema's, so what is loaded is what is accepted.
+/// @param places  For a Number, Decimal or Quantity, the field's places when a record gives it its own (see
+///                `encodeExact`); the value is shown at them rather than at the schema's, so what is loaded is what is
+///                accepted.
 /// @return The draft text.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind.
 [[nodiscard]] inline std::string decodeScalar(FieldSpec const& spec, detail::engine::Json const& value,
@@ -498,14 +504,14 @@ namespace detail::engine {
             if (!canonical) {
                 return {};
             }
-            if (spec.displayDecimals) {
+            if (auto const padTo = places ? places : spec.displayDecimals) {
                 auto const dot = canonical->find('.');
                 std::size_t const have = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
-                if (have < *spec.displayDecimals) {
+                if (have < *padTo) {
                     if (dot == std::string::npos) {
                         *canonical += '.';
                     }
-                    canonical->append(*spec.displayDecimals - have, '0');
+                    canonical->append(*padTo - have, '0');
                 }
             }
             return draftNumber(*canonical, context.locale);

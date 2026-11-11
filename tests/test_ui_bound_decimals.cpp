@@ -76,6 +76,18 @@ constexpr std::string_view kPrefill = R"({
     { "kind": "text", "testId": "verdict", "text": { "if": [ { "ref": "cap.concentration.valid" }, "valid", "invalid" ] } } ] }
 })";
 
+// A plain Number field whose schema shows two places and whose overlay is bound to `places`.
+constexpr std::string_view kNumber = R"({
+  "vocab": "ui/1", "id": "measured",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "state": { "places": { "init": 3 } },
+  "view": { "kind": "column", "children": [
+    { "kind": "form", "id": "cap", "model": "sample", "action": "Lims_MeasureTemperature", "submit": "explicit",
+      "fields": { "reading": { "decimals": { "ref": "places" } } } },
+    { "kind": "button", "testId": "whole", "label": "whole", "onClick": [ { "set": "places", "value": 0 } ] },
+    { "kind": "text", "testId": "verdict", "text": { "if": [ { "ref": "cap.reading.valid" }, "valid", "invalid" ] } } ] }
+})";
+
 }  // namespace
 
 TEST_CASE("bound decimals: a text input follows the places its binding gives", "[ui][bound-decimals]") {
@@ -243,5 +255,34 @@ TEST_CASE("bound decimals: a prefill with more places than the schema's is not r
     h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":1,"concentration":{"num":1234,"den":1000,"dp":3}})");
     h.settle();
     CHECK(h.backend.prop(input, "text") == "1.234");
+    CHECK(h.text("verdict") == "valid");
+}
+
+// Mutation: drop the `places` argument of `encodeNumber` in `encodeScalar`.
+TEST_CASE("bound decimals: a plain Number accepts the places its binding gives, not the schema's",
+          "[ui][bound-decimals]") {
+    Harness h;
+    auto const screen = h.mount(kNumber);
+    INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+    CHECK(h.diagnostics.empty());
+    int const input = h.byTestId("TextInput", "field_reading");
+
+    // Three bound places against the schema's two: three typed places are accepted, four refused.
+    h.backend.edit(input, "1.234");
+    h.settle();
+    CHECK(h.text("verdict") == "valid");
+    h.backend.edit(input, "1.2345");
+    h.settle();
+    CHECK(h.text("verdict") == "invalid");
+    h.backend.edit(input, "1.235");
+    h.settle();
+    CHECK(h.text("verdict") == "valid");
+
+    // Fewer bound places than the schema's: what is typed beyond them is refused.
+    h.backend.click(h.byTestId("Button", "whole"));
+    h.settle();
+    CHECK(h.text("verdict") == "invalid");
+    h.backend.edit(input, "12");
+    h.settle();
     CHECK(h.text("verdict") == "valid");
 }
