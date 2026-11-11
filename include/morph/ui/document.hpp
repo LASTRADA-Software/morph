@@ -795,11 +795,12 @@ inline constexpr std::array<KeySpec, 12> kButtonKeys = {{{"label", Shape::Expr},
                                                          {"mono", Shape::Flag},
                                                          {"weight", Shape::Text}}};
 /// @brief The keys of `textInput`.
-inline constexpr std::array<KeySpec, 15> kTextInputKeys = {{{"value", Shape::Expr},
+inline constexpr std::array<KeySpec, 16> kTextInputKeys = {{{"value", Shape::Expr},
                                                             {"placeholder", Shape::Expr},
                                                             {"mode", Shape::Expr},
                                                             {"icon", Shape::Expr},
                                                             {"unit", Shape::Expr},
+                                                            {"decimals", Shape::Expr},
                                                             {"prefix", Shape::Expr},
                                                             {"emphasis", Shape::Text},
                                                             {"mono", Shape::Flag},
@@ -4453,8 +4454,8 @@ private:
         if (name == nullptr || *name != "multiline") {
             return;
         }
-        for (std::string_view const key :
-             {std::string_view{"unit"}, std::string_view{"icon"}, std::string_view{"prefix"}}) {
+        for (std::string_view const key : {std::string_view{"unit"}, std::string_view{"icon"},
+                                           std::string_view{"prefix"}, std::string_view{"decimals"}}) {
             if (node.prop(key) != nullptr) {
                 refuse(pointerAppend(node.path, key), "a multiline input shows no " + std::string{key});
             }

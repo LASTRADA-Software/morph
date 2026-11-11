@@ -934,8 +934,8 @@ private:
     Widget& mountKind(reactive::Scope& scope, TextInput const& spec, ContainerWidget* parent) {
         bool const hasUnit = spec.unit.isBound() || !spec.unit.constant().empty();
         bool const hasPrefix = spec.prefix.isBound() || !spec.prefix.constant().empty();
-        if ((hasUnit || hasPrefix || spec.decimals >= 0 || !spec.icon.empty()) &&
-            spec.mode == TextInputMode::Multiline) {
+        bool const hasDecimals = spec.decimals.isBound() || spec.decimals.constant() >= 0;
+        if ((hasUnit || hasPrefix || hasDecimals || !spec.icon.empty()) && spec.mode == TextInputMode::Multiline) {
             throw std::logic_error{
                 "morph::ui: a multiline text input holds no number, so it takes no unit, prefix, places or icon"};
         }
@@ -957,8 +957,8 @@ private:
         if (hasPrefix) {
             bind(scope, spec.prefix, [&widget](std::string const& prefix) { widget.setPrefix(prefix); });
         }
-        if (spec.decimals >= 0) {
-            widget.setDecimals(spec.decimals);
+        if (hasDecimals) {
+            bind(scope, spec.decimals, [&widget](int decimals) { widget.setDecimals(decimals); });
         }
         if (!spec.icon.empty()) {
             widget.setIcon(spec.icon);

@@ -4942,6 +4942,32 @@ struct DateReading {
                        static_cast<unsigned>(date.day()));
 }
 
+/// @brief A value as the places a number is entered with.
+/// @param value  The value.
+/// @param format The formatting facts.
+/// @return The places, 0 to the most a decimal holds; -1 for a value that is not a non-negative integer.
+[[nodiscard]] inline int placesOf(Value const& value, FormatContext const& format) {
+    static_cast<void>(format);
+    std::int64_t const* const whole = value.asInt();
+    if (whole == nullptr || *whole < 0) {
+        return -1;
+    }
+    return static_cast<int>(std::min<std::int64_t>(*whole, math::kMaxDecimalPlaces));
+}
+
+/// @brief The fraction digits of a number as typed in the active locale.
+/// @param text   The typed text.
+/// @param format The formatting facts.
+/// @return The digits after the decimal separator; 0 for a text that is not a number, which no places rule judges.
+[[nodiscard]] inline std::size_t fractionDigits(std::string_view text, FormatContext const& format) {
+    std::optional<std::string> const canonical = render::normalizeLocaleNumber(text, format.numeric);
+    if (!canonical.has_value()) {
+        return 0;
+    }
+    auto const dot = canonical->find('.');
+    return dot == std::string::npos ? 0 : canonical->size() - dot - 1;
+}
+
 /// @brief Whether two values show the same in an input: by text for a text input, by instant for a date input, by
 ///        value otherwise.
 /// @param kind   The input's kind.
@@ -4994,6 +5020,13 @@ inline void ScreenCore::wireErrors(ElementState& element) {
         }
         for (std::string& text : stringsOf(evalIn(owner, nullptr, field.prop("errors")))) {
             errors.push_back(std::move(text));
+        }
+        if (ExprPtr const places = field.kind == "textInput" ? field.prop("decimals") : nullptr) {
+            int const allowed = placesOf(evalIn(owner, nullptr, places), session.formatting());
+            if (allowed >= 0 && fractionDigits(textOf(inputValue(element), session.formatting()),
+                                               session.formatting()) > static_cast<std::size_t>(allowed)) {
+                errors.emplace_back("Too many decimal places");
+            }
         }
         if (!field.id.empty()) {
             std::vector<std::string> const path{"errors", field.id};
@@ -7832,8 +7865,8 @@ inline std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx
         }
         // A multiline input shows no unit and no icon; a computed mode that turns out multiline is reported and
         // its unit and icon left out, so the mount never meets them there. The loader refuses a literal one.
-        for (std::string_view const key :
-             {std::string_view{"unit"}, std::string_view{"icon"}, std::string_view{"prefix"}}) {
+        for (std::string_view const key : {std::string_view{"unit"}, std::string_view{"icon"},
+                                           std::string_view{"prefix"}, std::string_view{"decimals"}}) {
             if (ExprPtr const given = node.prop(key); given != nullptr && spec.mode == TextInputMode::Multiline) {
                 report(given->path, "a multiline input shows no " + std::string{key});
             }
@@ -7851,6 +7884,9 @@ inline std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx
             }
             if (node.prop("prefix")) {
                 spec.prefix = kit.textProp("prefix");
+            }
+            if (ExprPtr const places = node.prop("decimals")) {
+                spec.decimals = bindProp<int>(ctx, places, -1, placesOf);
             }
         }
         fieldOf(node, ctx, element, spec.field);
@@ -8496,6 +8532,29 @@ inline void ScreenCore::wireForm(ElementState& element) {
     }
     element.form = std::make_unique<forms::FormSession>(runtime(), *std::move(model), aliasSubmits(alias->model),
                                                         aliasCalls(alias->model), engineOptions());
+    // An overlay's `decimals` follows its expression: the field keeps the draft as typed and checks it again against
+    // the places the expression gives now.
+    for (DocNodePtr const& record : node.partList("fields")) {
+        for (DocNodePtr const& part : record->partList("fields")) {
+            ExprPtr const places = part->prop("decimals");
+            if (!places) {
+                continue;
+            }
+            forms::FieldState* state = nullptr;
+            try {
+                state = &element.form->field(part->id);
+            } catch (std::out_of_range const&) {
+                continue;  // The overlay names a field the form does not have (an omitted one).
+            }
+            scope.nodes.effect([this, &scope, places, state] {
+                int const now = placesOf(evalIn(scope, nullptr, places), session.formatting());
+                runtime().untracked([&] {
+                    state->places().set(now >= 0 ? std::optional<std::uint32_t>{static_cast<std::uint32_t>(now)}
+                                                 : std::nullopt);
+                });
+            });
+        }
+    }
     if (ExprPtr const prefill = node.prop("prefill")) {
         // A prefill follows its expression. A value of the record being edited (the first value, or one under the
         // same `key`) keeps the fields the user changed; another record, a new `key`, or any later value of a form

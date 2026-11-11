@@ -233,19 +233,24 @@ namespace detail::engine {
 /// @param text    The trimmed draft.
 /// @param unit    Index into `spec.units`.
 /// @param context The locale and messages.
+/// @param places  The fraction digits accepted in place of the unit's own, when a record gives the field its own.
 /// @return The encoding.
 [[nodiscard]] inline Encoding encodeExact(FieldSpec const& spec, std::string_view text, std::size_t unit,
-                                          ValueContext const& context) {
+                                          ValueContext const& context,
+                                          std::optional<std::uint32_t> places = std::nullopt) {
     UnitOption const fallback{
         .id = spec.unitAscii, .display = spec.unit, .decimals = spec.decimalPlaces.value_or(0), .num = 1, .den = 1};
-    UnitOption const& entry = unit < spec.units.size() ? spec.units.at(unit) : fallback;
+    UnitOption entry = unit < spec.units.size() ? spec.units.at(unit) : fallback;
+    if (places.has_value()) {
+        entry.decimals = std::min(*places, math::kMaxDecimalPlaces);
+    }
     auto const canonical = render::normalizeLocaleNumber(text, context.locale);
     if (!canonical || !isCanonicalDecimal(*canonical)) {
         return std::unexpected(fieldError("malformed", context));
     }
     auto const dot = canonical->find('.');
-    std::size_t const places = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
-    if (places > entry.decimals) {
+    std::size_t const typedPlaces = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
+    if (typedPlaces > entry.decimals) {
         return std::unexpected(fieldError("too-precise", context));
     }
     auto const typed = render::parseDecimal(*canonical, render::NumericLocale{}, entry.decimals);
@@ -342,10 +347,12 @@ namespace detail::engine {
 /// @param draft   What the user typed, or what a control holds (an option's `valueJson`, `true`/`false`).
 /// @param unit    For a Decimal or Quantity, the index into `spec.units` the draft is typed in.
 /// @param context The locale, display zone and translations.
+/// @param places  For a Decimal or Quantity, the fraction digits accepted in place of the chosen unit's own.
 /// @return The encoding.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind.
 [[nodiscard]] inline Encoding encodeScalar(FieldSpec const& spec, std::string_view draft, std::size_t unit,
-                                           ValueContext const& context) {
+                                           ValueContext const& context,
+                                           std::optional<std::uint32_t> places = std::nullopt) {
     using namespace detail::engine;
     std::string_view const text = trim(draft);
     if (text.empty()) {
@@ -418,7 +425,7 @@ namespace detail::engine {
             return encodeNumber(spec, text, context);
         case FieldKind::Decimal:
         case FieldKind::Quantity:
-            return encodeExact(spec, text, unit, context);
+            return encodeExact(spec, text, unit, context, places);
         case FieldKind::Array:
             return encodeArray(spec, text, context);
         case FieldKind::Object:

@@ -202,6 +202,7 @@ public:
           _parent{parent},
           _text{core.runtime(), std::string{}},
           _unit{core.runtime(), spec.entryUnit},
+          _places{core.runtime(), std::optional<std::uint32_t>{}},
           _engaged{core.runtime(), false},
           _rows{core.runtime(), std::vector<std::shared_ptr<RowState>>{}},
           _encoded{core.runtime(), [this] { return computeEncoding(); }},
@@ -284,6 +285,12 @@ public:
     /// @brief A Decimal's or Quantity's entry unit, an index into `spec().units`.
     /// @return The unit signal.
     [[nodiscard]] reactive::Signal<std::size_t>& unit() noexcept { return _unit; }
+
+    /// @brief The fraction digits a Decimal or Quantity draft is accepted with, in place of the chosen unit's own:
+    ///        what a record gives the field after the form was built. Unset keeps the unit's. A change checks the
+    ///        draft again and leaves its text as typed.
+    /// @return The places signal.
+    [[nodiscard]] reactive::Signal<std::optional<std::uint32_t>>& places() noexcept { return _places; }
 
     /// @brief Whether a blank-capable field was filled once (an `x-blankAs: empty` text, or a
     ///        collection that had rows).
@@ -695,7 +702,7 @@ private:
             }
             return WireValue{.json = json + "]", .value = ui::Value{}};
         }
-        return encodeScalar(*_spec, _text.get(), _unit.get(), _core->values());
+        return encodeScalar(*_spec, _text.get(), _unit.get(), _core->values(), _places.get());
     }
 
     // Declaration order is destruction order reversed: the signals precede the computeds that
@@ -711,6 +718,7 @@ private:
     std::uint64_t _nextRowKey = 1;
     reactive::Signal<std::string> _text;
     reactive::Signal<std::size_t> _unit;
+    reactive::Signal<std::optional<std::uint32_t>> _places;
     reactive::Signal<bool> _engaged;
     reactive::Signal<std::vector<std::shared_ptr<RowState>>> _rows;
     std::vector<std::unique_ptr<FieldState>> _members;

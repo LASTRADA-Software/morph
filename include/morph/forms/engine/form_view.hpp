@@ -210,7 +210,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 [[nodiscard]] inline ui::Node fieldControl(FormSession& session, FieldState& state, ViewOptions const& options) {
     FieldState* const field = &state;
     FieldSpec const& spec = state.spec();
-    auto const textInput = [field](ui::TextInputMode mode, std::string unit = {}, int decimals = -1) {
+    auto const textInput = [field](ui::TextInputMode mode, std::string unit = {}, ui::Prop<int> decimals = -1) {
         return ui::textInput(ui::TextInput{
             .value = [field] { return field->text().get(); },
             .onChange = [field](std::string text) { field->text().set(std::move(text)); },
@@ -219,7 +219,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             .placeholder = field->placeholder(),
             .mode = mode,
             .unit = std::move(unit),
-            .decimals = decimals,
+            .decimals = std::move(decimals),
             .label = [field] { return field->label(); },
             .showLabel = false,
             .field = fieldState(field),
@@ -239,7 +239,14 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
         } else if (spec.decimalPlaces) {
             decimals = static_cast<int>(*spec.decimalPlaces);
         }
-        return textInput(ui::TextInputMode::SingleLine, spec.unit, decimals);
+        if (decimals < 0 || spec.kind == FieldKind::Integer) {
+            return textInput(ui::TextInputMode::SingleLine, spec.unit, decimals);
+        }
+        // A record can give the field its own places after the form is built; the input follows them.
+        return textInput(ui::TextInputMode::SingleLine, spec.unit, [field, decimals] {
+            std::optional<std::uint32_t> const places = field->places().get();
+            return places.has_value() ? static_cast<int>(*places) : decimals;
+        });
     };
     auto const dateInput = [&](bool date) {
         int const offset = date ? 0 : session.options().displayOffsetMinutes;

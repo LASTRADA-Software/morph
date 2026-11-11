@@ -3731,6 +3731,10 @@ struct TextInputOptions {
     /// @brief The unit the input shows, muted, at its trailing edge, and announces after its description, such as
     ///        `°C`; refused on a multiline input.
     AnyHandle unit;
+    /// @brief The fraction digits a number is entered with, 0 or more; it may follow an expression, such as the
+    ///        decimals of the currency a price is in. A text with more fraction digits is invalid. Refused on a
+    ///        multiline input.
+    AnyHandle decimals;
     /// @brief How much it stands out: `Prominent` for the screen's focal field, such as a scanner's; `Normal` writes
     ///        no key. Refused on a multiline input.
     InputEmphasis emphasis = InputEmphasis::Normal;
@@ -3764,6 +3768,7 @@ struct TextInputOptions {
         .put("mode", options.mode)
         .put("icon", options.icon)
         .put("unit", options.unit)
+        .put("decimals", options.decimals)
         .put("prefix", options.prefix);
     if (options.emphasis == InputEmphasis::Prominent) {
         node.text("emphasis", "prominent");
@@ -5483,7 +5488,8 @@ struct FieldSettings {
     AnyHandle label;
     /// @brief The display unit.
     AnyHandle unit;
-    /// @brief The display places.
+    /// @brief The places the field is entered with; it may follow an expression, and overrides the schema's
+    ///        `x-decimalPlaces` for the field.
     AnyHandle decimals;
     /// @brief The widget.
     AnyHandle widget;
