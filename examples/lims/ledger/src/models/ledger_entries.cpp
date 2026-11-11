@@ -6,8 +6,10 @@
 #include <algorithm>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <morph/offline/replay_ledger.hpp>
 #include <morph/session/session.hpp>
+#include <morph/table/query.hpp>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -25,6 +27,7 @@
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
 #include "lims/org/core/money.hpp"
+#include "lims/org/core/plan_sql.hpp"
 #include "lims/org/models/org_model.hpp"
 
 namespace lims {
@@ -149,6 +152,44 @@ struct LoadedEntry {
         });
     }
     return view;
+}
+
+/// @brief The journal's columns as the table engine reflects them from `JournalEntryView`.
+/// @return One column per member, in member order.
+[[nodiscard]] std::vector<::morph::table::ColumnInfo> const& journalColumns() {
+    static auto const columns = [] {
+        ::morph::table::RowsSource<JournalEntryView> const source{
+            std::make_shared<std::vector<JournalEntryView> const>(),
+            [](JournalEntryView const& entry) { return ::morph::table::RowId{*entry.id}; }};
+        auto const reflected = source.columns();
+        return std::vector<::morph::table::ColumnInfo>(reflected.begin(), reflected.end());
+    }();
+    return columns;
+}
+
+/// @brief How the database reads each journal column it can filter and order by.
+///
+/// `lines` is a serialisation of another table and `rate` is a quantity held as a numerator and denominator, whose
+/// exact comparison would multiply two `int64` values in SQLite, which turns an overflowing product into a real; both
+/// are refused. The enum columns are mapped to the enumerator's name, which is how the table engine holds them.
+/// @return The columns by id.
+[[nodiscard]] plansql::Columns const& journalSqlColumns() {
+    static plansql::Columns const columns{
+        {"id", plansql::integer("id")},
+        {"company", plansql::integer("company_id")},
+        {"period", plansql::integer("period_id")},
+        {"date", plansql::dateTime(plansql::wholeSeconds("date_ms"))},
+        {"state", plansql::text(plansql::enumName<EntryState>("state", kMaxEntryState + 1))},
+        {"sourceKey", plansql::storedText("source_key")},
+        {"sourceReference", plansql::storedText("source_reference")},
+        {"memo", plansql::storedText("memo")},
+        {"currency", plansql::text(plansql::enumName<CurrencyCode>("currency", kMaxCurrencyCode + 1))},
+        {"reverses", plansql::integer("reverses_id")},
+        {"reversedBy", plansql::integer("reversed_by_id")},
+        {"createdBy", plansql::storedText("created_by")},
+        {"postedBy", plansql::storedText("posted_by")},
+    };
+    return columns;
 }
 
 /// @brief Changes the entry row @p entryId only where it still holds the state the caller read.
@@ -487,6 +528,52 @@ ListEntriesResult LedgerModel::execute(const ListEntries& action) {
     }
     std::ranges::sort(result.entries, {}, [](JournalEntryView const& entry) { return *entry.id; });
     return result;
+}
+
+bool LedgerModel::canTranslateEntryColumn(std::string_view column, ::morph::table::PlanUse /*use*/) {
+    return plansql::translatable(journalSqlColumns(), column);
+}
+
+::morph::table::Page<JournalEntryView> LedgerModel::pageEntries(CompanyId company,
+                                                                ::morph::table::QueryPlan const& plan) {
+    auto const translation = plansql::translate(plan, journalSqlColumns(), "id");
+    if (!translation) {
+        throw ValidationError{"ListEntriesPage: " + translation.error().message};
+    }
+    Lightweight::DataMapper mapper;
+    // One read transaction for the count and the page, so the total agrees with the rows. It is rolled back, never
+    // committed, and no write happens inside it.
+    Lightweight::SqlTransaction const reading{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto const fetched = plansql::fetch(mapper, db::EntryRecord::TableName, "id",
+                                        "company_id = " + std::to_string(*company), *translation, plan);
+    ::morph::table::Page<JournalEntryView> page;
+    page.offset = plan.offset;
+    page.total = fetched.total;
+    page.totalKind = ::morph::table::TotalKind::Exact;
+    for (std::int64_t const id : fetched.ids) {
+        page.rows.push_back(toView(mapper, loadWritten(mapper, id)));
+    }
+    return page;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+::morph::table::Page<JournalEntryView> LedgerModel::execute(const ListEntriesPage& action) {
+    if (!action.validate()) {
+        throw ValidationError{"ListEntriesPage: a company is required"};
+    }
+    auto const plan = ::morph::table::planQuery(action.query, journalColumns(), {}, {}, {}, canTranslateEntryColumn);
+    if (!plan) {
+        throw ValidationError{"ListEntriesPage: " + plan.error().message};
+    }
+    auto const visibleCompanies = OrgModel::visibleCompanies(currentPrincipal());
+    if (std::ranges::find(visibleCompanies, action.company) == visibleCompanies.end()) {
+        ::morph::table::Page<JournalEntryView> empty;
+        empty.offset = plan->offset;
+        empty.total = 0;
+        return empty;
+    }
+    return pageEntries(action.company, *plan);
 }
 
 // An action handler: the registry calls it on the instance, like every other.

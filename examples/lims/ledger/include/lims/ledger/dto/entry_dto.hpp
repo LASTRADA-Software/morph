@@ -2,6 +2,7 @@
 #pragma once
 
 #include <morph/core/records.hpp>
+#include <morph/table/query.hpp>
 #include <morph/util/datetime.hpp>
 #include <string>
 #include <vector>
@@ -109,6 +110,18 @@ struct GetEntry {
 struct ListEntries {
     /// @brief The company.
     CompanyId company;
+
+    /// @brief Whether a company is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
+};
+
+/// @brief Lists a page of a company's entries, sorted and filtered by the table engine's query in the database.
+struct ListEntriesPage {
+    /// @brief The company.
+    CompanyId company;
+    /// @brief The sort, filters and page. The entries' lines and rate are not sortable or filterable.
+    ::morph::table::TableQuery query;
 
     /// @brief Whether a company is named.
     /// @return `true` when it is.

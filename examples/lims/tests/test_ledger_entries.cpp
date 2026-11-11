@@ -5,16 +5,23 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlStatement.hpp>
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <limits>
 #include <map>
+#include <memory>
 #include <morph/session/session_auth.hpp>
+#include <morph/table/plan_conformance.hpp>
+#include <morph/table/query.hpp>
 #include <morph/util/rational.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -1280,4 +1287,302 @@ TEST_CASE("LedgerModel over the full backend-mode matrix: a period is begun and 
     CHECK(closed.state == lims::PeriodState::Closed);
     CHECK(closed.id == november.id);
     CHECK(frozen(november.id).size() == 2U);
+}
+
+namespace {
+
+/// @brief One journal entry as the page tests write it: straight into the tables, so every cell can be made to
+///        differ, be empty or hold text the collator folds.
+struct RawEntry {
+    std::int64_t dateOffsetMs = 0;
+    lims::EntryState state = lims::EntryState::Posted;
+    std::string sourceKey;
+    std::string sourceReference;
+    std::string memo;
+    lims::CurrencyCode currency = lims::CurrencyCode::EUR;
+    std::optional<std::int64_t> reverses;
+    std::optional<std::int64_t> reversedBy;
+    std::string createdBy = "alice";
+    std::string postedBy = "alice";
+};
+
+/// @brief The journal the page tests page through: duplicate sort keys, empty cells in every nullable column,
+///        accents, upper and lower case, a non-Latin-1 capital, characters a statement could misread, and instants
+///        within one second, across a second and before the epoch.
+/// @return The entries, in id order.
+[[nodiscard]] std::vector<RawEntry> journalRows() {
+    using lims::EntryState;
+    std::vector<RawEntry> rows;
+    auto const add = [&](RawEntry entry) { rows.push_back(std::move(entry)); };
+    add({.dateOffsetMs = 0, .sourceKey = "a", .sourceReference = "Ref A", .memo = "Rent"});
+    add({.dateOffsetMs = 250, .sourceKey = "A", .sourceReference = "ref a", .memo = "rent"});
+    add({.dateOffsetMs = 999, .sourceKey = "", .sourceReference = "", .memo = "", .postedBy = ""});
+    add({.dateOffsetMs = 1000, .state = EntryState::Draft, .sourceKey = "", .memo = "Rent", .postedBy = ""});
+    add({.dateOffsetMs = 1001,
+         .sourceKey = "\xC3\x89"
+                      "clair",
+         .sourceReference = "x",
+         .memo = "\xC3\x89"
+                 "CLAIR"});
+    add({.dateOffsetMs = 86'400'000,
+         .sourceKey = "\xC3\xA9"
+                      "clair",
+         .sourceReference = "X",
+         .memo = "\xC3\xA9"
+                 "clair"});
+    add({.dateOffsetMs = 86'400'000,
+         .sourceKey = "\xCE\xA9"
+                      "mega",
+         .sourceReference = "\xCF\x89"
+                            "mega",
+         .memo = "omega"});
+    add({.dateOffsetMs = -2'000'000'000'123, .sourceKey = "a?b", .sourceReference = "{fn now()}", .memo = "it's"});
+    add({.dateOffsetMs = 172'800'000,
+         .sourceKey = "a_b",
+         .sourceReference = "a%b",
+         .memo = "O'Brien",
+         .createdBy = "bob"});
+    add({.dateOffsetMs = 172'800'500, .sourceKey = "Zeta", .memo = "z", .currency = lims::CurrencyCode::USD});
+    add({.dateOffsetMs = 172'800'999, .sourceKey = "zeta", .memo = "Z", .currency = lims::CurrencyCode::USD});
+    add({.dateOffsetMs = 259'200'000,
+         .sourceKey = "\xC3\x9C"
+                      "nder",
+         .memo = "\xC3\xBC"
+                 "nder",
+         .currency = lims::CurrencyCode::GBP});
+    add({.dateOffsetMs = 259'200'000,
+         .sourceKey = "\xC3\x97"
+                      "x",
+         .sourceReference = "\xC3\xB7",
+         .memo = "\xC3\x97"});
+    add({.dateOffsetMs = 345'600'000, .sourceKey = "r1", .memo = "reversal of 1", .reverses = 1});
+    add({.dateOffsetMs = 345'600'001, .sourceKey = "r5", .memo = "reversal of 5", .reverses = 5});
+    add({.dateOffsetMs = 432'000'000, .sourceKey = "k15", .memo = "Rent"});
+    add({.dateOffsetMs = 432'000'000, .sourceKey = "k16", .memo = "Rent"});
+    add({.dateOffsetMs = 518'400'000, .state = EntryState::Draft, .sourceKey = "d", .memo = "draft", .postedBy = ""});
+    add({.dateOffsetMs = 604'800'000, .sourceKey = "k19", .memo = "Rent"});
+    add({.dateOffsetMs = 691'200'000, .sourceKey = "k20", .memo = "m20"});
+    add({.dateOffsetMs = 777'600'000, .sourceKey = "k21", .memo = "m21"});
+    add({.dateOffsetMs = 864'000'000, .sourceKey = "k22", .memo = "m22"});
+    add({.dateOffsetMs = 950'400'000, .sourceKey = "k23", .memo = "m23"});
+    add({.dateOffsetMs = 1'036'800'000, .sourceKey = "k24", .memo = "m24"});
+    rows[0].reversedBy = 14;
+    rows[4].reversedBy = 15;
+    return rows;
+}
+
+/// @brief Writes @p rows as the seeded company's journal, two lines each, and returns the ids.
+/// @param period The period every entry is in.
+/// @param rows The entries.
+void writeJournal(lims::PeriodId period, std::vector<RawEntry> const& rows) {
+    Lightweight::DataMapper mapper;
+    std::int64_t asset = 0;
+    std::int64_t revenue = 0;
+    for (auto const& account : mapper.Query<lims::db::AccountRecord>().All()) {
+        (account.code.Value().ToStringView() == "1200" ? asset : revenue) =
+            static_cast<std::int64_t>(account.id.Value());
+    }
+    std::int64_t const base = lims::millisOf(morph::time::Timestamp{lims::test::at(2026, 11, 10)});
+    std::int64_t index = 0;
+    for (auto const& raw : rows) {
+        lims::db::EntryRecord entry;
+        entry.companyId = *lims::test::seededCompany();
+        entry.period = *period;
+        entry.dateMs = base + raw.dateOffsetMs;
+        entry.state = static_cast<int>(raw.state);
+        entry.sourceKey = raw.sourceKey;
+        entry.sourceReference = raw.sourceReference;
+        entry.memo = raw.memo;
+        entry.currency = static_cast<int>(raw.currency);
+        entry.rateNum = raw.currency == lims::CurrencyCode::EUR ? 1 : 92;
+        entry.rateDen = raw.currency == lims::CurrencyCode::EUR ? 1 : 100;
+        entry.reversesId = raw.reverses;
+        entry.reversedById = raw.reversedBy;
+        entry.createdBy = raw.createdBy;
+        entry.postedBy = raw.postedBy;
+        mapper.Create(entry);
+        auto const entryId = static_cast<std::int64_t>(entry.id.Value());
+        for (int position = 0; position < 2; ++position) {
+            lims::db::EntryLineRecord row;
+            row.entry = entryId;
+            row.position = position;
+            row.account = position == 0 ? asset : revenue;
+            row.side = static_cast<int>(position == 0 ? lims::PostingSide::Debit : lims::PostingSide::Credit);
+            row.amountNum = 1000 + index;
+            row.amountDen = 100;
+            row.companyNum = 1000 + index;
+            row.companyDen = 100;
+            mapper.Create(row);
+        }
+        ++index;
+    }
+}
+
+/// @brief The date-time queries the standard corpus cannot make: its operands are the cells' own text, and a date-time
+///        cell's text is not a date the parser reads. The operands are the whole seconds of the rows' own dates, so
+///        every equality, bound and tie falls on a boundary, and a few instants that match no row.
+/// @param entries The journal.
+/// @return The queries.
+[[nodiscard]] std::vector<morph::table::TableQuery> dateQueries(std::vector<lims::JournalEntryView> const& entries) {
+    using morph::table::ColumnFilter;
+    using morph::table::FilterEntry;
+    using morph::table::SortDirection;
+    using morph::table::SortKey;
+    using morph::table::TableQuery;
+    std::vector<TableQuery> queries;
+    auto const filtered = [&](std::string const& column, FilterEntry entry, bool asExclude) {
+        TableQuery query;
+        ColumnFilter filter;
+        (asExclude ? filter.exclude : filter.include).push_back(std::move(entry));
+        query.filters.columns.emplace(column, std::move(filter));
+        query.sort = {SortKey{.column = "date", .dir = SortDirection::Descending}};
+        queries.push_back(std::move(query));
+    };
+    std::vector<std::string> instants{"2026-11-10T09:00:00.500Z", "2026-11-11", "1969-12-08T00:00:00Z"};
+    for (auto const& entry : entries) {
+        auto const second = lims::test::isoSecond(entry.date);
+        if (std::ranges::find(instants, second) == instants.end()) {
+            instants.push_back(second);
+        }
+    }
+    for (bool const asExclude : {false, true}) {
+        for (std::string const& instant : instants) {
+            filtered("date", FilterEntry{.eq = instant}, asExclude);
+            filtered("date", FilterEntry{.ne = instant}, asExclude);
+            filtered("date", FilterEntry{.lt = instant}, asExclude);
+            filtered("date", FilterEntry{.le = instant}, asExclude);
+            filtered("date", FilterEntry{.gt = instant}, asExclude);
+            filtered("date", FilterEntry{.ge = instant}, asExclude);
+            filtered("date", FilterEntry{.between = std::array<std::string, 2>{instant, "2026-11-12"}}, asExclude);
+        }
+    }
+    TableQuery ties;
+    ties.sort = {SortKey{.column = "date", .dir = SortDirection::Ascending}};
+    queries.push_back(ties);
+    ties.sort = {SortKey{.column = "memo", .dir = SortDirection::Descending},
+                 SortKey{.column = "date", .dir = SortDirection::Ascending}};
+    queries.push_back(ties);
+    return queries;
+}
+
+/// @brief The seeded company's whole journal as the engine's source rows.
+/// @return The entries by id.
+[[nodiscard]] std::shared_ptr<std::vector<lims::JournalEntryView> const> journalRowsFromLedger() {
+    auto const listed = lims::LedgerModel{}.execute(lims::ListEntries{.company = lims::test::seededCompany()});
+    return std::make_shared<std::vector<lims::JournalEntryView> const>(listed.entries);
+}
+
+}  // namespace
+
+// The page the database returns is the page the table engine returns over the same rows, for every sort and filter the
+// standard corpus derives from the rows and for the date queries it cannot derive, with the total cap lowered so the
+// above-cap rule runs on a small journal.
+// Mutations: drop the plan's filters from the statement (translate returns "1" for the filter); order empty cells
+// first; render an exclude as NOT (cell condition) without COALESCE; round an integer operand; drop the Latin-1 fold;
+// order by the transaction-time seconds without the floor.
+TEST_CASE(
+    "ledger: a page of entries from the database equals the engine's page over the same rows, for every sort and "
+    "filter the journal offers",
+    "[lims][ledger][pages]") {
+    DbFixture fixture;
+    auto const period = books();
+    writeJournal(period.id, journalRows());
+    ScopedPrincipal const alice{"alice"};
+    auto const rows = journalRowsFromLedger();
+    REQUIRE(rows->size() == journalRows().size());
+    morph::table::RowsSource<lims::JournalEntryView> const source{
+        rows, [](lims::JournalEntryView const& entry) { return morph::table::RowId{*entry.id}; }};
+
+    auto corpus = morph::table::standardCorpus(source);
+    auto const standardQueries = corpus.size();
+    for (auto&& query : dateQueries(*rows)) {
+        corpus.push_back(std::move(query));
+    }
+    CHECK(standardQueries > 1000U);
+
+    morph::table::ConformanceOptions options;
+    options.limits.totalCap = 10;
+    options.translatable = lims::LedgerModel::canTranslateEntryColumn;
+    auto const company = lims::test::seededCompany();
+    auto const model =
+        [&](morph::table::QueryPlan const& plan) -> std::expected<morph::table::ModelPage, morph::table::TableError> {
+        auto const page = lims::LedgerModel::pageEntries(company, plan);
+        morph::table::ModelPage out;
+        for (auto const& row : page.rows) {
+            out.rows.emplace_back(*row.id);
+        }
+        out.total = page.total;
+        out.totalKind = page.totalKind;
+        out.offset = page.offset;
+        return out;
+    };
+    auto const failures = morph::table::conformanceFailures(source, model, corpus, options);
+    for (std::size_t i = 0; i < failures.size() && i < 10; ++i) {
+        WARN(failures[i]);
+    }
+    CHECK(failures.empty());
+}
+
+// The control for the case above: the journal and the corpus exercise what the helper claims to. Every translatable
+// column is filtered to a non-empty and a non-full set somewhere in the corpus, and the columns the database cannot
+// compare are exactly the two named.
+TEST_CASE("ledger: the entry page refuses the columns the database cannot compare, and nothing else",
+          "[lims][ledger][pages]") {
+    DbFixture fixture;
+    auto const period = books();
+    writeJournal(period.id, journalRows());
+    ScopedPrincipal const alice{"alice"};
+    auto const rows = journalRowsFromLedger();
+    morph::table::RowsSource<lims::JournalEntryView> const source{
+        rows, [](lims::JournalEntryView const& entry) { return morph::table::RowId{*entry.id}; }};
+    std::vector<std::string> refused;
+    for (auto const& column : source.columns()) {
+        if (!lims::LedgerModel::canTranslateEntryColumn(column.id, morph::table::PlanUse::Sort)) {
+            refused.push_back(column.id);
+        }
+    }
+    CHECK(refused == std::vector<std::string>{"rate", "lines"});
+
+    lims::LedgerModel ledger;
+    for (std::string const column : {"lines", "rate"}) {
+        CAPTURE(column);
+        lims::ListEntriesPage sorted{.company = lims::test::seededCompany(), .query = {}};
+        sorted.query.sort = {morph::table::SortKey{.column = column, .dir = morph::table::SortDirection::Ascending}};
+        CHECK_THROWS_AS(ledger.execute(sorted), lims::ValidationError);
+    }
+    lims::ListEntriesPage unknown{.company = lims::test::seededCompany(), .query = {}};
+    unknown.query.sort = {morph::table::SortKey{.column = "nope", .dir = morph::table::SortDirection::Ascending}};
+    CHECK_THROWS_AS(ledger.execute(unknown), lims::ValidationError);
+}
+
+// Mutation: skip the visibility check (dave, who sees no company, gets the journal).
+TEST_CASE("ledger: a page of entries is the caller's, with an exact total from the database",
+          "[lims][ledger][pages]") {
+    DbFixture fixture;
+    auto const period = books();
+    writeJournal(period.id, journalRows());
+    lims::LedgerModel ledger;
+    {
+        ScopedPrincipal const alice{"alice"};
+        lims::ListEntriesPage request{.company = lims::test::seededCompany(), .query = {}};
+        request.query.page = morph::table::PageRequest{.offset = 20, .limit = 3};
+        auto const page = ledger.execute(request);
+        CHECK(page.total == static_cast<std::int64_t>(journalRows().size()));
+        CHECK(page.totalKind == morph::table::TotalKind::Exact);
+        CHECK(page.offset == 20);
+        REQUIRE(page.rows.size() == 3U);
+        CHECK(*page.rows.front().id == 21);
+        CHECK(page.rows.front().lines.size() == 2U);
+        request.query.page.limit = 0;
+        auto const counted = ledger.execute(request);
+        CHECK(counted.rows.empty());
+        CHECK(counted.total == page.total);
+    }
+    {
+        ScopedPrincipal const dave{"dave"};
+        auto const page = ledger.execute(lims::ListEntriesPage{.company = lims::test::seededCompany(), .query = {}});
+        CHECK(page.rows.empty());
+        CHECK(page.total == 0);
+    }
+    CHECK_THROWS_AS(ledger.execute(lims::ListEntriesPage{}), lims::ValidationError);
 }
