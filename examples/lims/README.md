@@ -1295,6 +1295,24 @@ unit is a fact of its row. The quantity is therefore a `Measure` (an exact decim
 tag. Purchase orders in a supplier's currency (decision 44) are hypothesis 8's named second instance; this is a third
 place the same shape is needed, recorded here and weighed with both when the seam is decided.
 
+### 48. A stock change in one company reaches another company's watching stock keeper (hypothesis 7, second instance)
+
+**Hypothesis 7 is confirmed for its second instance, and what leaks is the same as decision 40's `changes<>` case.**
+Measured in `tests/test_two_company_stock.cpp` over a real `RemoteServer`, with company A's stock keeper watching
+`Inventory_Lot` and `Inventory_Movement` on a connection of her own: a lot recorded by company B's stock keeper is
+heard on company A's connection, as `Inventory_Lot` and `Inventory_Movement` each "as a whole" (no key; printed by
+`-s`), so company A learns that the other company's lots and movements changed, and when, not which lot. A lot
+recorded at company A is heard (the control). `RecordOpeningLot` declares `changes<LotStockView>` and
+`changes<StockMovementView>`, which is why no key is sent; `Inventory_Lot` is registered with a key
+(`record::key<&LotStockView::lot>`) and without `privateKeys`, so an action of inventory that declares `updates<>` on
+it would send company A the lot's id, as `ApproveInvoice` does for invoices (inferred from decision 40's measurement
+of the same fan-out; no inventory action declares `updates<>` yet, so it was not measured for stock).
+
+The fan-out re-authorizes each watcher at the model and action level, which a stock keeper of either company passes,
+and does not ask whether the record is in a scope the watcher can see. Invoices (decision 40) and stock measured the
+same, so two modules now need row-level scoping of the fan-out; that is the second instance a framework seam needs,
+and its design is Task 8's. A screen over these records, rather than a raw watching connection, was not measured.
+
 ### 50. lims's screens are held to committed mockups through a kit, two catalogues and side-by-side grabs
 
 Every screen formats money, balances, days, quantities and states through `screens/kit/`, so no screen shows a raw
