@@ -177,15 +177,21 @@ The engine compares a text operand to a cell after both pass through the collato
 collator's `sortKey`. A store holds neither. `PlannedCondition::value` holds the folded operand (raw when
 `caseSensitive`), and `text` holds the operand as given, so the model can use its store's mechanism.
 
-Text results equal the oracle's only when the store compares and orders by the same collator. Two ways satisfy that:
+Text results equal the oracle's only when the store compares and orders by the same collator. Three ways satisfy that:
 
 - a stored fold column and a stored sort-key column, written through the same collator, which the query compares and
   orders by; or
 - a store collation documented to coincide with the collator. The default collator folds ASCII and Latin-1 letters
   and orders by code point, and SQLite's `NOCASE` folds exactly ASCII, so `COLLATE NOCASE` reproduces the default
-  collator over ASCII data.
+  collator over ASCII data; or
+- an expression the store evaluates over the stored text that equals the collator's fold, which the query compares and
+  orders by. It is exact when the expression maps every input to the collator's output byte for byte: for the default
+  collator that is the ASCII lower-casing plus the lowering of each two-byte Latin-1 capital (`C3 80` to `C3 9E`
+  except `C3 97`), where no replacement's output is the input of another, and the store's own lower-casing folds
+  nothing the collator leaves alone. Whether a given store's function does is a property of that store's build, so
+  the model's conformance run against the real store is what holds it.
 
-A text column for which neither holds is refused in sort and filter through `translatable`, never answered
+A text column for which none of them holds is refused in sort and filter through `translatable`, never answered
 differently. A case-sensitive pattern needs a case-sensitive mechanism (`instr`, `GLOB`, a binary collation): a
 store's `LIKE` may be case-insensitive by default, so `escapeLikePattern` alone is enough only on the folded path.
 
@@ -231,7 +237,15 @@ rows in key order and through the model's callback `PlanModel` (`QueryPlan -> Mo
 total kind), and returns one description per
 disagreement: rows (compared by key), offset, total and kind, and refusals (compared by code and column).
 `standardCorpus` derives queries from a source's own cells: every operator each column's kind defines, both sort
-directions on every column, an offset past the end, a zero limit, an exclude, a group.
+directions on every column, an offset past the end, a zero limit, an exclude, a group. An operand is the cell's text
+as `displayText` shows it, except that a `DateTime` cell (whole UTC seconds) is written as ISO 8601 UTC
+(`2026-11-10T09:00:00Z`) and a `Date` cell (days) as `YYYY-MM-DD`: bare numbers do not parse as dates, so a query
+built from them would be refused by `apply` and by the plan alike and compare nothing.
+
+Identical refusals count as agreement, so `conformanceFailures` also guards against a corpus that compared nothing: it
+reports a column that the corpus filters with an operand (or, for sort-only queries, orders) when at least one query on it was
+refused identically by `apply` and the plan and none was compared with the model. A query the model's `translatable`
+refuses is skipped and counts as neither, so a column the model declares untranslatable is not reported.
 
 It lives under `include/morph/table`, not in the test tree, so a model in another tree includes it; it depends on
 neither a test framework nor a database, returning descriptions for the caller's test to assert on. morph does not

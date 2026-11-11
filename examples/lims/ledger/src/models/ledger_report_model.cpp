@@ -2,6 +2,8 @@
 #include "lims/ledger/models/ledger_report_model.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlError.hpp>
+#include <Lightweight/SqlStatement.hpp>
 #include <algorithm>
 #include <cstdint>
 #include <map>
@@ -199,6 +201,72 @@ void addExact(ExactSum& sum, Rational const& value, std::string_view what) {
     return lines;
 }
 
+/// @brief Adds the company-currency totals of the posted lines dated up to @p throughMs to @p totals, summed in the
+///        database.
+///
+/// The sum is taken per account, side and denominator: a stored amount is a numerator over a denominator, and lines of
+/// one denominator add as integers. SQLite's `SUM` raises an error rather than wrapping when the integer sum does not
+/// fit, which is reported as `OutOfRange`; the few sums per account, one per denominator, are then added exactly.
+/// A total that is only an over-range numerator at one denominator is refused even where it would reduce to a
+/// representable value, which is the "exact or refused" the ledger promises.
+/// @param mapper The open mapper.
+/// @param company The company.
+/// @param throughMs The last instant counted.
+/// @param skipPeriods Periods whose frozen totals stand in for their lines.
+/// @param onlyAccount The account to total; every account when empty.
+/// @param places The company currency's decimals.
+/// @param totals Receives the totals.
+/// @throws OutOfRange if a total does not fit.
+/// @throws ValidationError if a line stores a side out of range.
+void addPostedTotals(Lightweight::DataMapper& mapper, CompanyId company, std::int64_t throughMs,
+                     std::set<std::int64_t> const& skipPeriods, std::optional<std::uint64_t> onlyAccount,
+                     DecimalPlaces places, TotalsByAccount& totals) {
+    std::string sql = "SELECT l.account_id, l.side, l.company_den, SUM(l.company_num) FROM " +
+                      std::string{db::EntryLineRecord::TableName} + " l JOIN " +
+                      std::string{db::EntryRecord::TableName} +
+                      " e ON e.id = l.entry_id WHERE e.company_id = " + std::to_string(*company) +
+                      " AND e.state = " + std::to_string(static_cast<int>(EntryState::Posted)) +
+                      " AND e.date_ms >= 0 AND e.date_ms <= " + std::to_string(throughMs);
+    if (!skipPeriods.empty()) {
+        std::string periods;
+        for (std::int64_t const period : skipPeriods) {
+            periods += (periods.empty() ? "" : ", ") + std::to_string(period);
+        }
+        sql += " AND e.period_id NOT IN (" + periods + ")";
+    }
+    if (onlyAccount.has_value()) {
+        sql += " AND l.account_id = " + std::to_string(*onlyAccount);
+    }
+    sql += " GROUP BY l.account_id, l.side, l.company_den";
+    try {
+        Lightweight::SqlStatement statement{mapper.Connection()};
+        auto cursor = statement.ExecuteDirect(sql);
+        while (cursor.FetchRow()) {
+            auto const account = static_cast<std::uint64_t>(cursor.GetColumn<std::int64_t>(1));
+            int const side = static_cast<int>(cursor.GetColumn<std::int64_t>(2));
+            if (side != static_cast<int>(PostingSide::Debit) && side != static_cast<int>(PostingSide::Credit)) {
+                throw ValidationError{"account " + std::to_string(account) +
+                                      " has a line that stores a side out of range"};
+            }
+            Rational const value{Numerator{cursor.GetColumn<std::int64_t>(4)},
+                                 Denominator{cursor.GetColumn<std::int64_t>(3)}, places};
+            auto& sums = totals[account];
+            addExact(side == static_cast<int>(PostingSide::Debit) ? sums.debit : sums.credit, value,
+                     "an account's total");
+        }
+    } catch (Lightweight::SqlException const& error) {
+        // SQLite reports an integer sum that does not fit as "integer overflow".
+        if (std::string_view{error.what()}.contains("integer overflow") ||
+            error.info().message.find("integer overflow") != std::string::npos) {
+            throw OutOfRange{"an account's total is too large to total exactly"};
+        }
+        if (isBusy(error)) {
+            throw Conflict{"the database is busy with another write; try again"};
+        }
+        throw;
+    }
+}
+
 /// @brief Every account's totals through @p throughMs: frozen totals for the closed periods wholly inside the
 ///        range, and the lines of everything else.
 /// @param mapper The open mapper.
@@ -228,10 +296,7 @@ void addExact(ExactSum& sum, Rational const& value, std::string_view what) {
                      "an account's total");
         }
     }
-    for (auto const& [account, line] : postedLines(mapper, company, 0, throughMs, frozen, onlyAccount)) {
-        auto& sums = totals[account];
-        addExact(line.side == PostingSide::Debit ? sums.debit : sums.credit, line.value, "an account's total");
-    }
+    addPostedTotals(mapper, company, throughMs, frozen, onlyAccount, places, totals);
     return totals;
 }
 

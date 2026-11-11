@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Hypothesis 10 on the ledger: a list or a report over rows already in the database should not load them all. Two
-// Stress cases measure what the journal's list and the trial balance cost today at 10^6 entries and 10^7 lines. The
-// rows are written through Lightweight's DataMapper in batches, one transaction per 10,000; the posting path's cost
-// is not what is measured. Each case prints its measurements to stderr as it goes, so a run that does not finish
-// still says how far it got.
+// Hypothesis 10 on the ledger: a list or a report over rows already in the database does not load them all. Two
+// Stress cases measure a page of the journal at 10^6 entries and the trial balance at 10^7 lines. The rows are written
+// through Lightweight's DataMapper in batches, one transaction per 10,000; the posting path's cost is not what is
+// measured. Each case prints its measurements to stderr as it goes, so a run that does not finish still says how far
+// it got.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlTransaction.hpp>
@@ -170,22 +170,6 @@ struct Written {
 
 }  // namespace
 
-// Named, not anonymous: glaze reflects the row's member names through an extern object, which an anonymous type
-// cannot have.
-namespace lims::scale_test {
-
-/// @brief The columns of the journal's list the page is drawn from.
-struct JournalRow {
-    std::int64_t id = 0;
-    std::string sourceKey;
-    std::string sourceReference;
-    std::string memo;
-};
-
-}  // namespace lims::scale_test
-
-using lims::scale_test::JournalRow;
-
 TEST_CASE("Stress: Hypothesis 10: a page of the journal over 10^6 entries", "[lims][ledger][scale][stress]") {
     DbFixture fixture;
     lims::test::grant("alice", lims::LimsRole::Accountant);
@@ -196,41 +180,42 @@ TEST_CASE("Stress: Hypothesis 10: a page of the journal over 10^6 entries", "[li
 
     double const rssBefore = statusMegabytes("VmRSS:");
     double const peakBefore = statusMegabytes("VmHWM:");
-    auto start = Clock::now();
     lims::LedgerModel ledger;
-    auto listed = ledger.execute(lims::ListEntries{.company = lims::test::seededCompany()});
-    double const listMillis = millisSince(start);
-    report("ListEntries over " + std::to_string(kEntriesForPage) + " entries", listMillis);
-    std::fprintf(stderr, "[scale] ListEntries: RSS %.0f MB -> %.0f MB, peak %.0f MB -> %.0f MB\n", rssBefore,
-                 statusMegabytes("VmRSS:"), peakBefore, statusMegabytes("VmHWM:"));
-    REQUIRE(listed.entries.size() == static_cast<std::size_t>(kEntriesForPage));
-
-    // The page: the rows are projected from what ListEntries returned, then paged by the engine.
-    start = Clock::now();
-    std::vector<JournalRow> rows;
-    rows.reserve(listed.entries.size());
-    for (auto const& entry : listed.entries) {
-        rows.push_back(JournalRow{.id = *entry.id,
-                                  .sourceKey = entry.sourceKey,
-                                  .sourceReference = entry.sourceReference,
-                                  .memo = entry.memo});
-    }
-    morph::table::TableQuery query;
-    query.page.offset = 500'000;
-    query.page.limit = kPageSize;
-    auto page = morph::table::apply<JournalRow>(
-        rows, [](JournalRow const& row) { return morph::table::RowId{row.id}; }, query);
+    lims::ListEntriesPage request{.company = lims::test::seededCompany(), .query = {}};
+    request.query.page.offset = 500'000;
+    request.query.page.limit = kPageSize;
+    auto const start = Clock::now();
+    auto const page = ledger.execute(request);
     double const pageMillis = millisSince(start);
-    report("projection plus a page of " + std::to_string(kPageSize) + " through table::apply", pageMillis);
-    REQUIRE(page.has_value());
-    REQUIRE(page->rows.size() == static_cast<std::size_t>(kPageSize));
+    report("ListEntriesPage of " + std::to_string(kPageSize) + " at offset 500000 over " +
+               std::to_string(kEntriesForPage) + " entries",
+           pageMillis);
+    std::fprintf(stderr, "[scale] ListEntriesPage: RSS %.0f MB -> %.0f MB, peak %.0f MB -> %.0f MB\n", rssBefore,
+                 statusMegabytes("VmRSS:"), peakBefore, statusMegabytes("VmHWM:"));
+    REQUIRE(page.rows.size() == static_cast<std::size_t>(kPageSize));
 
-    // The control: the page's first and last rows against an independently sorted id list.
+    // The control: the page's first and last rows and the total against an independently sorted id list.
     auto ids = written.entryIds;
     std::ranges::sort(ids);
-    CHECK(page->rows.front().id == ids[500'000]);
-    CHECK(page->rows.back().id == ids[500'000 + kPageSize - 1]);
-    CHECK(page->offset == 500'000);
+    CHECK(*page.rows.front().id == ids[500'000]);
+    CHECK(*page.rows.back().id == ids[500'000 + kPageSize - 1]);
+    CHECK(page.offset == 500'000);
+    CHECK(page.total == kEntriesForPage);
+    CHECK(page.totalKind == morph::table::TotalKind::Exact);
+
+    // A sorted and filtered page costs the same order: the last entries by descending id, among those whose reference
+    // starts with the last one's prefix.
+    request.query.page.offset = 0;
+    request.query.sort = {morph::table::SortKey{.column = "id", .dir = morph::table::SortDirection::Descending}};
+    request.query.filters.columns["sourceReference"].include.push_back(
+        morph::table::FilterEntry{.startsWith = std::string{"scale 99999"}});
+    auto const filteredStart = Clock::now();
+    auto const filtered = ledger.execute(request);
+    report("a filtered, sorted ListEntriesPage over " + std::to_string(kEntriesForPage) + " entries",
+           millisSince(filteredStart));
+    REQUIRE_FALSE(filtered.rows.empty());
+    CHECK(filtered.rows.front().sourceReference.starts_with("scale 99999"));
+    CHECK(filtered.total >= static_cast<std::int64_t>(filtered.rows.size()));
 }
 
 TEST_CASE("Stress: Hypothesis 10: a trial balance over 10^7 posted lines", "[lims][ledger][scale][stress]") {

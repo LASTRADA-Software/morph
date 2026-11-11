@@ -4,12 +4,15 @@
 // total that does not fit is refused rather than saturated.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlError.hpp>
+#include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <map>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
@@ -482,6 +485,11 @@ TEST_CASE("ledger reports: a closed period inside the range reports its frozen t
     auto const december = ledger.execute(lims::OpenPeriod{
         .company = lims::test::seededCompany(), .month = morph::time::Timestamp{lims::test::at(2026, 12, 1)}});
     static_cast<void>(december);
+    static_cast<void>(ledger.execute(lims::SetExchangeRate{.company = lims::test::seededCompany(),
+                                                           .from = lims::CurrencyCode::USD,
+                                                           .to = lims::CurrencyCode::EUR,
+                                                           .validFrom = november(1),
+                                                           .rate = rate(92, 100)}));
     static_cast<void>(
         lims::LedgerModel::record(lims::PostingRequest{.company = lims::test::seededCompany(),
                                                        .date = morph::time::Timestamp{lims::test::at(2026, 12, 5)},
@@ -865,4 +873,171 @@ TEST_CASE("LedgerModel and LedgerReportModel over the full backend-mode matrix: 
                                                       .from = november(1),
                                                       .to = november(30)}))
               .lines.size() == 1U);
+}
+
+namespace {
+
+/// @brief Records a balanced two-line entry of @p transactionMinor in @p currency, valued at @p companyMinor in EUR.
+/// @param key The source key.
+/// @param date The entry's date.
+/// @param debit The debited account.
+/// @param credit The credited account.
+/// @param currency The transaction currency; the rate is 0.92 unless it is EUR.
+/// @param transactionMinor The amount in hundredths of the transaction currency.
+/// @param companyMinor The value in hundredths of EUR.
+void postValued(std::string const& key, morph::time::Timestamp date, std::string debit, std::string credit,
+                lims::CurrencyCode currency, std::int64_t transactionMinor, std::int64_t companyMinor) {
+    auto const amount = [](std::int64_t minor) {
+        return lims::Amount{Rational{Numerator{minor}, Denominator{100}, DecimalPlaces{2}}};
+    };
+    static_cast<void>(lims::LedgerModel::record(
+        lims::PostingRequest{.company = lims::test::seededCompany(),
+                             .date = date,
+                             .sourceKey = key,
+                             .sourceReference = key,
+                             .currency = currency,
+                             .rate = currency == lims::CurrencyCode::EUR ? one() : rate(92, 100),
+                             .lines = {lims::PostingLine{.accountCode = std::move(debit),
+                                                         .side = lims::PostingSide::Debit,
+                                                         .amount = amount(transactionMinor),
+                                                         .companyAmount = amount(companyMinor)},
+                                       lims::PostingLine{.accountCode = std::move(credit),
+                                                         .side = lims::PostingSide::Credit,
+                                                         .amount = amount(transactionMinor),
+                                                         .companyAmount = amount(companyMinor)}}}));
+}
+
+/// @brief What the posted lines of the seeded company up to @p throughMs add up to, per account code, read through
+///        the ledger's own entry list and summed here.
+/// @param throughMs The last instant counted.
+/// @return Each account's debit and credit total.
+[[nodiscard]] std::map<std::string, std::pair<lims::ExactSum, lims::ExactSum>> sumOverLines(std::int64_t throughMs) {
+    std::map<std::string, std::pair<lims::ExactSum, lims::ExactSum>> sums;
+    for (auto const& entry :
+         lims::LedgerModel{}.execute(lims::ListEntries{.company = lims::test::seededCompany()}).entries) {
+        if (entry.state != lims::EntryState::Posted || lims::millisOf(entry.date) > throughMs) {
+            continue;
+        }
+        for (auto const& line : entry.lines) {
+            auto& [debit, credit] = sums[line.accountCode];
+            REQUIRE((line.side == lims::PostingSide::Debit ? debit : credit).add(*line.companyAmount));
+        }
+    }
+    return sums;
+}
+
+}  // namespace
+
+// The trial balance is summed in the database, per account, side and denominator: a figure that differs between the
+// transaction and the company currency, amounts of every denominator a two-decimal currency stores, a draft that is
+// not counted and a closed period whose frozen totals stand in for its lines all give the sum over the lines.
+// Mutations: sum the transaction amount (amount_num, amount_den) instead of the company amount; leave out the state
+// filter (the draft is counted); drop the entry-date bound; drop the skip of frozen periods (a closed period counts
+// twice).
+TEST_CASE(
+    "ledger: a trial balance summed in the database equals the sum over the lines, and an overflowing sum is "
+    "OutOfRange",
+    "[lims][ledger][pages]") {
+    DbFixture fixture;
+    auto const novemberPeriod = books();
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const december = ledger.execute(lims::OpenPeriod{
+        .company = lims::test::seededCompany(), .month = morph::time::Timestamp{lims::test::at(2026, 12, 1)}});
+    static_cast<void>(december);
+    static_cast<void>(ledger.execute(lims::SetExchangeRate{.company = lims::test::seededCompany(),
+                                                           .from = lims::CurrencyCode::USD,
+                                                           .to = lims::CurrencyCode::EUR,
+                                                           .validFrom = november(1),
+                                                           .rate = rate(92, 100)}));
+    struct Figure {
+        std::int64_t transaction;
+        std::int64_t company;
+    };
+    // Hundredths; the denominators 1, 2, 4, 5, 10, 20, 25, 50 and 100 once each, and a figure with two digits.
+    constexpr std::array<Figure, 10> figures{Figure{10000, 9200}, Figure{50, 46},    Figure{25, 23}, Figure{20, 18},
+                                             Figure{10, 9},       Figure{5, 5},      Figure{4, 4},   Figure{2, 2},
+                                             Figure{1, 1},        Figure{1234, 1135}};
+    int index = 0;
+    for (auto const& figure : figures) {
+        postValued("nov-" + std::to_string(index), november(2 + static_cast<unsigned>(index)),
+                   index % 2 == 0 ? "1200" : "1300", index % 3 == 0 ? "4000" : "4100", lims::CurrencyCode::USD,
+                   figure.transaction, figure.company);
+        ++index;
+    }
+    postValued("nov-eur", november(20), "1200", "4000", lims::CurrencyCode::EUR, 777, 777);
+    auto const check = [&](morph::time::Timestamp asOf) {
+        auto const expected = sumOverLines(lims::millisOf(asOf));
+        auto const view = lims::LedgerReportModel{}.execute(
+            lims::TrialBalance{.company = lims::test::seededCompany(), .asOf = asOf});
+        lims::ExactSum totalDebit;
+        lims::ExactSum totalCredit;
+        REQUIRE(view.rows.size() == expected.size());
+        for (auto const& row : view.rows) {
+            CAPTURE(row.accountCode);
+            auto const found = expected.find(row.accountCode);
+            REQUIRE(found != expected.end());
+            CHECK(*row.debit == found->second.first.total());
+            CHECK(*row.credit == found->second.second.total());
+            REQUIRE(totalDebit.add(found->second.first.total()));
+            REQUIRE(totalCredit.add(found->second.second.total()));
+        }
+        CHECK(*view.totalDebit == totalDebit.total());
+        CHECK(*view.totalCredit == totalCredit.total());
+        CHECK(*view.totalDebit == *view.totalCredit);
+    };
+    SECTION("open books, with a draft that is not counted") {
+        // A draft is not in the balances.
+        ledger.execute(lims::CreateDraftEntry{.company = lims::test::seededCompany(),
+                                              .date = november(21),
+                                              .memo = "draft",
+                                              .currency = lims::CurrencyCode::EUR,
+                                              .rate = one(),
+                                              .lines = {lims::PostingLine{.accountCode = "1200",
+                                                                          .side = lims::PostingSide::Debit,
+                                                                          .amount = units(7),
+                                                                          .companyAmount = units(7)},
+                                                        lims::PostingLine{.accountCode = "4000",
+                                                                          .side = lims::PostingSide::Credit,
+                                                                          .amount = units(7),
+                                                                          .companyAmount = units(7)}}});
+        check(november(30));
+        // A bound inside the month leaves out the later entries.
+        check(november(5));
+        CHECK(sumOverLines(lims::millisOf(november(5))).at("1200").first.total() !=
+              sumOverLines(lims::millisOf(november(30))).at("1200").first.total());
+    }
+    SECTION("a closed period stands in for its lines") {
+        ledger.execute(lims::BeginClosePeriod{.periodId = novemberPeriod.id});
+        ledger.execute(lims::ClosePeriod{.periodId = novemberPeriod.id});
+        postValued("dec", morph::time::Timestamp{lims::test::at(2026, 12, 5)}, "1300", "4100", lims::CurrencyCode::USD,
+                   333, 306);
+        check(morph::time::Timestamp{lims::test::at(2026, 12, 31)});
+        check(november(30));
+    }
+}
+
+// The database refuses an integer sum that does not fit, where wrapping would answer a plausible wrong total. SQLite's
+// own behaviour is measured here, not assumed, and the ledger reports it as OutOfRange.
+// Mutation: sum as a real (SUM(CAST(company_num AS REAL))), which answers a rounded total instead of refusing.
+TEST_CASE("ledger: SQLite's SUM raises on integer overflow, and the trial balance reports it as OutOfRange",
+          "[lims][ledger][pages]") {
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    post("huge-1", lims::Amount{Rational{kHuge, DecimalPlaces{2}}}, 10, "1200", "4000");
+    post("huge-2", lims::Amount{Rational{kHuge, DecimalPlaces{2}}}, 11, "1200", "4000");
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlStatement statement{mapper.Connection()};
+    // Four lines of 5 * 10^18: the integer sum is 2 * 10^19, past int64.
+    CHECK_THROWS_AS(statement.ExecuteDirectScalar<std::int64_t>("SELECT SUM(company_num) FROM ledger_entry_lines"),
+                    Lightweight::SqlException);
+    try {
+        static_cast<void>(
+            statement.ExecuteDirectScalar<std::int64_t>("SELECT SUM(company_num) FROM ledger_entry_lines"));
+    } catch (Lightweight::SqlException const& error) {
+        WARN("SQLite said: " << error.info().message);
+        CHECK(error.info().message.find("integer overflow") != std::string::npos);
+    }
+    CHECK_THROWS_AS(trial(), lims::OutOfRange);
 }

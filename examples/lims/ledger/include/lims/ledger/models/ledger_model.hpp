@@ -5,10 +5,12 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/table/query.hpp>
 #include <morph/util/datetime.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "lims/ledger/dto/account_dto.hpp"
 #include "lims/ledger/dto/entry_dto.hpp"
@@ -147,6 +149,32 @@ public:
     /// @throws ValidationError if no company is named.
     ListEntriesResult execute(const ListEntries& action);
 
+    /// @brief Lists a page of a company's entries, sorted, filtered and counted in the database.
+    ///
+    /// The query is planned by `table::planQuery` and translated into one `SELECT` over the entries table, so the
+    /// cost follows the page, not the journal. The order ends with the entry's id. A sort or filter on `lines` or
+    /// `rate`, which the database cannot compare as the table engine does, is refused. The count and the page are
+    /// read in one transaction and the total is exact.
+    /// @param action The company and the query.
+    /// @return The page; none for a company the caller cannot see.
+    /// @throws ValidationError if no company is named or the query is refused.
+    ::morph::table::Page<JournalEntryView> execute(const ListEntriesPage& action);
+
+    /// @brief Whether the database can sort or filter the journal by @p column.
+    /// @param column The column's id.
+    /// @param use What the column is wanted for.
+    /// @return `false` for `lines` and `rate`, and for a name that is no column.
+    [[nodiscard]] static bool canTranslateEntryColumn(std::string_view column, ::morph::table::PlanUse use);
+
+    /// @brief Reads a page of @p company's entries for a validated plan, without checking who may see the company.
+    /// @param company The company.
+    /// @param plan The plan from `table::planQuery`, made with `canTranslateEntryColumn`.
+    /// @return The page, with an exact total.
+    /// @throws ValidationError if the plan holds an operand the database cannot compare.
+    /// @throws Lightweight::SqlException if a statement fails.
+    [[nodiscard]] static ::morph::table::Page<JournalEntryView> pageEntries(CompanyId company,
+                                                                            ::morph::table::QueryPlan const& plan);
+
     /// @brief Records a posting the app's posting client sends, once per company and source key.
     /// @param action The request.
     /// @return The entry and its date; the first one recorded under the request's key when it is repeated.
@@ -248,6 +276,7 @@ BRIDGE_REGISTER_EFFECTS(lims::SetExchangeRate, ::morph::effects::changes<lims::E
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListExchangeRates, "ListExchangeRates", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::GetEntry, "GetEntry", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListEntries, "ListEntries", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListEntriesPage, "ListEntriesPage", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::RecordPosting, "RecordPosting")
 BRIDGE_REGISTER_EFFECTS(lims::RecordPosting, ::morph::effects::changes<lims::JournalEntryView>)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::FindPosting, "FindPosting", ::morph::model::Loggable::No)

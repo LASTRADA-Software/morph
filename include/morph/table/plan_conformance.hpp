@@ -10,12 +10,14 @@
 /// reports every disagreement. It depends on neither a test framework nor a database: the caller asserts that the
 /// returned list is empty. See `docs/spec/table/database_pages.md`.
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <format>
 #include <functional>
 #include <limits>
+#include <map>
 #include <morph/table/query.hpp>
 #include <optional>
 #include <set>
@@ -108,6 +110,32 @@ namespace detail {
     return entry;
 }
 
+/// @brief The text a corpus query uses as an operand for a cell.
+///
+/// A date-time cell holds whole UTC seconds and a date cell holds days since the epoch; shown as bare numbers neither
+/// parses as a date, so a query built from them is refused by `apply` and by the plan alike and compares nothing.
+/// They are written as ISO 8601 (`2026-11-10T09:00:00Z`, `2026-11-10`), which the default date parser reads and which
+/// lands exactly on the second or day the cell holds. Any other cell is shown as `displayText` shows it.
+/// @param kind The column's kind.
+/// @param cell The cell.
+/// @return The operand text.
+[[nodiscard]] inline std::string operandText(ColumnKind kind, Cell const& cell) {
+    // 0001-01-01T00:00:00Z and 9999-12-31T23:59:59Z: the years four digits can write.
+    constexpr std::int64_t kMinSeconds = -62'135'596'800;
+    constexpr std::int64_t kMaxSeconds = 253'402'300'799;
+    constexpr std::int64_t kSecondsPerDay = 86'400;
+    if (auto const* whole = std::get_if<std::int64_t>(&cell)) {
+        if (kind == ColumnKind::DateTime && *whole >= kMinSeconds && *whole <= kMaxSeconds) {
+            return std::format("{:%Y-%m-%dT%H:%M:%SZ}", std::chrono::sys_seconds{std::chrono::seconds{*whole}});
+        }
+        if (kind == ColumnKind::Date && *whole >= kMinSeconds / kSecondsPerDay &&
+            *whole <= kMaxSeconds / kSecondsPerDay) {
+            return std::format("{:%F}", std::chrono::sys_days{std::chrono::days{*whole}});
+        }
+    }
+    return displayText(cell);
+}
+
 /// @brief A description of a total for a failure message.
 /// @param total The total.
 /// @param kind  Its kind.
@@ -153,7 +181,7 @@ namespace detail {
         // Up to three distinct non-empty texts of the column, in row order.
         std::vector<std::string> samples;
         for (std::size_t row = 0; row < snapshot->rowCount() && samples.size() < 3; ++row) {
-            auto text = displayText(snapshot->cell(row, c));
+            auto text = detail::operandText(columns[c].kind, snapshot->cell(row, c));
             if (!text.empty() && std::ranges::find(samples, text) == samples.end()) {
                 samples.push_back(std::move(text));
             }
@@ -217,13 +245,21 @@ namespace detail {
     return corpus;
 }
 
-/// @brief Runs @p corpus through `apply` over @p source and through @p model, and describes every disagreement.
+/// @brief Runs @p corpus through `apply` over @p source and through @p model, and describes every disagreement and
+/// every
+///        column the corpus never compared.
 ///
 /// @p source must hold the rows in the model's key order, which is the order `apply` breaks ties in. For each
 /// query: when the plan is refused for a reason other than the model's `translatable`, `apply` must refuse with the
 /// same code and column; when the plan is accepted, the model's rows (by key), offset and total must equal
 /// `apply`'s. Above `QueryLimits::totalCap` `apply` omits the total; the oracle then counts the view itself, and
 /// the model must report either that exact count or a lower bound equal to the cap.
+///
+/// Identical refusals count as agreement, so a corpus whose operands never parse would pass without comparing
+/// anything. For each column that a corpus query filters with an operand, and for each column that a sort-only query
+/// orders, the helper therefore also reports the column when at least one query on it was refused identically by
+/// `apply` and the plan and none was compared with the model. Queries the model's `translatable` refuses are skipped
+/// and count as neither, so a column the model declares untranslatable is not reported.
 /// @param source  The rows, in key order.
 /// @param model   The model's translation of a plan.
 /// @param corpus  The queries.
@@ -238,6 +274,32 @@ namespace detail {
     applyOptions.limits = options.limits;
     applyOptions.services = options.services;
     applyOptions.mayRead = options.mayRead;
+    // Per "filter <column>" and "sort <column>": queries compared with the model, and queries both sides refused.
+    struct Tally {
+        std::size_t compared = 0;
+        std::size_t refusedBySame = 0;
+    };
+    std::map<std::string, Tally> tallies;
+    auto const tallied = [&](TableQuery const& query) {
+        std::vector<Tally*> out;
+        if (!query.filters.columns.empty()) {
+            for (auto const& [column, filter] : query.filters.columns) {
+                // IsEmpty and NotEmpty take no operand, so they are compared whatever the operands do.
+                auto const hasOperand = [](FilterEntry const& entry) {
+                    return !entry.isEmpty.value_or(false) && !entry.notEmpty.value_or(false);
+                };
+                if (std::ranges::any_of(filter.include, hasOperand) ||
+                    std::ranges::any_of(filter.exclude, hasOperand)) {
+                    out.push_back(&tallies["filter " + column]);
+                }
+            }
+        } else {
+            for (auto const& key : query.sort) {
+                out.push_back(&tallies["sort " + key.column]);
+            }
+        }
+        return out;
+    };
     for (std::size_t index = 0; index < corpus.size(); ++index) {
         auto const& query = corpus[index];
         auto const name = std::format("query {}", index);
@@ -252,6 +314,10 @@ namespace detail {
                 expected.error().column != planned.error().column) {
                 failures.push_back(name + ": the plan was refused (" + planned.error().message +
                                    ") but apply answered differently");
+            } else {
+                for (auto* tally : tallied(query)) {
+                    ++tally->refusedBySame;
+                }
             }
             continue;
         }
@@ -263,6 +329,9 @@ namespace detail {
         if (!got) {
             failures.push_back(name + ": the model refused the plan: " + got.error().message);
             continue;
+        }
+        for (auto* tally : tallied(query)) {
+            ++tally->compared;
         }
         std::vector<RowId> wanted;
         wanted.reserve(expected->rows.size());
@@ -301,6 +370,14 @@ namespace detail {
                                    detail::describeTotal(got->total, got->totalKind) + " for a view of " +
                                    std::to_string(*counted->total));
             }
+        }
+    }
+    for (auto const& [use, tally] : tallies) {
+        if (tally.refusedBySame > 0 && tally.compared == 0) {
+            failures.push_back(std::format(
+                "{}: {} queries were refused identically by apply and the plan and none was compared with the model "
+                "(an operand the source's own cells cannot supply?)",
+                use, tally.refusedBySame));
         }
     }
     return failures;
