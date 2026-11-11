@@ -60,7 +60,7 @@ constexpr int kMaxMonth = static_cast<int>(Month::December);
 }
 
 /// @brief The highest stored value of `LimsRole`.
-constexpr int kMaxRole = static_cast<int>(LimsRole::Service);
+constexpr int kMaxRole = static_cast<int>(LimsRole::PurchaseApprover);
 
 /// @brief The highest stored value of `ScopeKind`.
 constexpr int kMaxScopeKind = static_cast<int>(ScopeKind::Site);

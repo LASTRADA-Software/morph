@@ -18,7 +18,9 @@
 #include "lims/org/db/org_entity.hpp"
 #include "lims/org/dto/role_dto.hpp"
 #include "lims/org/models/org_model.hpp"
+#include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/pump.hpp"
 
 /// @file
 /// The scaffolding every lims test needs: a scoped authenticated principal.
@@ -133,6 +135,30 @@ public:
 [[nodiscard]] inline std::shared_ptr<lims::auth::LimsAuthorizer> limsAuthorizer(std::string_view secret) {
     return std::make_shared<lims::auth::LimsAuthorizer>(
         std::string{secret}, [](std::string_view principal) { return lims::OrgModel::rolesAnywhere(principal); });
+}
+
+/// @brief The secret the test servers' authorizer and the service tokens share.
+inline constexpr std::string_view kServiceSecret = "lims-service-test-secret-at-least-32-bytes";
+
+/// @brief Runs @p action on a fresh @p Model as @p principal through an in-process bridge, as a client's call runs.
+///
+/// A handler that is a coroutine (a Task handler) is only built by a direct `execute`; a dispatch drives it, so a
+/// suite sends such an action this way.
+/// @tparam Model The model.
+/// @tparam Action The action.
+/// @param principal Who sends it.
+/// @param action The action.
+/// @param mode The backend mode the rig runs in.
+/// @return Its result.
+/// @throws std::exception the action's failure.
+template <typename Model, typename Action>
+auto dispatchAs(std::string const& principal, Action action,
+                ::morph::ladder::testkit::Mode mode = ::morph::ladder::testkit::Mode::Local) {
+    ::morph::ladder::testkit::BackendRig rig{mode, 1, limsAuthorizer(kServiceSecret)};
+    ::morph::session::TokenIssuer const issuer{std::string{kServiceSecret}, ::morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(signedAs(issuer, principal));
+    auto handler = rig.client<Model>(0);
+    return ::morph::ladder::testkit::awaitQt(handler.execute(std::move(action)));
 }
 
 }  // namespace lims::test

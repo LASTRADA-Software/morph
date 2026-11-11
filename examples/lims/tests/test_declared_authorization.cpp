@@ -389,7 +389,8 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
                    lims::SetBillingSettings, lims::RegisterBillingClient, lims::CreatePriceList, lims::SetPrice,
                    lims::RecordBillableLine, lims::CreateInvoice, lims::LeaseInvoice, lims::RemoveInvoiceLine,
                    lims::SetInvoiceReference, lims::ReleaseInvoice, lims::SubmitInvoice, lims::ApproveInvoice,
-                   lims::PostInvoice, lims::StartBillingRun, lims::AdvanceBillingRun, lims::RunBillingSchedule>;
+                   lims::PostInvoice, lims::StartBillingRun, lims::AdvanceBillingRun, lims::RunBillingSchedule,
+                   lims::SetInventorySettings, lims::CreateItem, lims::CreateLocation, lims::RecordOpeningLot>;
     std::set<std::string_view> listed;
     std::set<std::string_view> declared;
     std::apply(
@@ -444,6 +445,7 @@ TEST_CASE("declared authorization: every mutating action is declared or delibera
              "InvoiceModel",
              "InvoiceEditModel",
              "BillingRunModel",
+             "StockModel",
          }) {
         for (auto const& actionId : dispatcher.actionsOf(model)) {
             auto const effects = morph::effects::effectsOf(actionId);
@@ -492,6 +494,10 @@ TEST_CASE("declared authorization: the edge's table lists every declared role, a
     CHECK(lims::app::requiredRole("StartBillingRun") == lims::LimsRole::BillingClerk);
     CHECK(lims::app::requiredRole("AdvanceBillingRun") == lims::LimsRole::BillingClerk);
     CHECK(lims::app::requiredRole("RunBillingSchedule") == lims::LimsRole::Service);
+    CHECK(lims::app::requiredRole("SetInventorySettings") == lims::LimsRole::Supervisor);
+    CHECK(lims::app::requiredRole("CreateItem") == lims::LimsRole::StockKeeper);
+    CHECK(lims::app::requiredRole("CreateLocation") == lims::LimsRole::StockKeeper);
+    CHECK(lims::app::requiredRole("RecordOpeningLot") == lims::LimsRole::StockKeeper);
     // Some role, whichever: declared, but no specific role.
     CHECK(lims::app::requirementFor("CaptureConcentration").has_value());
     CHECK_FALSE(lims::app::requiredRole("CaptureConcentration").has_value());

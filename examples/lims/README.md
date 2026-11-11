@@ -220,6 +220,7 @@ lims is built from modules, each its own library with its own include directory 
 | `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
 | `ledger/` | the chart of accounts, the monthly periods and the journal entries (balanced, unrounded, immutable once posted, corrected by reversal; postings recorded once per source key; a closed period freezes its balances; dated exchange rates; the trial balance, account balance and account ledger reports) | `org`, `posting` |
 | `billing/` | billing settings, billing clients and dated price lists with per-client prices | `org`, `posting` |
+| `inventory/` | items with a stock unit, locations at a site, lots with an expiry, stock on hand per lot and the movements that change it | `org`, `posting` |
 | `app/` | the server edge's `LimsAuthorizer`, and the tables it reads: `declaredRequirements` and `openMutatingActions` | every module |
 
 The server (`src/server/`), the screens (`screens/`) and the suites (`tests/`) belong to the app and link every
@@ -1298,6 +1299,24 @@ names a person carries the name the server resolved (`OrgModel::displayNameOf`).
 which the declared table's role and scope cannot say, so the model checks it and the action is listed as open. A
 person who holds no role anywhere is named by no supervisor, because no company is theirs yet; they name themselves.
 
+### 42. Stock is held in the item's unit, and a quantity's unit travels beside it
+
+An item has one stock unit, chosen when it is created, and every lot of it holds its stock on hand in that unit. A
+quantity entered in another unit of the same dimension is converted exactly before it is stored (250 mL of a reagent
+stocked in L is 0.25 L), by `lims::convertStock`, which reads the relation from `UnitTraits<StockUnit>::relations`; a
+quantity in another dimension is refused. A lot's stock on hand changes only through a movement written in the same
+transaction, and the lot's update is conditional on the stock on hand that was read, so a lot's movements always sum
+to it and two movements on one lot cannot both apply to the same read. A lot number names one lot of an item. An
+opening lot, for stock a company held before lims, posts nothing: its value is the accountant's opening entry.
+
+**The runtime-unit shape of hypothesis 8 recurs for stock.** Measured in `tests/test_stock.cpp`: `Quantity` converts
+250 mL to 0.25 L exactly when both units are template arguments, and an action cannot use that, because an item's
+unit is a fact of its row. The quantity is therefore a `Measure` (an exact decimal in a carrier unit) with a
+`StockUnit` field beside it, and the conversion is inventory's own walk over the same relations — 30 lines in
+`units.cpp`. This is the shape decision 28 gave money, for the same reason: a `Quantity`'s unit is a compile-time
+tag. Purchase orders in a supplier's currency (decision 44) are hypothesis 8's named second instance; this is a third
+place the same shape is needed, recorded here and weighed with both when the seam is decided.
+
 ## Findings raised by this rung
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so
@@ -1313,7 +1332,9 @@ person who holds no role anywhere is named by no supervisor, because no company 
   is the typed query tier, not raw SQL. The race is simulated, not run concurrently: the tests make a trigger mark
   the original between the read and the mark, which fails with the guard removed; the post guard's condition has no
   such seam, so only its zero-row handling is tested.
-  Billing's `draftInvoice` claims each line the same way (`state` is Unbilled) and counts the rows.
+  Billing's `draftInvoice` claims each line the same way (`state` is Unbilled) and counts the rows. Billing and
+  inventory each hold the two-line helper that executes the builder's statement and counts the rows (`changedRows`);
+  it is Lightweight usage, not a morph seam, so it is copied rather than promoted.
 
 - **A source key is bound to one posting body.** The ledger records a posting once per company and source key. A
   repeat of the same request (date, source reference, currency, rate, and every line's account, side and amounts,

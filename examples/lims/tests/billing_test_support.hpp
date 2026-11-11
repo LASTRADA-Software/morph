@@ -135,9 +135,6 @@ inline void billingFor(ClientId client, CurrencyCode currency = CurrencyCode::EU
     }
 }
 
-/// @brief The secret the test servers' authorizer and the service tokens share.
-inline constexpr std::string_view kServiceSecret = "lims-service-test-secret-at-least-32-bytes";
-
 /// @brief Gives @p principal the service role in @p scope, unless it holds it there already.
 /// @param principal A service principal.
 /// @param scope The scope; the seeded company by default.
@@ -168,25 +165,6 @@ inline std::size_t relayLabEvents() {
                                              limsAuthorizer(kServiceSecret)};
     app::InternalClient events{rig.server(), kServiceSecret, std::string{app::kEventsPrincipal}};
     return app::relayLabEvents(events);
-}
-
-/// @brief Runs @p action on a fresh @p Model as @p principal through an in-process bridge, as a client's call runs.
-///
-/// A handler that is a coroutine (a Task handler) is only built by a direct `execute`; a dispatch drives it, so a
-/// suite sends such an action this way.
-/// @tparam Model The model.
-/// @tparam Action The action.
-/// @param principal Who sends it.
-/// @param action The action.
-/// @return Its result.
-/// @throws std::exception the action's failure.
-template <typename Model, typename Action>
-auto dispatchAs(std::string const& principal, Action action) {
-    ::morph::ladder::testkit::BackendRig rig{::morph::ladder::testkit::Mode::Local, 1};
-    ::morph::session::TokenIssuer const issuer{std::string{kServiceSecret}, ::morph::session::hmacSha256};
-    rig.bridge(0).setDefaultSession(signedAs(issuer, principal));
-    auto handler = rig.client<Model>(0);
-    return ::morph::ladder::testkit::awaitQt(handler.execute(std::move(action)));
 }
 
 /// @brief Billing settings for the seeded company (19 % tax, 48 approval hours, billing day 25), value limits as

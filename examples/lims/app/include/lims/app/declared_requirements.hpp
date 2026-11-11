@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "lims/billing/authorization/billing_authorization.hpp"
+#include "lims/inventory/authorization/inventory_authorization.hpp"
 #include "lims/lab/authorization/lab_authorization.hpp"
 #include "lims/ledger/authorization/ledger_authorization.hpp"
 #include "lims/org/authorization/org_authorization.hpp"
@@ -55,8 +56,8 @@ namespace lims::app {
 
 /// @brief Every action a module declares a role, or some role, for.
 /// @return The table.
-[[nodiscard]] inline std::array<RoleRequirement, 40> const& declaredRequirements() {
-    static constexpr std::array<RoleRequirement, 40> requirements{
+[[nodiscard]] inline std::array<RoleRequirement, 44> const& declaredRequirements() {
+    static constexpr std::array<RoleRequirement, 44> requirements{
         requirementOf<VerifyResult>(),
         requirementOf<CreateCompany>(),
         requirementOf<CreateSite>(),
@@ -97,6 +98,10 @@ namespace lims::app {
         requirementOf<StartBillingRun>(),
         requirementOf<AdvanceBillingRun>(),
         requirementOf<RunBillingSchedule>(),
+        requirementOf<SetInventorySettings>(),
+        requirementOf<CreateItem>(),
+        requirementOf<CreateLocation>(),
+        requirementOf<RecordOpeningLot>(),
     };
     return requirements;
 }
