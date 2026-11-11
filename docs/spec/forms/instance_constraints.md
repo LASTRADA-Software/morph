@@ -162,6 +162,20 @@ pass has already happened, and re-rounding there would mean rounding twice.
 storage rounds explicitly. Making rounding instance-aware would mean threading
 per-instance data into the dispatch runner, which is item 1 above.
 
+## In ui/1
+
+A `form` node builds from the catalog's schema for its action, one string per action, which no instance decorates;
+a query's result carrying `x-instanceConstraints` is not read by it. The client half of `x-decimalPlaces` is
+therefore a binding, not a served schema: a screen binds the instance's decimals to a `textInput`'s `decimals`, or
+to a `form` field overlay's `decimals`, from the same record the model's `InstanceConstraints` reads its
+`decimalPlaces` from. A change of the bound places keeps the text typed and checks it again against the new places,
+showing the field's `too-precise` error when it no longer fits. The overlay's value means exactly what
+`x-decimalPlaces` means: the field's entry granularity and the most fraction digits it accepts.
+
+The client's places are a convenience and never the check. The model keeps checking the submitted value with
+`checkValue` (or the application's own check), because a client can hold stale places, a different client or a
+script can submit anything, and the check is the floor.
+
 ## Limitations
 
 ### Values vary; structure does not
