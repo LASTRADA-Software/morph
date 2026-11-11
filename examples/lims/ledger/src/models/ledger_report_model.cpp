@@ -260,6 +260,9 @@ void addPostedTotals(Lightweight::DataMapper& mapper, CompanyId company, std::in
             error.info().message.find("integer overflow") != std::string::npos) {
             throw OutOfRange{"an account's total is too large to total exactly"};
         }
+        if (isBusy(error)) {
+            throw Conflict{"the database is busy with another write; try again"};
+        }
         throw;
     }
 }

@@ -610,6 +610,97 @@ TEST_CASE("table: the corpus holds a translation to non-integral operands on int
               .empty());
 }
 
+namespace {
+
+// A date parser that reads nothing, so every date operand is refused by apply and by the plan alike.
+class RefusingDates final : public DateParser {
+public:
+    [[nodiscard]] std::optional<std::int64_t> parseDate(std::string_view /*text*/,
+                                                        std::string_view /*format*/) const override {
+        return std::nullopt;
+    }
+    [[nodiscard]] std::optional<std::int64_t> parseDateTime(std::string_view /*text*/,
+                                                            std::string_view /*format*/) const override {
+        return std::nullopt;
+    }
+};
+
+// Instants in milliseconds around zero, one empty.
+std::vector<std::optional<std::int64_t>> instantsMs() {
+    return {-1500, -1001, -1000, -999, -1, 0, 1, 999, 1000, 1500, std::nullopt};
+}
+
+// The rows of an id and a date-time in whole seconds, with each instant floored or truncated toward zero.
+std::vector<std::vector<Cell>> instantRows(bool floored) {
+    std::vector<std::vector<Cell>> rows;
+    std::int64_t id = 0;
+    for (auto const& instant : instantsMs()) {
+        Cell at = std::monostate{};
+        if (instant) {
+            std::int64_t seconds = *instant / 1000;
+            if (floored && *instant % 1000 < 0) {
+                --seconds;
+            }
+            at = seconds;
+        }
+        rows.push_back({Cell{id++}, at});
+    }
+    return rows;
+}
+
+std::vector<ColumnInfo> instantColumns() { return {col("id", ColumnKind::Key), col("at", ColumnKind::DateTime)}; }
+
+}  // namespace
+
+TEST_CASE("table: the corpus writes date operands the date parser reads", "[table][database_pages]") {
+    auto const source = pageSource(60);
+    std::map<std::string, std::size_t> withOperand;
+    for (auto const& query : standardCorpus(*source)) {
+        for (auto const& [column, filter] : query.filters.columns) {
+            for (auto const& entry : filter.include) {
+                if ((column == "on" || column == "at") && entry.eq &&
+                    planQuery(query, source->columns()).has_value()) {
+                    ++withOperand[column];
+                }
+            }
+        }
+    }
+    CHECK(withOperand["on"] > 0);
+    CHECK(withOperand["at"] > 0);
+}
+
+TEST_CASE("table: the corpus holds a translation to the floor of a negative instant", "[table][database_pages]") {
+    // The source holds each instant floored to its UTC second, as the engine does.
+    auto const source = tabletest::makeSource(instantColumns(), instantRows(true));
+    auto const corpus = standardCorpus(*source);
+    ReferenceModel const flooring{instantColumns(), instantRows(true)};
+    ReferenceModel const truncating{instantColumns(), instantRows(false)};
+    CHECK(conformanceFailures(
+              *source, [&](QueryPlan const& plan) { return flooring.run(plan); }, corpus, smallCap())
+              .empty());
+    // -1500 ms is second -2, not -1: a model that truncates toward zero places it a second late.
+    CHECK_FALSE(conformanceFailures(
+                    *source, [&](QueryPlan const& plan) { return truncating.run(plan); }, corpus, smallCap())
+                    .empty());
+}
+
+TEST_CASE("table: the helper reports a column whose queries every side refused", "[table][database_pages]") {
+    auto const source = pageSource(60);
+    ReferenceModel const model{pageColumns(), pageRows(60)};
+    auto const corpus = standardCorpus(*source);
+    auto options = smallCap();
+    options.services.dates = std::make_shared<RefusingDates const>();
+    auto const failures =
+        conformanceFailures(*source, [&](QueryPlan const& plan) { return model.run(plan); }, corpus, options);
+    auto const reported = [&](std::string_view use) {
+        return std::ranges::any_of(failures, [&](std::string const& failure) { return failure.starts_with(use); });
+    };
+    CHECK(reported("filter at:"));
+    CHECK(reported("filter on:"));
+    CHECK_FALSE(reported("filter n:"));
+    CHECK_FALSE(reported("sort at:"));
+}
+
 TEST_CASE("table: a total kind goes over the wire by name", "[table][database_pages]") {
     Page<int> page{.rows = {1}, .total = 5, .offset = 0, .totalKind = TotalKind::AtLeast};
     auto const json = glz::write_json(page);

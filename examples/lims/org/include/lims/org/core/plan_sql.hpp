@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <Lightweight/DataBinder/SqlVariant.hpp>
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <cstdint>
 #include <expected>
@@ -14,6 +16,9 @@
 #include <variant>
 #include <vector>
 
+#include "lims/org/core/errors.hpp"
+#include "lims/org/core/model_support.hpp"
+
 /// @file
 /// Translates a `morph::table::QueryPlan` into SQLite for the lims models that page a table in the database.
 ///
@@ -22,8 +27,12 @@
 /// keeps the rows whose cell is empty, integer operands are never rounded, a date-time is compared by its whole UTC
 /// second, and text is compared and ordered by the default collator's fold. SQLite has no such fold, so it is spelled
 /// out in the statement; a text column whose store comparison cannot be made to match is left out of the column map
-/// and so refused. Statements carry their operands as literals, escaped here, because the number of operands is
-/// not known until the plan is read.
+/// and so refused.
+///
+/// The statement text is built from the model's own column mapping, enumerator names and the clamped numbers of the
+/// plan; nothing a client sent is written into it. Every operand a client sent is a `?` in the statement and a
+/// value in `Translation::params`, bound when the statement runs. A text operand holding a NUL byte is refused, since
+/// SQLite's `length` and `instr` stop at it and would not compare what the table engine compares.
 
 namespace lims::plansql {
 
@@ -31,10 +40,10 @@ namespace lims::plansql {
 struct Column {
     /// @brief The kind the table engine gives the column: `Integer`, `DateTime` or `Text`.
     ::morph::table::ColumnKind kind = ::morph::table::ColumnKind::Integer;
-    /// @brief The SQL expression of the cell, `NULL` when the cell is empty. An integer column's value is an integer;
+    /// @brief The SQL expression of the cell, `NULL` when the cell is empty. An integer column's value is an integer,
     /// a
-    ///        date-time column's value is whole UTC seconds; a text column's value is the text, `NULL` for the empty
-    ///        string.
+    ///        date-time column's value is whole UTC seconds, and a text column's value is the text, `NULL` for the
+    ///        empty string.
     std::string expr;
 };
 
@@ -47,6 +56,8 @@ struct Translation {
     std::string where;
     /// @brief The `ORDER BY` clause, total: it ends with the row key.
     std::string order;
+    /// @brief The values of the `?` markers in `where`, in the order the markers appear.
+    std::vector<Lightweight::SqlVariant> params;
 };
 
 /// @brief The ids a page holds and the size of the filtered view.
@@ -59,7 +70,8 @@ struct Fetched {
 
 namespace detail {
 
-/// @brief @p text as a SQL string literal.
+/// @brief @p text as a SQL string literal, for text the code itself supplies (the fold's byte pairs and enumerator
+///        names). An operand a client sent is never written this way; it is bound.
 /// @param text The text, without a NUL byte.
 /// @return The literal.
 [[nodiscard]] inline std::string literal(std::string_view text) {
@@ -73,6 +85,36 @@ namespace detail {
     out += '\'';
     return out;
 }
+
+/// @brief Collects the operands of a statement as it is written: each call returns the `?` marker and keeps the value.
+///
+/// The markers appear in the statement in the order the calls are made, so a caller sequences the calls in the order
+/// the pieces are concatenated.
+class Binds {
+public:
+    /// @brief Adds an integer operand.
+    /// @param value The value.
+    /// @return `?`.
+    [[nodiscard]] std::string integer(std::int64_t value) {
+        _values.emplace_back(Lightweight::SqlVariant::InnerType{std::in_place_type<long long>, value});
+        return "?";
+    }
+
+    /// @brief Adds a text operand.
+    /// @param value The text.
+    /// @return `?`.
+    [[nodiscard]] std::string text(std::string value) {
+        _values.emplace_back(Lightweight::SqlVariant::InnerType{std::in_place_type<std::string>, std::move(value)});
+        return "?";
+    }
+
+    /// @brief Hands over the collected values.
+    /// @return They, in marker order.
+    [[nodiscard]] std::vector<Lightweight::SqlVariant> take() { return std::move(_values); }
+
+private:
+    std::vector<Lightweight::SqlVariant> _values;
+};
 
 /// @brief The default collator's fold, as an SQL expression over text.
 ///
@@ -114,26 +156,28 @@ namespace detail {
 /// @param op The operator: `Eq`, `Ne`, `Lt`, `Le`, `Gt` or `Ge`.
 /// @param operand The operand.
 /// @param expr The column's integer expression.
+/// @param binds Receives the operand.
 /// @return The SQL boolean, `NULL` for an empty cell.
 [[nodiscard]] inline std::string integerCompare(::morph::table::FilterOp op, ::morph::math::Rational const& operand,
-                                                std::string const& expr) {
+                                                std::string const& expr, Binds& binds) {
     using Op = ::morph::table::FilterOp;
     bool const whole = operand.denominator == 1;
-    std::string const floored = std::to_string(floorDivide(operand.numerator, operand.denominator));
-    std::string const exact = std::to_string(operand.numerator);
+    std::int64_t const floored = floorDivide(operand.numerator, operand.denominator);
     switch (op) {
         case Op::Eq:
-            return whole ? "(" + expr + " = " + exact + ")" : "0";
+            return whole ? "(" + expr + " = " + binds.integer(operand.numerator) + ")" : "0";
         case Op::Ne:
-            return whole ? "(" + expr + " <> " + exact + ")" : "(" + expr + " IS NOT NULL)";
+            return whole ? "(" + expr + " <> " + binds.integer(operand.numerator) + ")" : "(" + expr + " IS NOT NULL)";
         case Op::Lt:
-            return whole ? "(" + expr + " < " + exact + ")" : "(" + expr + " <= " + floored + ")";
+            return whole ? "(" + expr + " < " + binds.integer(operand.numerator) + ")"
+                         : "(" + expr + " <= " + binds.integer(floored) + ")";
         case Op::Le:
-            return "(" + expr + " <= " + floored + ")";
+            return "(" + expr + " <= " + binds.integer(floored) + ")";
         case Op::Gt:
-            return "(" + expr + " > " + floored + ")";
+            return "(" + expr + " > " + binds.integer(floored) + ")";
         case Op::Ge:
-            return whole ? "(" + expr + " >= " + exact + ")" : "(" + expr + " > " + floored + ")";
+            return whole ? "(" + expr + " >= " + binds.integer(operand.numerator) + ")"
+                         : "(" + expr + " > " + binds.integer(floored) + ")";
         case Op::Between:
         case Op::Contains:
         case Op::StartsWith:
@@ -148,9 +192,10 @@ namespace detail {
 /// @brief A text column compared with an operand.
 /// @param condition The condition; its value is the folded operand, or the raw one when case-sensitive.
 /// @param column The column.
-/// @return The SQL boolean, `NULL` for an empty cell; or the error when the operand cannot be written.
+/// @param binds Receives the operand.
+/// @return The SQL boolean, `NULL` for an empty cell; or the error when the operand cannot be compared.
 [[nodiscard]] inline std::expected<std::string, ::morph::table::TableError> textCondition(
-    ::morph::table::PlannedCondition const& condition, Column const& column) {
+    ::morph::table::PlannedCondition const& condition, Column const& column, Binds& binds) {
     using Op = ::morph::table::FilterOp;
     auto const* const needle = std::get_if<std::string>(&condition.value);
     if (needle == nullptr) {
@@ -169,19 +214,26 @@ namespace detail {
         return condition.op == Op::Eq ? std::string{"0"} : "(" + column.expr + " IS NOT NULL)";
     }
     std::string const cell = condition.caseSensitive ? column.expr : fold(column.expr);
-    std::string const text = literal(*needle);
     switch (condition.op) {
         case Op::Eq:
-            return "(" + cell + " = " + text + ")";
+            return "(" + cell + " = " + binds.text(*needle) + ")";
         case Op::Ne:
-            return "(" + cell + " <> " + text + ")";
+            return "(" + cell + " <> " + binds.text(*needle) + ")";
         case Op::Contains:
-            return "(instr(" + cell + ", " + text + ") > 0)";
-        case Op::StartsWith:
-            return "(substr(" + cell + ", 1, length(" + text + ")) = " + text + ")";
-        case Op::EndsWith:
-            return "(length(" + cell + ") >= length(" + text + ") AND substr(" + cell + ", -length(" + text +
+            return "(instr(" + cell + ", " + binds.text(*needle) + ") > 0)";
+        case Op::StartsWith: {
+            // The markers are taken in the order they are written.
+            std::string const length = binds.text(*needle);
+            std::string const text = binds.text(*needle);
+            return "(substr(" + cell + ", 1, length(" + length + ")) = " + text + ")";
+        }
+        case Op::EndsWith: {
+            std::string const atLeast = binds.text(*needle);
+            std::string const from = binds.text(*needle);
+            std::string const text = binds.text(*needle);
+            return "(length(" + cell + ") >= length(" + atLeast + ") AND substr(" + cell + ", -length(" + from +
                    ")) = " + text + ")";
+        }
         case Op::Lt:
         case Op::Le:
         case Op::Gt:
@@ -200,9 +252,10 @@ namespace detail {
 /// @brief One condition as a SQL boolean that is never `NULL`: true when the cell is present and meets it.
 /// @param condition The condition.
 /// @param columns The translatable columns.
+/// @param binds Receives the operands.
 /// @return The boolean, or the error naming the column.
 [[nodiscard]] inline std::expected<std::string, ::morph::table::TableError> conditionSql(
-    ::morph::table::PlannedCondition const& condition, Columns const& columns) {
+    ::morph::table::PlannedCondition const& condition, Columns const& columns, Binds& binds) {
     using Op = ::morph::table::FilterOp;
     auto const found = columns.find(condition.column);
     if (found == columns.end()) {
@@ -229,9 +282,13 @@ namespace detail {
                                                                   .column = condition.column,
                                                                   .message = "an integer condition has no operand"});
             }
-            sql = condition.op == Op::Between ? "(" + integerCompare(Op::Ge, *value, column.expr) + " AND " +
-                                                    integerCompare(Op::Le, *upper, column.expr) + ")"
-                                              : integerCompare(condition.op, *value, column.expr);
+            if (condition.op == Op::Between) {
+                std::string const low = integerCompare(Op::Ge, *value, column.expr, binds);
+                std::string const high = integerCompare(Op::Le, *upper, column.expr, binds);
+                sql = "(" + low + " AND " + high + ")";
+            } else {
+                sql = integerCompare(condition.op, *value, column.expr, binds);
+            }
             break;
         }
         case ::morph::table::ColumnKind::DateTime: {
@@ -242,29 +299,31 @@ namespace detail {
                                                                   .column = condition.column,
                                                                   .message = "a date-time condition has no operand"});
             }
-            std::string const low = std::to_string(*value);
             switch (condition.op) {
                 case Op::Eq:
-                    sql = "(" + column.expr + " = " + low + ")";
+                    sql = "(" + column.expr + " = " + binds.integer(*value) + ")";
                     break;
                 case Op::Ne:
-                    sql = "(" + column.expr + " <> " + low + ")";
+                    sql = "(" + column.expr + " <> " + binds.integer(*value) + ")";
                     break;
                 case Op::Lt:
-                    sql = "(" + column.expr + " < " + low + ")";
+                    sql = "(" + column.expr + " < " + binds.integer(*value) + ")";
                     break;
                 case Op::Le:
-                    sql = "(" + column.expr + " <= " + low + ")";
+                    sql = "(" + column.expr + " <= " + binds.integer(*value) + ")";
                     break;
                 case Op::Gt:
-                    sql = "(" + column.expr + " > " + low + ")";
+                    sql = "(" + column.expr + " > " + binds.integer(*value) + ")";
                     break;
                 case Op::Ge:
-                    sql = "(" + column.expr + " >= " + low + ")";
+                    sql = "(" + column.expr + " >= " + binds.integer(*value) + ")";
                     break;
-                case Op::Between:
-                    sql = "(" + column.expr + " BETWEEN " + low + " AND " + std::to_string(*upper) + ")";
+                case Op::Between: {
+                    std::string const low = binds.integer(*value);
+                    std::string const high = binds.integer(*upper);
+                    sql = "(" + column.expr + " BETWEEN " + low + " AND " + high + ")";
                     break;
+                }
                 case Op::Contains:
                 case Op::StartsWith:
                 case Op::EndsWith:
@@ -277,7 +336,7 @@ namespace detail {
             break;
         }
         case ::morph::table::ColumnKind::Text: {
-            auto text = textCondition(condition, column);
+            auto text = textCondition(condition, column, binds);
             if (!text) {
                 return std::unexpected(std::move(text.error()));
             }
@@ -305,12 +364,12 @@ namespace detail {
 /// @param columns The translatable columns.
 /// @return The boolean, or the error naming the column.
 [[nodiscard]] inline std::expected<std::string, ::morph::table::TableError> columnFilter(
-    ::morph::table::PlannedColumnFilter const& filter, Columns const& columns) {
+    ::morph::table::PlannedColumnFilter const& filter, Columns const& columns, Binds& binds) {
     std::vector<std::string> parts;
     if (!filter.include.empty()) {
         std::string joined;
         for (auto const& entry : filter.include) {
-            auto sql = conditionSql(entry, columns);
+            auto sql = conditionSql(entry, columns, binds);
             if (!sql) {
                 return std::unexpected(std::move(sql.error()));
             }
@@ -322,7 +381,7 @@ namespace detail {
         parts.push_back("(" + joined + ")");
     }
     for (auto const& entry : filter.exclude) {
-        auto sql = conditionSql(entry, columns);
+        auto sql = conditionSql(entry, columns, binds);
         if (!sql) {
             return std::unexpected(std::move(sql.error()));
         }
@@ -414,9 +473,10 @@ template <typename Enum>
 [[nodiscard]] inline std::expected<Translation, ::morph::table::TableError> translate(
     ::morph::table::QueryPlan const& plan, Columns const& columns, std::string_view rowKey) {
     Translation out;
+    detail::Binds binds;
     std::vector<std::string> clauses;
     for (auto const& filter : plan.filters) {
-        auto sql = detail::columnFilter(filter, columns);
+        auto sql = detail::columnFilter(filter, columns, binds);
         if (!sql) {
             return std::unexpected(std::move(sql.error()));
         }
@@ -426,7 +486,7 @@ template <typename Enum>
         // A row meets a group when its entries are met on any of the group's columns; no usable column meets none.
         std::string any;
         for (auto const& filter : group.columns) {
-            auto sql = detail::columnFilter(filter, columns);
+            auto sql = detail::columnFilter(filter, columns, binds);
             if (!sql) {
                 return std::unexpected(std::move(sql.error()));
             }
@@ -457,6 +517,7 @@ template <typename Enum>
                      (key.dir == ::morph::table::SortDirection::Ascending ? " ASC, " : " DESC, ");
     }
     out.order += std::string{rowKey} + " ASC";
+    out.params = binds.take();
     return out;
 }
 
@@ -466,27 +527,42 @@ template <typename Enum>
 /// @param mapper The open mapper.
 /// @param table The table.
 /// @param rowKey The unique row key column.
-/// @param scope A SQL boolean the model's own scope (company, visibility) contributes.
+/// @param scope A SQL boolean the model's own scope (company, visibility) contributes; it holds no operand markers.
 /// @param translation The translated plan.
 /// @param plan The plan, for its offset and limit.
 /// @return The count of the filtered view and the keys of the page; no keys when the limit is zero.
-/// @throws Lightweight::SqlException if a statement fails.
+/// @throws Conflict if the database is busy or locked.
+/// @throws Lightweight::SqlException if a statement fails for another reason.
 [[nodiscard]] inline Fetched fetch(Lightweight::DataMapper& mapper, std::string_view table, std::string_view rowKey,
                                    std::string_view scope, Translation const& translation,
                                    ::morph::table::QueryPlan const& plan) {
     std::string const from =
         " FROM " + std::string{table} + " WHERE (" + std::string{scope} + ") AND " + translation.where;
-    Lightweight::SqlStatement statement{mapper.Connection()};
     Fetched out;
-    out.total = statement.ExecuteDirectScalar<std::int64_t>("SELECT COUNT(*)" + from).value_or(0);
-    if (plan.limit <= 0) {
-        return out;
-    }
-    auto cursor =
-        statement.ExecuteDirect("SELECT " + std::string{rowKey} + from + " " + translation.order + " LIMIT " +
-                                std::to_string(plan.limit) + " OFFSET " + std::to_string(plan.offset));
-    while (cursor.FetchRow()) {
-        out.ids.push_back(cursor.GetColumn<std::int64_t>(1));
+    try {
+        {
+            Lightweight::SqlStatement counting{mapper.Connection()};
+            counting.Prepare("SELECT COUNT(*)" + from);
+            auto cursor = counting.ExecuteWithVariants(translation.params);
+            if (cursor.FetchRow()) {
+                out.total = cursor.GetColumn<std::int64_t>(1);
+            }
+        }
+        if (plan.limit <= 0) {
+            return out;
+        }
+        Lightweight::SqlStatement paging{mapper.Connection()};
+        paging.Prepare("SELECT " + std::string{rowKey} + from + " " + translation.order + " LIMIT " +
+                       std::to_string(plan.limit) + " OFFSET " + std::to_string(plan.offset));
+        auto cursor = paging.ExecuteWithVariants(translation.params);
+        while (cursor.FetchRow()) {
+            out.ids.push_back(cursor.GetColumn<std::int64_t>(1));
+        }
+    } catch (Lightweight::SqlException const& error) {
+        if (!isBusy(error)) {
+            throw;
+        }
+        throw Conflict{"the database is busy with another write; try again"};
     }
     return out;
 }

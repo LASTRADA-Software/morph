@@ -1366,6 +1366,11 @@ struct RawEntry {
     add({.dateOffsetMs = 864'000'000, .sourceKey = "k22", .memo = "m22"});
     add({.dateOffsetMs = 950'400'000, .sourceKey = "k23", .memo = "m23"});
     add({.dateOffsetMs = 1'036'800'000, .sourceKey = "k24", .memo = "m24"});
+    add({.dateOffsetMs = 1'100'000'000, .sourceKey = "x'; DROP TABLE ledger_entries; --", .memo = "back\\slash"});
+    add({.dateOffsetMs = 1'200'000'000,
+         .sourceKey = "100%_done",
+         .sourceReference = "\"quoted\"",
+         .memo = "C:\\temp\\%"});
     rows[0].reversedBy = 14;
     rows[4].reversedBy = 15;
     return rows;
@@ -1387,7 +1392,8 @@ void writeJournal(lims::PeriodId period, std::vector<RawEntry> const& rows) {
     for (auto const& raw : rows) {
         lims::db::EntryRecord entry;
         entry.companyId = *lims::test::seededCompany();
-        entry.period = *period;
+        // Three periods, so the period column is filtered to a part of the journal.
+        entry.period = *period + (index % 3 == 0 ? 100 : 0);
         entry.dateMs = base + raw.dateOffsetMs;
         entry.state = static_cast<int>(raw.state);
         entry.sourceKey = raw.sourceKey;
@@ -1465,6 +1471,30 @@ void writeJournal(lims::PeriodId period, std::vector<RawEntry> const& rows) {
     return queries;
 }
 
+/// @brief Quick-search group queries over the journal's text columns that the database can compare. The standard
+///        corpus's group spans every text column, `lines` among them, and is refused whole.
+/// @return The queries.
+[[nodiscard]] std::vector<morph::table::TableQuery> groupQueries() {
+    using morph::table::FilterEntry;
+    using morph::table::GroupFilter;
+    using morph::table::TableQuery;
+    std::vector<TableQuery> queries;
+    std::vector<std::string> const columns{"sourceKey", "sourceReference", "memo",    "state",
+                                           "currency",  "createdBy",       "postedBy"};
+    auto const grouped = [&](morph::table::Combine combine, std::vector<FilterEntry> entries) {
+        TableQuery query;
+        query.filters.groups.push_back(
+            GroupFilter{.columns = columns, .combine = combine, .include = std::move(entries)});
+        queries.push_back(std::move(query));
+    };
+    grouped(morph::table::Combine::Any, {FilterEntry{.contains = "a"}});
+    grouped(morph::table::Combine::Any, {FilterEntry{.contains = "E"}});
+    grouped(morph::table::Combine::Any, {FilterEntry{.startsWith = "r"}, FilterEntry{.eq = "usd"}});
+    grouped(morph::table::Combine::All, {FilterEntry{.contains = "e"}, FilterEntry{.contains = "r"}});
+    grouped(morph::table::Combine::Any, {FilterEntry{.endsWith = "%"}, FilterEntry{.contains = "'"}});
+    return queries;
+}
+
 /// @brief The seeded company's whole journal as the engine's source rows.
 /// @return The entries by id.
 [[nodiscard]] std::shared_ptr<std::vector<lims::JournalEntryView> const> journalRowsFromLedger() {
@@ -1499,6 +1529,9 @@ TEST_CASE(
         corpus.push_back(std::move(query));
     }
     CHECK(standardQueries > 1000U);
+    for (auto&& query : groupQueries()) {
+        corpus.push_back(std::move(query));
+    }
 
     morph::table::ConformanceOptions options;
     options.limits.totalCap = 10;
@@ -1523,9 +1556,10 @@ TEST_CASE(
     CHECK(failures.empty());
 }
 
-// The control for the case above: the journal and the corpus exercise what the helper claims to. Every translatable
-// column is filtered to a non-empty and a non-full set somewhere in the corpus, and the columns the database cannot
-// compare are exactly the two named.
+// The control for the case above: the journal and the corpus compare what the helper is said to compare. Every column
+// the database can translate is filtered, somewhere in the corpus, by a query the plan accepts and whose view is
+// neither empty nor the whole journal, except the company, which every entry shares. The standard quick-search group
+// spans `lines` and is refused as Unavailable, so the group queries of the case above are the ones that are compared.
 TEST_CASE("ledger: the entry page refuses the columns the database cannot compare, and nothing else",
           "[lims][ledger][pages]") {
     DbFixture fixture;
@@ -1543,6 +1577,52 @@ TEST_CASE("ledger: the entry page refuses the columns the database cannot compar
     }
     CHECK(refused == std::vector<std::string>{"rate", "lines"});
 
+    auto corpus = morph::table::standardCorpus(source);
+    for (auto&& query : groupQueries()) {
+        corpus.push_back(std::move(query));
+    }
+    std::map<std::string, bool> partial;
+    std::size_t refusedGroups = 0;
+    std::size_t translatedGroups = 0;
+    auto const rowCount = static_cast<std::int64_t>(rows->size());
+    for (auto const& query : corpus) {
+        auto const planned =
+            morph::table::planQuery(query, source.columns(), {}, {}, {}, lims::LedgerModel::canTranslateEntryColumn);
+        if (!query.filters.groups.empty()) {
+            if (planned) {
+                ++translatedGroups;
+            } else {
+                CHECK(planned.error().code == morph::table::TableErrorCode::Unavailable);
+                CHECK((planned.error().column == "lines" || planned.error().column == "rate"));
+                ++refusedGroups;
+            }
+            continue;
+        }
+        if (!planned || query.filters.columns.size() != 1U) {
+            continue;
+        }
+        auto counting = query;
+        counting.page = morph::table::PageRequest{.offset = 0, .limit = 0};
+        auto const counted = morph::table::apply(source, counting);
+        REQUIRE(counted.has_value());
+        if (counted->total && *counted->total > 0 && *counted->total < rowCount) {
+            partial[query.filters.columns.begin()->first] = true;
+        }
+    }
+    for (auto const& column : source.columns()) {
+        if (!lims::LedgerModel::canTranslateEntryColumn(column.id, morph::table::PlanUse::Filter) ||
+            column.id == "company") {
+            continue;
+        }
+        INFO("column " << column.id);
+        CHECK(partial[column.id]);
+    }
+    for (auto const& entry : *rows) {
+        CHECK(entry.company == lims::test::seededCompany());
+    }
+    CHECK(refusedGroups > 0U);
+    CHECK(translatedGroups >= 5U);
+
     lims::LedgerModel ledger;
     for (std::string const column : {"lines", "rate"}) {
         CAPTURE(column);
@@ -1553,6 +1633,90 @@ TEST_CASE("ledger: the entry page refuses the columns the database cannot compar
     lims::ListEntriesPage unknown{.company = lims::test::seededCompany(), .query = {}};
     unknown.query.sort = {morph::table::SortKey{.column = "nope", .dir = morph::table::SortDirection::Ascending}};
     CHECK_THROWS_AS(ledger.execute(unknown), lims::ValidationError);
+}
+
+// Operands shaped like injection and like pattern syntax are data: quotes, a statement terminator, a comment
+// marker, `%`, `_`, backslashes and a driver escape. They are bound, so the page equals the engine's and the table is
+// untouched; a NUL byte, which SQLite's text functions stop at, is refused in words.
+// Mutation: write a text operand into the statement unescaped.
+TEST_CASE("ledger: text operands that look like SQL or like patterns are only data", "[lims][ledger][pages]") {
+    DbFixture fixture;
+    auto const period = books();
+    writeJournal(period.id, journalRows());
+    ScopedPrincipal const alice{"alice"};
+    auto const rows = journalRowsFromLedger();
+    morph::table::RowsSource<lims::JournalEntryView> const source{
+        rows, [](lims::JournalEntryView const& entry) { return morph::table::RowId{*entry.id}; }};
+    using morph::table::ColumnFilter;
+    using morph::table::FilterEntry;
+    using morph::table::TableQuery;
+    std::vector<TableQuery> corpus;
+    for (std::string const operand :
+         {"'", "''", "x'; DROP TABLE ledger_entries; --", "' OR '1'='1", "%", "_", "100%", "100%_done", "\\",
+          "back\\slash", "C:\\temp\\%", "\"quoted\"", "{fn now()}", "a?b", "?", "--", "/*",
+          "\xC3\x89"
+          "clair"}) {
+        for (std::string const column : {"memo", "sourceKey", "sourceReference"}) {
+            for (bool const caseSensitive : {false, true}) {
+                for (int op = 0; op < 5; ++op) {
+                    FilterEntry entry;
+                    entry.caseSensitive = caseSensitive;
+                    switch (op) {
+                        case 0:
+                            entry.eq = operand;
+                            break;
+                        case 1:
+                            entry.ne = operand;
+                            break;
+                        case 2:
+                            entry.contains = operand;
+                            break;
+                        case 3:
+                            entry.startsWith = operand;
+                            break;
+                        default:
+                            entry.endsWith = operand;
+                            break;
+                    }
+                    TableQuery query;
+                    ColumnFilter filter;
+                    filter.include.push_back(entry);
+                    query.filters.columns.emplace(column, std::move(filter));
+                    corpus.push_back(std::move(query));
+                }
+            }
+        }
+    }
+    morph::table::ConformanceOptions options;
+    options.translatable = lims::LedgerModel::canTranslateEntryColumn;
+    auto const company = lims::test::seededCompany();
+    auto const model =
+        [&](morph::table::QueryPlan const& plan) -> std::expected<morph::table::ModelPage, morph::table::TableError> {
+        auto const page = lims::LedgerModel::pageEntries(company, plan);
+        morph::table::ModelPage out;
+        for (auto const& row : page.rows) {
+            out.rows.emplace_back(*row.id);
+        }
+        out.total = page.total;
+        out.totalKind = page.totalKind;
+        out.offset = page.offset;
+        return out;
+    };
+    auto const failures = morph::table::conformanceFailures(source, model, corpus, options);
+    for (std::size_t i = 0; i < failures.size() && i < 10; ++i) {
+        WARN(failures[i]);
+    }
+    CHECK(failures.empty());
+    CHECK(lims::LedgerModel{}.execute(lims::ListEntries{.company = company}).entries.size() == rows->size());
+
+    lims::ListEntriesPage withNul{.company = company, .query = {}};
+    withNul.query.filters.columns["memo"].include.push_back(FilterEntry{.contains = std::string{"a\0b", 3}});
+    try {
+        static_cast<void>(lims::LedgerModel{}.execute(withNul));
+        FAIL("a NUL operand was answered");
+    } catch (lims::ValidationError const& error) {
+        CHECK(std::string_view{error.what()}.contains("NUL"));
+    }
 }
 
 // Mutation: skip the visibility check (dave, who sees no company, gets the journal).
@@ -1571,7 +1735,8 @@ TEST_CASE("ledger: a page of entries is the caller's, with an exact total from t
         CHECK(page.totalKind == morph::table::TotalKind::Exact);
         CHECK(page.offset == 20);
         REQUIRE(page.rows.size() == 3U);
-        CHECK(*page.rows.front().id == 21);
+        CHECK(page.rows.front().id ==
+              lims::LedgerModel{}.execute(lims::ListEntries{.company = lims::test::seededCompany()}).entries[20].id);
         CHECK(page.rows.front().lines.size() == 2U);
         request.query.page.limit = 0;
         auto const counted = ledger.execute(request);

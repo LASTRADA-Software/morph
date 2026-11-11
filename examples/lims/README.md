@@ -1320,15 +1320,15 @@ translates into its own query; `Page::totalKind`, a total that is the count or a
 balance is a sum, not a page: it computes its rows in the store and pages them with `apply` or with a plan over the
 aggregate, which the seam does not describe.
 
-On the seam, the same page (`ListEntriesPage`: 50 rows at offset 500,000 of 10^6 entries) took 170 ms with resident
+On the seam, the same page (`ListEntriesPage`: 50 rows at offset 500,000 of 10^6 entries) took 180 ms with resident
 memory 47 MB to 48 MB (peak 47 MB to 51 MB), and the trial balance over 10^7 lines took 3,885 ms with peak memory 41 MB
 (40 MB before), summed in the database, exact or refused as `OutOfRange`. Same build and machine as above, one run each;
 the totals equal the independently accumulated sums exactly. The sample list pages on it too. Stock movements are the
-second instance (decision 61).
+second instance, which is the stock movements of the inventory module.
 
 How it is held to the engine. `ListEntriesPage` and `ListSamples` translate the plan into one `SELECT` (the plan's
 filters to a `WHERE`, its sort to an `ORDER BY` ending in the row id, offset and limit) and count the filtered view
-with one `COUNT` in the same read transaction, so the total is `Exact` at any size. The tests run
+with one `COUNT` in the same read transaction, so the total is `Exact` at any size. That read transaction holds SQLite's shared lock until the page's rows are loaded (2.7 s for the filtered page at 10^6 entries), so a concurrent writer can be turned away for that window; a busy or locked database is reported as `Conflict`. The tests run
 `conformanceFailures` over `standardCorpus` of each list's own rows, against SQLite, with the total cap lowered to 10,
 plus date-time queries the corpus cannot derive; each mutation named beside those tests fails them. Three
 rules of the spec decided the translation. Text: the default collator folds ASCII and Latin-1 letters, SQLite's `lower`
@@ -1351,19 +1351,22 @@ from the manual), and the ledger reports that as `OutOfRange`.
 
 - **Paging a table in the database is raw SQL.** Lightweight's query builder has no `COALESCE`, `CASE`, `NULLIF`,
   `instr`, `replace` or computed `ORDER BY`, which the engine's meaning of empty cells, enum names and the collator's
-  fold need, so `org/core/plan_sql.hpp` writes the statement text and runs it with `SqlStatement::ExecuteDirect`:
-  IMPLEMENTATION.md rule 4's escape tier. Operands are written as escaped literals, not bound parameters, because their
-  number is not known until the plan is read; an operand holding a NUL byte is refused. The same statement text serves
-  the journal and the sample list, which is why it lives in org. Not verified: other databases (the `lower` and
-  `replace` fold is SQLite's), a SQLite built with ICU (its `lower` would fold more than the collator and the
-  conformance run would fail). Upstream: no Lightweight issue was searched for or filed.
+  fold need, so `org/core/plan_sql.hpp` writes the statement text and runs it with `SqlStatement::Prepare` and
+  `ExecuteWithVariants`: IMPLEMENTATION.md rule 4's escape tier. The statement text holds only the model's own column
+  mapping, enumerator names and the plan's clamped numbers; every operand a client sent is a `?` with a value bound
+  at run time, so no escaping is involved. A text operand holding a NUL byte is refused in words, since SQLite's
+  `length` and `instr` stop at it. Tests run quotes, a statement terminator, `%`, `_`, backslashes, `?` and a driver
+  escape through the page and compare it with the engine's. Not verified: other databases (the `lower` and `replace`
+  fold is SQLite's), a SQLite built with ICU (its `lower` would fold more than the collator and the conformance run
+  would fail). Upstream: no Lightweight issue was searched for or filed.
 
-- **The standard conformance corpus does not exercise date-time filters.** Its operands are the cells' own text, and a
-  date-time cell shows as whole seconds (`1793437200`), which the default date parser does not read, so `apply` and
-  `planQuery` refuse such a query identically and the helper counts that as agreement. Measured: a translation that
-  truncated a negative millisecond instant toward zero instead of flooring it passed `standardCorpus` plus date queries
-  at fixed ISO instants, and failed only once the tests derived the operands from the rows' own seconds, so the lims
-  tests build them that way. Not filed upstream here.
+- **The standard conformance corpus built date operands that never parsed. Fixed in morph.** Its operands were the
+  cells' own text, and a date-time cell shows as whole seconds (`1793437200`), which the default date parser does not
+  read, so `apply` and the plan refused such a query identically and the helper counted that as agreement. Measured: a
+  translation that truncated a negative millisecond instant toward zero instead of flooring it passed the corpus and
+  failed only when the lims tests built the operands from the rows' own seconds by hand. `standardCorpus` now writes
+  ISO operands, `conformanceFailures` reports a column whose queries were all refused identically, and a framework
+  test holds the truncating model.
 
 - **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so
   moving `lims_operators` into `org_role_assignments` is one `RawSql` `INSERT ... SELECT`
