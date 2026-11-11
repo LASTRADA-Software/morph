@@ -71,6 +71,13 @@ calls `Session::setLocale`, which replaces the reactive formatting facts with th
 so every `t` re-evaluates; then it calls `InterpreterHost::setLocale`, through which the application stores the
 choice as a preference.
 
+The client shell is what installs the provider. At start it reads `Source::catalogues()` (the bundle's verified
+catalogues, `loadCatalogues`), reports each of `problems()`, and calls `setTranslations(catalogues.provider())`; after
+a development reload that changed a catalogue it does so again. It also calls `Session::setLocale` with the locale it
+starts in, which installs the locale's number, money and date facts ([`locale_table.md`](locale_table.md)). The
+navigator's titles and headings are read in the active locale and relabelled on every `setLocale`
+([`workspace.md`](workspace.md#navigator-and-pins)).
+
 ## Keys known at run time
 
 `t` accepts a key expression in place of a literal key (`{"t": {"expr": …}}`, `tAt`), for a message whose key arrives
@@ -99,6 +106,14 @@ of its own what the built-in shell shows:
   and the fallback, the id standing in for a missing fallback), for a search. With `catalogues` null it is one title:
   a string title as is, else a reference's fallback, else the entry's id — what the navigator shows without
   `NavigatorOptions::titles`.
+
+Two functions give the navigator what it shows:
+
+- `catalogTitlesIn(entry, catalogues, locale)`: the title in `locale` first, then the other locales' titles that differ
+  from it, so the navigator shows the active locale's and a search matches every locale's.
+- `catalogLabel(catalogues, text, locale)`: a heading or other text that may be a message key. When the catalogues hold
+  `text` as a key for `locale` (the exact tag, then its language), the message formatted with no arguments; otherwise
+  `text` as written.
 
 ## Design decisions
 

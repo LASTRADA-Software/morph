@@ -74,7 +74,14 @@ otherwise (Qt Quick). A transport the frontend needs that is not built is refuse
 `mountShell(context, backend, opened, source, options)` mounts the library's `ShellFrame` with a `Workspace` of tabs
 in its page for what the source delivered, or shows why it did not open. `ShellOptions` holds the start screen and
 params, `onProblem`, `onMounted`, the downloads directory, the history, development mode, `onReloaded` and
-`signIn`. A sign-in or sign-out closes every tab and rebuilds the frame for the new catalog; a navigator choice
+`signIn`. Before the first mount the shell installs the bundle's
+message catalogues (`Source::catalogues()`, each problem reported) as the session's translations and calls
+`Session::setLocale` with `ShellOptions::locale` (empty is `en`), which installs the locale's number, money and date
+facts ([`locale_table.md`](../ui/locale_table.md)); a locale with no facts is reported once. The navigator's titles are
+the catalogue's in the session's locale and its headings go through `catalogLabel`. A document's `setLocale` reaches
+the shell's `ApplicationHost::setLocale`, which relabels the navigator and the active tab's title and then calls
+`ShellOptions::onLocale`, for the client to store the choice. A reload that changed a catalogue reinstalls them and
+relabels. A sign-in or sign-out closes every tab and rebuilds the frame for the new catalog; a navigator choice
 opens the screen as a tab from a task posted to the owner. An empty `signIn` is `std::invalid_argument`.
 
 A document's `navigate` is handled from a task posted to the owner too, since the screen that asked is still

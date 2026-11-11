@@ -283,8 +283,12 @@ the `render::TranslationProvider`, the `UnitTable`, the display zone's offset an
 
 - `number(x)` shows an `int`, or a decimal at its own places; `decimal(x, dp)` at `dp` places;
   `quantity(x, unit?)` the magnitude and the unit's display text, converted first when a unit is
-  given; `money(x, currency)` at the currency's minor digits (0 for `JPY` and the like, 3 for `KWD`
-  and the like, otherwise 2) followed by the code. All go through `render::formatCanonicalNumber`.
+  given; `money(x, currency, form?)` at the currency's minor digits (0 for `JPY` and the like, 3 for `KWD`
+  and the like, otherwise 2), with the currency placed by `FormatContext::currency`: the locale's symbol (`€13,196.40`,
+  `13.196,40 €`) when `form` is `"symbol"`, the default, else the code. A context with no currency facts writes
+  `13196.40 EUR`. `number` and `quantity` take the separators `FormatContext::numeric` holds, which
+  `Session::setLocale` installs from the locale table. All go through `render::formatCanonicalNumber`. See
+  [`locale_table.md`](locale_table.md).
 - `date` and `dateTime` take a date, a timestamp or ISO-8601 date-time text, and format it in a
   style (`short`, `medium`, the default, or `long`) through the `DateFormatter`; without one they
   write `FormatContext::datePattern` or `dateTimePattern` when it is set, in every style alike, so
