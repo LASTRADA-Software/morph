@@ -75,11 +75,13 @@ otherwise (Qt Quick). A transport the frontend needs that is not built is refuse
 in its page for what the source delivered, or shows why it did not open. `ShellOptions` holds the start screen and
 params, `onProblem`, `onMounted`, the downloads directory, the history, development mode, `onReloaded` and
 `signIn`. Before the first mount the shell installs the bundle's
-message catalogues (`Source::catalogues()`, each problem reported) as the session's translations and calls
+message catalogues (`Source::catalogues()`, each problem reported) as the session's translations, and again each time it
+loads a bundle: after the reload a sign-in or sign-out makes, and after a development poll that delivered a new bundle,
+before and independently of the empty-documents check, so a catalogue-only change re-evaluates every `t`. It calls
 `Session::setLocale` with `ShellOptions::locale` (empty is `en`), which installs the locale's number, money and date
-facts ([`locale_table.md`](../ui/locale_table.md)); a locale with no facts is reported once. The navigator's titles are
+facts ([`locale_table.md`](../ui/locale_table.md)); a locale with no facts is reported once per locale tag. The navigator's titles are
 the catalogue's in the session's locale and its headings go through `catalogLabel`. A document's `setLocale` reaches
-the shell's `ApplicationHost::setLocale`, which relabels the navigator and the active tab's title and then calls
+the shell's `ApplicationHost::setLocale`, which relabels the current frame's navigator, when there is one, and the active tab's title and then calls
 `ShellOptions::onLocale`, for the client to store the choice. A reload that changed a catalogue reinstalls them and
 relabels. A sign-in or sign-out closes every tab and rebuilds the frame for the new catalog; a navigator choice
 opens the screen as a tab from a task posted to the owner. An empty `signIn` is `std::invalid_argument`.

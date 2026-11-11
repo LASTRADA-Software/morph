@@ -208,7 +208,7 @@ arithmetic, and `any` where it depends on data the document does not describe.
 | Strings | `concat(s, ...)`, `format(template, args...)`, `trim`, `length` (code points), `isEmpty` (a string or a list), `contains` |
 | Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `stdev(list, dp, mode?)` (sample, n − 1), `rsd(list, dp, mode?)` (in percent), `any`, `all`, `first`, `includes`, `indexOf`, `concatLists(list, ...)`, `slice(list, start, count?)` |
 | Dates | `dateAdd(x, n, unit)`, `dateRange(from, to)` |
-| Display | `number`, `decimal(x, dp, mode?)`, `quantity(x, unit?)`, `money(x, currency)`, `date(x, style?)`, `dateTime(x, style?)` |
+| Display | `number`, `decimal(x, dp, mode?)`, `quantity(x, unit?)`, `money(x, currency, form?)`, `date(x, style?)`, `dateTime(x, style?)` |
 | Entry | `parseDecimal(text, dp?)` |
 | Text | `t(key, fallback, args?)` (`key` a literal, or `{"expr": e}` for a string, which the author API writes as `tAt`), `refusalText(refusal)` |
 
