@@ -49,7 +49,7 @@ default-constructed values, which `encode` leaves out of the JSON (see
 | `"watch"` / `"unwatch"` | request | Adds topics to (or, with `replace`, sets) / removes them from the connection's watch set. See [The watch, unwatch and changes bodies](#the-watch-unwatch-and-changes-bodies). | `body`, `session` |
 | `"event"`    | server-initiated | An unprompted notification on a connection that negotiated events. Never a reply to anything. See [The `event` kind](#the-event-kind). | `callId` (always `0`), `body` (`{topic, payload}`) |
 | `"ok"`       | reply     | Server success. | `callId`, `body` (serialized result, or — for a `"hello"` reply — the server's `ProtocolRange`), `modelId` (for register-replies) |
-| `"err"`      | reply     | Server failure. | `callId`, `message` |
+| `"err"`      | reply     | Server failure. | `callId`, `message`, `refusal` (optional; see [A refused action's `refusal`](#a-refused-actions-refusal)) |
 
 ### `contextKey` — stable identity
 
@@ -245,6 +245,16 @@ on the way in. Carrying it as `glz::raw_json` instead *is* a retype, does need a
 version bump, and interacts with the
 [`body` double-parse hazard](#the-body-double-parse-hazard) and the size cap
 that exists to bound it — which is why the two are kept separate.
+
+### A refused action's `refusal`
+
+An `err` reply to an `execute` carries an optional `refusal` member, `{"code": "...", "args": [{"name": "...", "value":
+"..."}]}`, when the action failed with a `morph::model::ActionRefusal`: the code the application gave the refusal and
+its named string arguments. `message` still carries the exception's text, for logs. The member is omitted when the
+failure is any other exception, so those replies are unchanged, and a peer that does not know the member ignores it
+(`decode` reads with `error_on_unknown_keys = false`) and has the message alone. `wire::executeFailure` turns a decoded
+`err` into the exception a pending execute is settled with: an `ActionRefusal` when `refusal` is present, otherwise a
+`std::runtime_error` with the message. See [`../ui/refusals.md`](../ui/refusals.md).
 
 ### Control bytes in string fields
 

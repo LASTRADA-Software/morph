@@ -34,6 +34,7 @@ clients keeps such documents free of it. The shared corpus is
 | `{"get": e, "path": "a.b"}` | `Get` | A path read out of any expression's value, as `ref` reads below its name |
 | `{"query": "q"}` | `Query` | A query's value |
 | `{"pending": "x"}`, `{"error": "x"}`, `{"errorKind": "x"}` | `Pending`, `Error`, `ErrorKind` | A query's or mutation's flight, error text and error kind |
+| `{"refusal": "x"}` | `Refusal` | A query's or mutation's last failure when it was an action refusal: `null`, or `{code, args}` ([`refusals.md`](refusals.md)) |
 | `{"result": "m"}` | `Result` | A mutation's last result |
 | `{"can": "x"}` | `Can` | Whether the principal may run a query or mutation, or the client has `host:<command>` |
 | `{"pref": "point.path"}` | `Pref` | A customization point's choice |
@@ -333,6 +334,12 @@ kind shows as `{$name}` and is returned as an error, which `t` reports.
 decimal's places are its visible fraction digits): `en`, `de`, `nl`, `sv`, `it`, `es`, `fr`, `pt`,
 `pl`, `ru`, `uk`, `cs` and `ar` carry their rules; every other language selects only `other`. The
 language subtag decides, so `pl-PL` uses Polish.
+
+**Run-time keys and list arguments.** `t`'s key may be `{"expr": e}` for an expression `e` evaluating to a string, and
+its `args` may be `{"expr": e}` for an `e` evaluating to a list of `{name, value}` records, each becoming a named
+argument whose string value is formatted as text. `refusalText(refusal)` is the sentence for an action refusal: the
+catalogue's message for its code, else its class sentence (`a.b.generic`, then `a.generic`), else `This was refused.`.
+See [`refusals.md`](refusals.md).
 
 ## The environment
 
