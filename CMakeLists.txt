@@ -458,6 +458,7 @@ target_sources(morph
         include/morph/core/timeout_scheduler.hpp
         include/morph/core/model.hpp
         include/morph/core/action_guard.hpp
+        include/morph/core/action_refusal.hpp
         include/morph/core/registry.hpp
         include/morph/core/records.hpp
         include/morph/core/effects.hpp

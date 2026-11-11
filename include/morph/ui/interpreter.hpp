@@ -478,6 +478,23 @@ namespace detail {
     }
 }
 
+/// @brief A failure's action refusal, as a document reads it.
+/// @param error The failure.
+/// @return `{"code": c, "args": [{"name": n, "value": v}, ...]}` when it is an `ActionRefusal`, else `null`.
+[[nodiscard]] inline Value refusalValue(std::exception_ptr const& error) {
+    try {
+        std::rethrow_exception(error);
+    } catch (model::ActionRefusal const& refusal) {
+        ValueList args;
+        for (model::RefusalArg const& arg : refusal.args()) {
+            args.emplace_back(ValueRecord{{"name", Value{arg.name}}, {"value", Value{arg.value}}});
+        }
+        return Value{ValueRecord{{"code", Value{refusal.code()}}, {"args", Value{std::move(args)}}}};
+    } catch (...) {
+        return Value{};
+    }
+}
+
 /// @brief The default error kinds: the bridge's own failures, and `error` for the rest.
 /// @param error The failure.
 /// @return The kind.
@@ -762,7 +779,12 @@ struct CacheEntry {
     /// @brief An empty entry.
     /// @param runtime The runtime its signals belong to.
     explicit CacheEntry(reactive::Runtime& runtime)
-        : value{runtime}, hasValue{runtime, false}, error{runtime}, errorKind{runtime}, pending{runtime, false} {}
+        : value{runtime},
+          hasValue{runtime, false},
+          error{runtime},
+          errorKind{runtime},
+          refusal{runtime},
+          pending{runtime, false} {}
 
     /// @brief The cache key: model type, instance, action and canonical body.
     std::string key;
@@ -782,6 +804,8 @@ struct CacheEntry {
     reactive::Signal<std::string> error;
     /// @brief The last failure's kind; empty when none.
     reactive::Signal<std::string> errorKind;
+    /// @brief The last failure's action refusal; `null` when none or when it was not a refusal.
+    reactive::Signal<Value> refusal;
     /// @brief Whether a request is in flight.
     reactive::Signal<bool> pending;
     /// @brief The value the server last confirmed.
@@ -1230,12 +1254,12 @@ public:
                 .onError([this, weak, generation](std::exception_ptr const& error) {
                     auto const held = weak.lock();
                     if (held && held->generation == generation) {
-                        settleFailure(*held, detail::failureText(error), classify(error));
+                        settleFailure(*held, detail::failureText(error), classify(error), detail::refusalValue(error));
                     }
                 });
         } catch (...) {
             std::exception_ptr const error = std::current_exception();
-            settleFailure(*entry, detail::failureText(error), classify(error));
+            settleFailure(*entry, detail::failureText(error), classify(error), detail::refusalValue(error));
         }
     }
 
@@ -1363,6 +1387,7 @@ private:
             entry.hasValue.set(true);
             entry.error.set({});
             entry.errorKind.set({});
+            entry.refusal.set(Value{});
             entry.pending.set(false);
             entry.fetchedAt = now();
             entry.stale = entry.refetchAfter;
@@ -1429,11 +1454,12 @@ private:
     /// @param marks    Where they go.
     void markInstanceChange(wire::InstanceTopic const& instance, detail::Marks& marks);
 
-    void settleFailure(detail::CacheEntry& entry, std::string text, std::string kind) {
+    void settleFailure(detail::CacheEntry& entry, std::string text, std::string kind, Value refusal = Value{}) {
         _runtime->batch([&] {
             noteWrite();
             entry.error.set(std::move(text));
             entry.errorKind.set(std::move(kind));
+            entry.refusal.set(std::move(refusal));
             entry.pending.set(false);
         });
     }
@@ -2033,6 +2059,10 @@ public:
     /// @return It.
     [[nodiscard]] Value errorKind() const;
 
+    /// @brief The failure's action refusal, `null` when none or when the failure was not a refusal. A tracked read.
+    /// @return It.
+    [[nodiscard]] Value refusal() const;
+
     /// @brief Whether the query has a value or a failure for its current key, or is idle. A tracked read, for a
     ///        boundary.
     /// @return It.
@@ -2150,6 +2180,10 @@ public:
     /// @return It.
     [[nodiscard]] Value errorKind() const { return _errorKind.get(); }
 
+    /// @brief The last applied failure's action refusal, or `null`. A tracked read.
+    /// @return It.
+    [[nodiscard]] Value refusal() const { return _refusal.get(); }
+
     /// @brief The declaration.
     /// @return It.
     [[nodiscard]] MutationDecl const& decl() const noexcept { return *_decl; }
@@ -2183,6 +2217,7 @@ private:
     reactive::Signal<Value> _result;
     reactive::Signal<Value> _error;
     reactive::Signal<Value> _errorKind;
+    reactive::Signal<Value> _refusal;
     std::uint64_t _runs = 0;
     std::uint64_t _latest = 0;
     std::map<std::string, std::deque<std::shared_ptr<Run>>, std::less<>> _queues;
@@ -4203,6 +4238,9 @@ inline Value ScopeEnv::control(ExprKind form, std::string_view name) const {
         if (form == ExprKind::Error) {
             return query.error();
         }
+        if (form == ExprKind::Refusal) {
+            return query.refusal();
+        }
         return form == ExprKind::ErrorKind ? query.errorKind() : Value{};
     }
     if (found != nullptr && found->category == NameCategory::Mutation) {
@@ -4215,6 +4253,9 @@ inline Value ScopeEnv::control(ExprKind form, std::string_view name) const {
         }
         if (form == ExprKind::Error) {
             return mutation.error();
+        }
+        if (form == ExprKind::Refusal) {
+            return mutation.refusal();
         }
         return form == ExprKind::ErrorKind ? mutation.errorKind() : Value{};
     }
@@ -4428,6 +4469,11 @@ inline Value QueryRuntime::errorKind() const {
     return Value{current->errorKind.get()};
 }
 
+inline Value QueryRuntime::refusal() const {
+    auto const& current = _entry.get();
+    return current ? current->refusal.get() : Value{};
+}
+
 inline bool QueryRuntime::settled() const {
     auto const& current = _entry.get();
     return !current || current->hasValue.get() || !current->error.get().empty();
@@ -4444,7 +4490,8 @@ inline MutationRuntime::MutationRuntime(MutationDecl const& decl, RtScope& scope
       _inFlight{scope.core.runtime(), 0},
       _result{scope.core.runtime()},
       _error{scope.core.runtime()},
-      _errorKind{scope.core.runtime()} {}
+      _errorKind{scope.core.runtime()},
+      _refusal{scope.core.runtime()} {}
 
 inline MutationRuntime::~MutationRuntime() {
     *_alive = false;
@@ -4608,6 +4655,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
             _result.set(*reply);
             _error.set(Value{});
             _errorKind.set(Value{});
+            _refusal.set(Value{});
             session.actionSucceeded(_typeId, _decl->action, *reply, ReplyUse::Applied, token);
             core.runList(_decl->onSuccess, commandCtx(*run->bindings), {});
             if (!secret.empty()) {
@@ -4620,6 +4668,7 @@ inline void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::option
         if (applied) {
             _error.set(Value{failureText(error)});
             _errorKind.set(Value{kind});
+            _refusal.set(detail::refusalValue(error));
             core.runList(_decl->onError, commandCtx(*run->bindings), {});
         }
         if (kind == "denied" && core.host != nullptr) {
@@ -9879,7 +9928,8 @@ inline void ScreenCore::ownQueriesOf(ExprPtr const& expr, RtScope const& scope, 
         return;
     }
     bool const control = expr->kind == ExprKind::Query || expr->kind == ExprKind::Pending ||
-                         expr->kind == ExprKind::Error || expr->kind == ExprKind::ErrorKind;
+                         expr->kind == ExprKind::Error || expr->kind == ExprKind::ErrorKind ||
+                         expr->kind == ExprKind::Refusal;
     if (control || expr->kind == ExprKind::Ref) {
         NameRef const* const found = scope.find(expr->name);
         if (found != nullptr && found->category == NameCategory::Query && seen.insert(expr->name).second) {

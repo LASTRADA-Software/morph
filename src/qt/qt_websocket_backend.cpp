@@ -551,7 +551,7 @@ bool QtWebSocketBackend::tryRouteExecuteReply(const ::morph::wire::Envelope& env
             // `default:` only because the project builds with
             // -Wswitch-default; every enumerator of the closed
             // ExecuteReplyKind is handled explicitly above.
-            execPending.state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
+            execPending.state->setException(::morph::wire::executeFailure(env));
             break;
     }
     return true;

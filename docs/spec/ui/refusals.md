@@ -112,7 +112,8 @@ The fallback stays a literal string: it is checked at load as it is today.
    keys follow from the code alone, so an application organises its sentences by whatever prefixes it uses;
 3. else the interpreter's built-in sentence, `This was refused.`.
 
-A `null` refusal yields the empty string, so a screen may bind the text unconditionally and show it under `engaged`.
+A `null` refusal yields `null`, as every function of `expr/1` does for a `null` argument, so a screen may bind the text
+unconditionally; it shows nothing until a refusal arrives.
 The exception's message is never shown: it is for logs.
 
 The code's arguments are given to whichever message is chosen, the class sentence included, so a `lims.generic` that
@@ -124,7 +125,7 @@ Resolution uses the session's locale and provider like `t`, so it re-evaluates w
 
 A literal `t` key is checked as the bundle checks it today. A run-time key cannot be: the bundle does not know which
 codes a server sends. The interpreter therefore reports a **missing run-time key** as a problem (the diagnostics a client
-logs and `ScreenHarness::problems()` collects), once per key and screen. For `refusalText` the report is for the
+logs and `ScreenHarness::problems()` collects), once per key and screen (the interpreter keeps its diagnostics per mounted screen). For `refusalText` the report is for the
 refusal's *code* being absent from the catalogue, whether or not a class sentence then stood in; a class key being
 absent is not reported, since the chain is meant to fall through. An application covers its codes with a test of its own
 over its catalogues; the interpreter's report is the backstop for a code the test missed.

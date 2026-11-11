@@ -2765,16 +2765,19 @@ private:
             run.complete(::morph::wire::encode(::morph::wire::makeOk(run.env.callId, std::move(result))));
         } else {
             ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
-            std::string message = "unknown exception";
+            ::morph::wire::Envelope failure = ::morph::wire::makeErr("unknown exception", run.env.callId);
             try {
                 std::rethrow_exception(error);
+            } catch (const ::morph::model::ActionRefusal& refusal) {
+                // The code and arguments travel beside the message, so the client words the refusal itself.
+                failure = ::morph::wire::makeRefusalErr(refusal, run.env.callId);
             } catch (const std::exception& exc) {
-                message = exc.what();
+                failure = ::morph::wire::makeErr(exc.what(), run.env.callId);
             } catch (...) {  // NOLINT(bugprone-empty-catch): the message stays "unknown exception"
                 // Keeps "unknown exception": the reply still goes out, so the
                 // caller's completion does not wait for its deadline.
             }
-            run.complete(::morph::wire::encode(::morph::wire::makeErr(message, run.env.callId)));
+            run.complete(::morph::wire::encode(failure));
         }
         run.holder->actionGate().leave();
     }
@@ -3207,7 +3210,7 @@ public:
                             // `default:` only because the project builds with
                             // -Wswitch-default; every enumerator of the closed
                             // ExecuteReplyKind is handled explicitly above.
-                            throw std::runtime_error(reply.message.empty() ? "malformed reply" : reply.message);
+                            std::rethrow_exception(::morph::wire::executeFailure(reply, "malformed reply"));
                     }
                 } catch (...) {
                     state->setException(std::current_exception());

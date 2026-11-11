@@ -1195,6 +1195,31 @@ enum class DateUnit : std::uint8_t {
     return Handle<std::string>::raw(std::move(json));
 }
 
+/// @brief `tAt(key, fallback, args)`: a translated message whose key is known only at run time.
+/// @param key      An expression evaluating to the catalogue key.
+/// @param fallback The pattern shown when the catalogue has none.
+/// @param args     An expression evaluating to a list of `{name, value}` records, which become the message's named
+///                 arguments; their values are formatted as text.
+/// @return The `{"t": {"expr": key}, ...}` form.
+[[nodiscard]] inline Handle<std::string> tAt(AnyHandle const& key, std::string const& fallback,
+                                             AnyHandle const& args) {
+    Json json = Json::object_t{};
+    detail::put(json, "t", detail::single("expr", key.json()));
+    detail::put(json, "fallback", fallback);
+    detail::put(json, "args", detail::single("expr", args.json()));
+    return Handle<std::string>::raw(std::move(json));
+}
+
+/// @brief `refusalText(refusal)`: the words for an action refusal, from the catalogue in the user's locale.
+///
+/// The catalogue's message for the refusal's code, else the first of the code's class sentences (`a.b.generic`, then
+/// `a.generic` for `a.b.c`), else the interpreter's built-in sentence. The exception's message is never shown.
+/// @param refusal A mutation's or a query's `refusal()`.
+/// @return The `refusalText` call; `null` while @p refusal is.
+[[nodiscard]] inline Handle<std::string> refusalText(AnyHandle const& refusal) {
+    return call<std::string>("refusalText", {refusal});
+}
+
 /// @brief `{"if": [c, a, b]}`: a choice between two values.
 /// @tparam T The value type of the branches.
 /// @param condition The condition.
@@ -1577,6 +1602,10 @@ public:
         return Handle<std::string>::raw(detail::single("errorKind", _name));
     }
 
+    /// @brief The action refusal the last failure was, if it was one.
+    /// @return `{"refusal": name}`: `null`, or `{code, args}`; `refusalText` words it.
+    [[nodiscard]] Handle<Value> refusal() const { return Handle<Value>::raw(detail::single("refusal", _name)); }
+
     /// @brief Whether the signed-in principal may run the query.
     /// @return `{"can": name}`.
     [[nodiscard]] Handle<bool> can() const { return Handle<bool>::raw(detail::single("can", _name)); }
@@ -1624,6 +1653,10 @@ public:
     [[nodiscard]] Handle<std::string> errorKind() const {
         return Handle<std::string>::raw(detail::single("errorKind", _name));
     }
+
+    /// @brief The action refusal the last failure was, if it was one.
+    /// @return `{"refusal": name}`: `null`, or `{code, args}`; `refusalText` words it.
+    [[nodiscard]] Handle<Value> refusal() const { return Handle<Value>::raw(detail::single("refusal", _name)); }
 
     /// @brief Whether the signed-in principal may run the mutation.
     /// @return `{"can": name}`.
