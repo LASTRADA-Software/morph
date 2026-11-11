@@ -57,8 +57,9 @@ TEST_CASE("FieldOverlay: omit, hidden, label, unit, decimals, widget and blankAs
     REQUIRE(mass != nullptr);
     CHECK(mass->title == "Masse");
     CHECK(mass->entryUnit == 1);
-    CHECK(mass->units.at(1).decimals == 2U);
-    CHECK(mass->decimalPlaces == 3U);  // the wire keeps the schema's places
+    CHECK(mass->units.at(0).decimals == 2U);  // the canonical unit's, as `x-decimalPlaces`
+    CHECK(mass->units.at(1).decimals == 1U);  // the entry unit keeps its own
+    CHECK(mass->decimalPlaces == 2U);         // and so is the wire dp
     CHECK(model->find("receivedOn")->kind == FieldKind::EpochDate);
     CHECK(model->find("remarks")->blankAs == morph::forms::BlankAs::Empty);
     CHECK(model->find("ratio")->unit == "%");
@@ -83,13 +84,13 @@ TEST_CASE("FieldOverlay: an omitted member leaves the body, a hidden one stays, 
                                    harness.server.fetcher()};
     CHECK(form.field("mass").unit().peek() == 1);  // entered in grams
     harness.type(form, "analystId", "7");
-    harness.type(form, "mass", "2650500.25");  // two places in grams, as the overlay says
+    harness.type(form, "mass", "2650500.2");  // one place in grams: the grams keep their own
     REQUIRE(form.body().has_value());
-    CHECK(*form.body() == R"({"analystId":7,"mass":{"num":265050025,"den":100000,"dp":3}})");
+    CHECK(*form.body() == R"({"analystId":7,"mass":{"num":26505002,"den":10000,"dp":2}})");  // dp: the overlay's
     // A prefill arrives in the canonical unit and is shown in the entry unit.
     form.prefill(R"({"analystId":7,"mass":{"num":2650500,"den":1000,"dp":3}})");
     harness.settle();
-    CHECK(form.field("mass").text().peek() == "2650500.00");
+    CHECK(form.field("mass").text().peek() == "2650500.0");
     CHECK(form.field("mass").unit().peek() == 1);
     // The user's unit lasts until a prefill or a reset, which return to the entry unit.
     form.field("mass").switchUnit(0);

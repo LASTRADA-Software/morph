@@ -4947,7 +4947,7 @@ struct DateReading {
 /// @param format The formatting facts.
 /// @return The places, 0 to the most a decimal holds; -1 for a value that is not a non-negative integer.
 [[nodiscard]] inline int placesOf(Value const& value, FormatContext const& format) {
-    static_cast<void>(format);
+    static_cast<void>(format);  // Only to fit `bindProp`'s converter signature.
     std::int64_t const* const whole = value.asInt();
     if (whole == nullptr || *whole < 0) {
         return -1;
@@ -5025,7 +5025,10 @@ inline void ScreenCore::wireErrors(ElementState& element) {
             int const allowed = placesOf(evalIn(owner, nullptr, places), session.formatting());
             if (allowed >= 0 && fractionDigits(textOf(inputValue(element), session.formatting()),
                                                session.formatting()) > static_cast<std::size_t>(allowed)) {
-                errors.emplace_back("Too many decimal places");
+                // The key and fallback of a form field's `too-precise`, so both read alike in any language.
+                errors.emplace_back(render::resolveText(session.formatting().translations, session.formatting().locale,
+                                                        std::nullopt, "morph.forms.error.too-precise",
+                                                        "Too many decimal places"));
             }
         }
         if (!field.id.empty()) {
@@ -8516,7 +8519,13 @@ inline void ScreenCore::wireForm(ElementState& element) {
     // `fields` is one record part holding a `field` part per overlaid member.
     for (DocNodePtr const& record : node.partList("fields")) {
         for (DocNodePtr const& part : record->partList("fields")) {
-            overlays.insert_or_assign(part->id, overlayOf(scope, *part, session.formatting()));
+            forms::FieldOverlay overlay = overlayOf(scope, *part, session.formatting());
+            // A computed `decimals` is carried by the effect below alone: baking the value read now would make it
+            // the fallback when the expression later gives no places, where the schema's places belong.
+            if (ExprPtr const places = part->prop("decimals"); places && places->kind != ExprKind::Literal) {
+                overlay.decimals.reset();
+            }
+            overlays.insert_or_assign(part->id, std::move(overlay));
         }
     }
     auto model = forms::FormModel::fromSchema(action, *schema, overlays);

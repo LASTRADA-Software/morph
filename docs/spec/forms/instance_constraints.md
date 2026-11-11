@@ -170,7 +170,10 @@ therefore a binding, not a served schema: a screen binds the instance's decimals
 to a `form` field overlay's `decimals`, from the same record the model's `InstanceConstraints` reads its
 `decimalPlaces` from. A change of the bound places keeps the text typed and checks it again against the new places,
 showing the field's `too-precise` error when it no longer fits. The overlay's value means exactly what
-`x-decimalPlaces` means: the field's entry granularity and the most fraction digits it accepts.
+`x-decimalPlaces` means: the canonical unit's entry granularity and the most fraction digits it accepts, and the wire
+`dp`. On a Quantity with alternative units the other units keep their own places, so switching unit never rewrites
+or rejects a draft by places that belong to another. A bound expression that gives no places restores the schema's.
+An instance's `minimum` and `maximum` have no client half in ui/1.
 
 The client's places are a convenience and never the check. The model keeps checking the submitted value with
 `checkValue` (or the application's own check), because a client can hold stale places, a different client or a

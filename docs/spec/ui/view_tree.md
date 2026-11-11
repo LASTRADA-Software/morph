@@ -279,8 +279,8 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    set once (a stack's gap, a grid's columns and gap, a panel's padding and collapsibility, a
    slider's range, a Tabs' labels, a Table's columns and selection mode) are passed to their
    setters once. A TextInput's `unit` and `prefix` are applied only when bound or not empty, and its `decimals`
-   only when bound or 0 or more, so an input that holds no number is told neither (a bound `decimals` that reads
-   below 0 tells the widget -1, so an input whose places go away is told so); a multiline input with
+   only when bound or 0 or more, so an input that holds no number is told neither (a bound `decimals` is told as it reads;
+   the interpreter's binding gives -1 for no places, so an input whose places go away is told so); a multiline input with
    either is refused (`std::logic_error`). A TextInput's, Select's and DateTimeInput's `label` is
    applied, as `setCaption(label, showLabel)`, only when bound, not empty, or `showLabel` is set. Each callback is handed over once, as an empty function when the node has none —
    except a Menu's `setOnActivate`, which always gets the mount's dispatcher over its items. Then

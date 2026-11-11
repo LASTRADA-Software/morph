@@ -233,7 +233,8 @@ namespace detail::engine {
 /// @param text    The trimmed draft.
 /// @param unit    Index into `spec.units`.
 /// @param context The locale and messages.
-/// @param places  The fraction digits accepted in place of the unit's own, when a record gives the field its own.
+/// @param places  The field's places when a record gives it its own: what `x-decimalPlaces` means, so the canonical
+///                unit's entry places and the wire `dp`. A draft typed in another unit keeps that unit's places.
 /// @return The encoding.
 [[nodiscard]] inline Encoding encodeExact(FieldSpec const& spec, std::string_view text, std::size_t unit,
                                           ValueContext const& context,
@@ -241,8 +242,10 @@ namespace detail::engine {
     UnitOption const fallback{
         .id = spec.unitAscii, .display = spec.unit, .decimals = spec.decimalPlaces.value_or(0), .num = 1, .den = 1};
     UnitOption entry = unit < spec.units.size() ? spec.units.at(unit) : fallback;
-    if (places.has_value()) {
-        entry.decimals = std::min(*places, math::kMaxDecimalPlaces);
+    std::optional<std::uint32_t> const own =
+        places.has_value() ? std::optional<std::uint32_t>{std::min(*places, math::kMaxDecimalPlaces)} : std::nullopt;
+    if (own.has_value() && (unit == 0 || unit >= spec.units.size())) {
+        entry.decimals = *own;
     }
     auto const canonical = render::normalizeLocaleNumber(text, context.locale);
     if (!canonical || !isCanonicalDecimal(*canonical)) {
@@ -268,7 +271,7 @@ namespace detail::engine {
     }
     std::int64_t const num = scaled * entry.num;
     std::int64_t const den = scale * entry.den;
-    std::uint32_t const canonDp = spec.decimalPlaces.value_or(0);
+    std::uint32_t const canonDp = own.value_or(spec.decimalPlaces.value_or(0));
     math::Rational const value{math::Numerator{num}, math::Denominator{den}, math::DecimalPlaces{canonDp}};
     if (spec.minimum && compareRationalToDecimal(value, *spec.minimum) == std::strong_ordering::less) {
         return std::unexpected(fieldError("below-minimum", context));
@@ -347,7 +350,7 @@ namespace detail::engine {
 /// @param draft   What the user typed, or what a control holds (an option's `valueJson`, `true`/`false`).
 /// @param unit    For a Decimal or Quantity, the index into `spec.units` the draft is typed in.
 /// @param context The locale, display zone and translations.
-/// @param places  For a Decimal or Quantity, the fraction digits accepted in place of the chosen unit's own.
+/// @param places  For a Decimal or Quantity, the field's places when a record gives it its own (see `encodeExact`).
 /// @return The encoding.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind.
 [[nodiscard]] inline Encoding encodeScalar(FieldSpec const& spec, std::string_view draft, std::size_t unit,

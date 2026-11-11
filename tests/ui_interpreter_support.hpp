@@ -389,6 +389,14 @@ inline Catalog corpusCatalog() {
                 "value":{"type":"integer","title":"Value","x-order":1}},"required":["value"]}}},
               "required":["sampleId"]})"};
         }
+        // A mass in kilograms (3 places) that is also entered in grams (1 place).
+        if (action == "Lims_WeighSample") {
+            return std::string{R"({"type":"object","title":"Weigh","properties":{
+              "mass":{"type":["object","null"],"title":"Mass","x-decimalPlaces":3,
+                "ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"},
+                "x-unitAlternatives":[{"id":"g","display":"g","decimals":1,"num":1,"den":1000}],"x-order":0}},
+              "required":["mass"]})"};
+        }
         if (action != "Lims_CaptureConcentration") {
             return std::nullopt;
         }

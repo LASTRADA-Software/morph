@@ -286,9 +286,9 @@ public:
     /// @return The unit signal.
     [[nodiscard]] reactive::Signal<std::size_t>& unit() noexcept { return _unit; }
 
-    /// @brief The fraction digits a Decimal or Quantity draft is accepted with, in place of the chosen unit's own:
-    ///        what a record gives the field after the form was built. Unset keeps the unit's. A change checks the
-    ///        draft again and leaves its text as typed.
+    /// @brief The field's places as a record gives them after the form was built, with the meaning of
+    ///        `x-decimalPlaces`: the canonical unit's entry places and the wire `dp`. Another unit of a Quantity keeps
+    ///        its own. Unset keeps the schema's. A change checks the draft again and leaves its text as typed.
     /// @return The places signal.
     [[nodiscard]] reactive::Signal<std::optional<std::uint32_t>>& places() noexcept { return _places; }
 
@@ -383,8 +383,11 @@ public:
         if (index >= _spec->units.size() || index == current || current >= _spec->units.size()) {
             return;
         }
-        auto converted =
-            convertDraft(_text.peek(), _spec->units.at(current), _spec->units.at(index), _core->values().locale);
+        UnitOption target = _spec->units.at(index);
+        if (index == 0 && _places.peek().has_value()) {
+            target.decimals = std::min(*_places.peek(), math::kMaxDecimalPlaces);
+        }
+        auto converted = convertDraft(_text.peek(), _spec->units.at(current), target, _core->values().locale);
         _core->runtime().batch([&] {
             _unit.set(index);
             if (!detail::engine::trim(_text.peek()).empty()) {
