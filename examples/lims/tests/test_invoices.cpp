@@ -269,8 +269,11 @@ TEST_CASE("invoices: a line invoiced between the read and the write is a Conflic
     }
 }
 
-// Mutation: drop the company existence check (an unknown company is then refused as a site that is not its own).
-TEST_CASE("invoices: a company or a site that does not exist is not found", "[lims][billing][invoices]") {
+// Mutation: drop the site existence check from CreateInvoice (an unknown site is then refused as a site that is not
+// the company's, not as missing). An unknown company never reaches the handler: the guard refuses it as a missing
+// role.
+TEST_CASE("invoices: an unknown company is refused as a missing role and an unknown site is not found",
+          "[lims][billing][invoices]") {
     lims::test::LabFixture const fixture;
     auto const lab = billedSample();
     ScopedPrincipal const bea{"bea"};

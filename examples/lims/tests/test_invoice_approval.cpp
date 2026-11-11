@@ -137,20 +137,72 @@ TEST_CASE("invoice approval: submission records the deadline, the submitter and 
     CHECK(read(invoice.id).submittedBy == "bea");
 }
 
-TEST_CASE("invoice approval: only a submitted invoice is approved, and only a billing clerk submits",
+// Mutation: make `checkState` a no-op (a draft reaches the value rule and is refused as an invoice with no value in
+// its company's currency, not as an IllegalTransition).
+TEST_CASE("invoice approval: a draft is not approved, and it is an IllegalTransition for an approver",
           "[lims][billing][approval]") {
     lims::test::LabFixture const fixture;
     auto const invoice = lims::test::draftedInvoice();
     lims::InvoiceModel invoices;
     {
         ScopedPrincipal const carl{"carl"};
-        // Called directly: through the guard a draft, which records no gross yet, is refused by the value-limit rule
-        // before the handler reaches its state check.
-        CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
+        CHECK_THROWS_AS(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
+                        lims::IllegalTransition);
     }
     CHECK_THROWS_AS(lims::test::dispatchAs<lims::InvoiceModel>("carl", lims::SubmitInvoice{.invoiceId = invoice.id}),
                     lims::Forbidden);
     CHECK(read(invoice.id).state == lims::InvoiceState::Draft);
+}
+
+// Mutation: make `checkState` a no-op (the creator re-approving an approved invoice is told they created it).
+TEST_CASE("invoice approval: re-approving an approved invoice is an IllegalTransition, even for its creator",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+    lims::InvoiceModel invoices;
+    {
+        ScopedPrincipal const paula{"paula"};
+        CHECK(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}).state == lims::InvoiceState::Approved);
+    }
+    for (char const* who : {"paula", "bea"}) {
+        ScopedPrincipal const caller{who};
+        CHECK_THROWS_AS(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
+                        lims::IllegalTransition);
+    }
+}
+
+// Mutation: drop the role check before `checkState` in `requireAuthorized` (an approver of another company is told the
+// draft exists, where an unknown id is refused).
+TEST_CASE("invoice approval: an approver of another company and an unknown id are refused identically",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::InvoiceModel invoices;
+    std::string foreign;
+    std::string unknown;
+    {
+        ScopedPrincipal const carl{"carl"};
+        // carl holds the approver role at the seeded company; make the invoice another company's.
+        execute("UPDATE billing_invoices SET company_id = company_id + 1000, site_id = site_id + 1000");
+        try {
+            static_cast<void>(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}));
+            FAIL("approving another company's invoice was not refused");
+        } catch (lims::Forbidden const& refusal) {
+            foreign = refusal.what();
+        }
+        try {
+            static_cast<void>(
+                ::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = lims::InvoiceId{9999}}));
+            FAIL("approving an unknown invoice was not refused");
+        } catch (lims::Forbidden const& refusal) {
+            unknown = refusal.what();
+        }
+    }
+    CHECK(foreign == unknown);
+    CHECK_THAT(foreign, !Catch::Matchers::ContainsSubstring("draft") && !Catch::Matchers::ContainsSubstring("value") &&
+                            !Catch::Matchers::ContainsSubstring("created"));
 }
 
 // Mutation: drop the currency check from SubmitInvoice (a yen invoice is submitted with a gross no rate valued).
@@ -235,7 +287,7 @@ TEST_CASE(
     {
         ScopedPrincipal const paula{"paula"};
         CHECK_THROWS_WITH(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
-                          Catch::Matchers::ContainsSubstring("at company"));
+                          Catch::Matchers::ContainsSubstring("does not hold the invoice-approver role"));
     }
     ScopedPrincipal const carl{"carl"};
     CHECK(invoices.execute(lims::GetInvoice{.invoiceId = invoice.id}).level == lims::ApprovalLevel::Company);
@@ -375,7 +427,7 @@ TEST_CASE("invoice approval: the edges of the limit and of the deadline", "[lims
         {
             ScopedPrincipal const paula{"paula"};
             CHECK_THROWS_WITH(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
-                              Catch::Matchers::ContainsSubstring("at company"));
+                              Catch::Matchers::ContainsSubstring("does not hold the invoice-approver role"));
             CHECK(invoices.execute(lims::ListPendingApprovals{}).invoices.empty());
         }
         ScopedPrincipal const carl{"carl"};

@@ -107,9 +107,6 @@ void requireNoOtherEditor(std::int64_t invoiceId) {
     // Taken before the first await: the session is the dispatch's, and a resumption may not run inside it.
     std::string const principal = ::morph::session::current()->principal;
     auto const row = invoiceRecord(action.invoiceId, "SubmitInvoice");
-    // Judged again inside the transaction: the scope, the recorded gross and the performers are read with the rows the
-    // write commits. The action's guard ran it first, on every path.
-    requireAuthorized(action);
     if (row.state.Value() != static_cast<int>(InvoiceState::Draft)) {
         throw IllegalTransition{"SubmitInvoice: only a draft is submitted"};
     }
@@ -193,8 +190,9 @@ InvoiceView InvoiceModel::execute(const ApproveInvoice& action) {
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     auto const row = invoiceRecord(action.invoiceId, "ApproveInvoice");
-    // Before the rule, so approving an approved invoice is an IllegalTransition for everyone and not a refusal that
-    // names who created it.
+    // The action's guard refuses a draft or an approved invoice as an IllegalTransition before it reads who created
+    // the invoice; this repeats it for a call that reaches the handler without the guard, and the rule below is
+    // judged again with the rows this transaction writes.
     if (row.state.Value() != static_cast<int>(InvoiceState::Submitted)) {
         throw IllegalTransition{"ApproveInvoice: only a submitted invoice is approved"};
     }

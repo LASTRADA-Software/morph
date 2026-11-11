@@ -105,6 +105,13 @@ struct Authorization<ApproveInvoice> {
     /// @return The scope; an empty company when there is no such invoice.
     [[nodiscard]] static Scope scopeOf(ApproveInvoice const& action);
 
+    /// @brief Refuses an invoice that is not submitted. Runs once the caller holds the role where the invoice is
+    ///        visible and before its value or its creator is read, so approving a draft or an approved invoice is an
+    ///        `IllegalTransition` for every approver and never a refusal naming who created it.
+    /// @param action The action.
+    /// @throws IllegalTransition when the invoice is not submitted.
+    static void checkState(ApproveInvoice const& action);
+
     /// @brief The invoice's gross in its company's currency, as its submission recorded it.
     /// @param action The action.
     /// @return The amount; zero when there is no such invoice.

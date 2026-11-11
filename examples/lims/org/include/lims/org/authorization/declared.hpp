@@ -139,6 +139,14 @@ concept DeclaresScope = DeclaresRule<Action> && requires(Action const& action) {
     { Authorization<Action>::scopeOf(action) } -> std::convertible_to<Scope>;
 };
 
+/// @brief Whether @p Action's rule declares a state check that runs once the principal holds the role where the
+///        action's subject is visible to them and before anything about the subject is read for the verdict: the
+///        value, the creator and the other facts of a subject the principal has no standing over stay unread.
+/// @tparam Action The action.
+template <typename Action>
+concept DeclaresStateCheck = DeclaresRole<Action> && DeclaresScope<Action> &&
+                             requires(Action const& action) { Authorization<Action>::checkState(action); };
+
 /// @brief Whether @p Action's rule declares a value limit. A limit is judged in a scope, so it needs one.
 /// @tparam Action The action.
 template <typename Action>
@@ -390,7 +398,19 @@ template <typename Action>
 template <typename Action>
     requires DeclaresRule<Action> && (!DeclaresModelScope<Action>)
 void requireAuthorized(Action const& action) {
-    if constexpr (DeclaresScope<Action>) {
+    if constexpr (DeclaresStateCheck<Action>) {
+        Scope const scope = Authorization<Action>::scopeOf(action);
+        std::string const principal = ::morph::session::current()->principal;
+        auto const held = detail::rolesHeldIn(principal, scope);
+        // The words name neither the scope nor the subject: a subject that does not exist and one in a scope the
+        // principal holds nothing in are refused identically.
+        if (std::ranges::find(held, Authorization<Action>::role) == held.end()) {
+            throw Forbidden{std::string{::morph::model::ActionTraits<Action>::typeId()} + ": '" + principal +
+                            "' does not hold " + roleWords(declaredRole<Action>()) + " where this applies"};
+        }
+        Authorization<Action>::checkState(action);
+        detail::judge(action, std::optional<Scope>{scope});
+    } else if constexpr (DeclaresScope<Action>) {
         detail::judge(action, std::optional<Scope>{Authorization<Action>::scopeOf(action)});
     } else {
         detail::judge(action, std::nullopt);

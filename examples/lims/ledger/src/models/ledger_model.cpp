@@ -185,8 +185,8 @@ PeriodView LedgerModel::execute(const BeginClosePeriod& action) {
     if (rows.empty()) {
         throw NotFound{"BeginClosePeriod: period " + std::to_string(*action.periodId) + " does not exist"};
     }
-    // Judged again inside the transaction: the scope, the recorded gross and the performers are read with the rows the
-    // write commits. The action's guard ran it first, on every path.
+    // Judged again inside the transaction: the scope is read from the row the write commits. The action's guard ran it
+    // first, on every path.
     requireAuthorized(action);
     auto& row = rows.front();
     if (row.state.Value() != static_cast<int>(PeriodState::Open)) {
