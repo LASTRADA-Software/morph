@@ -509,7 +509,7 @@ BRIDGE_REGISTER_EFFECTS(lims::RegisterSample, ::morph::effects::changes<lims::Sa
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::OpenSample, "OpenSample", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_EFFECTS(lims::OpenSample, ::morph::effects::none)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetSample, "GetSample", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListSamples, "ListSamples", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListSamples, "ListLimsSamples", ::morph::model::Loggable::No)
 // A transition answers the sample as it now is.
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ReceiveSample, "ReceiveSample")
 BRIDGE_REGISTER_EFFECTS(lims::ReceiveSample, ::morph::effects::updates<lims::SampleView>)

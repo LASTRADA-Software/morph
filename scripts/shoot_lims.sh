@@ -6,8 +6,7 @@
 #
 #   scripts/shoot_lims.sh OUT_DIR [CLIENT] [SCREEN...]
 #
-# CLIENT is the morph_lims_client binary (morph_examples_client cannot open lims: the registry refuses one action id on
-# two action types, and examples/forms and examples/bank register ids lims registers), by default
+# CLIENT is the morph_lims_client binary (lims alone, without the other rungs), by default
 # build/linux-everything/examples/client/morph_lims_client; pass `-` to take the default when naming screens. The
 # script refuses a client older than any source under examples/lims or include/morph, since a grab from a stale client
 # looks right and is not.
