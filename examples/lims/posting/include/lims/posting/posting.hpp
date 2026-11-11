@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <glaze/glaze.hpp>
 #include <morph/util/datetime.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "lims/org/core/money.hpp"
@@ -14,11 +16,22 @@
 /// @file
 /// The posting contract: a poster (billing, and inventory later) maps its document to a `PostingRequest`; the ledger
 /// validates and records it and answers a `PostingResult`. DTOs only. Neither side includes the other: the app hands
-/// one to the other.
+/// one to the other. It also holds the rule an account code must satisfy, which the ledger's chart applies and every
+/// poster's settings check.
 
 namespace lims {
 
 LIMS_DEFINE_STRONG_ID(JournalEntryId);
+
+/// @brief Whether @p code can name a ledger account: 1 to 16 upper-case letters and digits. Upper-case only, so that
+/// two
+///        codes differing only in case cannot coexist in a chart.
+/// @param code The code.
+/// @return `true` when it can.
+[[nodiscard]] inline bool isAccountCode(std::string_view code) noexcept {
+    return !code.empty() && code.size() <= 16 &&
+           std::ranges::all_of(code, [](char c) { return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'); });
+}
 
 /// @brief Which side of the entry a line is on.
 enum class PostingSide : std::uint8_t {

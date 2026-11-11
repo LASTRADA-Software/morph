@@ -7,9 +7,9 @@
 cmake_minimum_required(VERSION 3.25)
 
 morph_add_rung(NAME lims
-    MODULES org posting lab ledger billing app
+    MODULES org posting lab ledger billing inventory app
     SHARED_MODULES org posting
-    USES lab:org ledger:org,posting billing:org,posting
+    USES lab:org ledger:org,posting billing:org,posting inventory:org,posting
     APP_MODULE app)
 
 # The screens' sources below screens/ (the kit and the scenario) and the catalogues. morph_add_rung globs only
@@ -79,6 +79,11 @@ if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
     _lims_boundary_probe(billing_includes_lab billing fail lims/lab/models/sample_model.hpp)
     _lims_boundary_probe(billing_includes_posting billing pass lims/posting/posting.hpp)
     _lims_boundary_probe(ledger_includes_billing ledger fail lims/billing/models/price_list_model.hpp)
+    _lims_boundary_probe(inventory_includes_billing inventory fail lims/billing/models/price_list_model.hpp)
+    _lims_boundary_probe(inventory_includes_lab inventory fail lims/lab/models/sample_model.hpp)
+    _lims_boundary_probe(inventory_includes_ledger inventory fail lims/ledger/models/ledger_model.hpp)
+    _lims_boundary_probe(inventory_includes_posting inventory pass lims/posting/posting.hpp)
+    _lims_boundary_probe(billing_includes_inventory billing fail lims/inventory/models/stock_model.hpp)
 
     # The composing code declaring one module's action's effect on another module's record: the probe adds a second
     # effects registration for PostInvoice and must be refused; the control, without it, must resolve.

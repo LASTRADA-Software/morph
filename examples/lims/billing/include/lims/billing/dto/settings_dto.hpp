@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <algorithm>
 #include <morph/core/records.hpp>
 #include <string>
 #include <string_view>
@@ -11,20 +10,12 @@
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/references.hpp"
 #include "lims/org/core/types.hpp"
+#include "lims/posting/posting.hpp"
 
 /// @file
 /// A company's billing settings and the clients it bills, as the wire sees them.
 
 namespace lims {
-
-/// @brief Whether @p code can name a ledger account: 1 to 16 upper-case letters and digits, the rule the ledger's
-///        chart applies.
-/// @param code The code.
-/// @return `true` when it can.
-[[nodiscard]] inline bool isAccountCode(std::string_view code) noexcept {
-    return !code.empty() && code.size() <= 16 &&
-           std::ranges::all_of(code, [](char c) { return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'); });
-}
 
 /// @brief Sets how a company bills: the accounts its invoices post to, its tax rate and its approval and run timing.
 ///
