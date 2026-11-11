@@ -1018,7 +1018,6 @@ TEST_CASE("declared authorization: the nine model-scoped writes are refused to a
 
 // An incomplete working copy is judged by the guard before the handler reports what it lacks: a caller who holds no
 // role is refused, and one who holds a role is told in the result what is missing.
-// Mutation: remove `using guard` from SaveSample (mallory is told `noClient`).
 TEST_CASE("declared authorization: a role-less caller is refused before an incomplete save is described",
           "[lims][authorization][lab][entry]") {
     DbFixture fixture;
