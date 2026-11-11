@@ -193,7 +193,8 @@ store's `LIKE` may be case-insensitive by default, so `escapeLikePattern` alone 
 
 Some queries the engine accepts have no translation: a `Custom` sort key (its comparator is a function), a column
 that is a serialisation or is computed, text under a non-matching collation. `planQuery` takes a predicate
-`translatable(column, use)`; a sort or filter on a column it refuses is `TableError{Unavailable, column}` with a
+`translatable(column, use)`, asked of the request's columns (including every column of a group, whether or not the
+group's entries apply to it); a sort or filter on a column it refuses is `TableError{Unavailable, column}` with a
 message naming the column. The predicate runs after `validate`, so the usual refusals come first and are identical to
 `apply`'s. The conformance helper compares `apply` and the model on the queries the predicate accepts, and checks
 that the refusals are equal values. Which columns a client may offer to sort and filter belongs in the schema and is
@@ -201,13 +202,14 @@ not part of this seam.
 
 ## Totals
 
-`Page<Row>` gains `TotalKind totalKind = TotalKind::Exact`, with `enum class TotalKind { Exact, AtLeast }`:
+`Page<Row>` has `TotalKind totalKind = TotalKind::Exact`, with `enum class TotalKind { Exact, AtLeast }`, written in JSON
+by name, `"exact"` and `"atLeast"`, as the module's other wire enums are:
 
 - `Exact`: `total` is the count of the filtered view.
 - `AtLeast`: `total` is a lower bound and the view has at least that many rows; a client shows "100,000 or more".
 - `total` absent: not counted.
 
-`apply` reports `Exact` at or below `QueryLimits::totalCap` and omits the total above it, as it does today. A model
+`apply` reports `Exact` at or below `QueryLimits::totalCap` and omits the total above it. A model
 either counts exactly, at any size, and reports `Exact`; or counts up to `totalCap + 1` rows and, when it found more
 than `totalCap`, reports `AtLeast` with `total = totalCap`. Rules:
 
@@ -215,6 +217,8 @@ than `totalCap`, reports `AtLeast` with `total = totalCap`. Rules:
 - The count and the page run in one read transaction, so `total` agrees with the rows.
 - The count covers the model's own scope (company, visibility) ANDed with the plan's filter, as the page does.
 - A `limit` of zero returns the count and no rows.
+- The conformance helper holds an `Exact` total to the true count on either side of the cap: where `apply` omits the
+  total it counts the view itself.
 
 `PageWindow<Row>::totalKind()` returns the kind of the latest reply that carried a total; `reset` clears it with the
 total. `PageWindow` stops fetching past an `Exact` total only; past an `AtLeast` total it keeps fetching until a
@@ -237,7 +241,9 @@ against its real store: that run belongs to the module that owns the store.
 
 The corpus is only as discriminating as the data. The data a store-backed model feeds it must include duplicate sort
 keys, empty cells in each column, accents and case in text, sub-second date-times, quantities in more than one unit,
-and non-integral operands on integer columns; `standardCorpus` generates the operands, the caller chooses the rows.
+and non-integral operands on integer columns. `standardCorpus` takes its operands from the rows' own cells and adds a
+half-step operand (`eq 1.5`, `lt 1.5`) for every integer and key column, so a translation that rounds an operand is
+reported; the caller chooses the rows for the rest.
 
 ## Aggregate reports
 

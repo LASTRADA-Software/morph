@@ -15,6 +15,7 @@
 #include <expected>
 #include <format>
 #include <functional>
+#include <limits>
 #include <morph/table/query.hpp>
 #include <optional>
 #include <set>
@@ -49,8 +50,8 @@ struct ConformanceOptions {
     Services services;
     /// @brief Whether the principal may read a column; empty allows every column.
     std::function<bool(std::string_view)> mayRead;
-    /// @brief The columns and uses the model can translate; empty accepts all. A query this refuses is skipped when
-    ///        the oracle accepts it, and compared as a refusal otherwise.
+    /// @brief The columns and uses the model can translate; empty accepts all. A query this refuses is skipped: the
+    ///        refusal runs after `validate` and before the filter compiles, so only the refusal itself is the model's.
     std::function<bool(std::string_view, PlanUse)> translatable;
 };
 
@@ -157,6 +158,11 @@ namespace detail {
                 samples.push_back(std::move(text));
             }
         }
+        // A half step off a whole number, so a translation that rounds or integer-binds an operand on an integer
+        // column answers differently from `apply`.
+        if ((columns[c].kind == ColumnKind::Integer || columns[c].kind == ColumnKind::Key) && !samples.empty()) {
+            samples.push_back(samples.front() + ".5");
+        }
         for (auto const dir : {SortDirection::Ascending, SortDirection::Descending}) {
             TableQuery sorted;
             sorted.sort = {SortKey{.column = columns[c].id, .dir = dir}};
@@ -216,8 +222,8 @@ namespace detail {
 /// @p source must hold the rows in the model's key order, which is the order `apply` breaks ties in. For each
 /// query: when the plan is refused for a reason other than the model's `translatable`, `apply` must refuse with the
 /// same code and column; when the plan is accepted, the model's rows (by key), offset and total must equal
-/// `apply`'s. Above `QueryLimits::totalCap` `apply` omits the total, and the model must report either the exact
-/// count above the cap or a lower bound equal to the cap.
+/// `apply`'s. Above `QueryLimits::totalCap` `apply` omits the total; the oracle then counts the view itself, and
+/// the model must report either that exact count or a lower bound equal to the cap.
 /// @param source  The rows, in key order.
 /// @param model   The model's translation of a plan.
 /// @param corpus  The queries.
@@ -276,12 +282,24 @@ namespace detail {
                                    " but apply " + detail::describeTotal(expected->total, TotalKind::Exact));
             }
         } else {
+            // Above the cap `apply` omits the total, so the oracle counts the filtered view itself: an Exact total
+            // must equal that count, and a lower bound must equal the cap.
             auto const cap = options.limits.totalCap;
-            bool const exactAbove = got->total && got->totalKind == TotalKind::Exact && *got->total > cap;
+            auto counting = query;
+            counting.page = PageRequest{.offset = 0, .limit = 0};
+            auto countOptions = applyOptions;
+            countOptions.limits.totalCap = std::numeric_limits<std::int64_t>::max();
+            auto const counted = apply(source, counting, countOptions);
+            if (!counted || !counted->total) {
+                failures.push_back(name + ": the oracle could not count the view");
+                continue;
+            }
+            bool const exactCount = got->total == counted->total && got->totalKind == TotalKind::Exact;
             bool const boundAtCap = got->total && got->totalKind == TotalKind::AtLeast && *got->total == cap;
-            if (!exactAbove && !boundAtCap) {
+            if (!exactCount && !boundAtCap) {
                 failures.push_back(name + ": above the cap the model reported " +
-                                   detail::describeTotal(got->total, got->totalKind));
+                                   detail::describeTotal(got->total, got->totalKind) + " for a view of " +
+                                   std::to_string(*counted->total));
             }
         }
     }

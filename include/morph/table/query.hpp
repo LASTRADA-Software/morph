@@ -1097,15 +1097,15 @@ private:
         }
     }
 
+    // Whether a known total bounds the view; a lower bound does not.
+    [[nodiscard]] bool exactTotal() const noexcept { return _total && _totalKind == TotalKind::Exact; }
+
     std::int64_t _pageSize;
     std::size_t _maxPages;
     std::uint64_t _query = 0;
     std::map<std::int64_t, std::vector<Row>> _pages;
     std::set<std::int64_t> _complete;
     std::vector<std::int64_t> _inFlight;
-    // Whether a known total bounds the view; a lower bound does not.
-    [[nodiscard]] bool exactTotal() const noexcept { return _total && _totalKind == TotalKind::Exact; }
-
     std::optional<std::int64_t> _total;
     TotalKind _totalKind = TotalKind::Exact;
     std::optional<TableError> _error;
@@ -1116,3 +1116,11 @@ private:
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace morph::table
+
+/// @brief JSON names of `morph::table::TotalKind`: `exact` and `atLeast`.
+template <>
+struct glz::meta<morph::table::TotalKind> {
+    using enum morph::table::TotalKind;
+    /// @brief Each enumerator after its JSON name.
+    static constexpr auto value = glz::enumerate("exact", Exact, "atLeast", AtLeast);
+};

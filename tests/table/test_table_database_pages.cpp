@@ -549,3 +549,76 @@ TEST_CASE("table: the standard corpus filters every column kind with operands th
         CHECK(accepted[kind] > 20);
     }
 }
+
+TEST_CASE("table: an exact total above the cap must equal the true count", "[table][database_pages]") {
+    auto const source = pageSource(60);
+    ReferenceModel const model{pageColumns(), pageRows(60)};
+    auto const corpus = standardCorpus(*source);
+    // Exact above the cap, with the true count: accepted.
+    auto const exactCount = [&](QueryPlan plan) {
+        plan.totalCap = 1'000'000;
+        return model.run(plan);
+    };
+    CHECK(conformanceFailures(*source, exactCount, corpus, smallCap()).empty());
+    // Exact above the cap, but cap + 1 or an off-by-one count: reported.
+    auto const capPlusOne = [&](QueryPlan const& plan) {
+        auto page = model.run(plan);
+        if (page && page->totalKind == TotalKind::AtLeast) {
+            page->totalKind = TotalKind::Exact;
+            page->total = plan.totalCap + 1;
+        }
+        return page;
+    };
+    CHECK_FALSE(conformanceFailures(*source, capPlusOne, corpus, smallCap()).empty());
+    auto const offByOne = [&](QueryPlan plan) {
+        plan.totalCap = 1'000'000;
+        auto page = model.run(plan);
+        if (page && page->total && *page->total > 20) {
+            page->total = *page->total - 1;
+        }
+        return page;
+    };
+    CHECK_FALSE(conformanceFailures(*source, offByOne, corpus, smallCap()).empty());
+}
+
+TEST_CASE("table: the corpus holds a translation to non-integral operands on integer columns",
+          "[table][database_pages]") {
+    auto const source = pageSource(60);
+    ReferenceModel const model{pageColumns(), pageRows(60)};
+    auto const corpus = standardCorpus(*source);
+    // A translation that truncates the operand to a whole number, as an integer-bound parameter would.
+    auto const truncating = [&](QueryPlan plan) {
+        auto truncate = [](PlannedCondition& condition) {
+            if (condition.kind != ColumnKind::Integer && condition.kind != ColumnKind::Key) {
+                return;
+            }
+            for (auto* operand : {&condition.value, &condition.upper}) {
+                if (auto* exact = std::get_if<Rational>(operand)) {
+                    *exact = Rational{exact->numerator / exact->denominator, DecimalPlaces{0}};
+                }
+            }
+        };
+        for (auto& filter : plan.filters) {
+            std::ranges::for_each(filter.include, truncate);
+            std::ranges::for_each(filter.exclude, truncate);
+        }
+        return model.run(plan);
+    };
+    CHECK_FALSE(conformanceFailures(*source, truncating, corpus, smallCap()).empty());
+    CHECK(conformanceFailures(
+              *source, [&](QueryPlan const& plan) { return model.run(plan); }, corpus, smallCap())
+              .empty());
+}
+
+TEST_CASE("table: a total kind goes over the wire by name", "[table][database_pages]") {
+    Page<int> page{.rows = {1}, .total = 5, .offset = 0, .totalKind = TotalKind::AtLeast};
+    auto const json = glz::write_json(page);
+    REQUIRE(json.has_value());
+    CHECK(json->find("\"totalKind\":\"atLeast\"") != std::string::npos);
+    page.totalKind = TotalKind::Exact;
+    CHECK(glz::write_json(page).value().find("\"totalKind\":\"exact\"") != std::string::npos);
+    Page<int> back;
+    REQUIRE_FALSE(glz::read_json(back, R"({"rows":[],"total":3,"offset":0,"totalKind":"atLeast"})"));
+    CHECK(back.totalKind == TotalKind::AtLeast);
+    CHECK(glz::read_json(back, R"({"rows":[],"total":3,"offset":0,"totalKind":1})"));  // a number is refused
+}

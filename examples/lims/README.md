@@ -1289,7 +1289,7 @@ calls them hypothesis 10's in its Part D text; they are hypothesis 9's (an actio
 document layout), and hypothesis 10 is the large lists; the design's sentence now says 9. `IMPLEMENTATION.md` rule 2
 exempts lims's look, and only lims's.
 
-### 58. The journal and the trial balance [load every row they page or total] (hypothesis 10, first instance)
+### 58. The journal and the trial balance load every row they page or total (hypothesis 10, first instance)
 
 **Hypothesis 10 is confirmed for the journal and the trial balance.** Measured in `tests/test_ledger_scale.cpp` on the
 `linux-everything` Release build (clang `-O3`, SQLite on disk, one process, rows written through `DataMapper` in
