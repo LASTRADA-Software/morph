@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "lims/lab/core/types.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 
 /// @file
 /// Result entry (README build order §3): a `Quantity` with real units, and
@@ -190,6 +191,8 @@ struct ListDilutionModesResult {
 /// schema advertises against the one `Quantity::operator Quantity<To>()`
 /// applies, so a client honouring the schema and the server agree exactly.
 struct CaptureConcentration {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The exact analysis *version* this reading was captured under.
     AnalysisVersionId analysisVersionId;
 

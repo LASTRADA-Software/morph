@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "lims/ledger/core/types.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/posting/posting.hpp"
 
 /// @file
@@ -51,6 +52,8 @@ struct JournalEntryView {
 
 /// @brief Drafts an entry by hand.
 struct CreateDraftEntry {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The company.
     CompanyId company;
     /// @brief Its date.
@@ -76,6 +79,8 @@ struct CreateDraftEntry {
 
 /// @brief Posts a draft: it enters the balances and can no longer change.
 struct PostEntry {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The entry.
     JournalEntryId entryId;
 
@@ -86,6 +91,8 @@ struct PostEntry {
 
 /// @brief Corrects a posted entry with a posted reversal on @p date that names it.
 struct ReverseEntry {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The entry.
     JournalEntryId entryId;
     /// @brief The reversal's date.
@@ -137,6 +144,8 @@ struct ListEntriesResult {
 /// @brief The ledger's half of a posting, as an action: records the request once per company and source key. Sent
 ///        only by the app's posting client, as a service principal.
 struct RecordPosting {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The request.
     PostingRequest request;
 
@@ -157,6 +166,8 @@ struct FindPosting {
 
 /// @brief `Closing → Closed`: freezes the period's balances. Refused while a draft remains in it.
 struct ClosePeriod {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The period.
     PeriodId periodId;
 

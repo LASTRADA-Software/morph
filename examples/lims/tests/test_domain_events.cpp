@@ -8,6 +8,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/journal/outbox.hpp>
 #include <morph/session/session_auth.hpp>
@@ -82,7 +83,7 @@ TEST_CASE("domain events: a refused publish writes no outbox row", "[lims][event
     lims::SampleModel bench;
     bench.execute(lims::OpenSample{.sampleId = lab.sample});
     bench.execute(lims::ReturnForRework{.reason = "re-run the nitrate"});
-    CHECK_THROWS_AS(bench.execute(lims::PublishSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(bench, lims::PublishSample{}), lims::IllegalTransition);
     CHECK(lims::drainLabOutbox().empty());
 }
 

@@ -15,6 +15,8 @@
 /// The declared roles of every module, as the server edge uses them: by action id, held anywhere. The app is the one
 /// place that knows every module, so the table is composed here; each entry is read off its declaration, never
 /// restated.
+/// The action guard (`lims::DeclaredRuleGuard`) enforces every declared rule on every execution; this table is the
+/// edge's coarser answer, by id, which refuses a principal without the role before the payload is decoded.
 
 namespace lims::app {
 

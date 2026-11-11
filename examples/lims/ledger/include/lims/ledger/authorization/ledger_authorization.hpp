@@ -4,8 +4,8 @@
 #include "lims/ledger/dto/account_dto.hpp"
 #include "lims/ledger/dto/entry_dto.hpp"
 #include "lims/ledger/dto/rate_dto.hpp"
-#include "lims/ledger/models/ledger_model.hpp"
 #include "lims/org/authorization/declared.hpp"
+#include "lims/org/models/org_model.hpp"
 
 /// @file
 /// The ledger module's declared authorization: keeping a company's books is an accountant's, at that company.
@@ -89,3 +89,6 @@ struct Authorization<RecordPosting> {
 };
 
 }  // namespace lims
+
+// The models are included last, after every declaration their registrations need.
+#include "lims/ledger/models/ledger_model.hpp"

@@ -8,6 +8,7 @@
 
 #include "lims/billing/core/types.hpp"
 #include "lims/billing/dto/line_dto.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/references.hpp"
 #include "lims/org/core/types.hpp"
@@ -64,6 +65,8 @@ struct InvoiceView {
 
 /// @brief Drafts an invoice over every unbilled line of a client at a site.
 struct CreateInvoice {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The company that bills.
     CompanyId company;
     /// @brief The site whose lines are collected.
@@ -91,6 +94,8 @@ struct GetInvoice {
 
 /// @brief Submits a draft invoice for approval.
 struct SubmitInvoice {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The invoice.
     InvoiceId invoiceId;
 
@@ -104,6 +109,8 @@ struct SubmitInvoice {
 
 /// @brief Approves a submitted invoice.
 struct ApproveInvoice {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The invoice.
     InvoiceId invoiceId;
 
@@ -117,6 +124,8 @@ struct ApproveInvoice {
 
 /// @brief Posts an approved invoice to the ledger and numbers it.
 struct PostInvoice {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The invoice.
     InvoiceId invoiceId;
 

@@ -204,8 +204,8 @@ CompanyView OrgModel::execute(const CreateCompany& action) {
     if (!action.validate()) {
         throw ValidationError{"CreateCompany: a name of at most 128 bytes is required"};
     }
-    // Without a supervisor anywhere nobody passes, so the bootstrap assignment stays the first administrative act.
-    requireAuthorized(action);
+    // Without a supervisor anywhere nobody passes the guard, so the bootstrap assignment stays the first
+    // administrative act.
     Lightweight::DataMapper mapper;
     for (auto const& existing : mapper.Query<db::CompanyRecord>().All()) {
         if (existing.name.Value().ToStringView() == action.name) {
@@ -255,7 +255,6 @@ SiteView OrgModel::execute(const CreateSite& action) {
     if (!action.validate()) {
         throw ValidationError{"CreateSite: a company and a name of at most 128 bytes are required"};
     }
-    requireRoleSomewhere<CreateSite>();
     Lightweight::DataMapper mapper;
     if (mapper.Query<db::CompanyRecord>()
             .Where(::Lightweight::FieldNameOf<&db::CompanyRecord::id>, "=", *action.companyId)
@@ -263,7 +262,6 @@ SiteView OrgModel::execute(const CreateSite& action) {
             .empty()) {
         throw NotFound{"CreateSite: company " + std::to_string(*action.companyId) + " does not exist"};
     }
-    requireAuthorized(action);
     for (auto const& existing : mapper.Query<db::SiteRecord>().All()) {
         if (static_cast<std::int64_t>(existing.company.Value()) == *action.companyId &&
             existing.name.Value().ToStringView() == action.name) {
@@ -301,18 +299,9 @@ RoleAssignmentView OrgModel::execute(const AssignRole& action) {
         throw ValidationError{"AssignRole: a principal and exactly one of a company or a site are required"};
     }
     Scope const scope = Authorization<AssignRole>::scopeOf(action);
-    // A lab with no supervisor anywhere cannot appoint its first one any other way. The exception closes as soon as
-    // one exists, and the assignment names who made it.
-    bool const bootstrap = !supervisorExists();
-    if (!bootstrap) {
-        requireRoleSomewhere<AssignRole>();
-    }
     Lightweight::DataMapper mapper;
     if (!scopeExists(mapper, scope)) {
         throw NotFound{"AssignRole: " + scopeName(scope) + " does not exist"};
-    }
-    if (!bootstrap) {
-        requireAuthorized(action);
     }
     auto const [kind, scopeId] = storedScope(scope);
     for (auto const& row : assignmentsOf(mapper, action.principal)) {
@@ -337,7 +326,6 @@ RevokeRoleResult OrgModel::execute(const RevokeRole& action) {
     if (!action.validate()) {
         throw ValidationError{"RevokeRole: an assignment is required"};
     }
-    requireRoleSomewhere<RevokeRole>();
     Lightweight::DataMapper mapper;
     auto rows = mapper.Query<db::RoleAssignmentRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::RoleAssignmentRecord::id>, "=", *action.assignmentId)
@@ -346,7 +334,6 @@ RevokeRoleResult OrgModel::execute(const RevokeRole& action) {
         throw NotFound{"RevokeRole: assignment " + std::to_string(*action.assignmentId) + " does not exist"};
     }
     auto const view = toView(rows.front());
-    requireAuthorized(action);
     if (view.role == LimsRole::Supervisor) {
         // Only a company's own supervisors can administer it, so only they are counted: a supervisor at one of its
         // sites cannot assign at the company, and another company's supervisor cannot assign here.
@@ -595,12 +582,10 @@ ValueLimitView OrgModel::execute(const SetValueLimit& action) {
     if (!action.validate()) {
         throw ValidationError{"SetValueLimit: a principal, a company and a limit are required"};
     }
-    requireRoleSomewhere<SetValueLimit>();
     auto const company = findCompany(action.company);
     if (!company.has_value()) {
         throw NotFound{"SetValueLimit: company " + std::to_string(*action.company) + " does not exist"};
     }
-    requireAuthorized(action);
     auto const& limit = *action.limit;
     if (limit.numerator < 0 || !fitsCurrency(limit, company->baseCurrency)) {
         throw ValidationError{"SetValueLimit: a limit is a non-negative amount in " +

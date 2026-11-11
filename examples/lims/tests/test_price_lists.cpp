@@ -5,6 +5,7 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <morph/core/action_guard.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
@@ -270,11 +271,12 @@ TEST_CASE("price lists: a JPY list holds whole yen, and a client is registered o
         .name = "W",
         .currency = lims::CurrencyCode::JPY,
     });
-    CHECK_THROWS_AS(prices.execute(lims::RegisterBillingClient{.client = lims::ClientId{1},
-                                                               .company = lims::test::seededCompany(),
-                                                               .name = "W",
-                                                               .currency = lims::CurrencyCode::EUR}),
-                    lims::Conflict);
+    CHECK_THROWS_AS(
+        ::morph::model::executeChecked(prices, lims::RegisterBillingClient{.client = lims::ClientId{1},
+                                                                           .company = lims::test::seededCompany(),
+                                                                           .name = "W",
+                                                                           .currency = lims::CurrencyCode::EUR}),
+        lims::Conflict);
     auto const registered = lims::PriceListModel::billingClient(lims::ClientId{1}, lims::test::seededCompany());
     REQUIRE(registered.has_value());
     CHECK(need(registered).currency == lims::CurrencyCode::JPY);
@@ -291,7 +293,9 @@ TEST_CASE("price lists: a supervisor sets a company's billing settings, within t
     ScopedPrincipal const sam{"sam"};
     lims::PriceListModel prices;
     CHECK_FALSE(lims::PriceListModel::settingsOf(lims::test::seededCompany()).has_value());
-    CHECK_THROWS_AS(prices.execute(lims::GetBillingSettings{.company = lims::test::seededCompany()}), lims::NotFound);
+    CHECK_THROWS_AS(
+        ::morph::model::executeChecked(prices, lims::GetBillingSettings{.company = lims::test::seededCompany()}),
+        lims::NotFound);
 
     lims::SetBillingSettings settings = settingsFor(lims::test::seededCompany());
     auto const saved = prices.execute(settings);
@@ -349,7 +353,7 @@ TEST_CASE("price lists: a supervisor sets a company's billing settings, within t
 // Mutations: delete validate() from each action; delete requireRoleSomewhere or requireAuthorized from each; make the
 // company lookup answer for any id; scope SetPrice by any role instead of the list's company; swap the role of an
 // action (a clerk sets settings, a supervisor registers clients).
-TEST_CASE("price lists: each write is a role's, at the company, and a missing thing is a NotFound after the role",
+TEST_CASE("price lists: each write is a role's, at the company, and a missing thing is refused as a missing role",
           "[lims][billing][authorization]") {
     DbFixture fixture;
     auto const osaka = secondCompany();
@@ -363,46 +367,59 @@ TEST_CASE("price lists: each write is a role's, at the company, and a missing th
     }
     {
         ScopedPrincipal const nobody{"nobody"};
-        CHECK_THROWS_AS(prices.execute(settingsFor(lims::test::seededCompany())), lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(settingsFor(lims::CompanyId{9999})), lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(lims::RegisterBillingClient{
-                            .client = lims::ClientId{1}, .company = lims::test::seededCompany(), .name = "C"}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, settingsFor(lims::test::seededCompany())),
                         lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(listFor(lims::test::seededCompany())), lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, 10)), lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(priceInCents(lims::PriceListId{9999}, 1, 10)), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, settingsFor(lims::CompanyId{9999})), lims::Forbidden);
+        CHECK_THROWS_AS(
+            ::morph::model::executeChecked(prices, lims::RegisterBillingClient{.client = lims::ClientId{1},
+                                                                               .company = lims::test::seededCompany(),
+                                                                               .name = "C"}),
+            lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, listFor(lims::test::seededCompany())), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, priceInCents(list, 1, 10)), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, priceInCents(lims::PriceListId{9999}, 1, 10)),
+                        lims::Forbidden);
     }
     {
         // A role of the wrong kind is no role: a clerk does not set settings, a supervisor does not price.
         ScopedPrincipal const bea{"bea"};
-        CHECK_THROWS_AS(prices.execute(settingsFor(lims::test::seededCompany())), lims::Forbidden);
-        ScopedPrincipal const sam{"sam"};
-        CHECK_THROWS_AS(prices.execute(lims::RegisterBillingClient{
-                            .client = lims::ClientId{1}, .company = lims::test::seededCompany(), .name = "C"}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, settingsFor(lims::test::seededCompany())),
                         lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(listFor(lims::test::seededCompany())), lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, 10)), lims::Forbidden);
+        ScopedPrincipal const sam{"sam"};
+        CHECK_THROWS_AS(
+            ::morph::model::executeChecked(prices, lims::RegisterBillingClient{.client = lims::ClientId{1},
+                                                                               .company = lims::test::seededCompany(),
+                                                                               .name = "C"}),
+            lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, listFor(lims::test::seededCompany())), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, priceInCents(list, 1, 10)), lims::Forbidden);
     }
     {
-        // A role at another company is a role somewhere, so what does not exist is a NotFound; for the company it
-        // does exist at, it is Forbidden.
+        // A role at another company is a role somewhere, but a company or list that does not exist holds no role for
+        // anyone, so it is refused as a missing role, as is the company it does exist at.
         ScopedPrincipal const dave{"dave"};
-        CHECK_THROWS_AS(prices.execute(listFor(lims::CompanyId{9999})), lims::NotFound);
-        CHECK_THROWS_AS(prices.execute(lims::RegisterBillingClient{
-                            .client = lims::ClientId{1}, .company = lims::CompanyId{9999}, .name = "C"}),
-                        lims::NotFound);
-        CHECK_THROWS_AS(prices.execute(priceInCents(lims::PriceListId{9999}, 1, 10)), lims::NotFound);
-        CHECK_THROWS_AS(prices.execute(listFor(lims::test::seededCompany())), lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(lims::RegisterBillingClient{
-                            .client = lims::ClientId{1}, .company = lims::test::seededCompany(), .name = "C"}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, listFor(lims::CompanyId{9999})), lims::Forbidden);
+        CHECK_THROWS_AS(
+            ::morph::model::executeChecked(prices, lims::RegisterBillingClient{.client = lims::ClientId{1},
+                                                                               .company = lims::CompanyId{9999},
+                                                                               .name = "C"}),
+            lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, priceInCents(lims::PriceListId{9999}, 1, 10)),
                         lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, 10)), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, listFor(lims::test::seededCompany())), lims::Forbidden);
+        CHECK_THROWS_AS(
+            ::morph::model::executeChecked(prices, lims::RegisterBillingClient{.client = lims::ClientId{1},
+                                                                               .company = lims::test::seededCompany(),
+                                                                               .name = "C"}),
+            lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, priceInCents(list, 1, 10)), lims::Forbidden);
         CHECK_NOTHROW(prices.execute(listFor(osaka)));
     }
     {
         ScopedPrincipal const sven{"sven"};
-        CHECK_THROWS_AS(prices.execute(settingsFor(lims::test::seededCompany())), lims::Forbidden);
-        CHECK_THROWS_AS(prices.execute(settingsFor(lims::CompanyId{9999})), lims::NotFound);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, settingsFor(lims::test::seededCompany())),
+                        lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, settingsFor(lims::CompanyId{9999})), lims::Forbidden);
         CHECK_NOTHROW(prices.execute(settingsFor(osaka)));
     }
     ScopedPrincipal const sam{"sam"};
@@ -458,10 +475,11 @@ TEST_CASE("price lists: each write is a role's, at the company, and a missing th
         CHECK_FALSE(first.client.hasValue());
         CHECK(first.analysis == lims::AnalysisId{1});
         CHECK(*first.amount == Rational{4000, DecimalPlaces{2}});
-        CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, 4100)), lims::Conflict);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, priceInCents(list, 1, 4100)), lims::Conflict);
         // Another client, another analysis and a free price are other rows.
         CHECK_NOTHROW(prices.execute(priceInCents(list, 1, 3500, lims::ClientId{2})));
-        CHECK_THROWS_AS(prices.execute(priceInCents(list, 1, 3600, lims::ClientId{2})), lims::Conflict);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, priceInCents(list, 1, 3600, lims::ClientId{2})),
+                        lims::Conflict);
         CHECK_NOTHROW(prices.execute(priceInCents(list, 2, 0)));
         auto const shown = prices.execute(lims::ListPriceLists{.company = lims::test::seededCompany()});
         REQUIRE(shown.priceLists.size() == 1U);
@@ -487,7 +505,7 @@ TEST_CASE("price lists: each write is a role's, at the company, and a missing th
         CHECK_NOTHROW(prices.execute(priceInCents(list, 1, 4000)));
     }
     SECTION("a company has one list per currency and start") {
-        CHECK_THROWS_AS(prices.execute(listFor(lims::test::seededCompany())), lims::Conflict);
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, listFor(lims::test::seededCompany())), lims::Conflict);
         auto other = listFor(lims::test::seededCompany());
         other.currency = lims::CurrencyCode::USD;
         CHECK_NOTHROW(prices.execute(other));
@@ -531,13 +549,14 @@ TEST_CASE("price lists: a list or a read shows only a company the caller can see
         CHECK(clients.at(0).client == lims::ClientId{1});
         CHECK(clients.at(0).currency == lims::CurrencyCode::JPY);
         CHECK(clients.at(1).client == lims::ClientId{7});
-        CHECK_THROWS_AS(prices.execute(lims::GetBillingSettings{.company = lims::test::seededCompany()}),
-                        lims::NotFound);
+        CHECK_THROWS_AS(
+            ::morph::model::executeChecked(prices, lims::GetBillingSettings{.company = lims::test::seededCompany()}),
+            lims::NotFound);
         CHECK_NOTHROW(prices.execute(lims::GetBillingSettings{.company = osaka}));
-        CHECK_THROWS_AS(prices.execute(lims::QuotePrice{.company = lims::test::seededCompany(),
-                                                        .client = lims::ClientId{1},
-                                                        .analysis = lims::AnalysisId{1},
-                                                        .on = day(11, 1)}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(prices, lims::QuotePrice{.company = lims::test::seededCompany(),
+                                                                                .client = lims::ClientId{1},
+                                                                                .analysis = lims::AnalysisId{1},
+                                                                                .on = day(11, 1)}),
                         lims::NotFound);
     }
     ScopedPrincipal const bea{"bea"};
@@ -546,7 +565,8 @@ TEST_CASE("price lists: a list or a read shows only a company the caller can see
     CHECK(shown.front().prices.size() == 1U);
     CHECK(prices.execute(lims::ListPriceLists{.company = osaka}).priceLists.empty());
     CHECK(prices.execute(lims::ListBillingClients{}).clients.size() == 1U);
-    CHECK_THROWS_AS(prices.execute(lims::GetBillingSettings{.company = osaka}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(prices, lims::GetBillingSettings{.company = osaka}),
+                    lims::NotFound);
     ScopedPrincipal const stranger{"stranger"};
     CHECK(prices.execute(lims::ListPriceLists{.company = lims::test::seededCompany()}).priceLists.empty());
     CHECK(prices.execute(lims::ListBillingClients{}).clients.empty());

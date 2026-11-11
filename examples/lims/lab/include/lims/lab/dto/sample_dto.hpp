@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include "lims/lab/core/types.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 
 /// @file
 /// Sample registration and the lifecycle state machine (README build order
@@ -113,6 +114,8 @@ struct RegisterClientResult {
 /// @brief Logs a new sample against a client. The lifecycle's entry point:
 ///        the created sample is `Registered`, at version 1.
 struct RegisterSample {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The site the sample is registered at.
     SiteId siteId;
 
@@ -182,6 +185,8 @@ struct ListSamples {
 
 /// @brief `Registered → Received`: the container is physically in the lab.
 struct ReceiveSample {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief Always ready: the transition names nothing of its own.
     /// @return `true`.
     [[nodiscard]] bool validate() const noexcept { return true; }
@@ -189,6 +194,8 @@ struct ReceiveSample {
 
 /// @brief `Received → InProgress`: analysis work has started.
 struct StartWork {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief Always ready: the transition names nothing of its own.
     /// @return `true`.
     [[nodiscard]] bool validate() const noexcept { return true; }
@@ -197,6 +204,8 @@ struct StartWork {
 /// @brief `InProgress → ToBeVerified`: results are captured and await the
 ///        four-eyes check.
 struct SubmitForVerification {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief Always ready: the transition names nothing of its own.
     /// @return `true`.
     [[nodiscard]] bool validate() const noexcept { return true; }
@@ -204,6 +213,8 @@ struct SubmitForVerification {
 
 /// @brief `ToBeVerified → InProgress`: the verifier sent the sample back.
 struct ReturnForRework {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief Why the sample was returned; recorded in the journal.
     std::string reason;
 
@@ -217,6 +228,8 @@ struct ReturnForRework {
 
 /// @brief `ToBeVerified → Published`: the report is released to the client.
 struct PublishSample {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief Always ready: the transition names nothing of its own.
     /// @return `true`.
     [[nodiscard]] bool validate() const noexcept { return true; }
@@ -224,6 +237,8 @@ struct PublishSample {
 
 /// @brief `Registered|Received → Rejected`: the container is refused.
 struct RejectSample {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief Why the sample was refused; recorded in the journal. Required:
     ///        a refusal with no stated reason is not auditable.
     std::string reason;

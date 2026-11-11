@@ -4,8 +4,8 @@
 #include <morph/core/registry.hpp>
 
 #include "lims/inventory/dto/stock_dto.hpp"
-#include "lims/inventory/models/stock_model.hpp"
 #include "lims/org/authorization/declared.hpp"
+#include "lims/org/models/org_model.hpp"
 
 /// @file
 /// The inventory module's declared authorization: a company's inventory settings are a supervisor's; its items,
@@ -46,3 +46,6 @@ struct Authorization<RecordOpeningLot> {
 };
 
 }  // namespace lims
+
+// The models are included last, after every declaration their registrations need.
+#include "lims/inventory/models/stock_model.hpp"

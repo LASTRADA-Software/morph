@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/executor.hpp>
@@ -237,29 +238,38 @@ struct LabWrite {
     return {
         {"RegisterSample", SampleState::Registered,
          [](lims::SampleModel& model, Bench const& bench, std::string const&) {
-             model.execute(lims::RegisterSample{
-                 .siteId = lims::test::seededSite(), .clientId = bench.client, .reference = "WW-2"});
+             ::morph::model::executeChecked(
+                 model, lims::RegisterSample{
+                            .siteId = lims::test::seededSite(), .clientId = bench.client, .reference = "WW-2"});
          }},
         {"ReceiveSample", SampleState::Registered,
-         [](lims::SampleModel& model, Bench const&, std::string const&) { model.execute(lims::ReceiveSample{}); }},
+         [](lims::SampleModel& model, Bench const&, std::string const&) {
+             ::morph::model::executeChecked(model, lims::ReceiveSample{});
+         }},
         {"StartWork", SampleState::Received,
-         [](lims::SampleModel& model, Bench const&, std::string const&) { model.execute(lims::StartWork{}); }},
+         [](lims::SampleModel& model, Bench const&, std::string const&) {
+             ::morph::model::executeChecked(model, lims::StartWork{});
+         }},
         {"SubmitForVerification", SampleState::InProgress,
          [](lims::SampleModel& model, Bench const&, std::string const&) {
-             model.execute(lims::SubmitForVerification{});
+             ::morph::model::executeChecked(model, lims::SubmitForVerification{});
          }},
         {"ReturnForRework", SampleState::ToBeVerified,
          [](lims::SampleModel& model, Bench const&, std::string const&) {
-             model.execute(lims::ReturnForRework{.reason = "recheck"});
+             ::morph::model::executeChecked(model, lims::ReturnForRework{.reason = "recheck"});
          }},
         {"PublishSample", SampleState::ToBeVerified,
-         [](lims::SampleModel& model, Bench const&, std::string const&) { model.execute(lims::PublishSample{}); }},
+         [](lims::SampleModel& model, Bench const&, std::string const&) {
+             ::morph::model::executeChecked(model, lims::PublishSample{});
+         }},
         {"RejectSample", SampleState::Registered,
          [](lims::SampleModel& model, Bench const&, std::string const&) {
-             model.execute(lims::RejectSample{.reason = "leaked"});
+             ::morph::model::executeChecked(model, lims::RejectSample{.reason = "leaked"});
          }},
         {"CaptureConcentration", SampleState::InProgress,
-         [](lims::SampleModel& model, Bench const& bench, std::string const&) { model.execute(reading(bench)); }},
+         [](lims::SampleModel& model, Bench const& bench, std::string const&) {
+             ::morph::model::executeChecked(model, reading(bench));
+         }},
         {"QueuedCapture", SampleState::InProgress,
          [](lims::SampleModel& model, Bench const& bench, std::string const& who) {
              model.execute(lims::QueuedCapture{.sampleId = bench.sample,
@@ -270,9 +280,10 @@ struct LabWrite {
          }},
         {"ResolveConflict", SampleState::Registered,
          [](lims::SampleModel& model, Bench const& bench, std::string const&) {
-             model.execute(lims::ResolveConflict{.conflictId = flagConflict(bench),
-                                                 .resolution = lims::ConflictResolution::DiscardStale,
-                                                 .note = "duplicate"});
+             ::morph::model::executeChecked(model,
+                                            lims::ResolveConflict{.conflictId = flagConflict(bench),
+                                                                  .resolution = lims::ConflictResolution::DiscardStale,
+                                                                  .note = "duplicate"});
          }},
     };
 }
@@ -515,7 +526,8 @@ TEST_CASE("declared authorization: verifying needs the verifier role at the samp
     {
         ScopedPrincipal const bob{"bob"};
         lims::SampleModel verifier;
-        CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result}),
+                        lims::Forbidden);
     }
     {
         ScopedPrincipal const carol{"carol"};
@@ -532,16 +544,17 @@ TEST_CASE("declared authorization: a site needs a supervisor at its company, a c
     lims::test::grant("bob", lims::LimsRole::Supervisor, lims::Scope{lims::test::seededSite()});
     ScopedPrincipal const bob{"bob"};
     lims::OrgModel org;
-    CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Field lab"}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        org, lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Field lab"}),
                     lims::Forbidden);
     // A new company has no scope of its own yet, so CreateCompany declares its role in any scope.
     CHECK_NOTHROW(org.execute(lims::CreateCompany{
         .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April}));
     ScopedPrincipal const mallory{"mallory"};
-    CHECK_THROWS_AS(
-        org.execute(lims::CreateCompany{
-            .name = "Mallory Ltd", .baseCurrency = lims::CurrencyCode::EUR, .fiscalYearStart = lims::Month::January}),
-        lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::CreateCompany{.name = "Mallory Ltd",
+                                                                            .baseCurrency = lims::CurrencyCode::EUR,
+                                                                            .fiscalYearStart = lims::Month::January}),
+                    lims::Forbidden);
 }
 
 // Mutation: drop the same-actor comparison from authorizationVerdict (alice verifies her own capture).
@@ -552,7 +565,7 @@ TEST_CASE("declared authorization: the capturing analyst cannot verify, whatever
     lims::test::grant("alice", lims::LimsRole::Verifier);
     ScopedPrincipal const alice{"alice"};
     lims::SampleModel verifier;
-    CHECK_THROWS_WITH(verifier.execute(lims::VerifyResult{.resultId = lab.result}),
+    CHECK_THROWS_WITH(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result}),
                       Catch::Matchers::ContainsSubstring("captured this result and cannot also verify it"));
 }
 
@@ -573,7 +586,7 @@ TEST_CASE("declared authorization: a sample with no site cannot be verified by a
         CAPTURE(who);
         ScopedPrincipal const principal{who};
         lims::SampleModel verifier;
-        CHECK_THROWS_WITH(verifier.execute(lims::VerifyResult{.resultId = lab.result}),
+        CHECK_THROWS_WITH(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result}),
                           Catch::Matchers::ContainsSubstring("role at an unassigned site"));
     }
 }
@@ -594,7 +607,7 @@ TEST_CASE("declared authorization: while no supervisor exists anywhere, no compa
     DbFixture fixture;
     ScopedPrincipal const mallory{"mallory"};
     lims::OrgModel org;
-    CHECK_THROWS_AS(org.execute(lims::CreateCompany{.name = "Mallory Ltd"}), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::CreateCompany{.name = "Mallory Ltd"}), lims::Forbidden);
     CHECK_FALSE(lims::OrgModel::supervisorExists());
     {
         // Read from the table: mallory holds no role, so no list would show her the seeded company.
@@ -602,11 +615,11 @@ TEST_CASE("declared authorization: while no supervisor exists anywhere, no compa
         CHECK(mapper.Query<lims::db::CompanyRecord>().All().size() == 1);
     }
     // The bootstrap assignment is still the first administrative act, and a company can be created after it.
-    CHECK_NOTHROW(org.execute(lims::AssignRole{.principal = "mallory",
-                                               .role = lims::LimsRole::Supervisor,
-                                               .company = lims::test::seededCompany(),
-                                               .site = {}}));
-    CHECK_NOTHROW(org.execute(lims::CreateCompany{.name = "Mallory Ltd"}));
+    CHECK_NOTHROW(::morph::model::executeChecked(org, lims::AssignRole{.principal = "mallory",
+                                                                       .role = lims::LimsRole::Supervisor,
+                                                                       .company = lims::test::seededCompany(),
+                                                                       .site = {}}));
+    CHECK_NOTHROW(::morph::model::executeChecked(org, lims::CreateCompany{.name = "Mallory Ltd"}));
 }
 
 // Mutation: let any supervisor create a site in any company (carol, a supervisor of the other company, creates one).
@@ -620,16 +633,19 @@ TEST_CASE("declared authorization: a site is created only by a supervisor of its
         ScopedPrincipal const carol{"carol"};
         lims::OrgModel org;
         other = org.execute(lims::CreateCompany{.name = "Osaka branch"}).id;
-        CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Field lab"}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(
+                            org, lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Field lab"}),
                         lims::Forbidden);
         CHECK_NOTHROW(org.execute(lims::CreateSite{.companyId = other, .name = "Osaka lab"}));
     }
     ScopedPrincipal const mallory{"mallory"};
     lims::OrgModel org;
-    CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = other, .name = "Mallory lab"}), lims::Forbidden);
-    // Permission is asked before existence: a caller with no role learns nothing about which companies exist.
-    CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = lims::CompanyId{999}, .name = "Nowhere"}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::CreateSite{.companyId = other, .name = "Mallory lab"}),
                     lims::Forbidden);
+    // Permission is asked before existence: a caller with no role learns nothing about which companies exist.
+    CHECK_THROWS_AS(
+        ::morph::model::executeChecked(org, lims::CreateSite{.companyId = lims::CompanyId{999}, .name = "Nowhere"}),
+        lims::Forbidden);
 }
 
 // Mutations: drop requireAuthorized from AssignRole (carol assigns at the seeded company) or from RevokeRole (carol
@@ -647,11 +663,12 @@ TEST_CASE("declared authorization: a role is assigned and revoked only by a supe
         lims::AssignRole{.principal = "erin", .role = lims::LimsRole::Analyst, .company = osaka.id, .site = {}}));
     CHECK_NOTHROW(org.execute(lims::AssignRole{
         .principal = "erin", .role = lims::LimsRole::Analyst, .company = {}, .site = lims::test::seededSite()}));
-    CHECK_THROWS_AS(
-        org.execute(lims::AssignRole{
-            .principal = "erin", .role = lims::LimsRole::Analyst, .company = lims::test::seededCompany(), .site = {}}),
-        lims::Forbidden);
-    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = dave.id}), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::AssignRole{.principal = "erin",
+                                                                         .role = lims::LimsRole::Analyst,
+                                                                         .company = lims::test::seededCompany(),
+                                                                         .site = {}}),
+                    lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::RevokeRole{.assignmentId = dave.id}), lims::Forbidden);
 }
 
 // ── Lab writes are scoped to the sample's site ─────────────────────────────
@@ -697,29 +714,33 @@ TEST_CASE("declared authorization: a role at the sample's site or at its company
 
 /// @brief Calls every lab write that names a site, sample or conflict by id with an id that names nothing, as the
 ///        principal in scope.
-/// @tparam Exception What each call must throw.
+/// @tparam Exception What each guarded call must throw.
+/// @tparam ReplayException What the replay, which judges its own rule, must throw.
 /// @param bench The bench, for a client and a reading.
 /// @param who The principal in scope.
-template <typename Exception>
+template <typename Exception, typename ReplayException>
 void checkGhostWrites(Bench const& bench, std::string const& who) {
     lims::SampleModel model;
-    CHECK_THROWS_AS(model.execute(lims::RegisterSample{
-                        .siteId = lims::SiteId{999}, .clientId = bench.client, .reference = "WW-9"}),
-                    Exception);
+    CHECK_THROWS_AS(
+        ::morph::model::executeChecked(
+            model, lims::RegisterSample{.siteId = lims::SiteId{999}, .clientId = bench.client, .reference = "WW-9"}),
+        Exception);
     CHECK_THROWS_AS(model.execute(lims::QueuedCapture{.sampleId = lims::SampleId{9999},
                                                       .baseVersion = lims::SampleVersion{1},
                                                       .capturedBy = who,
                                                       .operationKey = lims::OperationKey{"op-ghost-" + who},
                                                       .capture = reading(bench)}),
-                    Exception);
-    CHECK_THROWS_AS(model.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "ghost"}),
+                    ReplayException);
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        model, lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "ghost"}),
                     Exception);
 }
 
 // The order of every scoped lab write: a caller with no role anywhere is Forbidden before any lookup, so learns
-// nothing about which ids exist; a caller with a role is told NotFound for an id that names nothing.
-// Mutation: look the row up before asking for the role (mallory learns that sample 9999 does not exist); ask for the
-// site's role before the lookup (eve, who holds a role, is refused instead of told NotFound).
+// nothing about which ids exist. A caller with a role somewhere is refused in words for an id that names nothing,
+// because the guard judges the scope the id resolves to, and a missing row resolves to none; only the replay, which
+// judges its own rule, and a handler attached to nothing, answer NotFound.
+// Mutation: look the row up before asking for the role (mallory learns that sample 9999 does not exist).
 TEST_CASE("declared authorization: no role anywhere is Forbidden, a missing row NotFound, the wrong site Forbidden",
           "[lims][authorization][lab]") {
     DbFixture fixture;
@@ -727,22 +748,22 @@ TEST_CASE("declared authorization: no role anywhere is Forbidden, a missing row 
     static_cast<void>(rivalWithEve());
     {
         ScopedPrincipal const mallory{"mallory"};
-        checkGhostWrites<lims::Forbidden>(bench, "mallory");
+        checkGhostWrites<lims::Forbidden, lims::Forbidden>(bench, "mallory");
         lims::SampleModel unattached;
-        CHECK_THROWS_AS(unattached.execute(lims::ReceiveSample{}), lims::Forbidden);
-        CHECK_THROWS_AS(unattached.execute(reading(bench)), lims::Forbidden);
-        CHECK_THROWS_AS(unattached.execute(lims::DeleteSample{}), lims::Forbidden);
-        CHECK_THROWS_WITH(unattached.execute(lims::DeleteSample{}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(unattached, lims::ReceiveSample{}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(unattached, reading(bench)), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(unattached, lims::DeleteSample{}), lims::Forbidden);
+        CHECK_THROWS_WITH(::morph::model::executeChecked(unattached, lims::DeleteSample{}),
                           Catch::Matchers::ContainsSubstring("does not hold any role") &&
                               !Catch::Matchers::ContainsSubstring("at no site"));
     }
     {
         ScopedPrincipal const eve{"eve"};
-        checkGhostWrites<lims::NotFound>(bench, "eve");
+        checkGhostWrites<lims::Forbidden, lims::NotFound>(bench, "eve");
         lims::SampleModel unattached;
-        CHECK_THROWS_AS(unattached.execute(lims::ReceiveSample{}), lims::NotFound);
-        CHECK_THROWS_AS(unattached.execute(reading(bench)), lims::NotFound);
-        CHECK_THROWS_AS(unattached.execute(lims::DeleteSample{}), lims::NotFound);
+        CHECK_THROWS_AS(::morph::model::executeChecked(unattached, lims::ReceiveSample{}), lims::NotFound);
+        CHECK_THROWS_AS(::morph::model::executeChecked(unattached, reading(bench)), lims::NotFound);
+        CHECK_THROWS_AS(::morph::model::executeChecked(unattached, lims::DeleteSample{}), lims::NotFound);
     }
 }
 
@@ -840,7 +861,7 @@ TEST_CASE("declared authorization: sample entry is refused for another company's
         lims::SampleModel model;
         model.execute(lims::NewSample{});
         fillHeader(model, bench.client, "WW-EVE", lims::test::seededSite());
-        CHECK_THROWS_WITH(model.execute(lims::SaveSample{}),
+        CHECK_THROWS_WITH(::morph::model::executeChecked(model, lims::SaveSample{}),
                           Catch::Matchers::ContainsSubstring("eve' does not hold any role at site"));
         CHECK(sampleTables().size() == countBefore);
     }
@@ -849,9 +870,9 @@ TEST_CASE("declared authorization: sample entry is refused for another company's
         auto const loaded = model.execute(lims::LoadSample{.id = alicesSample});
         REQUIRE(loaded.siteId == lims::test::seededSite());
         fillHeader(model, loaded.clientId, "WW-EVE", rival.site);
-        CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::SaveSample{}), lims::Forbidden);
         fillHeader(model, loaded.clientId, "WW-EVE", lims::test::seededSite());
-        CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::SaveSample{}), lims::Forbidden);
         CHECK(sampleRow(alicesSample) == std::pair{std::string{"WW-A"}, std::optional{*lims::test::seededSite()}});
     }
     SECTION("moving her own sample into another company's site") {
@@ -861,20 +882,20 @@ TEST_CASE("declared authorization: sample entry is refused for another company's
         auto const own = model.execute(lims::SaveSample{});
         REQUIRE(own.error == lims::SaveError::none);
         fillHeader(model, bench.client, "WW-EVE", lims::test::seededSite());
-        CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::SaveSample{}), lims::Forbidden);
         CHECK(sampleRow(own.sampleId) == std::pair{std::string{"WW-EVE"}, std::optional{*rival.site}});
     }
     SECTION("moving a sample of another company into her own site") {
         lims::SampleModel model;
         auto const loaded = model.execute(lims::LoadSample{.id = alicesSample});
         fillHeader(model, loaded.clientId, loaded.reference, rival.site);
-        CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::SaveSample{}), lims::Forbidden);
         CHECK(sampleRow(alicesSample).second == std::optional{*lims::test::seededSite()});
     }
     SECTION("deleting a sample of another company") {
         lims::SampleModel model;
         model.execute(lims::LoadSample{.id = alicesSample});
-        CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::DeleteSample{}), lims::Forbidden);
         CHECK(sampleRow(alicesSample).first == "WW-A");
     }
 }
@@ -961,9 +982,9 @@ TEST_CASE("declared authorization: a refused rewrite or delete of a stored sampl
     model.attachActionLog(log, std::string{});
     auto const loaded = model.execute(lims::LoadSample{.id = stored});
     REQUIRE(refusedSteps("DeleteSample").empty());
-    CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::DeleteSample{}), lims::Forbidden);
     fillHeader(model, loaded.clientId, "WW-EVE", rival.site);
-    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::SaveSample{}), lims::Forbidden);
 
     auto const deletes = refusedSteps("DeleteSample");
     REQUIRE(deletes.size() == 1);

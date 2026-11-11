@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/strong_id.hpp"
 #include "lims/org/core/types.hpp"
@@ -19,6 +20,8 @@ LIMS_DEFINE_STRONG_ID(ValueLimitId);
 
 /// @brief Sets a principal's value limit at a company, replacing any they had there.
 struct SetValueLimit {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief Whose limit.
     std::string principal;
     /// @brief The company.

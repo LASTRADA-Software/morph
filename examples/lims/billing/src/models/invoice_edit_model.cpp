@@ -158,13 +158,11 @@ InvoiceLeaseView InvoiceEditModel::execute(const LeaseInvoice& action) {
     if (!action.validate()) {
         throw ValidationError{"LeaseInvoice: an invoice is required"};
     }
-    requireRoleSomewhere<LeaseInvoice>();
     // The reads run on a mapper of their own, outside the write transaction: the write below is conditional on the
     // rows as they were read, so it needs no lock held since the read, and a concurrent editor's commit is not turned
     // away by one.
     Lightweight::DataMapper reader;
     auto const invoice = invoiceView(reader, *action.invoiceId);
-    requireAuthorized(action);
     requireDraft(invoice, "LeaseInvoice");
     std::int64_t const now = nowMillis();
     std::int64_t const expiresAt = now + kLeaseMillis;

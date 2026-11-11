@@ -73,9 +73,10 @@ TEST_CASE("lab: registering at no site, or at one that does not exist, is refuse
     CHECK_THROWS_AS(
         bench.execute(lims::RegisterSample{.siteId = {}, .clientId = client.clientId, .reference = "WW-1"}),
         lims::ValidationError);
-    CHECK_THROWS_AS(bench.execute(lims::RegisterSample{
-                        .siteId = lims::SiteId{999}, .clientId = client.clientId, .reference = "WW-1"}),
-                    lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(bench, lims::RegisterSample{.siteId = lims::SiteId{999},
+                                                                               .clientId = client.clientId,
+                                                                               .reference = "WW-1"}),
+                    lims::Forbidden);
 }
 
 // Mutation: skip the noSite check (the save without a site stores a sample).
@@ -142,7 +143,7 @@ TEST_CASE("lab: sample entry refuses a header naming a site that does not exist"
                                       .remarks = {},
                                       .siteId = lims::SiteId{999}});
     model.execute(lims::SelectProject{.projectId = 2});
-    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::SaveSample{}), lims::Forbidden);
 }
 
 // Mutation: drop the site assignment from SaveSample's update branch (the moved sample reads back its old site).

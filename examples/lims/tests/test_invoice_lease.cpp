@@ -10,6 +10,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <glaze/glaze.hpp>
+#include <morph/core/action_guard.hpp>
 #include <morph/session/session_auth.hpp>
 #include <optional>
 #include <string>
@@ -117,7 +118,7 @@ TEST_CASE("invoice lease: a second clerk is told who holds the draft, and takes 
     }
     {
         ScopedPrincipal const bob{"bob"};
-        CHECK_THROWS_WITH(bobEditor.execute(lims::LeaseInvoice{.invoiceId = invoice.id}),
+        CHECK_THROWS_WITH(::morph::model::executeChecked(bobEditor, lims::LeaseInvoice{.invoiceId = invoice.id}),
                           Catch::Matchers::ContainsSubstring("being edited by 'alice'"));
         CHECK_THROWS_AS(bobEditor.execute(lims::SetInvoiceReference{.reference = "mine"}), lims::Conflict);
     }
@@ -220,7 +221,8 @@ TEST_CASE("invoice lease: only a draft is leased", "[lims][billing][lease]") {
     }
     ScopedPrincipal const alice{"alice"};
     CHECK_THROWS_AS(editor.execute(lims::SetInvoiceReference{.reference = "late"}), lims::IllegalTransition);
-    CHECK_THROWS_AS(editor.execute(lims::LeaseInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(editor, lims::LeaseInvoice{.invoiceId = invoice.id}),
+                    lims::IllegalTransition);
 }
 
 // Mutation: make the takeover update unconditional (drop its token and expiry conditions), or let the UNIQUE
@@ -236,7 +238,7 @@ TEST_CASE("invoice lease: two editors taking one lease at once give one success 
     SECTION("a free invoice: the other editor's row appears first") {
         raceWith("INSERT INTO billing_invoice_leases (invoice_id, holder, token, expires_at) VALUES (" +
                  std::to_string(*invoice.id) + ", 'carl', 'carls-token', 4102444800000)");
-        CHECK_THROWS_WITH(bobEditor.execute(lims::LeaseInvoice{.invoiceId = invoice.id}),
+        CHECK_THROWS_WITH(::morph::model::executeChecked(bobEditor, lims::LeaseInvoice{.invoiceId = invoice.id}),
                           Catch::Matchers::ContainsSubstring("leased to another editor meanwhile"));
         lims::setFaultHook({});
         CHECK(holderOf(invoice.id) == "carl");
@@ -250,7 +252,7 @@ TEST_CASE("invoice lease: two editors taking one lease at once give one success 
         }
         raceWith(
             "UPDATE billing_invoice_leases SET holder = 'carl', token = 'carls-token', expires_at = 4102444800000");
-        CHECK_THROWS_WITH(bobEditor.execute(lims::LeaseInvoice{.invoiceId = invoice.id}),
+        CHECK_THROWS_WITH(::morph::model::executeChecked(bobEditor, lims::LeaseInvoice{.invoiceId = invoice.id}),
                           Catch::Matchers::ContainsSubstring("leased to another editor meanwhile"));
         lims::setFaultHook({});
         CHECK(holderOf(invoice.id) == "carl");
@@ -338,7 +340,8 @@ TEST_CASE("invoice lease: a write that fails for another reason than a second ed
     lims::InvoiceEditModel editor;
     {
         ScopedPrincipal const alice{"alice"};
-        CHECK_THROWS_AS(editor.execute(lims::LeaseInvoice{.invoiceId = invoice.id}), Lightweight::SqlException);
+        CHECK_THROWS_AS(::morph::model::executeChecked(editor, lims::LeaseInvoice{.invoiceId = invoice.id}),
+                        Lightweight::SqlException);
     }
     lims::setFaultHook({});
     CHECK(holderOf(invoice.id).empty());

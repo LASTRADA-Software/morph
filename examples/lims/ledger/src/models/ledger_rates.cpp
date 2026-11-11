@@ -123,11 +123,9 @@ ExchangeRateView LedgerModel::execute(const SetExchangeRate& action) {
         throw ValidationError{
             "SetExchangeRate: a company, a start, two different currencies and a positive rate are required"};
     }
-    requireRoleSomewhere<SetExchangeRate>();
     if (!OrgModel::findCompany(action.company).has_value()) {
         throw NotFound{"SetExchangeRate: company " + std::to_string(*action.company) + " does not exist"};
     }
-    requireAuthorized(action);
     return enterRate(action, currentPrincipal(), {});
 }
 

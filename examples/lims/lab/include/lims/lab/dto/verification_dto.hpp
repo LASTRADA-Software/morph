@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "lims/lab/dto/sample_dto.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/dto/role_dto.hpp"
 
 /// @file
@@ -38,6 +39,8 @@ namespace lims {
 /// captured the result, if the sample is not awaiting verification, or if the
 /// result has already been verified.
 struct VerifyResult {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The result to verify.
     ResultId resultId;
 

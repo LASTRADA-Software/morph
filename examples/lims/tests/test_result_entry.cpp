@@ -9,6 +9,7 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/action_log_json.hpp>
@@ -600,8 +601,9 @@ TEST_CASE("Capturing with no principal is refused and journals nothing", "[lims]
     lims::SampleModel anonymous;
     anonymous.attachActionLog(log, std::string{});
     anonymous.execute(lims::OpenSample{.sampleId = sampleId});
-    CHECK_THROWS_AS(anonymous.execute(lims::CaptureConcentration{.analysisVersionId = versionId,
-                                                                 .value = lims::Concentration{exact(12, 5, 3)}}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        anonymous, lims::CaptureConcentration{.analysisVersionId = versionId,
+                                                              .value = lims::Concentration{exact(12, 5, 3)}}),
                     lims::EmptyPrincipalError);
     CHECK(log->entries().empty());
 }
@@ -629,8 +631,9 @@ TEST_CASE("Listing or capturing against an unattached handler is NotFound", "[li
 
     const auto nitrate = defineNitrate(catalog);
     CHECK_THROWS_AS(model.execute(lims::ListResults{}), lims::NotFound);
-    CHECK_THROWS_AS(model.execute(lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
-                                                             .value = lims::Concentration{exact(12, 5, 3)}}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        model, lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
+                                                          .value = lims::Concentration{exact(12, 5, 3)}}),
                     lims::NotFound);
 }
 
@@ -640,8 +643,9 @@ TEST_CASE("Capturing against an analysis version that does not exist is NotFound
     lims::SampleModel model;
 
     sampleAtWork(model);
-    CHECK_THROWS_AS(model.execute(lims::CaptureConcentration{.analysisVersionId = lims::AnalysisVersionId{424242},
-                                                             .value = lims::Concentration{exact(12, 5, 3)}}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        model, lims::CaptureConcentration{.analysisVersionId = lims::AnalysisVersionId{424242},
+                                                          .value = lims::Concentration{exact(12, 5, 3)}}),
                     lims::NotFound);
 }
 

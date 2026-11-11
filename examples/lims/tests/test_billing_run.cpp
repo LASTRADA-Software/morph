@@ -12,6 +12,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <cstdint>
 #include <map>
+#include <morph/core/action_guard.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
@@ -224,7 +225,9 @@ TEST_CASE("billing run: a clerk starts and advances a run by hand, item by item"
     CHECK(run.state == lims::BillingRunState::Running);
     run = model.execute(lims::AdvanceBillingRun{.runId = run.id, .batch = batchOf(5)});
     CHECK(run.state == lims::BillingRunState::Finished);
-    CHECK_THROWS_AS(model.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}), lims::Conflict);
+    CHECK_THROWS_AS(
+        ::morph::model::executeChecked(model, lims::StartBillingRun{.company = lims::test::seededCompany()}),
+        lims::Conflict);
     CHECK(runs().size() == 1U);
 }
 
@@ -541,8 +544,9 @@ TEST_CASE("billing run: a batch is a whole number of at least one, and a run mus
             .runId = run.id,
             .batch = lims::Count{Rational{morph::math::Numerator{3}, morph::math::Denominator{2}, DecimalPlaces{0}}}}),
         lims::ValidationError);
-    CHECK_THROWS_AS(model.execute(lims::AdvanceBillingRun{.runId = lims::BillingRunId{9999}, .batch = batchOf(1)}),
-                    lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        model, lims::AdvanceBillingRun{.runId = lims::BillingRunId{9999}, .batch = batchOf(1)}),
+                    lims::Forbidden);
     CHECK_THROWS_AS(model.execute(lims::StartBillingRun{}), lims::ValidationError);
     REQUIRE(runs().size() == 1U);
     CHECK(*runs().front().done == whole(0));
@@ -563,9 +567,12 @@ TEST_CASE("billing run: a company without settings cannot start one, and only a 
     }
     {
         ScopedPrincipal const dave{"dave"};
-        CHECK_THROWS_AS(lims::BillingRunModel{}.execute(lims::StartBillingRun{.company = osaka}), lims::NotFound);
-        CHECK_THROWS_AS(lims::BillingRunModel{}.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}),
-                        lims::Forbidden);
+        lims::BillingRunModel daves;
+        CHECK_THROWS_AS(::morph::model::executeChecked(daves, lims::StartBillingRun{.company = osaka}),
+                        lims::NotFound);
+        CHECK_THROWS_AS(
+            ::morph::model::executeChecked(daves, lims::StartBillingRun{.company = lims::test::seededCompany()}),
+            lims::Forbidden);
     }
     lims::BillingRunId seeded;
     {
@@ -573,8 +580,10 @@ TEST_CASE("billing run: a company without settings cannot start one, and only a 
         seeded = lims::BillingRunModel{}.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}).id;
     }
     ScopedPrincipal const dave{"dave"};
-    CHECK_THROWS_AS(lims::BillingRunModel{}.execute(lims::AdvanceBillingRun{.runId = seeded, .batch = batchOf(1)}),
-                    lims::Forbidden);
+    lims::BillingRunModel daves;
+    CHECK_THROWS_AS(
+        ::morph::model::executeChecked(daves, lims::AdvanceBillingRun{.runId = seeded, .batch = batchOf(1)}),
+        lims::Forbidden);
     CHECK(lims::BillingRunModel{}.execute(lims::ListBillingRuns{.company = lims::test::seededCompany()}).runs.empty());
 }
 

@@ -24,8 +24,8 @@
 /// "may this principal ever verify a result?" from the declared roles
 /// (`lims::app::declaredRequirements`); it cannot answer "may this principal
 /// verify *this* result?", because it never sees the result, its site or who
-/// captured it. `lims::requireAuthorized` answers that in the model. Neither
-/// check stands in for the other.
+/// captured it. The action's guard (`lims::DeclaredRuleGuard`) answers that,
+/// on every dispatch path. Neither check stands in for the other.
 ///
 /// @par Why it derives from `SigningAuthorizer`
 /// A role gate is only worth anything if the principal is authenticated. A

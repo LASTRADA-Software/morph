@@ -10,6 +10,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <cstdint>
 #include <limits>
+#include <morph/core/action_guard.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
@@ -155,7 +156,7 @@ TEST_CASE("invoices: an invoice whose lines overflow is refused and leaves its l
     insertLine(lab, lims::test::seededSite(), 9002, kHalf, lims::CurrencyCode::EUR);
     ScopedPrincipal const bea{"bea"};
     lims::InvoiceModel invoices;
-    CHECK_THROWS_AS(invoices.execute(invoiceOf(lab)), lims::OutOfRange);
+    CHECK_THROWS_AS(::morph::model::executeChecked(invoices, invoiceOf(lab)), lims::OutOfRange);
     for (auto const& line : linesOf(lab)) {
         CHECK(line.state == lims::BillableLineState::Unbilled);
     }
@@ -219,7 +220,7 @@ TEST_CASE("invoices: a draft collects one client's unbilled lines at one site, i
     REQUIRE(others.lines.size() == 1U);
     CHECK(others.lines.front().state == lims::BillableLineState::Unbilled);
     // The lines are spent: a second draft finds none.
-    CHECK_THROWS_AS(invoices.execute(invoiceOf(lab)), lims::Conflict);
+    CHECK_THROWS_AS(::morph::model::executeChecked(invoices, invoiceOf(lab)), lims::Conflict);
     // What the draft answers is what a later read answers.
     auto const read = invoices.execute(lims::GetInvoice{.invoiceId = draft.id});
     CHECK(read.id == draft.id);
@@ -253,7 +254,7 @@ TEST_CASE("invoices: a line invoiced between the read and the write is a Conflic
             "CREATE TRIGGER other_draft AFTER INSERT ON billing_invoices "
             "BEGIN UPDATE billing_lines SET state = 2, invoice_id = 999 "
             "WHERE id = (SELECT MAX(id) FROM billing_lines); END");
-        CHECK_THROWS_AS(invoices.execute(invoiceOf(lab)), lims::Conflict);
+        CHECK_THROWS_AS(::morph::model::executeChecked(invoices, invoiceOf(lab)), lims::Conflict);
         execute("DROP TRIGGER other_draft");
         untouched();
     }
@@ -274,18 +275,24 @@ TEST_CASE("invoices: a company or a site that does not exist is not found", "[li
     auto const lab = billedSample();
     ScopedPrincipal const bea{"bea"};
     lims::InvoiceModel invoices;
-    CHECK_THROWS_WITH(invoices.execute(lims::CreateInvoice{
-                          .company = lims::CompanyId{9999}, .site = lims::test::seededSite(), .client = lab.client}),
-                      Catch::Matchers::ContainsSubstring("company 9999 does not exist"));
-    CHECK_THROWS_WITH(invoices.execute(lims::CreateInvoice{
-                          .company = lims::test::seededCompany(), .site = lims::SiteId{9999}, .client = lab.client}),
-                      Catch::Matchers::ContainsSubstring("site 9999 does not exist"));
-    CHECK_THROWS_AS(invoices.execute(lims::CreateInvoice{
-                        .company = lims::CompanyId{9999}, .site = lims::test::seededSite(), .client = lab.client}),
-                    lims::NotFound);
-    CHECK_THROWS_AS(invoices.execute(lims::CreateInvoice{
-                        .company = lims::test::seededCompany(), .site = lims::SiteId{9999}, .client = lab.client}),
-                    lims::NotFound);
+    CHECK_THROWS_WITH(::morph::model::executeChecked(invoices, lims::CreateInvoice{.company = lims::CompanyId{9999},
+                                                                                   .site = lims::test::seededSite(),
+                                                                                   .client = lab.client}),
+                      Catch::Matchers::ContainsSubstring("does not hold the billing-clerk role at company 9999"));
+    CHECK_THROWS_WITH(
+        ::morph::model::executeChecked(invoices, lims::CreateInvoice{.company = lims::test::seededCompany(),
+                                                                     .site = lims::SiteId{9999},
+                                                                     .client = lab.client}),
+        Catch::Matchers::ContainsSubstring("site 9999 does not exist"));
+    CHECK_THROWS_AS(::morph::model::executeChecked(invoices, lims::CreateInvoice{.company = lims::CompanyId{9999},
+                                                                                 .site = lims::test::seededSite(),
+                                                                                 .client = lab.client}),
+                    lims::Forbidden);
+    CHECK_THROWS_AS(
+        ::morph::model::executeChecked(invoices, lims::CreateInvoice{.company = lims::test::seededCompany(),
+                                                                     .site = lims::SiteId{9999},
+                                                                     .client = lab.client}),
+        lims::NotFound);
 }
 
 TEST_CASE("invoices: a yen client's invoice has no decimals and its tax is rounded half-up to whole yen",
@@ -369,7 +376,8 @@ TEST_CASE("invoices: only a billing clerk at the company drafts, and only for a 
     lims::test::grant("carol", lims::LimsRole::Verifier);
     {
         ScopedPrincipal const carol{"carol"};
-        CHECK_THROWS_AS(lims::InvoiceModel{}.execute(invoiceOf(lab)), lims::Forbidden);
+        lims::InvoiceModel invoices;
+        CHECK_THROWS_AS(::morph::model::executeChecked(invoices, invoiceOf(lab)), lims::Forbidden);
     }
     lims::CompanyId osaka;
     lims::SiteId osakaLab;
@@ -401,7 +409,8 @@ TEST_CASE("invoices: only a billing clerk at the company drafts, and only for a 
     // A clerk of Osaka only holds a billing role, so the edge passes her, and the model refuses her at the seeded
     // company.
     ScopedPrincipal const olga{"olga"};
-    CHECK_THROWS_AS(lims::InvoiceModel{}.execute(invoiceOf(lab)), lims::Forbidden);
+    lims::InvoiceModel olgasInvoices;
+    CHECK_THROWS_AS(::morph::model::executeChecked(olgasInvoices, invoiceOf(lab)), lims::Forbidden);
 }
 
 TEST_CASE("invoices: an invoice of a company the caller cannot see is not found and not listed",
@@ -431,7 +440,7 @@ TEST_CASE("invoices: an invoice of a company the caller cannot see is not found 
     }
     ScopedPrincipal const dave{"dave"};
     lims::InvoiceModel invoices;
-    CHECK_THROWS_AS(invoices.execute(lims::GetInvoice{.invoiceId = invoice}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(invoices, lims::GetInvoice{.invoiceId = invoice}), lims::NotFound);
     CHECK(invoices.execute(lims::ListInvoices{.company = lims::test::seededCompany()}).invoices.empty());
 }
 

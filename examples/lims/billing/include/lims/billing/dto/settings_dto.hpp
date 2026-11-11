@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "lims/billing/core/types.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/references.hpp"
 #include "lims/org/core/types.hpp"
@@ -22,6 +23,8 @@ namespace lims {
 /// The account codes are names in the company's chart, kept as text: billing does not read the ledger's tables, and
 /// the ledger refuses a posting that names a code its chart lacks. Setting twice replaces the earlier settings.
 struct SetBillingSettings {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The company.
     CompanyId company;
     /// @brief The account an invoice's total is owed on.
@@ -84,6 +87,8 @@ struct GetBillingSettings {
 
 /// @brief Registers a lab client for billing at a company, in a currency.
 struct RegisterBillingClient {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The lab's client.
     ClientId client;
     /// @brief The company that bills it.

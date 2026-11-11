@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "lims/billing/core/types.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/references.hpp"
 #include "lims/org/core/types.hpp"
@@ -42,6 +43,8 @@ struct BillingRunView {
 
 /// @brief Starts a company's billing run for the current month.
 struct StartBillingRun {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The company.
     CompanyId company;
 
@@ -55,6 +58,8 @@ struct StartBillingRun {
 
 /// @brief Drafts the next pending items of a run.
 struct AdvanceBillingRun {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The run.
     BillingRunId runId;
     /// @brief How many items to draft at most.
@@ -72,6 +77,8 @@ struct AdvanceBillingRun {
 ///        then advances every unfinished run of those companies by one batch. Sent only by the app's schedule, as a
 ///        service principal.
 struct RunBillingSchedule {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief How many items to draft at most per run.
     Count batch;
 

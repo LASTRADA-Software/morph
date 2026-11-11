@@ -194,8 +194,6 @@ SaveSampleResult SampleModel::execute(const SaveSample& action) {
     }
     requirePrincipal();
     try {
-        requireRoleSomewhere<SaveSample>();
-
         Lightweight::DataMapper mapper;
         auto clients = mapper.Query<db::ClientRecord>()
                            .Where(::Lightweight::FieldNameOf<&db::ClientRecord::id>, "=", *header.clientId)
@@ -214,12 +212,6 @@ SaveSampleResult SampleModel::execute(const SaveSample& action) {
             if (stored.empty()) {
                 throw NotFound{"sample " + std::to_string(*_sampleId) + " does not exist"};
             }
-        }
-        // The site the sample is written to, and, for an update, the site it is stored at: a move needs a role at
-        // both.
-        requireAuthorizedIn(action, Scope{header.siteId});
-        if (_sampleId) {
-            requireAuthorizedIn(action, Scope{SiteId::fromOptional(stored.front().siteId.Value())});
         }
         std::string payload;
         if (auto const error = glz::write_json(*_draft, payload); error) {
@@ -277,7 +269,6 @@ SaveSampleResult SampleModel::execute(const SaveSample& action) {
 DeleteSampleResult SampleModel::execute(const DeleteSample& action) {
     requirePrincipal();
     try {
-        requireRoleSomewhere<DeleteSample>();
         if (!_sampleId) {
             throw NotFound{"DeleteSample: the working copy was never saved"};
         }
@@ -288,7 +279,6 @@ DeleteSampleResult SampleModel::execute(const DeleteSample& action) {
         if (samples.empty()) {
             throw NotFound{"sample " + std::to_string(*_sampleId) + " does not exist"};
         }
-        requireAuthorizedIn(action, Scope{SiteId::fromOptional(samples.front().siteId.Value())});
         // A sample that has been received is part of the lab's record; only a registration can be withdrawn.
         if (static_cast<SampleState>(samples.front().state.Value()) != SampleState::Registered) {
             throw IllegalTransition{"DeleteSample: only a registered sample can be deleted"};

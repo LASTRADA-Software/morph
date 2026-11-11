@@ -7,6 +7,8 @@
 
 namespace lims {
 
+bool Authorization<AssignRole>::bootstrapOpen() { return !OrgModel::supervisorExists(); }
+
 Scope Authorization<RevokeRole>::scopeOf(RevokeRole const& action) {
     if (!action.assignmentId.hasValue()) {
         return Scope{CompanyId{}};

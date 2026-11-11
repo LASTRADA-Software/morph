@@ -11,6 +11,7 @@
 
 #include "lims/lab/dto/result_dto.hpp"
 #include "lims/lab/dto/sample_dto.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 
 /// @file
 /// Offline field capture (README build order §7) — the queue payload format,
@@ -226,6 +227,8 @@ struct ListConflictsResult {
 
 /// @brief A human's decision about one flagged conflict.
 struct ResolveConflict {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The conflict to resolve.
     ConflictId conflictId;
 
