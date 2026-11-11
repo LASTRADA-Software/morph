@@ -444,10 +444,13 @@ namespace detail::engine {
 /// @param spec    The field.
 /// @param value   The wire value (JSON null and a mismatched shape decode to blank).
 /// @param context The locale and display zone.
+/// @param places  For a Decimal or Quantity, the field's places when a record gives it its own (see `encodeExact`);
+///                the value is shown at them rather than at the schema's, so what is loaded is what is accepted.
 /// @return The draft text.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind.
 [[nodiscard]] inline std::string decodeScalar(FieldSpec const& spec, detail::engine::Json const& value,
-                                              ValueContext const& context) {
+                                              ValueContext const& context,
+                                              std::optional<std::uint32_t> places = std::nullopt) {
     using namespace detail::engine;
     if (value.is_null()) {
         return {};
@@ -497,12 +500,12 @@ namespace detail::engine {
             }
             if (spec.displayDecimals) {
                 auto const dot = canonical->find('.');
-                std::size_t const places = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
-                if (places < *spec.displayDecimals) {
+                std::size_t const have = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
+                if (have < *spec.displayDecimals) {
                     if (dot == std::string::npos) {
                         *canonical += '.';
                     }
-                    canonical->append(*spec.displayDecimals - places, '0');
+                    canonical->append(*spec.displayDecimals - have, '0');
                 }
             }
             return draftNumber(*canonical, context.locale);
@@ -515,7 +518,9 @@ namespace detail::engine {
                 return {};
             }
             math::Rational const exact{math::Numerator{*num}, math::Denominator{*den}, math::DecimalPlaces{0}};
-            return draftNumber(decimalText(exact, spec.decimalPlaces.value_or(0)), context.locale);
+            std::uint32_t const shown =
+                places.has_value() ? std::min(*places, math::kMaxDecimalPlaces) : spec.decimalPlaces.value_or(0);
+            return draftNumber(decimalText(exact, shown), context.locale);
         }
         case FieldKind::Array: {
             if (!value.is_array()) {

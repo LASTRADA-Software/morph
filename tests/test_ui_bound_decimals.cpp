@@ -62,6 +62,20 @@ constexpr std::string_view kWeigh = R"({
     { "kind": "text", "testId": "verdict", "text": { "if": [ { "ref": "cap.mass.valid" }, "valid", "invalid" ] } } ] }
 })";
 
+// A form prefilled from a record, whose field shows the places the record's currency gives (state `places`).
+constexpr std::string_view kPrefill = R"({
+  "vocab": "ui/1", "id": "prefilled",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "state": { "places": { "init": 0 } },
+  "queries": { "rec": { "model": "sample", "action": "Lims_ListResults", "body": { "obj": { "id": 1 } } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "form", "id": "cap", "model": "sample", "action": "Lims_CaptureConcentration", "submit": "explicit",
+      "prefill": { "query": "rec" },
+      "fields": { "rowIndex": { "omit": true }, "concentration": { "decimals": { "ref": "places" } } } },
+    { "kind": "button", "testId": "three", "label": "three", "onClick": [ { "set": "places", "value": 3 } ] },
+    { "kind": "text", "testId": "verdict", "text": { "if": [ { "ref": "cap.concentration.valid" }, "valid", "invalid" ] } } ] }
+})";
+
 }  // namespace
 
 TEST_CASE("bound decimals: a text input follows the places its binding gives", "[ui][bound-decimals]") {
@@ -197,4 +211,37 @@ TEST_CASE("bound decimals: a text input's too-many-places error is a form field'
     h.settle();
     CHECK(readJson(*screen, R"({"ref":"amount.errors"})") == R"(["Zu viele Nachkommastellen"])");
     CHECK(std::ranges::find(asked, "morph.forms.error.too-precise") != asked.end());
+}
+
+// Mutation: decode the prefill at the schema's places (drop the `_places` argument of `decodeScalar` in `load`).
+TEST_CASE("bound decimals: a prefill is shown at the places its binding gives, and later changes keep the text",
+          "[ui][bound-decimals]") {
+    Harness h;
+    auto const screen = h.mount(kPrefill);
+    CHECK(h.diagnostics.empty());
+    int const input = h.byTestId("TextInput", "field_concentration");
+
+    // No places in the record's currency: 1000 loads as "1000", not the schema's "1000.00", and is valid untouched.
+    h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":1,"concentration":{"num":1000,"den":1,"dp":2}})");
+    h.settle();
+    CHECK(h.backend.prop(input, "text") == "1000");
+    CHECK(h.text("verdict") == "valid");
+
+    // Places change after the load: the text stays as typed and is checked again.
+    h.backend.click(h.byTestId("Button", "three"));
+    h.settle();
+    CHECK(h.backend.prop(input, "text") == "1000");
+    CHECK(h.text("verdict") == "valid");
+}
+
+TEST_CASE("bound decimals: a prefill with more places than the schema's is not rounded", "[ui][bound-decimals]") {
+    Harness h;
+    std::string document{kPrefill};
+    document.replace(document.find(R"("init": 0)"), 9, R"("init": 3)");
+    auto const screen = h.mount(document);
+    int const input = h.byTestId("TextInput", "field_concentration");
+    h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":1,"concentration":{"num":1234,"den":1000,"dp":3}})");
+    h.settle();
+    CHECK(h.backend.prop(input, "text") == "1.234");
+    CHECK(h.text("verdict") == "valid");
 }

@@ -234,10 +234,11 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             return textInput(ui::TextInputMode::SingleLine, spec.unit, 0);
         }
         if (!spec.units.empty()) {
-            return textInput(ui::TextInputMode::SingleLine, spec.unit, [field, &spec] {
-                std::size_t const unit = std::min(field->unit().get(), spec.units.size() - 1);
+            return textInput(ui::TextInputMode::SingleLine, spec.unit, [field] {
+                auto const& units = field->spec().units;
+                std::size_t const unit = std::min(field->unit().get(), units.size() - 1);
                 std::optional<std::uint32_t> const places = field->places().get();
-                return static_cast<int>(unit == 0 && places.has_value() ? *places : spec.units.at(unit).decimals);
+                return static_cast<int>(unit == 0 && places.has_value() ? *places : units.at(unit).decimals);
             });
         }
         int decimals = -1;
@@ -245,9 +246,6 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             decimals = static_cast<int>(*spec.displayDecimals);
         } else if (spec.decimalPlaces) {
             decimals = static_cast<int>(*spec.decimalPlaces);
-        }
-        if (decimals < 0) {
-            return textInput(ui::TextInputMode::SingleLine, spec.unit, decimals);
         }
         return textInput(ui::TextInputMode::SingleLine, spec.unit, [field, decimals] {
             std::optional<std::uint32_t> const places = field->places().get();

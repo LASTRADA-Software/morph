@@ -498,7 +498,7 @@ public:
             _engaged.set(present && value->is_array());
             return;
         }
-        std::string draft = present ? decodeScalar(*_spec, *value, _core->values()) : std::string{};
+        std::string draft = present ? decodeScalar(*_spec, *value, _core->values(), _places.peek()) : std::string{};
         std::size_t const unit = _spec->entryUnit;
         if (unit != 0 && unit < _spec->units.size() && !draft.empty()) {
             // The wire value is in the canonical unit; the draft is shown in the entry unit.
