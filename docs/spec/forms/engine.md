@@ -239,7 +239,7 @@ before the session is built; `FormModel::fromSchema(action, schema, overlays)` a
 - `unit` picks a Quantity's entry unit (`FieldSpec::entryUnit`) among its units, or replaces the unit shown on a
   field without units. A draft starts, and a prefill and a reset return, in the entry unit; the wire value stays in
   the canonical unit.
-- `decimals` sets the entry unit's places (a Number's display decimals); the wire keeps the schema's places.
+- `decimals` is `x-decimalPlaces` given by the screen: the canonical unit's entry places and the wire `dp` (another unit of a Quantity keeps its own); a Number's display decimals.
 - An overlay naming a field the schema does not have, or a unit that is not one of the field's, is a
   `SchemaError`.
 
@@ -253,7 +253,7 @@ before it.
 | Kind | Control |
 |---|---|
 | Text, Multiline | `TextInput` (single-line, multiline) |
-| Integer, Number, Decimal | `TextInput` showing its unit (`unit`), with its entry places (`decimals`: 0 for an Integer, else the entry unit's, the display places or the declared places) |
+| Integer, Number, Decimal | `TextInput` showing its unit (`unit`), with its entry places (`decimals`: 0 for an Integer, else the chosen unit's, the display places or the declared places) |
 | Quantity | `TextInput` showing its unit, as a Decimal's (one unit); with alternatives, a `TextInput` with no unit and a unit `Select` beside it; switching converts the draft exactly |
 | Boolean | `Checkbox` labelled with the field |
 | Enum, Choice | `Select` (dropdown, or radio for `x-widget: radio`) keyed by each option's JSON literal; a Choice adds a `Busy` while its options load |

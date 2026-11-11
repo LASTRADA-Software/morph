@@ -625,8 +625,9 @@ struct TextInput {
     ///        a single-line or password input shows one: the mount refuses a multiline input with an icon. Set once.
     std::string icon;
     /// @brief The fraction digits a number is entered with, for a backend or a kit to read; -1 when the input does
-    ///        not hold a number. Set once; the mount refuses places on a multiline input.
-    int decimals = -1;
+    ///        not hold a number. It follows its binding: the mount tells the widget again on each change. The mount
+    ///        refuses places on a multiline input.
+    Prop<int> decimals = -1;
     /// @brief The field's label: its visible caption while `showLabel`; a form's cell draws it otherwise, beside
     ///        the input. Empty: none.
     Prop<std::string> label;
