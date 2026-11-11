@@ -92,8 +92,9 @@ std::string recordThrough(ServerConnection& connection, std::string const& princ
 }  // namespace
 
 // Hypothesis 7. The control: kim's connection hears a lot recorded at her own company, so the check can see a change.
-// Mutation: watch {"Inventory_Item"} instead of the lot and movement records; kim hears neither lot, so both
-// CHECKs on what she heard fail.
+// Mutation: watch {"Inventory_Item"} instead of the lot and movement records; kim hears neither lot, so heardOfB,
+// lotWhole, movementWhole and the control fail. CHECK_FALSE(anyKeys) stays green under it: its detector is decision
+// 40's ApproveInvoice case, which sends a key through the same fan-out.
 TEST_CASE("Hypothesis 7: a company-B lot and what a company-A connection hears of it", "[lims][inventory][h7]") {
     DbFixture fixture;
     auto const rhein = lims::test::stockSetUp();
