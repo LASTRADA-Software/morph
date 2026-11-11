@@ -1321,7 +1321,7 @@ balance is a sum, not a page: it computes its rows in the store and pages them w
 aggregate, which the seam does not describe.
 
 On the seam, the same page (`ListEntriesPage`: 50 rows at offset 500,000 of 10^6 entries) took 180 ms with resident
-memory 47 MB to 48 MB (peak 47 MB to 51 MB), and the trial balance over 10^7 lines took 3,885 ms with peak memory 41 MB
+memory 46 MB to 48 MB (peak 47 MB to 51 MB), and the trial balance over 10^7 lines took 3,885 ms with peak memory 41 MB
 (40 MB before), summed in the database, exact or refused as `OutOfRange`. Same build and machine as above, one run each;
 the totals equal the independently accumulated sums exactly. The sample list pages on it too. Stock movements are the
 second instance, which is the stock movements of the inventory module.

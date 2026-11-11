@@ -191,7 +191,7 @@ Text results equal the oracle's only when the store compares and orders by the s
   nothing the collator leaves alone. Whether a given store's function does is a property of that store's build, so
   the model's conformance run against the real store is what holds it.
 
-A text column for which neither holds is refused in sort and filter through `translatable`, never answered
+A text column for which none of them holds is refused in sort and filter through `translatable`, never answered
 differently. A case-sensitive pattern needs a case-sensitive mechanism (`instr`, `GLOB`, a binary collation): a
 store's `LIKE` may be case-insensitive by default, so `escapeLikePattern` alone is enough only on the folded path.
 
