@@ -500,6 +500,7 @@ target_sources(morph
         include/morph/ui/mount.hpp
         include/morph/ui/frontend.hpp
         include/morph/ui/value.hpp
+        include/morph/ui/locale_table.hpp
         include/morph/ui/message.hpp
         include/morph/ui/expression.hpp
         include/morph/ui/document.hpp

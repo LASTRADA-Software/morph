@@ -25,6 +25,9 @@ MorphField {
 
     // The month the calendar shows, zero-based as `MonthGrid` takes it.
     property int pickerMonth: 0
+    // English whatever the desktop's language: both frontends write the session's text, not the system's.
+    readonly property var monthNames: ["January", "February", "March", "April", "May", "June", "July", "August",
+                                       "September", "October", "November", "December"]
     property int pickerYear: 0
 
     // The field's date, which the calendar opens on and marks.
@@ -179,7 +182,8 @@ MorphField {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     color: root.scheme.text
-                    text: Qt.locale().monthName(root.pickerMonth, Locale.LongFormat) + " " + root.pickerYear
+                    objectName: "datePickerMonth"
+                    text: root.monthNames[root.pickerMonth] + " " + root.pickerYear
                 }
 
                 ToolButton {
@@ -208,6 +212,9 @@ MorphField {
             MonthGrid {
                 id: grid
                 objectName: "datePickerGrid"
+                // The C locale: the weekday names are English and the week starts on Monday, whatever the
+                // desktop's language, as the month names above are and as `MMM` is.
+                locale: Qt.locale("C")
                 month: root.pickerMonth
                 year: root.pickerYear
                 delegate: Item {

@@ -44,6 +44,9 @@ struct NavigatorOptions {
     /// @brief An entry's titles, each one a search can match: one per locale (spec 6 §19). Empty uses the entry's
     ///        title, a string or a message reference's `fallback`. The first title is the one shown.
     std::function<std::vector<std::string>(CatalogEntry const&)> titles;
+    /// @brief Maps a group heading, or a module's when its entries have no group, to the text shown: a message key
+    ///        becomes its message. Empty shows the text as written.
+    std::function<std::string(std::string_view text)> label;
     /// @brief The person's pins as stored, in order; unknown ids and those past `maxPins` are dropped.
     std::vector<std::string> pins;
     /// @brief The most pins (`app-max-pins`).
@@ -232,6 +235,26 @@ public:
         return true;
     }
 
+    /// @brief Reads every entry's titles and every heading again, as after a change of locale: the entry buttons,
+    ///        their accessible names, the pins, the headings and the search filter follow. The pins, the current
+    ///        entry, the badges and the search text stay. Calls the handler `setOnChanged` set.
+    void relabel() {
+        for (Group& group : _groups) {
+            group.heading->setText(headingOf(group));
+            for (Item& item : group.items) {
+                item.titles = titlesOf(*item.entry);
+                item.button->setLabel(item.titles.front());
+                item.label->setText(item.titles.front());
+                if (item.shown) {
+                    item.button->setAccessibleName(item.titles.front() + ", " + item.shown->text);
+                }
+            }
+        }
+        showPins();
+        filter(_searchText);
+        changed();
+    }
+
     /// @brief Sets what is called after anything `menuEntries()` lists changed: a count, the current entry, a pin.
     /// @param onChanged The handler; empty calls nothing.
     void setOnChanged(std::function<void()> onChanged) { _onChanged = std::move(onChanged); }
@@ -318,12 +341,10 @@ private:
         return out;
     }
 
-    [[nodiscard]] static std::string headingOf(Group const& group) {
-        std::string heading = group.module;
-        if (!group.group.empty()) {
-            heading += heading.empty() ? group.group : " / " + group.group;
-        }
-        return heading;
+    // The group, or the module when the entry has no group, through the label.
+    [[nodiscard]] std::string headingOf(Group const& group) const {
+        std::string const& text = group.group.empty() ? group.module : group.group;
+        return _options.label ? _options.label(text) : text;
     }
 
     void changed() const {
@@ -453,6 +474,7 @@ private:
                 item.content->setLayout({.width = Sizing::stretch(), .height = {}});
                 item.label = _backend->createText(item.content.get());
                 item.label->setText(item.titles.front());
+                item.label->setTestId("nav_title_" + entry.id);
                 item.label->setLayout({.width = Sizing::stretch(), .height = {}});
                 item.badge = _backend->createBadge(item.content.get());
                 item.badge->setTestId("nav_badge_" + entry.id);
@@ -463,6 +485,7 @@ private:
     }
 
     void filter(std::string const& text) {
+        _searchText = text;
         std::string const wanted = lower(text);
         for (Group& group : _groups) {
             bool any = false;
@@ -506,6 +529,7 @@ private:
     std::vector<Group> _groups;
     std::vector<std::string> _pins;
     std::string _current;
+    std::string _searchText;
     std::function<void()> _onChanged;
 };
 

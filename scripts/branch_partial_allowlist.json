@@ -148,21 +148,21 @@
     },
     {
       "file": "include/morph/ui/expression.hpp",
-      "line": 571,
+      "line": 572,
       "source": "default:",
       "context": "return comprehension(made, object, path);",
       "reason": "The default arm is unreachable: the switch names every enumerator of ExprKind, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is ExprParser::form's switch over the expression forms."
     },
     {
       "file": "include/morph/ui/expression.hpp",
-      "line": 1037,
+      "line": 1038,
       "source": "default:",
       "context": "return Type::of(TypeKind::List);",
       "reason": "The default arm is unreachable: the switch names every enumerator of ExprKind, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is ExprChecker::check's switch."
     },
     {
       "file": "include/morph/ui/expression.hpp",
-      "line": 1817,
+      "line": 1820,
       "source": "default:",
       "context": "return items;",
       "reason": "The default arm is unreachable: the switch names every enumerator of ExprKind, so no value reaches `default`. The project's strict warnings require both at once -- -Wswitch-enum wants every enumerator listed and -Wswitch-default wants a default label -- so the default shares the last enumerator's body and is never the label taken. It is Evaluator::eval's switch."

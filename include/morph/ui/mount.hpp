@@ -2025,8 +2025,8 @@ private:
         applyCommon(scope, widget, spec.common);
         applyField(scope, widget, spec.field);
         // Before the value, which is then shown in it; an input with no pattern is told none.
-        if (!spec.pattern.empty()) {
-            widget.setPattern(spec.pattern);
+        if (spec.pattern.isBound() || !spec.pattern.constant().empty()) {
+            bind(scope, spec.pattern, [&widget](std::string const& pattern) { widget.setPattern(pattern); });
         }
         widget.setOnChange(inputEvent(
             spec.onChange,

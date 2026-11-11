@@ -913,6 +913,26 @@ TEST_CASE("qt_quick widgets: an empty date input's calendar opens on today's mon
     CHECK(grid->property("month").toInt() == today.month() - 1);
 }
 
+// Mutation: take the month name from Qt.locale() (a desktop in another language shows its own name).
+TEST_CASE("qt_quick widgets: the date picker's month header is English whatever the system locale", "[qt_quick]") {
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    QLocale const previous = QLocale();
+    QLocale::setDefault(QLocale(QLocale::German, QLocale::Germany));
+    Scene scene;
+    auto input = scene.backend().createDateTimeInput(nullptr, ui::DateMode::Date, 0);
+    input->setValue(
+        morph::time::Timestamp{DateTime{year{2026}, month{10}, day{15}, hours{0}, minutes{0}, seconds{0}}});
+    scene.settle();
+    QQuickItem const* const button = findNamed(Scene::itemOf(*input), QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    scene.click(*button);
+    QQuickItem const* const header = findNamed(*scene.window().contentItem(), QStringLiteral("datePickerMonth"));
+    REQUIRE(header != nullptr);
+    CHECK(header->property("text").toString() == QStringLiteral("October 2026"));
+    QLocale::setDefault(previous);
+}
+
 TEST_CASE("qt_quick widgets: dates format and parse in a display zone", "[qt_quick]") {
     using morph::time::DateTime;
     using namespace std::chrono;

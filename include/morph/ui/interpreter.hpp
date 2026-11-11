@@ -45,6 +45,7 @@
 #include "dev_tools.hpp"
 #include "document.hpp"
 #include "expression.hpp"
+#include "locale_table.hpp"
 #include "message.hpp"
 #include "mount.hpp"
 #include "value.hpp"
@@ -998,21 +999,33 @@ public:
     [[nodiscard]] FormatContext const& formattingNow() const { return *_format.peek(); }
 
     /// @brief Sets the patterns every date and every date and time is written and read in, keeping the other
-    ///        formatting facts; an empty one keeps ISO.
+    ///        formatting facts. A non-empty pattern is the application's: it stays through every `setLocale`. An empty
+    ///        one is not declared: the active locale's pattern applies, and ISO where the locale has none.
     /// @param date     The date pattern, such as `dd-MMM-yyyy`.
     /// @param dateTime The date-and-time pattern, such as `dd-MMM-yyyy HH:mm`.
     void setDatePatterns(std::string date, std::string dateTime) {
+        _declaredDate = std::move(date);
+        _declaredDateTime = std::move(dateTime);
         FormatContext next = *_format.peek();
-        next.datePattern = std::move(date);
-        next.dateTimePattern = std::move(dateTime);
+        next.datePattern = _declaredDate.empty() ? _localeDate : _declaredDate;
+        next.dateTimePattern = _declaredDateTime.empty() ? _localeDateTime : _declaredDateTime;
         setFormatting(std::move(next));
     }
 
-    /// @brief Changes the active locale, keeping the other formatting facts.
+    /// @brief Changes the active locale and installs its facts from the locale table (`localeFacts`): the separators
+    ///        and currency symbols, and the date patterns the application did not declare
+    ///        (`setDatePatterns`). The other formatting facts stay.
     /// @param locale The BCP 47 locale.
     void setLocale(std::string locale) {
+        LocaleFacts const& facts = localeFacts(locale);
+        _localeDate = std::string{facts.datePattern};
+        _localeDateTime = std::string{facts.dateTimePattern};
         FormatContext next = *_format.peek();
         next.locale = std::move(locale);
+        next.numeric = facts.numeric;
+        next.currency = facts.currency;
+        next.datePattern = _declaredDate.empty() ? _localeDate : _declaredDate;
+        next.dateTimePattern = _declaredDateTime.empty() ? _localeDateTime : _declaredDateTime;
         setFormatting(std::move(next));
     }
 
@@ -1476,6 +1489,11 @@ private:
     std::set<std::pair<std::string, std::string>> _watchInstances;
     std::set<std::pair<std::string, std::string>> _unwatchInstances;
     reactive::Signal<std::shared_ptr<FormatContext const>> _format;
+    // What the application declared (`setDatePatterns`) and what the locale installed (`setLocale`), per pattern.
+    std::string _declaredDate;
+    std::string _declaredDateTime;
+    std::string _localeDate;
+    std::string _localeDateTime;
     reactive::Signal<ValueRecord> _env;
     reactive::Signal<ValueRecord> _sessionValues;
     reactive::Signal<ValueRecord> _hostValues;
@@ -1959,10 +1977,10 @@ private:
     }
     // A number that cannot be rounded at its own places shows as its exact JSON rather than as a clamped value.
     if (Quantity const* const quantity = value.asQuantity()) {
-        auto number = formatNumber(value, format.numeric);
+        auto number = formatNumber(value, withoutGrouping(format.numeric));
         return number ? *number + " " + unitDisplay(quantity->unit, format.units) : canonicalJson(value);
     }
-    if (auto number = formatNumber(value, format.numeric)) {
+    if (auto number = formatNumber(value, withoutGrouping(format.numeric))) {
         return *std::move(number);
     }
     if (time::DateTime const* const instant = value.asTimestamp()) {
@@ -5009,7 +5027,7 @@ struct DateReading {
 /// @param format The formatting facts.
 /// @return The digits after the decimal separator; 0 for a text that is not a number, which no places rule judges.
 [[nodiscard]] inline std::size_t fractionDigits(std::string_view text, FormatContext const& format) {
-    std::optional<std::string> const canonical = render::normalizeLocaleNumber(text, format.numeric);
+    std::optional<std::string> const canonical = render::normalizeLocaleNumber(text, withoutGrouping(format.numeric));
     if (!canonical.has_value()) {
         return 0;
     }
@@ -8088,9 +8106,11 @@ inline std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx
         };
         spec.mode = mode;
         spec.offsetMinutes = offsetMinutes;
-        // Read once and untracked, like the zone: a pattern changed after mount applies to inputs mounted later.
-        FormatContext const& now = session.formattingNow();
-        spec.pattern = mode == DateMode::Date ? now.datePattern : now.dateTimePattern;
+        // Tracked: a locale switch changes the pattern the screen's dates are written in, and the input follows.
+        spec.pattern = slotProp<std::string>([this, mode] {
+            FormatContext const& now = session.formatting();
+            return mode == DateMode::Date ? now.datePattern : now.dateTimePattern;
+        });
         fieldOf(node, ctx, element, spec.field);
         commonOf(node, ctx, element, spec.common);
         kit.nameByLabel(spec.common);
@@ -8894,7 +8914,7 @@ inline forms::Submitter ScreenCore::aliasSubmits(ModelAlias* alias, std::string 
 inline forms::FormSessionOptions ScreenCore::engineOptions() const {
     FormatContext const& format = session.formatting();
     forms::FormSessionOptions options{};
-    options.locale = format.numeric;
+    options.locale = withoutGrouping(format.numeric);
     options.bcp47 = format.locale;
     options.translations = format.translations;
     options.displayOffsetMinutes = format.utcOffsetMinutes;

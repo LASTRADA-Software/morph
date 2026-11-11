@@ -85,8 +85,9 @@ shell always calls `setLocale` before the first mount, with `ShellOptions::local
 
 **Reach.** The locale's decimal separator applies wherever a number is shown or typed through the session's facts: the
 display functions, plain text interpolation, `format`, MessageFormat `:number` and the entry of a number input. The
-group separator applies only in `number`, `quantity` and `money` (and `decimal`, which writes through the same path):
-an integer shown through plain interpolation, `format` or an input stays ungrouped, `2026` and not `2,026`, in every
+group separator applies in `number`, `quantity`, `money` and `decimal` (which write through the same path), in a
+message's `:number` (a catalogue text is prose, as `number` is) and in what `parseDecimal` accepts; an integer shown
+through plain interpolation, `format` or an input stays ungrouped, `2026` and not `2,026`, in every
 locale. An integer that is meant to be read as a quantity is shown with `number`; one that is an identifier needs
 nothing.
 
