@@ -312,6 +312,7 @@ TEST_CASE("refusal: a failure that is not a refusal reads null and shows no word
     CHECK(h.text("message") == "boom");
 }
 
+// Mutation: delete `entry.refusal.set(Value{})` in the query's success path.
 TEST_CASE("refusal: a query's refusal is read like a mutation's, and a success clears it", "[refusal][ui]") {
     Harness h;
     install(h, {{"probe.taken", "Held by {$holder}"}});
@@ -319,14 +320,72 @@ TEST_CASE("refusal: a query's refusal is read like a mutation's, and a success c
       "vocab": "ui/1", "id": "queryRefusal",
       "models": { "sample": { "type": "Lims_SampleModel" } },
       "queries": { "q": { "model": "sample", "action": "Lims_ListResults" } },
-      "mutations": { "m": { "model": "sample", "action": "Lims_Save" } },
       "view": { "kind": "column", "children": [
-        { "kind": "text", "testId": "words", "text": { "fn": "refusalText", "args": [ { "refusal": "q" } ] } } ] } })");
+        { "kind": "button", "testId": "again", "label": "again", "onClick": { "refetch": "q" } },
+        { "kind": "text", "testId": "words", "text": { "fn": "refusalText", "args": [ { "refusal": "q" } ] } },
+        { "kind": "text", "testId": "has",
+          "text": { "fn": "format", "args": [ "{0}", { "fn": "engaged", "args": [ { "refusal": "q" } ] } ] } } ] } })");
     auto& call = h.dispatcher.calls.at(h.dispatcher.last("Lims_ListResults"));
     call.answered = true;
     call.promise.reject(taken());
     h.settle();
     CHECK(h.text("words") == "Held by Alice");
+    CHECK(h.text("has") == "true");
+    h.backend.click(h.byTestId("Button", "again"));
+    h.settle();
+    h.dispatcher.reply(h.dispatcher.last("Lims_ListResults"), "[]");
+    h.settle();
+    CHECK(h.text("has") == "false");
+    CHECK(h.text("words").empty());
+}
+
+// Mutation: delete `_refusal.set(Value{})` in the mutation's success path.
+TEST_CASE("refusal: a mutation's refusal is cleared by the next success", "[refusal][ui]") {
+    Harness h;
+    install(h, {{"probe.taken", "Held by {$holder}"}});
+    auto const screen = h.mount(kScreen);
+    failWith(h, taken());
+    CHECK(h.text("words") == "Held by Alice");
+    CHECK(h.text("has") == "true");
+    h.backend.click(h.byTestId("Button", "go"));
+    h.settle();
+    h.dispatcher.reply(h.dispatcher.last("Lims_Save"), "{}");
+    h.settle();
+    CHECK(h.text("has") == "false");
+    CHECK(h.text("words").empty());
+}
+
+// Mutation: make `:number` leave a string operand as it is.
+TEST_CASE("refusal: a numeric argument is formatted in the user's locale and selects a plural", "[refusal][ui]") {
+    Harness h;
+    install(h, {{"probe.amount", "Needs {$amount :number}"},
+                {"probe.count", ".input {$count :number}\n.match $count\none {{{$count} lot}}\n* {{{$count} lots}}"},
+                {"probe.bad", "Needs {$amount :number}"}});
+    ui::FormatContext english = h.session.formattingNow();
+    english.locale = "en";
+    english.numeric.decimalSeparator = ".";
+    english.numeric.groupSeparator = ",";
+    h.session.setFormatting(english);
+    auto const screen = h.mount(kScreen);
+    auto const refuse = [&h](std::string code, std::string name, std::string value) {
+        failWith(h, std::make_exception_ptr(
+                        morph::model::ActionRefusal{std::move(code), {{std::move(name), std::move(value)}}, "x"}));
+    };
+    refuse("probe.amount", "amount", "5000.5");
+    CHECK(h.text("words") == "Needs 5,000.5");
+    ui::FormatContext german = h.session.formattingNow();
+    german.locale = "de";
+    german.numeric.decimalSeparator = ",";
+    german.numeric.groupSeparator = ".";
+    h.session.setFormatting(german);
+    h.settle();
+    CHECK(h.text("words") == "Needs 5.000,5");
+    refuse("probe.count", "count", "1");
+    CHECK(h.text("words") == "1 lot");
+    refuse("probe.count", "count", "3");
+    CHECK(h.text("words") == "3 lots");
+    refuse("probe.bad", "amount", "a lot");
+    CHECK(h.text("words") == "Needs {$amount}");
 }
 
 TEST_CASE("refusal: t takes a key expression and a list of named arguments", "[refusal][ui]") {

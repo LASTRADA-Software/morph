@@ -26,6 +26,10 @@ application's, in its catalogues.
 
 ## What a refusal is
 
+This page's subject is `morph::model::ActionRefusal`, the refusal an application throws on purpose and a screen words.
+[`../core/action_guards.md`](../core/action_guards.md) has a section of the same name that covers the wider case, any
+exception a guard throws.
+
 `morph::model::ActionRefusal` is an exception deriving from `std::runtime_error`. It carries
 
 - a **code**: a dotted name the application owns (`lims.billing.invoiceLeased`). It is the key the catalogue words,
@@ -93,11 +97,22 @@ otherwise an error, and it keeps the literal form unchanged.
 `args` may be a record of expressions, as today, or `{"expr": <expression>}` evaluating to a **list of `{name, value}`
 records**, which becomes the message's named arguments. A record of expressions whose only field is named `expr` is
 therefore read as the wrapper, not as a field; an application that needs an argument called `expr` uses the list form.
-An argument named `holder` is the MessageFormat 2 variable `$holder`; its value is a string, formatted as text. No
-`:number` or `:date` is applied to it: a pattern that wants one names it (`{$amount :number}`), which then formats the
-string only when it reads as a number, and shows `{$amount}` with an error otherwise. A list element that is not a
-record with a string `name`, or whose `value` is not a string, is a type error at run time: reported, and the element
-left out.
+An argument named `holder` is the MessageFormat 2 variable `$holder`; its value is a string, formatted as text.
+
+**A string that spells a number is a number to `:number`.** Arguments stay strings on the wire, so the server writes a
+number as a plain literal (`5000.5`, `-3`, `12`: an optional minus, digits, and optionally a point and digits, at most
+18 digits in all). A placeholder or a `.input` declaration that names `:number` (`{$amount :number}`) reads such a
+string as the decimal it spells, at the places it writes, and formats it in the user's locale like any decimal:
+`5,000.5` in `en`, `5.000,5` in `de`. A `.match` on a `:number` selector reads it the same way, so plural categories
+and exact keys select on it (`one` for `1`, `other` for `3`, in the locale's own rules). Without `:number` a string is
+text, whatever it looks like. A string that is not such a literal (`a lot`, ` 5`, `1e3`, `+5`) is a formatting error of
+the operand, handled as the message formatter handles a non-numeric operand today: the placeholder shows `{$amount}`
+and the formatter reports that the argument is not a number, and a `.match` variant keyed by a number or plural
+category does not match that selector (only `*` does). The formatter has no `:integer`; `:number` is the one numeric
+function.
+
+A list element that is not a record with a string `name`, or whose `value` is not a string, is a type error at run
+time: reported, and the element left out.
 
 The fallback stays a literal string: it is checked at load as it is today.
 
@@ -108,8 +123,8 @@ The fallback stays a literal string: it is checked at load as it is today.
 1. the catalogue's message for the **code**, formatted with the arguments;
 2. else the **class sentence**: the message for the first of the code's class keys that the catalogue has. The class
    keys are each dotted prefix of the code, longest first, each followed by `.generic`; for
-   `lims.billing.invoiceLeased` they are `lims.billing.generic`, then `lims.generic`. morph knows no prefix by name; the
-   keys follow from the code alone, so an application organises its sentences by whatever prefixes it uses;
+   `lims.billing.invoiceLeased` they are `lims.billing.generic`, then `lims.generic`. morph knows no prefix by name;
+   the keys follow from the code alone, so an application organises its sentences by whatever prefixes it uses;
 3. else the interpreter's built-in sentence, `This was refused.`.
 
 A `null` refusal yields `null`, as every function of `expr/1` does for a `null` argument, so a screen may bind the text
@@ -123,12 +138,15 @@ Resolution uses the session's locale and provider like `t`, so it re-evaluates w
 
 ## Load-time checks
 
-A literal `t` key is checked as the bundle checks it today. A run-time key cannot be: the bundle does not know which
-codes a server sends. The interpreter therefore reports a **missing run-time key** as a problem (the diagnostics a client
-logs and `ScreenHarness::problems()` collects), once per key and screen (the interpreter keeps its diagnostics per mounted screen). For `refusalText` the report is for the
-refusal's *code* being absent from the catalogue, whether or not a class sentence then stood in; a class key being
-absent is not reported, since the chain is meant to fall through. An application covers its codes with a test of its own
-over its catalogues; the interpreter's report is the backstop for a code the test missed.
+The expression checker checks the `fallback`'s syntax, for a literal key and a run-time key alike. Nothing at load or
+at registration checks that a `t` key, literal or run-time, has an entry in a catalogue: a missing literal key shows
+its fallback without a report. A **missing run-time key** is reported at run time as a problem (the diagnostics a
+client logs and `ScreenHarness::problems()` collects), once per expression site and key: the interpreter keeps its
+diagnostics per mounted screen, and two bindings of `refusalText` on one screen each report the same absent code. For
+`refusalText` the report is for the refusal's *code* being absent from the catalogue, whether or not a class sentence
+then stood in; a class key being absent is not reported, since the chain is meant to fall through. Covering keys is the
+application's own test over its catalogues, for literal and run-time keys alike; the interpreter's report is the
+backstop for a run-time code the test missed.
 
 ## Wire compatibility
 
@@ -136,6 +154,12 @@ The `refusal` member is omitted when absent, as every default-valued member is, 
 refusal is byte-for-byte what it was. A client that does not know the member ignores it, because `decode` reads with
 `error_on_unknown_keys = false`, and shows the message as before. A server that does not send it yields a plain
 `runtime_error`, and `refusal` reads `null`. No protocol version changes.
+
+A refusal comes only from a guard or the model's run. An exception thrown before the model runs (an admission check,
+a malformed request) is answered as any other exception is, with a message and no `refusal`.
+
+An older client refuses, at load, a document that uses `refusal`, `refusalText` or `t` with `{"expr": …}`, as
+[`expressions.md`](expressions.md) states for any form a vocabulary version does not know.
 
 ## Invariants
 
@@ -153,5 +177,8 @@ refusal is byte-for-byte what it was. A client that does not know the member ign
 - **Parsing the message.** Fragile, and the message is in one language.
 - **A load-time list of codes per bundle.** The server's codes are the application's and change without the bundle, so
   the list would be stale in exactly the case it exists for.
+- **A sibling key for the argument list (`argList`) instead of the `{"expr": …}` wrapper.** It would leave a record of
+  expressions with an argument named `expr` unambiguous. The wrapper is the same shape on the key and on the arguments,
+  so one rule covers both; the cost is that an argument named `expr` must use the list form.
 - **A new error kind for refusals.** It would change what every existing `errorKind` comparison sees for an exception
   that is now an `ActionRefusal`; the separate `refusal` state gives the same branch without that.

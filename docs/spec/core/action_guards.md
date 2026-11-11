@@ -169,11 +169,19 @@ commit together.
 
 ## What a refusal is
 
+This section covers any exception a guard throws. A refusal an application throws on purpose and a screen words is
+`morph::model::ActionRefusal`, specified in [`../ui/refusals.md`](../ui/refusals.md).
+
 A guard that throws refuses the action. `Model::execute` does not run, and the
 exception reaches the caller exactly as a throw from `execute` would:
 `LocalBackend` resolves the `Completion` through `onError` with the concrete
 type; `RemoteServer` answers `err` with `what()`, and the client's `Completion`
-resolves with a `std::runtime_error` carrying that text.
+resolves with a `std::runtime_error` carrying that text. A guard that throws a
+`morph::model::ActionRefusal` is the exception: the `err` also carries the
+refusal's code and arguments, and the client's `Completion` resolves with an
+`ActionRefusal` (see [`../ui/refusals.md`](../ui/refusals.md)). Only a throw from the
+guard or the model's run carries one; a throw before the model runs (an admission
+check) is answered as any other exception is.
 
 **A refusal is journaled as a throw from `execute` is.** When a
 `journal::IActionLog` is attached to the holder and the action is loggable, a

@@ -2567,7 +2567,7 @@ private:
                 return catalogued(expr, classKey, std::string{kBuiltInRefusal}, named, false);
             }
         }
-        return catalogued(expr, std::string{}, std::string{kBuiltInRefusal}, named, false);
+        return std::string{kBuiltInRefusal};
     }
 
     Value listFunction(Expr const& expr, ValueList const& items) {

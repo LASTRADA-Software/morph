@@ -698,6 +698,28 @@ namespace detail {
                           math::DecimalPlaces{0}};
 }
 
+/// @brief The operand a `:number` reads: a string holding a numeric literal `-?[0-9]+(\.[0-9]+)?` is the decimal it
+///        spells, at the places it writes; every other value is itself.
+///
+/// A refusal's arguments are strings on the wire, and this is how a pattern formats them in the user's locale.
+/// A string that is not such a literal stays a string, so the caller reports it as not a number.
+/// @param value The argument.
+/// @return The operand.
+[[nodiscard]] inline Value numberOperand(Value const& value) {
+    std::string const* const text = value.asString();
+    if (text == nullptr) {
+        return value;
+    }
+    auto const parsed = parseExactKey(*text);
+    if (!parsed) {
+        return value;
+    }
+    auto const dot = text->find('.');
+    auto const places = dot == std::string::npos ? 0U : static_cast<std::uint32_t>(text->size() - dot - 1);
+    return Value{Decimal{math::Rational{math::Numerator{parsed->numerator}, math::Denominator{parsed->denominator},
+                                        math::DecimalPlaces{places}}}};
+}
+
 /// @brief Whether a variant key matches a selector's value.
 /// @param key      The key.
 /// @param value    The selector's value.
@@ -716,7 +738,7 @@ namespace detail {
         }
         return std::nullopt;
     }
-    auto const number = numberOf(value);
+    auto const number = numberOf(numberOperand(value));
     if (!number) {
         return std::nullopt;
     }
@@ -768,14 +790,15 @@ inline void formatPattern(std::vector<MessagePart> const& pattern, ValueRecord c
             out.text += *text;
             continue;
         }
-        if (auto number = formatNumber(value, locale.numeric)) {
+        Value const operand = numberOperand(value);
+        if (auto number = formatNumber(operand, locale.numeric)) {
             out.text += *number;
             continue;
         }
         out.text += "{$" + part.variable + "}";
         if (found == args.end() || value.isNull()) {
             out.errors.push_back("the argument `" + part.variable + "` is missing");
-        } else if (numberOf(value)) {
+        } else if (numberOf(operand)) {
             out.errors.push_back("the argument `" + part.variable + "` overflows at its places");
         } else {
             out.errors.push_back("the argument `" + part.variable + "` is not a " +

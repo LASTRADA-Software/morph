@@ -74,9 +74,10 @@ choice as a preference.
 ## Keys known at run time
 
 `t` accepts a key expression in place of a literal key (`{"t": {"expr": …}}`, `tAt`), for a message whose key arrives
-with data, such as an action refusal's code. A literal key is checked by the bundle as before; a run-time key cannot be,
-because the bundle does not know the keys the data will name. The interpreter reports a run-time key the catalogue lacks
-as a problem, once per key and screen, and shows the fallback. The application covers its keys with a test of its own
+with data, such as an action refusal's code. Only the `fallback`'s syntax is checked at load, for either kind of key; no check tests that a key, literal or
+run-time, has an entry in a catalogue, and a missing literal key shows its fallback without a report. The interpreter
+reports a run-time key the catalogue lacks at run time, as a problem once per expression site and key, and shows the
+fallback. The application covers its keys, literal and run-time alike, with a test of its own
 over its catalogues. See [`refusals.md`](refusals.md).
 
 ## Search
