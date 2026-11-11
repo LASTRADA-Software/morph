@@ -16,7 +16,8 @@ namespace morph::model {
 struct RefusalArg {
     /// @brief The argument's name; the sentence reads it as the variable `$name`.
     std::string name;
-    /// @brief The argument's value, as the text the sentence should show.
+    /// @brief The argument's value: a number as a plain numeric literal (`5000.5`), which a `:number` placeholder
+    ///        formats in the client's locale; anything else as the text the sentence should show.
     std::string value;
 };
 

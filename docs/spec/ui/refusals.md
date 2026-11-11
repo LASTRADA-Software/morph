@@ -35,8 +35,8 @@ exception a guard throws.
 - a **code**: a dotted name the application owns (`lims.billing.invoiceLeased`). It is the key the catalogue words,
   and so it is stable across releases of the wording;
 - **named arguments**: `RefusalArg{name, value}` pairs, both strings (`{"holder", "alice"}`). They are the facts the
-  sentence needs. A value that is a number or a date is written by the throwing side as the text the sentence should
-  show, because the server does not know the client's locale;
+  sentence needs. A number is written as a plain numeric literal (`5000.5`, no grouping), so a `:number` placeholder
+  formats it in the client's locale; a date is written as the text the sentence should show;
 - a **message** for logs and tests, the `what()` text, which the application writes for a developer ("SubmitInvoice:
   invoice 7 is being edited by 'alice'").
 

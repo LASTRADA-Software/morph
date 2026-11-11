@@ -1199,7 +1199,8 @@ enum class DateUnit : std::uint8_t {
 /// @param key      An expression evaluating to the catalogue key.
 /// @param fallback The pattern shown when the catalogue has none.
 /// @param args     An expression evaluating to a list of `{name, value}` records, which become the message's named
-///                 arguments; their values are formatted as text.
+///                 arguments; a value is shown as text, or formatted as a number by a `:number` placeholder
+///                 when it is a plain numeric literal.
 /// @return The `{"t": {"expr": key}, ...}` form.
 [[nodiscard]] inline Handle<std::string> tAt(AnyHandle const& key, std::string const& fallback,
                                              AnyHandle const& args) {
