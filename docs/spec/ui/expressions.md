@@ -34,6 +34,7 @@ clients keeps such documents free of it. The shared corpus is
 | `{"get": e, "path": "a.b"}` | `Get` | A path read out of any expression's value, as `ref` reads below its name |
 | `{"query": "q"}` | `Query` | A query's value |
 | `{"pending": "x"}`, `{"error": "x"}`, `{"errorKind": "x"}` | `Pending`, `Error`, `ErrorKind` | A query's or mutation's flight, error text and error kind |
+| `{"refusal": "x"}` | `Refusal` | A query's or mutation's last failure when it was an action refusal: `null`, or `{code, args}` ([`refusals.md`](refusals.md)) |
 | `{"result": "m"}` | `Result` | A mutation's last result |
 | `{"can": "x"}` | `Can` | Whether the principal may run a query or mutation, or the client has `host:<command>` |
 | `{"pref": "point.path"}` | `Pref` | A customization point's choice |
@@ -209,7 +210,7 @@ arithmetic, and `any` where it depends on data the document does not describe.
 | Dates | `dateAdd(x, n, unit)`, `dateRange(from, to)` |
 | Display | `number`, `decimal(x, dp, mode?)`, `quantity(x, unit?)`, `money(x, currency)`, `date(x, style?)`, `dateTime(x, style?)` |
 | Entry | `parseDecimal(text, dp?)` |
-| Text | `t(key, fallback, args?)` |
+| Text | `t(key, fallback, args?)` (`key` a literal, or `{"expr": e}` for a string, which the author API writes as `tAt`), `refusalText(refusal)` |
 
 - `format`'s placeholders are `{0}`, `{1}`, …; `{{` and `}}` are literal braces. An argument shows
   as text, a bool as `true`/`false`, a number or quantity as `number` and `quantity` show it, a
@@ -329,10 +330,23 @@ pattern.
 exact key before a plural category before `*`. A variable that is missing, `null` or of the wrong
 kind shows as `{$name}` and is returned as an error, which `t` reports.
 
+A `:number` operand is an `int`, a decimal, a quantity, or a **string holding a numeric literal**
+(`-?[0-9]+(\.[0-9]+)?`, at most 18 digits), which reads as the decimal it spells at the places it writes, as
+MessageFormat 2 specifies for a string operand. That is how an action refusal's string arguments format in the user's
+locale and select plural categories. A string that is not such a literal is a non-numeric operand: it shows as
+`{$name}` with an error, and matches no `.match` key but `*`. Without `:number` a string is text. There is no
+`:integer`.
+
 **Plural categories** (`pluralCategory`) are CLDR's, from the operands `n`, `i` and `v` (a
 decimal's places are its visible fraction digits): `en`, `de`, `nl`, `sv`, `it`, `es`, `fr`, `pt`,
 `pl`, `ru`, `uk`, `cs` and `ar` carry their rules; every other language selects only `other`. The
 language subtag decides, so `pl-PL` uses Polish.
+
+**Run-time keys and list arguments.** `t`'s key may be `{"expr": e}` for an expression `e` evaluating to a string, and
+its `args` may be `{"expr": e}` for an `e` evaluating to a list of `{name, value}` records, each becoming a named
+argument whose string value is formatted as text, or as a number under `:number`. `refusalText(refusal)` is the sentence for an action refusal: the
+catalogue's message for its code, else its class sentence (`a.b.generic`, then `a.generic`), else `This was refused.`.
+See [`refusals.md`](refusals.md).
 
 ## The environment
 

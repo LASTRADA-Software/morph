@@ -1130,7 +1130,7 @@ private:
                     // `default:` only because the project builds with
                     // -Wswitch-default; ExecuteReplyKind is a closed enum and
                     // all three enumerators are handled explicitly.
-                    pending->state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
+                    pending->state->setException(::morph::wire::executeFailure(env));
                     break;
             }
         }

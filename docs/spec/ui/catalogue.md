@@ -19,6 +19,7 @@ loading rule of spec 5 §4.
 - [At load](#at-load)
 - [Resolution](#resolution)
 - [Switching locale](#switching-locale)
+- [Keys known at run time](#keys-known-at-run-time)
 - [Search](#search)
 - [Catalog titles](#catalog-titles)
 - [Design decisions](#design-decisions)
@@ -69,6 +70,15 @@ every key.
 calls `Session::setLocale`, which replaces the reactive formatting facts with the new locale and the same provider,
 so every `t` re-evaluates; then it calls `InterpreterHost::setLocale`, through which the application stores the
 choice as a preference.
+
+## Keys known at run time
+
+`t` accepts a key expression in place of a literal key (`{"t": {"expr": …}}`, `tAt`), for a message whose key arrives
+with data, such as an action refusal's code. Only the `fallback`'s syntax is checked at load, for either kind of key; no check tests that a key, literal or
+run-time, has an entry in a catalogue, and a missing literal key shows its fallback without a report. The interpreter
+reports a run-time key the catalogue lacks at run time, as a problem once per expression site and key, and shows the
+fallback. The application covers its keys, literal and run-time alike, with a test of its own
+over its catalogues. See [`refusals.md`](refusals.md).
 
 ## Search
 

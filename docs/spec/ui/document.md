@@ -379,8 +379,13 @@ evaluated.
   checked against it.
 - **What a reference reads.** A param or state reads its type; a `let` the type of its expression;
   a query its value (`any`); an element one of its values, which the reference must name; a transfer
-  `progress`, `pending` or `error`. A mutation is read through `result`, `pending` and `error`, a
+  `progress`, `pending` or `error`. A mutation is read through `result`, `pending`, `error` and `refusal`, a
   model alias not at all.
+- **Refusals in words.** `{"refusal": "m"}` reads a mutation's or a query's last failure when it was an action refusal
+  (`null`, or `{code, args}`); `refusalText(refusal)` is its sentence from the catalogue in the user's locale; `t`
+  takes `{"expr": e}` as its key, and as its `args` an expression evaluating to a list of `{name, value}` records.
+  A mutation or query that is not in scope refuses `refusal` at load as it does `error`. See
+  [`refusals.md`](refusals.md).
 
 ## Load-time rules
 

@@ -163,6 +163,8 @@ providers and limits ·
 (`host/1`): checked arguments, the trust gate, `can` and the handshake ·
 [`ui/catalogue.md`](ui/catalogue.md) — a bundle's message catalogues, the provider `t` resolves through, locale
 switching and search in every locale ·
+[`ui/refusals.md`](ui/refusals.md) — a refused action's code and arguments on the wire, `refusal()` on a mutation or query,
+and `refusalText`: the sentence in the user's locale from the catalogue, by a key known at run time ·
 [`ui/theme.md`](ui/theme.md) — theme tokens: DTCG 2025.10 files, aliases and layering, the checks at registration,
 the closed `ui-theme/1` set and its defaults, and applying it on Qt Quick ·
 [`ui/host.md`](ui/host.md) — the host contract: `ScreenHost`, `ScreenHandle`, the close protocol, call and return,
