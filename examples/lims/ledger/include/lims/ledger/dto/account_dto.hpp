@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <algorithm>
 #include <morph/core/records.hpp>
 #include <morph/util/datetime.hpp>
 #include <string>
@@ -9,6 +8,7 @@
 
 #include "lims/ledger/core/types.hpp"
 #include "lims/org/core/types.hpp"
+#include "lims/posting/posting.hpp"
 
 /// @file
 /// The chart of accounts and the periods, as the wire sees them.
@@ -30,10 +30,7 @@ struct CreateAccount {
     /// @return `true` when a company, a code of 1 to 16 upper-case letters and digits and a name of 1 to 128 bytes
     /// are named. Codes are upper-case so that two codes differing only in case cannot coexist.
     [[nodiscard]] bool validate() const noexcept {
-        bool const codeOk = !code.empty() && code.size() <= 16 && std::ranges::all_of(code, [](char c) {
-            return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z');
-        });
-        return company.hasValue() && codeOk && !name.empty() && name.size() <= 128;
+        return company.hasValue() && isAccountCode(code) && !name.empty() && name.size() <= 128;
     }
 
     /// @brief Sent by its button, never per keystroke.

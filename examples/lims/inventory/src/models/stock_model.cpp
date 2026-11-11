@@ -268,6 +268,7 @@ ItemView StockModel::execute(const CreateItem& action) {
     };
     return guardedInsert(
         [&] {
+            // The lookup runs on a mapper of its own, outside the write's transaction below.
             if (std::invoke([&] {
                     Lightweight::DataMapper lookup;
                     return itemByCode(lookup, action.company, action.code).has_value();
@@ -331,6 +332,7 @@ LocationView StockModel::execute(const CreateLocation& action) {
     };
     return guardedInsert(
         [&] {
+            // The lookup runs on a mapper of its own, outside the write's transaction below.
             if (std::invoke([&] {
                     Lightweight::DataMapper lookup;
                     return locationByName(lookup, action.site, action.name).has_value();
@@ -403,8 +405,13 @@ LotStockView StockModel::execute(const RecordOpeningLot& action) {
         throw ValidationError{"RecordOpeningLot: the quantity must be positive"};
     }
     auto const company = OrgModel::findCompany(CompanyId{item->companyId.Value()});
-    if (!company.has_value() || (*action.unitCost).isNegative() ||
-        !fitsCurrency(*action.unitCost, company->baseCurrency)) {
+    if (!company.has_value()) {
+        throw NotFound{"RecordOpeningLot: company " + std::to_string(item->companyId.Value()) + " does not exist"};
+    }
+    if ((*action.unitCost).isNegative()) {
+        throw ValidationError{"RecordOpeningLot: the unit cost must not be negative"};
+    }
+    if (!fitsCurrency(*action.unitCost, company->baseCurrency)) {
         throw ValidationError{"RecordOpeningLot: the unit cost is not a whole number of the company's minor units"};
     }
     std::string const principal = ::morph::session::current()->principal;
@@ -422,16 +429,14 @@ LotStockView StockModel::execute(const RecordOpeningLot& action) {
     lot.unitCostNum = (*action.unitCost).numerator;
     lot.unitCostDen = (*action.unitCost).denominator;
     lot.reservationVersion = 0;
-    try {
-        mapper.Create(lot);
-    } catch (Lightweight::SqlException const&) {
-        // The unique index on (item, lot number) refused it; any other failure finds no such lot and surfaces.
-        if (inventory::lotNumberTaken(*action.item, action.lotNumber)) {
-            throw Conflict{"RecordOpeningLot: lot " + action.lotNumber + " of " +
-                           std::string{item->code.Value().ToStringView()} + " exists already"};
-        }
-        throw;
-    }
+    // The unique index on (item, lot number) refuses a second lot of the number; any other failure finds no such lot
+    // and surfaces.
+    guardedInsert([&] { mapper.Create(lot); },
+                  [&] { return inventory::lotNumberTaken(*action.item, action.lotNumber); },
+                  [&] {
+                      return Conflict{"RecordOpeningLot: lot " + action.lotNumber + " of " +
+                                      std::string{item->code.Value().ToStringView()} + " exists already"};
+                  });
     static_cast<void>(inventory::moveLot(mapper, lot, MovementKind::Opening, quantity, "opening", principal));
     sqlTxn.Commit();
     return inventory::lotView(mapper, inventory::lotRecord(mapper, static_cast<std::int64_t>(lot.id.Value())));

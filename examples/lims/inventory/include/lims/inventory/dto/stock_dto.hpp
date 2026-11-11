@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <algorithm>
 #include <array>
 #include <morph/core/records.hpp>
 #include <morph/table/query.hpp>
@@ -15,20 +14,13 @@
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/references.hpp"
 #include "lims/org/core/types.hpp"
+#include "lims/posting/posting.hpp"
 
 /// @file
 /// A company's inventory settings, its items, locations and lots, the stock on hand and the movements that changed
 /// it, as the wire sees them.
 
 namespace lims {
-
-/// @brief Whether @p code can name a ledger account: 1 to 16 upper-case letters and digits.
-/// @param code The code.
-/// @return `true` when it can.
-[[nodiscard]] inline bool isStockAccountCode(std::string_view code) noexcept {
-    return !code.empty() && code.size() <= 16 &&
-           std::ranges::all_of(code, [](char c) { return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'); });
-}
 
 /// @brief Sets how a company keeps stock: the ledger accounts its stock postings use and how long a requisition may
 ///        wait for approval. Setting twice replaces the earlier settings.
@@ -53,9 +45,8 @@ struct SetInventorySettings {
     /// @return `true` when a company, four account codes and the approval hours are named. The range of the hours is
     /// the model's to judge.
     [[nodiscard]] bool validate() const noexcept {
-        return company.hasValue() && isStockAccountCode(stockAccount) && isStockAccountCode(grniAccount) &&
-               isStockAccountCode(consumptionAccount) && isStockAccountCode(roundingAccount) &&
-               approvalHours.hasValue();
+        return company.hasValue() && isAccountCode(stockAccount) && isAccountCode(grniAccount) &&
+               isAccountCode(consumptionAccount) && isAccountCode(roundingAccount) && approvalHours.hasValue();
     }
 
     /// @brief Sent by its button, never per keystroke.

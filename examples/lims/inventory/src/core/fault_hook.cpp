@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "lims/inventory/core/fault_hook.hpp"
 
+#include <utility>
+
 namespace lims {
 
 namespace {
