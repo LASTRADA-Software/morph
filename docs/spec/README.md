@@ -134,7 +134,9 @@ form definitions that are data ·
 rules, exact values and reactive session, headless ·
 [`table/engine.md`](table/engine.md) — sorting, filtering and view
 mapping for a table, on and off the owner thread, and `table::apply` for a
-server
+server ·
+[`table/database_pages.md`](table/database_pages.md) — paging a table that
+lives in a database: `planQuery`, `Page::totalKind` and the conformance helper
 
 **Reactive state and control**
 [`reactive/signals.md`](reactive/signals.md) ·

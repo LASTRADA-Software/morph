@@ -482,11 +482,16 @@ function(morph_add_rung)
     # \"Stress: ...\" gets `stress` the same way, which CI's ladder legs
     # (ctest -L ladder -LE stress) and its coverage leg leave out. A stress
     # case is long by design, so it gets a 600 s limit instead of the
-    # rung's 120 s.
+    # rung's 120 s; one whose name sizes its table as 10^6 or 10^7 rows
+    # gets 1800 s, because writing and reading that many rows through a
+    # database takes most of 600 s on its own.
     if(_ladder_test MATCHES \"Journey: \")
         set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder-${_rung};journey\")
     elseif(_ladder_test MATCHES \"Stress: \")
         set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder-${_rung};stress\" TIMEOUT 600)
+        if(_ladder_test MATCHES \"10.[67] \")
+            set_tests_properties(\"\${_ladder_test}\" PROPERTIES TIMEOUT 1800)
+        endif()
     endif()
 endforeach()
 "

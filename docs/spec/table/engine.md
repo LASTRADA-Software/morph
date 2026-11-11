@@ -46,10 +46,11 @@ or the reactive runtime.
 |---|---|
 | `data_source.hpp` | `ColumnKind`, `ColumnInfo`, `Cell`, `QuantityCell`, `RowId`, `TableError`, `RowSnapshot`, `TableSnapshot`, `DataSource`, `VectorSource`, `RowPatcher`, the services, `parseDecimal`, `displayText` |
 | `sort.hpp` | `SortKey`, `SortChain`, `CellState`, `KeyColumn`, `buildKeys`, `compareKeys`, `RowOrder`, `ChunkedMergeSort`, `sortRows` |
-| `filter.hpp` | `FilterEntry`, `Combine`, `ColumnFilter`, `GroupFilter`, `FilterSpec`, `CompiledFilter`, `compileFilter`, `FilterRun` |
+| `filter.hpp` | `FilterEntry`, `Combine`, `ColumnFilter`, `GroupFilter`, `FilterSpec`, `CompiledFilter`, `compileFilter`, `compileFilterGuarded`, `FilterRun` |
 | `view_change.hpp` | `ViewOp`, `ViewChange`, `diffViews`, `applyViewChange` |
 | `engine.hpp` | `Engine`, `EngineOptions`, `EngineStats`, `ReorderPolicy`, `ColumnLayout` |
-| `query.hpp` | `PageRequest`, `TableQuery`, `Page<Row>`, `QueryLimits`, `validate`, `escapeLikePattern`, `ApplyOptions`, `PageRows`, `apply`, `RowsSource<Row>`, `PageWindow<Row>` |
+| `query.hpp` | `PageRequest`, `TableQuery`, `Page<Row>`, `TotalKind`, `QueryLimits`, `validate`, `escapeLikePattern`, `ApplyOptions`, `PageRows`, `apply`, `QueryPlan`, `planQuery`, `RowsSource<Row>`, `PageWindow<Row>` |
+| `plan_conformance.hpp` | `ModelPage`, `PlanModel`, `ConformanceOptions`, `standardCorpus`, `conformanceFailures` |
 | `selection.hpp` | `TableMode`, `SelectionMode`, `Selection`, `TableCounts`, `counts` |
 | `edits.hpp` | `EditRequest`, `FieldError`, `EditCommit`, `CellEdits` |
 
@@ -296,14 +297,21 @@ edited included; the next repair holds them again.
   `apply(rows, key, query, options, kinds)` does the same over typed rows and
   returns a `Page<Row>`. Text order is the server's collator; a client in
   server mode does not re-sort a page.
+- A model that holds its rows in a database pages them there: `planQuery(query, columns, limits, mayRead, services,
+  translatable)` is `validate`, the model's own refusals, the guarded compile and a projection of the compiled filter
+  into a `QueryPlan` the model translates into its query, and `Page::totalKind` says whether a total is the count or a
+  lower bound (`AtLeast`). `apply` stays the reference: `conformanceFailures` runs a corpus through `apply` and the
+  model's translation and reports every disagreement. `compileFilterGuarded` is the one compile step `apply`,
+  `Engine` and `planQuery` share, so a collator or date parser that throws is `ServiceFailed` in all three. The
+  design is [`database_pages.md`](database_pages.md).
 - `escapeLikePattern` is for a database-backed server that maps `contains` to
   SQL `LIKE`: it keeps `%` and `_` ordinary.
 - `TableError` serialises with its code by name (`"unsupportedOperator"`), so a
   server returns it as the action's typed error.
 - `PageWindow<Row>` is the client's view of a server-mode table: `visible(first,
   count)` returns the `PageFetch`es (a `PageRequest` tagged with the query) to
-  send around the visible rows (one page of margin each side, nothing past a
-  known total, nothing complete or in flight); `accept(fetch, page)` stores a
+  send around the visible rows (one page of margin each side, nothing past an
+  `Exact` total, nothing complete or in flight); `accept(fetch, page)` stores a
   reply and evicts the pages farthest from the visible rows beyond `maxPages`;
   `fail(fetch, error)` records the error the table shows until the next reply;
   `reset` drops everything and starts a new query when the sort or filter
