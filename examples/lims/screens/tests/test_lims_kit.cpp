@@ -2,6 +2,7 @@
 //
 // The screen kit: money, balances, days and states in words, in English and German, and catalogues that agree.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -21,10 +22,16 @@
 #include <string_view>
 #include <testkit/db_fixture.hpp>
 #include <testkit/screen_harness.hpp>
+#include <vector>
 
 #include "kit/kit.hpp"
+#include "lims/billing/core/refusal_codes.hpp"
 #include "lims/billing/core/types.hpp"
+#include "lims/billing/db/billing_entity.hpp"
+#include "lims/billing/models/invoice_edit_model.hpp"
+#include "lims/org/core/errors.hpp"
 #include "lims/org/models/org_model.hpp"
+#include "lims_test_support.hpp"
 #include "scenario/org_scenario.hpp"
 #include "scenario/scenario_client.hpp"
 #include "screen_test_support.hpp"
@@ -111,6 +118,40 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
     entry.id = "test.names";
     entry.title = "Names";
     if (auto added = served.addScreen(std::move(entry), (*registered)->text); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    return served.build();
+}
+
+/// @brief A screen with a button that asks to lease invoice @p invoice and a banner wording the refusal.
+/// @param invoice The invoice's id.
+/// @return The bundle.
+std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> refusalBundle(std::int64_t invoice) {
+    ui::ScreenRegistry screens;
+    auto registered = screens.add(ui::screen("test.refusal", [invoice](ui::Scope& screen) {
+        auto const editor = screen.model<lims::InvoiceEditModel>("editor");
+        auto const lease = screen.mutation<lims::LeaseInvoice>("lease", editor);
+        return ui::column({
+            ui::button({.label = "Lease",
+                        .onClick = ui::run(lease, {{&lims::LeaseInvoice::invoiceId, ui::AnyHandle{invoice}}})})
+                .testId("lease"),
+            kit::refusalBanner(lease.refusal()).testId("refusal"),
+            ui::text({.text = ui::coalesce({lease.error(), ui::AnyHandle{"no message"}})}).testId("message"),
+            ui::button({.label = "Deutsch", .onClick = ui::setLocale("de")}).testId("german"),
+        });
+    }));
+    if (!registered) {
+        return std::unexpected(registered.error());
+    }
+    morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = "lims-refusal-test", .version = "1.0"},
+                                 screens.catalog()};
+    morph::ui::CatalogEntry entry;
+    entry.id = "test.refusal";
+    entry.title = "Refusal";
+    if (auto added = served.addScreen(std::move(entry), (*registered)->text); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    if (auto added = lims::screens::addCatalogues(served); !added) {
         return std::unexpected(std::move(added.error()));
     }
     return served.build();
@@ -248,6 +289,74 @@ TEST_CASE("lims kit: each module's catalogues hold the same keys in both locales
             CHECK(english.contains(key));
         }
     }
+}
+
+// A draft invoice that alice is editing, written straight to the tables: the refusal is the real model's.
+// Mutation: make the banner show the refusal's message (the banner then reads "LeaseInvoice: invoice ... is being
+// edited by 'alice'"); give the lease refusal a code the catalogue does not hold (the class sentence shows).
+TEST_CASE("lims kit: a refusal banner shows the code's words, never the message", "[lims-screens][kit]") {
+    morph::ladder::testkit::DbFixture fixture;
+    lims::test::grant("bob", lims::LimsRole::BillingClerk);
+    lims::test::grant("alice", lims::LimsRole::BillingClerk);
+    std::int64_t invoice = 0;
+    {
+        Lightweight::DataMapper mapper;
+        lims::db::InvoiceRecord row;
+        row.companyId = lims::db::kSeededCompanyId;
+        row.siteId = lims::db::kSeededSiteId;
+        row.clientId = 1;
+        mapper.Create(row);
+        invoice = static_cast<std::int64_t>(row.id.Value());
+        lims::db::InvoiceLeaseRecord lease;
+        lease.invoiceId = invoice;
+        lease.holder = Lightweight::SqlAnsiString<64>{"alice"};
+        lease.token = Lightweight::SqlAnsiString<32>{"alices-token"};
+        lease.expiresAt = std::int64_t{4102444800000};
+        mapper.Create(lease);
+    }
+    ScreenHarness harness{
+        morph::client::LocalApp{
+            .name = "lims-refusal", .bundle = [invoice] { return refusalBundle(invoice); }, .setUp = {}},
+        "test.refusal",
+        RigMode::Local,
+        {},
+        morph::client::LocalSetup{.db = {}, .user = "bob"}};
+    lims::screens::test::reportProblems(harness);
+    auto const banner = [&harness] { return lims::screens::test::prop(harness, "Banner", "refusal", "text"); };
+    CHECK(banner().empty());
+    harness.click("lease");
+    CHECK(harness.waitFor([&banner] { return banner() == "alice is editing this invoice."; }));
+    CHECK(harness.waitForText("message",
+                              "LeaseInvoice: invoice " + std::to_string(invoice) + " is being edited by 'alice'"));
+    harness.click("german");
+    CHECK(harness.waitFor([&banner] { return banner() == "alice bearbeitet diese Rechnung."; }));
+}
+
+// Mutation: drop `lims.billing.invoiceLeased` from de/billing.json (the German words are missing and the case names
+// the code).
+TEST_CASE("lims kit: every code lims throws has words in both catalogues", "[lims-screens][kit]") {
+    auto const catalogues = servedCatalogues();
+    std::vector<std::string_view> codes;
+    for (auto const code : lims::kClassRefusalCodes) {
+        codes.push_back(code);
+    }
+    for (auto const code : lims::kOrgRefusalCodes) {
+        codes.push_back(code);
+    }
+    for (auto const code : lims::kBillingRefusalCodes) {
+        codes.push_back(code);
+    }
+    morph::ui::ValueRecord const holder{{"holder", morph::ui::Value{"Alice Adams"}}};
+    for (std::string_view const code : codes) {
+        INFO(code);
+        CHECK_FALSE(formatted(catalogues, code, "en", holder).empty());
+        CHECK_FALSE(formatted(catalogues, code, "de", holder).empty());
+    }
+    CHECK(formatted(catalogues, "lims.billing.invoiceLeased", "en", holder) == "Alice Adams is editing this invoice.");
+    CHECK(formatted(catalogues, "lims.billing.invoiceLeased", "de", holder) ==
+          "Alice Adams bearbeitet diese Rechnung.");
+    CHECK(formatted(catalogues, "lims.refusal.conflict", "de") ==
+          "Jemand hat das inzwischen geändert. Bitte neu laden und erneut versuchen.");
 }
 
 // Mutations: make personName answer the principal always ("named" reads "anna"); drop the non-empty-name condition

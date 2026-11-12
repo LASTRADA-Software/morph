@@ -44,8 +44,8 @@ ui::Handle<std::string> personName(ui::AnyHandle const& users, ui::AnyHandle con
         ui::coalesce({ui::call("first", {named}).at("displayName"), principal}).json());
 }
 
-ui::Node errorBanner(ui::AnyHandle const& message) {
-    return ui::banner({.tone = ui::AnyHandle{"err"}, .text = message}).visible(ui::engaged(message));
+ui::Node refusalBanner(ui::AnyHandle const& refusal) {
+    return ui::banner({.tone = ui::AnyHandle{"err"}, .text = ui::refusalText(refusal)}).visible(ui::engaged(refusal));
 }
 
 }  // namespace lims::screens::kit

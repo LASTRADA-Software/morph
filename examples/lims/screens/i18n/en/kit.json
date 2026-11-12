@@ -1,10 +1,18 @@
 {
   "lims.credit": "Cr",
+  "lims.generic": "This could not be done.",
   "lims.loading": "Loading…",
   "lims.module.billing": "Billing",
   "lims.module.inventory": "Inventory",
   "lims.module.lab": "Laboratory",
   "lims.module.ledger": "Ledger",
   "lims.module.org": "Organisation",
-  "lims.module.shell": "Home"
+  "lims.module.shell": "Home",
+  "lims.refusal.conflict": "Someone changed this meanwhile. Reload it and try again.",
+  "lims.refusal.emptyPrincipal": "You are not signed in. Sign in and try again.",
+  "lims.refusal.forbidden": "You are not allowed to do this here.",
+  "lims.refusal.illegalTransition": "That is not possible in the current state.",
+  "lims.refusal.notFound": "That record is not available here.",
+  "lims.refusal.outOfRange": "An amount is too large to be recorded exactly.",
+  "lims.refusal.validation": "Some of what was entered is not valid. Check it and try again."
 }
