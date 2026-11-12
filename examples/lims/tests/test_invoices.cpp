@@ -22,6 +22,7 @@
 #include "lims/app/event_wiring.hpp"
 #include "lims/billing/core/invoice_math.hpp"
 #include "lims/billing/db/billing_entity.hpp"
+#include "lims/billing/models/invoice_edit_model.hpp"
 #include "lims/billing/models/invoice_model.hpp"
 #include "lims/org/core/calendar.hpp"
 #include "lims/org/models/org_model.hpp"
@@ -507,4 +508,46 @@ TEST_CASE("InvoiceModel over the full backend-mode matrix: an invoice is drafted
     auto const listed = awaitQt(invoices.execute(lims::ListInvoices{.company = lims::test::seededCompany()})).invoices;
     REQUIRE(listed.size() == 1U);
     CHECK(listed.front().id == draft.id);
+}
+
+// Mutation: delete validate() from RecordBillableLine, CreateInvoice, GetInvoice, GetInvoiceLease or ListInvoices (an
+// unnamed company, invoice or event reaches the books).
+TEST_CASE("invoices: a request that names no company, invoice or event is refused by the handler",
+          "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    ScopedPrincipal const bea{"bea"};
+    lims::InvoiceModel invoices;
+    CHECK_THROWS_AS(invoices.execute(lims::RecordBillableLine{}), lims::ValidationError);
+    CHECK_THROWS_AS(invoices.execute(lims::CreateInvoice{}), lims::ValidationError);
+    CHECK_THROWS_AS(invoices.execute(lims::GetInvoice{}), lims::ValidationError);
+    CHECK_THROWS_AS(invoices.execute(lims::GetInvoiceLease{}), lims::ValidationError);
+    CHECK_THROWS_AS(invoices.execute(lims::ListInvoices{}), lims::ValidationError);
+}
+
+// Mutation: total the invoice from the line just removed instead of the lines that remain (the net keeps the removed
+// line's amount), or leave the totals as they were.
+TEST_CASE("invoices: removing one of two lines re-totals the invoice from the line that remains",
+          "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    auto const lab = billedSample();
+    insertLine(lab, lims::test::seededSite(), 9101, 10, lims::CurrencyCode::EUR);
+    ScopedPrincipal const bea{"bea"};
+    auto const draft = lims::InvoiceModel{}.execute(invoiceOf(lab));
+    REQUIRE(draft.lines.size() == 2U);
+    CHECK(*draft.net == exact(50, 1, 2));
+    lims::BillableLineId removed;
+    for (auto const& line : draft.lines) {
+        if (*line.amount == exact(40, 1, 2)) {
+            removed = line.id;
+        }
+    }
+    REQUIRE(removed.hasValue());
+    lims::InvoiceEditModel editor;
+    editor.execute(lims::LeaseInvoice{.invoiceId = draft.id});
+    auto const edited = editor.execute(lims::RemoveInvoiceLine{.line = removed});
+    REQUIRE(edited.lines.size() == 1U);
+    CHECK(*edited.lines.front().amount == exact(10, 1, 2));
+    CHECK(*edited.net == exact(10, 1, 2));
+    CHECK(*edited.tax == exact(19, 10, 2));
+    CHECK(*edited.gross == exact(119, 10, 2));
 }

@@ -6,12 +6,14 @@
 // of the ledger's authorization, effects and journal.
 
 #include <Lightweight/SqlConnection.hpp>
+#include <Lightweight/SqlStatement.hpp>
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <condition_variable>
+#include <core/async/SyncRun.hpp>
 #include <cstdint>
 #include <memory>
 #include <morph/journal/action_log.hpp>
@@ -555,4 +557,94 @@ TEST_CASE("invoice posting: two clerks posting at once get consecutive numbers",
         morph::ladder::testkit::awaitQt(std::move(bobPosting)).number,
     };
     CHECK(numbers == std::set<std::string>{"INV-2026-000001", "INV-2026-000002"});
+}
+
+// Mutation: delete validate() from PostInvoice's handler.
+TEST_CASE("invoice posting: the post handler refuses an unnamed invoice on its own", "[lims][billing][posting]") {
+    lims::test::LabFixture const fixture;
+    ScopedPrincipal const bea{"bea"};
+    lims::InvoiceModel invoices;
+    CHECK_THROWS_AS(core::async::syncRun(invoices.execute(lims::PostInvoice{})), lims::ValidationError);
+}
+
+// Mutation: drop the port completeness check from PostInvoice (an unwired server dereferences an empty function).
+TEST_CASE("invoice posting: an approved invoice is not posted while no ledger is wired", "[lims][billing][posting]") {
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    lims::test::billingSettings();
+    auto const invoice = lims::test::approvedInvoice();
+    CHECK_THROWS_WITH(lims::test::dispatchAs<lims::InvoiceModel>("bea", lims::PostInvoice{.invoiceId = invoice.id}),
+                      Catch::Matchers::ContainsSubstring("no ledger is wired"));
+    CHECK(lims::findInvoiceRecord(invoice.id).value_or(lims::db::InvoiceRecord{}).state.Value() ==
+          static_cast<int>(lims::InvoiceState::Approved));
+}
+
+// Mutation: post a foreign-currency invoice at rate one when the ledger has no rate on the posting date (the entry
+// values 47.60 USD as 47.60 EUR).
+TEST_CASE("invoice posting: a foreign-currency invoice is not posted on a date the ledger has no rate for",
+          "[lims][billing][posting]") {
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    {
+        ScopedPrincipal const acc{"acc"};
+        lims::LedgerModel{}.execute(lims::SetExchangeRate{
+            .company = lims::test::seededCompany(),
+            .from = lims::CurrencyCode::USD,
+            .to = lims::CurrencyCode::EUR,
+            .validFrom = morph::time::Timestamp{lims::test::at(2026, 11, 1)},
+            .rate = lims::Rate{exact(92, 100, 6)},
+        });
+    }
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::Dispatched};
+    auto const invoice = lims::test::approvedInvoice("WW-1", lims::CurrencyCode::USD);
+    // The rate is valid from 1 November; on 20 October none is.
+    ScopedClockOverride const october{lims::test::at(2026, 10, 20)};
+    CHECK_THROWS_WITH(posting.post(invoice),
+                      Catch::Matchers::ContainsSubstring("no USD/EUR rate on the posting date"));
+    CHECK(entries().empty());
+    ScopedClockOverride const november{lims::test::at(2026, 11, 20)};
+    CHECK(posting.post(invoice).state == lims::InvoiceState::Posted);
+}
+
+// Mutation: submit a foreign-currency invoice whose converted gross overflows (the gross is stored wrapped).
+TEST_CASE("invoice posting: a foreign gross too large to convert exactly is refused at submission",
+          "[lims][billing][posting]") {
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    {
+        ScopedPrincipal const acc{"acc"};
+        lims::LedgerModel{}.execute(lims::SetExchangeRate{
+            .company = lims::test::seededCompany(),
+            .from = lims::CurrencyCode::USD,
+            .to = lims::CurrencyCode::EUR,
+            .validFrom = morph::time::Timestamp{lims::test::at(2026, 11, 1)},
+            .rate = lims::Rate{exact(92, 100, 6)},
+        });
+    }
+    lims::test::billingSettings();
+    lims::test::PostingRig const posting{PostingMode::Dispatched};
+    auto const lab = lims::test::publishedSample();
+    lims::test::billingFor(lab.client, lims::CurrencyCode::USD);
+    lims::test::relayLabEvents();
+    lims::InvoiceId invoiceId;
+    {
+        ScopedPrincipal const bea{"bea"};
+        invoiceId =
+            lims::InvoiceModel{}
+                .execute(lims::CreateInvoice{
+                    .company = lims::test::seededCompany(), .site = lims::test::seededSite(), .client = lab.client})
+                .id;
+    }
+    {
+        Lightweight::SqlStatement statement;
+        (void)statement.ExecuteDirect("UPDATE billing_invoices SET gross_num = 9000000000000000001, gross_den = 1");
+    }
+    CHECK_THROWS_AS(lims::test::dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = invoiceId}),
+                    lims::OutOfRange);
+    CHECK(lims::findInvoiceRecord(invoiceId).value_or(lims::db::InvoiceRecord{}).state.Value() ==
+          static_cast<int>(lims::InvoiceState::Draft));
 }

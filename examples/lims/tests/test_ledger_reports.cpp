@@ -1046,3 +1046,113 @@ TEST_CASE("ledger: SQLite's SUM raises on integer overflow, and the trial balanc
     }
     CHECK_THROWS_AS(trial(), lims::OutOfRange);
 }
+
+// Mutation: delete validate() from GetRateOn.
+TEST_CASE("ledger rates: a rate question naming no company or no date is refused", "[lims][ledger][reports]") {
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    CHECK_THROWS_AS(ledger.execute(lims::GetRateOn{.query = {.company = {},
+                                                             .from = lims::CurrencyCode::USD,
+                                                             .to = lims::CurrencyCode::EUR,
+                                                             .on = november(1)}}),
+                    lims::ValidationError);
+    CHECK_THROWS_AS(ledger.execute(lims::GetRateOn{.query = {.company = lims::test::seededCompany(),
+                                                             .from = lims::CurrencyCode::USD,
+                                                             .to = lims::CurrencyCode::EUR,
+                                                             .on = {}}}),
+                    lims::ValidationError);
+}
+
+// Mutations: drop the year carry from the end of a December period (its end falls in the January of the year before,
+// so the period counts as frozen on every date and the 15 December figure reports the tampered total); drop the
+// freeze of a period ending in January.
+TEST_CASE("ledger reports: a closed December period ends in January of the next year", "[lims][ledger][reports]") {
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const december = ledger.execute(lims::OpenPeriod{
+        .company = lims::test::seededCompany(), .month = morph::time::Timestamp{lims::test::at(2026, 12, 1)}});
+    static_cast<void>(
+        lims::LedgerModel::record(lims::PostingRequest{.company = lims::test::seededCompany(),
+                                                       .date = morph::time::Timestamp{lims::test::at(2026, 12, 5)},
+                                                       .sourceKey = "dec-entry",
+                                                       .sourceReference = "dec-entry",
+                                                       .currency = lims::CurrencyCode::EUR,
+                                                       .rate = one(),
+                                                       .lines = {lims::PostingLine{.accountCode = "1200",
+                                                                                   .side = lims::PostingSide::Debit,
+                                                                                   .amount = units(10),
+                                                                                   .companyAmount = units(10)},
+                                                                 lims::PostingLine{.accountCode = "4000",
+                                                                                   .side = lims::PostingSide::Credit,
+                                                                                   .amount = units(10),
+                                                                                   .companyAmount = units(10)}}}));
+    ledger.execute(lims::BeginClosePeriod{.periodId = december.id});
+    ledger.execute(lims::ClosePeriod{.periodId = december.id});
+    {
+        Lightweight::DataMapper mapper;
+        auto row = frozenRow(mapper, december.id, "1200");
+        row.debitNum = 5000;
+        row.debitDen = 1;
+        mapper.Update(row);
+    }
+    lims::LedgerReportModel reports;
+    auto const balanceOn = [&](int year, unsigned month, unsigned day) {
+        return *reports
+                    .execute(lims::AccountBalance{.company = lims::test::seededCompany(),
+                                                  .accountCode = "1200",
+                                                  .asOf = morph::time::Timestamp{lims::test::at(year, month, day)}})
+                    .balance;
+    };
+    // Inside December the period's own lines count, not its frozen row.
+    CHECK(balanceOn(2026, 12, 15) == Rational{10, DecimalPlaces{2}});
+    // After the period's end the frozen figure replaces the period's lines.
+    CHECK(balanceOn(2027, 1, 5) == Rational{5000, DecimalPlaces{2}});
+}
+
+// Mutation: skip only the first closed period's lines in the statement (the second period's lines are counted on top
+// of its frozen totals).
+TEST_CASE("ledger reports: two closed periods are each reported from their frozen totals", "[lims][ledger][reports]") {
+    DbFixture fixture;
+    auto const november = books();
+    post("nov", units(100), 10);
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const december = ledger.execute(lims::OpenPeriod{
+        .company = lims::test::seededCompany(), .month = morph::time::Timestamp{lims::test::at(2026, 12, 1)}});
+    static_cast<void>(
+        lims::LedgerModel::record(lims::PostingRequest{.company = lims::test::seededCompany(),
+                                                       .date = morph::time::Timestamp{lims::test::at(2026, 12, 5)},
+                                                       .sourceKey = "dec",
+                                                       .sourceReference = "dec",
+                                                       .currency = lims::CurrencyCode::EUR,
+                                                       .rate = one(),
+                                                       .lines = {lims::PostingLine{.accountCode = "1200",
+                                                                                   .side = lims::PostingSide::Debit,
+                                                                                   .amount = units(10),
+                                                                                   .companyAmount = units(10)},
+                                                                 lims::PostingLine{.accountCode = "4000",
+                                                                                   .side = lims::PostingSide::Credit,
+                                                                                   .amount = units(10),
+                                                                                   .companyAmount = units(10)}}}));
+    for (auto const& period : {november, december}) {
+        ledger.execute(lims::BeginClosePeriod{.periodId = period.id});
+        ledger.execute(lims::ClosePeriod{.periodId = period.id});
+    }
+    {
+        Lightweight::DataMapper mapper;
+        for (auto const& [period, debit] : {std::pair{november.id, 5000}, std::pair{december.id, 7000}}) {
+            auto row = frozenRow(mapper, period, "1200");
+            row.debitNum = debit;
+            row.debitDen = 1;
+            mapper.Update(row);
+        }
+    }
+    auto const report = lims::LedgerReportModel{}.execute(lims::TrialBalance{
+        .company = lims::test::seededCompany(), .asOf = morph::time::Timestamp{lims::test::at(2027, 1, 5)}});
+    CHECK(*report.totalDebit == Rational{12000, DecimalPlaces{2}});
+    CHECK(*report.totalCredit == Rational{110, DecimalPlaces{2}});
+}

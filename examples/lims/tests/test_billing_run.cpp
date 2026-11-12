@@ -627,3 +627,13 @@ TEST_CASE("BillingRunModel over the full backend-mode matrix: a run is started, 
     CHECK(listed.front().id == runId);
     CHECK(listed.front().label == "2026-11");
 }
+
+// Mutation: delete validate() from AdvanceBillingRun, RunBillingSchedule or ListBillingRuns.
+TEST_CASE("billing run: a request naming no run, batch or company is refused by the handler", "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    ScopedPrincipal const bea{"bea"};
+    lims::BillingRunModel model;
+    CHECK_THROWS_AS(model.execute(lims::AdvanceBillingRun{.runId = {}, .batch = batchOf(1)}), lims::ValidationError);
+    CHECK_THROWS_AS(model.execute(lims::RunBillingSchedule{}), lims::ValidationError);
+    CHECK_THROWS_AS(model.execute(lims::ListBillingRuns{}), lims::ValidationError);
+}

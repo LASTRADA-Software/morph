@@ -209,6 +209,11 @@ void addExact(ExactSum& sum, Rational const& value, std::string_view what) {
 /// fit, which is reported as `OutOfRange`; the few sums per account, one per denominator, are then added exactly.
 /// A total that is only an over-range numerator at one denominator is refused even where it would reduce to a
 /// representable value, which is the "exact or refused" the ledger promises.
+///
+/// Each skipped period adds one `!=` condition on the entry's period. The builder has no "not in" for a set, so the
+/// conditions chain, and SQLite refuses an expression nested deeper than its default limit of 1000 levels. That bounds
+/// the closed periods one company can have inside a report's range at about a thousand (about 83 years of monthly
+/// periods); this bound is read from SQLite's documentation, not measured here.
 /// @param mapper The open mapper.
 /// @param company The company.
 /// @param throughMs The last instant counted.

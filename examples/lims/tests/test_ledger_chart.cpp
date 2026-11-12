@@ -269,3 +269,12 @@ TEST_CASE("LedgerModel over the full backend-mode matrix: an account and a perio
     REQUIRE(periods.size() == 1U);
     CHECK(periods.front().state == lims::PeriodState::Closing);
 }
+
+// Mutation: delete validate() from ListAccounts (a query naming no company answers an empty chart).
+TEST_CASE("ledger chart: a list naming no company is refused", "[lims][ledger]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Accountant);
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    CHECK_THROWS_AS(ledger.execute(lims::ListAccounts{}), lims::ValidationError);
+}

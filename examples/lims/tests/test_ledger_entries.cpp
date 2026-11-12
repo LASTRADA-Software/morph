@@ -1774,3 +1774,50 @@ TEST_CASE("ledger: a page of entries is the caller's, with an exact total from t
     }
     CHECK_THROWS_AS(ledger.execute(lims::ListEntriesPage{}), lims::ValidationError);
 }
+
+// Mutation: delete validate() from FindPosting or RecordPosting (a query naming no company reaches the books).
+TEST_CASE("ledger entries: a posting query or request naming no company or no key is refused", "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    lims::test::grant("poster", lims::LimsRole::Service);
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    CHECK_THROWS_AS(ledger.execute(lims::FindPosting{.query = {.company = {}, .sourceKey = "k"}}),
+                    lims::ValidationError);
+    CHECK_THROWS_AS(
+        ledger.execute(lims::FindPosting{.query = {.company = lims::test::seededCompany(), .sourceKey = {}}}),
+        lims::ValidationError);
+    ScopedPrincipal const poster{"poster"};
+    auto request = posting("k", 100);
+    request.sourceKey.clear();
+    CHECK_THROWS_AS(ledger.execute(lims::RecordPosting{.request = request}), lims::ValidationError);
+    request = posting("k", 100);
+    request.company = {};
+    CHECK_THROWS_AS(ledger.execute(lims::RecordPosting{.request = request}), lims::ValidationError);
+}
+
+// Mutation: answer the entry id of a source key whose entry no longer exists.
+TEST_CASE("ledger entries: a source key whose entry is gone finds no posting", "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    auto const first = lims::LedgerModel::record(posting("billing.invoice:gone", 11900));
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const query =
+        lims::FindPosting{.query = {.company = lims::test::seededCompany(), .sourceKey = "billing.invoice:gone"}};
+    CHECK(ledger.execute(query).entryId == first.entryId);
+    {
+        Lightweight::DataMapper mapper;
+        for (auto& row : mapper.Query<lims::db::EntryLineRecord>()
+                             .Where(::Lightweight::FieldNameOf<&lims::db::EntryLineRecord::entry>, "=", *first.entryId)
+                             .All()) {
+            mapper.Delete(row);
+        }
+        for (auto& row : mapper.Query<lims::db::EntryRecord>()
+                             .Where(::Lightweight::FieldNameOf<&lims::db::EntryRecord::id>, "=", *first.entryId)
+                             .All()) {
+            mapper.Delete(row);
+        }
+    }
+    CHECK_FALSE(ledger.execute(query).entryId.hasValue());
+}

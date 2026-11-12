@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <core/async/SyncRun.hpp>
 #include <functional>
 #include <morph/core/action_guard.hpp>
 #include <morph/core/registry.hpp>
@@ -482,6 +483,32 @@ TEST_CASE("invoice approval: the pending list holds nothing of a company the cal
                     .id;
     }
     execute("UPDATE billing_invoices SET company_id = " + std::to_string(*other));
+    ScopedPrincipal const carl{"carl"};
+    CHECK(invoices.execute(lims::ListPendingApprovals{}).invoices.empty());
+}
+
+// Mutation: delete validate() from SubmitInvoice's handler (an unnamed invoice is looked up).
+TEST_CASE("invoice approval: the submit handler refuses an unnamed invoice on its own", "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    ScopedPrincipal const bea{"bea"};
+    lims::InvoiceModel invoices;
+    CHECK_THROWS_AS(core::async::syncRun(invoices.execute(lims::SubmitInvoice{})), lims::ValidationError);
+}
+
+// Mutation: leave the `continue` out of the pending list (one invoice with no company-currency value fails the
+// whole list for every approver).
+TEST_CASE("invoice approval: an invoice with no company-currency value is left out of the pending list",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+    lims::InvoiceModel invoices;
+    {
+        ScopedPrincipal const carl{"carl"};
+        REQUIRE(invoices.execute(lims::ListPendingApprovals{}).invoices.size() == 1U);
+    }
+    execute("UPDATE billing_invoices SET gross_company_num = NULL, gross_company_den = NULL");
     ScopedPrincipal const carl{"carl"};
     CHECK(invoices.execute(lims::ListPendingApprovals{}).invoices.empty());
 }
