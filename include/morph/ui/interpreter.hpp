@@ -8221,10 +8221,12 @@ inline std::optional<Node> ScreenCore::lowerDisplay(DocNode const& node, LowerCt
                     for (Value const& item : *list) {
                         Value const* const label = item.field("label");
                         Value const* const state = item.field("state");
+                        Value const* const detail = item.field("detail");
                         std::string const name = state == nullptr ? std::string{} : textOf(*state, {});
                         steps.push_back(
                             Step{.label = label == nullptr ? std::string{} : textOf(*label, session.formatting()),
-                                 .state = stepStateOf(name)});
+                                 .state = stepStateOf(name),
+                                 .detail = detail == nullptr ? std::string{} : textOf(*detail, session.formatting())});
                     }
                 }
                 return steps;

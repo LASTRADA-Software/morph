@@ -1507,13 +1507,20 @@ public:
     void setLabel(std::string_view label) override { set("label", formatText(label)); }
 };
 
-/// @brief A fake `StepsWidget`: properties `steps` (`[label:State,…]`), `current` (a position, or `none`), `labelled`.
+/// @brief A fake `StepsWidget`: properties `steps` (`[label:State,…]`, a nonempty detail following as
+/// `;detail=<text>`), `current` (a position, or `none`), `labelled`.
 class FakeSteps final : public FakeLeaf<StepsWidget> {
 public:
     using FakeLeaf<StepsWidget>::FakeLeaf;
     void setSteps(std::vector<Step> const& steps) override {
-        set("steps",
-            formatList(steps, [](Step const& step) { return formatItem(step.label) + ":" + enumName(step.state); }));
+        // `;` is escaped too, so a label or a detail cannot forge the detail attribute.
+        auto const text = [](std::string_view value) {
+            return escape(value, [](char character) { return std::string_view{"=,[];"}.contains(character); });
+        };
+        set("steps", formatList(steps, [&text](Step const& step) {
+                std::string const formatted = text(step.label) + ":" + enumName(step.state);
+                return step.detail.empty() ? formatted : formatted + ";detail=" + text(step.detail);
+            }));
     }
     void setCurrent(std::optional<std::size_t> index) override {
         set("current", index.has_value() ? std::to_string(*index) : std::string{"none"});

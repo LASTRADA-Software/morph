@@ -322,6 +322,7 @@ void StepsImpl::setSteps(std::vector<ui::Step> const& steps) {
     QVariantList list;
     for (ui::Step const& step : steps) {
         list.append(QVariantMap{{QStringLiteral("label"), toQString(step.label)},
+                                {QStringLiteral("detail"), toQString(step.detail)},
                                 {QStringLiteral("state"), static_cast<int>(step.state)}});
     }
     write("steps", list);

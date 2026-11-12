@@ -3484,3 +3484,65 @@ TEST_CASE(
     REQUIRE(value != nullptr);
     CHECK(value->width() >= segment - 1.0);
 }
+
+// Mutation: leave `detail` out of StepsImpl::setSteps (no detail text), drop it from the accessible name, show it
+// while unlabelled, or let the detail ask for its own width (the cell grows with it).
+TEST_CASE("qt_quick widgets: a step's detail hangs under its label, shows only while labelled and never widens it",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const plain = scene.backend().createSteps(column.get());
+    plain->setSteps({{.label = "Received", .state = ui::StepState::Done}});
+    auto const steps = scene.backend().createSteps(column.get());
+    steps->setSteps({{.label = "Received",
+                      .state = ui::StepState::Done,
+                      .detail = "A. Weber, 12 November 2026 at 09:14 in the receiving bay"},
+                     {.label = "Verified", .state = ui::StepState::Active}});
+    steps->setCurrent(1);
+    scene.settle();
+
+    auto const stepCells = [](ui::StepsWidget const& widget) {
+        QList<QQuickItem*> found;
+        // The delegates are visual children of the layout, not QObject children of the widget.
+        for (QQuickItem* const child : Scene::itemOf(widget).childItems()) {
+            for (QQuickItem* const cell : child->childItems()) {
+                if (cell->objectName() == QStringLiteral("step")) {
+                    found.append(cell);
+                }
+            }
+        }
+        return found;
+    };
+    QList<QQuickItem*> const cells = stepCells(*steps);
+    REQUIRE(cells.size() == 2);
+    auto* const detail = cells.at(0)->findChild<QQuickItem*>(QStringLiteral("detail"));
+    auto* const label = cells.at(0)->findChild<QQuickItem*>(QStringLiteral("label"));
+    auto* const circle = cells.at(0)->findChild<QQuickItem*>(QStringLiteral("circle"));
+    REQUIRE((detail != nullptr && label != nullptr && circle != nullptr));
+    CHECK(detail->property("text").toString() ==
+          QStringLiteral("A. Weber, 12 November 2026 at 09:14 in the receiving bay"));
+    CHECK(detail->isVisible());
+    CHECK(detail->y() >= label->y() + label->height());
+    // The detail is cut at the label's width, so the step is no wider than one with no detail.
+    CHECK(detail->width() <= label->width() + 0.5);
+    CHECK(cells.at(0)->width() == stepCells(*plain).at(0)->width());
+    // The circle is centred on the label's line.
+    CHECK(circle->mapToItem(cells.at(0), QPointF{0, circle->height() / 2}).y() ==
+          Catch::Approx(label->mapToItem(cells.at(0), QPointF{0, label->height() / 2}).y()).margin(1.0));
+    auto* const bare = cells.at(1)->findChild<QQuickItem*>(QStringLiteral("detail"));
+    REQUIRE(bare != nullptr);
+    CHECK_FALSE(bare->isVisible());
+
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const named = QAccessible::queryAccessibleInterface(cells.at(0));
+    REQUIRE(named != nullptr);
+    CHECK(named->text(QAccessible::Name) ==
+          QStringLiteral("Received, A. Weber, 12 November 2026 at 09:14 in the receiving bay, done"));
+    steps->setLabelled(false);
+    scene.settle();
+    CHECK_FALSE(detail->isVisible());
+    CHECK(named->text(QAccessible::Name) ==
+          QStringLiteral("Received, A. Weber, 12 November 2026 at 09:14 in the receiving bay, done"));
+    QAccessible::setActive(wasActive);
+}
