@@ -468,6 +468,19 @@ predicate — an accept-everything one when the node's `accepts` is empty — so
 an empty one. A source or target the user cannot reach (hidden, disabled, or inside such a
 container) takes part in no drag.
 
+## The popover
+
+`PopoverWidget` (`createPopover(parent)`) is a container for a panel that belongs to another widget and is not a dialog:
+a menu of search results under a field. It is non-modal and takes no focus, so focus stays where it was; it dims
+nothing; it is anchored under its parent container's box and aligned to its leading edge, with a width of its own
+(`setWidth(units)`; 0 is the parent's width). `setOpen(bool)` shows or hides it and never calls `onDismiss`;
+`setOnDismiss(handler)` is called when the backend sees Escape or a press outside both the popover and its parent. On a
+backend with a floating layer (Qt Quick) it floats over the content and takes no space in its parent's layout; on a
+backend without one (the terminal) it is the rows under the parent, in flow. The recording backend records `open`,
+`width` and its children. `MenuEntry::heading` is a label in a menu that is not a command: drawn as muted text, exposed
+as static text and never chosen; `MenuTrigger::detail` is a button menu's second line under its label, which the
+terminal joins to the label with a dot.
+
 ## RecordingBackend
 
 The headless reference backend and the test double for everything above the contract.

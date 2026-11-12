@@ -36,7 +36,7 @@ clients keeps such documents free of it. The shared corpus is
 | `{"pending": "x"}`, `{"error": "x"}`, `{"errorKind": "x"}` | `Pending`, `Error`, `ErrorKind` | A query's or mutation's flight, error text and error kind |
 | `{"refusal": "x"}` | `Refusal` | A query's or mutation's last failure when it was an action refusal: `null`, or `{code, args}` ([`refusals.md`](refusals.md)) |
 | `{"result": "m"}` | `Result` | A mutation's last result |
-| `{"can": "x"}` | `Can` | Whether the principal may run a query or mutation, or the client has `host:<command>` |
+| `{"can": "x"}` | `Can` | Whether the principal may run a query or mutation, or the client has `host:<command>`, or (`context`) a scope switcher with an option is installed, which is when `setContext` can run |
 | `{"pref": "point.path"}` | `Pref` | A customization point's choice |
 | `{"fn": "name", "args": [...]}` | `Call` | A library function |
 | `{"t": "key", "fallback": "text", "args": {...}}` | `Call` (`t`) | The translated message |
@@ -45,7 +45,7 @@ clients keeps such documents free of it. The shared corpus is
 | `{"map": e, "as": "x", "to": e}`, `{"filter": e, "as": "x", "where": e}` | `Map`, `Filter` | Comprehensions over a list |
 | `{"runs": e, "as": "x", "by": e}` | `Runs` | The list split into runs of adjacent elements whose `by` values are equal, each a record `{key, count, first, last, items}` |
 | `{"sort": e, "as": "x", "by": e, "order": e}` | `Sort` | The list ordered by the value `by` gives each element; `order` is `"asc"` (also when absent or `null`) or `"desc"` |
-| `{"env": "name"}` | `Env` | `widthClass`, `locale`, `platform`, `online`, `backend` (see below) |
+| `{"env": "name"}` | `Env` | `widthClass`, `locale`, `platform`, `online`, `backend`, `context` (see below) |
 | `{"session": "name"}` | `Session` | `principal`, `userName`, `displayName`, `userKey`, `tenant`, `authenticated` |
 | `{"host": "name"}` | `Host` | A value the application registered, `null` when absent |
 
@@ -57,7 +57,7 @@ the first mount and updates it on a resize. The terminal counts its columns, so 
 Quick counts the window's width in `Theme.unitWidth`s. A document's breakpoints therefore sit at the same number of
 its own units on both frontends.
 
-The other four names, as the client sets them:
+The other five names, as the client sets them:
 
 | Name | Value | Source |
 |---|---|---|
@@ -65,6 +65,7 @@ The other four names, as the client sets them:
 | `platform` | `linux`, `macos`, `windows`, `web`, `android` or `unknown` | The platform the client binary was built for |
 | `online` | `true` or `false` | The client's source: `false` from the moment its transport drops until it connects again; an in-process source has no transport to lose and stays `true`. A drop the transport does not report (a server that stops answering on a connection that stays open) is not seen |
 | `backend` | `primary`, `local` or `remote` | The client's source: `local` for a linked application run in process, `remote` for a server. A committed backend switch replaces it |
+| `context` | the chosen option's value (a string or an integer), `null` with no scope switcher or before it answers | The shell's scope switcher ([`shell_parts.md`](shell_parts.md#the-context)). `context` is the one name `ui/1` gained after `env`'s first five; it is read like the others and changed only by the `setContext` command |
 
 A `Session` that no client drives (a test, or an application's own) reads `null` for `platform`, `online` and
 `backend` until its owner sets them with `setEnvironmentValue`.

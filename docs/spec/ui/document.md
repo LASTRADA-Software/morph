@@ -67,6 +67,7 @@ refused: a lab writes dates one way everywhere, so the pattern is the applicatio
 | `leadPlacement`, `titleRole`, `headSurface`, `pageSurface` | same | Where the head's lead sits, the text role of its title (`heading`, or `headline` for a record's identity), the surface the shell draws its top bar on while the screen is shown, and the surface it draws the page area on, in the screen scope ([The head](#the-head)); a screen's only |
 | `principalPlacement` | `principalPlacement` | Where the shell shows who is signed in: `sidebar` (the default, at the sidebar's foot) or `head` (at the top bar's trailing end); a literal name, the app document's only, and any other name is refused at load |
 | `navigation` | `navigation` | The counts on the navigator's entries, in the app scope ([The app document's navigation](#the-app-documents-navigation)); the app document's only |
+| `shell` | `shell` | The shell's declared parts ([`shell_parts.md`](shell_parts.md)), lowered to queries and state of the app scope named `shell…`; the app document's only, and a screen that has the key is refused |
 | `params` | `params` | Name to type, in declaration order |
 | `scope` | `models`, `state`, `let`, `queries`, `mutations`, `watch`, `checks` | The screen scope's declarations |
 | `lifecycle` | `onMount`, `onUnmount`, `onClose`, `onSave`, `onBackendChange` | Command lists |
@@ -205,8 +206,8 @@ A command list is an array of commands, or one command object. `Command` carries
 
 | Member | Holds |
 |---|---|
-| `target` | The name acted on: `set`'s `name.path`; the state of `reset`; the mutation of `run`, `signIn`, `upload`; the query of `refetch`; the element of `open`, `close`, `focus`; the screen of `navigate`; the name of `host`, `switchBackend`, `setLocale`; the point of `resetPrefs`; the state a `download` to preview binds |
-| `value` | `set`'s value; `run`'s body; `navigate`'s params; `return`'s value; `host`'s args; `notify`'s message; `if`'s condition; the file of `upload` and `download` |
+| `target` | The name acted on: `set`'s `name.path`; the state of `reset`; the mutation of `run`, `signIn`, `upload`; the query of `refetch`; the element of `open`, `close`, `focus`; the screen of `navigate`; the name of `host`, `switchBackend`, `setLocale`; none for `setContext`, whose `value` is the option's value; the point of `resetPrefs`; the state a `download` to preview binds |
+| `value` | `set`'s value; `setContext`'s option value; `run`'s body; `navigate`'s params; `return`'s value; `host`'s args; `notify`'s message; `if`'s condition; the file of `upload` and `download` |
 | `extra` | `run`'s `each`; `navigate`'s `route`; `download`'s suggested `name`; `focus`'s `row` |
 | `binding` | `run`'s and `upload`'s `as` |
 | `option` | `navigate`'s `as`; `notify`'s `role`; `download`'s `dialog` or `preview` |

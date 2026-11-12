@@ -119,14 +119,18 @@ destroyed before either goes, so it never writes into a navigator that is gone o
 first visible badge is its count; a count no longer given is taken away. A count for a screen the navigator does not
 list is reported once per screen, while the navigator lists anything (a signed-out frame lists nothing).
 
-When the bundle carries shell parts (the `shell` manifest file, [`shell_parts.md`](../ui/shell_parts.md)), the shell
-reads them through the session after the app root is mounted and the frame built, installs the frame's parts and
-registers the host command `shell.setContext`. It writes the context to the session environment (`context`), runs the
-reads on mount, on each change of a record they hold and on each change of the context, searches after the pause the
-spec gives, binds Ctrl K, and opens a hit as a tab from a task posted to the owner. The principal menu's locale choice
-is the document `setLocale` path: `Session::setLocale`, then `ShellOptions::onLocale`. Every reply that fails is
-reported through `onProblem`. The reads end before the app root and the frame go, and are rebuilt with the frame on a
-sign-in or sign-out, which also clears the context.
+When the app document declares [shell parts](../ui/shell_parts.md), the shell builds the workspace with
+`HeadPlacement::InPage` and reads the parts from the app root's queries (`AppRoot::read`), each in an effect made
+after the root and the frame and destroyed before either goes: the switcher's options, the module counts (onto
+`Navigator::setModuleBadge`), the inbox sources, the principal's reply and the search hits (onto
+`ShellFrame::setParts`). It writes the chosen context to the session (`Session::setContext`, the `env` name `context`)
+and installs the frame's choices: the switcher, the search text (written to the app state `shellSearchText` after
+`kSearchPause`), Ctrl K, a hit opening a tab from a task posted to the owner, and the principal menu's language and
+format choices (`Session::setLocale`, `Session::setFormatLocale`, then `ShellOptions::onLocale`). It implements
+`InterpreterHost::setContext`: it refuses a value not among the options, and asks once before discarding unsaved tabs
+(`Workspace::dirtyTabs`, `closeDirtyTabs`). The start screen is opened only after the switcher answered or failed, and
+the page shows a busy widget until then. Every reply that fails is reported through `onProblem`. A sign-in or sign-out
+rebuilds the frame and the root and clears the context.
 
 An app document that does not load, or that the interpreter refuses, is reported through `onProblem`, and the
 screens mount without it. A development reload that changes the app document loads and reports it, and the new
