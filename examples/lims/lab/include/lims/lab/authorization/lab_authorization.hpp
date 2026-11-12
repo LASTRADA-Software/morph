@@ -4,12 +4,15 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "lims/lab/dto/offline_dto.hpp"
+#include "lims/lab/dto/result_dto.hpp"
 #include "lims/lab/dto/sample_dto.hpp"
+#include "lims/lab/dto/sample_entry_dto.hpp"
 #include "lims/lab/dto/verification_dto.hpp"
-#include "lims/lab/models/sample_model.hpp"
 #include "lims/org/authorization/declared.hpp"
+#include "lims/org/models/org_model.hpp"
 
 /// @file
 /// The lab module's declared authorization: every write on a sample needs some role at the sample's site, and four
@@ -29,6 +32,17 @@ struct AnyRoleAtAttachedSite {
     static constexpr bool anyRole = true;
     /// @brief The model names the scope.
     static constexpr bool scopeFromModel = true;
+
+    /// @brief The scope the model resolves: the site of the sample the handler is attached to.
+    /// @tparam Model `SampleModel`.
+    /// @tparam Action The action.
+    /// @param model The instance.
+    /// @return That site, alone.
+    /// @throws NotFound when the handler is attached to no sample.
+    template <typename Model, typename Action>
+    [[nodiscard]] static std::vector<Scope> scopesIn(Model const& model, Action const& /*action*/) {
+        return {model.attachedSiteScope()};
+    }
 };
 
 /// @brief Every lifecycle transition needs some role at the attached sample's site.
@@ -57,16 +71,39 @@ struct Authorization<CaptureConcentration> : AnyRoleAtAttachedSite {};
 /// @brief Saving a sample entry needs some role at the header's site and, when it updates a stored sample, at that
 ///        sample's stored site too, so moving a sample needs a role at both ends.
 template <>
-struct Authorization<SaveSample> : AnyRoleAtAttachedSite {};
+struct Authorization<SaveSample> : AnyRoleAtAttachedSite {
+    /// @brief The scopes the save writes to.
+    /// @tparam Model `SampleModel`.
+    /// @param model The instance.
+    /// @return The header's site and, for an update, the stored site.
+    template <typename Model>
+    [[nodiscard]] static std::vector<Scope> scopesIn(Model const& model, SaveSample const& /*action*/) {
+        return model.entryScopes();
+    }
+};
 
 /// @brief Deleting a sample needs some role at the attached sample's site.
 template <>
-struct Authorization<DeleteSample> : AnyRoleAtAttachedSite {};
+struct Authorization<DeleteSample> : AnyRoleAtAttachedSite {
+    /// @brief The scope the delete acts in.
+    /// @tparam Model `SampleModel`.
+    /// @param model The instance.
+    /// @return The stored sample's site, alone.
+    /// @throws NotFound when the working copy was never saved.
+    template <typename Model>
+    [[nodiscard]] static std::vector<Scope> scopesIn(Model const& model, DeleteSample const& /*action*/) {
+        return {model.storedSiteScope()};
+    }
+};
 
 /// @brief Replaying a queued capture needs some role, held by the operator who captured it (the replay runs as that
 ///        operator), at the site of the sample the capture names.
 template <>
 struct Authorization<QueuedCapture> {
+    /// @brief The handler judges the rule itself: it answers a redelivery before it asks for the role, so the action
+    ///        declares no guard.
+    static constexpr bool checkedInHandler = true;
+
     /// @brief Any role is enough.
     static constexpr bool anyRole = true;
 
@@ -93,6 +130,8 @@ template <>
 struct Authorization<RegisterSample> {
     /// @brief Any role is enough.
     static constexpr bool anyRole = true;
+    /// @brief The scope is spelled out in the payload.
+    static constexpr bool scopeInPayload = true;
 
     /// @brief The site the payload names.
     /// @param action The action.
@@ -107,9 +146,10 @@ struct Authorization<VerifyResult> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::Verifier;
 
-    /// @brief The pair's first half: the registered id of `CaptureConcentration`, so the pair names an action that
-    ///        exists.
-    static constexpr std::string_view separatedFrom = ::morph::model::ActionTraits<CaptureConcentration>::typeId();
+    /// @brief The pair's first half: the registered id of `CaptureConcentration`. Spelled out because this header may
+    ///        be read before the model that registers it; the declared-authorization suite compares it with the
+    ///        registered id.
+    static constexpr std::string_view separatedFrom = "CaptureConcentration";
 
     /// @brief The refusal when the verifier captured the reading.
     static constexpr std::string_view sameActorRefusal = "captured this result and cannot also verify it";
@@ -127,3 +167,6 @@ struct Authorization<VerifyResult> {
 };
 
 }  // namespace lims
+
+// The models are included last, after every declaration their registrations need.
+#include "lims/lab/models/sample_model.hpp"

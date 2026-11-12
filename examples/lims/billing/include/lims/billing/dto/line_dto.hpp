@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "lims/billing/core/types.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/references.hpp"
 #include "lims/org/core/types.hpp"
@@ -20,6 +21,8 @@ namespace lims {
 ///
 /// Sent only by the app's event relay, as a service principal; a redelivered event id answers the line it made.
 struct RecordBillableLine {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The event's id, `<module>.<event>:<aggregate id>:<aggregate version>`; the same for a redelivery.
     std::string eventId;
     /// @brief The published result.

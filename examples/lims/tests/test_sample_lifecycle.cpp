@@ -10,6 +10,7 @@
 #include <concepts>
 #include <cstdint>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/journal/action_log.hpp>
 #include <stdexcept>
@@ -149,7 +150,7 @@ TEST_CASE("An illegal transition is refused and changes nothing", "[lims][sample
     lims::SampleModel model;
 
     registerSample(model);
-    CHECK_THROWS_AS(model.execute(lims::PublishSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::PublishSample{}), lims::IllegalTransition);
 
     // The refusal must be total: no partial write, no version bump. A LIMS
     // that leaves a sample at 'registered' but version 2 has already lost the
@@ -168,12 +169,14 @@ TEST_CASE("A published sample refuses every further transition", "[lims][sample]
     walkToVerification(model);
     model.execute(lims::PublishSample{});
 
-    CHECK_THROWS_AS(model.execute(lims::ReceiveSample{}), lims::IllegalTransition);
-    CHECK_THROWS_AS(model.execute(lims::StartWork{}), lims::IllegalTransition);
-    CHECK_THROWS_AS(model.execute(lims::SubmitForVerification{}), lims::IllegalTransition);
-    CHECK_THROWS_AS(model.execute(lims::PublishSample{}), lims::IllegalTransition);
-    CHECK_THROWS_AS(model.execute(lims::RejectSample{.reason = "changed my mind"}), lims::IllegalTransition);
-    CHECK_THROWS_AS(model.execute(lims::ReturnForRework{.reason = "changed my mind"}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::ReceiveSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::StartWork{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::SubmitForVerification{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::PublishSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::RejectSample{.reason = "changed my mind"}),
+                    lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::ReturnForRework{.reason = "changed my mind"}),
+                    lims::IllegalTransition);
 
     CHECK(model.execute(lims::GetSample{}).state == lims::SampleState::Published);
 }
@@ -201,7 +204,8 @@ TEST_CASE("A sample can be rejected at registration or at receipt, but not after
         registerSample(model);
         model.execute(lims::ReceiveSample{});
         model.execute(lims::StartWork{});
-        CHECK_THROWS_AS(model.execute(lims::RejectSample{.reason = "too late"}), lims::IllegalTransition);
+        CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::RejectSample{.reason = "too late"}),
+                        lims::IllegalTransition);
     }
 }
 
@@ -236,7 +240,7 @@ TEST_CASE("A mutating transition with no principal is refused and journals nothi
     anonymous.attachActionLog(log, std::string{});
     anonymous.execute(lims::OpenSample{.sampleId = sampleId});
 
-    CHECK_THROWS_AS(anonymous.execute(lims::ReceiveSample{}), lims::EmptyPrincipalError);
+    CHECK_THROWS_AS(::morph::model::executeChecked(anonymous, lims::ReceiveSample{}), lims::EmptyPrincipalError);
 
     // The one failure class that cannot be attributed is the one that must not
     // be recorded: an audit entry naming nobody is worse than no entry.
@@ -282,7 +286,7 @@ TEST_CASE("A refused transition is journaled as a failure, naming who tried", "[
     model.attachActionLog(log, std::string{});
     const auto sample = registerSample(model);
 
-    CHECK_THROWS_AS(model.execute(lims::PublishSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::PublishSample{}), lims::IllegalTransition);
 
     const auto entries = log->entries(std::to_string(*sample.id));
     REQUIRE(entries.size() == 2);
@@ -318,7 +322,7 @@ TEST_CASE("An unattached handler refuses to read or transition anything", "[lims
     lims::SampleModel model;
 
     CHECK_THROWS_AS(model.execute(lims::GetSample{}), lims::NotFound);
-    CHECK_THROWS_AS(model.execute(lims::ReceiveSample{}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::ReceiveSample{}), lims::NotFound);
 }
 
 TEST_CASE("Opening or registering against something that does not exist is NotFound", "[lims][sample]") {
@@ -327,10 +331,10 @@ TEST_CASE("Opening or registering against something that does not exist is NotFo
     lims::SampleModel model;
 
     CHECK_THROWS_AS(model.execute(lims::OpenSample{.sampleId = lims::SampleId{424242}}), lims::NotFound);
-    CHECK_THROWS_AS(
-        model.execute(lims::RegisterSample{
-            .siteId = lims::test::seededSite(), .clientId = lims::ClientId{424242}, .reference = "orphan"}),
-        lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::RegisterSample{.siteId = lims::test::seededSite(),
+                                                                               .clientId = lims::ClientId{424242},
+                                                                               .reference = "orphan"}),
+                    lims::NotFound);
     CHECK_THROWS_AS(model.execute(lims::OpenSample{}), lims::ValidationError);
 }
 

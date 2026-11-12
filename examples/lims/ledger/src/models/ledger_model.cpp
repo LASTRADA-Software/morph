@@ -80,9 +80,7 @@ AccountView LedgerModel::execute(const CreateAccount& action) {
         throw ValidationError{
             "CreateAccount: a company, a code of 1 to 16 upper-case letters and digits and a name are required"};
     }
-    requireRoleSomewhere<CreateAccount>();
     requireCompany("CreateAccount", action.company);
-    requireAuthorized(action);
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     if (!mapper.Query<db::AccountRecord>()
@@ -130,9 +128,7 @@ PeriodView LedgerModel::execute(const OpenPeriod& action) {
     if (!action.validate()) {
         throw ValidationError{"OpenPeriod: a company and a month are required"};
     }
-    requireRoleSomewhere<OpenPeriod>();
     requireCompany("OpenPeriod", action.company);
-    requireAuthorized(action);
     auto const month = calendarMonthOf(action.month);
     std::int64_t const start = monthStartMillis(month);
     Lightweight::DataMapper mapper;
@@ -181,7 +177,6 @@ PeriodView LedgerModel::execute(const BeginClosePeriod& action) {
     if (!action.validate()) {
         throw ValidationError{"BeginClosePeriod: a period is required"};
     }
-    requireRoleSomewhere<BeginClosePeriod>();
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     auto rows = mapper.Query<db::PeriodRecord>()
@@ -190,6 +185,9 @@ PeriodView LedgerModel::execute(const BeginClosePeriod& action) {
     if (rows.empty()) {
         throw NotFound{"BeginClosePeriod: period " + std::to_string(*action.periodId) + " does not exist"};
     }
+    // Judged again just before the write: the guard ran it first, on every path, and this reads the scope's row once
+    // more, so a role revoked since is seen. The rule reads on its own connection, so it sees committed rows, not this
+    // transaction's; this transaction has written nothing yet.
     requireAuthorized(action);
     auto& row = rows.front();
     if (row.state.Value() != static_cast<int>(PeriodState::Open)) {

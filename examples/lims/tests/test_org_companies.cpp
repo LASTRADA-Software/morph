@@ -6,6 +6,7 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <glaze/glaze.hpp>
+#include <morph/core/action_guard.hpp>
 #include <morph/core/registry.hpp>
 #include <string>
 
@@ -72,8 +73,9 @@ TEST_CASE("org: a site belongs to a company that exists", "[lims][org]") {
     CHECK(lims::OrgModel::findSite(site.id)->name == "Field lab");
     CHECK_FALSE(lims::OrgModel::findSite(lims::SiteId{999}).has_value());
 
-    CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = lims::CompanyId{999}, .name = "Nowhere"}),
-                    lims::NotFound);
+    CHECK_THROWS_AS(
+        ::morph::model::executeChecked(org, lims::CreateSite{.companyId = lims::CompanyId{999}, .name = "Nowhere"}),
+        lims::Forbidden);
     CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = {}}),
                     lims::ValidationError);
     CHECK_THROWS_AS(org.execute(lims::CreateCompany{
@@ -84,11 +86,12 @@ TEST_CASE("org: a site belongs to a company that exists", "[lims][org]") {
 TEST_CASE("org: creating a company or a site needs an authenticated principal", "[lims][org]") {
     DbFixture fixture;
     lims::OrgModel org;
-    CHECK_THROWS_AS(
-        org.execute(lims::CreateCompany{
-            .name = "Anonymous", .baseCurrency = lims::CurrencyCode::EUR, .fiscalYearStart = lims::Month::January}),
-        lims::EmptyPrincipalError);
-    CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Anonymous"}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::CreateCompany{.name = "Anonymous",
+                                                                            .baseCurrency = lims::CurrencyCode::EUR,
+                                                                            .fiscalYearStart = lims::Month::January}),
+                    lims::EmptyPrincipalError);
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        org, lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Anonymous"}),
                     lims::EmptyPrincipalError);
 }
 
@@ -131,7 +134,8 @@ TEST_CASE("org: a company name is unique", "[lims][org]") {
     lims::test::grant("alice", lims::LimsRole::Supervisor);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
-    CHECK_THROWS_AS(org.execute(lims::CreateCompany{.name = "Main laboratory"}), lims::Conflict);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::CreateCompany{.name = "Main laboratory"}),
+                    lims::Conflict);
     CHECK(org.execute(lims::ListCompanies{}).companies.size() == 1);
     CHECK(org.execute(lims::CreateCompany{.name = "Osaka branch"}).id.hasValue());
 }
@@ -142,7 +146,8 @@ TEST_CASE("org: a site name is unique within its company, not across companies",
     lims::test::grant("alice", lims::LimsRole::Supervisor);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
-    CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Main site"}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        org, lims::CreateSite{.companyId = lims::test::seededCompany(), .name = "Main site"}),
                     lims::Conflict);
     CHECK(org.execute(lims::ListSites{}).sites.size() == 1);
 

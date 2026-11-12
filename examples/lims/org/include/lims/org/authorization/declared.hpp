@@ -6,6 +6,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <morph/core/action_guard.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/session/session.hpp>
 #include <morph/util/rational.hpp>
@@ -14,21 +15,54 @@
 #include <string_view>
 #include <vector>
 
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/errors.hpp"
+#include "lims/org/core/principal.hpp"
 #include "lims/org/core/types.hpp"
 #include "lims/org/dto/role_dto.hpp"
-#include "lims/org/models/org_model.hpp"
 
 /// @file
 /// Declared authorization: per action, the role it needs, the scope its payload names, an optional value limit and
-/// an optional separation-of-duties pair, declared once beside the action by the module that owns it and checked by
-/// `requireAuthorized` inside the model.
+/// an optional separation-of-duties pair, declared once beside the action by the module that owns it.
 ///
-/// The check runs in the model because only the model has the decoded payload: `IAuthorizer::authorize` at the
-/// server edge is handed the model and action ids, never the payload, so the edge can ask whether a principal holds
-/// the role somewhere (`lims::app::declaredRequirements`) and nothing more.
+/// `DeclaredRuleGuard` is the action guard every declared action names (`using guard = ::lims::DeclaredRuleGuard;`),
+/// so the framework judges the rule on the decoded action on every dispatch path, after the validator and before the
+/// handler. A handler calls `requireAuthorized` again only just before a write whose scope or amount a row gives, so
+/// a change committed since the guard ran is seen; the rule reads on its own connection, never through the handler's
+/// transaction.
+///
+/// `IAuthorizer::authorize` at the server edge is handed the model and action ids, never the payload, so the edge can
+/// ask whether a principal holds the role somewhere (`lims::app::declaredRequirements`) and nothing more.
 
 namespace lims {
+
+class OrgModel;
+
+namespace detail {
+
+/// @brief The roles @p principal holds anywhere, read from `OrgModel`.
+///
+/// A template over the model so that `OrgModel` needs to be complete only where a rule is judged, not where this
+/// header is read: `OrgModel`'s own header includes this one's through its authorization declarations.
+/// @tparam Org `OrgModel`.
+/// @param principal The principal.
+/// @return Its roles.
+template <typename Org = OrgModel>
+[[nodiscard]] std::vector<LimsRole> rolesHeldAnywhere(std::string_view principal) {
+    return Org::rolesAnywhere(principal);
+}
+
+/// @brief The roles @p principal holds in @p scope, read from `OrgModel`.
+/// @tparam Org `OrgModel`.
+/// @param principal The principal.
+/// @param scope The scope.
+/// @return Its roles there.
+template <typename Org = OrgModel>
+[[nodiscard]] std::vector<LimsRole> rolesHeldIn(std::string_view principal, Scope const& scope) {
+    return Org::rolesIn(principal, scope);
+}
+
+}  // namespace detail
 
 /// @brief One action's declared authorization; an action with no specialisation declares none.
 ///
@@ -40,8 +74,17 @@ namespace lims {
 /// and, each only where the action needs it:
 /// - `static Scope scopeOf(Action const&)` — the scope the action's payload names, read from its scope field; without
 ///   it the role is needed in some scope, any. A role held at a company holds at its sites;
-/// - `static constexpr bool scopeFromModel = true` — the payload names no scope but the model knows it (the site of
-///   the sample the handler is attached to): the model then judges with `requireAuthorizedIn` and passes the scope;
+/// - `static constexpr bool scopeInPayload = true` — `scopeOf` returns a scope the payload itself names, so a refusal
+///   may say which one. A scope read from a row (every `scopeOf` that looks something up, and every
+///   `scopeFromModel`) is not declared so, and a refusal names no scope: it would tell a caller whether the id
+///   exists and, when it does, where the record is;
+/// - `static constexpr bool scopeFromModel = true` and `template <typename Model> static std::vector<Scope>
+///   scopesIn(Model const&, Action const&)` — the payload names no scope but the model knows it (the site of the
+///   sample the handler is attached to): the guard judges the rule in every scope the model resolves, read before the
+///   handler runs;
+/// - `static bool bootstrapOpen()` — the rule is waived while this holds;
+/// - `static constexpr bool checkedInHandler = true` — the handler judges the rule itself, because it answers
+///   something else first, and the action declares no guard;
 /// - `static ::morph::math::Rational amountOf(Action const&)` and
 ///   `static std::optional<::morph::math::Rational> limitOf(std::string_view principal, Scope const&)` — a value
 ///   limit: the principal may act on amounts up to their limit in the scope, and on none without one;
@@ -101,6 +144,20 @@ concept DeclaresScope = DeclaresRule<Action> && requires(Action const& action) {
     { Authorization<Action>::scopeOf(action) } -> std::convertible_to<Scope>;
 };
 
+/// @brief Whether @p Action's rule declares that the scope it names is one the payload spells out, which a refusal may
+///        therefore repeat.
+/// @tparam Action The action.
+template <typename Action>
+concept DeclaresScopeInPayload = DeclaresRule<Action> && requires { requires Authorization<Action>::scopeInPayload; };
+
+/// @brief Whether @p Action's rule declares a state check that runs once the principal holds the role where the
+///        action's subject is visible to them and before anything about the subject is read for the verdict: the
+///        value, the creator and the other facts of a subject the principal has no standing over stay unread.
+/// @tparam Action The action.
+template <typename Action>
+concept DeclaresStateCheck = DeclaresRole<Action> && DeclaresScope<Action> &&
+                             requires(Action const& action) { Authorization<Action>::checkState(action); };
+
 /// @brief Whether @p Action's rule declares a value limit. A limit is judged in a scope, so it needs one.
 /// @tparam Action The action.
 template <typename Action>
@@ -136,6 +193,8 @@ template <typename Action, LimsRole Role>
 struct CompanyRule {
     /// @brief The role.
     static constexpr LimsRole role = Role;
+    /// @brief The company is in the payload.
+    static constexpr bool scopeInPayload = true;
 
     /// @brief The company the payload names.
     /// @param action The action.
@@ -197,7 +256,7 @@ template <typename Action>
     requires DeclaresRule<Action>
 void requireRoleSomewhere() {
     std::string const principal = ::morph::session::current()->principal;
-    auto const held = OrgModel::rolesAnywhere(principal);
+    auto const held = detail::rolesHeldAnywhere(principal);
     auto const role = declaredRole<Action>();
     if (role.has_value() ? std::ranges::find(held, *role) == held.end() : held.empty()) {
         throw Forbidden{std::string{::morph::model::ActionTraits<Action>::typeId()} + ": '" + principal +
@@ -228,7 +287,8 @@ concept DeclaresSeparations = DeclaresRule<Action> && requires(Action const& act
 struct JudgedFacts {
     /// @brief The facts.
     AuthorizationFacts facts;
-    /// @brief The scope, in words: "at company 2", or "in any scope".
+    /// @brief The scope, in words: "at company 2" where the payload names it, "where this applies" where a row gave
+    ///        it, or "in any scope".
     std::string where;
     /// @brief The refusal's words when the verdict is `SameActor`; empty without a pair.
     std::string sameActorRefusal;
@@ -259,14 +319,16 @@ template <typename Action>
                        .where = "in any scope",
                        .sameActorRefusal = {}};
     if (scope.has_value()) {
-        judged.facts.held = OrgModel::rolesIn(principal, *scope);
-        judged.where = "at " + scopeName(*scope);
+        judged.facts.held = detail::rolesHeldIn(principal, *scope);
+        // A scope read from a row is not named: an unknown id and a record in a scope the caller cannot see must be
+        // refused in the same words.
+        judged.where = DeclaresScopeInPayload<Action> ? "at " + scopeName(*scope) : std::string{"where this applies"};
         if constexpr (DeclaresValueLimit<Action>) {
             judged.facts.amount = Rule::amountOf(action);
             judged.facts.limit = Rule::limitOf(principal, *scope);
         }
     } else {
-        judged.facts.held = OrgModel::rolesAnywhere(principal);
+        judged.facts.held = detail::rolesHeldAnywhere(principal);
     }
     if constexpr (DeclaresSeparation<Action>) {
         judged.facts.firstPerformer = Rule::firstPerformerOf(action);
@@ -342,16 +404,29 @@ template <typename Action>
 
 /// @brief Checks @p action against its declaration, as the authenticated principal.
 ///
-/// Called by the model on every dispatch path, after the payload is validated and, where the rule needs a row, before
-/// that row is looked up for anything but its scope, so a refusal is about permission and never a disguised missing
-/// row: an unknown scope holds no role, so it is refused as a missing role.
+/// Called by `DeclaredRuleGuard` on every dispatch path, after the payload is validated and, where the rule needs a
+/// row, before that row is looked up for anything but its scope, so a refusal is about permission and never a
+/// disguised missing row: an unknown scope holds no role, so it is refused as a missing role. A handler calls it again
+/// just before its write.
 /// @tparam Action A declared action whose scope the payload names, or that needs none.
 /// @param action The action.
 /// @throws Forbidden with the reason, in words, when the verdict is not `Allowed`.
 template <typename Action>
     requires DeclaresRule<Action> && (!DeclaresModelScope<Action>)
 void requireAuthorized(Action const& action) {
-    if constexpr (DeclaresScope<Action>) {
+    if constexpr (DeclaresStateCheck<Action>) {
+        Scope const scope = Authorization<Action>::scopeOf(action);
+        std::string const principal = ::morph::session::current()->principal;
+        auto const held = detail::rolesHeldIn(principal, scope);
+        // The words name neither the scope nor the subject: a subject that does not exist and one in a scope the
+        // principal holds nothing in are refused identically.
+        if (std::ranges::find(held, Authorization<Action>::role) == held.end()) {
+            throw Forbidden{std::string{::morph::model::ActionTraits<Action>::typeId()} + ": '" + principal +
+                            "' does not hold " + roleWords(declaredRole<Action>()) + " where this applies"};
+        }
+        Authorization<Action>::checkState(action);
+        detail::judge(action, std::optional<Scope>{scope});
+    } else if constexpr (DeclaresScope<Action>) {
         detail::judge(action, std::optional<Scope>{Authorization<Action>::scopeOf(action)});
     } else {
         detail::judge(action, std::nullopt);
@@ -370,6 +445,64 @@ template <typename Action>
 void requireAuthorizedIn(Action const& action, Scope const& scope) {
     detail::judge(action, std::optional<Scope>{scope});
 }
+
+/// @brief Whether @p Action's rule is waived while an exemption the declaration names holds: the first role
+///        assignment on a lab with no supervisor.
+/// @tparam Action The action.
+template <typename Action>
+concept DeclaresBootstrap = DeclaresRule<Action> && requires {
+    { Authorization<Action>::bootstrapOpen() } -> std::convertible_to<bool>;
+};
+
+/// @brief Whether @p Action's rule is checked by its handler, because the handler answers something else first, and
+///        so the action declares no guard.
+/// @tparam Action The action.
+template <typename Action>
+concept DeclaresCheckedInHandler =
+    DeclaresRule<Action> && requires { requires Authorization<Action>::checkedInHandler; };
+
+/// @brief The guard of every lims action that declares a rule: the framework runs it on the decoded action, on every
+///        dispatch path, after the validator and before the handler.
+struct DeclaredRuleGuard {
+    /// @brief Refuses @p action unless its declared rule allows the current principal, in the scope its payload
+    ///        names.
+    /// @tparam Action A lims action whose rule names its scope in the payload, or needs none.
+    /// @param action The decoded action.
+    /// @throws EmptyPrincipalError when no principal is authenticated.
+    /// @throws Forbidden with the reason, in words, when the rule refuses.
+    template <typename Action>
+        requires DeclaresRule<Action> && (!DeclaresModelScope<Action>)
+    static void check(Action const& action) {
+        static_assert(!DeclaresCheckedInHandler<Action>, "an action whose handler checks its rule declares no guard");
+        requirePrincipal();
+        if constexpr (DeclaresBootstrap<Action>) {
+            if (Authorization<Action>::bootstrapOpen()) {
+                return;
+            }
+        }
+        requireRoleSomewhere<Action>();
+        requireAuthorized(action);
+    }
+
+    /// @brief Refuses @p action unless its declared rule allows the current principal in every scope @p model
+    ///        resolves for it.
+    /// @tparam Model The model the action is addressed to.
+    /// @tparam Action A lims action whose rule takes its scope from the model.
+    /// @param model The instance, as it stands before the handler runs.
+    /// @param action The decoded action.
+    /// @throws EmptyPrincipalError when no principal is authenticated.
+    /// @throws NotFound when the model holds nothing to resolve a scope from.
+    /// @throws Forbidden with the reason, in words, when the rule refuses in any of the scopes.
+    template <typename Model, typename Action>
+        requires DeclaresModelScope<Action>
+    static void check(Model const& model, Action const& action) {
+        requirePrincipal();
+        requireRoleSomewhere<Action>();
+        for (Scope const& scope : Authorization<Action>::scopesIn(model, action)) {
+            requireAuthorizedIn(action, scope);
+        }
+    }
+};
 
 /// @brief One declared role as the server edge can use it: by action id, with no payload.
 struct RoleRequirement {

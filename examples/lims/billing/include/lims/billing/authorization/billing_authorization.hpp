@@ -14,11 +14,8 @@
 #include "lims/billing/dto/price_dto.hpp"
 #include "lims/billing/dto/run_dto.hpp"
 #include "lims/billing/dto/settings_dto.hpp"
-#include "lims/billing/models/billing_run_model.hpp"
-#include "lims/billing/models/invoice_edit_model.hpp"
-#include "lims/billing/models/invoice_model.hpp"
-#include "lims/billing/models/price_list_model.hpp"
 #include "lims/org/authorization/declared.hpp"
+#include "lims/org/models/org_model.hpp"
 
 /// @file
 /// The billing module's declared authorization: a company's billing settings are a supervisor's; its clients, price
@@ -89,14 +86,16 @@ struct Authorization<ApproveInvoice> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::InvoiceApprover;
 
-    /// @brief The pairs: whoever created the invoice, and whoever submitted it, may not also approve it.
+    /// @brief The pairs: whoever created the invoice, and whoever submitted it, may not also approve it. The actions
+    ///        are named by their registered ids, spelled out because this header may be read before the models that
+    ///        register them; the declared-authorization suite checks each is registered.
     static constexpr std::array<SeparatedFrom, 2> separations{
         SeparatedFrom{
-            .action = ::morph::model::ActionTraits<CreateInvoice>::typeId(),
+            .action = "CreateInvoice",
             .refusal = "created this invoice and cannot also approve it",
         },
         SeparatedFrom{
-            .action = ::morph::model::ActionTraits<SubmitInvoice>::typeId(),
+            .action = "SubmitInvoice",
             .refusal = "submitted this invoice and cannot also approve it",
         },
     };
@@ -105,6 +104,13 @@ struct Authorization<ApproveInvoice> {
     /// @param action The action.
     /// @return The scope; an empty company when there is no such invoice.
     [[nodiscard]] static Scope scopeOf(ApproveInvoice const& action);
+
+    /// @brief Refuses an invoice that is not submitted. Runs once the caller holds the role where the invoice is
+    ///        visible and before its value or its creator is read, so approving a draft or an approved invoice is an
+    ///        `IllegalTransition` for every approver and never a refusal naming who created it.
+    /// @param action The action.
+    /// @throws IllegalTransition when the invoice is not submitted.
+    static void checkState(ApproveInvoice const& action);
 
     /// @brief The invoice's gross in its company's currency, as its submission recorded it.
     /// @param action The action.
@@ -166,6 +172,8 @@ template <>
 struct Authorization<RecordBillableLine> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::Service;
+    /// @brief The scope is spelled out in the payload.
+    static constexpr bool scopeInPayload = true;
 
     /// @brief The site the published sample belongs to.
     /// @param action The action.
@@ -174,3 +182,9 @@ struct Authorization<RecordBillableLine> {
 };
 
 }  // namespace lims
+
+// The models are included last, after every declaration their registrations need.
+#include "lims/billing/models/billing_run_model.hpp"
+#include "lims/billing/models/invoice_edit_model.hpp"
+#include "lims/billing/models/invoice_model.hpp"
+#include "lims/billing/models/price_list_model.hpp"

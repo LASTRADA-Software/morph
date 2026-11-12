@@ -282,11 +282,9 @@ BillingRunView BillingRunModel::execute(const StartBillingRun& action) {
     if (!action.validate()) {
         throw ValidationError{"StartBillingRun: a company is required"};
     }
-    requireRoleSomewhere<StartBillingRun>();
     if (!PriceListModel::settingsOf(action.company).has_value()) {
         throw NotFound{"StartBillingRun: company " + std::to_string(*action.company) + " has no billing settings"};
     }
-    requireAuthorized(action);
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     std::int64_t const started = startRun(mapper, action.company, currentPrincipal());
@@ -302,7 +300,6 @@ BillingRunView BillingRunModel::execute(const AdvanceBillingRun& action) {
         throw ValidationError{"AdvanceBillingRun: a run and a batch are required"};
     }
     auto const items = itemsIn(action.batch, "AdvanceBillingRun");
-    requireRoleSomewhere<AdvanceBillingRun>();
     Lightweight::DataMapper mapper;
     auto const runs = mapper.Query<db::BillingRunRecord>()
                           .Where(::Lightweight::FieldNameOf<&db::BillingRunRecord::id>, "=", *action.runId)
@@ -310,7 +307,6 @@ BillingRunView BillingRunModel::execute(const AdvanceBillingRun& action) {
     if (runs.empty()) {
         throw NotFound{"AdvanceBillingRun: run " + std::to_string(*action.runId) + " does not exist"};
     }
-    requireAuthorized(action);
     advanceRun(mapper, *action.runId, CompanyId{runs.front().companyId.Value()}, items, currentPrincipal());
     return runView(mapper, *action.runId);
 }
@@ -324,8 +320,6 @@ BillingScheduleResult BillingRunModel::execute(const RunBillingSchedule& action)
     }
     auto const items = itemsIn(action.batch, "RunBillingSchedule");
     requireServicePrincipal("RunBillingSchedule");
-    requireRoleSomewhere<RunBillingSchedule>();
-    requireAuthorized(action);
     std::string const principal = currentPrincipal();
     // The schedule acts only where its principal holds the service role, so the role assignments say what it may do.
     auto const serves = [&principal](CompanyId company) {

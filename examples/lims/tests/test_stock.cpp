@@ -8,6 +8,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <cstdint>
+#include <morph/core/action_guard.hpp>
 #include <morph/table/query.hpp>
 #include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
@@ -185,10 +186,11 @@ TEST_CASE("stock: a person without the stock keeper role cannot create an item, 
     lims::test::grant("ann", lims::LimsRole::Analyst);
     ScopedPrincipal const ann{"ann"};
     lims::StockModel stock;
-    CHECK_THROWS_WITH(
-        stock.execute(lims::CreateItem{
-            .company = lims::test::seededCompany(), .code = "X", .name = "X", .unit = lims::StockUnit::piece}),
-        Catch::Matchers::ContainsSubstring("does not hold the stock-keeper role"));
+    CHECK_THROWS_WITH(::morph::model::executeChecked(stock, lims::CreateItem{.company = lims::test::seededCompany(),
+                                                                             .code = "X",
+                                                                             .name = "X",
+                                                                             .unit = lims::StockUnit::piece}),
+                      Catch::Matchers::ContainsSubstring("does not hold the stock-keeper role"));
     ScopedPrincipal const stranger{"stranger"};
     CHECK(stock.execute(lims::StockOnHand{.company = lims::test::seededCompany(), .item = {}}).lots.empty());
 }
@@ -282,13 +284,16 @@ TEST_CASE("stock: an item code is unique in its company, and items are listed by
     auto const other = otherCompany();
     ScopedPrincipal const kim{"kim"};
     lims::StockModel stock;
-    CHECK_THROWS_AS(
-        stock.execute(lims::CreateItem{
-            .company = lims::test::seededCompany(), .code = "NO3-R", .name = "Again", .unit = lims::StockUnit::piece}),
-        lims::Conflict);
-    CHECK_THROWS_AS(stock.execute(lims::CreateItem{
-                        .company = lims::CompanyId{999}, .code = "X", .name = "X", .unit = lims::StockUnit::piece}),
-                    lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(stock, lims::CreateItem{.company = lims::test::seededCompany(),
+                                                                           .code = "NO3-R",
+                                                                           .name = "Again",
+                                                                           .unit = lims::StockUnit::piece}),
+                    lims::Conflict);
+    CHECK_THROWS_AS(::morph::model::executeChecked(stock, lims::CreateItem{.company = lims::CompanyId{999},
+                                                                           .code = "X",
+                                                                           .name = "X",
+                                                                           .unit = lims::StockUnit::piece}),
+                    lims::Forbidden);
     CHECK_THROWS_AS(
         stock.execute(lims::CreateItem{
             .company = lims::test::seededCompany(), .code = "", .name = "X", .unit = lims::StockUnit::piece}),
@@ -317,9 +322,12 @@ TEST_CASE("stock: a location name is unique at its site, and locations are liste
     auto const other = otherCompany();
     ScopedPrincipal const kim{"kim"};
     lims::StockModel stock;
-    CHECK_THROWS_AS(stock.execute(lims::CreateLocation{.site = lims::test::seededSite(), .name = "Cold room"}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        stock, lims::CreateLocation{.site = lims::test::seededSite(), .name = "Cold room"}),
                     lims::Conflict);
-    CHECK_THROWS_AS(stock.execute(lims::CreateLocation{.site = lims::SiteId{999}, .name = "Nowhere"}), lims::NotFound);
+    CHECK_THROWS_AS(
+        ::morph::model::executeChecked(stock, lims::CreateLocation{.site = lims::SiteId{999}, .name = "Nowhere"}),
+        lims::Forbidden);
     CHECK_THROWS_AS(stock.execute(lims::CreateLocation{.site = lims::test::seededSite(), .name = ""}),
                     lims::ValidationError);
     static_cast<void>(stock.execute(lims::CreateLocation{.site = lims::test::seededSite(), .name = "Annex"}));

@@ -91,7 +91,6 @@ namespace {
     if (!action.validate()) {
         throw ValidationError{"PostInvoice: an invoice is required"};
     }
-    requireRoleSomewhere<PostInvoice>();
     // Taken before the first await: the session is the dispatch's, and a resumption may not run inside it.
     std::string const author = currentPrincipal();
     InvoiceView invoice;
@@ -99,7 +98,6 @@ namespace {
         Lightweight::DataMapper mapper;
         invoice = invoiceView(mapper, *action.invoiceId);
     }
-    requireAuthorized(action);
     if (invoice.state != InvoiceState::Approved) {
         throw IllegalTransition{"PostInvoice: only an approved invoice is posted"};
     }

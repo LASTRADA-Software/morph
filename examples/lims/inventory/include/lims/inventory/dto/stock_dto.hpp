@@ -11,6 +11,7 @@
 
 #include "lims/inventory/core/types.hpp"
 #include "lims/inventory/core/units.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/references.hpp"
 #include "lims/org/core/types.hpp"
@@ -28,6 +29,8 @@ namespace lims {
 /// The account codes are names in the company's chart, kept as text: inventory does not read the ledger's tables, and
 /// the ledger refuses a posting that names a code its chart lacks.
 struct SetInventorySettings {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The company.
     CompanyId company;
     /// @brief The account stock on hand is valued on.
@@ -81,6 +84,8 @@ struct GetInventorySettings {
 
 /// @brief Creates an item a company keeps in stock. Its unit is chosen here and never changes.
 struct CreateItem {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The company.
     CompanyId company;
     /// @brief The item's code, unique within the company.
@@ -132,6 +137,8 @@ struct ListItemsResult {
 
 /// @brief Creates a place at a site where stock is kept.
 struct CreateLocation {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The site.
     SiteId site;
     /// @brief The location's name, unique within the site.
@@ -178,6 +185,8 @@ struct ListLocationsResult {
 ///
 /// The quantity may be in any unit of the item's dimension; it is stored in the item's unit.
 struct RecordOpeningLot {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The item.
     ItemId item;
     /// @brief Where the lot is kept.

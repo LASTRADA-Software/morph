@@ -148,12 +148,10 @@ BillableLineView InvoiceModel::execute(const RecordBillableLine& action) {
                               "' does not name everything a line needs"};
     }
     requireServicePrincipal("RecordBillableLine");
-    requireRoleSomewhere<RecordBillableLine>();
     auto const site = OrgModel::findSite(action.site);
     if (!site.has_value()) {
         throw NotFound{"RecordBillableLine: site " + std::to_string(*action.site) + " does not exist"};
     }
-    requireAuthorized(action);
     return storeLine(action, site->companyId, {});
 }
 
@@ -206,7 +204,6 @@ InvoiceView InvoiceModel::execute(const CreateInvoice& action) {
     if (!action.validate()) {
         throw ValidationError{"CreateInvoice: a company, a site and a client are required"};
     }
-    requireRoleSomewhere<CreateInvoice>();
     if (!OrgModel::findCompany(action.company).has_value()) {
         throw NotFound{"CreateInvoice: company " + std::to_string(*action.company) + " does not exist"};
     }
@@ -218,7 +215,6 @@ InvoiceView InvoiceModel::execute(const CreateInvoice& action) {
         throw ValidationError{"CreateInvoice: site " + std::to_string(*action.site) + " is not a site of company " +
                               std::to_string(*action.company)};
     }
-    requireAuthorized(action);
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     auto const invoice = draftInvoice(mapper, action.company, action.site, action.client, currentPrincipal());

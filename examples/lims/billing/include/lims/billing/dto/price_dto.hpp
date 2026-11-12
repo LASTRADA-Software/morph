@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "lims/billing/core/types.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/references.hpp"
 #include "lims/org/core/types.hpp"
@@ -21,6 +22,8 @@ namespace lims {
 /// A list replaces the one in force before it whole: it holds every price that applies from its date on, and an
 /// analysis it has no price for has none. A company has one list per currency and start.
 struct CreatePriceList {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The company.
     CompanyId company;
     /// @brief The list's name.
@@ -70,6 +73,8 @@ struct PriceListView {
 
 /// @brief Sets the price of an analysis in a list: the list's own, or one client's.
 struct SetPrice {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The price list.
     PriceListId priceList;
     /// @brief The analysis definition.

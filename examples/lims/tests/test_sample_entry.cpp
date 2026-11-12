@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <morph/core/action_guard.hpp>
 #include <morph/table/query.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
@@ -205,7 +206,7 @@ TEST_CASE("sample entry: deleting withdraws a registration and refuses a receive
     auto const second = model.execute(lims::SaveSample{});
     REQUIRE(second.error == lims::SaveError::none);
     model.execute(lims::ReceiveSample{});
-    CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::DeleteSample{}), lims::IllegalTransition);
     CHECK(reader.execute(lims::LoadSample{.id = second.sampleId}).reference == "WW-0001");
 }
 
@@ -217,7 +218,7 @@ TEST_CASE("sample entry: loading names a sample, and a never-saved working copy 
     ScopedPrincipal const alice{"alice"};
     lims::SampleModel model;
     CHECK_THROWS_AS(model.execute(lims::LoadSample{}), lims::ValidationError);
-    CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::DeleteSample{}), lims::NotFound);
 }
 
 // Mutations: skip the client lookup in SaveSample (a header naming a client that does not exist is stored); clear
@@ -234,7 +235,7 @@ TEST_CASE("sample entry: a save names a client that exists, and each optional me
                                       .receivedOn = 20'000,
                                       .remarks = {},
                                       .siteId = lims::test::seededSite()});
-    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::SaveSample{}), lims::NotFound);
 
     model.execute(
         lims::TurbiditySection{.ntu = lims::Turbidity{Rational{Numerator{3}, Denominator{2}, DecimalPlaces{2}}}});

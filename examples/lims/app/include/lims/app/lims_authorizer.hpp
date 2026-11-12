@@ -24,8 +24,25 @@
 /// "may this principal ever verify a result?" from the declared roles
 /// (`lims::app::declaredRequirements`); it cannot answer "may this principal
 /// verify *this* result?", because it never sees the result, its site or who
-/// captured it. `lims::requireAuthorized` answers that in the model. Neither
-/// check stands in for the other.
+/// captured it.
+///
+/// The action's guard (`lims::DeclaredRuleGuard`) enforces every declared rule
+/// on every execution, whichever way the call arrives. This class is not that
+/// enforcement: on the server its per-id answer refuses a principal who holds
+/// no role the action could need before the payload is decoded, and it is what
+/// admits watches. A watch runs no action and so no guard, and `authorize` is
+/// not told whether it answers an execute or a watch; `RemoteServer` admits a
+/// watch on a record when the principal is authorized for some action holding
+/// it, and a watch on a model's instances when authorized for any of the
+/// model's actions. The table is therefore not narrowed to what a guard would
+/// refuse anyway.
+///
+/// @par Reads
+/// An action that declares no rule is still an action holding records, and a
+/// watch is admitted through it. For the models that keep a company's ledger
+/// and billing (`isBooksModel`) the answer for such an action is "holds some
+/// role", so reading or watching those records needs a role, not only a valid
+/// token.
 ///
 /// @par Why it derives from `SigningAuthorizer`
 /// A role gate is only worth anything if the principal is authenticated. A
@@ -84,11 +101,11 @@ public:
     /// @brief Allows the call iff the token verifies **and** the caller holds
     ///        whatever role the action requires.
     ///
-    /// The bootstrap carve-out `OrgModel::execute(AssignRole)` implements —
+    /// The bootstrap carve-out `AssignRole`'s guard implements —
     /// the first assignment on a lab with no supervisor — is deliberately **not**
     /// mirrored here. This layer cannot see whether the lab has a supervisor
     /// yet without a second lookup, and duplicating a security exception in two
-    /// places is how the two copies drift; the model's own check is the one
+    /// places is how the two copies drift; the guard is the one
     /// that decides, and it runs on every path including this one. The
     /// practical consequence is stated in the rung README: the very first
     /// `AssignRole` must be made locally (or by a principal already holding
@@ -119,14 +136,28 @@ public:
             return false;
         }
         // The edge sees no payload, so it asks whether the principal holds the declared role anywhere; the scope, a
-        // value limit and a separation-of-duties pair are checked by the model, which has the payload.
+        // value limit and a separation-of-duties pair are judged by the action's guard, which has the payload.
         if (auto const requirement = ::lims::app::requirementFor(actionType)) {
             return requirement->role.has_value() ? holds(*principal, *requirement->role) : holdsAny(*principal);
+        }
+        // An action with no declared rule still reaches the records of a company's books: a watch admits a principal
+        // authorized for any action holding the record, and a read holds it too. For the ledger and billing models
+        // that answer is "holds some role", so a read cannot admit a principal with no role.
+        if (isBooksModel(modelType)) {
+            return holdsAny(*principal);
         }
         return true;
     }
 
 private:
+    /// @brief Whether @p modelType keeps a company's ledger or billing records.
+    /// @param modelType The model type id.
+    /// @return `true` for the ledger, ledger-report, price-list, invoice, invoice-edit and billing-run models.
+    [[nodiscard]] static bool isBooksModel(std::string_view modelType) noexcept {
+        return modelType == "LedgerModel" || modelType == "LedgerReportModel" || modelType == "PriceListModel" ||
+               modelType == "InvoiceModel" || modelType == "InvoiceEditModel" || modelType == "BillingRunModel";
+    }
+
     /// @brief Whether @p principal currently holds @p role.
     /// @param principal The authenticated principal.
     /// @param role The role to check for.

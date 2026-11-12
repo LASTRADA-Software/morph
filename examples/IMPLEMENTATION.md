@@ -72,6 +72,11 @@ The user-code contract is: **you implement Models; morph exposes them.**
 - Models must re-check their own preconditions and authorization
   (`Context::principal`) — the schema's `required` and the client gates are
   UX, not security (`docs/spec/security.md`).
+  An authorization rule that reads the payload or the instance is the action's
+  guard (`using guard = …;`, `docs/spec/core/action_guards.md`), which the
+  framework runs on every dispatch path; a direct caller uses
+  `morph::model::executeChecked`. A rule that must hold atomically with the
+  write is judged again inside the write's transaction.
 - Action failures are thrown as the app's typed error set (one
   `core/errors.hpp`-style header per rung, as bank does) and surface through
   `Completion::onError`; never encode failure as a magic value in a result

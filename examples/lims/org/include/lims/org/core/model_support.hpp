@@ -13,10 +13,11 @@
 
 #include "clock.hpp"
 #include "lims/org/core/errors.hpp"
+#include "lims/org/core/principal.hpp"
 
 /// @file
 /// The three things every model in this rung needs and morph does not
-/// provide: the principal check, and the two conversions between the ladder's
+/// provide: the principal check (`principal.hpp`, included here), and the two conversions between the ladder's
 /// injectable clock (`morph::ladder::now()`, examples/common/clock.hpp) and
 /// the epoch-millisecond integers the database columns hold.
 ///
@@ -25,20 +26,6 @@
 /// and the integer never escapes the DTO⇄entity mapping.
 
 namespace lims {
-
-/// @brief Throws unless a non-empty principal is authenticated.
-///
-/// Called by every mutating action rather than assumed: the README names
-/// empty-principal audit entries as disqualifying for this rung, and an
-/// authorizer that ran is not the same fact as a principal that is present
-/// (the authorize/authenticate TOCTOU it calls out).
-/// @throws EmptyPrincipalError when no principal, or an empty one, is in scope.
-inline void requirePrincipal() {
-    const auto* ctx = ::morph::session::current();
-    if (ctx == nullptr || ctx->principal.empty()) {
-        throw EmptyPrincipalError{};
-    }
-}
 
 /// @brief Whether @p error is SQLite's single writer turning this one away.
 ///

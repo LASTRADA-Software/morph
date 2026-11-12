@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "lims/lab/core/types.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 
 /// @file
 /// Sample entry: the record-editing side of `SampleModel`. A model instance holds one private working copy of a
@@ -64,7 +65,9 @@ enum class SaveError : std::uint8_t {
 };
 
 /// @brief Commits the working copy: registers the sample when it is new, then stores its entry data.
-struct SaveSample {};
+struct SaveSample {
+    using guard = ::lims::DeclaredRuleGuard;
+};
 
 /// @brief What a save did.
 struct SaveSampleResult {
@@ -75,7 +78,9 @@ struct SaveSampleResult {
 };
 
 /// @brief Deletes the stored sample the working copy was loaded from, and discards the working copy.
-struct DeleteSample {};
+struct DeleteSample {
+    using guard = ::lims::DeclaredRuleGuard;
+};
 
 /// @brief What a delete removed.
 struct DeleteSampleResult {

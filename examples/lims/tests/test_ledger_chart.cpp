@@ -5,6 +5,7 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <morph/core/action_guard.hpp>
 #include <morph/session/session_auth.hpp>
 #include <string>
 #include <string_view>
@@ -85,7 +86,11 @@ TEST_CASE("ledger chart: an accountant keeps accounts per company, each code onc
     }
     ScopedPrincipal const dave{"dave"};
     CHECK(ledger.execute(lims::ListAccounts{.company = lims::test::seededCompany()}).accounts.empty());
-    CHECK_THROWS_AS(account(ledger, "1300", lims::AccountType::Asset), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::CreateAccount{.company = lims::test::seededCompany(),
+                                                                               .code = "1300",
+                                                                               .name = "Account 1300",
+                                                                               .type = lims::AccountType::Asset}),
+                    lims::Forbidden);
 }
 
 // Mutation: let BeginClosePeriod accept a Closing period (the second begin succeeds).
@@ -99,13 +104,16 @@ TEST_CASE("ledger chart: a month is opened once and moves from open to closing",
     CHECK(opened.label == "2026-11");
     CHECK(opened.state == lims::PeriodState::Open);
     CHECK(opened.start == morph::time::Timestamp{lims::test::at(2026, 11, 1, 0)});
-    CHECK_THROWS_AS(ledger.execute(lims::OpenPeriod{.company = lims::test::seededCompany(),
-                                                    .month = morph::time::Timestamp{lims::test::at(2026, 11, 2)}}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        ledger, lims::OpenPeriod{.company = lims::test::seededCompany(),
+                                                 .month = morph::time::Timestamp{lims::test::at(2026, 11, 2)}}),
                     lims::Conflict);
     auto const closing = ledger.execute(lims::BeginClosePeriod{.periodId = opened.id});
     CHECK(closing.state == lims::PeriodState::Closing);
-    CHECK_THROWS_AS(ledger.execute(lims::BeginClosePeriod{.periodId = opened.id}), lims::IllegalTransition);
-    CHECK_THROWS_AS(ledger.execute(lims::BeginClosePeriod{.periodId = lims::PeriodId{999}}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::BeginClosePeriod{.periodId = opened.id}),
+                    lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::BeginClosePeriod{.periodId = lims::PeriodId{999}}),
+                    lims::Forbidden);
     CHECK(ledger.execute(lims::ListPeriods{.company = lims::test::seededCompany()}).periods.size() == 1U);
 }
 
@@ -133,8 +141,9 @@ TEST_CASE("ledger chart: the database refuses a duplicate code or month on its o
 
     // The model still answers with the rung's typed error, ahead of the index.
     CHECK_THROWS_AS(account(ledger, "1200", lims::AccountType::Asset), lims::Conflict);
-    CHECK_THROWS_AS(ledger.execute(lims::OpenPeriod{.company = lims::test::seededCompany(),
-                                                    .month = morph::time::Timestamp{lims::test::at(2026, 11, 20)}}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        ledger, lims::OpenPeriod{.company = lims::test::seededCompany(),
+                                                 .month = morph::time::Timestamp{lims::test::at(2026, 11, 20)}}),
                     lims::Conflict);
 }
 
@@ -170,11 +179,13 @@ TEST_CASE("ledger chart: roles gate periods per company, and a stranger learns n
         osakaPeriod = ledger.execute(
             lims::OpenPeriod{.company = osaka, .month = morph::time::Timestamp{lims::test::at(2026, 10, 1)}});
         // Mutation: delete requireAuthorized(action) from OpenPeriod.
-        CHECK_THROWS_AS(ledger.execute(lims::OpenPeriod{.company = lims::test::seededCompany(), .month = month}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(
+                            ledger, lims::OpenPeriod{.company = lims::test::seededCompany(), .month = month}),
                         lims::Forbidden);
         // Mutation: delete requireAuthorized(action) from BeginClosePeriod, or make periodCompany answer the
         // seeded company for every period.
-        CHECK_THROWS_AS(ledger.execute(lims::BeginClosePeriod{.periodId = seededPeriod.id}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::BeginClosePeriod{.periodId = seededPeriod.id}),
+                        lims::Forbidden);
         CHECK(ledger.execute(lims::BeginClosePeriod{.periodId = osakaPeriod.id}).state == lims::PeriodState::Closing);
         // Only visible companies' periods are listed.
         CHECK(ledger.execute(lims::ListPeriods{.company = lims::test::seededCompany()}).periods.empty());
@@ -183,15 +194,21 @@ TEST_CASE("ledger chart: roles gate periods per company, and a stranger learns n
     {
         // Mutation: make periodCompany return the seeded company for every period (erin may then close Osaka's).
         ScopedPrincipal const erin{"erin"};
-        CHECK_THROWS_AS(ledger.execute(lims::BeginClosePeriod{.periodId = osakaPeriod.id}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::BeginClosePeriod{.periodId = osakaPeriod.id}),
+                        lims::Forbidden);
         CHECK(ledger.execute(lims::ListPeriods{.company = osaka}).periods.empty());
         CHECK(ledger.execute(lims::ListPeriods{.company = lims::test::seededCompany()}).periods.size() == 1U);
         // A role at the right company reveals which ids exist.
-        CHECK_THROWS_AS(ledger.execute(lims::BeginClosePeriod{.periodId = lims::PeriodId{9999}}), lims::NotFound);
-        CHECK_THROWS_AS(ledger.execute(lims::OpenPeriod{.company = lims::CompanyId{9999}, .month = month}),
-                        lims::NotFound);
-        CHECK_THROWS_AS(ledger.execute(lims::CreateAccount{
-                            .company = osaka, .code = "1300", .name = "Cash", .type = lims::AccountType::Asset}),
+        CHECK_THROWS_AS(
+            ::morph::model::executeChecked(ledger, lims::BeginClosePeriod{.periodId = lims::PeriodId{9999}}),
+            lims::Forbidden);
+        CHECK_THROWS_AS(
+            ::morph::model::executeChecked(ledger, lims::OpenPeriod{.company = lims::CompanyId{9999}, .month = month}),
+            lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(
+                            ledger,
+                            lims::CreateAccount{
+                                .company = osaka, .code = "1300", .name = "Cash", .type = lims::AccountType::Asset}),
                         lims::Forbidden);
     }
 }
@@ -200,14 +217,16 @@ TEST_CASE("ledger chart: a principal with no role is Forbidden, not told what ex
     DbFixture fixture;
     lims::LedgerModel ledger;
     ScopedPrincipal const nobody{"nobody"};
-    CHECK_THROWS_AS(ledger.execute(lims::BeginClosePeriod{.periodId = lims::PeriodId{9999}}), lims::Forbidden);
-    CHECK_THROWS_AS(ledger.execute(lims::CreateAccount{.company = lims::CompanyId{9999},
-                                                       .code = "1200",
-                                                       .name = "Receivables",
-                                                       .type = lims::AccountType::Asset}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::BeginClosePeriod{.periodId = lims::PeriodId{9999}}),
                     lims::Forbidden);
-    CHECK_THROWS_AS(ledger.execute(lims::OpenPeriod{.company = lims::CompanyId{9999},
-                                                    .month = morph::time::Timestamp{lims::test::at(2026, 12, 1)}}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::CreateAccount{.company = lims::CompanyId{9999},
+                                                                               .code = "1200",
+                                                                               .name = "Receivables",
+                                                                               .type = lims::AccountType::Asset}),
+                    lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        ledger, lims::OpenPeriod{.company = lims::CompanyId{9999},
+                                                 .month = morph::time::Timestamp{lims::test::at(2026, 12, 1)}}),
                     lims::Forbidden);
 }
 

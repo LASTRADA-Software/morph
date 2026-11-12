@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/types.hpp"
 
 /// @file
@@ -14,6 +15,8 @@ namespace lims {
 
 /// @brief Creates a company.
 struct CreateCompany {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The company's name.
     std::string name;
     /// @brief The currency its books are kept in.
@@ -56,6 +59,8 @@ struct ListCompaniesResult {
 
 /// @brief Creates a site in a company.
 struct CreateSite {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The company the site belongs to.
     CompanyId companyId;
     /// @brief The site's name.

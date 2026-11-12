@@ -386,9 +386,7 @@ JournalEntryView LedgerModel::execute(const CreateDraftEntry& action) {
     if (!action.validate()) {
         throw ValidationError{"CreateDraftEntry: a company, a date, a rate and two or more lines are required"};
     }
-    requireRoleSomewhere<CreateDraftEntry>();
     CurrencyCode const base = companyCurrency(action.company);
-    requireAuthorized(action);
     requireRate("CreateDraftEntry", *action.rate, action.currency, base);
     requireBalanced("CreateDraftEntry", action.lines, action.currency, base, action.rate);
     Lightweight::DataMapper mapper;
@@ -411,13 +409,15 @@ JournalEntryView LedgerModel::execute(const PostEntry& action) {
     if (!action.validate()) {
         throw ValidationError{"PostEntry: an entry is required"};
     }
-    requireRoleSomewhere<PostEntry>();
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     auto entry = loadEntry(mapper, *action.entryId);
     if (!entry.has_value()) {
         throw NotFound{"PostEntry: entry " + std::to_string(*action.entryId) + " does not exist"};
     }
+    // Judged again just before the write: the guard ran it first, on every path, and this reads the scope's row once
+    // more, so a role revoked since is seen. The rule reads on its own connection, so it sees committed rows, not this
+    // transaction's; this transaction has written nothing yet.
     requireAuthorized(action);
     if (entry->header.state.Value() != static_cast<int>(EntryState::Draft)) {
         throw IllegalTransition{"PostEntry: entry " + std::to_string(*action.entryId) + " is already posted"};
@@ -453,13 +453,15 @@ JournalEntryView LedgerModel::execute(const ReverseEntry& action) {
     if (!action.validate()) {
         throw ValidationError{"ReverseEntry: an entry and a date are required"};
     }
-    requireRoleSomewhere<ReverseEntry>();
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     auto original = loadEntry(mapper, *action.entryId);
     if (!original.has_value()) {
         throw NotFound{"ReverseEntry: entry " + std::to_string(*action.entryId) + " does not exist"};
     }
+    // Judged again just before the write: the guard ran it first, on every path, and this reads the scope's row once
+    // more, so a role revoked since is seen. The rule reads on its own connection, so it sees committed rows, not this
+    // transaction's; this transaction has written nothing yet.
     requireAuthorized(action);
     if (original->header.state.Value() != static_cast<int>(EntryState::Posted)) {
         throw IllegalTransition{"ReverseEntry: only a posted entry is reversed; a draft is not on the books"};
@@ -583,7 +585,6 @@ PeriodView LedgerModel::execute(const ClosePeriod& action) {
     if (!action.validate()) {
         throw ValidationError{"ClosePeriod: a period is required"};
     }
-    requireRoleSomewhere<ClosePeriod>();
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     auto periods = mapper.Query<db::PeriodRecord>()
@@ -592,6 +593,9 @@ PeriodView LedgerModel::execute(const ClosePeriod& action) {
     if (periods.empty()) {
         throw NotFound{"ClosePeriod: period " + std::to_string(*action.periodId) + " does not exist"};
     }
+    // Judged again just before the write: the guard ran it first, on every path, and this reads the scope's row once
+    // more, so a role revoked since is seen. The rule reads on its own connection, so it sees committed rows, not this
+    // transaction's; this transaction has written nothing yet.
     requireAuthorized(action);
     auto& period = periods.front();
     if (period.state.Value() != static_cast<int>(PeriodState::Closing)) {
@@ -801,8 +805,6 @@ PostingResult LedgerModel::execute(const RecordPosting& action) {
         throw ValidationError{"RecordPosting: a company and a source key are required"};
     }
     requireServicePrincipal("RecordPosting");
-    requireRoleSomewhere<RecordPosting>();
-    requireAuthorized(action);
     return record(action.request);
 }
 

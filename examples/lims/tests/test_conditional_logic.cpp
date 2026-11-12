@@ -23,6 +23,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <glaze/glaze.hpp>
+#include <morph/core/action_guard.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/rational.hpp>
 #include <string>

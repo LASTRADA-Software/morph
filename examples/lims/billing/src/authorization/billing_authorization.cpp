@@ -55,6 +55,13 @@ Scope Authorization<ApproveInvoice>::scopeOf(ApproveInvoice const& action) {
     return escalated(*row) ? Scope{CompanyId{row->companyId.Value()}} : Scope{SiteId{row->siteId.Value()}};
 }
 
+void Authorization<ApproveInvoice>::checkState(ApproveInvoice const& action) {
+    auto const row = findInvoiceRecord(action.invoiceId);
+    if (row.has_value() && row->state.Value() != static_cast<int>(InvoiceState::Submitted)) {
+        throw IllegalTransition{"ApproveInvoice: only a submitted invoice is approved"};
+    }
+}
+
 ::morph::math::Rational Authorization<ApproveInvoice>::amountOf(ApproveInvoice const& action) {
     auto const row = findInvoiceRecord(action.invoiceId);
     if (!row.has_value()) {

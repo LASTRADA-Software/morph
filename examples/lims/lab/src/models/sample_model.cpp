@@ -214,13 +214,9 @@ SampleView SampleModel::execute(const RegisterSample& action) {
     if (!action.validate()) {
         throw ValidationError{"RegisterSample: a site, a client and a reference are required"};
     }
-    // A caller with no role anywhere learns nothing about which sites exist; a missing site is NotFound; a role at
-    // the wrong site is refused last.
-    requireRoleSomewhere<RegisterSample>();
     if (!OrgModel::findSite(action.siteId)) {
         throw NotFound{"RegisterSample: no such site"};
     }
-    requireAuthorized(action);
 
     Lightweight::DataMapper mapper;
     auto clients = mapper.Query<db::ClientRecord>()
@@ -361,6 +357,56 @@ Scope SampleModel::attachedSiteScope() const {
     return siteScopeOfSample(SampleId{*_sampleId});
 }
 
+std::vector<Scope> SampleModel::entryScopes() const {
+    std::vector<Scope> scopes;
+    if (!_draft.has_value()) {
+        return scopes;
+    }
+    if (_draft->header.siteId.hasValue()) {
+        scopes.emplace_back(_draft->header.siteId);
+    }
+    if (_sampleId.has_value()) {
+        scopes.push_back(siteScopeOfSample(SampleId{*_sampleId}));
+    }
+    return scopes;
+}
+
+Scope SampleModel::storedSiteScope() const {
+    if (!_sampleId.has_value()) {
+        throw NotFound{"DeleteSample: the working copy was never saved"};
+    }
+    return siteScopeOfSample(SampleId{*_sampleId});
+}
+
+template <typename Action>
+    requires RefusalRecordedInTrail<Action>
+void SampleModel::onGuardRefused(Action const& action, std::exception const& refusal) {
+    if (dynamic_cast<EmptyPrincipalError const*>(&refusal) != nullptr ||
+        dynamic_cast<LimsError const*>(&refusal) == nullptr) {
+        return;
+    }
+    if constexpr (std::is_same_v<Action, CaptureConcentration> || std::is_same_v<Action, SaveSample> ||
+                  std::is_same_v<Action, DeleteSample>) {
+        // A handler attached to no sample has no trail to record into.
+        if (!_sampleId.has_value()) {
+            return;
+        }
+    }
+    if constexpr (std::is_same_v<Action, VerifyResult>) {
+        // A verification belongs to the sample of the result, whatever this handler is attached to.
+        if (action.resultId.hasValue()) {
+            Lightweight::DataMapper mapper;
+            auto const results = mapper.Query<db::ResultRecord>()
+                                     .Where(::Lightweight::FieldNameOf<&db::ResultRecord::id>, "=", *action.resultId)
+                                     .All();
+            if (!results.empty()) {
+                _journal.rekey(std::to_string(results.front().sample.Value()));
+            }
+        }
+    }
+    _journal.recordFailure<SampleModel>(action, refusal.what(), nowMillis());
+}
+
 SampleView SampleModel::loadAttached() const {
     if (!_sampleId.has_value()) {
         throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
@@ -401,9 +447,7 @@ SampleView SampleModel::transition(const Action& action, SampleState target) {
             throw ValidationError{std::string{::morph::model::ActionTraits<Action>::typeId()} +
                                   ": the action is not well-formed"};
         }
-        requireRoleSomewhere<Action>();
         const auto before = loadAttached();
-        requireAuthorizedIn(action, attachedSiteScope());
         if (!isLegalTransition(before.state, target)) {
             throw IllegalTransition{std::string{"a "} + std::string{stateName(before.state)} +
                                     " sample cannot become " + std::string{stateName(target)}};
@@ -638,13 +682,10 @@ ListDilutionModesResult SampleModel::execute(const ListDilutionModes& action) {
 ResultView SampleModel::execute(const CaptureConcentration& action) {
     requirePrincipal();
     if (!_sampleId.has_value()) {
-        requireRoleSomewhere<CaptureConcentration>();
         throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
     }
     try {
-        requireRoleSomewhere<CaptureConcentration>();
         static_cast<void>(loadAttached());
-        requireAuthorizedIn(action, attachedSiteScope());
         auto view = applyCapture(SampleId{*_sampleId}, action, ::morph::session::current()->principal);
         _journal.recordSuccess<SampleModel>(action, view, nowMillis());
         return view;
@@ -708,10 +749,19 @@ ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
         }
 
         // A new operation needs the operator to hold some role at the sample's site now, at replay time, not when
-        // the reading was taken: no role anywhere is Forbidden, a missing sample NotFound, the wrong site Forbidden.
+        // the reading was taken: no role anywhere is Forbidden, and so are a missing sample and the wrong site, which
+        // the operator must not be able to tell apart.
         requireRoleSomewhere<QueuedCapture>();
         Lightweight::DataMapper mapper;
-        const auto sample = toView(loadSample(mapper, *action.sampleId));
+        std::optional<SampleView> found;
+        try {
+            found = toView(loadSample(mapper, *action.sampleId));
+        } catch (const NotFound&) {
+            // A missing sample resolves to no scope, which holds no role: refused as the guard refuses its own.
+            ::lims::detail::judge(action, std::optional<Scope>{Scope{}});
+            throw;
+        }
+        const auto& sample = *found;
         requireAuthorized(action);
         const auto serverVersion = SampleVersion{*sample.version};
 
@@ -804,9 +854,6 @@ ConflictView SampleModel::execute(const ResolveConflict& action) {
         if (!action.validate()) {
             throw ValidationError{"ResolveConflict: a conflict and a stated reason are required"};
         }
-        // A caller with no role anywhere learns nothing about which conflicts exist; a missing conflict is
-        // NotFound; a role at the wrong site is refused last.
-        requireRoleSomewhere<ResolveConflict>();
         Lightweight::DataMapper mapper;
         auto rows = mapper.Query<db::OfflineConflictRecord>()
                         .Where(::Lightweight::FieldNameOf<&db::OfflineConflictRecord::id>, "=", *action.conflictId)
@@ -814,7 +861,6 @@ ConflictView SampleModel::execute(const ResolveConflict& action) {
         if (rows.empty()) {
             throw NotFound{"ResolveConflict: no such conflict"};
         }
-        requireAuthorized(action);
         auto row = rows.front();
         // Same reason as `execute(VerifyResult)`: a resolution belongs to the
         // conflict's sample, whatever this handler is attached to.
@@ -874,10 +920,6 @@ VerificationView SampleModel::execute(const VerifyResult& action) {
         if (!action.validate()) {
             throw ValidationError{"VerifyResult: a resultId is required"};
         }
-        // Asked before the result is looked up, so a caller who is no verifier anywhere learns nothing about which
-        // results exist; the scope and the pair are judged below, once the result is known.
-        requireRoleSomewhere<VerifyResult>();
-
         Lightweight::DataMapper mapper;
         auto results = mapper.Query<db::ResultRecord>()
                            .Where(::Lightweight::FieldNameOf<&db::ResultRecord::id>, "=", *action.resultId)
@@ -889,11 +931,8 @@ VerificationView SampleModel::execute(const VerifyResult& action) {
         const auto capturedBy = std::string{result.capturedBy.Value().ToStringView()};
         const auto& principal = ::morph::session::current()->principal;
 
-        // Both halves of four eyes, as lab declares them: the verifier role at the sample's site, and not being the
-        // analyst who captured the reading. The server edge can check only the role, held anywhere, because it
-        // never sees the result; this check runs on every dispatch path, and no authorizer runs on the Local one.
-        requireAuthorized(action);
-
+        // Both halves of four eyes, the verifier role at the sample's site and not being the analyst who captured the
+        // reading, were judged by the action's guard before this ran.
         const auto sampleId = static_cast<std::int64_t>(result.sample.Value());
         // Journal this verification against the *sample* it belongs to, not
         // against whatever this handler happened to be attached to. A
@@ -1015,5 +1054,18 @@ void SampleModel::onBackendChanged() {
 void SampleModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
     _journal.attach(std::move(log), std::move(entityKey));
 }
+
+// The guard's refusals reach the model through these; the template is defined here, out of the header.
+template void SampleModel::onGuardRefused<ReceiveSample>(ReceiveSample const&, std::exception const&);
+template void SampleModel::onGuardRefused<StartWork>(StartWork const&, std::exception const&);
+template void SampleModel::onGuardRefused<SubmitForVerification>(SubmitForVerification const&, std::exception const&);
+template void SampleModel::onGuardRefused<ReturnForRework>(ReturnForRework const&, std::exception const&);
+template void SampleModel::onGuardRefused<PublishSample>(PublishSample const&, std::exception const&);
+template void SampleModel::onGuardRefused<RejectSample>(RejectSample const&, std::exception const&);
+template void SampleModel::onGuardRefused<CaptureConcentration>(CaptureConcentration const&, std::exception const&);
+template void SampleModel::onGuardRefused<SaveSample>(SaveSample const&, std::exception const&);
+template void SampleModel::onGuardRefused<DeleteSample>(DeleteSample const&, std::exception const&);
+template void SampleModel::onGuardRefused<ResolveConflict>(ResolveConflict const&, std::exception const&);
+template void SampleModel::onGuardRefused<VerifyResult>(VerifyResult const&, std::exception const&);
 
 }  // namespace lims

@@ -227,9 +227,7 @@ InventorySettingsView StockModel::execute(const SetInventorySettings& action) {
             "approval hours are required"};
     }
     requireHoursInRange(action);
-    requireRoleSomewhere<SetInventorySettings>();
     requireCompany("SetInventorySettings", action.company);
-    requireAuthorized(action);
     return storeSettings(action);
 }
 
@@ -259,9 +257,7 @@ ItemView StockModel::execute(const CreateItem& action) {
         throw ValidationError{
             "CreateItem: a company, a code of 1 to 32 bytes and a name of 1 to 128 bytes are required"};
     }
-    requireRoleSomewhere<CreateItem>();
     requireCompany("CreateItem", action.company);
-    requireAuthorized(action);
     auto const conflict = [&] {
         return Conflict{"CreateItem: company " + std::to_string(*action.company) + " has an item " + action.code +
                         " already"};
@@ -320,12 +316,10 @@ LocationView StockModel::execute(const CreateLocation& action) {
     if (!action.validate()) {
         throw ValidationError{"CreateLocation: a site and a name of 1 to 64 bytes are required"};
     }
-    requireRoleSomewhere<CreateLocation>();
     auto const site = OrgModel::findSite(action.site);
     if (!site.has_value()) {
         throw NotFound{"CreateLocation: site " + std::to_string(*action.site) + " does not exist"};
     }
-    requireAuthorized(action);
     auto const conflict = [&] {
         return Conflict{"CreateLocation: site " + std::to_string(*action.site) + " has a location " + action.name +
                         " already"};
@@ -386,7 +380,6 @@ LotStockView StockModel::execute(const RecordOpeningLot& action) {
             "RecordOpeningLot: an item, a location, a lot number, an expiry, a quantity and a cost "
             "are required"};
     }
-    requireRoleSomewhere<RecordOpeningLot>();
     // Reads on a mapper of their own: the transaction below opens with its first write.
     Lightweight::DataMapper reader;
     auto const item = inventory::findItem(reader, *action.item);
@@ -398,7 +391,6 @@ LotStockView StockModel::execute(const RecordOpeningLot& action) {
         throw NotFound{"RecordOpeningLot: location " + std::to_string(*action.location) + " is not one of " +
                        std::string{item->code.Value().ToStringView()} + "'s company"};
     }
-    requireAuthorized(action);
     auto const unit = inventory::stockUnitOf(*item);
     auto const quantity = convertStock(*action.quantity, action.unit, unit);
     if (quantity.numerator <= 0) {

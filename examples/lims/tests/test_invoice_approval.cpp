@@ -11,6 +11,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <functional>
+#include <morph/core/action_guard.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
@@ -86,23 +87,25 @@ TEST_CASE("invoice approval: four eyes and a value limit, judged in the model", 
     lims::InvoiceModel invoices;
     {
         ScopedPrincipal const bea{"bea"};
-        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+        CHECK_THROWS_WITH(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
                           Catch::Matchers::ContainsSubstring("created this invoice"));
     }
     {
         ScopedPrincipal const tom{"tom"};
-        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+        CHECK_THROWS_WITH(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
                           Catch::Matchers::ContainsSubstring("value limit"));
     }
     {
         ScopedPrincipal const nobody{"nora"};
-        CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
+                        lims::Forbidden);
     }
     ScopedPrincipal const paula{"paula"};
     auto const approved = invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id});
     CHECK(approved.state == lims::InvoiceState::Approved);
     CHECK(approved.approvedBy == "paula");
-    CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
+                    lims::IllegalTransition);
 }
 
 // Mutation: drop `submitted_by` from the submission's update (the row records no submitter).
@@ -125,7 +128,7 @@ TEST_CASE("invoice approval: submission records the deadline, the submitter and 
     CHECK_THROWS_AS(dispatchAs<lims::InvoiceModel>("paula", lims::SubmitInvoice{.invoiceId = invoice.id}),
                     lims::Forbidden);
     CHECK_THROWS_AS(dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = lims::InvoiceId{9999}}),
-                    lims::NotFound);
+                    lims::Forbidden);
     // A dispatch refuses an unnamed invoice before the handler runs, with the registry's own error type.
     CHECK_THROWS_AS(dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{}), morph::model::ValidationError);
     lims::InvoiceModel invoices;
@@ -134,18 +137,72 @@ TEST_CASE("invoice approval: submission records the deadline, the submitter and 
     CHECK(read(invoice.id).submittedBy == "bea");
 }
 
-TEST_CASE("invoice approval: only a submitted invoice is approved, and only a billing clerk submits",
+// Mutation: make `checkState` a no-op (a draft reaches the value rule and is refused as an invoice with no value in
+// its company's currency, not as an IllegalTransition).
+TEST_CASE("invoice approval: a draft is not approved, and it is an IllegalTransition for an approver",
           "[lims][billing][approval]") {
     lims::test::LabFixture const fixture;
     auto const invoice = lims::test::draftedInvoice();
     lims::InvoiceModel invoices;
     {
         ScopedPrincipal const carl{"carl"};
-        CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
+        CHECK_THROWS_AS(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
+                        lims::IllegalTransition);
     }
     CHECK_THROWS_AS(lims::test::dispatchAs<lims::InvoiceModel>("carl", lims::SubmitInvoice{.invoiceId = invoice.id}),
                     lims::Forbidden);
     CHECK(read(invoice.id).state == lims::InvoiceState::Draft);
+}
+
+// Mutation: make `checkState` a no-op (the creator re-approving an approved invoice is told they created it).
+TEST_CASE("invoice approval: re-approving an approved invoice is an IllegalTransition, even for its creator",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
+    lims::InvoiceModel invoices;
+    {
+        ScopedPrincipal const paula{"paula"};
+        CHECK(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}).state == lims::InvoiceState::Approved);
+    }
+    for (char const* who : {"paula", "bea"}) {
+        ScopedPrincipal const caller{who};
+        CHECK_THROWS_AS(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
+                        lims::IllegalTransition);
+    }
+}
+
+// Mutation: drop the role check before `checkState` in `requireAuthorized` (an approver of another company is told the
+// draft exists, where an unknown id is refused).
+TEST_CASE("invoice approval: an approver of another company and an unknown id are refused identically",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::InvoiceModel invoices;
+    std::string foreign;
+    std::string unknown;
+    {
+        ScopedPrincipal const carl{"carl"};
+        // carl holds the approver role at the seeded company; make the invoice another company's.
+        execute("UPDATE billing_invoices SET company_id = company_id + 1000, site_id = site_id + 1000");
+        try {
+            static_cast<void>(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}));
+            FAIL("approving another company's invoice was not refused");
+        } catch (lims::Forbidden const& refusal) {
+            foreign = refusal.what();
+        }
+        try {
+            static_cast<void>(
+                ::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = lims::InvoiceId{9999}}));
+            FAIL("approving an unknown invoice was not refused");
+        } catch (lims::Forbidden const& refusal) {
+            unknown = refusal.what();
+        }
+    }
+    CHECK(foreign == unknown);
+    CHECK_THAT(foreign, !Catch::Matchers::ContainsSubstring("draft") && !Catch::Matchers::ContainsSubstring("value") &&
+                            !Catch::Matchers::ContainsSubstring("created"));
 }
 
 // Mutation: drop the currency check from SubmitInvoice (a yen invoice is submitted with a gross no rate valued).
@@ -229,8 +286,8 @@ TEST_CASE(
     CHECK(pendingFor("carl") == 1U);
     {
         ScopedPrincipal const paula{"paula"};
-        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
-                          Catch::Matchers::ContainsSubstring("at company"));
+        CHECK_THROWS_WITH(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
+                          Catch::Matchers::ContainsSubstring("does not hold the invoice-approver role"));
     }
     ScopedPrincipal const carl{"carl"};
     CHECK(invoices.execute(lims::GetInvoice{.invoiceId = invoice.id}).level == lims::ApprovalLevel::Company);
@@ -267,7 +324,8 @@ TEST_CASE("Hypothesis 5: an approval lasts across days, principals and rigs as o
 }
 
 // Hypothesis 6, second instance: the edge sees (principal, model, action) and allows; the model sees the invoice.
-// Mutation: drop requireAuthorized from ApproveInvoice (bea's self-approval succeeds over every backend).
+// Mutation: remove `using guard` from ApproveInvoice and its in-transaction `requireAuthorized` (either alone leaves
+// the refusal: bea's self-approval succeeds over every backend only with both gone).
 TEST_CASE("Hypothesis 6: the edge lets an invoice's creator through to approve it, and the model refuses",
           "[lims][billing][approval][h6]") {
     auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
@@ -316,7 +374,7 @@ TEST_CASE("invoice approval: an invoice the billing run drafted still needs a se
     lims::InvoiceModel invoices;
     {
         ScopedPrincipal const bea{"bea"};
-        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = id}),
+        CHECK_THROWS_WITH(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = id}),
                           Catch::Matchers::ContainsSubstring("submitted this invoice"));
     }
     ScopedPrincipal const carl{"carl"};
@@ -354,14 +412,14 @@ TEST_CASE("invoice approval: the edges of the limit and of the deadline", "[lims
         setLimit("paula", Rational{morph::math::Numerator{4759}, morph::math::Denominator{100}, DecimalPlaces{2}});
         ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
         ScopedPrincipal const paula{"paula"};
-        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+        CHECK_THROWS_WITH(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
                           Catch::Matchers::ContainsSubstring("value limit"));
     }
     SECTION("an approver with the role and no limit is refused") {
         lims::test::grant("dora", lims::LimsRole::InvoiceApprover, lims::Scope{lims::test::seededSite()});
         ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
         ScopedPrincipal const dora{"dora"};
-        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+        CHECK_THROWS_WITH(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
                           Catch::Matchers::ContainsSubstring("has no value limit"));
         CHECK(invoices.execute(lims::ListPendingApprovals{}).invoices.empty());
     }
@@ -369,8 +427,8 @@ TEST_CASE("invoice approval: the edges of the limit and of the deadline", "[lims
         ScopedClockOverride const clock{lims::test::at(2026, 11, 12)};
         {
             ScopedPrincipal const paula{"paula"};
-            CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
-                              Catch::Matchers::ContainsSubstring("at company"));
+            CHECK_THROWS_WITH(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
+                              Catch::Matchers::ContainsSubstring("does not hold the invoice-approver role"));
             CHECK(invoices.execute(lims::ListPendingApprovals{}).invoices.empty());
         }
         ScopedPrincipal const carl{"carl"};
@@ -394,7 +452,7 @@ TEST_CASE("invoice approval: a company billing in yen is judged against whole-ye
     lims::InvoiceModel invoices;
     {
         ScopedPrincipal const paula{"paula"};
-        CHECK_THROWS_WITH(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}),
+        CHECK_THROWS_WITH(::morph::model::executeChecked(invoices, lims::ApproveInvoice{.invoiceId = invoice.id}),
                           Catch::Matchers::ContainsSubstring("value limit"));
     }
     ScopedPrincipal const carl{"carl"};

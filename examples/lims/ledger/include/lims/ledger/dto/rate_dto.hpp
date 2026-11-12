@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "lims/ledger/core/types.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/types.hpp"
 #include "lims/posting/posting.hpp"
@@ -23,6 +24,8 @@ namespace lims {
 /// entered separately; it is never derived as a reciprocal, because the two quotes differ and rounding the reciprocal
 /// would invent a rate nobody entered.
 struct SetExchangeRate {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The company whose books the rate converts for.
     CompanyId company;
     /// @brief The transaction currency.

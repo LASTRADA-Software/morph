@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <concepts>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
@@ -28,6 +30,17 @@
 /// instance.
 
 namespace lims {
+
+/// @brief Whether a refusal of @p Action by its guard is recorded in the sample's own audit trail: the actions
+///        whose handler records its own refusals there.
+/// @tparam Action The action.
+template <typename Action>
+concept RefusalRecordedInTrail =
+    std::same_as<Action, ReceiveSample> || std::same_as<Action, StartWork> ||
+    std::same_as<Action, SubmitForVerification> || std::same_as<Action, ReturnForRework> ||
+    std::same_as<Action, PublishSample> || std::same_as<Action, RejectSample> ||
+    std::same_as<Action, CaptureConcentration> || std::same_as<Action, SaveSample> ||
+    std::same_as<Action, DeleteSample> || std::same_as<Action, ResolveConflict> || std::same_as<Action, VerifyResult>;
 
 /// @brief One sample: its registration and its position in the lab workflow.
 ///
@@ -409,6 +422,37 @@ public:
     ///        with the sample's own id as soon as this handler attaches to one.
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
 
+    /// @brief The attached sample's site as a scope, for the declared authorization check.
+    /// @return Its site; an empty site when the sample has no row or no site, which holds no role, so the caller is
+    ///         refused as a missing role before anything else is looked up.
+    /// @throws NotFound if this handler is not attached: there is no id to leak, so the caller is told.
+    [[nodiscard]] Scope attachedSiteScope() const;
+
+    /// @brief The scopes a `SaveSample` of the working copy writes to: the header's site when it names one and, when
+    ///        the working copy updates a stored sample, that sample's stored site too, so moving a sample needs a
+    ///        role at both ends.
+    /// @return The scopes; an empty scope for a stored sample whose row is gone, which holds no role. None when no
+    ///         working copy is held. A header that names no site contributes none, so a copy with no stored sample
+    ///         still answers `SaveError::noSite` from the handler.
+    [[nodiscard]] std::vector<Scope> entryScopes() const;
+
+    /// @brief The site the stored sample the working copy was loaded from sits at, for a `DeleteSample`.
+    /// @return Its site; an empty scope when its row is gone, which holds no role.
+    /// @throws NotFound when the working copy was never saved.
+    [[nodiscard]] Scope storedSiteScope() const;
+
+    /// @brief Records a refusal by the action's guard in this sample's own audit trail, as the handler's own refusals
+    ///        are, so a refused verification or transition appears in `GetAuditTrail`.
+    ///
+    /// A refusal of nobody (`EmptyPrincipalError`) is not recorded: an entry naming nobody is what the audit trail
+    /// keeps out.
+    /// @tparam Action The refused action.
+    /// @param action The refused action.
+    /// @param refusal The guard's exception.
+    template <typename Action>
+        requires RefusalRecordedInTrail<Action>
+    void onGuardRefused(Action const& action, std::exception const& refusal);
+
 private:
     /// @brief Shared body of every transition action.
     ///
@@ -421,12 +465,6 @@ private:
     /// @return The sample's state after the transition.
     template <typename Action>
     SampleView transition(const Action& action, SampleState target);
-
-    /// @brief The attached sample's site as a scope, for the declared authorization check.
-    /// @return Its site; an empty site when the sample has no row or no site, which holds no role, so the caller is
-    ///         refused as a missing role before anything else is looked up.
-    /// @throws NotFound if this handler is not attached: there is no id to leak, so the caller is told.
-    [[nodiscard]] Scope attachedSiteScope() const;
 
     /// @brief Loads the attached sample and returns its view.
     /// @return The attached sample's full state.
@@ -497,7 +535,26 @@ private:
     std::shared_ptr<::morph::offline::IOfflineQueue> _queue;
 };
 
+// `onGuardRefused` is defined in `sample_model.cpp`, which keeps the ORM out of this header; these are its
+// instantiations.
+extern template void SampleModel::onGuardRefused<ReceiveSample>(ReceiveSample const&, std::exception const&);
+extern template void SampleModel::onGuardRefused<StartWork>(StartWork const&, std::exception const&);
+extern template void SampleModel::onGuardRefused<SubmitForVerification>(SubmitForVerification const&,
+                                                                        std::exception const&);
+extern template void SampleModel::onGuardRefused<ReturnForRework>(ReturnForRework const&, std::exception const&);
+extern template void SampleModel::onGuardRefused<PublishSample>(PublishSample const&, std::exception const&);
+extern template void SampleModel::onGuardRefused<RejectSample>(RejectSample const&, std::exception const&);
+extern template void SampleModel::onGuardRefused<CaptureConcentration>(CaptureConcentration const&,
+                                                                       std::exception const&);
+extern template void SampleModel::onGuardRefused<SaveSample>(SaveSample const&, std::exception const&);
+extern template void SampleModel::onGuardRefused<DeleteSample>(DeleteSample const&, std::exception const&);
+extern template void SampleModel::onGuardRefused<ResolveConflict>(ResolveConflict const&, std::exception const&);
+extern template void SampleModel::onGuardRefused<VerifyResult>(VerifyResult const&, std::exception const&);
+
 }  // namespace lims
+
+// The guard each registered action names must be complete here: the registration instantiates its execution.
+#include "lims/lab/authorization/lab_authorization.hpp"
 
 BRIDGE_REGISTER_MODEL(lims::SampleModel, "SampleModel")
 // No screen lists clients: a registered client is only named by the sample registered for it next.

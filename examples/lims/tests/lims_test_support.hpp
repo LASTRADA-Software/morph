@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <format>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/datetime.hpp>
@@ -79,16 +80,17 @@ inline lims::RoleAssignmentView grant(std::string principal, lims::LimsRole role
     lims::OrgModel org;
     auto const held = lims::OrgModel::rolesIn(kGranter, lims::Scope{seededCompany()});
     if (std::ranges::find(held, lims::LimsRole::Supervisor) == held.end()) {
-        org.execute(lims::AssignRole{.principal = std::string{kGranter},
-                                     .role = lims::LimsRole::Supervisor,
-                                     .company = seededCompany(),
-                                     .site = {}});
+        ::morph::model::executeChecked(org, lims::AssignRole{.principal = std::string{kGranter},
+                                                             .role = lims::LimsRole::Supervisor,
+                                                             .company = seededCompany(),
+                                                             .site = {}});
     }
     auto const* company = std::get_if<lims::CompanyId>(&scope);
-    return org.execute(lims::AssignRole{.principal = std::move(principal),
-                                        .role = role,
-                                        .company = company != nullptr ? *company : lims::CompanyId{},
-                                        .site = company != nullptr ? lims::SiteId{} : std::get<lims::SiteId>(scope)});
+    return ::morph::model::executeChecked(
+        org, lims::AssignRole{.principal = std::move(principal),
+                              .role = role,
+                              .company = company != nullptr ? *company : lims::CompanyId{},
+                              .site = company != nullptr ? lims::SiteId{} : std::get<lims::SiteId>(scope)});
 }
 
 /// @brief A fresh database in which the lab's bench staff, `alice`, `fiona`, `gerard` and `tech`, are analysts at the

@@ -265,9 +265,7 @@ BillingSettingsView PriceListModel::execute(const SetBillingSettings& action) {
             "approval hours and a billing day are required"};
     }
     requireSettingsInRange(action);
-    requireRoleSomewhere<SetBillingSettings>();
     requireCompany("SetBillingSettings", action.company);
-    requireAuthorized(action);
     return storeSettings(action, {});
 }
 
@@ -308,9 +306,7 @@ BillingClientView PriceListModel::execute(const RegisterBillingClient& action) {
         throw ValidationError{
             "RegisterBillingClient: a client above zero, a company and a name of 1 to 128 bytes are required"};
     }
-    requireRoleSomewhere<RegisterBillingClient>();
     requireCompany("RegisterBillingClient", action.company);
-    requireAuthorized(action);
     return storeClient(action, {});
 }
 
@@ -372,9 +368,7 @@ PriceListView PriceListModel::execute(const CreatePriceList& action) {
     if (!action.validate()) {
         throw ValidationError{"CreatePriceList: a company, a start and a name of 1 to 128 bytes are required"};
     }
-    requireRoleSomewhere<CreatePriceList>();
     requireCompany("CreatePriceList", action.company);
-    requireAuthorized(action);
     return storePriceList(action, {});
 }
 
@@ -424,7 +418,6 @@ PriceView PriceListModel::execute(const SetPrice& action) {
     if ((*action.amount).isNegative()) {
         throw ValidationError{"SetPrice: a price cannot be negative"};
     }
-    requireRoleSomewhere<SetPrice>();
     std::optional<db::PriceListRecord> list;
     {
         Lightweight::DataMapper mapper;
@@ -433,7 +426,6 @@ PriceView PriceListModel::execute(const SetPrice& action) {
     if (!list.has_value()) {
         throw NotFound{"SetPrice: price list " + std::to_string(*action.priceList) + " does not exist"};
     }
-    requireAuthorized(action);
     auto const currency = currencyOf(list->currency.Value(), "price list " + std::to_string(list->id.Value()));
     if (!fitsCurrency(*action.amount, currency)) {
         throw ValidationError{"SetPrice: a " + std::string{currencyName(currency)} +

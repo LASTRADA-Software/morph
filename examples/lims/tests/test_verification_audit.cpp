@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
@@ -99,7 +100,8 @@ TEST_CASE("Verifying needs the verifier role", "[lims][audit][verification]") {
         // Bob has no role at all yet.
         const ScopedPrincipal bob{"bob"};
         lims::SampleModel verifier;
-        CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result.id}),
+                        lims::Forbidden);
     }
 
     lims::test::grant("bob", lims::LimsRole::Analyst);
@@ -107,7 +109,8 @@ TEST_CASE("Verifying needs the verifier role", "[lims][audit][verification]") {
         // ...and an analyst is still not a verifier.
         const ScopedPrincipal bob{"bob"};
         lims::SampleModel verifier;
-        CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result.id}),
+                        lims::Forbidden);
     }
 
     lims::test::grant("bob", lims::LimsRole::Verifier);
@@ -132,7 +135,8 @@ TEST_CASE("A verifier cannot verify their own reading, however senior", "[lims][
     lims::test::grant("alice", lims::LimsRole::Supervisor);
     lims::test::grant("alice", lims::LimsRole::Verifier);
 
-    CHECK_THROWS_AS(lab.bench.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(lab.bench, lims::VerifyResult{.resultId = lab.result.id}),
+                    lims::Forbidden);
     CHECK(lab.bench.execute(lims::ListVerifications{}).verifications.empty());
 }
 
@@ -148,10 +152,12 @@ TEST_CASE("A result is verified once, while the sample is awaiting verification"
     verifier.execute(lims::VerifyResult{.resultId = lab.result.id});
 
     // Twice is a conflict, not a second signature.
-    CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Conflict);
+    CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result.id}),
+                    lims::Conflict);
     CHECK(verifier.execute(lims::ListVerifications{}).verifications.size() == 1);
 
-    CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lims::ResultId{424242}}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lims::ResultId{424242}}),
+                    lims::Forbidden);
     CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{}), lims::ValidationError);
 }
 
@@ -163,7 +169,7 @@ TEST_CASE("A sample cannot be published while any of its results is unverified",
     // This is what makes the four-eyes step load-bearing rather than
     // decorative: publishing is where the lab tells the client a number is
     // true, so it is where a second pair of eyes is insisted on.
-    CHECK_THROWS_AS(lab.bench.execute(lims::PublishSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(lab.bench, lims::PublishSample{}), lims::IllegalTransition);
     CHECK(lab.bench.execute(lims::GetSample{}).state == lims::SampleState::ToBeVerified);
 
     lims::test::grant("bob", lims::LimsRole::Verifier);
@@ -263,7 +269,8 @@ TEST_CASE("The model re-checks the role the authorizer already checked", "[lims]
     CHECK(lims::OrgModel::rolesAnywhere("bob").empty());
     const ScopedPrincipal bob{"bob"};
     lims::SampleModel verifier;
-    CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result.id}),
+                    lims::Forbidden);
 }
 
 // ── The audit trail ────────────────────────────────────────────────────────
@@ -328,13 +335,14 @@ TEST_CASE("Every state the sample was ever in is reconstructible from the journa
     CHECK(sawVerification);
 }
 
+// Mutation: remove `SampleModel::onGuardRefused` (no refused step appears).
 TEST_CASE("A refused attempt appears in the trail, marked refused", "[lims][audit]") {
     lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
 
-    CHECK_THROWS_AS(lab.bench.execute(lims::PublishSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(lab.bench, lims::PublishSample{}), lims::IllegalTransition);
 
     const auto trail = lab.bench.execute(lims::GetAuditTrail{});
     bool sawRefusal = false;
@@ -484,6 +492,8 @@ TEST_CASE("A verification appears in the sample's own audit trail", "[lims][audi
     CHECK(sawVerification);
 }
 
+// A guard refusal reaches the sample's own trail through `SampleModel::onGuardRefused`.
+// Mutation: remove `SampleModel::onGuardRefused` (no refused step appears).
 TEST_CASE("A refused verification appears in the trail, marked refused", "[lims][audit]") {
     lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
@@ -493,7 +503,8 @@ TEST_CASE("A refused verification appears in the trail, marked refused", "[lims]
 
     // Alice captured the reading, so she cannot verify it. The attempt is
     // audit-worthy precisely because it was refused.
-    CHECK_THROWS_AS(lab.bench.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(lab.bench, lims::VerifyResult{.resultId = lab.result.id}),
+                    lims::Forbidden);
 
     const auto trail = lab.bench.execute(lims::GetAuditTrail{});
     bool sawRefusal = false;
@@ -581,7 +592,8 @@ TEST_CASE("A verification is refused unless the sample is awaiting verification"
 
     const ScopedPrincipal bob{"bob"};
     lims::SampleModel verifier;
-    CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result.id}),
+                    lims::IllegalTransition);
 }
 
 TEST_CASE("The audit and verification listings need an attached handler", "[lims][audit]") {
@@ -618,9 +630,9 @@ TEST_CASE("Every refused action kind is named in the trail, not lumped as unread
                     lims::ValidationError);
     CHECK_THROWS_AS(bench.execute(lims::QueuedCapture{.sampleId = atWork.id, .capturedBy = "alice"}),
                     lims::ValidationError);
-    CHECK_THROWS_AS(
-        bench.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "no such conflict"}),
-        lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(bench, lims::ResolveConflict{.conflictId = lims::ConflictId{424242},
+                                                                                .note = "no such conflict"}),
+                    lims::Forbidden);
 
     std::vector<lims::AuditStepKind> refusedKinds;
     for (const auto& step : bench.execute(lims::GetAuditTrail{}).steps) {

@@ -6,6 +6,7 @@
 #include <string>
 
 #include "lims/billing/core/types.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/references.hpp"
 #include "lims/org/core/types.hpp"
 
@@ -26,6 +27,8 @@ struct InvoiceLeaseView {
 
 /// @brief Leases a draft invoice to the editing instance that sends it.
 struct LeaseInvoice {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The invoice.
     InvoiceId invoiceId;
 

@@ -4,8 +4,8 @@
 #include "lims/ledger/dto/account_dto.hpp"
 #include "lims/ledger/dto/entry_dto.hpp"
 #include "lims/ledger/dto/rate_dto.hpp"
-#include "lims/ledger/models/ledger_model.hpp"
 #include "lims/org/authorization/declared.hpp"
+#include "lims/org/models/org_model.hpp"
 
 /// @file
 /// The ledger module's declared authorization: keeping a company's books is an accountant's, at that company.
@@ -81,6 +81,8 @@ template <>
 struct Authorization<RecordPosting> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::Service;
+    /// @brief The scope is spelled out in the payload.
+    static constexpr bool scopeInPayload = true;
 
     /// @brief The request's company.
     /// @param action The action.
@@ -89,3 +91,6 @@ struct Authorization<RecordPosting> {
 };
 
 }  // namespace lims
+
+// The models are included last, after every declaration their registrations need.
+#include "lims/ledger/models/ledger_model.hpp"

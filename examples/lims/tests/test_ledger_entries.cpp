@@ -17,6 +17,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/table/plan_conformance.hpp>
 #include <morph/table/query.hpp>
@@ -271,7 +272,8 @@ TEST_CASE("ledger entries: a draft is posted once and is then immutable; a corre
     auto const posted = ledger.execute(lims::PostEntry{.entryId = draft.id});
     CHECK(posted.state == lims::EntryState::Posted);
     CHECK(posted.postedBy == "alice");
-    CHECK_THROWS_AS(ledger.execute(lims::PostEntry{.entryId = draft.id}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::PostEntry{.entryId = draft.id}),
+                    lims::IllegalTransition);
 
     auto const reversal = ledger.execute(
         lims::ReverseEntry{.entryId = draft.id, .date = morph::time::Timestamp{lims::test::at(2026, 11, 20)}});
@@ -280,8 +282,9 @@ TEST_CASE("ledger entries: a draft is posted once and is then immutable; a corre
     REQUIRE(reversal.lines.size() == 2U);
     CHECK(reversal.lines[0].side == lims::PostingSide::Credit);
     CHECK(ledger.execute(lims::GetEntry{.entryId = draft.id}).reversedBy == reversal.id);
-    CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = draft.id,
-                                                      .date = morph::time::Timestamp{lims::test::at(2026, 11, 21)}}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        ledger, lims::ReverseEntry{.entryId = draft.id,
+                                                   .date = morph::time::Timestamp{lims::test::at(2026, 11, 21)}}),
                     lims::Conflict);
 
     // The original is not edited: its lines and state are as posted; only reversedBy is set.
@@ -301,8 +304,9 @@ TEST_CASE("ledger entries: only a posted entry is reversed, and a reversal is it
     ScopedPrincipal const alice{"alice"};
     lims::LedgerModel ledger;
     auto const draft = accrual(ledger, morph::time::Timestamp{lims::test::at(2026, 11, 12)});
-    CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = draft.id,
-                                                      .date = morph::time::Timestamp{lims::test::at(2026, 11, 13)}}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        ledger, lims::ReverseEntry{.entryId = draft.id,
+                                                   .date = morph::time::Timestamp{lims::test::at(2026, 11, 13)}}),
                     lims::IllegalTransition);
     ledger.execute(lims::PostEntry{.entryId = draft.id});
     auto const reversal = ledger.execute(
@@ -415,15 +419,15 @@ TEST_CASE("ledger entries: what the ledger refuses", "[lims][ledger]") {
         CHECK_THROWS_AS(
             make({line("9999", lims::PostingSide::Debit, 1000), line("4000", lims::PostingSide::Credit, 1000)}),
             lims::NotFound);
-        CHECK_THROWS_AS(
-            ledger.execute(lims::CreateDraftEntry{.company = lims::test::seededCompany(),
-                                                  .date = morph::time::Timestamp{lims::test::at(2027, 1, 5)},
-                                                  .memo = "m",
-                                                  .currency = lims::CurrencyCode::EUR,
-                                                  .rate = one(),
-                                                  .lines = {line("1200", lims::PostingSide::Debit, 1000),
-                                                            line("4000", lims::PostingSide::Credit, 1000)}}),
-            lims::NotFound);
+        CHECK_THROWS_AS(::morph::model::executeChecked(
+                            ledger, lims::CreateDraftEntry{.company = lims::test::seededCompany(),
+                                                           .date = morph::time::Timestamp{lims::test::at(2027, 1, 5)},
+                                                           .memo = "m",
+                                                           .currency = lims::CurrencyCode::EUR,
+                                                           .rate = one(),
+                                                           .lines = {line("1200", lims::PostingSide::Debit, 1000),
+                                                                     line("4000", lims::PostingSide::Credit, 1000)}}),
+                        lims::NotFound);
     }
     SECTION("a closing period takes no new draft but posts and reverses what is there") {
         auto const draft = accrual(ledger, date);
@@ -440,8 +444,9 @@ TEST_CASE("ledger entries: what the ledger refuses", "[lims][ledger]") {
         ledger.execute(lims::PostEntry{.entryId = posted.id});
         forceState(november.id, lims::PeriodState::Closed);
         CHECK_THROWS_AS(accrual(ledger, date), lims::Conflict);
-        CHECK_THROWS_AS(ledger.execute(lims::PostEntry{.entryId = draft.id}), lims::Conflict);
-        CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = posted.id, .date = date}), lims::Conflict);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::PostEntry{.entryId = draft.id}), lims::Conflict);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::ReverseEntry{.entryId = posted.id, .date = date}),
+                        lims::Conflict);
         // The refused reversal left the original unreversed and wrote nothing.
         CHECK_FALSE(ledger.execute(lims::GetEntry{.entryId = posted.id}).reversedBy.hasValue());
         CHECK(ledger.execute(lims::ListEntries{.company = lims::test::seededCompany()}).entries.size() == 2U);
@@ -537,14 +542,16 @@ TEST_CASE("ledger entries: roles gate entries per company, and a stranger learns
         // No role anywhere: Forbidden before any lookup, so ids that exist and ids that do not look alike.
         ScopedPrincipal const nobody{"nobody"};
         for (auto const id : {draft, lims::JournalEntryId{9999}}) {
-            CHECK_THROWS_AS(ledger.execute(lims::PostEntry{.entryId = id}), lims::Forbidden);
-            CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = id, .date = date}), lims::Forbidden);
+            CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::PostEntry{.entryId = id}), lims::Forbidden);
+            CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::ReverseEntry{.entryId = id, .date = date}),
+                            lims::Forbidden);
         }
-        CHECK_THROWS_AS(ledger.execute(lims::CreateDraftEntry{.company = lims::CompanyId{9999},
-                                                              .date = date,
-                                                              .rate = one(),
-                                                              .lines = {line("1200", lims::PostingSide::Debit, 1),
-                                                                        line("4000", lims::PostingSide::Credit, 1)}}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(
+                            ledger, lims::CreateDraftEntry{.company = lims::CompanyId{9999},
+                                                           .date = date,
+                                                           .rate = one(),
+                                                           .lines = {line("1200", lims::PostingSide::Debit, 1),
+                                                                     line("4000", lims::PostingSide::Credit, 1)}}),
                         lims::Forbidden);
         CHECK_THROWS_AS(ledger.execute(lims::GetEntry{.entryId = posted}), lims::NotFound);
         CHECK(ledger.execute(lims::ListEntries{.company = lims::test::seededCompany()}).entries.empty());
@@ -552,13 +559,15 @@ TEST_CASE("ledger entries: roles gate entries per company, and a stranger learns
     {
         // An accountant at Osaka only: a role, but not at this entry's company.
         ScopedPrincipal const dave{"dave"};
-        CHECK_THROWS_AS(ledger.execute(lims::PostEntry{.entryId = draft}), lims::Forbidden);
-        CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = posted, .date = date}), lims::Forbidden);
-        CHECK_THROWS_AS(ledger.execute(lims::CreateDraftEntry{.company = lims::test::seededCompany(),
-                                                              .date = date,
-                                                              .rate = one(),
-                                                              .lines = {line("1200", lims::PostingSide::Debit, 1),
-                                                                        line("4000", lims::PostingSide::Credit, 1)}}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::PostEntry{.entryId = draft}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::ReverseEntry{.entryId = posted, .date = date}),
+                        lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(
+                            ledger, lims::CreateDraftEntry{.company = lims::test::seededCompany(),
+                                                           .date = date,
+                                                           .rate = one(),
+                                                           .lines = {line("1200", lims::PostingSide::Debit, 1),
+                                                                     line("4000", lims::PostingSide::Credit, 1)}}),
                         lims::Forbidden);
         CHECK_THROWS_AS(ledger.execute(lims::GetEntry{.entryId = posted}), lims::NotFound);
         CHECK(ledger.execute(lims::ListEntries{.company = lims::test::seededCompany()}).entries.empty());
@@ -569,12 +578,17 @@ TEST_CASE("ledger entries: roles gate entries per company, and a stranger learns
     {
         lims::test::grant("erin", lims::LimsRole::Accountant);
         ScopedPrincipal const erin{"erin"};
-        CHECK_THROWS_AS(ledger.execute(lims::PostEntry{.entryId = lims::JournalEntryId{9999}}), lims::NotFound);
-        CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = lims::JournalEntryId{9999}, .date = date}),
-                        lims::NotFound);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::PostEntry{.entryId = lims::JournalEntryId{9999}}),
+                        lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(
+                            ledger, lims::ReverseEntry{.entryId = lims::JournalEntryId{9999}, .date = date}),
+                        lims::Forbidden);
         // An entry that exists at another company: a role, but not there.
-        CHECK_THROWS_AS(ledger.execute(lims::PostEntry{.entryId = osakaDraft}), lims::Forbidden);
-        CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = osakaDraft, .date = date}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::PostEntry{.entryId = osakaDraft}),
+                        lims::Forbidden);
+        CHECK_THROWS_AS(
+            ::morph::model::executeChecked(ledger, lims::ReverseEntry{.entryId = osakaDraft, .date = date}),
+            lims::Forbidden);
         CHECK_THROWS_AS(ledger.execute(lims::GetEntry{.entryId = osakaDraft}), lims::NotFound);
         CHECK(ledger.execute(lims::GetEntry{.entryId = draft}).state == lims::EntryState::Draft);
         CHECK(ledger.execute(lims::ListEntries{.company = lims::test::seededCompany()}).entries.size() == 2U);
@@ -734,7 +748,7 @@ TEST_CASE("ledger entries: a failed reversal leaves nothing behind, and a lost r
         execute(
             "CREATE TRIGGER fail_mark BEFORE UPDATE OF reversed_by_id ON ledger_entries "
             "BEGIN SELECT RAISE(ABORT, 'injected: the reversed mark never landed'); END");
-        CHECK_THROWS(ledger.execute(lims::ReverseEntry{.entryId = original.id, .date = date}));
+        CHECK_THROWS(::morph::model::executeChecked(ledger, lims::ReverseEntry{.entryId = original.id, .date = date}));
         execute("DROP TRIGGER fail_mark");
         untouched();
     }
@@ -742,7 +756,9 @@ TEST_CASE("ledger entries: a failed reversal leaves nothing behind, and a lost r
         execute(
             "CREATE TRIGGER other_reversal AFTER INSERT ON ledger_entries WHEN NEW.reverses_id IS NOT NULL "
             "BEGIN UPDATE ledger_entries SET reversed_by_id = 999 WHERE id = NEW.reverses_id; END");
-        CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = original.id, .date = date}), lims::Conflict);
+        CHECK_THROWS_AS(
+            ::morph::model::executeChecked(ledger, lims::ReverseEntry{.entryId = original.id, .date = date}),
+            lims::Conflict);
         execute("DROP TRIGGER other_reversal");
         untouched();
     }
@@ -751,7 +767,7 @@ TEST_CASE("ledger entries: a failed reversal leaves nothing behind, and a lost r
         execute(
             "CREATE TRIGGER already_posted BEFORE UPDATE ON ledger_entries "
             "BEGIN SELECT RAISE(IGNORE); END");
-        CHECK_THROWS_AS(ledger.execute(lims::PostEntry{.entryId = draft.id}), lims::Conflict);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::PostEntry{.entryId = draft.id}), lims::Conflict);
         execute("DROP TRIGGER already_posted");
         CHECK(ledger.execute(lims::GetEntry{.entryId = draft.id}).state == lims::EntryState::Draft);
     }
@@ -1062,7 +1078,8 @@ TEST_CASE("ledger entries: a total too large to freeze is OutOfRange and leaves 
     ScopedPrincipal const alice{"alice"};
     lims::LedgerModel ledger;
     ledger.execute(lims::BeginClosePeriod{.periodId = november.id});
-    CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = november.id}), lims::OutOfRange);
+    CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::ClosePeriod{.periodId = november.id}),
+                    lims::OutOfRange);
     Lightweight::DataMapper mapper;
     CHECK(mapper.Query<lims::db::PeriodBalanceRecord>().All().empty());
     auto const periods = mapper.Query<lims::db::PeriodRecord>()
@@ -1122,24 +1139,27 @@ TEST_CASE("ledger entries: a period closes only without drafts, and nothing is r
     lims::LedgerModel ledger;
     auto const draft = accrual(ledger, morph::time::Timestamp{lims::test::at(2026, 11, 12)});
     // Not closing yet: ClosePeriod is refused even with no drafts to wait for.
-    CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = november.id}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::ClosePeriod{.periodId = november.id}),
+                    lims::IllegalTransition);
     ledger.execute(lims::BeginClosePeriod{.periodId = november.id});
     // Closing: no new drafts, postings still recorded.
     CHECK_THROWS_AS(accrual(ledger, morph::time::Timestamp{lims::test::at(2026, 11, 13)}), lims::Conflict);
     (void)lims::LedgerModel::record(posting("billing.invoice:2", 2000));
-    CHECK_THROWS_WITH(ledger.execute(lims::ClosePeriod{.periodId = november.id}),
+    CHECK_THROWS_WITH(::morph::model::executeChecked(ledger, lims::ClosePeriod{.periodId = november.id}),
                       Catch::Matchers::ContainsSubstring("draft"));
     CHECK(frozen(november.id).empty());
     ledger.execute(lims::PostEntry{.entryId = draft.id});
     auto const closed = ledger.execute(lims::ClosePeriod{.periodId = november.id});
     CHECK(closed.state == lims::PeriodState::Closed);
     CHECK(closed.id == november.id);
-    CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = november.id}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::ClosePeriod{.periodId = november.id}),
+                    lims::IllegalTransition);
     // Closed: nothing new enters it.
     CHECK_THROWS_AS(lims::LedgerModel::record(posting("billing.invoice:3", 3000)), lims::Conflict);
     CHECK_THROWS_AS(accrual(ledger, morph::time::Timestamp{lims::test::at(2026, 11, 14)}), lims::Conflict);
-    CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = draft.id,
-                                                      .date = morph::time::Timestamp{lims::test::at(2026, 11, 30)}}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        ledger, lims::ReverseEntry{.entryId = draft.id,
+                                                   .date = morph::time::Timestamp{lims::test::at(2026, 11, 30)}}),
                     lims::Conflict);
     // A retried posting from before the close still answers its entry.
     CHECK_NOTHROW((void)lims::LedgerModel::record(posting("billing.invoice:2", 2000)));
@@ -1252,13 +1272,16 @@ TEST_CASE("ledger entries: closing a period is an accountant's, at its company",
     {
         ScopedPrincipal const nobody{"nobody"};
         for (auto const id : {november.id, lims::PeriodId{9999}}) {
-            CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = id}), lims::Forbidden);
+            CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::ClosePeriod{.periodId = id}),
+                            lims::Forbidden);
         }
     }
     {
         ScopedPrincipal const dave{"dave"};
-        CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = november.id}), lims::Forbidden);
-        CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = lims::PeriodId{9999}}), lims::NotFound);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::ClosePeriod{.periodId = november.id}),
+                        lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, lims::ClosePeriod{.periodId = lims::PeriodId{9999}}),
+                        lims::Forbidden);
         CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{}), lims::ValidationError);
         auto const osakaPeriod = ledger.execute(
             lims::OpenPeriod{.company = osaka, .month = morph::time::Timestamp{lims::test::at(2026, 11, 1)}});

@@ -26,6 +26,7 @@
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>

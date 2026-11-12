@@ -9,6 +9,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/session/session_auth.hpp>
 #include <string>
 #include <string_view>
@@ -76,10 +77,10 @@ TEST_CASE("org roles: the first assignment bootstraps a lab with no supervisor; 
     }
     {
         ScopedPrincipal const mallory{"mallory"};
-        CHECK_THROWS_AS(org.execute(lims::AssignRole{.principal = "mallory",
-                                                     .role = lims::LimsRole::Supervisor,
-                                                     .company = lims::test::seededCompany(),
-                                                     .site = {}}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::AssignRole{.principal = "mallory",
+                                                                             .role = lims::LimsRole::Supervisor,
+                                                                             .company = lims::test::seededCompany(),
+                                                                             .site = {}}),
                         lims::Forbidden);
     }
     {
@@ -91,10 +92,11 @@ TEST_CASE("org roles: the first assignment bootstraps a lab with no supervisor; 
         CHECK(again.id == bob.id);
         CHECK(org.execute(lims::ListRoleAssignments{}).assignments.size() == 2);
     }
-    CHECK_THROWS_AS(
-        org.execute(lims::AssignRole{
-            .principal = "bob", .role = lims::LimsRole::Verifier, .company = lims::test::seededCompany(), .site = {}}),
-        lims::EmptyPrincipalError);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::AssignRole{.principal = "bob",
+                                                                         .role = lims::LimsRole::Verifier,
+                                                                         .company = lims::test::seededCompany(),
+                                                                         .site = {}}),
+                    lims::EmptyPrincipalError);
 }
 
 // Mutations: drop `notOnSelf` from Authorization<AssignRole> (alice grants herself InvoiceApprover); refuse the
@@ -110,15 +112,15 @@ TEST_CASE("org roles: a supervisor does not assign themselves a role, except the
                                                        .company = lims::test::seededCompany(),
                                                        .site = {}});
         CHECK(boot.principal == "alice");
-        CHECK_THROWS_AS(org.execute(lims::AssignRole{.principal = "alice",
-                                                     .role = lims::LimsRole::InvoiceApprover,
-                                                     .company = lims::test::seededCompany(),
-                                                     .site = {}}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::AssignRole{.principal = "alice",
+                                                                             .role = lims::LimsRole::InvoiceApprover,
+                                                                             .company = lims::test::seededCompany(),
+                                                                             .site = {}}),
                         lims::Forbidden);
-        CHECK_THROWS_AS(org.execute(lims::AssignRole{.principal = "alice",
-                                                     .role = lims::LimsRole::Accountant,
-                                                     .company = {},
-                                                     .site = lims::test::seededSite()}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::AssignRole{.principal = "alice",
+                                                                             .role = lims::LimsRole::Accountant,
+                                                                             .company = {},
+                                                                             .site = lims::test::seededSite()}),
                         lims::Forbidden);
         auto const osaka = org.execute(lims::CreateCompany{
             .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April});
@@ -156,14 +158,16 @@ TEST_CASE("org roles: an assignment names exactly one scope, and the scope exist
         org.execute(lims::AssignRole{
             .principal = {}, .role = lims::LimsRole::Analyst, .company = lims::test::seededCompany(), .site = {}}),
         lims::ValidationError);
-    CHECK_THROWS_AS(
-        org.execute(lims::AssignRole{
-            .principal = "bob", .role = lims::LimsRole::Analyst, .company = {}, .site = lims::SiteId{999}}),
-        lims::NotFound);
-    CHECK_THROWS_AS(
-        org.execute(lims::AssignRole{
-            .principal = "bob", .role = lims::LimsRole::Analyst, .company = lims::CompanyId{999}, .site = {}}),
-        lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::AssignRole{.principal = "bob",
+                                                                         .role = lims::LimsRole::Analyst,
+                                                                         .company = {},
+                                                                         .site = lims::SiteId{999}}),
+                    lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::AssignRole{.principal = "bob",
+                                                                         .role = lims::LimsRole::Analyst,
+                                                                         .company = lims::CompanyId{999},
+                                                                         .site = {}}),
+                    lims::NotFound);
 }
 
 // Mutations: ignore company-scoped assignments for a site (bob's company role is missing at the field lab); let a
@@ -220,12 +224,14 @@ TEST_CASE("org roles: a supervisor revokes an assignment, but never the last sup
         .principal = "bob", .role = lims::LimsRole::Verifier, .company = lims::test::seededCompany(), .site = {}});
     {
         ScopedPrincipal const asBob{"bob"};
-        CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = boss.id}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::RevokeRole{.assignmentId = boss.id}),
+                        lims::Forbidden);
     }
     CHECK(org.execute(lims::RevokeRole{.assignmentId = bob.id}).assignmentId == bob.id);
     CHECK(lims::OrgModel::rolesAnywhere("bob").empty());
-    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = boss.id}), lims::Conflict);
-    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = lims::RoleAssignmentId{999}}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::RevokeRole{.assignmentId = boss.id}), lims::Conflict);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::RevokeRole{.assignmentId = lims::RoleAssignmentId{999}}),
+                    lims::Forbidden);
     CHECK(lims::OrgModel::supervisorExists());
 }
 
@@ -337,10 +343,11 @@ TEST_CASE("org roles: creating a company appoints its creator supervisor there",
     {
         // Roles are not hierarchical: mallory, a supervisor at neither company, cannot assign at Osaka.
         ScopedPrincipal const mallory{"mallory"};
-        CHECK_THROWS_AS(
-            org.execute(lims::AssignRole{
-                .principal = "mallory", .role = lims::LimsRole::Supervisor, .company = osaka.id, .site = {}}),
-            lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::AssignRole{.principal = "mallory",
+                                                                             .role = lims::LimsRole::Supervisor,
+                                                                             .company = osaka.id,
+                                                                             .site = {}}),
+                        lims::Forbidden);
     }
 }
 
@@ -356,8 +363,9 @@ TEST_CASE("org roles: a company whose supervisor cannot be appointed is not crea
             "CREATE TRIGGER morph_fail_insert BEFORE INSERT ON \"org_role_assignments\" BEGIN SELECT RAISE(ABORT, "
             "'injected'); END");
     }
-    CHECK_THROWS(org.execute(lims::CreateCompany{
-        .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April}));
+    CHECK_THROWS(::morph::model::executeChecked(org, lims::CreateCompany{.name = "Osaka branch",
+                                                                         .baseCurrency = lims::CurrencyCode::JPY,
+                                                                         .fiscalYearStart = lims::Month::April}));
     {
         Lightweight::SqlStatement stmt;
         (void)stmt.ExecuteDirect("DROP TRIGGER morph_fail_insert");
@@ -393,7 +401,8 @@ TEST_CASE("org roles: a company's last supervisor cannot be revoked, whoever els
     // Another company has a supervisor, and so does a site of this one; neither is this company's.
     org.execute(lims::AssignRole{
         .principal = "carol", .role = lims::LimsRole::Supervisor, .company = {}, .site = osakaLab.id});
-    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = aliceAtOsaka.id}), lims::Conflict);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::RevokeRole{.assignmentId = aliceAtOsaka.id}),
+                    lims::Conflict);
     CHECK(holds(lims::OrgModel::rolesIn("alice", lims::Scope{osaka.id}), lims::LimsRole::Supervisor));
 
     // A second company-scope supervisor makes the first one's revoke legitimate.
@@ -412,7 +421,7 @@ TEST_CASE("org roles: the last supervisor anywhere cannot be revoked, even one s
     ScopedPrincipal const alice{"alice"};
     auto const atSite = org.execute(lims::AssignRole{
         .principal = "alice", .role = lims::LimsRole::Supervisor, .company = {}, .site = lims::test::seededSite()});
-    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = atSite.id}), lims::Conflict);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::RevokeRole{.assignmentId = atSite.id}), lims::Conflict);
     CHECK(lims::OrgModel::supervisorExists());
 
     // A second supervisor, anywhere, makes the first one's revoke legitimate.
@@ -468,23 +477,29 @@ TEST_CASE("org roles: a caller who supervises nowhere cannot tell which scopes a
                                      .site = {}});
         bob = org.execute(lims::AssignRole{
             .principal = "bob", .role = lims::LimsRole::Analyst, .company = lims::test::seededCompany(), .site = {}});
+        CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::AssignRole{.principal = "bob",
+                                                                             .role = lims::LimsRole::Analyst,
+                                                                             .company = {},
+                                                                             .site = lims::SiteId{999}}),
+                        lims::Forbidden);
         CHECK_THROWS_AS(
-            org.execute(lims::AssignRole{
-                .principal = "bob", .role = lims::LimsRole::Analyst, .company = {}, .site = lims::SiteId{999}}),
-            lims::NotFound);
-        CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = lims::RoleAssignmentId{999}}), lims::NotFound);
+            ::morph::model::executeChecked(org, lims::RevokeRole{.assignmentId = lims::RoleAssignmentId{999}}),
+            lims::Forbidden);
     }
     ScopedPrincipal const mallory{"mallory"};
-    CHECK_THROWS_AS(
-        org.execute(lims::AssignRole{
-            .principal = "mallory", .role = lims::LimsRole::Analyst, .company = {}, .site = lims::SiteId{999}}),
-        lims::Forbidden);
-    CHECK_THROWS_AS(
-        org.execute(lims::AssignRole{
-            .principal = "mallory", .role = lims::LimsRole::Analyst, .company = lims::CompanyId{999}, .site = {}}),
-        lims::Forbidden);
-    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = lims::RoleAssignmentId{999}}), lims::Forbidden);
-    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = bob.id}), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::AssignRole{.principal = "mallory",
+                                                                         .role = lims::LimsRole::Analyst,
+                                                                         .company = {},
+                                                                         .site = lims::SiteId{999}}),
+                    lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::AssignRole{.principal = "mallory",
+                                                                         .role = lims::LimsRole::Analyst,
+                                                                         .company = lims::CompanyId{999},
+                                                                         .site = {}}),
+                    lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::RevokeRole{.assignmentId = lims::RoleAssignmentId{999}}),
+                    lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::RevokeRole{.assignmentId = bob.id}), lims::Forbidden);
 }
 
 // Mutations: bypass the dispatcher's journaling of a refused action (no Failed entry); drop AssignRole's

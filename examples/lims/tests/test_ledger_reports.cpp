@@ -265,13 +265,17 @@ TEST_CASE("ledger rates: entering one is an accountant's, at its company, and ea
     lims::LedgerModel ledger;
     {
         ScopedPrincipal const nobody{"nobody"};
-        CHECK_THROWS_AS(ledger.execute(set(lims::test::seededCompany(), rate(1, 1))), lims::Forbidden);
-        CHECK_THROWS_AS(ledger.execute(set(lims::CompanyId{9999}, rate(1, 1))), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, set(lims::test::seededCompany(), rate(1, 1))),
+                        lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, set(lims::CompanyId{9999}, rate(1, 1))),
+                        lims::Forbidden);
     }
     {
         ScopedPrincipal const dave{"dave"};
-        CHECK_THROWS_AS(ledger.execute(set(lims::test::seededCompany(), rate(1, 1))), lims::Forbidden);
-        CHECK_THROWS_AS(ledger.execute(set(lims::CompanyId{9999}, rate(1, 1))), lims::NotFound);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, set(lims::test::seededCompany(), rate(1, 1))),
+                        lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, set(lims::CompanyId{9999}, rate(1, 1))),
+                        lims::Forbidden);
     }
     ScopedPrincipal const alice{"alice"};
     SECTION("a malformed request is a ValidationError") {
@@ -293,7 +297,8 @@ TEST_CASE("ledger rates: entering one is an accountant's, at its company, and ea
         CHECK(first.setBy == "alice");
         CHECK(first.from == lims::CurrencyCode::USD);
         CHECK(*first.rate == Rational{Numerator{92}, Denominator{100}, DecimalPlaces{6}});
-        CHECK_THROWS_AS(ledger.execute(set(lims::test::seededCompany(), rate(93, 100))), lims::Conflict);
+        CHECK_THROWS_AS(::morph::model::executeChecked(ledger, set(lims::test::seededCompany(), rate(93, 100))),
+                        lims::Conflict);
         // Another start, another direction and another company are other rows.
         CHECK_NOTHROW(ledger.execute(set(lims::test::seededCompany(), rate(93, 100), 2)));
         auto reverse = set(lims::test::seededCompany(), rate(109, 100));

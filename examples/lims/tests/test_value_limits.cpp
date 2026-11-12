@@ -4,6 +4,7 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/core/action_guard.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
 
@@ -82,9 +83,10 @@ TEST_CASE("value limits: only a supervisor of the company sets one", "[lims][lim
     lims::test::grant("carol", lims::LimsRole::InvoiceApprover);
     ScopedPrincipal const carol{"carol"};
     lims::OrgModel org;
-    CHECK_THROWS_AS(org.execute(lims::SetValueLimit{
-                        .principal = "carol", .company = lims::test::seededCompany(), .limit = euros(1)}),
-                    lims::Forbidden);
+    CHECK_THROWS_AS(
+        ::morph::model::executeChecked(
+            org, lims::SetValueLimit{.principal = "carol", .company = lims::test::seededCompany(), .limit = euros(1)}),
+        lims::Forbidden);
 }
 
 TEST_CASE("value limits: findCompany answers a company's currency and fiscal-year start", "[lims][limits]") {
@@ -121,9 +123,10 @@ TEST_CASE("value limits: a list shows only the limits at companies the caller ca
     CHECK(listed.limits.front().id == yen.id);
     CHECK((*listed.limits.front().limit).getDecimalPlaces() == DecimalPlaces{0});
     CHECK(lims::OrgModel::valueLimit("bob", osaka.id) == Rational{50000, DecimalPlaces{0}});
-    CHECK_THROWS_AS(org.execute(lims::SetValueLimit{
-                        .principal = "bob", .company = lims::test::seededCompany(), .limit = euros(1)}),
-                    lims::Forbidden);
+    CHECK_THROWS_AS(
+        ::morph::model::executeChecked(
+            org, lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(1)}),
+        lims::Forbidden);
 }
 
 // Mutation: drop `notOnSelf` from Authorization<SetValueLimit> (alice sets her own limit).
@@ -134,8 +137,9 @@ TEST_CASE("value limits: a supervisor does not set their own limit, another supe
     lims::OrgModel org;
     {
         ScopedPrincipal const alice{"alice"};
-        CHECK_THROWS_AS(org.execute(lims::SetValueLimit{
-                            .principal = "alice", .company = lims::test::seededCompany(), .limit = euros(1'000'000)}),
+        CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::SetValueLimit{.principal = "alice",
+                                                                                .company = lims::test::seededCompany(),
+                                                                                .limit = euros(1'000'000)}),
                         lims::Forbidden);
         CHECK_FALSE(lims::OrgModel::valueLimit("alice", lims::test::seededCompany()).has_value());
     }

@@ -26,6 +26,8 @@ template <>
 struct Authorization<CreateSite> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::Supervisor;
+    /// @brief The scope is spelled out in the payload.
+    static constexpr bool scopeInPayload = true;
 
     /// @brief The company the payload names.
     /// @param action The action.
@@ -40,8 +42,15 @@ template <>
 struct Authorization<AssignRole> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::Supervisor;
+    /// @brief The scope is spelled out in the payload.
+    static constexpr bool scopeInPayload = true;
     /// @brief A supervisor does not assign roles to themselves.
     static constexpr bool notOnSelf = true;
+
+    /// @brief Whether the rule is waived: a lab with no supervisor anywhere cannot appoint its first one any other
+    ///        way. The exemption closes as soon as one exists, and the assignment names who made it.
+    /// @return Whether no supervisor exists yet.
+    [[nodiscard]] static bool bootstrapOpen();
 
     /// @brief The principal receiving the role.
     /// @param action The action.
@@ -82,3 +91,6 @@ struct Authorization<SetValueLimit> : CompanyRule<SetValueLimit, LimsRole::Super
 };
 
 }  // namespace lims
+
+// The model is included last, after every declaration its registration needs.
+#include "lims/org/models/org_model.hpp"

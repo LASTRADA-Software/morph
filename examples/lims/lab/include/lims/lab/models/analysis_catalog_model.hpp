@@ -69,7 +69,8 @@ BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::DefineAnalysis, "Define
 BRIDGE_REGISTER_EFFECTS(lims::DefineAnalysis, ::morph::effects::changes<lims::AnalysisVersionView>)
 BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::ReviseAnalysis, "ReviseAnalysis")
 BRIDGE_REGISTER_EFFECTS(lims::ReviseAnalysis, ::morph::effects::changes<lims::AnalysisVersionView>)
-BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::ListAnalyses, "ListAnalyses")
-BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::GetAnalysisVersion, "GetAnalysisVersion")
+BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::ListAnalyses, "ListAnalyses", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::GetAnalysisVersion, "GetAnalysisVersion",
+                       ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::GetAnalysisSchema, "GetAnalysisSchema",
                        ::morph::model::Loggable::No)

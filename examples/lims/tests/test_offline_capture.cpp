@@ -17,6 +17,7 @@
 #include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/util/rational.hpp>
@@ -323,9 +324,10 @@ TEST_CASE("Discarding a conflict closes it and leaves the server's value standin
     CHECK((*results.results[0].value).numerator == 12);
 
     // One-shot: a second decision about the same conflict is refused.
-    CHECK_THROWS_AS(reader.execute(lims::ResolveConflict{.conflictId = conflicts[0].id,
-                                                         .resolution = lims::ConflictResolution::ApplyAnyway,
-                                                         .note = "changed my mind"}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        reader, lims::ResolveConflict{.conflictId = conflicts[0].id,
+                                                      .resolution = lims::ConflictResolution::ApplyAnyway,
+                                                      .note = "changed my mind"}),
                     lims::Conflict);
 }
 
@@ -375,9 +377,9 @@ TEST_CASE("Resolving needs a stated reason and a conflict the caller may see", "
 
     CHECK_THROWS_AS(model.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{1}}), lims::ValidationError);
     CHECK_THROWS_AS(model.execute(lims::ResolveConflict{.note = "no id"}), lims::ValidationError);
-    CHECK_THROWS_AS(
-        model.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "no such conflict"}),
-        lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::ResolveConflict{.conflictId = lims::ConflictId{424242},
+                                                                                .note = "no such conflict"}),
+                    lims::Forbidden);
 }
 
 // ── Replay's own guards ────────────────────────────────────────────────────

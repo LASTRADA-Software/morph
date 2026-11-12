@@ -252,6 +252,9 @@ public:
 
 }  // namespace lims
 
+// The guard each registered action names must be complete here: the registration instantiates its execution.
+#include "lims/ledger/authorization/ledger_authorization.hpp"
+
 // The registration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
 BRIDGE_REGISTER_MODEL(lims::LedgerModel, "LedgerModel")

@@ -104,11 +104,9 @@ void requireNoOtherEditor(std::int64_t invoiceId) {
     if (!action.validate()) {
         throw ValidationError{"SubmitInvoice: an invoice is required"};
     }
-    requireRoleSomewhere<SubmitInvoice>();
     // Taken before the first await: the session is the dispatch's, and a resumption may not run inside it.
     std::string const principal = ::morph::session::current()->principal;
     auto const row = invoiceRecord(action.invoiceId, "SubmitInvoice");
-    requireAuthorized(action);
     if (row.state.Value() != static_cast<int>(InvoiceState::Draft)) {
         throw IllegalTransition{"SubmitInvoice: only a draft is submitted"};
     }
@@ -189,15 +187,20 @@ InvoiceView InvoiceModel::execute(const ApproveInvoice& action) {
     if (!action.validate()) {
         throw ValidationError{"ApproveInvoice: an invoice is required"};
     }
-    requireRoleSomewhere<ApproveInvoice>();
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     auto const row = invoiceRecord(action.invoiceId, "ApproveInvoice");
-    // Before the rule, so approving an approved invoice is an IllegalTransition for everyone and not a refusal that
-    // names who created it.
+    // The action's guard refuses a draft or an approved invoice as an IllegalTransition before it reads who created
+    // the invoice; this repeats it for a call that reaches the handler without the guard.
     if (row.state.Value() != static_cast<int>(InvoiceState::Submitted)) {
         throw IllegalTransition{"ApproveInvoice: only a submitted invoice is approved"};
     }
+    // Judged again just before the write: the guard ran it first, on every path, and this reads the scope, the gross
+    // and the performers once more, so a role or limit changed since is seen. The rule reads on its own connection, so
+    // it sees committed rows, not this transaction's; this transaction has written nothing yet. That is enough because
+    // a submitted invoice's gross and performers cannot change (every edit is conditional on Draft, and nothing
+    // returns an invoice to Draft), and the conditional update below on Submitted binds what was judged to what is
+    // written; it is also what makes the write safe against a concurrent approval.
     requireAuthorized(action);
     if (!updateInvoiceIf(mapper, static_cast<std::int64_t>(row.id.Value()), InvoiceState::Submitted, [](auto& query) {
             query.Set("state", static_cast<int>(InvoiceState::Approved))

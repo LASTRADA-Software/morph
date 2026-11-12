@@ -11,6 +11,7 @@
 #include <string_view>
 #include <vector>
 
+#include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/types.hpp"
 
 /// @file
@@ -75,6 +76,8 @@ enum class LimsRole : std::uint8_t {
 /// Requires `Supervisor` in that scope, except on a lab with no supervisor anywhere, where the first assignment is
 /// allowed so the lab can be set up at all; that exception closes as soon as any supervisor exists.
 struct AssignRole {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief Who gets the role.
     std::string principal;
     /// @brief The role.
@@ -123,6 +126,8 @@ struct RoleAssignmentView {
 
 /// @brief Revokes one role assignment. Requires `Supervisor` in its scope; the last supervisor's is never revoked.
 struct RevokeRole {
+    using guard = ::lims::DeclaredRuleGuard;
+
     /// @brief The assignment.
     RoleAssignmentId assignmentId;
 
