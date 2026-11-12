@@ -655,12 +655,12 @@ namespace {
 /// Amounts and the rate compare by value, so a figure written with other decimals is the same figure; the
 /// entry's author and generated memo are not part of the request.
 /// @param mapper The open mapper.
-/// @param entry The recorded entry.
+/// @param recorded The recorded entry, as loaded.
 /// @param request The request.
 /// @return Whether they agree.
-/// @throws NotFound if the entry is gone.
-[[nodiscard]] bool recordedAs(Lightweight::DataMapper& mapper, std::int64_t entry, PostingRequest const& request) {
-    auto const stored = toView(mapper, loadWritten(mapper, entry));
+[[nodiscard]] bool recordedAs(Lightweight::DataMapper& mapper, LoadedEntry const& recorded,
+                              PostingRequest const& request) {
+    auto const stored = toView(mapper, recorded);
     if (millisOf(stored.date) != millisOf(request.date) || stored.sourceReference != request.sourceReference ||
         stored.currency != request.currency || *stored.rate != *request.rate ||
         stored.lines.size() != request.lines.size()) {
@@ -680,6 +680,7 @@ namespace {
 /// @param request The request.
 /// @return The first entry when the request is the one recorded; nothing when the key is new.
 /// @throws Conflict if the key is recorded for a different request.
+/// @throws NotFound if the recorded entry is gone.
 [[nodiscard]] std::optional<PostingResult> answerKnown(Lightweight::DataMapper& mapper, PostingSources const& sources,
                                                        std::string const& scope, PostingRequest const& request) {
     auto const known = sources.lookup(scope, request.sourceKey);
@@ -687,15 +688,12 @@ namespace {
         return std::nullopt;
     }
     auto const entry = std::stoll(*known);
-    if (!recordedAs(mapper, entry, request)) {
+    auto const first = loadWritten(mapper, entry);
+    if (!recordedAs(mapper, first, request)) {
         throw Conflict{"record: source key " + request.sourceKey +
                        " is already recorded for a different posting; a corrected document needs a new key"};
     }
-    auto const first = loadEntry(mapper, entry);
-    if (!first.has_value()) {
-        throw NotFound{"record: entry " + std::to_string(entry) + " of source key " + request.sourceKey + " is gone"};
-    }
-    return PostingResult{.entryId = JournalEntryId{entry}, .date = timestampFromMillis(first->header.dateMs.Value())};
+    return PostingResult{.entryId = JournalEntryId{entry}, .date = timestampFromMillis(first.header.dateMs.Value())};
 }
 
 }  // namespace
