@@ -185,8 +185,9 @@ PeriodView LedgerModel::execute(const BeginClosePeriod& action) {
     if (rows.empty()) {
         throw NotFound{"BeginClosePeriod: period " + std::to_string(*action.periodId) + " does not exist"};
     }
-    // Judged again inside the transaction: the scope is read from the row the write commits. The action's guard ran it
-    // first, on every path.
+    // Judged again just before the write: the guard ran it first, on every path, and this reads the scope's row once
+    // more, so a role revoked since is seen. The rule reads on its own connection, so it sees committed rows, not this
+    // transaction's; this transaction has written nothing yet.
     requireAuthorized(action);
     auto& row = rows.front();
     if (row.state.Value() != static_cast<int>(PeriodState::Open)) {

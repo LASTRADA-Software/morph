@@ -415,8 +415,9 @@ JournalEntryView LedgerModel::execute(const PostEntry& action) {
     if (!entry.has_value()) {
         throw NotFound{"PostEntry: entry " + std::to_string(*action.entryId) + " does not exist"};
     }
-    // Judged again inside the transaction: the scope is read from the row the write commits. The action's guard ran it
-    // first, on every path.
+    // Judged again just before the write: the guard ran it first, on every path, and this reads the scope's row once
+    // more, so a role revoked since is seen. The rule reads on its own connection, so it sees committed rows, not this
+    // transaction's; this transaction has written nothing yet.
     requireAuthorized(action);
     if (entry->header.state.Value() != static_cast<int>(EntryState::Draft)) {
         throw IllegalTransition{"PostEntry: entry " + std::to_string(*action.entryId) + " is already posted"};
@@ -458,8 +459,9 @@ JournalEntryView LedgerModel::execute(const ReverseEntry& action) {
     if (!original.has_value()) {
         throw NotFound{"ReverseEntry: entry " + std::to_string(*action.entryId) + " does not exist"};
     }
-    // Judged again inside the transaction: the scope is read from the row the write commits. The action's guard ran it
-    // first, on every path.
+    // Judged again just before the write: the guard ran it first, on every path, and this reads the scope's row once
+    // more, so a role revoked since is seen. The rule reads on its own connection, so it sees committed rows, not this
+    // transaction's; this transaction has written nothing yet.
     requireAuthorized(action);
     if (original->header.state.Value() != static_cast<int>(EntryState::Posted)) {
         throw IllegalTransition{"ReverseEntry: only a posted entry is reversed; a draft is not on the books"};
@@ -591,8 +593,9 @@ PeriodView LedgerModel::execute(const ClosePeriod& action) {
     if (periods.empty()) {
         throw NotFound{"ClosePeriod: period " + std::to_string(*action.periodId) + " does not exist"};
     }
-    // Judged again inside the transaction: the scope is read from the row the write commits. The action's guard ran it
-    // first, on every path.
+    // Judged again just before the write: the guard ran it first, on every path, and this reads the scope's row once
+    // more, so a role revoked since is seen. The rule reads on its own connection, so it sees committed rows, not this
+    // transaction's; this transaction has written nothing yet.
     requireAuthorized(action);
     auto& period = periods.front();
     if (period.state.Value() != static_cast<int>(PeriodState::Closing)) {

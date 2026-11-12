@@ -191,13 +191,14 @@ InvoiceView InvoiceModel::execute(const ApproveInvoice& action) {
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     auto const row = invoiceRecord(action.invoiceId, "ApproveInvoice");
     // The action's guard refuses a draft or an approved invoice as an IllegalTransition before it reads who created
-    // the invoice; this repeats it for a call that reaches the handler without the guard, and the rule below is
-    // judged again with the rows this transaction writes.
+    // the invoice; this repeats it for a call that reaches the handler without the guard.
     if (row.state.Value() != static_cast<int>(InvoiceState::Submitted)) {
         throw IllegalTransition{"ApproveInvoice: only a submitted invoice is approved"};
     }
-    // Judged again inside the transaction: the scope, the recorded gross and the performers are read with the rows the
-    // write commits. The action's guard ran it first, on every path.
+    // Judged again just before the write: the guard ran it first, on every path, and this reads the scope, the gross
+    // and the performers once more, so a role or limit changed since is seen. The rule reads on its own connection, so
+    // it sees committed rows, not this transaction's; this transaction has written nothing yet. What makes the write
+    // safe against a concurrent approval is the conditional update below.
     requireAuthorized(action);
     if (!updateInvoiceIf(mapper, static_cast<std::int64_t>(row.id.Value()), InvoiceState::Submitted, [](auto& query) {
             query.Set("state", static_cast<int>(InvoiceState::Approved))

@@ -26,6 +26,8 @@ template <>
 struct Authorization<CreateLocation> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::StockKeeper;
+    /// @brief The scope is spelled out in the payload.
+    static constexpr bool scopeInPayload = true;
 
     /// @brief The site the payload names.
     /// @param action The action.

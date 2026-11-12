@@ -81,6 +81,8 @@ template <>
 struct Authorization<RecordPosting> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::Service;
+    /// @brief The scope is spelled out in the payload.
+    static constexpr bool scopeInPayload = true;
 
     /// @brief The request's company.
     /// @param action The action.

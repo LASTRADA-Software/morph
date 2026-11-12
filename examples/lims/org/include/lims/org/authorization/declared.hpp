@@ -27,8 +27,9 @@
 ///
 /// `DeclaredRuleGuard` is the action guard every declared action names (`using guard = ::lims::DeclaredRuleGuard;`),
 /// so the framework judges the rule on the decoded action on every dispatch path, after the validator and before the
-/// handler. A handler calls `requireAuthorized` again only inside the write's transaction, where the rows the rule
-/// reads are the rows the write commits.
+/// handler. A handler calls `requireAuthorized` again only just before a write whose scope or amount a row gives, so
+/// a change committed since the guard ran is seen; the rule reads on its own connection, never through the handler's
+/// transaction.
 ///
 /// `IAuthorizer::authorize` at the server edge is handed the model and action ids, never the payload, so the edge can
 /// ask whether a principal holds the role somewhere (`lims::app::declaredRequirements`) and nothing more.
@@ -73,6 +74,10 @@ template <typename Org = OrgModel>
 /// and, each only where the action needs it:
 /// - `static Scope scopeOf(Action const&)` — the scope the action's payload names, read from its scope field; without
 ///   it the role is needed in some scope, any. A role held at a company holds at its sites;
+/// - `static constexpr bool scopeInPayload = true` — `scopeOf` returns a scope the payload itself names, so a refusal
+///   may say which one. A scope read from a row (every `scopeOf` that looks something up, and every
+///   `scopeFromModel`) is not declared so, and a refusal names no scope: it would tell a caller whether the id
+///   exists and, when it does, where the record is;
 /// - `static constexpr bool scopeFromModel = true` and `template <typename Model> static std::vector<Scope>
 ///   scopesIn(Model const&, Action const&)` — the payload names no scope but the model knows it (the site of the
 ///   sample the handler is attached to): the guard judges the rule in every scope the model resolves, read before the
@@ -139,6 +144,12 @@ concept DeclaresScope = DeclaresRule<Action> && requires(Action const& action) {
     { Authorization<Action>::scopeOf(action) } -> std::convertible_to<Scope>;
 };
 
+/// @brief Whether @p Action's rule declares that the scope it names is one the payload spells out, which a refusal may
+///        therefore repeat.
+/// @tparam Action The action.
+template <typename Action>
+concept DeclaresScopeInPayload = DeclaresRule<Action> && requires { requires Authorization<Action>::scopeInPayload; };
+
 /// @brief Whether @p Action's rule declares a state check that runs once the principal holds the role where the
 ///        action's subject is visible to them and before anything about the subject is read for the verdict: the
 ///        value, the creator and the other facts of a subject the principal has no standing over stay unread.
@@ -182,6 +193,8 @@ template <typename Action, LimsRole Role>
 struct CompanyRule {
     /// @brief The role.
     static constexpr LimsRole role = Role;
+    /// @brief The company is in the payload.
+    static constexpr bool scopeInPayload = true;
 
     /// @brief The company the payload names.
     /// @param action The action.
@@ -274,7 +287,8 @@ concept DeclaresSeparations = DeclaresRule<Action> && requires(Action const& act
 struct JudgedFacts {
     /// @brief The facts.
     AuthorizationFacts facts;
-    /// @brief The scope, in words: "at company 2", or "in any scope".
+    /// @brief The scope, in words: "at company 2" where the payload names it, "where this applies" where a row gave
+    ///        it, or "in any scope".
     std::string where;
     /// @brief The refusal's words when the verdict is `SameActor`; empty without a pair.
     std::string sameActorRefusal;
@@ -306,7 +320,9 @@ template <typename Action>
                        .sameActorRefusal = {}};
     if (scope.has_value()) {
         judged.facts.held = detail::rolesHeldIn(principal, *scope);
-        judged.where = "at " + scopeName(*scope);
+        // A scope read from a row is not named: an unknown id and a record in a scope the caller cannot see must be
+        // refused in the same words.
+        judged.where = DeclaresScopeInPayload<Action> ? "at " + scopeName(*scope) : std::string{"where this applies"};
         if constexpr (DeclaresValueLimit<Action>) {
             judged.facts.amount = Rule::amountOf(action);
             judged.facts.limit = Rule::limitOf(principal, *scope);
@@ -391,7 +407,7 @@ template <typename Action>
 /// Called by `DeclaredRuleGuard` on every dispatch path, after the payload is validated and, where the rule needs a
 /// row, before that row is looked up for anything but its scope, so a refusal is about permission and never a
 /// disguised missing row: an unknown scope holds no role, so it is refused as a missing role. A handler calls it again
-/// only inside the write's transaction.
+/// just before its write.
 /// @tparam Action A declared action whose scope the payload names, or that needs none.
 /// @param action The action.
 /// @throws Forbidden with the reason, in words, when the verdict is not `Allowed`.

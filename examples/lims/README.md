@@ -1282,9 +1282,13 @@ payload names, or, for the nine writes on a sample the handler holds (the six tr
 `SaveSample`, `DeleteSample`), in every scope the model resolves from its attached sample or working copy, read
 `const` before the handler runs. The rules stay lims's. No handler calls the check, with two kinds of exception:
 `QueuedCapture` declares no guard and keeps its check, because it answers a redelivery before the role (decision 25);
-and `BeginClosePeriod`, `PostEntry`, `ReverseEntry`, `ClosePeriod`, `SubmitInvoice` and `ApproveInvoice` judge their
-rule again inside the write's transaction, because the scope, the recorded gross and the performers are read with the
-rows the write commits, and the guard runs outside that transaction. The first role assignment on a lab with no
+and five handlers judge their rule again just before their write: `BeginClosePeriod`, `PostEntry`, `ReverseEntry` and
+`ClosePeriod` (the scope is read from the row once more) and `ApproveInvoice` (the scope, the recorded gross and the
+performers are read once more). The second judgment reads on the rule's own connection, so it sees committed rows and
+not the handler's transaction, which has written nothing yet; what it adds is that a role or limit changed since the
+guard ran is seen. `SubmitInvoice` is judged once, by the guard: its only write is a conditional update on the
+invoice's state and gross, which refuses a stale submission by itself. What makes `ApproveInvoice` safe against a
+concurrent approval is likewise its conditional update from `Submitted`, not the second judgment. The first role assignment on a lab with no
 supervisor is exempt in the guard (`Authorization<AssignRole>::bootstrapOpen`).
 
 **Unknown ids.** A caller who names a row that does not exist, and holds a role somewhere, is refused in words rather
@@ -1297,11 +1301,12 @@ missing site; `CreateSite`, `CreateItem`, `CreateLocation`, `CreateInvoice`, `Se
 writes naming a missing company or list; `OpenPeriod`, `BeginClosePeriod`, `ClosePeriod`, `PostEntry` and
 `ReverseEntry` of an unknown id; `AdvanceBillingRun` and `SubmitInvoice` of an unknown run or invoice; `RevokeRole` of an unknown assignment; and `QueuedCapture` of a missing sample, whose replay judges its own
 rule and used to be the one scoped write that still answered `NotFound` where the sample's site was refused. Decision 23
-promised `NotFound` for these; it now holds only for a handler attached to nothing, which names no id. The words of the
-refusal still differ in one respect: a rule judged in a scope the payload names says "at site 3", a missing row
-resolved by the model says "at no site", so a caller who reads the words, not the type, can tell a missing sample from
-one at a site they hold nothing in. That is the same disclosure the wrong-site refusal made before the guard, and it is
-not closed here.
+promised `NotFound` for these; it now holds only for a handler attached to nothing, which names no id. The words are the same too:
+a rule whose scope is read from a row (every rule that looks something up, and every model-scoped write) names no
+scope, so a missing id and a record in a scope the caller holds nothing in both read "... does not hold the verifier
+role where this applies". Only a rule whose payload spells out its scope (`scopeInPayload`: a company or site the
+caller wrote) repeats it, "at company 3", because that tells the caller nothing new. The decision is made in
+`judgedFactsIn`, so a rule that does not declare `scopeInPayload` hides its scope by default.
 
 **`ApproveInvoice` is judged in a fixed order**, and it differs from the other rules because an approval is the one
 write whose refusal must reveal nothing about an invoice outside the approver's reach: first the role, held where the

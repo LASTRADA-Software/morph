@@ -130,6 +130,8 @@ template <>
 struct Authorization<RegisterSample> {
     /// @brief Any role is enough.
     static constexpr bool anyRole = true;
+    /// @brief The scope is spelled out in the payload.
+    static constexpr bool scopeInPayload = true;
 
     /// @brief The site the payload names.
     /// @param action The action.

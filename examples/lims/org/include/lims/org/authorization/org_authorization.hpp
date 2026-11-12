@@ -26,6 +26,8 @@ template <>
 struct Authorization<CreateSite> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::Supervisor;
+    /// @brief The scope is spelled out in the payload.
+    static constexpr bool scopeInPayload = true;
 
     /// @brief The company the payload names.
     /// @param action The action.
@@ -40,6 +42,8 @@ template <>
 struct Authorization<AssignRole> {
     /// @brief The role.
     static constexpr LimsRole role = LimsRole::Supervisor;
+    /// @brief The scope is spelled out in the payload.
+    static constexpr bool scopeInPayload = true;
     /// @brief A supervisor does not assign roles to themselves.
     static constexpr bool notOnSelf = true;
 

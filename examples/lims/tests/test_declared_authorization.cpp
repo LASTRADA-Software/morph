@@ -560,7 +560,7 @@ TEST_CASE("declared authorization: a sample with no site cannot be verified by a
         ScopedPrincipal const principal{who};
         lims::SampleModel verifier;
         CHECK_THROWS_WITH(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result}),
-                          Catch::Matchers::ContainsSubstring("role at an unassigned site"));
+                          Catch::Matchers::ContainsSubstring("role where this applies"));
     }
 }
 
@@ -661,8 +661,10 @@ TEST_CASE("declared authorization: a principal of another company is refused eve
     auto const before = sampleTables();
 
     ScopedPrincipal const eve{"eve"};
+    // RegisterSample's payload names its site, so its refusal says which; the others resolve it from the sample.
     CHECK_THROWS_WITH(runWrite(write, bench, "eve"),
-                      Catch::Matchers::ContainsSubstring("eve' does not hold any role at site"));
+                      Catch::Matchers::ContainsSubstring("eve' does not hold any role where this applies") ||
+                          Catch::Matchers::ContainsSubstring("eve' does not hold any role at site"));
     CHECK(sampleTables() == before);
 }
 
@@ -838,7 +840,7 @@ TEST_CASE("declared authorization: sample entry is refused for another company's
         model.execute(lims::NewSample{});
         fillHeader(model, bench.client, "WW-EVE", lims::test::seededSite());
         CHECK_THROWS_WITH(::morph::model::executeChecked(model, lims::SaveSample{}),
-                          Catch::Matchers::ContainsSubstring("eve' does not hold any role at site"));
+                          Catch::Matchers::ContainsSubstring("eve' does not hold any role where this applies"));
         CHECK(sampleTables().size() == countBefore);
     }
     SECTION("rewriting a sample of another company") {
@@ -1001,16 +1003,16 @@ TEST_CASE("declared authorization: the nine model-scoped writes are refused to a
     if (index < writes.size()) {
         CAPTURE(writes[index].name);
         CHECK_THROWS_WITH(runWrite(writes[index], bench, "ned"),
-                          Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+                          Catch::Matchers::ContainsSubstring("does not hold any role where this applies"));
     } else {
         auto const loaded = model.execute(lims::LoadSample{.id = stored});
         if (index == writes.size()) {
             fillHeader(model, loaded.clientId, loaded.reference, otherSite);
             CHECK_THROWS_WITH(::morph::model::executeChecked(model, lims::SaveSample{}),
-                              Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+                              Catch::Matchers::ContainsSubstring("does not hold any role where this applies"));
         } else {
             CHECK_THROWS_WITH(::morph::model::executeChecked(model, lims::DeleteSample{}),
-                              Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+                              Catch::Matchers::ContainsSubstring("does not hold any role where this applies"));
         }
     }
     CHECK(sampleTables() == before);
@@ -1018,6 +1020,8 @@ TEST_CASE("declared authorization: the nine model-scoped writes are refused to a
 
 // An incomplete working copy is judged by the guard before the handler reports what it lacks: a caller who holds no
 // role is refused, and one who holds a role is told in the result what is missing.
+// Mutation: remove `requireRoleSomewhere<Action>()` from the model form of `DeclaredRuleGuard::check` (a new working
+// copy names no site, so no scope is judged and mallory is told `noClient`).
 TEST_CASE("declared authorization: a role-less caller is refused before an incomplete save is described",
           "[lims][authorization][lab][entry]") {
     DbFixture fixture;
@@ -1032,6 +1036,66 @@ TEST_CASE("declared authorization: a role-less caller is refused before an incom
     lims::SampleModel model;
     model.execute(lims::NewSample{});
     CHECK(::morph::model::executeChecked(model, lims::SaveSample{}).error == lims::SaveError::noClient);
+}
+
+namespace {
+
+/// @brief The words of the `Forbidden` @p call throws.
+/// @tparam Call A callable.
+/// @param call The call.
+/// @return The exception's text; empty when it threw nothing.
+template <typename Call>
+[[nodiscard]] std::string forbiddenWords(Call&& call) {
+    try {
+        call();
+    } catch (lims::Forbidden const& refused) {
+        return refused.what();
+    }
+    return {};
+}
+
+}  // namespace
+
+// A rule whose scope is read from a row names no scope in its refusal, so an id that names nothing and a record in a
+// scope the caller holds nothing in are refused in identical words: the caller cannot learn which ids exist, or where.
+// Mutation: make judgedFactsIn name the scope for every rule (bob is told "at site N" for the real result and "at an
+// unassigned site" for the missing one).
+TEST_CASE("declared authorization: a payload-scoped rule refuses a missing id and another scope's record identically",
+          "[lims][authorization][lab][unknown-id]") {
+    DbFixture fixture;
+    auto const lab = twoSites();
+    lims::test::grant("bob", lims::LimsRole::Verifier, lims::Scope{lab.fieldLab});
+    ScopedPrincipal const bob{"bob"};
+    lims::SampleModel model;
+    auto const real =
+        forbiddenWords([&] { ::morph::model::executeChecked(model, lims::VerifyResult{.resultId = lab.result}); });
+    auto const missing = forbiddenWords(
+        [&] { ::morph::model::executeChecked(model, lims::VerifyResult{.resultId = lims::ResultId{987654}}); });
+    REQUIRE_FALSE(real.empty());
+    CHECK(real == missing);
+    CHECK_THAT(real, Catch::Matchers::ContainsSubstring("does not hold the verifier role where this applies"));
+}
+
+// The same for a rule whose scope the model resolves: a header naming a site that does not exist and one naming a
+// site of another company are refused in identical words.
+// Mutation: make judgedFactsIn name the scope for every rule (eve is told "at site 1" and "at site 999").
+TEST_CASE("declared authorization: a model-scoped rule refuses a missing site and another scope's site identically",
+          "[lims][authorization][lab][unknown-id]") {
+    DbFixture fixture;
+    auto const bench = benchIn(lims::SampleState::Registered);
+    static_cast<void>(rivalWithEve());
+    ScopedPrincipal const eve{"eve"};
+    auto const saveAt = [&](lims::SiteId site) {
+        lims::SampleModel model;
+        model.execute(lims::NewSample{});
+        fillHeader(model, bench.client, "WW-X", site);
+        return forbiddenWords([&] { ::morph::model::executeChecked(model, lims::SaveSample{}); });
+    };
+    auto const real = saveAt(lims::test::seededSite());
+    auto const missing = saveAt(lims::SiteId{999});
+    REQUIRE_FALSE(real.empty());
+    CHECK(real == missing);
+    CHECK_THAT(real, Catch::Matchers::ContainsSubstring("does not hold any role where this applies"));
 }
 
 // Mutation: drop the requirement from RegisterSample, ReceiveSample or ResolveConflict (eve's call is recorded in that
@@ -1060,7 +1124,7 @@ TEST_CASE("declared authorization: the model refuses a write at another company'
     BridgeHandler<lims::SampleModel, AllowShared> handler{rig.bridge(0), rig.executor()};
     awaitQt(handler.execute(lims::OpenSample{.sampleId = bench.sample}));
     CHECK_THROWS_WITH(awaitQt(handler.execute(lims::ReceiveSample{})),
-                      Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+                      Catch::Matchers::ContainsSubstring("does not hold any role where this applies"));
     CHECK(sampleTables() == before);
 
     // A conflict on a sample of the other company's site is refused the same way, and stays open.
@@ -1070,7 +1134,7 @@ TEST_CASE("declared authorization: the model refuses a write at another company'
     CHECK_THROWS_WITH(
         awaitQt(resolver.execute(lims::ResolveConflict{
             .conflictId = conflict, .resolution = lims::ConflictResolution::DiscardStale, .note = "not mine"})),
-        Catch::Matchers::ContainsSubstring("does not hold any role at site"));
+        Catch::Matchers::ContainsSubstring("does not hold any role where this applies"));
     CHECK(conflictStatuses() == std::vector<int>{static_cast<int>(lims::ConflictStatus::Open)});
 }
 
@@ -1108,7 +1172,7 @@ TEST_CASE("Hypothesis 6: on every backend, the guard refuses what the edge let t
     auto verifier = rig.client<lims::SampleModel>(0);
     // The refusal's own words prove the guard refused: any other failure of the call would not contain them.
     CHECK_THROWS_WITH(awaitQt(verifier.execute(lims::VerifyResult{.resultId = lab.result})),
-                      Catch::Matchers::ContainsSubstring("does not hold the verifier role at site"));
+                      Catch::Matchers::ContainsSubstring("does not hold the verifier role where this applies"));
     {
         ScopedPrincipal const alice{"alice"};
         lims::SampleModel reader;
