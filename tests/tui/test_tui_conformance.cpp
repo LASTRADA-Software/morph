@@ -110,6 +110,20 @@ public:
         settle();
     }
 
+    // A click at the horizontal middle of one widget's drawn bounds and the vertical middle of another's.
+    void clickAt(ui::Widget& across, ui::Widget& along) override {
+        settle();
+        auto const column = WidgetBase::of(across).view().screenBounds();
+        auto const line = WidgetBase::of(along).view().screenBounds();
+        if (column.width > 0 && line.height > 0) {
+            int const x = column.x + (column.width / 2);
+            int const y = line.y + (line.height / 2);
+            send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = x + 1, .y = y + 1});
+            send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = x + 1, .y = y + 1});
+        }
+        settle();
+    }
+
     // Select all (Ctrl+Shift+A), then the text pasted over the selection, so the field takes it as one edit; an
     // empty text deletes the selection.
     void type(ui::Widget& widget, std::string_view text) override {

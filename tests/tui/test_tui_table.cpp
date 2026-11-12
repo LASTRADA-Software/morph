@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <core/tui/InputEvent.hpp>
@@ -1032,4 +1033,137 @@ TEST_CASE("tui table: a container cell keeps its natural least width", "[tui][ta
     REQUIRE(drawn.size() >= 2);
     // The nested text is not a direct cell, so its column never narrows below it and the tag gives instead.
     CHECK(drawn.at(1).starts_with("  alpha beta gamma "));
+}
+
+// Mutation: leave `setRowSpans` empty (the covered cells show their own text, and the first row's cell stays in its
+// row), or hide no covered cell (the covered rows show "kiwi" and "plum" beside the spanning text).
+TEST_CASE("tui table: a spanning cell is drawn once over the rows it covers, and the covered cells draw nothing",
+          "[tui][table][span]") {
+    Harness harness{30, 6};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    fruit.addRow(harness, key(3), "plum", "7");
+    static_cast<void>(harness.draw());
+    CHECK(harness.draw() == Rows{"  Name  Qty", "  apple 3", "  kiwi  12", "  plum  7"});
+    // The first column's first cell covers all three rows; its text sits on the middle one, as a centred cell does.
+    fruit.table->setRowSpans(*fruit.rows.at(0), {{.column = 0, .rows = 3}});
+    CHECK(harness.draw() == Rows{"  Name  Qty", "        3", "  apple 12", "        7"});
+    // The covered cells give their column no width: the column is the spanning cell's. A covered cell longer than the
+    // spanning one would widen the column if it counted.
+    fruit.table->setRowSpans(*fruit.rows.at(0), {});
+    CHECK(harness.draw() == Rows{"  Name  Qty", "  apple 3", "  kiwi  12", "  plum  7"});
+}
+
+// Mutation: hit-test the drawn text area alone (the blank covered lines of a centred cell select the covered row).
+TEST_CASE("tui table: a click on a blank line of a centred spanning cell selects the row that gives the span",
+          "[tui][table][span]") {
+    Harness harness{30, 6};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    fruit.addRow(harness, key(3), "plum", "7");
+    std::vector<std::vector<ui::Key>> selections;
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
+    fruit.table->setRowSpans(*fruit.rows.at(0), {{.column = 0, .rows = 3}});
+    static_cast<void>(harness.draw());
+    // The one-line text is centred on line 2; lines 1 and 3 are blank covered lines of the same column.
+    CHECK(harness.draw().at(2).contains("apple"));
+    CHECK(harness.click({.x = 4, .y = 3}) == EventResult::Handled);
+    CHECK(selections == std::vector<std::vector<ui::Key>>{{key(1)}});
+    CHECK(harness.click({.x = 4, .y = 1}) == EventResult::Handled);
+    CHECK(selections.back() == std::vector<ui::Key>{key(1)});
+    // Beside the span, the covered row's own cell is the covered row's.
+    CHECK(harness.click({.x = 12, .y = 3}) == EventResult::Handled);
+    CHECK(selections.back() == std::vector<ui::Key>{key(3)});
+}
+
+// Mutation: leave a table with no spans on the per-frame planning path (the cells are walked every frame).
+TEST_CASE("tui table: a table that never had a span plans nothing, and one that lost its spans puts the cells back",
+          "[tui][table][span]") {
+    Harness harness{30, 6};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    static_cast<void>(harness.draw());
+    CHECK(std::ranges::find(harness.context().spanTables, fruit.table.get()) == harness.context().spanTables.end());
+    fruit.table->setRowSpans(*fruit.rows.at(0), {{.column = 0, .rows = 2}});
+    CHECK(std::ranges::find(harness.context().spanTables, fruit.table.get()) != harness.context().spanTables.end());
+    static_cast<void>(harness.draw());
+    CHECK(fruit.cells.at(0)->lifted());
+    fruit.table->setRowSpans(*fruit.rows.at(0), {});
+    CHECK(harness.draw() == Rows{"  Name  Qty", "  apple 3", "  kiwi  12"});
+    CHECK_FALSE(fruit.cells.at(0)->lifted());
+    CHECK(std::ranges::find(harness.context().spanTables, fruit.table.get()) == harness.context().spanTables.end());
+}
+
+// Mutation: plan only while painting (the first frame after a span arrives still sizes the table by the cell that is
+// about to be lifted, and the widget under it sits two lines too low).
+TEST_CASE("tui table: lifting a tall spanning cell shrinks the table in the frame that does it",
+          "[tui][table][span]") {
+    Harness harness{30, 10};
+    auto column = harness.make<StackImpl>(nullptr, ui::Axis::Vertical);
+    Fruit fruit{harness, ui::SelectionMode::Single, column.get()};
+    auto foot = harness.make<TextImpl>(column.get());
+    foot->setText("foot");
+    // The first cell is three lines tall, so its row is.
+    fruit.cells.at(0)->setText("a\nb\nc");
+    CHECK(harness.draw().at(5) == "foot");
+    fruit.table->setRowSpans(*fruit.rows.at(0), {{.column = 0, .rows = 2}});
+    // Lifted, the cell leaves its row, which is a line tall; the cell's three lines cover that and the second row, a
+    // line, and one more line goes to the last covered row. The table is four lines tall, and the foot sits under it.
+    Rows const drawn = harness.draw();
+    CHECK(drawn.at(4) == "foot");
+}
+
+// Mutation: let the hit-test read the line alone (the click on the covered line selects the second row).
+TEST_CASE("tui table: a click on a spanning cell, on a line of a covered row, selects the row that gives the span",
+          "[tui][table][span]") {
+    Harness harness{30, 6};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    fruit.addRow(harness, key(3), "plum", "7");
+    std::vector<std::vector<ui::Key>> selections;
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
+    fruit.table->setRowSpans(*fruit.rows.at(0), {{.column = 0, .rows = 3}});
+    static_cast<void>(harness.draw());
+    // Line 2 is the covered second row's; column 4 lies in the spanning cell's column.
+    CHECK(harness.click({.x = 4, .y = 2}) == EventResult::Handled);
+    CHECK(selections == std::vector<std::vector<ui::Key>>{{key(1)}});
+    // The same line, in the other column, is the covered row's own.
+    CHECK(harness.click({.x = 12, .y = 2}) == EventResult::Handled);
+    CHECK(selections.back() == std::vector<ui::Key>{key(2)});
+}
+
+// Mutation: leave the plan alone when a row goes (the click reads the removed origin row's freed spanning cell, and
+// selects the freed row; ASan reports it).
+TEST_CASE("tui table: a click between removing a span's origin row and the next draw selects the row under it",
+          "[tui][table][span]") {
+    Harness harness{30, 6};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    fruit.addRow(harness, key(3), "plum", "7");
+    fruit.addRow(harness, key(4), "pear", "9");
+    std::vector<std::vector<ui::Key>> selections;
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
+    fruit.table->setRowSpans(*fruit.rows.at(0), {{.column = 0, .rows = 3}});
+    static_cast<void>(harness.draw());
+    fruit.removeRow(0);
+    // No draw has run: the rows are kiwi, plum and pear on lines 1 to 3, and line 3 in the first column is pear's.
+    CHECK(harness.click({.x = 4, .y = 3}) == EventResult::Handled);
+    CHECK(selections == std::vector<std::vector<ui::Key>>{{key(4)}});
+}
+
+// Mutation: place the spanning cell without the table's clip (it draws above the header, or not at all).
+TEST_CASE("tui table: a span whose origin row has scrolled off the top still shows its text on the covered lines",
+          "[tui][table][span]") {
+    Harness harness{30, 3};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    fruit.addRow(harness, key(3), "plum", "7");
+    fruit.addRow(harness, key(4), "fig", "1");
+    fruit.table->setRowSpans(*fruit.rows.at(0), {{.column = 0, .rows = 3}});
+    static_cast<void>(harness.draw());
+    harness.focus(*fruit.table);
+    for (int step = 0; step < 3; ++step) {
+        static_cast<void>(harness.key(KeyCode::Down));
+    }
+    Rows const drawn = harness.draw();
+    // The cursor is on the fourth row; the first is above the view, the second and third are covered and shown.
+    CHECK(drawn.at(0) == "  Name  Qty");
+    CHECK(drawn.at(1).contains("apple"));
 }

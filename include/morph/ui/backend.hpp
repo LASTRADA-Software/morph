@@ -775,6 +775,17 @@ public:
     /// @param row One of this table's rows.
     virtual void setRowHeading(Widget& row) = 0;
 
+    /// @brief Sets which of a row's cells cover the rows below it. Called for a row with spans once the change's rows
+    ///        are placed, and again on every change, a call with an empty list clearing them; never for a row that
+    ///        has never had one. The spans are resolved against the rows (no unknown column, overlap, heading or span
+    ///        past the last row once a change settles), but a backend derives which cells are covered from the rows'
+    ///        current order when it lays out or paints, never here, and clips a span that runs past its last row or
+    ///        onto a heading row. A spanning cell is drawn once over the rows it covers, in its column, with the
+    ///        look of this row; the covered rows' cells in that column are not shown.
+    /// @param row   One of this table's rows.
+    /// @param spans The row's effective spans, by column, each column once.
+    virtual void setRowSpans(Widget& row, std::vector<RowSpan> const& spans) = 0;
+
     /// @brief Requests the rows with these keys, and marks those it has. Never calls the `onSelectionChange` handler.
     /// @param keys The selected keys.
     virtual void setSelection(std::vector<Key> const& keys) = 0;

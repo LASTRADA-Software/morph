@@ -134,7 +134,11 @@ void StackImpl::setColumnLayout(std::vector<int> extents, int gap, std::vector<C
     if (_extents.empty()) {
         return stackNaturalSize(children(), _axis, _gap);
     }
-    auto const natural = stackNaturalSize(children(), _axis, 0);
+    // A lifted cell is a table's to size: it does not make its row taller.
+    std::vector<WidgetBase*> own;
+    std::ranges::copy_if(children(), std::back_inserter(own),
+                         [](WidgetBase const* child) { return !child->lifted(); });
+    auto const natural = stackNaturalSize(own, _axis, 0);
     int const columns =
         std::accumulate(_extents.begin(), _extents.end(), 0) + (_extentGap * (static_cast<int>(_extents.size()) - 1));
     return _axis == ui::Axis::Horizontal ? ::core::tui::Size{.width = columns, .height = natural.height}

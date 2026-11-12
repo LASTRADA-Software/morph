@@ -824,6 +824,20 @@ struct Column {
     bool holder = false;
 };
 
+/// @brief A table cell that covers rows below its own: the cell of @ref column in the row that gives it, extended
+///        down over @ref rows rows counting that row.
+struct RowSpan {
+    /// @brief The column's index in the table's columns; the select column is not one.
+    std::size_t column = 0;
+    /// @brief How many rows the cell covers, the row that gives it included; 1 covers nothing.
+    std::size_t rows = 1;
+
+    /// @brief Whether two spans name the same column and count.
+    /// @param other The other span.
+    /// @return True when equal.
+    [[nodiscard]] bool operator==(RowSpan const& other) const noexcept = default;
+};
+
 /// @brief Children laid out left to right.
 struct Row {
     /// @brief The children, in order; a null child is skipped.
@@ -841,6 +855,9 @@ struct Row {
     /// @brief Whether a table row is a heading: one cell spanning every column, never selected or activated. Only
     ///        `table`'s row view sets it; the mount refuses it on a row outside a table.
     bool heading = false;
+    /// @brief A table row's spans, bound in the row's scope: disengaged when none was given. Only `table`'s row view
+    ///        sets it; the mount refuses it on a row outside a table.
+    std::optional<Prop<std::vector<RowSpan>>> spans;
     /// @brief Where the children sit across the row (vertically); set once.
     Align align = Align::Stretch;
     /// @brief Where the spare width goes while no shown child stretches; set once.
@@ -1992,6 +2009,10 @@ struct TableRowView {
     std::optional<Prop<std::string>> label = std::nullopt;
     /// @brief Whether the row is a heading: exactly one cell, spanning every column, never selected or activated.
     bool heading = false;
+    /// @brief The cells of this row that cover the rows below, bound in the row's own scope; disengaged for none.
+    ///        The mount resolves them against the table's rows, refuses and reports a bad span, and tells the widget
+    ///        only the effective ones.
+    std::optional<Prop<std::vector<RowSpan>>> spans;
 };
 
 /// @brief A table of keyed rows: one `Row` of cells per row, under the column headers.
@@ -2056,7 +2077,8 @@ template <typename RowT>
             return row(Row{.children = std::move(made.cells),
                            .tone = std::move(made.tone),
                            .label = std::move(made.label),
-                           .heading = made.heading});
+                           .heading = made.heading,
+                           .spans = std::move(made.spans)});
         };
     Table spec{
         .rows =

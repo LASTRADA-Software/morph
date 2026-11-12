@@ -105,6 +105,182 @@ void TableImpl::setRowHeading(ui::Widget& row) {
     refresh();
 }
 
+void TableImpl::setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) {
+    auto& base = WidgetBase::of(row);
+    if (base.container() != this) {
+        throw std::logic_error{"morph::tui: setRowSpans of a widget that is not this table's row"};
+    }
+    if (spans.empty()) {
+        _spans.erase(&base);
+    } else {
+        _spans.insert_or_assign(&base, spans);
+        if (std::ranges::find(context().spanTables, this) == context().spanTables.end()) {
+            context().spanTables.push_back(this);
+        }
+    }
+    refresh();
+}
+
+int TableImpl::heightOf(WidgetBase const& row) const {
+    auto const extra = _extraLines.find(&row);
+    return rowHeight(row) + (extra == _extraLines.end() ? 0 : extra->second);
+}
+
+// The rows' order decides coverage, so it is worked out here, from the rows as they are, and never when a row is told
+// its spans: rows moving under an unchanged span change what is covered.
+void TableImpl::planSpans() {
+    if (_spans.empty() && _plan.empty()) {
+        std::erase(context().spanTables, this);
+        return;  // nothing spans and nothing is lifted: every cell is in its row already
+    }
+    auto const rows = shownChildren();
+    auto const cellsOf = [](WidgetBase* row) {
+        auto* const stack = dynamic_cast<ContainerBase*>(row);
+        return stack == nullptr ? std::vector<WidgetBase*>{}
+                                : std::vector<WidgetBase*>{stack->children().begin(), stack->children().end()};
+    };
+    std::vector<SpanPlace> plan;
+    std::unordered_set<WidgetBase const*> covered;
+    std::vector<std::size_t> coveredUntil(_columns.size(), 0);
+    for (std::size_t index = 0; index < rows.size() && !_spans.empty(); ++index) {
+        auto const found = _spans.find(rows.at(index));
+        if (found == _spans.end() || isHeading(rows.at(index))) {
+            continue;
+        }
+        auto const cells = cellsOf(rows.at(index));
+        for (ui::RowSpan const& span : found->second) {
+            if (span.column >= _columns.size() || span.column >= cells.size() || span.rows < 2 ||
+                coveredUntil.at(span.column) > index) {
+                continue;
+            }
+            std::size_t last = std::min(index + span.rows, rows.size()) - 1;
+            for (std::size_t between = index + 1; between <= last; ++between) {
+                if (isHeading(rows.at(between))) {
+                    last = between - 1;
+                    break;
+                }
+            }
+            if (last == index) {
+                continue;
+            }
+            coveredUntil.at(span.column) = last + 1;
+            plan.push_back({.origin = rows.at(index),
+                            .cell = cells.at(span.column),
+                            .column = span.column,
+                            .first = index,
+                            .last = last});
+            for (std::size_t between = index + 1; between <= last; ++between) {
+                auto const coveredCells = cellsOf(rows.at(between));
+                if (span.column < coveredCells.size()) {
+                    covered.insert(coveredCells.at(span.column));
+                }
+            }
+        }
+    }
+    // Lift the spanning cells and hide the covered ones; every other cell goes back to its row.
+    std::unordered_set<WidgetBase const*> lifted;
+    for (SpanPlace const& place : plan) {
+        lifted.insert(place.cell);
+    }
+    for (auto* const row : children()) {
+        for (auto* const cell : cellsOf(row)) {
+            bool const lift = lifted.contains(cell);
+            cell->setLifted(lift);
+            ::core::tui::Component& home = lift ? view() : row->view();
+            if (cell->view().parent() != &home) {
+                home.addChild(cell->view(),
+                              ::core::tui::LayoutParams{.area = {}, .visible = cell->shown(), .zIndex = lift ? 1 : 0});
+            }
+            bool const hide = covered.contains(cell);
+            if (cell->spanCovered() != hide) {
+                cell->setSpanCovered(hide);
+                cell->setStructuralVisible(!hide);
+            }
+        }
+    }
+    // A spanning cell taller than the rows it covers adds the shortfall to the last of them.
+    std::unordered_map<WidgetBase const*, int> extra;
+    for (SpanPlace const& place : plan) {
+        int block = 0;
+        for (std::size_t row = place.first; row <= place.last; ++row) {
+            auto const added = extra.find(rows.at(row));
+            block += rowHeight(*rows.at(row)) + (added == extra.end() ? 0 : added->second);
+        }
+        int const need = requestedSize(*place.cell).height;
+        if (need > block) {
+            extra[rows.at(place.last)] += need - block;
+        }
+    }
+    bool const changed = extra != _extraLines;
+    _plan = std::move(plan);
+    _extraLines = std::move(extra);
+    if (changed) {
+        refresh();
+    }
+}
+
+std::vector<::core::tui::Rect> TableImpl::spanAreas(::core::tui::Size size,
+                                                    std::vector<::core::tui::Rect>* blocks) const {
+    std::vector<::core::tui::Rect> areas(_plan.size());
+    std::vector<::core::tui::Rect> unused;
+    std::vector<::core::tui::Rect>& block = blocks != nullptr ? *blocks : unused;
+    block.assign(_plan.size(), {});
+    auto const rows = shownChildren();
+    auto const widths = columnWidths(size.width);
+    int const header = _showHeader ? 1 : 0;
+    // The line of each row as if every row were drawn: the first one drawn starts under the header, the ones above it
+    // before that.
+    std::vector<int> start(rows.size(), 0);
+    int line = header;
+    for (std::size_t index = std::min(_top, rows.size()); index < rows.size(); ++index) {
+        start.at(index) = line;
+        line += heightOf(*rows.at(index));
+    }
+    line = header;
+    for (std::size_t index = std::min(_top, rows.size()); index > 0; --index) {
+        line -= heightOf(*rows.at(index - 1));
+        start.at(index - 1) = line;
+    }
+    for (auto const [place, area, lines] : std::views::zip(_plan, areas, block)) {
+        if (place.column >= widths.size() || place.last >= rows.size()) {
+            continue;
+        }
+        int const top = std::max(start.at(place.first), header);
+        int const bottom = std::min(start.at(place.last) + heightOf(*rows.at(place.last)), size.height);
+        if (bottom <= top) {
+            continue;
+        }
+        int left = gutter();
+        for (std::size_t index = 0; index < place.column; ++index) {
+            left += widths.at(index) + kColumnGap;
+        }
+        // Placed down the lines it covers by its column's `valign`, as a cell is down its row.
+        ui::Align const down = _columns.at(place.column).valign;
+        int const space = bottom - top;
+        int const height = down == ui::Align::Stretch ? space : std::min(requestedSize(*place.cell).height, space);
+        area = {.x = left,
+                .y = top + alignedOffset(down, height, space),
+                .width = widths.at(place.column),
+                .height = height};
+        lines = {.x = left, .y = top, .width = widths.at(place.column), .height = space};
+    }
+    return areas;
+}
+
+WidgetBase* TableImpl::spanOriginAt(::core::tui::Point cell) const {
+    // The whole block the cell stands for, not the part its content is drawn on: a click on a blank line of it, under
+    // a centred or top-aligned cell, is still a click on the span.
+    std::vector<::core::tui::Rect> blocks;
+    static_cast<void>(spanAreas(_size, &blocks));
+    for (auto const [place, block] : std::views::zip(_plan, blocks)) {
+        if (!block.empty() && cell.x >= block.x && cell.x < block.x + block.width && cell.y >= block.y &&
+            cell.y < block.y + block.height) {
+            return place.origin;
+        }
+    }
+    return nullptr;
+}
+
 std::size_t TableImpl::dataPlace(std::span<WidgetBase* const> rows, std::size_t place, Direction direction) const {
     auto const data = [&](std::size_t candidate) {
         return candidate < rows.size() && !isHeading(rows.subspan(candidate).front());
@@ -190,6 +366,11 @@ void TableImpl::clickHeader(int x) {
 void TableImpl::childForgotten(WidgetBase& child) {
     _keys.erase(&child);
     _headings.erase(&child);
+    _spans.erase(&child);
+    _extraLines.erase(&child);
+    // The plan points at rows and at the cells lifted out of them, and is rebuilt only by the next fit: until then a
+    // click would hit-test a block of a row that is gone, and read its freed cell.
+    _plan.clear();
     if (_lastClick.row == &child) {
         _lastClick = {};
     }
@@ -287,7 +468,7 @@ std::vector<int> TableImpl::columnWidths(int width) const {
                       (kColumnGap * std::max(0, static_cast<int>(widths.size()) - 1));
     int height = _showHeader ? 1 : 0;
     for (auto const* row : shownChildren()) {
-        height += rowHeight(*row);
+        height += heightOf(*row);
     }
     return {.width = width, .height = height};
 }
@@ -339,7 +520,7 @@ std::size_t TableImpl::lastTop(std::span<WidgetBase* const> rows) const {
     std::size_t top = rows.size();
     int used = 0;
     for (auto const* row : rows | std::views::reverse) {
-        used += rowHeight(*row);
+        used += heightOf(*row);
         if (used > _rowRoom) {
             break;
         }
@@ -354,7 +535,7 @@ std::size_t TableImpl::pageFrom(std::span<WidgetBase* const> rows, std::size_t p
     std::size_t target = place;
     while (direction == Direction::Forward ? target + 1 < rows.size() : target > 0) {
         auto const next = direction == Direction::Forward ? target + 1 : target - 1;
-        used += rowHeight(*rows.subspan(next).front());
+        used += heightOf(*rows.subspan(next).front());
         if (used > _rowRoom && target != place) {
             break;
         }
@@ -389,12 +570,12 @@ void TableImpl::showCursor(std::span<WidgetBase* const> rows) {
     }
     auto const shown = rows.subspan(_top, place - _top + 1);
     int used = std::accumulate(shown.begin(), shown.end(), 0,
-                               [](int sum, WidgetBase const* row) { return sum + rowHeight(*row); });
+                               [this](int sum, WidgetBase const* row) { return sum + heightOf(*row); });
     for (auto const* row : shown.first(shown.size() - 1)) {
         if (used <= _rowRoom) {
             return;
         }
-        used -= rowHeight(*row);
+        used -= heightOf(*row);
         ++_top;
     }
 }
@@ -412,7 +593,7 @@ std::vector<::core::tui::Rect> TableImpl::childAreas(::core::tui::Size size) con
         if (above || line >= size.height) {
             continue;
         }
-        int const height = rowHeight(*row);
+        int const height = heightOf(*row);
         area = {.x = gutter(), .y = line, .width = std::max(0, size.width - gutter()), .height = height};
         line += height;
     }
@@ -503,9 +684,13 @@ void TableImpl::paint(::core::tui::Canvas& canvas) {
     _top = std::min(_top, lastTop(rows));
     _cursorPlace = cursorPlace(rows);
 
+    planSpans();
     arrangeRows(widths);
     auto const areas = childAreas(_size);
     placeChildren(areas);
+    for (auto const [place, area] : std::views::zip(_plan, spanAreas(_size))) {
+        place.cell->place(area);
+    }
 
     bool const focused = hasFocus();
     for (auto const [row, area] : std::views::zip(children(), areas)) {
@@ -610,7 +795,9 @@ void TableImpl::clickWith(::core::tui::Point cell, ::core::tui::Modifier modifie
         clickHeader(cell.x);
         return;
     }
-    auto* const row = rowAtLine(cell.y);
+    // A spanning cell drawn over a covered row's line is its origin row's.
+    auto* const spanning = spanOriginAt(cell);
+    auto* const row = spanning != nullptr ? spanning : rowAtLine(cell.y);
     if (row == nullptr || isHeading(row)) {
         return;
     }

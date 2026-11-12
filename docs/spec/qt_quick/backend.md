@@ -311,6 +311,31 @@ state, so its look follows the selection alone; its `clicked` fires the row's `t
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 
+A spanning cell (`setRowSpans`; `TableImpl::planSpans` resolves it against the rows as they stand, each time a row
+comes, goes, moves or is told its spans) stays a cell of its origin row, left out of that row's `tallest` and
+`implicitHeight`, and overflows the row downward: `MorphTableRow.spanPlan` (`[{column, rows}]`, the spans clipped to the
+rows that remain) names the cell, and the table gives the row `spanBlocks` (`[{column, height}]`, the summed
+`implicitHeight` of the rows the cell covers) and the last covered row a `spanExtra`, the lines the cell needs
+beyond them, which that row's `placeOnce` adds; both are worked out at table level (`recomputeSpans`, once per event
+loop turn, from the rows' `ownHeight`), as no row can see another's, and the cell's height never feeds back into a
+row's own. The cell is not drawn in a layer of the table above the rows: it stays a child of its origin row, so its
+focus, its accessible node and its key handling are the row's, and the row is drawn above every row below it (C++
+writes `z` as the count of rows from it to the end), so the cell lies over the rows it covers, also when a covered row
+is itself an origin in another column. Under the
+cell, in its column, the row has a `spanBackdrop`: `scheme.surface` first, which hides the covered rows' rules, then a
+second instance of the `tableRow` part's `background` component (a restyle is instantiated once more per spanning
+cell), laid out as wide as the row and cut to the column so the row's own marks fall where they do on the row, and
+given the origin row's tone, stripe, selected, hover and current state; its rule is thus the block's foot. The backdrop
+has a `TapHandler` of its own, since a point below the origin row's bounds does not reach the row's handlers; its tap
+is the origin row's tap (`MorphTableRow.tapped`), and a row ignores a tap that lands in a spanning or a covered column.
+Hover is delivered only to an item whose bounds hold the pointer, so the row's `containmentMask` takes in the blocks of
+its spanning cells beside its own rectangle: the row's `HoverHandler` is then hovered over any part of the cell, and
+the covered row under the pointer is not, as the origin row is raised above it. A covered cell is hidden by `ItemBase::cover`, a flag kept apart from the
+cell's own visibility (`ownVisible() && !covered`, so uncovering restores what the mount set and never shows a cell the
+document hid): it takes no focus and no tap, has no accessible node, and is left out of `widestCell` and the column
+caches as a hidden cell is. `Accessible` has no cell extent, so assistive technology reads the cell in its origin
+row.
+
 A heading row (`setRowHeading`, the row's `heading`) places its one cell from the first inset across the select
 column and every column, less two insets; its `TapHandler`, Enter and select box are off, and `shownRows` (the rows the
 current row, Ctrl+A and the select-all box run over) leaves it out, as does a content column's width scan. Its

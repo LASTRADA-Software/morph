@@ -4666,6 +4666,10 @@ struct TableOptions {
     AnyHandle filters;
     /// @brief A row's tone, read in the row scope.
     AnyHandle rowTone;
+    /// @brief A row's spans, read in the row scope: a list of `{column, rows}` records, `column` a column's id and
+    ///        `rows` an integer from 1 counting the row itself; the cells they name cover the rows below. Absent,
+    ///        none.
+    AnyHandle rowSpans;
     /// @brief The key a linked chart highlights.
     AnyHandle highlightKey;
     /// @brief Commands run when a row is activated, in its row scope.
@@ -4775,6 +4779,7 @@ namespace detail {
         .put("page", options.page)
         .put("filters", options.filters)
         .put("rowTone", options.rowTone)
+        .put("rowSpans", options.rowSpans)
         .put("highlightKey", options.highlightKey)
         .put("onActivate", options.onActivate)
         .put("empty", options.empty)

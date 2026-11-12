@@ -2897,6 +2897,11 @@ private:
     /// A `rowTone` value as a tone: `neutral`, `info`, `ok`, `warn`, `err`, or `null` for none. Another value is
     /// reported, at @p path, while @p noted is still false, and shows no tone.
     std::optional<Tone> rowToneOf(Value const& value, std::string const& path, bool& noted);
+    /// A `rowSpans` value as spans: a list of `{column, rows}` records, `column` a column's id from @p columns and
+    /// `rows` an integer from 1; `null` and `[]` are none. A record of another shape is dropped and reported once
+    /// through @p noted.
+    std::vector<RowSpan> rowSpansOf(Value const& value, std::vector<std::string> const& columns,
+                                    std::string const& path, bool& noted);
     Node lowerBoundary(DocNode const& node, LowerCtx const& ctx);
     /// A group: a column of its legend (a text carrying the mark), its children, its description and its shown
     /// errors, named and announced as a group.
@@ -9456,8 +9461,10 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     auto registry = std::make_shared<std::map<std::string, std::weak_ptr<RtScope>, std::less<>>>();
     // A value that names no tone is reported once for the table, whichever row and value it was.
     auto toneReported = std::make_shared<bool>(false);
-    auto cellsOf = [this, ctx, &node, cells, fields, roles, registry, keyFn,
-                    toneReported](reactive::Signal<Value> const& row) {
+    // Likewise for a `rowSpans` value that is no list of spans.
+    auto spansReported = std::make_shared<bool>(false);
+    auto cellsOf = [this, ctx, &node, cells, fields, roles, registry, keyFn, toneReported,
+                    spansReported](reactive::Signal<Value> const& row) {
         if (row.peek().field(kGroupHeadingField) != nullptr) {
             return headingRow(node, ctx, row,
                               runtime().untracked([&] { return canonicalJson(valueOfKey(keyFn(row.peek()))); }));
@@ -9505,6 +9512,12 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                 [this, scope, bindings = ctx.bindings, toneExpr, toneReported]() -> std::optional<Tone> {
                     return rowToneOf(evalIn(*scope, bindings.get(), toneExpr), toneExpr->path, *toneReported);
                 });
+        }
+        if (ExprPtr const spansExpr = node.prop("rowSpans")) {
+            rowView.spans = slotProp<std::vector<RowSpan>>([this, scope, bindings = ctx.bindings, spansExpr,
+                                                            spansReported, fields] {
+                return rowSpansOf(evalIn(*scope, bindings.get(), spansExpr), fields, spansExpr->path, *spansReported);
+            });
         }
         return rowView;
     };
@@ -10071,6 +10084,35 @@ inline std::optional<Tone> ScreenCore::rowToneOf(Value const& value, std::string
         report(path, "rowTone is " + canonicalJson(value) + "; a tone is neutral, info, ok, warn or err");
     }
     return std::nullopt;
+}
+
+inline std::vector<RowSpan> ScreenCore::rowSpansOf(Value const& value, std::vector<std::string> const& columns,
+                                                   std::string const& path, bool& noted) {
+    std::vector<RowSpan> spans;
+    if (value.isNull()) {
+        return spans;
+    }
+    ValueList const* const items = value.asList();
+    bool bad = items == nullptr;
+    for (Value const& item : items != nullptr ? *items : ValueList{}) {
+        Value const* const column = item.field("column");
+        Value const* const rows = item.field("rows");
+        std::string const* const id = column != nullptr ? column->asString() : nullptr;
+        std::int64_t const* const count = rows != nullptr ? rows->asInt() : nullptr;
+        auto const found = id != nullptr ? std::ranges::find(columns, *id) : columns.end();
+        if (found == columns.end() || count == nullptr || *count < 1) {
+            bad = true;
+            continue;
+        }
+        spans.push_back(RowSpan{.column = static_cast<std::size_t>(found - columns.begin()),
+                                .rows = static_cast<std::size_t>(*count)});
+    }
+    if (bad && !noted) {
+        noted = true;
+        report(path,
+               "rowSpans is " + canonicalJson(value) + "; a span is {column: a column's id, rows: an integer from 1}");
+    }
+    return spans;
 }
 
 inline void ScreenCore::ownQueriesOf(ExprPtr const& expr, RtScope const& scope, BoundaryRuntime& boundary,

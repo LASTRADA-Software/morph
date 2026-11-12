@@ -117,7 +117,7 @@ lowers them to the kinds below.
 | `Dialog` | `dialog` | `open`, `title`, `description` (applied only when bound or not empty), `descriptionSpans` (the description as runs; while bound or not empty, `setDescriptionSpans` is called in place of `setDescription`), `child`, `onDismiss`, `sheet` (default `false`), `dismissLabel` (default `Close`): the mount calls `setSheet` and `setDismissLabel` only when they are bound or not the default |
 | `Busy` | `busy` | `active`, `label` |
 | `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap`, `common` (the row container's, as on every kind), `wrap` (a `bool`; honoured on a horizontal `axis` only, as a Row's), `divided` (a `bool`; honoured on a vertical `axis` only, as a Column's) ([below](#keyed-collections)) |
-| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width, role, align, valign, sortable, wrap, shrink}`, set once; a `Stretch` `width` starts from the column's content and its weight shares only the width the content leaves (the contract's four steps), and `shrink` also makes the column give up width before the other stretch columns; `sortable` makes a click on the header ask to sort by the column; `role` styles a column's default cell and has no effect on the style of one with its own `.cell`, and a `Mono` role makes a fixed width count monospace characters; `wrap`, default `true`, with `false` keeps the column's text cells to one line, cut at the column's width with an ellipsis; `align`, default `Start`, places a text's or a text input's text, a label-width cell and the header label across the column, and `valign`, default `Center`, places every cell down its row, `Stretch` filling it), rows, key function, cells — or a row view answering `TableRowView{cells, tone, label, heading}`, whose tone and label bind in the row's own scope and whose `heading` makes the row a heading of exactly one cell (`ui::table` refuses any other count, as it refuses a data row of the wrong count) — and `TableOptions{selectionMode, selection, onSelectionChange (the keys and a `SelectionChange`: `Replace`, the whole selection, or `Extend`, which keeps the keys the backend does not hold), onActivate, selectColumn (set once: a leading column of check boxes drawing the selection), selectAllLabel (the header box's name, default `Select all`), sort (a `Prop<std::optional<TableSort{column, direction}>>`: the column whose header marks the sort, and its `SortDirection`; the table never reorders its rows, which arrive sorted), onSort (a sortable column's index when the user asks to sort by it), common}`; the mount tells the widget `sort` and `onSort` only when a column is sortable ([below](#keyed-collections)) |
+| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width, role, align, valign, sortable, wrap, shrink}`, set once; a `Stretch` `width` starts from the column's content and its weight shares only the width the content leaves (the contract's four steps), and `shrink` also makes the column give up width before the other stretch columns; `sortable` makes a click on the header ask to sort by the column; `role` styles a column's default cell and has no effect on the style of one with its own `.cell`, and a `Mono` role makes a fixed width count monospace characters; `wrap`, default `true`, with `false` keeps the column's text cells to one line, cut at the column's width with an ellipsis; `align`, default `Start`, places a text's or a text input's text, a label-width cell and the header label across the column, and `valign`, default `Center`, places every cell down its row, `Stretch` filling it), rows, key function, cells — or a row view answering `TableRowView{cells, tone, label, heading, spans}`, whose tone, label and `spans` bind in the row's own scope and whose `heading` makes the row a heading of exactly one cell (`ui::table` refuses any other count, as it refuses a data row of the wrong count); a row's `spans` let its cells cover the rows below it ([Row spans](#row-spans)), and a sorted or virtualized table draws no spans, and a bad span is refused alone — and `TableOptions{selectionMode, selection, onSelectionChange (the keys and a `SelectionChange`: `Replace`, the whole selection, or `Extend`, which keeps the keys the backend does not hold), onActivate, selectColumn (set once: a leading column of check boxes drawing the selection), selectAllLabel (the header box's name, default `Select all`), sort (a `Prop<std::optional<TableSort{column, direction}>>`: the column whose header marks the sort, and its `SortDirection`; the table never reorders its rows, which arrive sorted), onSort (a sortable column's index when the user asks to sort by it), common}`; the mount tells the widget `sort` and `onSort` only when a column is sortable ([below](#keyed-collections)) |
 | `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field; the change is the commit, since both backends report one only when an edit is finished), `onCommit` (the same value, after `onChange`), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC), `pattern` (the pattern it shows and reads its value in; empty is ISO) — the last three set once; `label` and `showLabel` (below) |
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` (each step while a drag lasts), `onCommit` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePicker` | `filePicker` | `path`, `mode` (`FilePickerMode{Open, Save}`, set once), `onPicked` |
@@ -474,6 +474,87 @@ threshold is completely unaffected.
 A Table's `selection` binding is made after its rows. The widget marks a requested key whenever
 its row arrives, so the order only shapes the log: the first `setSelection` already finds the
 rows.
+
+### Row spans
+
+A table row may give `spans`, a `std::vector<RowSpan{column, rows}>`: `TableRowView::spans` and `Row::spans` are
+`std::optional<Prop<std::vector<RowSpan>>>`, bound in the row's own scope as the tone is, and disengaged when the row
+gives none (the mount refuses an engaged one on a row outside a table, and binds nothing for a row without one). Each
+`RowSpan` names a column by its index in the table's `columns` (the select column is not one) and a `rows` count that
+includes the row itself: `{.column = 0, .rows = 2}` on a row makes its column-0 cell cover that row and the one after
+it. The cell is the row's own, built in the row's scope; the cells in that column of the rows it covers (*covered
+cells*) are mounted and bound as every cell is, so a row keeps exactly one non-null cell per column, but they are not
+shown: not drawn, not placed, not focusable, absent from the accessibility tree, and they widen no column. Their values
+are ignored, not required to be empty; a document leaves them empty anyway, because a client that does not know spans
+draws them. A spanning cell whose own `visible` is false is hidden, and its covered cells stay covered and blank: the
+span is a property of the row, not of the cell.
+
+**The mount resolves the requested spans.** Three pieces of the mount do it:
+
+- `mountRows` takes an *after-reconcile* callback, which the rows Effect runs, untracked, after `reconcile` has brought
+  the rows into the snapshot's order. It receives the realized rows in order. The per-row `RowHook` is not used for
+  this: it fires in the middle of a reconcile, while the list is half updated.
+- Per-table *span state* holds each realized key's requested spans and whether it is a heading, and the effective
+  spans last sent to the widget for each row.
+- A row's `spans` binding, in the row's scope, stores the request in that state. During a reconcile it only marks the
+  state dirty; outside one (a row's `spans` changing on its own) it resolves at once.
+- The sort is read by the rows Effect itself, not by an Effect of its own, so two Effects cannot resolve against either
+  order. Whether the sort is engaged and the rows' order come from the same pass when the rows source reorders in the
+  batch that sets the sort (a local sort). A sort bound to state that drives a server query does not: clearing it
+  re-runs the Effect while the rows are still in the sorted order, and the resolve can report one spurious
+  `kRowSpanOverrun` until the rows arrive.
+
+The resolve walks the rows top to bottom, one column at a time, and diffs the result against what was last sent:
+`TableWidget::setRowSpans` is called for each row whose effective spans changed, the last call for a row with an empty
+list, and never for a row that has never had one. A row that was removed needs no call. It resolves after the rows
+Effect's reconcile and after a change of one row's `spans`, so a backend can see an inconsistent span, for the
+duration of one change (the last covered row removed, the rows moved under an unchanged span). Hence the backends'
+tolerance below. A requested span is refused, and its cell draws in its own row alone, when:
+
+- its `column` is not a column of the table, or its `rows` is 0 (`rows` of 1 is valid and covers nothing);
+- the row is a heading row;
+- it runs past the last row the mount holds (a table paged by the document holds one page, so a span across a page
+  boundary runs past the last row), or over a heading row;
+- the row's column is covered by an earlier row's effective span, whether or not this row has a span of its own
+  there; the earlier span wins, so the later one never overlaps it;
+- the row repeats a column its earlier `RowSpan` already named (the first wins).
+
+Only the bad span is refused; the row's other spans and every other row's stay. Each refusal is reported, not ignored:
+`detail::site::kRowSpanInvalid` for an unknown column, a `rows` of 0, a heading row's span and a repeated column,
+`kRowSpanOverrun` for a span that runs past the last row or over a heading, and `kRowSpanOverlap` for a covered
+column. A refusal is reported once per table for as long as the set of refused spans is the same, and again when the
+set changes. A site is a bare string: the mount's reports carry no path, so an author looks at the rows' order.
+
+Two conditions draw no spans at all. While the table's `sort` is engaged, the spans are not drawn and nothing is
+reported, since a sort moves the rows apart and a header click is the user's doing; they return when the sort is
+cleared. The sort counts only where the mount wires it, on a table with a sortable column (`setSort` is told it only
+then), so a table with a `sort` and no sortable column keeps its spans; and a sort the interpreter cannot compare
+still counts as engaged while the rows keep their order. And while the table is above its virtualization threshold,
+where a row's widget may be released while the rows it covers are still shown, spans are refused, and
+`kRowSpanVirtualized` is reported once per table, only when some row requests a span of two or more rows.
+
+**What the backends do** with a row's effective spans, `setRowSpans(row, spans)` (see
+[`backend_contract.md`](backend_contract.md)). A backend derives which cells are covered from the current order of the
+rows and their spans, at layout or paint time and never when `setRowSpans` is called, so a move of rows under an
+unchanged span, which sends nothing, is followed. It clips a span that runs past its last row or onto a heading row
+rather than trusting it. Then:
+
+- The spanning cell is laid out as a cell of its column and row, for the width of the column, and its height is the
+  height of the rows it covers plus the gaps between them. The spanning cell is left out of its origin row's height:
+  a row's height is that of its tallest cell that covers only that row. When a spanning cell is taller than the rows
+  it covers together, the shortfall is added to the last of them. That is computed for the table, as a cross-row
+  value, not by the row. The cell is placed down the height by its column's `valign`. Its width counts toward its
+  column's content width as any cell's does.
+- A spanning cell takes the look of its origin row over its whole height: tone, stripe (`alternate`), selection,
+  hover and focus, on an opaque surface, with the row rule between the covered rows not drawn through it. A covered
+  row draws its own look in its other columns; a covered row that is selected while its origin row is not shows the
+  origin row's unselected look in the spanned column, and a covered row's focus ring is partly under the spanning
+  cell. Both are intended.
+- Rows stay rows. A click, a double click, a tap, hover or Enter on the spanning cell, wherever on its height, acts
+  on its origin row; the same on any other cell of a covered row acts on that row. Selection, the current row, a
+  range and Ctrl+A count each row as before, and a covered row's key is reported as its own.
+- The accessible name of a row (`label`) is the row's alone. The spanning cell is the origin row's, and a covered
+  row's reading leaves it out; a document that needs its text in each row's reading says so in `rowLabel`.
 
 ## Controlled inputs
 

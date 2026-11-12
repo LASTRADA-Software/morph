@@ -9,6 +9,13 @@ import QtQuick.Layouts
 // selects the range from the anchor, and each makes it the table's current row; a double click or Enter activates
 // it. C++ calls `place` again whenever a cell's implicit size changes. A heading row has one cell across every column
 // and the select column, takes no click or key, and is never the table's current row.
+//
+// A cell that spans (`spanPlan`, written by C++) covers the rows below its own. It stays a cell of this row, left out
+// of the row's height, and is placed down the `spanBlocks` height the table gives it; the row is drawn above the rows
+// it covers (C++ sets `z`), and under the cell sits a `spanBackdrop` in the column: an opaque surface with this row's
+// background, the look of the row over the whole block, and a tap handler of its own, since the block lies outside
+// the row's bounds, which the row's handlers would not reach. Hover is the row's own: its `containmentMask` takes in
+// the blocks. A row ignores a tap in a spanning or covered column: the backdrop took it.
 MorphWidget {
     id: root
 
@@ -41,10 +48,65 @@ MorphWidget {
     // Whether the row is a group heading; C++ sets it once, right after the row's key.
     property bool heading: false
     readonly property Item backgroundItem: backgroundLoader.item as Item
+    // The cells that span, C++'s resolve of the row's spans: [{column, rows}], and the columns of this row that a
+    // span above covers: [column]. The table gives each spanning column the block it covers: [{column, height}], and
+    // this row the lines a spanning cell adds to it as the last row it covers.
+    property var spanPlan: []
+    property var coveredColumns: []
+    property var spanBlocks: []
+    property real spanExtra: 0
+    // The height of the row's own cells and background, without what a spanning cell adds.
+    readonly property real ownHeight: Math.max(cells.implicitHeight,
+                                               root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
+
+    // Whether column `index` is one this row's spanning cells or a span above it cover.
+    function spanned(index: int): bool {
+        if (root.coveredColumns.indexOf(index) >= 0)
+            return true
+        for (const span of root.spanPlan) {
+            if (span.column === index)
+                return true
+        }
+        return false
+    }
+
+    // The left edge of column `index`, from the row's start.
+    function columnLeft(index: int): real {
+        let left = root.table ? root.table.lead : 0
+        for (let i = 0; i < index && i < root.widths.length; ++i)
+            left += root.widths[i]
+        return left
+    }
+
+    // The height of the block the spanning cell of column `index` covers: the table's, else the row's own.
+    function blockHeight(index: int): real {
+        for (const block of root.spanBlocks) {
+            if (block.column === index)
+                return block.height
+        }
+        return root.height
+    }
+
+    // Whether a point in the row's coordinates lies in a spanning or covered column.
+    function inSpannedColumn(x: real): bool {
+        for (let i = 0; i < root.widths.length; ++i) {
+            if (root.spanned(i) && x >= root.columnLeft(i) && x < root.columnLeft(i) + root.widths[i])
+                return true
+        }
+        return false
+    }
 
     function holdsFocus(focused: Item): bool {
         for (let at = focused; at; at = at.parent) {
             if (at === root)
+                return true
+        }
+        return false
+    }
+
+    function isSpanning(index: int): bool {
+        for (const span of root.spanPlan) {
+            if (span.column === index)
                 return true
         }
         return false
@@ -146,17 +208,21 @@ MorphWidget {
             if (cell.tabularFigures !== undefined)
                 cell.tabularFigures = across === 3
             x += w
-            tallest = Math.max(tallest, cell.implicitHeight)
+            if (!root.isSpanning(i))
+                tallest = Math.max(tallest, cell.implicitHeight)
         }
         cells.implicitWidth = x
         cells.implicitHeight = tallest + 2 * insetY
-        const rowHeight = Math.max(tallest + 2 * insetY, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
+        const rowHeight = Math.max(root.ownHeight, tallest + 2 * insetY) + root.spanExtra
         const room = rowHeight - 2 * insetY
         for (let i = 0; i < cells.children.length; ++i) {
             const cell = cells.children[i]
             const down = i < root.columns.length ? root.columns[i].valign : 2
-            cell.height = down === 0 ? room : Math.min(cell.implicitHeight, tallest)
-            const spare = room - cell.height
+            // A spanning cell is placed down the block it covers, and sits at the row's top edge.
+            const spanning = root.isSpanning(i)
+            const space = spanning ? root.blockHeight(i) - 2 * insetY : room
+            cell.height = down === 0 ? space : Math.min(cell.implicitHeight, spanning ? space : tallest)
+            const spare = space - cell.height
             cell.y = insetY + (down === 3 ? spare : down === 2 ? Math.floor(spare / 2) : 0)
         }
     }
@@ -172,6 +238,9 @@ MorphWidget {
     }
     onWidthsChanged: place()
     onHeadingChanged: place()
+    onSpanPlanChanged: place()
+    onSpanBlocksChanged: place()
+    onSpanExtraChanged: place()
     onColumnsChanged: place()
     onBackgroundItemChanged: place()
     // The row is as tall as its background asks when that is more than the cells, and they centre in that height.
@@ -184,7 +253,12 @@ MorphWidget {
     Layout.fillWidth: true
     implicitWidth: cells.implicitWidth
     // The cells' height, or the background's when it asks for more: the stock one is a dense row.
-    implicitHeight: Math.max(cells.implicitHeight, root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
+    implicitHeight: root.ownHeight + root.spanExtra
+    // The table works out the blocks and the lines a spanning cell adds from the rows' heights.
+    onOwnHeightChanged: {
+        if (root.table)
+            root.table.scheduleSpans()
+    }
     Accessible.role: Accessible.Row
     Accessible.selected: selected
 
@@ -252,6 +326,89 @@ MorphWidget {
         id: rowHover
     }
 
+    // Hover is delivered only to an item whose bounds hold the pointer, so the part of a spanning cell below the row
+    // is part of the row for it: the row's own rectangle and the blocks of its spanning cells.
+    containmentMask: QtObject {
+        function contains(point: point): bool {
+            if (point.x >= 0 && point.x < root.width && point.y >= 0 && point.y < root.height)
+                return true
+            for (const span of root.spanPlan) {
+                const left = root.columnLeft(span.column)
+                if (span.column < root.widths.length && point.x >= left && point.x < left + root.widths[span.column] &&
+                        point.y >= 0 && point.y < root.blockHeight(span.column))
+                    return true
+            }
+            return false
+        }
+    }
+
+    Repeater {
+        model: root.spanPlan
+        delegate: Item {
+            id: backdrop
+            required property var modelData
+            objectName: "spanBackdrop"
+            x: root.columnLeft(modelData.column)
+            y: 0
+            width: modelData.column < root.widths.length ? root.widths[modelData.column] : 0
+            height: root.blockHeight(modelData.column)
+            clip: true
+            Rectangle {
+                anchors.fill: parent
+                color: root.scheme.surface
+            }
+            // This row's background laid out as wide as the row and cut to the column, so the row's own marks (the
+            // selection's bar at the leading edge) fall where they do on the row.
+            Loader {
+                id: spanLoader
+                x: -backdrop.x
+                width: root.width
+                height: backdrop.height
+                sourceComponent: root.background
+            }
+            Binding {
+                target: spanLoader.item
+                property: "selected"
+                value: root.selected
+            }
+            Binding {
+                target: spanLoader.item
+                property: "hovered"
+                value: root.hovered
+            }
+            Binding {
+                target: spanLoader.item
+                property: "current"
+                value: root.current
+            }
+            Binding {
+                target: spanLoader.item
+                property: "alternate"
+                value: root.alternate
+            }
+            Binding {
+                target: spanLoader.item
+                property: "tone"
+                value: root.tone
+            }
+            Binding {
+                target: spanLoader.item
+                property: "scheme"
+                value: root.scheme
+            }
+            Binding {
+                target: spanLoader.item
+                property: "selectColumn"
+                value: root.table ? root.table.selectColumn : false
+                when: spanLoader.item !== null && ("selectColumn" in spanLoader.item)
+            }
+            TapHandler {
+                onTapped: root.tapped(point.modifiers, tapCount, point.position.x + backdrop.x,
+                                      point.position.y, false)
+            }
+        }
+    }
+
     Item {
         id: cells
         anchors.fill: parent
@@ -285,26 +442,35 @@ MorphWidget {
         Accessible.name: root.accessibleName
     }
 
+    // A click, as the row takes it: by the row's own handler, or by a spanning cell's backdrop, which passes its point
+    // in the row's coordinates (a point past the row's bottom).
+    function tapped(modifiers: int, tapCount: int, x: real, y: real, fromRow: bool) {
+        if (root.heading)
+            return
+        // The backdrop takes a tap in a spanning or covered column; the row's own handler leaves it.
+        if (fromRow && root.inSpannedColumn(x))
+            return
+        const held = modifiers & (Qt.ControlModifier | Qt.ShiftModifier)
+        // Only plain clicks make a double click, so two quick Ctrl-clicks toggle a row twice.
+        if (tapCount >= 2 && held === Qt.NoModifier) {
+            root.fire("activate", undefined)
+            return
+        }
+        // A click on the select box is the box's own.
+        if (fromRow && selectBox.visible && selectBox.contains(selectBox.mapFromItem(root, Qt.point(x, y))))
+            return
+        // The row takes the focus unless a control in one of its cells took it with the press.
+        if (!root.holdsFocus(root.Window.activeFocusItem))
+            root.forceActiveFocus(Qt.MouseFocusReason)
+        root.fire("tap", {
+            "ctrl": (modifiers & Qt.ControlModifier) !== 0,
+            "shift": (modifiers & Qt.ShiftModifier) !== 0
+        })
+    }
+
     TapHandler {
         id: tap
         enabled: !root.heading
-        onTapped: {
-            const held = tap.point.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)
-            // Only plain clicks make a double click, so two quick Ctrl-clicks toggle a row twice.
-            if (tap.tapCount >= 2 && held === Qt.NoModifier) {
-                root.fire("activate", undefined)
-                return
-            }
-            // A click on the select box is the box's own.
-            if (selectBox.visible && selectBox.contains(selectBox.mapFromItem(root, tap.point.position)))
-                return
-            // The row takes the focus unless a control in one of its cells took it with the press.
-            if (!root.holdsFocus(root.Window.activeFocusItem))
-                root.forceActiveFocus(Qt.MouseFocusReason)
-            root.fire("tap", {
-                "ctrl": (tap.point.modifiers & Qt.ControlModifier) !== 0,
-                "shift": (tap.point.modifiers & Qt.ShiftModifier) !== 0
-            })
-        }
+        onTapped: root.tapped(tap.point.modifiers, tap.tapCount, tap.point.position.x, tap.point.position.y, true)
     }
 }
