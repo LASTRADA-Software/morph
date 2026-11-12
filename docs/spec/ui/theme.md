@@ -272,7 +272,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 marked point read their tone's colour (`muted` for neutral). Each default holds 3:1 against `color.surface` and
 `color.background` (WCAG 1.4.11): 5.19, 4.60, 4.94 and 5.02:1 on white. No four colours stay apart from the four
 tone colours under colour-vision deficiency, so a chart never tells series apart by colour alone: each also has its
-own marker shape, a marked point a cross no series uses, and a clipped point an open triangle. A dark theme sets its
+own marker shape (a `Bars` series its place in the bar group, in the legend's order), a marked point a cross no series uses, and a clipped point an open triangle. A dark theme sets its
 own four, as it sets every colour.
 
 **Touch targets follow the width class.** While the window's width class is `compact`, the backend sets

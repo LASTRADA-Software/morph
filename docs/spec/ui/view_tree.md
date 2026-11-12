@@ -186,17 +186,42 @@ Everything in it is computed before the backend sees it ([`interpreter.md`](inte
 
 | Field | Meaning |
 |---|---|
-| `xMin`, `xMax`, `yMin`, `yMax` | The plotted range of each axis, padding included |
+| `xMin`, `xMax`, `yMin`, `yMax` | The plotted range of each axis, padding included; with a `Bars` series, `xMin`/`xMax` also hold half a bar slot beyond the outermost position and `yMin`/`yMax` hold the baseline |
+| `barSlot` | The width, in `x` units, of the room one position gives its bars (the smallest distance between two positions that carry a bar, or 1 for one position or none); 0 when no series is `Bars` |
 | `yLabel` | The value axis's unit or name; empty for none |
 | `yTicks` | `ChartTick{value, text}`s labelling the value axis; empty when three or more reference lines label it |
 | `lines` | `ChartLine{value, label, tone, style}`: a horizontal reference line in its `Tone`'s colour, `ChartLineStyle{Solid, Dashed, Dotted}` |
-| `series` | `ChartSeries{label, joined, points}`, at most four, in drawing order; `label` names it in the legend |
+| `series` | `ChartSeries{label, joined, style, points}`, at most four, in drawing order; `label` names it in the legend; `style` is `ChartStyle{Line, Bars}`, `Line` by default; `joined` is false for a `Bars` series and a backend reads it for a `Line` series only |
 | `series[].points` | `ChartPoint{x, y, clip, xLabel, tone, note}`: `x` is an index, a number or an instant's milliseconds since the epoch; `y` empty is a gap no line joins across; `clip` (`ChartClip{None, Below, Above}`) marks a value beyond an axis end the document fixed, and `y` is then that end; `tone` engaged marks the point; `note` is text beside it |
 | `summary` | The text alternative: the accessible description, and what a probe reads as the chart's text |
 
 A series is told apart by its shape as well as its colour (`color.chart.1` to `.4`, [`theme.md`](theme.md)), a
 marked point by a shape no series uses, and a clipped point by an open triangle at the edge, so nothing a chart
 says rests on colour alone.
+
+**Bars.** A `Bars` series draws, at each position that has a value, a rectangle from the baseline to the value
+instead of a point and a joining line. The baseline is 0 clamped into the value axis, so a document that fixes
+`yMin` above 0 grows its bars from the bottom edge and one that fixes `yMax` below 0 hangs them from the top edge.
+A negative value hangs below the baseline. A value beyond a fixed end is clipped as a point is: the bar reaches the
+end, with the open triangle just beyond its tip, and a `tone` marks its bar in that tone's colour with the cross just
+beyond its tip.
+
+- **A group.** The `Bars` series of a chart, *n* of them in series order, stand side by side at every position, each
+  `0.8 × barSlot / n` wide, touching one another, left to right in series order, the group centred on the position
+  and a gap of `0.2 × barSlot` between two groups at the nearest positions. A position at which a series has no
+  value (a gap, a `null` `y`, or no point at all) leaves that series' place in the group empty, so a series' bars
+  keep their place from one position to the next and the other series' bars do not widen to fill it. A `Line`
+  series takes no place in a group.
+- **Mixing.** `Line` and `Bars` series share the axes. Bars are drawn first, then reference lines, then the lines
+  and points of the `Line` series over them, so a point is never hidden by a bar. Only positions of `Bars` series
+  set the bar slot, and only `Bars` series count towards *n*. A `Line` series' points keep their exact positions,
+  never moved to a group's centre or a bar's place.
+- **Telling bars apart.** A series' bar is told apart from the others by its place in the group, which is the order
+  of the legend, as well as by `color.chart.1` to `.4`; the legend marks a `Bars` series with a filled square.
+- **Axis labels.** A point's `xLabel` is drawn under the centre of its group, as under a point.
+
+A client older than this vocabulary ignores the `style` key and draws the series as a joined line, so a document that
+may reach one gives the chart a `summary` that carries the values.
 
 The builder for a Switch is `switchOf` because `switch` is a keyword. `switchOn<E>(selector, cases,
 fallback)` is the enumeration form: `selector` is a `std::function<E()>`, `cases` pairs enumerators
@@ -571,7 +596,7 @@ rows appear at the next change of the rows.
 
 ## Out of scope
 
-Not in the palette: themes beyond `TextRole`, images, charts other than points against a numeric axis (bars,
-histograms, areas, pies), chart interaction, and translation catalogues — a
+Not in the palette: themes beyond `TextRole`, images, charts other than points and bars against a numeric axis (histograms,
+areas, pies, stacked bars), chart interaction, and translation catalogues — a
 binding produces translated text. The document's further kinds and properties join with the
 interpreter ([The palette](#the-palette)).
