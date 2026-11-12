@@ -453,7 +453,7 @@ void paintLabelledSteps(::core::tui::Canvas& canvas, std::vector<ui::Step> const
         auto const& style = stepStyle(theme, step.state, current == index);
         auto const row = static_cast<int>(index);
         canvas.putString(row, 0, std::string{mark} + step.label, style);
-        // The detail is dropped, whole, from a row too narrow for it; the label is cut by the canvas as before.
+        // The detail is dropped, whole, from a row too narrow for it; the canvas cuts the label.
         int const labelEnd = 4 + displayWidth(step.label);
         if (detailWidth(step) > 0 && labelEnd + detailWidth(step) <= canvas.width()) {
             canvas.putString(row, labelEnd, " [" + step.detail + "]", theme.textMuted);

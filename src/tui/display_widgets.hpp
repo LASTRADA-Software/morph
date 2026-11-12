@@ -151,7 +151,8 @@ private:
 };
 
 /// Steps: one row per step, its state as `[ ]` pending, `[>]` active, `[x]` done or `[!]` failed, the current one
-/// accented; a step's detail follows its label in brackets, muted, and is left out of a row too narrow for it. Unlabelled, the marks sit in one row joined by `─` that fills the width.
+/// accented; a step's detail follows its label in brackets, muted, and is left out of a row too narrow for it.
+/// Unlabelled, the marks sit in one row joined by `─` that fills the width.
 class StepsImpl final : public TuiWidget<ui::StepsWidget> {
 public:
     explicit StepsImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
