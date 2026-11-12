@@ -648,3 +648,20 @@ TEST_CASE("invoice posting: a foreign gross too large to convert exactly is refu
     CHECK(lims::findInvoiceRecord(invoiceId).value_or(lims::db::InvoiceRecord{}).state.Value() ==
           static_cast<int>(lims::InvoiceState::Draft));
 }
+
+// Mutation: delete the settings lookup of PostInvoice (the entry is built with no accounts).
+TEST_CASE("invoice posting: an approved invoice is not posted in a company with no billing settings",
+          "[lims][billing][posting]") {
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::Dispatched};
+    auto const invoice = lims::test::approvedInvoice();
+    {
+        Lightweight::SqlStatement statement;
+        (void)statement.ExecuteDirect("DELETE FROM billing_settings");
+    }
+    CHECK_THROWS_WITH(posting.post(invoice), Catch::Matchers::ContainsSubstring("has no billing settings"));
+    CHECK(entries().empty());
+}

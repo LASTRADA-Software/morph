@@ -7,6 +7,7 @@
 #include <Lightweight/SqlConnection.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <glaze/glaze.hpp>
@@ -481,9 +482,12 @@ TEST_CASE("invoice lease: a handler holding no invoice releases nothing, and a r
 }
 
 // Mutation: compare only the token when deciding whether a lease moved on (a write that fails after another editor
-// renewed the lease it read is rethrown as the raw database error instead of reported as a Conflict).
-TEST_CASE("invoice lease: a failed write after the lease it read was renewed is a Conflict",
-          "[lims][billing][lease]") {
+// renewed the lease it read is rethrown as the raw database error instead of reported as a Conflict). The write fails
+// before it matches a row, by naming a column that is gone for the length of its transaction, so the lease row it
+// read is still the one it would have updated unless the other editor's renewal changed it.
+TEST_CASE(
+    "invoice lease: a failed write after the lease it read was renewed is a Conflict, and one that was not is not",
+    "[lims][billing][lease]") {
     lims::test::LabFixture const fixture;
     auto const invoice = draft();
     lims::InvoiceEditModel first;
@@ -492,26 +496,43 @@ TEST_CASE("invoice lease: a failed write after the lease it read was renewed is 
         ScopedPrincipal const alice{"alice"};
         first.execute(lims::LeaseInvoice{.invoiceId = invoice.id});
     }
-    // The lease lapsed at 09:15. Bob reads it at 10:00; before he writes, the row's expiry moves (the holder's own
-    // renewal, committed on another connection) and his write then fails.
+    bool const renewed = GENERATE(true, false);
+    CAPTURE(renewed);
     FaultHookGuard const guard;
-    lims::setFaultHook([](std::string_view point, Lightweight::SqlConnection& connection) {
+    lims::setFaultHook([renewed](std::string_view point, Lightweight::SqlConnection& connection) {
         if (point == "invoice.beforeLeaseWrite") {
-            {
+            if (renewed) {
                 Lightweight::SqlConnection other;
                 Lightweight::SqlStatement statement{other};
                 (void)statement.ExecuteDirect("UPDATE billing_invoice_leases SET expires_at = expires_at + 1");
             }
             Lightweight::SqlStatement statement{connection};
-            (void)statement.ExecuteDirect(
-                "CREATE TRIGGER poison_lease BEFORE UPDATE ON billing_invoice_leases BEGIN "
-                "SELECT RAISE(ABORT, 'CHECK constraint failed: poison'); END");
+            (void)statement.ExecuteDirect("ALTER TABLE billing_invoice_leases RENAME COLUMN holder TO holder_gone");
         }
     });
+    // The lease lapsed at 09:15; bob reads it at 10:00.
     ScopedClockOverride const ten{lims::test::at(2026, 11, 10, 10)};
     ScopedPrincipal const bob{"bob"};
     lims::InvoiceEditModel second;
-    CHECK_THROWS_AS(second.execute(lims::LeaseInvoice{.invoiceId = invoice.id}), lims::Conflict);
+    if (renewed) {
+        CHECK_THROWS_AS(second.execute(lims::LeaseInvoice{.invoiceId = invoice.id}), lims::Conflict);
+    } else {
+        CHECK_THROWS_AS(second.execute(lims::LeaseInvoice{.invoiceId = invoice.id}), Lightweight::SqlException);
+    }
+}
+
+// Mutation: delete the settings lookup of RemoveInvoiceLine (the totals are computed with no tax rate).
+TEST_CASE("invoice lease: a removal in a company with no billing settings is refused", "[lims][billing][lease]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = draft();
+    lims::InvoiceEditModel editor;
+    ScopedPrincipal const alice{"alice"};
+    editor.execute(lims::LeaseInvoice{.invoiceId = invoice.id});
+    {
+        Lightweight::SqlStatement statement;
+        (void)statement.ExecuteDirect("DELETE FROM billing_settings");
+    }
+    CHECK_THROWS_AS(editor.execute(lims::RemoveInvoiceLine{.line = invoice.lines.front().id}), lims::NotFound);
 }
 
 // Mutation: let ~InvoiceEditModel throw what its release throws (the process terminates).

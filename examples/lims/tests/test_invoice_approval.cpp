@@ -512,3 +512,15 @@ TEST_CASE("invoice approval: an invoice with no company-currency value is left o
     ScopedPrincipal const carl{"carl"};
     CHECK(invoices.execute(lims::ListPendingApprovals{}).invoices.empty());
 }
+
+// Mutation: delete the settings lookup of SubmitInvoice (the deadline is computed from no approval hours).
+TEST_CASE("invoice approval: a submission in a company with no billing settings is refused",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    execute("DELETE FROM billing_settings");
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 10)};
+    CHECK_THROWS_AS(lims::test::dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = invoice.id}),
+                    lims::NotFound);
+    CHECK(read(invoice.id).state == lims::InvoiceState::Draft);
+}

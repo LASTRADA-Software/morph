@@ -1156,3 +1156,28 @@ TEST_CASE("ledger reports: two closed periods are each reported from their froze
     CHECK(*report.totalDebit == Rational{12000, DecimalPlaces{2}});
     CHECK(*report.totalCredit == Rational{110, DecimalPlaces{2}});
 }
+
+// Mutation: read a stored line side that is neither debit nor credit as a credit (a corrupted row changes a report's
+// totals instead of being refused).
+TEST_CASE("ledger reports: a stored line with a side out of range is refused by every report",
+          "[lims][ledger][reports]") {
+    DbFixture fixture;
+    books();
+    post("a", units(100));
+    {
+        Lightweight::DataMapper mapper;
+        auto lines = mapper.Query<lims::db::EntryLineRecord>().All();
+        REQUIRE_FALSE(lines.empty());
+        lines.front().side = 7;
+        mapper.Update(lines.front());
+    }
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerReportModel reports;
+    CHECK_THROWS_AS(reports.execute(lims::TrialBalance{.company = lims::test::seededCompany(), .asOf = november(30)}),
+                    lims::ValidationError);
+    CHECK_THROWS_AS(reports.execute(lims::AccountLedger{.company = lims::test::seededCompany(),
+                                                        .accountCode = "1200",
+                                                        .from = morph::time::Timestamp{lims::test::at(2026, 11, 1, 0)},
+                                                        .to = november(30)}),
+                    lims::ValidationError);
+}

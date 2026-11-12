@@ -659,7 +659,7 @@ mounts every screen on Qt Quick offscreen. `morph_examples_client --app lims` ru
 process over a local database (`--db`, default `lims.db`).
 
 
-### 20. Model coverage is 94.80%, and measuring it found a real defect (§ coverage gate)
+### 20. Model coverage is 96.43%, and measuring it found a real defect (§ coverage gate)
 
 `codecov.yml` has one component per module (`lims_lab`, `lims_org`, `lims_ledger`, `lims_billing`), each scoped to that
 module's model paths (`examples/lims/<m>/src/models/**` and `examples/lims/<m>/include/lims/<m>/models/**`) — the paths
@@ -668,48 +668,53 @@ that lab and org keep the stricter bar they measure. Inventory is Part C's and j
 has no model.
 
 Measured the way CI measures: the `clang-coverage` preset configured with `MORPH_LADDER_RUNGS=lims` (CI passes `all`;
-the other rungs' binaries execute none of these sources), the whole tree built, `ctest --preset clang-coverage -LE
-stress` over every test (5121 passed, 453 of them `ladder-lims`), then `scripts/coverage.sh`, which reports over all
-fifteen binaries in `coverage_objects.txt`. The line counts are llvm-cov's; the branch counts are llvm-cov's per
-instantiation, so they are higher than the aggregated figure the branch gate reports.
+the other rungs' binaries execute none of these sources), the whole tree built, every test but the stress cases run
+(`ctest --preset clang-coverage -LE stress`, 5149 passed, 481 of them `ladder-lims`, with `LLVM_PROFILE_FILE=%p.profraw`
+so that each test process writes a profile of its own), then `scripts/coverage.sh`, which reports over all fifteen
+binaries in `coverage_objects.txt`. The line counts are llvm-cov's; the branch counts are llvm-cov's per instantiation,
+so they are higher than the aggregated figure the branch gate reports.
 
 | Module | Lines | Branches | Target |
 |---|---|---|---|
-| lab | 1257/1299 = 96.77% | 321/354 | 96% |
+| lab | 1270/1299 = 97.77% | 329/354 | 97% |
 | org | 576/591 = 97.46% | 192/216 | 97% |
-| ledger | 1086/1149 = 94.52% | 284/332 | 94% |
-| billing | 1623/1752 = 92.64% | 376/466 | 92% |
-| the four | 4542/4791 = 94.80% | 1173/1368 | |
+| ledger | 1106/1149 = 96.26% | 293/332 | 96% |
+| billing | 1668/1752 = 95.21% | 398/466 | 95% |
+| the four | 4620/4791 = 96.43% | 1212/1368 | |
 
-llvm-cov warns `10015 functions have mismatched data` over the merged profile. That is a property of merging the
-profiles of fifteen binaries, which instantiate the same inline and template functions with different counter layouts;
-llvm-cov leaves such a function out of its totals. It does not touch these sources: a profile written by
-`ladder_lims_tests` and `ladder_lims_screen_tests` alone, each running one test, loads with no warning, and its line
-and function counts for all seventeen model files equal the merged run's, file for file. The profile set was empty
-before the build, so no stale profile is in the merge.
+llvm-cov warns `10015 functions have mismatched data` over the merged profile. The cause is inferred, not shown: the
+warning is the one llvm-cov gives when functions from different binaries carry different counter layouts, which fits
+fifteen binaries that instantiate the same inline and template functions differently; llvm-cov does not name the
+functions, and none was identified. A control argues that no model function is among them: a profile written by
+`ladder_lims_tests` and `ladder_lims_screen_tests` alone, each running one test, loads with no warning, and the
+*totals* of instrumented lines and functions for all seventeen model files equal the merged run's, file for file. Equal
+totals show that no model function is missing from the report. They do not show that no binary's counts for a model
+function were discarded, which could only lower a figure. The control was run on the earlier revision and not repeated;
+the warning count is the same 10015 on this one. The profile set was empty before the tests ran, so no stale profile is
+in the merge.
 
-The 249 uncovered lines, by file. Where a line is called unreachable, that is judged by reading the code, not shown by a
-test. Four things recur. The dispatch path (`bridge.hpp`) refuses an action whose `validate()` is false before the
-handler runs, so a handler's own `validate()` arm runs only when `execute` is called directly. An action whose scope
-comes from an id (`Authorization<...>::scopeOf`) maps an id with no row to an empty company, which the guard refuses
-before the handler runs (checked by a test for `SetPrice` on an unknown list); the handler's not-found arm behind it
-is a second line of defence. A stored enumerator or currency outside its range needs a corrupted row. An `isBusy` arm
-needs a second writer holding SQLite's lock, and a `throw;` rethrows a database error that is not the conflict being
-handled.
+The 171 uncovered lines, by file. Every one of them is listed with the reason a call to the model cannot reach it, and
+no line is left that an action or a direct handler call reaches against rows the model itself wrote: each place that was recorded as reachable has a
+test that asserts its behaviour, and the three guards that carry money or dates (a foreign gross too large to convert, a
+foreign invoice posted on a date with no rate, a December period's end) were each shown to fail their test under a
+mutation of the guarded line. Where a line is called unreachable, that is judged by reading the code, not shown by a
+test. Five things recur. The dispatch path (`bridge.hpp`) refuses an action whose `validate()` is false before the
+handler runs, so a handler's own `validate()` arm is driven by calling `execute` directly, which the suite does; an arm
+listed here is one that no such call can reach. An action whose scope comes from an id (`Authorization<...>::scopeOf`)
+maps an id with no row to an empty company, which the guard refuses before the handler runs (checked by a test for
+`SetPrice` on an unknown list); the handler's not-found arm behind it is a second line of defence. A stored enumerator
+or currency outside its range needs a row written behind the model. An `isBusy` arm needs a second writer holding
+SQLite's lock, and a `throw;` rethrows a database error that is not the conflict being handled. A "row gone between two
+reads" arm needs a deletion between two statements of one action, and the model has no delete for those rows.
 
 *lab*
 - `analysis_catalog_model.cpp:93-94` malformed-JSON arm of `renderSchemaFor` (its input is `schemaJson<A>()`);
   `:230-231` dangling version (a declared foreign key forbids the row).
-- `sample_entry.cpp:165-166` a stored entry that does not decode: reachable, needs a corrupted row, untested;
-  `:205-206` unknown site and `:213-214`, `:280-281` a sample row gone between two reads; `:218-219` a draft that does
-  not encode; `:263-264` the journal entry for a refused rewrite of a stored sample: reachable, untested; `:273-274`
-  `DeleteSample` on a draft never saved: reachable, untested.
-- `sample_model.cpp:218-219` unknown site (behind the site guard); `:305-306` `ListSamples` plan that does not
-  translate: reachable, untested; `:363-364` scopes of a handler with no draft: reachable, untested; `:602` the
-  `BelowMinimum` label of the capture's constraint switch, which no test enters (only `AboveMaximum` is):
-  reachable, untested; `:612-613` the `default` arm, which `checkValue` has no other kind to reach; `:685-686` an entry
-  action on a handler with no sample: reachable, untested; `:717-718` `alreadyDecided`'s empty-key guard (validation
-  refuses an empty key first); `:862-863`, `:928-929` a conflict or result row gone between reads.
+- `sample_entry.cpp:205-206` unknown site and `:213-214`, `:280-281` a sample row gone between two reads; `:218-219` a
+  draft that does not encode.
+- `sample_model.cpp:218-219` unknown site (behind the site guard); `:612-613` the `default` arm, which `checkValue` has
+  no other kind to reach; `:717-718` `alreadyDecided`'s empty-key guard (validation refuses an empty key first);
+  `:862-863`, `:928-929` a conflict or result row gone between reads.
 
 *org* (`org_model.cpp`)
 - `:263-264`, `:587-588` unknown company, `:334-335` unknown assignment: behind the scope guard.
@@ -717,40 +722,28 @@ handled.
 - `:636-637`, `:647-648` a company row gone between two reads.
 
 *ledger*
-- `ledger_entries.cpp:68-69` the loader's no-row result, and `:85-86`, `:416-417`, `:430-431`, `:460-461`, `:594-595`,
-  `:696-697` its callers' not-found arms (behind the scope guard, or a row gone between reads);
-  `:113-114` a stored state or currency out of range; `:763-771` a busy database on the retry; `:778-779`,
-  `:805-806` validation arms; `:792-793` a posting whose entry is gone.
-- `ledger_model.cpp:44-45` a stored period state out of range; `:61-62` unknown company; `:108-109` validation arm;
-  `:186-187` unknown period (behind the scope guard).
-- `ledger_rates.cpp:39-40` a stored currency out of range; `:127-128` unknown company; `:144` rethrow; `:176-177`
-  validation arm.
-- `ledger_report_model.cpp:88-89` a period that starts in December, carrying into January of the next year:
-  reachable, untested; `:103-104` unknown company; `:186-188`, `:256-258` a stored line side out of range;
-  `:271-275` a busy database and the rethrow.
+- `ledger_entries.cpp:85-86`, `:416-417`, `:430-431`, `:460-461`, `:594-595`, `:696-697` the not-found arms of the
+  loader's callers (behind the scope guard, or a row gone between reads); `:113-114` a stored state or currency out of
+  range; `:763-771` a busy database on the retry.
+- `ledger_model.cpp:44-45` a stored period state out of range; `:61-62` unknown company; `:186-187` unknown period
+  (behind the scope guard).
+- `ledger_rates.cpp:39-40` a stored currency out of range; `:127-128` unknown company; `:144` rethrow.
+- `ledger_report_model.cpp:103-104` unknown company; `:276-280` a busy database and the rethrow.
 
 *billing*
 - `billing_run_model.cpp:76-77`, `:308-309` unknown run (behind the scope guard); `:81-82` stored state out of range;
-  `:159` rethrow; `:300-301`, `:319-320`, `:353-354` validation arms.
-- `invoice_approval.cpp:36-37` unknown invoice; `:105-106` validation arm; `:118-119` unknown company, `:123-124`
-  a company with no billing settings; `:148-149` a gross too large to convert exactly: reachable, untested;
-  `:196-197` the state check the guard already made (the code says so); `:222-223` an empty principal, refused before
-  the handler; `:239-240` an invoice with no company-currency value left out of an approver's inbox: reachable,
-  untested.
+  `:159` rethrow.
+- `invoice_approval.cpp:36-37` unknown invoice; `:118-119` unknown company; `:196-197` the state check the guard
+  already made (the code says so); `:222-223` an empty principal, refused before the handler.
 - `invoice_drafts.cpp:51-56`, `:243-247` stored state or currency out of range; `:115-116` an unbilled line with no
   amount (a corrupted row); `:164-165`, `:199-200` an invoice posted or a number series advanced meanwhile (needs
   a second writer); `:171-172`, `:237-238` unknown invoice; `:176-177` unknown company; `:220-221` empty invoice id.
-- `invoice_edit_model.cpp:60` the lease comparison's second operand, reached only when the token is unchanged and the
-  expiry differs: reachable, untested; `:152-153` the logged failure of releasing a lease: reachable with a failing
-  database, untested; `:229-230` the lease of a handler with no invoice: reachable, untested; `:242-243` validation
-  arm; `:269-270` a company with no billing settings; `:277-278`, `:293-294`, `:317-318` a line or invoice changed
-  meanwhile (needs a second writer); `:281-282` the re-total of an
-  invoice that keeps other lines after one is removed: reachable, untested (the tests remove the only line).
-- `invoice_model.cpp:86-87` unknown line; `:147-149`, `:205-206`, `:233-234`, `:247-248`, `:270-271` validation arms;
-  `:153-154` unknown site, `:208-209` unknown company; `:176` rethrow; `:252-253` an invoice the caller cannot see.
-- `invoice_posting.cpp:30-34`, `:51-55`, `:77-81` a busy database during posting (needs a second writer);
-  `:92-93` validation arm; `:106-107` no ledger wired: reachable, untested; `:122-123` unknown company, `:126-127`
-  no billing settings; `:134-136` no rate on the posting date: reachable, untested.
+- `invoice_edit_model.cpp:277-278`, `:293-294`, `:317-318` a line or invoice changed meanwhile (needs a second
+  writer).
+- `invoice_model.cpp:86-87` unknown line; `:153-154` unknown site, `:208-209` unknown company; `:176` rethrow;
+  `:252-253` an invoice the caller cannot see.
+- `invoice_posting.cpp:30-34`, `:51-55`, `:77-81` a busy database during posting (needs a second writer); `:122-123`
+  unknown company.
 - `price_list_model.cpp:46-47` stored currency out of range; `:129-130` unknown company; `:150`, `:284` rethrows;
   `:427-428`, `:448-449` unknown price list (the second after a re-read); `:527-528` empty company.
 
