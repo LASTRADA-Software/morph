@@ -1,5 +1,7 @@
 {
   "lims.billing.draftFor": "Draft for {$client}",
+  "lims.billing.generic": "This could not be done to the invoice.",
+  "lims.billing.invoiceLeased": "{$holder} is editing this invoice.",
   "lims.status.InvoiceState.Approved": "Approved",
   "lims.status.InvoiceState.Draft": "Draft",
   "lims.status.InvoiceState.Posted": "Posted",

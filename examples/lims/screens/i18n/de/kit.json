@@ -1,10 +1,18 @@
 {
   "lims.credit": "H",
+  "lims.generic": "Das konnte nicht ausgeführt werden.",
   "lims.loading": "Wird geladen…",
   "lims.module.billing": "Fakturierung",
   "lims.module.inventory": "Lager",
   "lims.module.lab": "Labor",
   "lims.module.ledger": "Hauptbuch",
   "lims.module.org": "Organisation",
-  "lims.module.shell": "Start"
+  "lims.module.shell": "Start",
+  "lims.refusal.conflict": "Jemand hat das inzwischen geändert. Bitte neu laden und erneut versuchen.",
+  "lims.refusal.emptyPrincipal": "Sie sind nicht angemeldet. Bitte anmelden und erneut versuchen.",
+  "lims.refusal.forbidden": "Das ist Ihnen hier nicht erlaubt.",
+  "lims.refusal.illegalTransition": "Im aktuellen Zustand ist das nicht möglich.",
+  "lims.refusal.notFound": "Dieser Datensatz ist hier nicht verfügbar.",
+  "lims.refusal.outOfRange": "Ein Betrag ist zu groß, um genau erfasst zu werden.",
+  "lims.refusal.validation": "Einige Eingaben sind ungültig. Bitte prüfen und erneut versuchen."
 }

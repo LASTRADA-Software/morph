@@ -11,6 +11,7 @@
 #include "lims/billing/authorization/billing_authorization.hpp"
 #include "lims/billing/core/fault_hook.hpp"
 #include "lims/billing/core/ledger_port.hpp"
+#include "lims/billing/core/refusal_codes.hpp"
 #include "lims/billing/db/billing_entity.hpp"
 #include "lims/billing/db/billing_store.hpp"
 #include "lims/billing/models/invoice_model.hpp"
@@ -91,7 +92,9 @@ void requireNoOtherEditor(std::int64_t invoiceId) {
     }
     std::string const holder{rows.front().holder.Value().ToStringView()};
     if (holder != ::morph::session::current()->principal) {
-        throw Conflict{"SubmitInvoice: invoice " + std::to_string(invoiceId) + " is being edited by '" + holder + "'"};
+        throw Conflict{std::string{kInvoiceLeasedCode},
+                       {{"holder", OrgModel::displayNameOf(holder)}},
+                       "SubmitInvoice: invoice " + std::to_string(invoiceId) + " is being edited by '" + holder + "'"};
     }
 }
 

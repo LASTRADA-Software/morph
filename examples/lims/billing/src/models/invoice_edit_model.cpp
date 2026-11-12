@@ -19,6 +19,7 @@
 #include "lims/billing/authorization/billing_authorization.hpp"
 #include "lims/billing/core/fault_hook.hpp"
 #include "lims/billing/core/invoice_math.hpp"
+#include "lims/billing/core/refusal_codes.hpp"
 #include "lims/billing/db/billing_entity.hpp"
 #include "lims/billing/db/billing_store.hpp"
 #include "lims/billing/models/price_list_model.hpp"
@@ -188,8 +189,10 @@ InvoiceLeaseView InvoiceEditModel::execute(const LeaseInvoice& action) {
             std::string const holder{row.holder.Value().ToStringView()};
             std::string const holderToken{row.token.Value().ToStringView()};
             if (row.expiresAt.Value() > now && holderToken != _token) {
-                throw Conflict{"LeaseInvoice: invoice " + std::to_string(*action.invoiceId) + " is being edited by '" +
-                               holder + "'"};
+                throw Conflict{std::string{kInvoiceLeasedCode},
+                               {{"holder", OrgModel::displayNameOf(holder)}},
+                               "LeaseInvoice: invoice " + std::to_string(*action.invoiceId) + " is being edited by '" +
+                                   holder + "'"};
             }
             // Conditional on the row as it was read: of two editors taking one lapsed lease, the second finds the
             // token or the expiry changed and changes nothing.

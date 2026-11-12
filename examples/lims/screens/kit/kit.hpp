@@ -194,9 +194,10 @@ template <typename E>
 /// @return The text.
 [[nodiscard]] ui::Handle<std::string> personName(ui::AnyHandle const& users, ui::AnyHandle const& principal);
 
-/// @brief An error banner over @p message, shown only while it is engaged.
-/// @param message The text.
+/// @brief An error banner wording a refused action from the catalogue in the user's locale, shown only while the
+///        refusal is engaged. It never shows the exception's message.
+/// @param refusal A mutation's or a query's `refusal()`.
 /// @return The banner.
-[[nodiscard]] ui::Node errorBanner(ui::AnyHandle const& message);
+[[nodiscard]] ui::Node refusalBanner(ui::AnyHandle const& refusal);
 
 }  // namespace lims::screens::kit

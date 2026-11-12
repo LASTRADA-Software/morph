@@ -19,6 +19,7 @@
 #include "billing_test_support.hpp"
 #include "clock.hpp"
 #include "lims/billing/core/fault_hook.hpp"
+#include "lims/billing/core/refusal_codes.hpp"
 #include "lims/billing/models/invoice_edit_model.hpp"
 #include "lims/billing/models/invoice_model.hpp"
 #include "lims/org/models/org_model.hpp"
@@ -130,6 +131,52 @@ TEST_CASE("invoice lease: a second clerk is told who holds the draft, and takes 
     // Alice's instance still names a lease, but it is bob's now: her edit is refused, not applied.
     ScopedPrincipal const alice{"alice"};
     CHECK_THROWS_AS(aliceEditor.execute(lims::SetInvoiceReference{.reference = "late"}), lims::Conflict);
+}
+
+namespace {
+
+/// @brief The refusal a lease on @p invoice meets.
+/// @param editor The editor instance that leases.
+/// @param invoice The invoice.
+/// @return The refusal, or nothing when the lease was granted.
+[[nodiscard]] std::optional<lims::Conflict> leaseRefusal(lims::InvoiceEditModel& editor, lims::InvoiceId invoice) {
+    try {
+        static_cast<void>(editor.execute(lims::LeaseInvoice{.invoiceId = invoice}));
+    } catch (lims::Conflict const& refusal) {
+        return refusal;
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+// Mutation: pass the holder's principal instead of `OrgModel::displayNameOf` (the second read says "alice").
+TEST_CASE("invoice lease: a refused lease carries its code and the holder's name", "[lims][billing][lease]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = draft();
+    ScopedClockOverride const nine{lims::test::at(2026, 11, 10, 9)};
+    lims::InvoiceEditModel aliceEditor;
+    lims::InvoiceEditModel bobEditor;
+    {
+        ScopedPrincipal const alice{"alice"};
+        static_cast<void>(aliceEditor.execute(lims::LeaseInvoice{.invoiceId = invoice.id}));
+    }
+    auto const holderArg = [&] {
+        ScopedPrincipal const bob{"bob"};
+        auto const refusal = leaseRefusal(bobEditor, invoice.id);
+        REQUIRE(refusal.has_value());
+        CHECK(refusal->code() == lims::kInvoiceLeasedCode);
+        REQUIRE(refusal->args().size() == 1);
+        CHECK(refusal->args().front().name == "holder");
+        return refusal->args().front().value;
+    };
+    CHECK(holderArg() == "alice");
+    {
+        ScopedPrincipal const sam{"sam"};
+        static_cast<void>(
+            lims::OrgModel{}.execute(lims::SetDisplayName{.principal = "alice", .displayName = "Alice Adams"}));
+    }
+    CHECK(holderArg() == "Alice Adams");
 }
 
 // Mutation: leave `expires_at` out of requireOwnLease's renewal (an edit no longer extends the lease).
@@ -385,6 +432,15 @@ TEST_CASE("invoice lease: a draft another clerk is editing is not submitted, the
     }
     CHECK_THROWS_WITH(lims::test::dispatchAs<lims::InvoiceModel>("bob", lims::SubmitInvoice{.invoiceId = invoice.id}),
                       Catch::Matchers::ContainsSubstring("being edited by 'alice'"));
+    try {
+        static_cast<void>(
+            lims::test::dispatchAs<lims::InvoiceModel>("bob", lims::SubmitInvoice{.invoiceId = invoice.id}));
+        FAIL("the submission was not refused");
+    } catch (lims::Conflict const& refusal) {
+        CHECK(refusal.code() == lims::kInvoiceLeasedCode);
+        REQUIRE(refusal.args().size() == 1);
+        CHECK(refusal.args().front().value == "alice");
+    }
     CHECK(lims::test::dispatchAs<lims::InvoiceModel>("alice", lims::SubmitInvoice{.invoiceId = invoice.id}).state ==
           lims::InvoiceState::Submitted);
 }

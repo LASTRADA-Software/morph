@@ -1436,6 +1436,17 @@ names a person carries the name the server resolved (`OrgModel::displayNameOf`).
 which the declared table's role and scope cannot say, so the model checks it and the action is listed as open. A
 person who holds no role anywhere is named by no supervisor, because no company is theirs yet; they name themselves.
 
+### 52. A refusal reaches a screen as a code with its arguments, and the screen words it
+
+Every lims error is a `morph::model::ActionRefusal`: its class gives a default code (`lims.refusal.conflict`, ...) and
+a refusal a screen shows gives a specific one with its arguments (`lims.billing.invoiceLeased`, holder). A person
+named in a refusal is named by the display name the server resolved. The code travels in the `err` envelope beside
+the message; a screen shows `refusalText`, the catalogue's words for the code in the user's locale, or its class's
+sentence, and never the message, which stays what lims logs and its tests read. Every code a module throws is listed
+beside it, and a test holds both catalogues to the list. A refusal that withholds a scope or a record's existence
+(`Forbidden` and `NotFound` from the declared authorization) keeps its class code and carries no argument, so the
+words say no more than the message does.
+
 ### 58. The journal and the trial balance load every row they page or total (hypothesis 10, first instance)
 
 **Hypothesis 10 is confirmed for the journal and the trial balance.** Measured in `tests/test_ledger_scale.cpp` on the
