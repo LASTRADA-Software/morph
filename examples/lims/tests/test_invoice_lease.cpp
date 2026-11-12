@@ -7,6 +7,7 @@
 #include <Lightweight/SqlConnection.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <glaze/glaze.hpp>
@@ -521,4 +522,90 @@ TEST_CASE("invoice lease: an edit of a line of a company the caller cannot see i
     ScopedPrincipal const dave{"dave"};
     lims::InvoiceEditModel editor;
     CHECK_THROWS_AS(editor.execute(lims::RemoveInvoiceLine{.line = invoice.lines.front().id}), lims::NotFound);
+}
+
+// Mutation: delete validate() from RemoveInvoiceLine; answer a release by a handler that holds nothing with a lease.
+TEST_CASE("invoice lease: a handler holding no invoice releases nothing, and a removal names a line",
+          "[lims][billing][lease]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(draft());
+    ScopedPrincipal const alice{"alice"};
+    lims::InvoiceEditModel editor;
+    auto const released = editor.execute(lims::ReleaseInvoice{});
+    CHECK_FALSE(released.invoice.hasValue());
+    CHECK(released.holder.empty());
+    CHECK_THROWS_AS(editor.execute(lims::RemoveInvoiceLine{}), lims::ValidationError);
+}
+
+// Mutation: compare only the token when deciding whether a lease moved on (a write that fails after another editor
+// renewed the lease it read is rethrown as the raw database error instead of reported as a Conflict). The write fails
+// before it matches a row, by naming a column that is gone for the length of its transaction, so the lease row it
+// read is still the one it would have updated unless the other editor's renewal changed it.
+TEST_CASE(
+    "invoice lease: a failed write after the lease it read was renewed is a Conflict, and one that was not is not",
+    "[lims][billing][lease]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = draft();
+    lims::InvoiceEditModel first;
+    {
+        ScopedClockOverride const nine{lims::test::at(2026, 11, 10, 9)};
+        ScopedPrincipal const alice{"alice"};
+        first.execute(lims::LeaseInvoice{.invoiceId = invoice.id});
+    }
+    bool const renewed = GENERATE(true, false);
+    CAPTURE(renewed);
+    FaultHookGuard const guard;
+    lims::setFaultHook([renewed](std::string_view point, Lightweight::SqlConnection& connection) {
+        if (point == "invoice.beforeLeaseWrite") {
+            if (renewed) {
+                Lightweight::SqlConnection other;
+                Lightweight::SqlStatement statement{other};
+                (void)statement.ExecuteDirect("UPDATE billing_invoice_leases SET expires_at = expires_at + 1");
+            }
+            Lightweight::SqlStatement statement{connection};
+            (void)statement.ExecuteDirect("ALTER TABLE billing_invoice_leases RENAME COLUMN holder TO holder_gone");
+        }
+    });
+    // The lease lapsed at 09:15; bob reads it at 10:00.
+    ScopedClockOverride const ten{lims::test::at(2026, 11, 10, 10)};
+    ScopedPrincipal const bob{"bob"};
+    lims::InvoiceEditModel second;
+    if (renewed) {
+        CHECK_THROWS_AS(second.execute(lims::LeaseInvoice{.invoiceId = invoice.id}), lims::Conflict);
+    } else {
+        CHECK_THROWS_AS(second.execute(lims::LeaseInvoice{.invoiceId = invoice.id}), Lightweight::SqlException);
+    }
+}
+
+// Mutation: delete the settings lookup of RemoveInvoiceLine (the totals are computed with no tax rate).
+TEST_CASE("invoice lease: a removal in a company with no billing settings is refused", "[lims][billing][lease]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = draft();
+    lims::InvoiceEditModel editor;
+    ScopedPrincipal const alice{"alice"};
+    editor.execute(lims::LeaseInvoice{.invoiceId = invoice.id});
+    {
+        Lightweight::SqlStatement statement;
+        (void)statement.ExecuteDirect("DELETE FROM billing_settings");
+    }
+    CHECK_THROWS_AS(editor.execute(lims::RemoveInvoiceLine{.line = invoice.lines.front().id}), lims::NotFound);
+}
+
+// Mutation: let ~InvoiceEditModel throw what its release throws (the process terminates).
+TEST_CASE("invoice lease: an editor whose release fails is destroyed without throwing, and its lease stays",
+          "[lims][billing][lease]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = draft();
+    {
+        ScopedPrincipal const alice{"alice"};
+        lims::InvoiceEditModel editor;
+        editor.execute(lims::LeaseInvoice{.invoiceId = invoice.id});
+        Lightweight::SqlStatement statement;
+        (void)statement.ExecuteDirect(
+            "CREATE TRIGGER poison_release BEFORE DELETE ON billing_invoice_leases BEGIN "
+            "SELECT RAISE(ABORT, 'poison'); END");
+    }
+    CHECK(holderOf(invoice.id) == "alice");
+    Lightweight::SqlStatement statement;
+    (void)statement.ExecuteDirect("DROP TRIGGER poison_release");
 }

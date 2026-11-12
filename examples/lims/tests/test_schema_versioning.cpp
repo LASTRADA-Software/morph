@@ -251,6 +251,27 @@ TEST_CASE("A reading outside the served spec range is stored, and flagged", "[li
     CHECK(flagged == 1);
 }
 
+// Mutation: flag only a reading above the maximum (a reading below the minimum is stored unflagged).
+TEST_CASE("A reading below the served spec range is stored, and flagged", "[lims][schema][versioning]") {
+    lims::test::LabFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    lims::AnalysisCatalogModel catalog;
+    lims::SampleModel model;
+
+    const auto v1 = catalog.execute(nitrateV1());  // spec 0..50
+    sampleAtWork(model);
+
+    const auto below = model.execute(
+        lims::CaptureConcentration{.analysisVersionId = v1.versionId, .value = lims::Concentration{exact(-1, 1, 1)}});
+    REQUIRE(below.value.hasValue());
+    CHECK((*below.value).numerator == -1);
+    CHECK(below.outOfSpec);
+
+    const auto inside = model.execute(
+        lims::CaptureConcentration{.analysisVersionId = v1.versionId, .value = lims::Concentration{exact(0, 1, 1)}});
+    CHECK_FALSE(inside.outOfSpec);
+}
+
 TEST_CASE("A qualifier makes no numeric claim, so it is never out of specification", "[lims][schema][versioning]") {
     lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};

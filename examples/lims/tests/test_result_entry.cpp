@@ -635,6 +635,10 @@ TEST_CASE("Listing or capturing against an unattached handler is NotFound", "[li
                         model, lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
                                                           .value = lims::Concentration{exact(12, 5, 3)}}),
                     lims::NotFound);
+    // The handler refuses on its own too, when it is called past the guard.
+    CHECK_THROWS_AS(model.execute(lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
+                                                             .value = lims::Concentration{exact(12, 5, 3)}}),
+                    lims::NotFound);
 }
 
 TEST_CASE("Capturing against an analysis version that does not exist is NotFound", "[lims][result]") {

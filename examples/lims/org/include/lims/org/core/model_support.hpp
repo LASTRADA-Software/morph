@@ -30,8 +30,9 @@ namespace lims {
 /// @brief Whether @p error is SQLite's single writer turning this one away.
 ///
 /// The driver reports SQLite's primary result code as the native code: 5 for busy, 6 for locked. The message is the
-/// fallback for a driver that reports neither, and is limited to those two words: any other failure (a constraint, a
-/// missing table) is a defect and must surface as itself.
+/// fallback for a driver that reports neither: "database is locked", "database table is locked" or the word "busy"
+/// anywhere in it. A failure whose message contains none of these (a constraint, most missing tables) surfaces as
+/// itself; one that merely mentions "busy", such as a missing table of that name, is read as busy.
 /// @param error The failure.
 /// @return `true` when the database was busy or locked.
 [[nodiscard]] inline bool isBusy(::Lightweight::SqlException const& error) {

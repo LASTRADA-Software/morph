@@ -4,6 +4,7 @@
 // company holds at every site of it; roles themselves are not hierarchical (README decision 16).
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -638,4 +639,30 @@ TEST_CASE("org: a supervisor names only people who hold a role in a company they
     CHECK_THROWS_AS(org.execute(lims::SetDisplayName{.principal = "bob", .displayName = "Bob"}), lims::Forbidden);
     CHECK_THROWS_AS(org.execute(lims::SetDisplayName{.principal = "stranger", .displayName = "Stranger"}),
                     lims::Forbidden);
+}
+
+// Mutation: delete the company lookup from CreateSite (a site is written for a company that is not there) or the
+// assignment lookup from RevokeRole (a revoke of nothing answers success).
+TEST_CASE("org roles: the handlers refuse an unknown company or assignment on their own", "[lims][org][roles]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    auto const sites = [] {
+        Lightweight::DataMapper mapper;
+        return mapper.Query<lims::db::SiteRecord>().All().size();
+    };
+    auto const before = sites();
+    CHECK_THROWS_AS(org.execute(lims::CreateSite{.companyId = lims::CompanyId{9999}, .name = "Annex"}),
+                    lims::NotFound);
+    CHECK(sites() == before);
+    CHECK_THROWS_AS(org.execute(lims::RevokeRole{.assignmentId = lims::RoleAssignmentId{9999}}), lims::NotFound);
+}
+
+// Mutation: let a failed first naming that is not the lost race answer success (the name is never stored).
+TEST_CASE("org roles: a first naming whose write fails surfaces as itself", "[lims][org][roles]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::test::FailingStatements const failing{"org_people", "INSERT", "injected: disk full"};
+    CHECK_THROWS_AS(lims::OrgModel{}.execute(lims::SetDisplayName{.principal = "alice", .displayName = "Alice"}),
+                    Lightweight::SqlException);
 }

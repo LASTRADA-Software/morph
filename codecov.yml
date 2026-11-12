@@ -308,19 +308,61 @@ component_management:
           target: auto
           informational: true
 
-    - component_id: lims
-      name: "application ladder rung 3 (examples/lims models)"
+    # lims: one component per module, each target 0.5 points below that module's coverage as Codecov counts it
+    # (hits / (hits + misses + partials) over the uploaded coverage.lcov, after scripts/coverage.sh over every
+    # test but the stress ones): lab 98.14, org 98.05, ledger 98.73, billing 98.75. llvm-cov's line figure is
+    # higher, because it counts a line that runs as covered even when a branch arm on it is never taken.
+    # Inventory is Part C's and joins when Part C's definition of done is measured.
+    - component_id: lims_lab
+      name: "application ladder rung 3 (examples/lims lab models)"
       paths:
         - examples/lims/lab/src/models/**
         - examples/lims/lab/include/lims/lab/models/**
+      statuses:
+        - type: project
+          target: 97.6%
+          informational: true
+        - type: patch
+          target: 97.6%
+          informational: true
+
+    - component_id: lims_org
+      name: "application ladder rung 3 (examples/lims org models)"
+      paths:
         - examples/lims/org/src/models/**
         - examples/lims/org/include/lims/org/models/**
       statuses:
         - type: project
-          target: 97%
+          target: 97.5%
           informational: true
         - type: patch
-          target: 97%
+          target: 97.5%
+          informational: true
+
+    - component_id: lims_ledger
+      name: "application ladder rung 3 (examples/lims ledger models)"
+      paths:
+        - examples/lims/ledger/src/models/**
+        - examples/lims/ledger/include/lims/ledger/models/**
+      statuses:
+        - type: project
+          target: 98.2%
+          informational: true
+        - type: patch
+          target: 98.2%
+          informational: true
+
+    - component_id: lims_billing
+      name: "application ladder rung 3 (examples/lims billing models)"
+      paths:
+        - examples/lims/billing/src/models/**
+        - examples/lims/billing/include/lims/billing/models/**
+      statuses:
+        - type: project
+          target: 98.2%
+          informational: true
+        - type: patch
+          target: 98.2%
           informational: true
 
 # Always post the coverage-comparison comment on a PR, even on the first upload

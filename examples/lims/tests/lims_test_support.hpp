@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <Lightweight/SqlStatement.hpp>
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -171,5 +172,118 @@ auto dispatchAs(std::string const& principal, Action action,
     auto handler = rig.client<Model>(0);
     return ::morph::ladder::testkit::awaitQt(handler.execute(std::move(action)));
 }
+
+/// @brief Runs one SQL statement on a fresh connection to the fixture's database.
+/// @param text The statement.
+inline void runSql(std::string const& text) {
+    Lightweight::SqlStatement statement;
+    static_cast<void>(statement.ExecuteDirect(text));
+}
+
+/// @brief What a busy database says.
+inline constexpr std::string_view kBusyMessage = "database is locked";
+
+/// @brief Makes every statement of one kind on one table fail with a chosen message, until it goes out of scope.
+///
+/// The statement the model issues is the real one; a trigger refuses it, so the model's own handling of a database
+/// failure runs. A message containing "database is locked" reads as a busy database through `isBusy`'s message
+/// fallback (its error code is SQLITE_CONSTRAINT, not SQLITE_BUSY), anything else as a failure that is not. Each
+/// instance has a name of its own, and a `'` in the message is doubled.
+class FailingStatements {
+public:
+    /// @param table The table.
+    /// @param event `INSERT`, `UPDATE` or `DELETE`.
+    /// @param message What the database says.
+    /// @param when An optional condition over `NEW` or `OLD`, as SQL; empty fails every statement.
+    FailingStatements(std::string const& table, std::string const& event, std::string const& message,
+                      std::string const& when = {})
+        : _name{"lims_test_fail_" + table + "_" + event + "_" + std::to_string(++_made)} {
+        runSql("CREATE TRIGGER " + _name + " BEFORE " + event + " ON " + table +
+               (when.empty() ? "" : " WHEN " + when) + " BEGIN SELECT RAISE(ABORT, '" + quoted(message) + "'); END");
+    }
+
+    FailingStatements(FailingStatements const&) = delete;
+    FailingStatements& operator=(FailingStatements const&) = delete;
+
+    ~FailingStatements() {
+        try {
+            runSql("DROP TRIGGER IF EXISTS " + _name);
+        } catch (...) {
+            // The fixture's database is discarded with the test, and the trigger with it.
+        }
+    }
+
+private:
+    static std::string quoted(std::string text) {
+        for (auto at = text.find('\''); at != std::string::npos; at = text.find('\'', at + 2)) {
+            text.insert(at, 1, '\'');
+        }
+        return text;
+    }
+
+    static inline int _made = 0;
+    std::string _name;
+};
+
+/// @brief Makes every statement of one kind on one table change no row, until it goes out of scope.
+///
+/// A row-level `RAISE(IGNORE)` skips the row the statement targets, so an `UPDATE` that a model guards with "exactly
+/// one row changed" sees zero, as it does when another writer changed the row between the model's read and its write.
+class SkippedStatements {
+public:
+    /// @param table The table.
+    /// @param event `UPDATE` or `DELETE`.
+    /// @param when An optional condition over `NEW` or `OLD`, as SQL; empty skips every row.
+    SkippedStatements(std::string const& table, std::string const& event, std::string const& when = {})
+        : _name{"lims_test_skip_" + table + "_" + event + "_" + std::to_string(++_made)} {
+        runSql("CREATE TRIGGER " + _name + " BEFORE " + event + " ON " + table +
+               (when.empty() ? "" : " WHEN " + when) + " BEGIN SELECT RAISE(IGNORE); END");
+    }
+
+    SkippedStatements(SkippedStatements const&) = delete;
+    SkippedStatements& operator=(SkippedStatements const&) = delete;
+
+    ~SkippedStatements() {
+        try {
+            runSql("DROP TRIGGER IF EXISTS " + _name);
+        } catch (...) {
+            // The fixture's database is discarded with the test, and the trigger with it.
+        }
+    }
+
+private:
+    static inline int _made = 0;
+    std::string _name;
+};
+
+/// @brief A trigger the test installs by its own text, dropped when it goes out of scope.
+///
+/// For the arm that reads a row a moment after the model wrote one: an `AFTER` trigger that deletes the row it just
+/// saw written stands in for another writer that removed it between the two statements.
+class ScopedTrigger {
+public:
+    /// @param when The part after the trigger's name, for example `AFTER UPDATE ON billing_invoices WHEN NEW.state =
+    /// 3`.
+    /// @param body The statements to run, each ending in a semicolon.
+    ScopedTrigger(std::string const& when, std::string const& body)
+        : _name{"lims_test_trigger_" + std::to_string(++_made)} {
+        runSql("CREATE TRIGGER " + _name + " " + when + " BEGIN " + body + " END");
+    }
+
+    ScopedTrigger(ScopedTrigger const&) = delete;
+    ScopedTrigger& operator=(ScopedTrigger const&) = delete;
+
+    ~ScopedTrigger() {
+        try {
+            runSql("DROP TRIGGER IF EXISTS " + _name);
+        } catch (...) {
+            // The fixture's database is discarded with the test, and the trigger with it.
+        }
+    }
+
+private:
+    static inline int _made = 0;
+    std::string _name;
+};
 
 }  // namespace lims::test

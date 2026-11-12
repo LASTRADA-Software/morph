@@ -209,6 +209,11 @@ void addExact(ExactSum& sum, Rational const& value, std::string_view what) {
 /// fit, which is reported as `OutOfRange`; the few sums per account, one per denominator, are then added exactly.
 /// A total that is only an over-range numerator at one denominator is refused even where it would reduce to a
 /// representable value, which is the "exact or refused" the ledger promises.
+///
+/// Each skipped period adds one `!=` condition on the entry's period. The builder has no "not in" for a set, so the
+/// conditions chain, and SQLite refuses an expression nested deeper than its default limit of 1000 levels. That bounds
+/// the closed periods one company can have inside a report's range at about a thousand (about 83 years of monthly
+/// periods); this bound is read from SQLite's documentation, not measured here.
 /// @param mapper The open mapper.
 /// @param company The company.
 /// @param throughMs The last instant counted.
@@ -221,23 +226,31 @@ void addExact(ExactSum& sum, Rational const& value, std::string_view what) {
 void addPostedTotals(Lightweight::DataMapper& mapper, CompanyId company, std::int64_t throughMs,
                      std::set<std::int64_t> const& skipPeriods, std::optional<std::uint64_t> onlyAccount,
                      DecimalPlaces places, TotalsByAccount& totals) {
-    std::string sql = "SELECT l.account_id, l.side, l.company_den, SUM(l.company_num) FROM " +
-                      std::string{db::EntryLineRecord::TableName} + " l JOIN " +
-                      std::string{db::EntryRecord::TableName} +
-                      " e ON e.id = l.entry_id WHERE e.company_id = " + std::to_string(*company) +
-                      " AND e.state = " + std::to_string(static_cast<int>(EntryState::Posted)) +
-                      " AND e.date_ms >= 0 AND e.date_ms <= " + std::to_string(throughMs);
-    if (!skipPeriods.empty()) {
-        std::string periods;
-        for (std::int64_t const period : skipPeriods) {
-            periods += (periods.empty() ? "" : ", ") + std::to_string(period);
-        }
-        sql += " AND e.period_id NOT IN (" + periods + ")";
+    std::string_view const lines{db::EntryLineRecord::TableName};
+    std::string_view const entries{db::EntryRecord::TableName};
+    auto const column = [](std::string_view table, std::string_view name) {
+        return Lightweight::SqlQualifiedTableColumnName{table, name};
+    };
+    auto builder = mapper.Query().FromTable(lines).Select();
+    static_cast<void>(builder.Field(column(lines, "account_id"))
+                          .Field(column(lines, "side"))
+                          .Field(column(lines, "company_den"))
+                          .Field(Lightweight::Aggregate::Sum(column(lines, "company_num")))
+                          .InnerJoin(entries, "id", column(lines, "entry_id"))
+                          .Where(column(entries, "company_id"), "=", static_cast<std::int64_t>(*company))
+                          .Where(column(entries, "state"), "=", static_cast<int>(EntryState::Posted))
+                          .Where(column(entries, "date_ms"), ">=", std::int64_t{0})
+                          .Where(column(entries, "date_ms"), "<=", throughMs));
+    for (std::int64_t const period : skipPeriods) {
+        static_cast<void>(builder.WhereNotEqual(column(entries, "period_id"), period));
     }
     if (onlyAccount.has_value()) {
-        sql += " AND l.account_id = " + std::to_string(*onlyAccount);
+        static_cast<void>(builder.Where(column(lines, "account_id"), "=", static_cast<std::int64_t>(*onlyAccount)));
     }
-    sql += " GROUP BY l.account_id, l.side, l.company_den";
+    auto const sql = builder.GroupBy(column(lines, "account_id"))
+                         .GroupBy(column(lines, "side"))
+                         .GroupBy(column(lines, "company_den"))
+                         .All();
     try {
         Lightweight::SqlStatement statement{mapper.Connection()};
         auto cursor = statement.ExecuteDirect(sql);

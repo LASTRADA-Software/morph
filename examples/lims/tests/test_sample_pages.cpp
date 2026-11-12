@@ -264,3 +264,15 @@ TEST_CASE("lab: the sample list answers through the action with an exact total",
     request.query.sort = {morph::table::SortKey{.column = "nope", .dir = morph::table::SortDirection::Ascending}};
     CHECK_THROWS_AS(model.execute(request), lims::ValidationError);
 }
+
+// Mutation: let pageSamples run a plan whose sort names a column the statement cannot order by.
+TEST_CASE("lab: a plan the statement cannot translate is refused", "[lims][lab][pages]") {
+    DbFixture fixture;
+    static_cast<void>(setUp());
+    ScopedPrincipal const bob{"bob"};
+    morph::table::QueryPlan plan;
+    plan.sort.push_back(morph::table::PlannedSortKey{.column = "nope"});
+    plan.limit = 5;
+    plan.totalCap = 10;
+    CHECK_THROWS_AS(lims::SampleModel::pageSamples(lims::OrgModel::visibleSites("bob"), plan), lims::ValidationError);
+}
