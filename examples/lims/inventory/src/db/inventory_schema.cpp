@@ -88,4 +88,39 @@ LIGHTWEIGHT_SQL_MIGRATION(20261120000004, "Create inventory_requisitions and the
         .RequiredColumn("estimate_num", Bigint())
         .RequiredColumn("estimate_den", Bigint());
 }
+LIGHTWEIGHT_SQL_MIGRATION(20261120000005, "Create inventory suppliers, orders and order lines") {
+    plan.AlterTable("inventory_requisitions").AddNotRequiredColumn("order_id", Bigint());
+    plan.CreateTableIfNotExists("inventory_suppliers")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("name", Varchar(128))
+        .RequiredColumn("currency", Integer());
+    plan.CreateUniqueIndex("idx_inventory_suppliers_company_name", "inventory_suppliers", {"company_id", "name"});
+    plan.CreateTableIfNotExists("inventory_orders")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("site_id", Bigint())
+        .RequiredColumn("supplier_id", Bigint())
+        .RequiredColumn("requisition_id", Bigint())
+        .RequiredColumn("currency", Integer())
+        .RequiredColumn("state", Integer())
+        .RequiredColumn("total_num", Bigint())
+        .RequiredColumn("total_den", Bigint())
+        .RequiredColumn("ordered_by", Varchar(64))
+        .RequiredColumn("ordered_at", Bigint());
+    // A requisition becomes one order: the index refuses the second of two orders that raced.
+    plan.CreateUniqueIndex("idx_inventory_orders_requisition", "inventory_orders", {"requisition_id"});
+    plan.CreateTableIfNotExists("inventory_order_lines")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("order_id", Bigint())
+        .RequiredColumn("item_id", Bigint())
+        .RequiredColumn("ordered_num", Bigint())
+        .RequiredColumn("ordered_den", Bigint())
+        .RequiredColumn("received_num", Bigint())
+        .RequiredColumn("received_den", Bigint())
+        .RequiredColumn("unit_price_num", Bigint())
+        .RequiredColumn("unit_price_den", Bigint())
+        .RequiredColumn("line_total_num", Bigint())
+        .RequiredColumn("line_total_den", Bigint());
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

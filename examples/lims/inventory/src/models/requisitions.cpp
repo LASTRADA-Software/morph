@@ -31,43 +31,8 @@ using ::morph::math::Rational;
 
 constexpr std::int64_t kMillisPerHour = 3'600'000;
 
-/// @brief The row of @p requisition, read on a mapper of its own so the caller's transaction opens with its write.
-/// @param requisition The requisition.
-/// @param action The action's name, for the refusal.
-/// @return The row.
-/// @throws NotFound if there is no such requisition, or it is of a company the caller cannot see; the words are the
-///         same for both.
-[[nodiscard]] db::RequisitionRecord requisitionRecord(RequisitionId requisition, char const* action) {
-    Lightweight::DataMapper reader;
-    auto const row = inventory::findRequisition(reader, *requisition);
-    auto const visible = OrgModel::visibleCompanies(currentPrincipal());
-    if (!row.has_value() || std::ranges::find(visible, CompanyId{row->companyId.Value()}) == visible.end()) {
-        throw NotFound{std::string{action} + ": requisition " + std::to_string(*requisition) + " does not exist"};
-    }
-    return *row;
-}
-
-/// @brief Moves requisition @p id from @p from by a conditional update, and counts the rows it changed.
-///
-/// A fault point sits before the write, so a test makes a concurrent action win it.
-/// @tparam Set Callable adding the columns to change to the update's builder.
-/// @tparam Guard Callable adding further columns the caller read and requires unchanged.
-/// @param mapper The caller's mapper, inside its transaction.
-/// @param id The requisition.
-/// @param from The state the caller read.
-/// @param set Adds the columns to change.
-/// @param guard Adds the further conditions.
-/// @return Whether exactly one row matched.
-template <typename Set, typename Guard>
-[[nodiscard]] bool moveRequisition(Lightweight::DataMapper& mapper, std::int64_t id, RequisitionState from,
-                                   Set const& set, Guard const& guard) {
-    inventoryFaultPoint("requisition.beforeStateChange", mapper.Connection());
-    auto query = mapper.Connection().Query(db::RequisitionRecord::TableName).Update();
-    set(query);
-    (void)query.Where("id", "=", id).Where("state", "=", static_cast<int>(from));
-    guard(query);
-    return inventory::changedRows(mapper, query.ToSql()) == 1U;
-}
+using inventory::moveRequisition;
+using inventory::visibleRequisition;
 
 /// @brief Requires that the caller raised @p row and that it is still a draft: what adding a line and submitting
 ///        share.
@@ -126,7 +91,7 @@ RequisitionView ProcurementModel::execute(const AddRequisitionLine& action) {
     if (!action.validate()) {
         throw ValidationError{"AddRequisitionLine: a requisition, an item, a quantity and an estimate are required"};
     }
-    auto const row = requisitionRecord(action.requisition, "AddRequisitionLine");
+    auto const row = visibleRequisition(action.requisition, "AddRequisitionLine");
     requireOwnDraft(row, "AddRequisitionLine");
     // Reads on a mapper of their own: the transaction below opens with its first write.
     Lightweight::DataMapper reader;
@@ -183,7 +148,7 @@ RequisitionView ProcurementModel::execute(const SubmitRequisition& action) {
     if (!action.validate()) {
         throw ValidationError{"SubmitRequisition: a requisition is required"};
     }
-    auto const row = requisitionRecord(action.requisitionId, "SubmitRequisition");
+    auto const row = visibleRequisition(action.requisitionId, "SubmitRequisition");
     std::string const principal = currentPrincipal();
     requireOwnDraft(row, "SubmitRequisition");
     if (row.totalNum.Value() <= 0) {
@@ -227,7 +192,7 @@ RequisitionView ProcurementModel::execute(const ApproveRequisition& action) {
     if (!action.validate()) {
         throw ValidationError{"ApproveRequisition: a requisition is required"};
     }
-    auto const row = requisitionRecord(action.requisitionId, "ApproveRequisition");
+    auto const row = visibleRequisition(action.requisitionId, "ApproveRequisition");
     // The action's guard refuses a draft or an approved requisition as an IllegalTransition before it reads who
     // raised it; this repeats it for a call that reaches the handler without the guard.
     if (row.state.Value() != static_cast<int>(RequisitionState::Submitted)) {
@@ -261,7 +226,7 @@ RequisitionView ProcurementModel::execute(const GetRequisition& action) {
     if (!action.validate()) {
         throw ValidationError{"GetRequisition: a requisition is required"};
     }
-    auto const row = requisitionRecord(action.requisitionId, "GetRequisition");
+    auto const row = visibleRequisition(action.requisitionId, "GetRequisition");
     Lightweight::DataMapper mapper;
     return inventory::requisitionView(mapper, static_cast<std::int64_t>(row.id.Value()));
 }

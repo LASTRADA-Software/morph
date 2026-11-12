@@ -23,6 +23,7 @@ using ::morph::math::Rational;
 
 constexpr int kMaxStockUnit = static_cast<int>(StockUnit::piece);
 constexpr int kMaxRequisitionState = static_cast<int>(RequisitionState::Ordered);
+constexpr int kMaxOrderState = static_cast<int>(OrderState::Received);
 constexpr int kMaxCurrencyCode = static_cast<int>(CurrencyCode::JPY);
 
 /// @brief A column of text, as a string.
@@ -157,6 +158,109 @@ std::optional<db::RequisitionRecord> findRequisition(Lightweight::DataMapper& ma
     return rows.empty() ? std::nullopt : std::optional{rows.front()};
 }
 
+db::RequisitionRecord visibleRequisition(RequisitionId requisition, char const* action) {
+    Lightweight::DataMapper reader;
+    auto const row = findRequisition(reader, *requisition);
+    auto const visible = OrgModel::visibleCompanies(currentPrincipal());
+    if (!row.has_value() || std::ranges::find(visible, CompanyId{row->companyId.Value()}) == visible.end()) {
+        throw NotFound{std::string{action} + ": requisition " + std::to_string(*requisition) + " does not exist"};
+    }
+    return *row;
+}
+
+std::optional<db::SupplierRecord> findSupplier(Lightweight::DataMapper& mapper, std::int64_t supplier) {
+    auto rows = mapper.Query<db::SupplierRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::SupplierRecord::id>, "=", supplier)
+                    .All();
+    return rows.empty() ? std::nullopt : std::optional{rows.front()};
+}
+
+std::optional<db::PurchaseOrderRecord> findOrderOf(Lightweight::DataMapper& mapper, std::int64_t requisition) {
+    auto rows = mapper.Query<db::PurchaseOrderRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::PurchaseOrderRecord::requisitionId>, "=", requisition)
+                    .All();
+    return rows.empty() ? std::nullopt : std::optional{rows.front()};
+}
+
+SupplierView supplierView(db::SupplierRecord const& row) {
+    int const currency = row.currency.Value();
+    if (currency < 0 || currency > kMaxCurrencyCode) {
+        throw ValidationError{"supplier " + std::to_string(row.id.Value()) + " stores a currency outside its range"};
+    }
+    return SupplierView{
+        .id = SupplierId{static_cast<std::int64_t>(row.id.Value())},
+        .company = CompanyId{row.companyId.Value()},
+        .name = textOf(row.name),
+        .currency = static_cast<CurrencyCode>(currency),
+    };
+}
+
+PurchaseOrderView orderView(Lightweight::DataMapper& mapper, std::int64_t order) {
+    auto const rows = mapper.Query<db::PurchaseOrderRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::PurchaseOrderRecord::id>, "=", order)
+                          .All();
+    if (rows.empty()) {
+        throw NotFound{"purchase order " + std::to_string(order) + " does not exist"};
+    }
+    auto const& row = rows.front();
+    int const state = row.state.Value();
+    int const currency = row.currency.Value();
+    if (state < 0 || state > kMaxOrderState) {
+        throw ValidationError{"purchase order " + std::to_string(order) + " stores a state outside its range"};
+    }
+    if (currency < 0 || currency > kMaxCurrencyCode) {
+        throw ValidationError{"purchase order " + std::to_string(order) + " stores a currency outside its range"};
+    }
+    auto const supplier = findSupplier(mapper, row.supplierId.Value());
+    if (!supplier.has_value()) {
+        throw NotFound{"purchase order " + std::to_string(order) + ": supplier " +
+                       std::to_string(row.supplierId.Value()) + " does not exist"};
+    }
+    auto const code = static_cast<CurrencyCode>(currency);
+    auto const money = [code](std::int64_t numerator, std::int64_t denominator) {
+        return Amount{Rational{Numerator{numerator}, Denominator{denominator}, DecimalPlaces{decimalsOf(code)}}};
+    };
+    auto const measure = [](std::int64_t numerator, std::int64_t denominator) {
+        return Measure{Rational{Numerator{numerator}, Denominator{denominator}, DecimalPlaces{6}}};
+    };
+    PurchaseOrderView view{
+        .id = PurchaseOrderId{order},
+        .company = CompanyId{row.companyId.Value()},
+        .site = SiteId{row.siteId.Value()},
+        .supplier = SupplierId{row.supplierId.Value()},
+        .supplierName = textOf(supplier->name),
+        .requisition = RequisitionId{row.requisitionId.Value()},
+        .currency = code,
+        .state = static_cast<OrderState>(state),
+        .lines = {},
+        .total = money(row.totalNum.Value(), row.totalDen.Value()),
+        .orderedBy = textOf(row.orderedBy),
+        .orderedAt = instant(row.orderedAt.Value()),
+    };
+    auto lines = mapper.Query<db::OrderLineRecord>()
+                     .Where(::Lightweight::FieldNameOf<&db::OrderLineRecord::orderId>, "=", order)
+                     .All();
+    std::ranges::sort(lines, {}, [](db::OrderLineRecord const& line) { return line.id.Value(); });
+    for (auto const& line : lines) {
+        auto const item = findItem(mapper, line.itemId.Value());
+        if (!item.has_value()) {
+            throw NotFound{"purchase order " + std::to_string(order) + ": item " +
+                           std::to_string(line.itemId.Value()) + " does not exist"};
+        }
+        view.lines.push_back(OrderLineView{
+            .id = OrderLineId{static_cast<std::int64_t>(line.id.Value())},
+            .item = ItemId{line.itemId.Value()},
+            .itemCode = textOf(item->code),
+            .ordered = measure(line.orderedNum.Value(), line.orderedDen.Value()),
+            .received = measure(line.receivedNum.Value(), line.receivedDen.Value()),
+            .unit = stockUnitOf(*item),
+            .unitPrice = money(line.unitPriceNum.Value(), line.unitPriceDen.Value()),
+            .lineTotal = money(line.lineTotalNum.Value(), line.lineTotalDen.Value()),
+        });
+    }
+    return view;
+}
+
 bool requisitionEscalated(db::RequisitionRecord const& requisition) {
     return requisition.deadlineAt.Value() > 0 && nowMillis() >= requisition.deadlineAt.Value();
 }
@@ -193,6 +297,7 @@ RequisitionView requisitionView(Lightweight::DataMapper& mapper, std::int64_t re
         .submittedAt = instant(row->submittedAt.Value()),
         .approvalDeadline = instant(row->deadlineAt.Value()),
         .level = requisitionEscalated(*row) ? RequisitionLevel::Company : RequisitionLevel::Site,
+        .order = row->orderId.Value().has_value() ? PurchaseOrderId{*row->orderId.Value()} : PurchaseOrderId{},
     };
     auto lines = mapper.Query<db::RequisitionLineRecord>()
                      .Where(::Lightweight::FieldNameOf<&db::RequisitionLineRecord::requisitionId>, "=", requisition)

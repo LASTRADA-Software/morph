@@ -142,6 +142,8 @@ struct RequisitionView {
     ::morph::time::Timestamp approvalDeadline;
     /// @brief Who must approve it: `Company` once the deadline has passed.
     RequisitionLevel level = RequisitionLevel::Site;
+    /// @brief The purchase order it became; empty until ordered.
+    PurchaseOrderId order;
 };
 
 /// @brief Reads a requisition.

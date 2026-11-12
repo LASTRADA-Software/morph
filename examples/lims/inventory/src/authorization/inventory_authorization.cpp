@@ -52,6 +52,15 @@ Scope Authorization<ApproveRequisition>::scopeOf(ApproveRequisition const& actio
                                                  : Scope{SiteId{row->siteId.Value()}};
 }
 
+Scope Authorization<CreatePurchaseOrder>::scopeOf(CreatePurchaseOrder const& action) {
+    if (!action.requisition.hasValue()) {
+        return Scope{CompanyId{}};
+    }
+    Lightweight::DataMapper mapper;
+    auto const row = inventory::findRequisition(mapper, *action.requisition);
+    return Scope{CompanyId{row.has_value() ? row->companyId.Value() : 0}};
+}
+
 void Authorization<ApproveRequisition>::checkState(ApproveRequisition const& action) {
     Lightweight::DataMapper mapper;
     auto const row = inventory::findRequisition(mapper, *action.requisitionId);

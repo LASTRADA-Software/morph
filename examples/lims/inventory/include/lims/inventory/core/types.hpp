@@ -17,6 +17,9 @@ LIMS_DEFINE_STRONG_ID(LotId);
 LIMS_DEFINE_STRONG_ID(MovementId);
 LIMS_DEFINE_STRONG_ID(RequisitionId);
 LIMS_DEFINE_STRONG_ID(RequisitionLineId);
+LIMS_DEFINE_STRONG_ID(SupplierId);
+LIMS_DEFINE_STRONG_ID(PurchaseOrderId);
+LIMS_DEFINE_STRONG_ID(OrderLineId);
 
 /// @brief Why a lot's stock on hand changed.
 enum class MovementKind : std::uint8_t {
@@ -40,6 +43,13 @@ enum class RequisitionLevel : std::uint8_t {
     Company,  ///< The approvers at its company, from the deadline on.
 };
 
+/// @brief Where a purchase order stands.
+enum class OrderState : std::uint8_t {
+    Open,            ///< Placed; nothing has been received against it.
+    PartlyReceived,  ///< Some of its lines have been received.
+    Received,        ///< Every line has been received in full.
+};
+
 }  // namespace lims
 
 LIMS_DEFINE_STRONG_ID_WIRE(ItemId);
@@ -48,12 +58,18 @@ LIMS_DEFINE_STRONG_ID_WIRE(LotId);
 LIMS_DEFINE_STRONG_ID_WIRE(MovementId);
 LIMS_DEFINE_STRONG_ID_WIRE(RequisitionId);
 LIMS_DEFINE_STRONG_ID_WIRE(RequisitionLineId);
+LIMS_DEFINE_STRONG_ID_WIRE(SupplierId);
+LIMS_DEFINE_STRONG_ID_WIRE(PurchaseOrderId);
+LIMS_DEFINE_STRONG_ID_WIRE(OrderLineId);
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(ItemId, "lims.itemId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(LocationId, "lims.locationId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(LotId, "lims.lotId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(MovementId, "lims.movementId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(RequisitionId, "lims.requisitionId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(RequisitionLineId, "lims.requisitionLineId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(SupplierId, "lims.supplierId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(PurchaseOrderId, "lims.purchaseOrderId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(OrderLineId, "lims.orderLineId");
 
 /// @brief Reflects `MovementKind` as its enumerator name.
 template <>
@@ -80,4 +96,13 @@ struct glz::meta<lims::RequisitionLevel> {
 
     /// @brief The enumerator ⇄ name mapping glaze reads and writes.
     static constexpr auto value = glz::enumerate(Site, Company);
+};
+
+/// @brief Reflects `OrderState` as its enumerator name.
+template <>
+struct glz::meta<lims::OrderState> {
+    using enum lims::OrderState;
+
+    /// @brief The enumerator ⇄ name mapping glaze reads and writes.
+    static constexpr auto value = glz::enumerate(Open, PartlyReceived, Received);
 };
