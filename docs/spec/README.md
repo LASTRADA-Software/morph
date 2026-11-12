@@ -174,6 +174,8 @@ and `DocumentScreenHost` mounting screens as roots or into a host's container ·
 [`ui/workspace.md`](ui/workspace.md) — the workspace shell: tabs over screens, focus by identity, singleton and
 placeholder tabs, closing tab by tab until a veto, and the most-recently-used walk ·
 [`ui/shell_frame.md`](ui/shell_frame.md) — the frame screens are shown in: sidebar with the navigator, top bar, page ·
+[`ui/shell_parts.md`](ui/shell_parts.md) — the shell's declared parts: a scope switcher, module counts, one search,
+an inbox button and the principal's menu, each a model action an application names, and the `context` every screen reads ·
 [`ui/explorer.md`](ui/explorer.md) — the app explorer: an application's screens, models and actions, with a live form
 for each action ·
 [`ui/inspector.md`](ui/inspector.md) — the development inspector: a mounted screen's nodes, queries, mutations and

@@ -8,6 +8,8 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 - [Shape](#shape)
 - [Signed in and signed out](#signed-in-and-signed-out)
 - [The compact form](#the-compact-form)
+- [Declared parts](#declared-parts)
+- [Module groups](#module-groups)
 - [Toast](#toast)
 - [Design decisions](#design-decisions)
 
@@ -110,6 +112,28 @@ again, restores the bar's step 2 and the line's steps 3 and 3, and hides the men
 and the sign-in state combine: signed out, the sidebar and the top bar stay hidden in either form. The frame does not
 decide when to be compact; the generic client's rule is in [`client/client.md`](../client/client.md#the-shell). A
 compact frame has no navigator search: the menu lists every entry.
+
+## Declared parts
+
+An application's [`ShellParts`](shell_parts.md) are drawn by the frame from state the client sets; the frame asks no
+action itself. `setParts(ShellPartsView)` (its shape is in `shell_parts.hpp`) installs the parts and
+`ShellPartsView` is the frame's whole input: the switcher's options, label and chosen value, the search's hits and
+highlight, the inbox's count and caption, the principal's name and roles and the locales offered. The frame reports a
+choice through `ShellPartsHandlers` (`onContext`, `onSearchText`, `onSearchOpen`, `onSearchOpenAll`, `onInbox`,
+`onLocale`). The widgets, by test id: `shell_context` (the sidebar's top, under `shell_application`), `shell_search`,
+`shell_search_results`, `shell_inbox` (in `shell_head_trail`, before the principal) and `shell_principal_menu` (in place
+of `shell_principal` or `shell_head_principal`, whichever the principal's placement chose). Compact, the switcher, the
+module groups and the principal's menu are entries of `shell_nav_menu`, and the search and the inbox are icon buttons
+of the bar (`shell_search_open`, `shell_inbox`); the search opens as `shell_search_overlay`. A frame given no parts has
+none of these widgets visible.
+
+## Module groups
+
+`Navigator::setModuleGroups(true)` collapses the navigator's modules: each module is one row (`nav_module_<module>`)
+holding its heading and, from `setModuleBadge(module, badge)`, its count; only the open module lists its screens
+(`openModule()`, `setOpenModule(module)`; opening one closes the other, and `setCurrent` opens the module of the
+current screen). A module with one entry is that entry's row. Pins stay above the groups. `menuEntries()` is
+unchanged by it: the compact menu already has a submenu per module, with the count after its label.
 
 ## Toast
 
