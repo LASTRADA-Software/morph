@@ -9905,6 +9905,43 @@ inline void ScreenCore::chartSeries(ChartData& data, DocNode const& node, RtScop
     for (auto const& points : series) {
         std::ranges::transform(points, std::back_inserter(positions), positionOf);
     }
+    // The room one position gives its bars: the least distance between two of their positions, gaps included, so a
+    // bar never grows over the label of an empty position between two.
+    std::vector<math::Rational> barPositions;
+    {
+        std::size_t seriesIndex = 0;
+        for (DocNodePtr const& part : node.partList("series")) {
+            if (part->name("style") == "bars") {
+                std::ranges::transform(series.at(seriesIndex), std::back_inserter(barPositions), positionOf);
+            }
+            ++seriesIndex;
+        }
+    }
+    std::ranges::sort(barPositions);
+    std::optional<math::Rational> slot;
+    for (std::size_t next = 1; next < barPositions.size(); ++next) {
+        auto const distance = math::checkedSub(barPositions.at(next), barPositions.at(next - 1));
+        if (distance && distance->numerator > 0 && (!slot || *distance < *slot)) {
+            slot = *distance;
+        }
+    }
+    if (!barPositions.empty()) {
+        data.barSlot = realOf(slot.value_or(math::Rational{1, math::DecimalPlaces{0}}));
+    }
+    // A bar is centred on its position and half a slot wide each side, so the axis holds that much beyond the
+    // outermost position.
+    if (!barPositions.empty() && !positions.empty()) {
+        math::Rational const half = math::checkedDiv(slot.value_or(math::Rational{1, math::DecimalPlaces{0}}),
+                                                     math::Rational{2, math::DecimalPlaces{0}})
+                                        .value_or(math::Rational{0, math::DecimalPlaces{0}});
+        auto const [lowest, highest] = std::ranges::minmax(positions);
+        auto const below = math::checkedSub(lowest, half);
+        auto const above = math::checkedAdd(highest, half);
+        if (below && above) {
+            positions.push_back(*below);
+            positions.push_back(*above);
+        }
+    }
     if (std::optional<ChartRange> const across = chartRange(positions, 0)) {
         data.xMin = realOf(across->low);
         data.xMax = realOf(across->high);
@@ -9912,10 +9949,13 @@ inline void ScreenCore::chartSeries(ChartData& data, DocNode const& node, RtScop
     std::size_t index = 0;
     for (DocNodePtr const& part : node.partList("series")) {
         ChartSeries drawn;
+        if (part->name("style") == "bars") {
+            drawn.style = ChartStyle::Bars;
+        }
         if (ExprPtr const label = part->prop("label")) {
             drawn.label = textOf(evalIn(scope, bindings, label), session.formatting());
         }
-        drawn.joined = !part->flags.contains("joined") || part->flag("joined");
+        drawn.joined = drawn.style == ChartStyle::Line && (!part->flags.contains("joined") || part->flag("joined"));
         for (detail::ChartRawPoint& point : series.at(index)) {
             ChartPoint out{.x = realOf(positionOf(point)),
                            .y = std::nullopt,
@@ -9959,6 +9999,27 @@ inline ChartData ScreenCore::chartData(DocNode const& node, RtScope const& scope
         }
     }
     std::ranges::transform(lines, std::back_inserter(values), &detail::ChartRawLine::value);
+    // A bar grows from 0, so the axis holds 0; the baseline's side is padded only when something lies beyond it, so
+    // that the baseline is the plot's edge when nothing does.
+    std::vector<math::Rational> axisValues = values;
+    ChartPadding padding;
+    bool barsHaveValues = false;
+    {
+        std::size_t seriesIndex = 0;
+        for (DocNodePtr const& part : node.partList("series")) {
+            barsHaveValues =
+                barsHaveValues || (part->name("style") == "bars" &&
+                                   std::ranges::any_of(series.at(seriesIndex), [](detail::ChartRawPoint const& point) {
+                                       return point.y.has_value();
+                                   }));
+            ++seriesIndex;
+        }
+    }
+    if (barsHaveValues) {
+        axisValues.push_back(math::Rational{0, math::DecimalPlaces{0}});
+        padding.low = std::ranges::any_of(values, [](math::Rational const& value) { return value.numerator < 0; });
+        padding.high = std::ranges::any_of(values, [](math::Rational const& value) { return value.numerator > 0; });
+    }
     std::uint32_t widest = 0;
     for (math::Rational const& value : values) {
         widest = std::max(widest, value.decimalPlaces.value);
@@ -9966,7 +10027,7 @@ inline ChartData ScreenCore::chartData(DocNode const& node, RtScope const& scope
     ExprPtr const placesExpr = node.prop("yPlaces");
     std::int64_t const* const fixedPlaces = placesExpr ? placesExpr->literal.asInt() : nullptr;
     std::uint32_t const places = fixedPlaces != nullptr ? static_cast<std::uint32_t>(*fixedPlaces) : widest;
-    std::optional<ChartRange> const computed = chartRange(values, places);
+    std::optional<ChartRange> const computed = chartRange(axisValues, places, padding);
     if (!computed) {
         report(node.path, "the chart's values overflow its arithmetic; it draws nothing");
         return data;

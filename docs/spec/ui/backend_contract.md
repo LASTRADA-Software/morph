@@ -395,7 +395,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `StepsWidget` | `setSteps(vector<Step>)` (each `Step` is `{label, state, detail}`. A nonempty `detail` is the step's muted second line. Qt Quick: under the label in the muted colour at the small size, on one line; the circle and the connectors stay centred on the label's line and the indicator is as tall as its tallest step; a step's natural and minimum width are its label's, and a detail wider than that is cut at its end with an ellipsis, so it never widens a step. Terminal: after the label, one space and the detail in brackets, in the muted style; the natural width includes the bracketed detail, and a row narrower than the label plus the whole bracketed detail drops the detail, before the label is cut. An empty detail draws nothing. Unlabelled, no detail is drawn. A step's accessible name, labelled or not, is its label, its detail when nonempty and its state when it has one (`current`, `done`, `failed`), joined by `, `; the indicator's own name, `shownText` and probe text stay the current step's label alone), `setCurrent(optional<size_t>)`, `setLabelled(bool)` (pure; the mount calls it only when the document gives `labelled`) | — |
 | `KeyValueWidget` | `setItems(vector<KeyValueItem>)`, `setCaptionPlacement` (once, only for `Above`), `setCaptionWidth` (once, only when the node gives a width) | — |
 | `EmptyStateWidget` | `setTitle`, `setText`, `setIcon` (once), `setActionLabel` | `setOnAction` |
-| `ChartWidget` | `setData(ChartData)`, at mount and on every change (`view_tree.md`, Chart data); it takes no focus | — |
+| `ChartWidget` | `setData(ChartData)`, at mount and on every change (`view_tree.md`, Chart data); it takes no focus. A `Bars` series is drawn as `view_tree.md`, Bars, lays out (the terminal's cell rules are in `tui/frontend.md`, Qt Quick's in `qt_quick/backend.md`), on the baseline that `ChartData` implies: 0 clamped into `yMin`..`yMax` | — |
 | `DrawerWidget` | `setOpen`, `setTitle`, `setDescription` (as a dialog's), `footer()` | `setOnDismiss` (Esc on the TUI), for an open drawer |
 | `SplitterWidget` | `setSizes(vector<int>)` | `setOnResize(sizes)` |
 | `CollapsibleWidget` | `setTitle`, `setHeader(child)` (at most once), `setOpen` | `setOnToggle(open)`, with the state the user asked for |
@@ -503,7 +503,7 @@ The headless reference backend and the test double for everything above the cont
   `captions` and `captionWidth` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title`, `description` (Drawer);
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
   `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom);
-  `yRange`, `xRange`, `yLabel`, `yTicks`, `lines`, `series`, `summary` (Chart, each set only when its text
+  `yRange`, `xRange`, `barSlot`, `yLabel`, `yTicks`, `lines`, `series`, `summary` (Chart, each set only when its text
   changed, so a test sees which parts of the data moved).
 - **Components.** `createCustom` loads only the components named by `loadsComponents(names)`, none
   until it is called, so a custom node shows its fallback by default. A loaded one is a `Custom`
@@ -517,7 +517,7 @@ The headless reference backend and the test double for everything above the cont
   as `[label:value,…]`, a value with spans as its runs in brackets and a tone other than `Neutral` following as
   `;tone=<Tone>` (`[Serial number:[DEAB-902114;mono],Containers:180 needed;tone=Err]`), with `;` escaped in a caption
   or value so it cannot forge a tone; sizes as `[n,…]`; a chart's ranges as `[lo,hi]`, its ticks as `[text@value,…]`, its lines
-  as `[label@value;tone;style,…]` (`err`, `dashed`), and its series as `[label;joined;[point|…],…]`, each point
+  as `[label@value;tone;style,…]` (`err`, `dashed`), and its series as `[label;joined;[point|…],…]` (a `Bars` series followed by `;bars` after its points, a `Line` series by nothing: `[Revenue;false;[Jan@0,12;;|Feb@1,15;;];bars]`), each point
   `xLabel@x,y;tone;note` with `y` as a number, `gap` for none, or the axis end followed by `↑` or `↓` for a clipped
   point, and the tone empty for an unmarked one; every chart number shortest-round-trip, so a log is the same on
   every platform; runs as `[Lot ,L-26-0381;mono]`, each run's text followed by `;strong` and

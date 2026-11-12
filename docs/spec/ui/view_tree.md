@@ -132,7 +132,7 @@ lowers them to the kinds below.
 | `Splitter` | `splitter` | `children` (a null child is skipped), `orientation` (`Axis`, set once), `sizes` (`std::vector<int>`; empty, or of a length other than the pane count, places each pane of a horizontal splitter by its own width sizing: fixed in units, percent as a share of the splitter's width, stretch by weight, content as a stretch of weight 1, so equal panes share equally; a vertical splitter shares its height equally; every pane's `minWidth`/`maxWidth` (`minHeight`/`maxHeight` for a vertical splitter) bound it, a user's drag included; matching `sizes` place the panes and the bounds still apply), `onResize` (every pane's size after the user dragged a handle) |
 | `Collapsible` | `collapsible` | `title`, `open`, `onToggle` (the state the user asked for), `header` (shown beside the title, usable while closed), `child` (mounted once, hidden while closed) |
 | `DropZone` | `dropZone` | `accept` (extensions such as `".csv"`, without regard to case; empty takes every file), `multiple` (both set once), `onDrop` (the paths of a drop it took; a drop with a refused file, or several files when not `multiple`, is refused whole), `child` |
-| `Chart` | `chart` | `data` (`ChartData`, below): points against a numeric axis with horizontal reference lines. It takes no focus and calls no handler |
+| `Chart` | `chart` | `data` (`ChartData`, below): points, joined or as bars, against a numeric axis with horizontal reference lines. It takes no focus and calls no handler |
 | `Custom` | `custom` | `name`, `fallback` (never null: `custom` throws `std::invalid_argument`), `props` (`CustomProp`: a name and a `Prop` of text, `bool` or `double`), `minVersion`, `onEvent(event, payload)`. `Mounted` asks `IViewBackend::createCustom` for the component and mounts the fallback only when it returns null; `Custom` has no `Common` of its own |
 
 Every node but `Custom` also carries `Common`:
@@ -186,17 +186,49 @@ Everything in it is computed before the backend sees it ([`interpreter.md`](inte
 
 | Field | Meaning |
 |---|---|
-| `xMin`, `xMax`, `yMin`, `yMax` | The plotted range of each axis, padding included |
+| `xMin`, `xMax`, `yMin`, `yMax` | The plotted range of each axis, padding included; with a `Bars` series, `xMin`/`xMax` also hold half a bar slot beyond the outermost position, and `yMin`/`yMax` hold the baseline, which is the end itself when nothing lies beyond it |
+| `barSlot` | The width, in `x` units, of the room one position gives its bars (the smallest distance between two positions of `Bars` series, gaps included, or 1 for one position); 0 when no series is `Bars` or none has a point |
 | `yLabel` | The value axis's unit or name; empty for none |
 | `yTicks` | `ChartTick{value, text}`s labelling the value axis; empty when three or more reference lines label it |
 | `lines` | `ChartLine{value, label, tone, style}`: a horizontal reference line in its `Tone`'s colour, `ChartLineStyle{Solid, Dashed, Dotted}` |
-| `series` | `ChartSeries{label, joined, points}`, at most four, in drawing order; `label` names it in the legend |
+| `series` | `ChartSeries{label, joined, style, points}`, at most four, in drawing order; `label` names it in the legend; `style` is `ChartStyle{Line, Bars}`, `Line` by default; `joined` is false for a `Bars` series and a backend reads it for a `Line` series only |
 | `series[].points` | `ChartPoint{x, y, clip, xLabel, tone, note}`: `x` is an index, a number or an instant's milliseconds since the epoch; `y` empty is a gap no line joins across; `clip` (`ChartClip{None, Below, Above}`) marks a value beyond an axis end the document fixed, and `y` is then that end; `tone` engaged marks the point; `note` is text beside it |
 | `summary` | The text alternative: the accessible description, and what a probe reads as the chart's text |
 
 A series is told apart by its shape as well as its colour (`color.chart.1` to `.4`, [`theme.md`](theme.md)), a
 marked point by a shape no series uses, and a clipped point by an open triangle at the edge, so nothing a chart
 says rests on colour alone.
+
+**Bars.** A `Bars` series draws, at each position that has a value, a rectangle from the baseline to the value
+instead of a point and a joining line. The baseline is 0 clamped into the value axis, so a document that fixes
+`yMin` above 0 grows its bars from the bottom edge and one that fixes `yMax` below 0 hangs them from the top edge.
+A negative value hangs below the baseline. A value beyond a fixed end is clipped as a point is: the bar reaches the
+end and the open triangle is drawn there, as for a clipped point; a bar clipped on the baseline's own side has no
+extent and draws only the triangle. A `tone` marks its bar in that tone's colour with the cross centred half a unit
+(one cell in the terminal) beyond its tip; clip wins over tone, as for points. A bar's `note` is drawn beside the
+marker's place, or the tip's where there is no marker, as a point's note is beside the point.
+
+- **A group.** The `Bars` series of a chart, *n* of them in series order, stand side by side at every position, each
+  `0.8 × barSlot / n` wide, touching one another, left to right in series order, the group centred on the position
+  and a gap of `0.2 × barSlot` between two groups at the nearest positions. A position at which a series has no
+  value (a gap, which is a `null` `y`, or no point at all) leaves that series' place in the group empty, so a
+  series' bars keep their place from one position to the next and the other series' bars do not widen to fill it. A
+  `Line` series takes no place in a group. A frontend draws a bar at least one pixel (in the terminal, one column)
+  wide; bars that then share room overlap, the one whose tip is nearer the baseline in front, the later series in
+  front on a tie.
+- **Mixing.** `Line` and `Bars` series share the axes. The bars are drawn first, then the reference lines over them
+  where the frontend can draw two things in one place (a terminal cell holds one glyph, so a line leaves the cells
+  of a bar alone), then the lines and points of the `Line` series, then the clipped and marked points, so a point is
+  never hidden by a bar. Only positions of `Bars` series, gaps included, set the bar slot, and only `Bars` series
+  count towards *n*. A `Line` series' points keep their exact positions, never moved to a group's centre or a bar's
+  place.
+- **Telling bars apart.** A series' bar is told apart from the others by its place in the group, which is the order
+  of the legend, as well as by `color.chart.1` to `.4`. The legend marks a `Bars` series with a bar-shaped swatch, a
+  shape no point marker has.
+- **Axis labels.** A point's `xLabel` is drawn under the centre of its group, as under a point.
+
+A client older than this vocabulary ignores the `style` key and draws the series as a joined line, so a document that
+may reach one gives the chart a `summary` that carries the values.
 
 The builder for a Switch is `switchOf` because `switch` is a keyword. `switchOn<E>(selector, cases,
 fallback)` is the enumeration form: `selector` is a `std::function<E()>`, `cases` pairs enumerators
@@ -571,7 +603,7 @@ rows appear at the next change of the rows.
 
 ## Out of scope
 
-Not in the palette: themes beyond `TextRole`, images, charts other than points against a numeric axis (bars,
-histograms, areas, pies), chart interaction, and translation catalogues — a
+Not in the palette: themes beyond `TextRole`, images, charts other than points and bars against a numeric axis (histograms,
+areas, pies, stacked bars), chart interaction, and translation catalogues — a
 binding produces translated text. The document's further kinds and properties join with the
 interpreter ([The palette](#the-palette)).

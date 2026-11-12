@@ -332,6 +332,12 @@ enum class ChartClip : std::uint8_t {
     Above,  ///< Above its upper end; drawn at that end, pointing up.
 };
 
+/// @brief How a chart's series is drawn.
+enum class ChartStyle : std::uint8_t {
+    Line,  ///< Points, joined by a line when the series is `joined`.
+    Bars,  ///< A bar from the baseline to each value, side by side with the other `Bars` series at each position.
+};
+
 /// @brief How many rows of a `Table` the user can select.
 enum class SelectionMode : std::uint8_t {
     None,      ///< Rows can be activated, not selected.
@@ -1450,8 +1456,11 @@ struct ChartPoint {
 struct ChartSeries {
     /// @brief The series' name in the legend; empty for a chart's one series.
     std::string label;
-    /// @brief Whether a line joins the points.
+    /// @brief Whether a line joins the points; a `Bars` series is never joined and a frontend reads this for `Line`
+    ///        only.
     bool joined = true;
+    /// @brief Whether the series is drawn as a line of points or as bars.
+    ChartStyle style = ChartStyle::Line;
     /// @brief The points, in order.
     std::vector<ChartPoint> points;
 
@@ -1502,6 +1511,9 @@ struct ChartData {
     double yMin = 0.0;
     /// @brief The upper end of the value axis, padding included.
     double yMax = 0.0;
+    /// @brief The width, in horizontal-axis units, of the room one position gives its bars; 0 when no series is
+    ///        `Bars`.
+    double barSlot = 0.0;
     /// @brief The value axis's unit or name, drawn above its labels; empty for none.
     std::string yLabel;
     /// @brief The value axis's ticks; empty when three or more reference lines label the axis.
@@ -1518,7 +1530,7 @@ struct ChartData {
     bool operator==(ChartData const&) const = default;
 };
 
-/// @brief Points against a numeric axis, optionally joined, with horizontal reference lines. Takes no focus and
+/// @brief Points, joined or as bars, against a numeric axis, with horizontal reference lines. Takes no focus and
 ///        calls no handler.
 struct Chart {
     /// @brief What the chart draws.

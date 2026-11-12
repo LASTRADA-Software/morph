@@ -368,6 +368,7 @@ void ChartImpl::setData(ui::ChartData const& data) {
         }
         series.append(QVariantMap{{QStringLiteral("label"), toQString(one.label)},
                                   {QStringLiteral("joined"), one.joined},
+                                  {QStringLiteral("style"), static_cast<int>(one.style)},
                                   {QStringLiteral("points"), points}});
     }
     write("summary", toQString(data.summary));
@@ -375,6 +376,7 @@ void ChartImpl::setData(ui::ChartData const& data) {
                                {QStringLiteral("xMax"), data.xMax},
                                {QStringLiteral("yMin"), data.yMin},
                                {QStringLiteral("yMax"), data.yMax},
+                               {QStringLiteral("barSlot"), data.barSlot},
                                {QStringLiteral("yLabel"), toQString(data.yLabel)},
                                {QStringLiteral("ticks"), ticks},
                                {QStringLiteral("lines"), lines},

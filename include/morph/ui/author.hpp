@@ -5262,6 +5262,12 @@ namespace detail {
 /// @brief An expression read once per point of a chart's series, from the point's element (`{"row": ""}`).
 using PointExpression = std::function<AnyHandle(AnyHandle const& point)>;
 
+/// @brief How a `chart` series is drawn.
+enum class SeriesStyle : std::uint8_t {
+    Line,  ///< Points, joined by a line unless `joined` is false.
+    Bars,  ///< A bar from the baseline to each value, beside the other `Bars` series at each position.
+};
+
 /// @brief One series of a `chart`.
 struct ChartSeries {
     /// @brief The series' name in the legend; required when the chart has two or more series.
@@ -5279,8 +5285,10 @@ struct ChartSeries {
     PointExpression tone;
     /// @brief Text drawn beside the point.
     PointExpression note;
-    /// @brief Whether a line joins the points.
+    /// @brief Whether a line joins the points; a `Bars` series is never joined, whatever this says.
     bool joined = true;
+    /// @brief Whether the series is drawn as a line of points or as bars.
+    SeriesStyle style = SeriesStyle::Line;
 };
 
 /// @brief How a chart's reference line is stroked.
@@ -5348,6 +5356,9 @@ struct ChartOptions {
         each(part, "note", one.note);
         if (!one.joined) {
             detail::put(part, "joined", false);
+        }
+        if (one.style == SeriesStyle::Bars) {
+            detail::put(part, "style", "bars");
         }
         series.push_back(std::move(part));
     }

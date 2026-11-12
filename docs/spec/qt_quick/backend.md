@@ -201,12 +201,17 @@ throws is logged and goes no further. Only the user's own actions fire: Qt Quick
   axis, else the ticks') right-aligned in a left gutter as wide as the widest, `yLabel` above them; with ticks, each
   line's label at its right end, above the line; the `xLabel`s in one row below the plot, each skipped when it would
   overlap the last one drawn, the newest always drawn; the legend below that for two or more series, each series'
-  shape beside its label. It draws, in order: the lines (1 px on a pixel row's centre, so a line is one row of
+  shape beside its label, a `Bars` series' a bar-shaped swatch (a unit wide, 0.8 of a unit tall), a shape no marker has. It draws, in order: the bars of every `Bars` series; the lines (1 px on a pixel row's centre, so a line is one row of
   device pixels at any ratio; dashes 4 on 3 off, dots 2 on 3 off, in the tone's colour, `muted` for neutral); each
-  series as a 1.5 px polyline in `scheme.chart1` to `chart4`, broken at gaps, when joined; its points, 5 px across,
+  `Line` series as a 1.5 px polyline in `scheme.chart1` to `chart4`, broken at gaps, when joined; its points, 5 px across,
   as a circle, square, triangle or diamond in token order; then over every series the clipped points (an open
   triangle at the edge, pointing out of the plot) and the marked points (a cross 10 px across, 2 px stroke, in the
   tone's colour) and the notes (the tone's colour, beside the point, flipped to its left near the right edge).
+  A bar is a filled rectangle in its series' colour (its tone's for a marked point) from the baseline, which is 0
+  clamped into the axis, to the value; a group of *n* is `0.8 × barSlot` wide in plot pixels, each bar a *n*th of it
+  and at least 1 px, the bars touching and in series order from the left, and where bars overlap the one whose tip is nearer the
+  baseline is drawn over the other, the later series over the earlier on a tie. A reference line crosses a bar on top of it. A marked bar's cross is centred
+  half a unit beyond its tip, a clipped bar's open triangle on the axis end, and a note beside that place.
   Its content size is 40 units by 8, so a chart in a stretching column is readable before any `sizing`. It is
   `Accessible.Chart`, named by the node's `a11y` name or else the summary; the summary is the description only
   when the name is not, so a screen reader reads it once. `shownText()`, the probe's `textOf`, is the summary. A

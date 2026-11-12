@@ -339,7 +339,7 @@ A node list is an array of nodes or one node. `nodeKinds()` lists the kinds.
 
 ### Charts
 
-A `chart` plots points against a numeric axis, optionally joined, with horizontal reference lines: a control
+A `chart` plots points against a numeric axis, joined or as bars, with horizontal reference lines: a control
 chart, a trend, a stability plot. It is a palette node rather than a host component, so it reaches every client and
 backend, and what it plots, marks and says is the interpreter's ([`interpreter.md`](interpreter.md#charts)).
 
@@ -349,7 +349,10 @@ backend, and what it plots, marks and says is the interpreter's ([`interpreter.m
   instant, and without `x` on any series a point sits at its index; `xLabel` labels the point on the horizontal
   axis; `tone` (`neutral`, `info`, `ok`, `warn`, `err`, or `null`) marks it; `note` is text beside it. `label` is
   the series' name in the legend, required when there are two or more series. `joined` (a literal `bool`, default
-  `true`) joins the points.
+  `true`) joins the points. `style` (a literal name, `line` by default, or `bars`) draws the series as a line of
+  points or as bars (`view_tree.md`, Bars): a bar stands at each point's position from the baseline to its `y`, and a
+  series with `style: bars` has no joining line, so `joined: true` beside it is refused (`joined: false` is accepted). A client that predates `style`
+  ignores it and draws the series as a joined line; a document that must not be drawn so writes `!style`, which such a client refuses.
 - A **line** is drawn at `value` (required, a number or a quantity), in its `tone` (default `neutral`), with
   `style` `solid` (the default), `dashed` or `dotted`; `label` defaults to the value at `yPlaces`.
 - `yMin` and `yMax` fix the ends of the value axis; `yPlaces` is the places its labels are shown at; `yLabel` names
@@ -357,7 +360,7 @@ backend, and what it plots, marks and says is the interpreter's ([`interpreter.m
 
 The loader refuses, each at its path: a chart without `summary` or `series`; a series without `points` or `y`; two
 or more series where one has no `label`; `x` on some series and not on others; more than 4 series or 16 lines; a
-`yPlaces` that is not a literal integer from 0 to 18; a `style` other than the three; a literal `tone` that names no
+`yPlaces` that is not a literal integer from 0 to 18; a line `style` other than the three; a series `style` other than `line` and `bars`; `joined: true` beside `style: bars`; a literal `tone` that names no
 tone; literal `yMin` above literal `yMax`. A computed value that breaks one of these is reported when it is
 evaluated.
 

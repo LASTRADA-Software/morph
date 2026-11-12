@@ -170,12 +170,14 @@ private:
     bool _labelled = true;
 };
 
-/// Chart: points plotted in character cells. A gutter at the left holds the reference lines' labels when three or more
-/// label the axis, else the ticks'; each line is a row of `─`, `╌` or `┄` in its tone. A point is its series' glyph
-/// (`●`, `■`, `▲`, `◆`) in the series colour, a marked one `✕` in its tone with its note after it, a clipped one `△`
-/// or `▽` on the edge row. Points are not joined: a cell is twice as tall as it is wide, so box characters between
-/// cells would draw slopes that are not there. Below the plot, the points' labels and, for two or more series, the
-/// legend. Smaller than 20 by 5 cells, it shows its summary, muted, in place of the plot.
+/// Chart: points and bars plotted in character cells. A gutter at the left holds the reference lines' labels when
+/// three or more label the axis, else the ticks'; each line is a row of `─`, `╌` or `┄` in its tone. A point is its
+/// series' glyph (`●`, `■`, `▲`, `◆`) in the series colour, a marked one `✕` in its tone with its note after it, a
+/// clipped one `△` or `▽` on the edge row. Points are not joined: a cell is twice as tall as it is wide, so box
+/// characters between cells would draw slopes that are not there. A `Bars` series is a run of block characters per
+/// position (`█`, and `▁` to `▇` for a partial end cell), drawn before the lines, which leave the cells a bar covers
+/// alone. Below the plot, the points' labels and, for two or more series, the legend. Smaller than 20 by 5 cells, it
+/// shows its summary, muted, in place of the plot.
 class ChartImpl final : public TuiWidget<ui::ChartWidget> {
 public:
     explicit ChartImpl(Context& context) : TuiWidget{context} { adopt(makeView(*this)); }
@@ -194,8 +196,12 @@ private:
         [[nodiscard]] int rowOf(ui::ChartData const& data, double value) const;
         [[nodiscard]] int columnOf(ui::ChartData const& data, double position) const;
     };
+    /// The cells the `Bars` series cover and the marks beyond their tips.
+    struct BarLayout;
+    [[nodiscard]] BarLayout barLayout(::core::tui::Theme const& theme, Plot const& plot) const;
     void paintSummary(::core::tui::Canvas& canvas) const;
-    void paintLines(::core::tui::Canvas& canvas, Plot const& plot, bool byLines) const;
+    void paintLines(::core::tui::Canvas& canvas, Plot const& plot, bool byLines, BarLayout const& bars) const;
+    void paintBarMarks(::core::tui::Canvas& canvas, Plot const& plot, BarLayout const& bars) const;
     void paintPoints(::core::tui::Canvas& canvas, Plot const& plot) const;
     void paintBelow(::core::tui::Canvas& canvas, Plot const& plot) const;
 
