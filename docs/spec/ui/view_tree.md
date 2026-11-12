@@ -187,7 +187,7 @@ Everything in it is computed before the backend sees it ([`interpreter.md`](inte
 | Field | Meaning |
 |---|---|
 | `xMin`, `xMax`, `yMin`, `yMax` | The plotted range of each axis, padding included; with a `Bars` series, `xMin`/`xMax` also hold half a bar slot beyond the outermost position, and `yMin`/`yMax` hold the baseline, which is the end itself when nothing lies beyond it |
-| `barSlot` | The width, in `x` units, of the room one position gives its bars (the smallest distance between two positions of `Bars` series, gaps included, or 1 for one position or none); 0 when no series is `Bars` |
+| `barSlot` | The width, in `x` units, of the room one position gives its bars (the smallest distance between two positions of `Bars` series, gaps included, or 1 for one position); 0 when no series is `Bars` or none has a point |
 | `yLabel` | The value axis's unit or name; empty for none |
 | `yTicks` | `ChartTick{value, text}`s labelling the value axis; empty when three or more reference lines label it |
 | `lines` | `ChartLine{value, label, tone, style}`: a horizontal reference line in its `Tone`'s colour, `ChartLineStyle{Solid, Dashed, Dotted}` |
