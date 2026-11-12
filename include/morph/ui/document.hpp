@@ -24,6 +24,7 @@
 
 #include "control_shape.hpp"
 #include "expression.hpp"
+#include "shell_parts.hpp"
 #include "value.hpp"
 
 /// @file
@@ -257,6 +258,7 @@ enum class CommandKind : std::uint8_t {
     SwitchBackend,  ///< `{"switchBackend": "name"}`
     ResetPrefs,     ///< `{"resetPrefs": "point" | "all"}`
     SetLocale,      ///< `{"setLocale": "de"}`
+    SetContext,     ///< `{"setContext": e}`
     Notify,         ///< `{"notify": e, "role": "success"}`
     Seq,            ///< `{"seq": [...]}`
     All,            ///< `{"all": [...]}`
@@ -602,6 +604,8 @@ struct Document {
     ExprPtr pageSurface;
     /// @brief The app document's principal placement, `sidebar` or `head`; empty for the default, `sidebar`.
     std::string principalPlacement;
+    /// @brief The shell's declared parts, the app document's only; their reads are queries of `scope`.
+    std::optional<ShellParts> shell;
     /// @brief The head's status badges: `headBadge` parts, in order.
     std::vector<DocNodePtr> status;
     /// @brief The head's actions: `actionButton` parts, in order.
@@ -1351,6 +1355,7 @@ public:
             }
         }
         doc.scope = scope(*object, "");
+        shellParts(*object, doc);
         for (std::string_view const key : {"onMount", "onUnmount", "onClose", "onSave", "onBackendChange"}) {
             if (Json const* const commands = member(*object, key)) {
                 doc.lifecycle.emplace(std::string{key}, commandList(*commands, pointerAppend("", key)));
@@ -1589,6 +1594,113 @@ private:
             parts.push_back(part(array->at(index), kind, pointerAppend(path, index)));
         }
         return parts;
+    }
+
+    /// @brief Reads the app document's `shell` member, checks it, and appends the queries and state it lowers to.
+    /// @param object The document's JSON object.
+    /// @param doc    The document being built; its scope receives the lowered declarations.
+    void shellParts(Json::object_t const& object, Document& doc) {
+        Json const* const declared = member(object, "shell");
+        if (declared == nullptr) {
+            return;
+        }
+        if (doc.id != "app") {
+            refuse("/shell", "`shell` is the app document's; a screen has none");
+        }
+        ShellParts parts;
+        auto const text = glz::write_json(*declared);
+        if (!text || glz::read_json(parts, *text)) {
+            refuse("/shell", "`shell` is the shell's parts: context, modules, search, inbox, principal, searchHint");
+        }
+        checkShellParts(parts);
+        auto reserved = [](std::string const& name) { return name.starts_with("shell"); };
+        for (auto const& model : doc.scope.models) {
+            if (reserved(model.name)) {
+                refuse(model.path, "names beginning `shell` are reserved for the shell's parts");
+            }
+        }
+        for (auto const& state : doc.scope.state) {
+            if (reserved(state.name)) {
+                refuse(state.path, "names beginning `shell` are reserved for the shell's parts");
+            }
+        }
+        for (auto const& query : doc.scope.queries) {
+            if (reserved(query.name)) {
+                refuse(query.path, "names beginning `shell` are reserved for the shell's parts");
+            }
+        }
+        auto lowered = parseJson(lowerShellParts(parts));
+        auto const* const loweredObject = lowered ? std::get_if<Json::object_t>(&lowered->data) : nullptr;
+        if (loweredObject == nullptr) {
+            refuse("/shell", "the shell's parts do not lower");
+        }
+        ScopeDecl extra = scope(*loweredObject, "/shell");
+        auto append = [](auto& into, auto& from) {
+            into.insert(into.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end()));
+        };
+        append(doc.scope.models, extra.models);
+        append(doc.scope.state, extra.state);
+        append(doc.scope.queries, extra.queries);
+        doc.shell = std::move(parts);
+    }
+
+    /// @brief Refuses a declaration that cannot be read: a repeated module, an empty required field, a repeated tag.
+    /// @param parts The parts.
+    static void checkShellParts(ShellParts const& parts) {
+        auto required = [](std::string const& value, std::string const& path) {
+            if (value.empty()) {
+                refuse(path, "the shell's part needs this name");
+            }
+        };
+        auto distinct = [](auto const& list, std::string const& path, auto key) {
+            std::set<std::string> seen;
+            for (auto const& entry : list) {
+                if (!seen.insert(key(entry)).second) {
+                    refuse(path, "the shell's parts list `" + key(entry) + "` twice");
+                }
+            }
+        };
+        if (parts.context) {
+            required(parts.context->model, "/shell/context/model");
+            required(parts.context->action, "/shell/context/action");
+            required(parts.context->optionsField, "/shell/context/optionsField");
+            required(parts.context->labelField, "/shell/context/labelField");
+            required(parts.context->valueField, "/shell/context/valueField");
+        }
+        auto count = [&](ModuleCount const& entry, std::string const& path) {
+            required(entry.model, path + "/model");
+            required(entry.action, path + "/action");
+            required(entry.countField, path + "/countField");
+        };
+        for (std::size_t index = 0; index < parts.modules.size(); ++index) {
+            count(parts.modules.at(index), "/shell/modules/" + std::to_string(index));
+        }
+        distinct(parts.modules, "/shell/modules", [](ModuleCount const& entry) { return entry.module; });
+        for (std::size_t index = 0; index < parts.search.size(); ++index) {
+            std::string const path = "/shell/search/" + std::to_string(index);
+            required(parts.search.at(index).model, path + "/model");
+            required(parts.search.at(index).action, path + "/action");
+            required(parts.search.at(index).queryField, path + "/queryField");
+            required(parts.search.at(index).resultsField, path + "/resultsField");
+        }
+        distinct(parts.search, "/shell/search", [](SearchSource const& entry) { return entry.module; });
+        if (parts.inbox) {
+            required(parts.inbox->screen, "/shell/inbox/screen");
+            if (parts.inbox->sources.empty()) {
+                refuse("/shell/inbox/sources", "an inbox sums at least one source");
+            }
+            for (std::size_t index = 0; index < parts.inbox->sources.size(); ++index) {
+                count(parts.inbox->sources.at(index), "/shell/inbox/sources/" + std::to_string(index));
+            }
+        }
+        if (parts.principal) {
+            PrincipalMenu const& menu = *parts.principal;
+            required(menu.model, "/shell/principal/model");
+            required(menu.action, "/shell/principal/action");
+            required(menu.nameField, "/shell/principal/nameField");
+            distinct(menu.locales, "/shell/principal/locales", [](std::string const& tag) { return tag; });
+            distinct(menu.formats, "/shell/principal/formats", [](std::string const& tag) { return tag; });
+        }
     }
 
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per kind of declaration.
@@ -1838,7 +1950,7 @@ private:
     };
 
     // NOLINTBEGIN(modernize-use-designated-initializers): one row per command reads as a table.
-    static constexpr std::array<CommandSpec, 23> kCommands = {{
+    static constexpr std::array<CommandSpec, 24> kCommands = {{
         {"set", CommandKind::Set, {"value"}},
         {"reset", CommandKind::Reset, {}},
         {"run", CommandKind::Run, {"body", "as", "each"}},
@@ -1852,6 +1964,7 @@ private:
         {"switchBackend", CommandKind::SwitchBackend, {}},
         {"resetPrefs", CommandKind::ResetPrefs, {}},
         {"setLocale", CommandKind::SetLocale, {}},
+        {"setContext", CommandKind::SetContext, {}},
         {"notify", CommandKind::Notify, {"role"}},
         {"seq", CommandKind::Seq, {}},
         {"all", CommandKind::All, {}},
@@ -1967,6 +2080,7 @@ private:
                 navigate(cmd, fields, primary, path);
                 break;
             case CommandKind::Return:
+            case CommandKind::SetContext:
                 cmd.value = expr(primary, where);
                 break;
             case CommandKind::Host:
@@ -4882,6 +4996,7 @@ private:
             case CommandKind::Notify:
             case CommandKind::SwitchBackend:
             case CommandKind::SetLocale:
+            case CommandKind::SetContext:
             case CommandKind::SignOut:
             default:
                 if (cmd.value) {
@@ -5259,7 +5374,7 @@ inline std::expected<Type, std::string> ScopeResolver::row(std::span<std::string
 }
 
 inline std::expected<Type, std::string> ScopeResolver::control(ExprKind form, std::string_view name) const {
-    if (form == ExprKind::Can && name.starts_with("host:")) {
+    if (form == ExprKind::Can && (name.starts_with("host:") || name == "context")) {
         return Type::of(TypeKind::Bool);
     }
     NameEntry const* const entry = DocumentValidator::lookup(_context.scope, name);

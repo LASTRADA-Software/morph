@@ -116,24 +116,33 @@ compact frame has no navigator search: the menu lists every entry.
 ## Declared parts
 
 An application's [`ShellParts`](shell_parts.md) are drawn by the frame from state the client sets; the frame asks no
-action itself. `setParts(ShellPartsView)` installs them. `ShellPartsView` is the frame's whole input:
+action itself. `setParts(ShellPartsView)` installs them (`shell_parts_view.hpp`). `ShellPartsView` is the frame's whole
+input:
 
 | Member | Holds |
 |---|---|
-| `context` | the switcher: `options` (each `label`, `detail`, `group`, a `key` the handler gets back), `chosen` (an index, or none), `enabled` |
-| `search` | `hint`, `text`, `phase` (`Idle`, `Busy`, `Done`), `sources` (each `title`, `failed`, `hits` of `kind`, `title`, `detail`), `highlight` (an index over the drawn hits, or none), `open` |
-| `inbox` | `title`, `count` (none while unanswered), `failed`, `shown` |
-| `principal` | `name`, `subtitle`, `detail`, `roles` (each `label`, `detail`), `locales`, `chosenLocale`, `formats`, `chosenFormat` (each with a display `label`), `shown` |
+| `context` | the switcher: `shown`, `options` (each `label`, `detail`, `group`), `chosen` (an index, or none), `enabled` |
+| `search` | `shown`, `hint`, `sources` (each `title`, `failed`, `pending`, `hits` of `kind`, `title`, `detail`) |
+| `inbox` | `shown`, `title`, `count` (none while unanswered), `failed` |
+| `principal` | `shown`, `name`, `subtitle`, `detail`, `roles` (each `label`, `detail`), `locales` and `formats` (each `tag`, `label`), `chosenLocale`, `chosenFormat` |
 | `labels` | the texts the frame draws that are not data: the catalogue-resolved strings of `morph.shell.*` |
 
-`ShellPartsHandlers` is what the frame reports: `onContext(index)`, `onSearchText(text)`, `onSearchMove(delta)`,
-`onSearchOpen()`, `onSearchOpenAll()`, `onSearchClose()`, `onInbox()`, `onLocale(index)` and `onFormat(index)`. A frame
-with no parts installed has none of these widgets visible.
+The search text, the highlight and whether the panel is open are the frame's own state, because they follow the person's
+typing and keys; `setSearchText` of the model receives each edit. `ShellPartsHandlers` is what the frame reports:
+`onContext(index)`, `onSearchText(text)`, `onSearchOpen(source, hit)`, `onSearchOpenAll()`, `onInbox()`,
+`onLocale(index)` and `onFormat(index)`; the frame's `setPartsHandlers` installs them. `ShellPartsBinding`
+(`shell_parts_binding.hpp`) joins a `ShellPartsModel` that reads the parts to a frame: it follows the model into
+`setParts`, the module counts into `Navigator::setModuleBadge`, and the handlers back into the model. A frame with no
+parts installed has none of these widgets visible.
+
+`confirm(message, yes, no, done)` asks a yes-or-no question in a dialog over the frame (`shell_confirm`, with
+`shell_confirm_yes` and `shell_confirm_no`) and answers once; Escape answers no.
 
 The widgets, by test id: `shell_context` (the sidebar's top, under `shell_application`); in the top bar's line, in this
 order, `shell_search` (a text input; Ctrl K focuses it) with `shell_search_popover` under it holding
 `shell_search_results`, `shell_inbox` with its sibling badge `shell_inbox_count` and its error marker, and
-`shell_principal_menu`. `shell_search_popover` is a `PopoverWidget` and closes on `setOnDismiss`. With parts, the top bar's
+`shell_principal_menu`. `shell_search_popover` is a `PopoverWidget` whose dismissal closes the panel; its rows are `shell_search_busy`,
+`shell_search_source_<n>`, `shell_search_failed_<n>`, `shell_search_hit_<source>_<place>` and `shell_search_empty`. With parts, the top bar's
 title and head slots are not used: the client mounts the workspace `HeadPlacement::InPage`, and `shell_head_trail` and
 `shell_head_principal` stay hidden. The sidebar's principal text and sign-out button are hidden while a principal menu is
 shown; the navigator's search field is hidden while a search part is shown (`Navigator::setSearchShown`).

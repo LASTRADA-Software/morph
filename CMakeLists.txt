@@ -531,6 +531,10 @@ target_sources(morph
         include/morph/ui/route_history.hpp
         include/morph/ui/service_client.hpp
         include/morph/ui/shell_frame.hpp
+        include/morph/ui/shell_parts.hpp
+        include/morph/ui/shell_parts_binding.hpp
+        include/morph/ui/shell_parts_model.hpp
+        include/morph/ui/shell_parts_view.hpp
         include/morph/ui/explorer.hpp
         include/morph/ui/agent.hpp
         include/morph/ui/chat/client.hpp

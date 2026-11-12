@@ -945,7 +945,8 @@ public:
           _env{runtime, ValueRecord{{"locale", Value{FormatContext{}.locale}}}},
           _sessionValues{runtime},
           _hostValues{runtime},
-          _hostCommandNames{runtime} {}
+          _hostCommandNames{runtime},
+          _contextOffered{runtime, false} {}
 
     Session(Session const&) = delete;
     Session& operator=(Session const&) = delete;
@@ -976,8 +977,42 @@ public:
         if (action.starts_with(kHostPrefix)) {
             return _hostCommandNames.get().contains(action.substr(kHostPrefix.size()));
         }
+        if (action == "context") {
+            return _contextOffered.get();
+        }
         return _permitted.get().contains(action);
     }
+
+    /// @brief Says whether a scope switcher with at least one option is installed, which is when `{"can": "context"}`
+    ///        holds and the `setContext` command can run.
+    /// @param offered Whether it is.
+    void setContextOffered(bool offered) { _contextOffered.set(offered); }
+
+    /// @brief Installs what runs the `setContext` command: the shell, which checks the value against the switcher's
+    ///        options and asks before discarding unsaved work. An empty function removes it.
+    /// @param handler It gets the requested value and answers whether it accepted the request.
+    void setContextHandler(std::function<bool(Value const&)> handler) { _contextHandler = std::move(handler); }
+
+    /// @brief Asks the installed handler to change the context.
+    /// @param value The option value requested.
+    /// @return Whether a handler accepted it; `false` with none installed.
+    bool requestContext(Value const& value) const { return _contextHandler && _contextHandler(value); }
+
+    /// @brief Sets the scope every screen reads as `{"env": "context"}`.
+    /// @param value The chosen option's value; `null` for none.
+    void setContext(Value value) { setEnvironmentValue("context", std::move(value)); }
+
+    /// @brief Chooses the number, money and date facts apart from the language. The choice stays through later
+    ///        `setLocale` calls, until an empty tag clears it.
+    /// @param tag The BCP 47 tag whose facts apply; empty follows the language.
+    void setFormatLocale(std::string tag) {
+        _formatLocale = std::move(tag);
+        applyFacts(_format.peek()->locale);
+    }
+
+    /// @brief The tag chosen with `setFormatLocale`.
+    /// @return It; empty when the facts follow the language.
+    [[nodiscard]] std::string const& formatLocale() const noexcept { return _formatLocale; }
 
     /// @brief Replaces the formatting facts; every `t` and display function re-evaluates. `{"env": "locale"}` follows
     ///        the facts' locale.
@@ -1016,18 +1051,7 @@ public:
     ///        and currency symbols, and the date patterns the application did not declare
     ///        (`setDatePatterns`). The other formatting facts stay.
     /// @param locale The BCP 47 locale.
-    void setLocale(std::string locale) {
-        LocaleFacts const& facts = localeFacts(locale);
-        _localeDate = std::string{facts.datePattern};
-        _localeDateTime = std::string{facts.dateTimePattern};
-        FormatContext next = *_format.peek();
-        next.locale = std::move(locale);
-        next.numeric = facts.numeric;
-        next.currency = facts.currency;
-        next.datePattern = _declaredDate.empty() ? _localeDate : _declaredDate;
-        next.dateTimePattern = _declaredDateTime.empty() ? _localeDateTime : _declaredDateTime;
-        setFormatting(std::move(next));
-    }
+    void setLocale(std::string locale) { applyFacts(std::move(locale)); }
 
     /// @brief Replaces the message catalogue, keeping the other formatting facts; every `t` re-resolves.
     /// @param translations The provider, such as `MessageCatalogues::provider()`; empty shows every fallback.
@@ -1487,6 +1511,21 @@ private:
     std::set<std::string, std::less<>> _watchRecords;
     std::set<std::string, std::less<>> _unwatchRecords;
     std::set<std::pair<std::string, std::string>> _watchInstances;
+    // Installs the facts of @p locale's row, or of the chosen format locale's row where one is chosen, and names
+    // @p locale as the language.
+    void applyFacts(std::string locale) {
+        LocaleFacts const& facts = localeFacts(_formatLocale.empty() ? locale : _formatLocale);
+        _localeDate = std::string{facts.datePattern};
+        _localeDateTime = std::string{facts.dateTimePattern};
+        FormatContext next = *_format.peek();
+        next.locale = std::move(locale);
+        next.numeric = facts.numeric;
+        next.currency = facts.currency;
+        next.datePattern = _declaredDate.empty() ? _localeDate : _declaredDate;
+        next.dateTimePattern = _declaredDateTime.empty() ? _localeDateTime : _declaredDateTime;
+        setFormatting(std::move(next));
+    }
+
     std::set<std::pair<std::string, std::string>> _unwatchInstances;
     reactive::Signal<std::shared_ptr<FormatContext const>> _format;
     // What the application declared (`setDatePatterns`) and what the locale installed (`setLocale`), per pattern.
@@ -1500,6 +1539,9 @@ private:
     detail::RtScope const* _appScope = nullptr;
     std::vector<detail::ScreenCore*> _screens;
     reactive::Signal<std::set<std::string, std::less<>>> _hostCommandNames;
+    reactive::Signal<bool> _contextOffered;
+    std::function<bool(Value const&)> _contextHandler;
+    std::string _formatLocale;
     std::function<HostCommandResult(std::string const&, Value const&)> _hostCommandRunner;
     std::map<std::string, std::shared_ptr<detail::CacheEntry>, std::less<>> _entries;
     std::vector<detail::QueryRuntime*> _mounted;
@@ -2474,6 +2516,8 @@ inline constexpr std::size_t kPruneLoweredAt = 256;
             return "resetPrefs";
         case CommandKind::SetLocale:
             return "setLocale";
+        case CommandKind::SetContext:
+            return "setContext";
         case CommandKind::Notify:
             return "notify";
         case CommandKind::Seq:
@@ -3731,6 +3775,55 @@ public:
             return Value{};
         }
         return detail::evalIn(*_scope, nullptr, *parsed);
+    }
+
+    /// @brief What a query of the app document holds now.
+    struct QueryRead {
+        /// @brief Its value; `null` before the first reply.
+        Value value;
+        /// @brief Whether a request is in flight.
+        bool pending = false;
+        /// @brief Whether the last request failed.
+        bool failed = false;
+        /// @brief Whether the app document declares the query.
+        bool declared = false;
+        /// @brief Whether the server refused the request as not permitted.
+        bool denied = false;
+    };
+
+    /// @brief Reads a query of the app document. A tracked read: an effect that calls it follows the query.
+    /// @param name The query.
+    /// @return Its state; `declared` is false for a name the document does not declare as a query.
+    [[nodiscard]] QueryRead query(std::string_view name) const {
+        detail::NameRef const* const found = _scope->find(name);
+        if (found == nullptr || found->category != detail::NameCategory::Query) {
+            return QueryRead{};
+        }
+        detail::QueryRuntime const& runtime = *found->query;
+        Value const error = runtime.error();
+        Value const kind = runtime.errorKind();
+        std::string const* const kindText = kind.asString();
+        return QueryRead{.value = runtime.value(),
+                         .pending = runtime.pending(),
+                         .failed = !error.isNull(),
+                         .declared = true,
+                         .denied = kindText != nullptr && *kindText == "denied"};
+    }
+
+    /// @brief Writes a state of the app document, as a `set` of `app.name` does.
+    /// @param name  The state.
+    /// @param value The value.
+    /// @return Whether the document declares the state.
+    bool setState(std::string_view name, Value value) {
+        detail::NameRef const* const found = _scope->find(name);
+        if (found == nullptr || found->category != detail::NameCategory::State) {
+            return false;
+        }
+        detail::StateSlot& slot = *found->state;
+        slot.scope->core.initState(*slot.scope, slot);
+        _core->session.noteWrite();
+        slot.value->set(std::move(value));
+        return true;
     }
 
     /// @brief The diagnostics reported so far.
@@ -5898,6 +5991,20 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
             }
             finish(true);
             return;
+        case CommandKind::SetContext: {
+            // The shell checks the value against the switcher's options; with no switcher it is unsupported.
+            Value const requested = eval(command.value);
+            if (session.requestContext(requested)) {
+                finish(true);
+            } else {
+                report(command.path,
+                       "`setContext` was refused: " + std::string{session.can("context")
+                                                                      ? "the value is not one of the scope's options"
+                                                                      : "no scope switcher is declared"});
+                finish(false);
+            }
+            return;
+        }
         case CommandKind::Notify: {
             std::string const text = textOf(eval(command.value), session.formatting());
             finish(host != nullptr && host->notify(text, command.option) ? true : unsupported(command, "`notify`"));

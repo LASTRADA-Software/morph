@@ -8,6 +8,7 @@
 #include <morph/ui/service.hpp>
 #include <string>
 #include <string_view>
+#include <vector>
 
 /// @file
 /// A two-screen application the foundation's tests open: `probe.home` shows the answer of a query and navigates to
@@ -35,8 +36,29 @@ struct Attach {
     std::string content;
 };
 
-/// @brief The model: one answer, a sign-in and an attachment.
+/// @brief The scope switcher's read.
+struct Scopes {};
+
+/// @brief One scope the person may choose.
+struct ScopeOption {
+    /// @brief The caption.
+    std::string label;
+    /// @brief The value screens read as the context.
+    std::string value;
+};
+
+/// @brief What `Scopes` answers.
+struct ScopeList {
+    /// @brief The options.
+    std::vector<ScopeOption> options;
+};
+
+/// @brief The model: one answer, a sign-in, an attachment and the scopes.
 struct ProbeModel {
+    /// @brief The scopes.
+    /// @param action The request.
+    /// @return Two options.
+    [[nodiscard]] ScopeList execute(Scopes const& action) const;
     /// @brief The answer.
     /// @param action The request.
     /// @return 42.

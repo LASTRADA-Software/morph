@@ -217,6 +217,13 @@ A command list is an array of commands, or one command object. `Command` carries
 | `nameAs`, `typeAs` | `upload`'s body members for an inline file's name and media type |
 | `commands`, `alternative` | `seq` and `all` steps; `if`'s branches; `navigate`'s `onResult` and `onCancel` |
 
+`setContext` is the one command the shell handles: `{"setContext": e}` asks the shell to make the value of `e` the scope
+its switcher holds ([`shell_parts.md`](shell_parts.md#changing-the-context)). It runs when the value is one of the
+switcher's current options, after the person agreed to discard the unsaved work of open tabs, and answers as a failed
+command otherwise, reported as ``setContext was refused`` with its reason. `{"can": "context"}` is true exactly while a
+switcher with at least one option is installed. The command is rebuilt with each session's frame: the shell installs the
+handler when it builds the frame and takes it away with it, so nothing is registered for the process.
+
 `run`'s `as` names the element of `each` inside its body when `each` is given, and the reply for
 the later steps of the enclosing `seq` otherwise. `if` takes two or three parts: a missing else
 runs nothing.

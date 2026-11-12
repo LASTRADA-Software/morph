@@ -1009,7 +1009,8 @@ void MenuButtonImpl::setOnActivate(std::function<void(std::vector<std::size_t>)>
 // The label and a `▾`; an icon-only trigger its icon's glyph, else its accessible name, so it is never blank.
 std::string MenuButtonImpl::triggerText() const {
     if (!_trigger.label.empty()) {
-        return _trigger.label + " ▾";
+        // The second line of a two-line trigger follows the label on the terminal's one row.
+        return _trigger.label + (_trigger.detail.empty() ? std::string{} : " · " + _trigger.detail) + " ▾";
     }
     std::string_view const glyph = ui::iconGlyph(_trigger.icon);
     if (!glyph.empty()) {

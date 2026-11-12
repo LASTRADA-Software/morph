@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -13,6 +15,8 @@
 #include "../attributes.hpp"
 #include "backend.hpp"
 #include "navigator.hpp"
+#include "shell_parts.hpp"
+#include "shell_parts_view.hpp"
 
 /// @file
 /// @brief `morph::ui::ShellFrame`: the frame a client shows its screens in — a sidebar with the navigator, a top bar,
@@ -177,13 +181,7 @@ public:
         _navMenu->setTooltip("Navigation");
         _navMenu->setTrigger(MenuTrigger{.label = {}, .icon = "nav.menu", .emphasis = ButtonEmphasis::Ghost});
         showNavEntries();
-        _navMenu->setOnActivate([this](std::vector<std::size_t> const& path) {
-            if (_onSignOut && path.size() == 1 && path.front() == _navEntryCount + 1) {
-                _onSignOut();
-                return;
-            }
-            _navigator->choose(path);
-        });
+        _navMenu->setOnActivate([this](std::vector<std::size_t> const& path) { chooseNav(path); });
         _navMenu->setVisible(false);
         _navigator->setOnChanged([this] { showNavEntries(); });
         _leadBlock->setLayout({.width = Sizing::stretch(), .height = {}, .minWidth = kShellHeadLeadMinimum});
@@ -245,6 +243,7 @@ public:
         _chatSlot->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
         _chatBottom->setLayout({.width = {}, .height = Sizing::fixed(0)});
         _chatEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
+        buildParts();
         showChat();
     }
 
@@ -440,6 +439,83 @@ public:
     /// @return It.
     [[nodiscard]] bool compact() const noexcept { return _compact; }
 
+    /// @brief Installs what the frame draws of the application's declared parts ([`ShellPartsView`]): the scope
+    ///        switcher at the sidebar's top, and in the top bar the search with its results panel, the inbox button
+    ///        and the person's menu. Compact, the switcher, the module rows and the person's menu are entries of the
+    ///        navigation menu, and the search is a button that opens a full-window overlay. A frame with no parts
+    ///        draws none of them.
+    /// @param view What to draw.
+    void setParts(ShellPartsView view) {
+        if (view == _parts) {
+            return;
+        }
+        std::string const previousSignature = hitSignature();
+        _parts = std::move(view);
+        if (hitSignature() != previousSignature) {
+            _highlight = hitCount() == 0 ? std::nullopt : std::optional<std::size_t>{0};
+        }
+        showParts();
+    }
+
+    /// @brief Sets what the frame reports of the parts.
+    /// @param handlers The handlers; an empty one does nothing.
+    void setPartsHandlers(ShellPartsHandlers handlers) { _handlers = std::move(handlers); }
+
+    /// @brief Moves keyboard focus to the search field, as Ctrl K does; compact, opens the search overlay.
+    void focusSearch() {
+        if (!_parts.search.shown) {
+            return;
+        }
+        if (_compact) {
+            _overlay->setOpen(true);
+            _overlayInput->focus();
+        } else {
+            _search->focus();
+        }
+    }
+
+    /// @brief Puts @p text in the search field, as typing it would, without reporting it: a client that restores a
+    ///        search, or a test, drives the panel with it.
+    /// @param text The text; empty clears the field and closes the panel.
+    void setSearchText(std::string_view text) {
+        _searchText = std::string{text};
+        _searchDismissed = false;
+        _search->setText(text);
+        _overlayInput->setText(text);
+        showSearch();
+    }
+
+    /// @brief The texts the frame wrote for the navigation menu, so the client can name the module rows with the same
+    ///        words.
+    /// @return The current labels.
+    [[nodiscard]] ShellLabels const& labels() const noexcept { return _parts.labels; }
+
+    /// @brief Asks a yes-or-no question in a dialog over the frame and calls @p done with the answer, once. Escape and
+    ///        the cancel button answer no.
+    /// @param message The question.
+    /// @param yes     The confirming button's caption.
+    /// @param no      The cancelling button's caption.
+    /// @param done    Called with whether the person confirmed.
+    void confirm(std::string_view message, std::string_view yes, std::string_view no, std::function<void(bool)> done) {
+        if (_confirm == nullptr) {
+            _confirm = _backend.createDialog(_main.get());
+            _confirm->setTestId("shell_confirm");
+            _confirm->setOnDismiss([this] { answerConfirm(false); });
+            _confirmYes = _backend.createButton(&_confirm->footer());
+            _confirmYes->setTestId("shell_confirm_yes");
+            _confirmYes->setEmphasis(ButtonEmphasis::Danger);
+            _confirmYes->setOnClick([this] { answerConfirm(true); });
+            _confirmNo = _backend.createButton(&_confirm->footer());
+            _confirmNo->setTestId("shell_confirm_no");
+            _confirmNo->setOnClick([this] { answerConfirm(false); });
+        }
+        _confirm->setTitle(message);
+        _confirmYes->setLabel(yes);
+        _confirmNo->setLabel(no);
+        _confirmDone = std::move(done);
+        _confirm->setOpen(true);
+    }
+
     /// @brief Shows a passive, transient message over the frame's main content area. Made the first time it is
     ///        asked for; a later call replaces its text and tone and restarts its dismiss interval, whether or not
     ///        it is still showing.
@@ -470,16 +546,71 @@ private:
         }
     }
 
-    // The navigation menu lists the navigator's entries, and, with a sign-out handler, a separator and a sign-out
-    // entry described by the principal.
+    // The navigation menu: the scope switcher, the navigator's entries (the modules as submenus when they are
+    // grouped), the person's menu, and a sign-out entry where no person's menu holds one. `_navTargets` says what
+    // each top-level entry is, so a chosen path is mapped by what the frame built and not by a position.
     void showNavEntries() {
-        std::vector<MenuEntry> entries = _navigator->menuEntries();
-        _navEntryCount = entries.size();
-        if (_onSignOut) {
-            entries.push_back(MenuEntry{.separator = true});
-            entries.push_back(MenuEntry{.label = "Sign out", .description = _principalName});
+        std::vector<MenuEntry> entries;
+        _navTargets.clear();
+        auto const add = [&](MenuEntry entry, NavTarget::Kind kind, std::size_t offset) {
+            entries.push_back(std::move(entry));
+            _navTargets.push_back(NavTarget{.kind = kind, .offset = offset});
+        };
+        if (_parts.context.shown) {
+            MenuEntry submenu = contextMenuEntry();
+            add(std::move(submenu), NavTarget::Kind::Context, 0);
+            add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
+        }
+        std::vector<MenuEntry> navigation = _navigator->menuEntries();
+        _navEntryCount = navigation.size();
+        std::size_t const firstNavigation = entries.size();
+        for (std::size_t index = 0; index < navigation.size(); ++index) {
+            add(std::move(navigation.at(index)), NavTarget::Kind::Navigator, firstNavigation);
+        }
+        if (_parts.principal.shown) {
+            add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
+            MenuEntry person = principalMenuEntry();
+            add(std::move(person), NavTarget::Kind::Principal, 0);
+        } else if (_onSignOut) {
+            add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
+            add(MenuEntry{.label = "Sign out", .description = _principalName}, NavTarget::Kind::SignOut, 0);
         }
         _navMenu->setItems(entries);
+    }
+
+    // A chosen path of the navigation menu.
+    void chooseNav(std::vector<std::size_t> const& path) {
+        if (path.empty() || path.front() >= _navTargets.size()) {
+            return;
+        }
+        NavTarget const target = _navTargets.at(path.front());
+        switch (target.kind) {
+            case NavTarget::Kind::Navigator: {
+                std::vector<std::size_t> inner = path;
+                inner.front() -= target.offset;
+                _navigator->choose(inner);
+                return;
+            }
+            case NavTarget::Kind::SignOut:
+                if (_onSignOut && path.size() == 1) {
+                    _onSignOut();
+                }
+                return;
+            case NavTarget::Kind::Context:
+                if (path.size() == 2 && path.at(1) < _contextMap.size() && _contextMap.at(path.at(1)) &&
+                    _handlers.onContext) {
+                    _handlers.onContext(*_contextMap.at(path.at(1)));
+                }
+                return;
+            case NavTarget::Kind::Principal:
+                if (path.size() == 2) {
+                    choosePrincipal(path.at(1));
+                }
+                return;
+            case NavTarget::Kind::Separator:
+            default:
+                return;
+        }
     }
 
     // The chrome that shows for the sign-in state and the form.
@@ -487,7 +618,7 @@ private:
         _sidebar->setVisible(_signedIn && !_compact);
         _topBar->setVisible(_signedIn);
         _navMenu->setVisible(_compact);
-        _principal->setVisible(!_principalInHead);
+        showParts();
         showChat();
         showTrail();
     }
@@ -498,9 +629,10 @@ private:
     // the slot while the head shows, and the row while either does. Every call that changes one of those ends here,
     // so no stale visibility outlives it.
     void showTrail() {
-        bool const principalShown = _principalInHead && !_compact && !_principalName.empty();
+        bool const principalShown =
+            _principalInHead && !_compact && !_principalName.empty() && !_parts.principal.shown;
         _topPrincipal->setVisible(principalShown);
-        _trail->setVisible(_headShown || principalShown);
+        _trail->setVisible((_headShown || principalShown) && !barParts());
         _trailInset->setVisible(_compact && _trailEnd != HeadTrailEnd::Unframed);
     }
 
@@ -528,6 +660,519 @@ private:
         } else {
             _topBar->setSurface(_headSurface.empty() ? "toolbar" : _headSurface);
         }
+    }
+
+    // What a top-level entry of the navigation menu is.
+    struct NavTarget {
+        enum class Kind : std::uint8_t { Context, Navigator, Principal, SignOut, Separator };
+        Kind kind = Kind::Separator;
+        // For a navigator entry, the index of the first one among the menu's entries.
+        std::size_t offset = 0;
+    };
+
+    // What a person's menu entry does.
+    struct PrincipalChoice {
+        enum class Kind : std::uint8_t { None, Locale, Format, SignOut };
+        Kind kind = Kind::None;
+        std::size_t index = 0;
+    };
+
+    // One hit's row in a results column: the button holds a muted kind, the title and a muted detail.
+    struct HitRow {
+        std::unique_ptr<ButtonWidget> button;
+        std::unique_ptr<StackWidget> content;
+        std::unique_ptr<TextWidget> kind;
+        std::unique_ptr<TextWidget> title;
+        std::unique_ptr<TextWidget> detail;
+    };
+
+    // The widgets of one results column, a panel under the field or the compact overlay's body.
+    struct ResultsColumn {
+        std::vector<std::unique_ptr<TextWidget>> texts;
+        std::vector<HitRow> rows;
+        void clear() {
+            rows.clear();
+            texts.clear();
+        }
+    };
+
+    [[nodiscard]] bool barParts() const noexcept {
+        return _parts.search.shown || _parts.inbox.shown || _parts.principal.shown;
+    }
+
+    // The widgets the parts are drawn with, all hidden until `setParts` says otherwise.
+    void buildParts() {
+        _context = _backend.createMenu(_side.get(), MenuStyle::Button);
+        _side->moveChild(*_context, 2);
+        _context->setTestId("shell_context");
+        _context->setVisible(false);
+        _context->setOnActivate([this](std::vector<std::size_t> const& path) {
+            if (path.size() == 1 && path.front() < _contextMap.size() && _contextMap.at(path.front()) &&
+                _handlers.onContext) {
+                _handlers.onContext(*_contextMap.at(path.front()));
+            }
+        });
+
+        // The top bar's tools sit in the wrapping row after the navigation menu: the search, the inbox, the person.
+        _tools = _backend.createStack(_topMain.get(), Axis::Horizontal);
+        _topMain->moveChild(*_tools, 1);
+        _tools->setGap(3);
+        _tools->setAlign(Align::Center);
+        _tools->setTestId("shell_topbar_tools");
+        _tools->setVisible(false);
+        _searchBox = _backend.createStack(_tools.get(), Axis::Vertical);
+        _searchBox->setLayout(
+            {.width = Sizing::stretch(), .height = {}, .minWidth = std::nullopt, .maxWidth = kShellSearchWidth});
+        _searchBox->setTestId("shell_search_box");
+        _search = _backend.createTextInput(_searchBox.get(), TextInputMode::SingleLine);
+        _search->setTestId("shell_search");
+        _search->setOnChange([this](std::string const& text) { searchEdited(text, false); });
+        _search->setOnSubmit([this](std::string const&) { openHighlighted(); });
+        _search->setKeys({"Down", "Up", "Escape", "Shift+Enter", "Alt+Enter"},
+                         [this](std::string const& chord) { searchChord(chord); });
+        _popover = _backend.createPopover(_searchBox.get());
+        _popover->setTestId("shell_search_popover");
+        _popover->setWidth(kShellSearchWidth);
+        _popover->setOnDismiss([this] {
+            _searchDismissed = true;
+            showSearch();
+        });
+        _resultsBody = _backend.createStack(_popover.get(), Axis::Vertical);
+        _resultsBody->setTestId("shell_search_results");
+        _resultsBody->setGap(1);
+        _searchOpenButton = _backend.createButton(_tools.get());
+        _searchOpenButton->setTestId("shell_search_open");
+        _searchOpenButton->setLabel("⌕");
+        _searchOpenButton->setEmphasis(ButtonEmphasis::Ghost);
+        _searchOpenButton->setVisible(false);
+        _searchOpenButton->setOnClick([this] { focusSearch(); });
+        _inboxGroup = _backend.createStack(_tools.get(), Axis::Horizontal);
+        _inboxGroup->setGap(1);
+        _inboxGroup->setAlign(Align::Center);
+        _inboxGroup->setTestId("shell_inbox_group");
+        _inboxGroup->setVisible(false);
+        _inbox = _backend.createButton(_inboxGroup.get());
+        _inbox->setTestId("shell_inbox");
+        _inbox->setOnClick([this] {
+            if (_handlers.onInbox) {
+                _handlers.onInbox();
+            }
+        });
+        _inboxCount = _backend.createBadge(_inboxGroup.get());
+        _inboxCount->setTestId("shell_inbox_count");
+        _inboxCount->setVisible(false);
+        _inboxError = _backend.createText(_inboxGroup.get());
+        _inboxError->setTestId("shell_inbox_error");
+        _inboxError->setText("!");
+        _inboxError->setVisible(false);
+        _principalMenu = _backend.createMenu(_tools.get(), MenuStyle::Button);
+        _principalMenu->setTestId("shell_principal_menu");
+        _principalMenu->setVisible(false);
+        _principalMenu->setOnActivate([this](std::vector<std::size_t> const& path) {
+            if (path.size() == 1) {
+                choosePrincipal(path.front());
+            }
+        });
+
+        // The compact search: a sheet over the window with its own field and the same results.
+        _overlay = _backend.createDialog(_main.get());
+        _overlay->setTestId("shell_search_overlay");
+        _overlay->setSheet(true);
+        _overlay->setOnDismiss([this] { _overlay->setOpen(false); });
+        _overlayInput = _backend.createTextInput(_overlay.get(), TextInputMode::SingleLine);
+        _overlayInput->setTestId("shell_search_overlay_input");
+        _overlayInput->setOnChange([this](std::string const& text) { searchEdited(text, true); });
+        _overlayInput->setOnSubmit([this](std::string const&) { openHighlighted(); });
+        _overlayInput->setKeys({"Down", "Up", "Escape", "Shift+Enter", "Alt+Enter"},
+                               [this](std::string const& chord) { searchChord(chord); });
+        _overlayBody = _backend.createStack(_overlay.get(), Axis::Vertical);
+        _overlayBody->setTestId("shell_search_overlay_results");
+        _overlayBody->setGap(1);
+
+        _root->setKeys({"Ctrl+K"}, [this](std::string const&) { focusSearch(); });
+    }
+
+    // Everything the parts draw, from the view and the frame's form.
+    void showParts() {
+        bool const bar = barParts();
+        ShellLabels const& labels = _parts.labels;
+        // The switcher, at the sidebar's top.
+        _context->setVisible(_parts.context.shown);
+        if (_parts.context.shown) {
+            _context->setItems(contextEntries());
+            ShellOptionView const* const chosen =
+                _parts.context.chosen && *_parts.context.chosen < _parts.context.options.size()
+                    ? &_parts.context.options.at(*_parts.context.chosen)
+                    : nullptr;
+            std::string const label = chosen == nullptr ? std::string{} : chosen->label;
+            std::string const detail = chosen == nullptr ? std::string{} : chosen->detail;
+            _context->setTrigger(MenuTrigger{.label = label.empty() ? labels.scope : label,
+                                             .icon = {},
+                                             .emphasis = ButtonEmphasis::Normal,
+                                             .detail = detail});
+            _context->setEnabled(_parts.context.enabled);
+            _context->setAccessibleName(labels.scope + ": " + label + (detail.empty() ? "" : ", " + detail));
+        }
+        // The top bar.
+        _tools->setVisible(bar);
+        _leadBlock->setVisible(!bar);
+        _searchBox->setVisible(_parts.search.shown && !_compact);
+        _searchOpenButton->setVisible(_parts.search.shown && _compact);
+        _searchOpenButton->setAccessibleName(labels.search);
+        _search->setAccessibleName(labels.search);
+        _search->setPlaceholder(_parts.search.hint.empty() ? labels.search + " (Ctrl K)"
+                                                           : _parts.search.hint + " (Ctrl K)");
+        _overlay->setTitle(labels.search);
+        _overlay->setDismissLabel(labels.close);
+        _overlayInput->setAccessibleName(labels.search);
+        _overlayInput->setPlaceholder(_parts.search.hint.empty() ? labels.search : _parts.search.hint);
+        showSearch();
+        // The inbox.
+        _inboxGroup->setVisible(_parts.inbox.shown);
+        _inbox->setLabel(_compact ? std::string{"✉"} : _parts.inbox.title);
+        _inbox->setEmphasis(_compact ? ButtonEmphasis::Ghost : ButtonEmphasis::Normal);
+        std::string inboxName = _parts.inbox.title;
+        bool const counted = _parts.inbox.count && *_parts.inbox.count > 0;
+        if (counted) {
+            inboxName += ", " + shellCountText(*_parts.inbox.count) + " " + labels.waiting;
+        }
+        _inbox->setAccessibleName(inboxName);
+        _inboxCount->setVisible(counted);
+        if (counted) {
+            _inboxCount->setText(shellCountText(*_parts.inbox.count));
+            _inboxCount->setTone(Tone::Err);
+        }
+        _inboxError->setVisible(_parts.inbox.failed);
+        _inboxError->setAccessibleName(_parts.inbox.title + ": " + labels.countFailed);
+        // The person's menu.
+        ShellPrincipalView const& person = _parts.principal;
+        _principalMenu->setVisible(person.shown && !_compact);
+        if (person.shown) {
+            _principalMenu->setItems(principalEntries());
+            _principalMenu->setTrigger(MenuTrigger{
+                .label = person.name, .icon = {}, .emphasis = ButtonEmphasis::Ghost, .detail = person.subtitle});
+            _principalMenu->setAccessibleName(labels.signedInAs + " " + person.name);
+        }
+        _principal->setVisible(!_principalInHead && !person.shown);
+        _signOut->setVisible(static_cast<bool>(_onSignOut) && !person.shown);
+        _navigator->setSearchShown(!_parts.search.shown);
+        showNavEntries();
+        showTrail();
+    }
+
+    // The options as radio entries, a heading entry where the group changes; `_contextMap` maps an entry to its
+    // option, with no value for a heading.
+    [[nodiscard]] std::vector<MenuEntry> contextEntries() {
+        std::vector<MenuEntry> entries;
+        _contextMap.clear();
+        std::string group;
+        for (std::size_t index = 0; index < _parts.context.options.size(); ++index) {
+            ShellOptionView const& option = _parts.context.options.at(index);
+            if (!option.group.empty() && option.group != group) {
+                MenuEntry heading;
+                heading.label = option.group;
+                heading.heading = true;
+                heading.enabled = false;
+                entries.push_back(std::move(heading));
+                _contextMap.push_back(std::nullopt);
+            }
+            group = option.group;
+            MenuEntry entry;
+            entry.label = option.label;
+            entry.description = option.detail;
+            entry.checked = _parts.context.chosen == index;
+            entries.push_back(std::move(entry));
+            _contextMap.push_back(index);
+        }
+        return entries;
+    }
+
+    // The switcher as a submenu of the navigation menu.
+    [[nodiscard]] MenuEntry contextMenuEntry() {
+        MenuEntry submenu;
+        std::string label = _parts.labels.scope;
+        if (_parts.context.chosen && *_parts.context.chosen < _parts.context.options.size()) {
+            label = _parts.context.options.at(*_parts.context.chosen).label;
+        }
+        submenu.label = label;
+        submenu.items = contextEntries();
+        submenu.enabled = _parts.context.enabled;
+        return submenu;
+    }
+
+    // The person's menu: the name (the detail beneath), the roles under a heading, the languages and the formats under
+    // theirs, and sign-out. `_principalMap` maps an entry to what choosing it does.
+    [[nodiscard]] std::vector<MenuEntry> principalEntries() {
+        std::vector<MenuEntry> entries;
+        _principalMap.clear();
+        ShellPrincipalView const& person = _parts.principal;
+        ShellLabels const& labels = _parts.labels;
+        auto const add = [&](MenuEntry entry, PrincipalChoice choice) {
+            entries.push_back(std::move(entry));
+            _principalMap.push_back(choice);
+        };
+        auto const heading = [&](std::string const& text) {
+            MenuEntry entry;
+            entry.label = text;
+            entry.heading = true;
+            entry.enabled = false;
+            add(std::move(entry), PrincipalChoice{});
+        };
+        auto const separator = [&] { add(MenuEntry{.separator = true}, PrincipalChoice{}); };
+        MenuEntry name;
+        name.label = person.name;
+        name.description = person.detail;
+        name.enabled = false;
+        add(std::move(name), PrincipalChoice{});
+        if (!person.roles.empty()) {
+            separator();
+            heading(labels.roles);
+            for (ShellRoleView const& role : person.roles) {
+                MenuEntry entry;
+                entry.label = role.label;
+                entry.description = role.detail;
+                entry.enabled = false;
+                add(std::move(entry), PrincipalChoice{});
+            }
+        }
+        if (!person.locales.empty()) {
+            separator();
+            heading(labels.language);
+            for (std::size_t index = 0; index < person.locales.size(); ++index) {
+                MenuEntry entry;
+                entry.label = person.locales.at(index).label;
+                entry.checked = person.chosenLocale == index;
+                add(std::move(entry), PrincipalChoice{.kind = PrincipalChoice::Kind::Locale, .index = index});
+            }
+        }
+        if (!person.formats.empty()) {
+            separator();
+            heading(labels.formats);
+            for (std::size_t index = 0; index < person.formats.size(); ++index) {
+                MenuEntry entry;
+                entry.label = person.formats.at(index).label;
+                entry.checked = person.chosenFormat == index;
+                add(std::move(entry), PrincipalChoice{.kind = PrincipalChoice::Kind::Format, .index = index});
+            }
+        }
+        if (_onSignOut) {
+            separator();
+            add(MenuEntry{.label = "Sign out"}, PrincipalChoice{.kind = PrincipalChoice::Kind::SignOut, .index = 0});
+        }
+        return entries;
+    }
+
+    // The person's menu as a submenu of the navigation menu.
+    [[nodiscard]] MenuEntry principalMenuEntry() {
+        MenuEntry submenu;
+        submenu.label = _parts.principal.name;
+        submenu.description = _parts.principal.subtitle;
+        submenu.items = principalEntries();
+        return submenu;
+    }
+
+    void answerConfirm(bool yes) {
+        _confirm->setOpen(false);
+        if (auto done = std::exchange(_confirmDone, {})) {
+            done(yes);
+        }
+    }
+
+    void choosePrincipal(std::size_t entry) {
+        if (entry >= _principalMap.size()) {
+            return;
+        }
+        PrincipalChoice const choice = _principalMap.at(entry);
+        if (choice.kind == PrincipalChoice::Kind::Locale && _handlers.onLocale) {
+            _handlers.onLocale(choice.index);
+        } else if (choice.kind == PrincipalChoice::Kind::Format && _handlers.onFormat) {
+            _handlers.onFormat(choice.index);
+        } else if (choice.kind == PrincipalChoice::Kind::SignOut && _onSignOut) {
+            _onSignOut();
+        }
+    }
+
+    // The hits as one flat list, in the order they are drawn.
+    [[nodiscard]] std::size_t hitCount() const {
+        std::size_t total = 0;
+        for (ShellSourceView const& source : _parts.search.sources) {
+            total += source.hits.size();
+        }
+        return total;
+    }
+
+    [[nodiscard]] std::string hitSignature() const {
+        std::string out;
+        for (ShellSourceView const& source : _parts.search.sources) {
+            out += source.title + "\x1f";
+            for (ShellHitView const& hit : source.hits) {
+                out += hit.kind + "\x1e" + hit.title + "\x1e" + hit.detail + "\x1d";
+            }
+        }
+        return out;
+    }
+
+    // The source and the place in it of the hit at @p flat.
+    [[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>> hitAt(std::size_t flat) const {
+        for (std::size_t source = 0; source < _parts.search.sources.size(); ++source) {
+            std::size_t const size = _parts.search.sources.at(source).hits.size();
+            if (flat < size) {
+                return std::pair{source, flat};
+            }
+            flat -= size;
+        }
+        return std::nullopt;
+    }
+
+    void searchEdited(std::string const& text, bool fromOverlay) {
+        _searchText = text;
+        _searchDismissed = false;
+        // The two fields are one search: the one not typed in follows.
+        (fromOverlay ? _search : _overlayInput)->setText(text);
+        if (_handlers.onSearchText) {
+            _handlers.onSearchText(text);
+        }
+        showSearch();
+    }
+
+    void clearSearch() {
+        _searchDismissed = false;
+        _searchText.clear();
+        _search->setText({});
+        _overlayInput->setText({});
+        if (_handlers.onSearchText) {
+            _handlers.onSearchText({});
+        }
+        _overlay->setOpen(false);
+        showSearch();
+    }
+
+    void openHighlighted() {
+        if (!_highlight) {
+            return;
+        }
+        if (auto const place = hitAt(*_highlight)) {
+            if (_handlers.onSearchOpen) {
+                _handlers.onSearchOpen(place->first, place->second);
+            }
+            clearSearch();
+        }
+    }
+
+    void searchChord(std::string const& chord) {
+        std::size_t const total = hitCount();
+        if (chord == "Down" || chord == "Up") {
+            if (total != 0) {
+                std::size_t const at = _highlight.value_or(chord == "Down" ? total - 1 : 0);
+                _highlight = chord == "Down" ? (at + 1) % total : (at + total - 1) % total;
+                showSearch();
+            }
+        } else if (chord == "Shift+Enter" || chord == "Alt+Enter") {
+            if (total != 0 && _handlers.onSearchOpenAll) {
+                _handlers.onSearchOpenAll();
+                clearSearch();
+            }
+        } else if (chord == "Escape") {
+            if (_popoverOpen) {
+                _searchDismissed = true;
+                showSearch();
+            } else if (!_searchText.empty()) {
+                clearSearch();
+            } else {
+                _content->focus();
+            }
+        }
+    }
+
+    // The panel and the overlay's body from the view.
+    void showSearch() {
+        bool const wanted = _parts.search.shown && !_searchText.empty();
+        bool const open = wanted && !_searchDismissed && !_compact;
+        _popoverOpen = open;
+        _popover->setOpen(open);
+        _panelResults.clear();
+        _overlayResults.clear();
+        if (open) {
+            renderResults(*_resultsBody, _panelResults);
+        }
+        if (wanted && _compact) {
+            renderResults(*_overlayBody, _overlayResults);
+        }
+    }
+
+    void renderResults(StackWidget& into, ResultsColumn& column) {
+        ShellLabels const& labels = _parts.labels;
+        auto const text = [&](std::string const& value, TextRole role, std::string const& id) {
+            auto widget = _backend.createText(&into);
+            widget->setText(value);
+            widget->setRole(role);
+            widget->setTestId(id);
+            column.texts.push_back(std::move(widget));
+        };
+        bool pending = false;
+        bool failed = false;
+        for (ShellSourceView const& source : _parts.search.sources) {
+            pending = pending || source.pending;
+            failed = failed || source.failed;
+        }
+        if (pending) {
+            text(labels.searching, TextRole::Muted, "shell_search_busy");
+        }
+        std::size_t flat = 0;
+        for (std::size_t index = 0; index < _parts.search.sources.size(); ++index) {
+            ShellSourceView const& source = _parts.search.sources.at(index);
+            if (source.hits.empty() && !source.failed) {
+                continue;
+            }
+            text(source.title, TextRole::Overline, "shell_search_source_" + std::to_string(index));
+            if (source.failed) {
+                text(source.title + " " + labels.searchFailed, TextRole::Muted,
+                     "shell_search_failed_" + std::to_string(index));
+            }
+            for (std::size_t hit = 0; hit < source.hits.size(); ++hit, ++flat) {
+                addHitRow(into, column, source.hits.at(hit), index, hit, _highlight == flat);
+            }
+        }
+        if (!pending && !failed && hitCount() == 0) {
+            text(labels.searchEmpty + " “" + _searchText + "”", TextRole::Muted, "shell_search_empty");
+        }
+    }
+
+    void addHitRow(StackWidget& into, ResultsColumn& column, ShellHitView const& hit, std::size_t source,
+                   std::size_t place, bool highlighted) {
+        HitRow row;
+        row.button = _backend.createButton(&into);
+        row.button->setTestId("shell_search_hit_" + std::to_string(source) + "_" + std::to_string(place));
+        row.button->setStyle(ButtonStyle::Item);
+        row.button->setLayout({.width = Sizing::stretch(), .height = {}});
+        row.button->setSelected(highlighted);
+        std::string name = hit.kind;
+        name += (name.empty() ? "" : ", ") + hit.title;
+        name += hit.detail.empty() ? "" : ", " + hit.detail;
+        row.button->setAccessibleName(name);
+        row.button->setOnClick([this, source, place] {
+            if (_handlers.onSearchOpen) {
+                _handlers.onSearchOpen(source, place);
+            }
+            clearSearch();
+        });
+        row.content = _backend.createStack(&row.button->content(), Axis::Horizontal);
+        row.content->setGap(2);
+        row.content->setAlign(Align::Center);
+        row.content->setLayout({.width = Sizing::stretch(), .height = {}});
+        if (!hit.kind.empty()) {
+            row.kind = _backend.createText(row.content.get());
+            row.kind->setText(hit.kind);
+            row.kind->setRole(TextRole::Muted);
+        }
+        row.title = _backend.createText(row.content.get());
+        row.title->setText(hit.title);
+        if (!hit.detail.empty()) {
+            row.detail = _backend.createText(row.content.get());
+            row.detail->setText(hit.detail);
+            row.detail->setRole(TextRole::Muted);
+        }
+        column.rows.push_back(std::move(row));
     }
 
     // Declared parent before child, so destruction takes the children first.
@@ -583,6 +1228,36 @@ private:
     std::unique_ptr<StackWidget> _chatSlot;
     std::unique_ptr<SpacerWidget> _chatBottom;
     std::unique_ptr<SpacerWidget> _chatEnd;
+    std::unique_ptr<MenuWidget> _context;
+    std::unique_ptr<StackWidget> _tools;
+    std::unique_ptr<StackWidget> _searchBox;
+    std::unique_ptr<TextInputWidget> _search;
+    std::unique_ptr<PopoverWidget> _popover;
+    std::unique_ptr<StackWidget> _resultsBody;
+    std::unique_ptr<ButtonWidget> _searchOpenButton;
+    std::unique_ptr<StackWidget> _inboxGroup;
+    std::unique_ptr<ButtonWidget> _inbox;
+    std::unique_ptr<BadgeWidget> _inboxCount;
+    std::unique_ptr<TextWidget> _inboxError;
+    std::unique_ptr<MenuWidget> _principalMenu;
+    std::unique_ptr<DialogWidget> _overlay;
+    std::unique_ptr<TextInputWidget> _overlayInput;
+    std::unique_ptr<StackWidget> _overlayBody;
+    std::unique_ptr<DialogWidget> _confirm;
+    std::unique_ptr<ButtonWidget> _confirmYes;
+    std::unique_ptr<ButtonWidget> _confirmNo;
+    std::function<void(bool)> _confirmDone;
+    ResultsColumn _panelResults;
+    ResultsColumn _overlayResults;
+    ShellPartsView _parts;
+    ShellPartsHandlers _handlers;
+    std::vector<NavTarget> _navTargets;
+    std::vector<std::optional<std::size_t>> _contextMap;
+    std::vector<PrincipalChoice> _principalMap;
+    std::string _searchText;
+    std::optional<std::size_t> _highlight;
+    bool _searchDismissed = false;
+    bool _popoverOpen = false;
     std::function<void()> _onSignOut;
     std::string _principalName;
     std::string _titleText;

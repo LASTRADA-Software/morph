@@ -361,7 +361,8 @@ inline constexpr std::array<FunctionSpec, 50> kFunctions = {{
 inline constexpr std::array<std::string_view, 6> kDateUnits = {"days", "weeks", "months", "years", "hours", "minutes"};
 
 /// @brief The names `{"env": ...}` reads.
-inline constexpr std::array<std::string_view, 5> kEnvNames = {"widthClass", "locale", "platform", "online", "backend"};
+inline constexpr std::array<std::string_view, 6> kEnvNames = {"widthClass", "locale",  "platform",
+                                                              "online",     "backend", "context"};
 
 /// @brief The names `{"session": ...}` reads.
 inline constexpr std::array<std::string_view, 6> kSessionNames = {"principal", "userName", "displayName",

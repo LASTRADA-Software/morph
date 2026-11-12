@@ -47,6 +47,7 @@ QVariantList menuEntries(std::vector<ui::MenuEntry> const& entries) {
             {QStringLiteral("items"), menuEntries(entry.items)},
             {QStringLiteral("separator"), entry.separator},
             {QStringLiteral("description"), toQString(entry.description)},
+            {QStringLiteral("heading"), entry.heading},
         });
     }
     return list;
@@ -161,6 +162,7 @@ MenuImpl::MenuImpl(Context& context, ui::ContainerWidget* parent, ui::MenuStyle 
 void MenuImpl::setTrigger(ui::MenuTrigger const& trigger) {
     context().checkIcon(trigger.icon);
     write("triggerLabel", toQString(trigger.label));
+    write("triggerDetail", toQString(trigger.detail));
     write("triggerIcon", toQString(trigger.icon));
     // MorphMenu's `triggerEmphasis`: 0 normal, 1 primary, 2 danger, 3 ghost.
     int shown = 0;

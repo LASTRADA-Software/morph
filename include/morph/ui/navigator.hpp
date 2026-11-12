@@ -156,6 +156,11 @@ public:
         _current = std::string{screenId};
         if (Item const* const next = itemOf(_current)) {
             next->button->setSelected(true);
+            if (CatalogEntry const* const entry = entryOf(_current);
+                entry != nullptr && _openModule != entry->module) {
+                _openModule = entry->module;
+                refreshVisibility();
+            }
         } else {
             _current.clear();
         }
@@ -235,6 +240,100 @@ public:
         return true;
     }
 
+    /// @brief Collapses the navigator to one row per module: the row holds the module's label, a chevron and, while
+    ///        the module is closed, its count; only the open module lists its entries, under the headings of its
+    ///        later groups (the first group's heading is the module's label). A module with one entry is that
+    ///        entry's row. A search text shows the matching entries of every module and hides the module rows.
+    /// @param grouped Whether to collapse.
+    void setModuleGroups(bool grouped) {
+        if (_moduleGroups == grouped) {
+            return;
+        }
+        _moduleGroups = grouped;
+        refreshVisibility();
+        changed();
+    }
+
+    /// @brief Whether modules are collapsed.
+    /// @return `true` after `setModuleGroups(true)`.
+    [[nodiscard]] bool moduleGroups() const noexcept { return _moduleGroups; }
+
+    /// @brief Opens a module's entries and closes the one open before.
+    /// @param module The module.
+    /// @return Whether the navigator lists the module.
+    bool setOpenModule(std::string_view module) {
+        if (!listsModule(module)) {
+            return false;
+        }
+        if (_openModule != module) {
+            _openModule = std::string{module};
+            refreshVisibility();
+            changed();
+        }
+        return true;
+    }
+
+    /// @brief The module whose entries are listed.
+    /// @return It; empty when none is open.
+    [[nodiscard]] std::string const& openModule() const noexcept { return _openModule; }
+
+    /// @brief The words a module row's accessible name carries after its label and count.
+    /// @param closed      Said of a closed module.
+    /// @param open        Said of the open module.
+    /// @param countFailed Said when the count could not be read.
+    void setModuleTexts(std::string closed, std::string open, std::string countFailed) {
+        _closedWord = std::move(closed);
+        _openWord = std::move(open);
+        _failedWord = std::move(countFailed);
+        for (Module const& module : _modules) {
+            nameModule(module);
+        }
+    }
+
+    /// @brief Puts a count on a module's row while the module is closed, or takes it away.
+    /// @param module The module.
+    /// @param badge  The count, or `std::nullopt` for none.
+    /// @param failed Whether the count could not be read, which draws an error marker beside the label.
+    /// @return Whether the navigator lists the module.
+    bool setModuleBadge(std::string_view module, std::optional<NavigatorBadge> const& badge, bool failed = false) {
+        Module* const found = moduleOf(module);
+        if (found == nullptr) {
+            return false;
+        }
+        if (found->shown == badge && found->failed == failed) {
+            return true;
+        }
+        found->shown = badge;
+        found->failed = failed;
+        if (badge) {
+            found->badge->setText(badge->text);
+            found->badge->setTone(badge->tone);
+        }
+        found->error->setVisible(failed);
+        nameModule(*found);
+        refreshVisibility();
+        changed();
+        return true;
+    }
+
+    /// @brief The count on a module's row.
+    /// @param module The module.
+    /// @return It; empty for none or for a module the navigator does not list.
+    [[nodiscard]] std::optional<NavigatorBadge> moduleBadgeOf(std::string_view module) const {
+        Module const* const found = moduleOf(module);
+        return found == nullptr ? std::nullopt : found->shown;
+    }
+
+    /// @brief Shows or hides the navigator's own search field, which a shell with a global search replaces.
+    /// @param shown Whether it shows; hiding it clears its text.
+    void setSearchShown(bool shown) {
+        if (!shown) {
+            _search->setText({});
+            filter({});
+        }
+        _search->setVisible(shown);
+    }
+
     /// @brief Reads every entry's titles and every heading again, as after a change of locale: the entry buttons,
     ///        their accessible names, the pins, the headings and the search filter follow. The pins, the current
     ///        entry, the badges and the search text stay. Calls the handler `setOnChanged` set.
@@ -249,6 +348,10 @@ public:
                     item.button->setAccessibleName(item.titles.front() + ", " + item.shown->text);
                 }
             }
+        }
+        for (Module const& module : _modules) {
+            module.label->setText(moduleLabel(module));
+            nameModule(module);
         }
         showPins();
         filter(_searchText);
@@ -279,6 +382,21 @@ private:
         std::unique_ptr<StackWidget> section;
         std::unique_ptr<TextWidget> heading;
         std::vector<Item> items;
+    };
+
+    // A module's row in the collapsed form: a button holding a chevron, the label, the count and an error marker.
+    struct Module {
+        std::string module;
+        std::size_t entries = 0;
+        std::unique_ptr<StackWidget> row;
+        std::unique_ptr<ButtonWidget> button;
+        std::unique_ptr<StackWidget> content;
+        std::unique_ptr<TextWidget> chevron;
+        std::unique_ptr<TextWidget> label;
+        std::unique_ptr<BadgeWidget> badge;
+        std::unique_ptr<TextWidget> error;
+        std::optional<NavigatorBadge> shown;
+        bool failed = false;
     };
 
     // What one entry of `menuEntries()` opens: a screen, or a submenu's entries; neither for a separator.
@@ -323,6 +441,10 @@ private:
                                             .description = {}});
             out.targets.push_back(MenuSlot{});
         }
+        if (_moduleGroups) {
+            moduleMenu(out);
+            return out;
+        }
         for (Group const& group : _groups) {
             std::string const heading = headingOf(group);
             MenuEntry submenu;
@@ -339,6 +461,46 @@ private:
             }
         }
         return out;
+    }
+
+    // The collapsed form as a menu: one submenu per module, its count after the label, the module's later groups as
+    // heading entries inside it; a module with one entry is that entry at the top level.
+    void moduleMenu(Menu& out) const {
+        for (Module const& module : _modules) {
+            MenuEntry submenu;
+            MenuSlot slot;
+            bool first = true;
+            for (Group const& group : _groups) {
+                if (group.module != module.module) {
+                    continue;
+                }
+                bool const lone = module.entries <= 1;
+                if (!first && !lone && !headingOf(group).empty()) {
+                    MenuEntry heading;
+                    heading.label = headingOf(group);
+                    heading.heading = true;
+                    heading.enabled = false;
+                    submenu.items.push_back(std::move(heading));
+                    slot.items.push_back(MenuSlot{});
+                }
+                first = false;
+                for (Item const& item : group.items) {
+                    (lone ? out.entries : submenu.items).push_back(menuEntry(*item.entry));
+                    (lone ? out.targets : slot.items).push_back(MenuSlot{.screenId = item.entry->id, .items = {}});
+                }
+            }
+            if (module.entries > 1) {
+                submenu.label = moduleLabel(module);
+                if (module.shown) {
+                    submenu.label += " · " + module.shown->text;
+                }
+                if (module.failed) {
+                    submenu.label += " · !";
+                }
+                out.entries.push_back(std::move(submenu));
+                out.targets.push_back(std::move(slot));
+            }
+        }
     }
 
     // The group, or the module when the entry has no group, through the label.
@@ -423,81 +585,197 @@ private:
     }
 
     void listEntries() {
+        // Entries are listed module by module, a module's groups together, each in order of first appearance.
+        std::vector<std::string> moduleOrder;
         for (CatalogEntry const& entry : _options.entries) {
-            bool const seen = std::ranges::any_of(_groups, [&entry](Group const& candidate) {
-                return candidate.module == entry.module && candidate.group == entry.group;
-            });
-            if (!seen) {
-                _groups.push_back(
-                    Group{.module = entry.module, .group = entry.group, .section = {}, .heading = {}, .items = {}});
+            if (!std::ranges::contains(moduleOrder, entry.module)) {
+                moduleOrder.push_back(entry.module);
             }
         }
-        for (Group& group : _groups) {
-            // The heading and its entries are a column of their own, a step apart from the next group's; the heading
-            // sits a step under whatever precedes it, and the entries' own heights keep them apart.
-            group.section = _backend->createStack(_root.get(), Axis::Vertical);
-            group.section->setGap(1);
-            group.section->setTestId("navigator_group_" + group.module + "/" + group.group + "_section");
-            group.heading = _backend->createText(group.section.get());
-            // An overline, which a theme may draw as small capitals; by default it looks as a section does.
-            group.heading->setRole(TextRole::Overline);
-            group.heading->setTestId("navigator_group_" + group.module + "/" + group.group);
-            group.heading->setText(headingOf(group));
+        for (std::string const& moduleName : moduleOrder) {
+            makeModuleRow(moduleName);
+            std::vector<std::string> groupOrder;
             for (CatalogEntry const& entry : _options.entries) {
-                if (entry.module != group.module || entry.group != group.group) {
-                    continue;
+                if (entry.module == moduleName && !std::ranges::contains(groupOrder, entry.group)) {
+                    groupOrder.push_back(entry.group);
                 }
-                Item item{.entry = &entry,
-                          .titles = titlesOf(entry),
-                          .row = _backend->createStack(group.section.get(), Axis::Horizontal),
-                          .button = {},
-                          .content = {},
-                          .label = {},
-                          .badge = {},
-                          .shown = std::nullopt};
-                item.row->setTestId("nav_row_" + entry.id);
-                item.row->setLayout({.width = Sizing::stretch(), .height = {}});
-                item.row->setAlign(Align::Center);
-                item.button = _backend->createButton(item.row.get());
-                item.button->setTestId("nav_" + entry.id);
-                item.button->setStyle(ButtonStyle::Item);
-                item.button->setLayout({.width = Sizing::stretch(), .height = {}});
-                wire(*item.button, entry, item.titles.front());
-                // The title and the badge are the button's content, so its selection spans both. The badge is hidden
-                // until a count is set; the button's accessible name carries the count, so the entry stays one
-                // control to assistive technology.
-                ContainerWidget& content = item.button->content();
-                item.content = _backend->createStack(&content, Axis::Horizontal);
-                item.content->setTestId("nav_content_" + entry.id);
-                item.content->setGap(1);
-                item.content->setAlign(Align::Center);
-                item.content->setLayout({.width = Sizing::stretch(), .height = {}});
-                item.label = _backend->createText(item.content.get());
-                item.label->setText(item.titles.front());
-                item.label->setTestId("nav_title_" + entry.id);
-                item.label->setLayout({.width = Sizing::stretch(), .height = {}});
-                item.badge = _backend->createBadge(item.content.get());
-                item.badge->setTestId("nav_badge_" + entry.id);
-                item.badge->setVisible(false);
-                group.items.push_back(std::move(item));
             }
+            for (std::string const& groupName : groupOrder) {
+                _groups.push_back(
+                    Group{.module = moduleName, .group = groupName, .section = {}, .heading = {}, .items = {}});
+                makeGroup(_groups.back());
+            }
+        }
+        refreshVisibility();
+    }
+
+    // The module's row of the collapsed form, hidden until module groups are on.
+    void makeModuleRow(std::string const& moduleName) {
+        Module made;
+        made.module = moduleName;
+        made.entries =
+            static_cast<std::size_t>(std::ranges::count(_options.entries, moduleName, &CatalogEntry::module));
+        made.row = _backend->createStack(_root.get(), Axis::Horizontal);
+        made.row->setTestId("nav_module_row_" + moduleName);
+        made.row->setLayout({.width = Sizing::stretch(), .height = {}});
+        made.row->setAlign(Align::Center);
+        made.row->setVisible(false);
+        made.button = _backend->createButton(made.row.get());
+        made.button->setTestId("nav_module_" + moduleName);
+        made.button->setStyle(ButtonStyle::Item);
+        made.button->setLayout({.width = Sizing::stretch(), .height = {}});
+        made.button->setOnClick([this, moduleName] {
+            if (_openModule == moduleName) {
+                _openModule.clear();
+                refreshVisibility();
+                changed();
+            } else {
+                setOpenModule(moduleName);
+            }
+        });
+        ContainerWidget& content = made.button->content();
+        made.content = _backend->createStack(&content, Axis::Horizontal);
+        made.content->setGap(1);
+        made.content->setAlign(Align::Center);
+        made.content->setLayout({.width = Sizing::stretch(), .height = {}});
+        made.chevron = _backend->createText(made.content.get());
+        made.chevron->setTestId("nav_module_chevron_" + moduleName);
+        made.label = _backend->createText(made.content.get());
+        made.label->setTestId("nav_module_label_" + moduleName);
+        made.label->setLayout({.width = Sizing::stretch(), .height = {}});
+        made.error = _backend->createText(made.content.get());
+        made.error->setTestId("shell_count_error_" + moduleName);
+        made.error->setText("!");
+        made.error->setVisible(false);
+        made.badge = _backend->createBadge(made.content.get());
+        made.badge->setTestId("nav_module_badge_" + moduleName);
+        made.badge->setVisible(false);
+        _modules.push_back(std::move(made));
+        Module& stored = _modules.back();
+        stored.label->setText(moduleLabel(stored));
+        nameModule(stored);
+    }
+
+    void makeGroup(Group& group) {
+        // The heading and its entries are a column of their own, a step apart from the next group's; the heading
+        // sits a step under whatever precedes it, and the entries' own heights keep them apart.
+        group.section = _backend->createStack(_root.get(), Axis::Vertical);
+        group.section->setGap(1);
+        group.section->setTestId("navigator_group_" + group.module + "/" + group.group + "_section");
+        group.heading = _backend->createText(group.section.get());
+        // An overline, which a theme may draw as small capitals; by default it looks as a section does.
+        group.heading->setRole(TextRole::Overline);
+        group.heading->setTestId("navigator_group_" + group.module + "/" + group.group);
+        group.heading->setText(headingOf(group));
+        for (CatalogEntry const& entry : _options.entries) {
+            if (entry.module != group.module || entry.group != group.group) {
+                continue;
+            }
+            Item item{.entry = &entry,
+                      .titles = titlesOf(entry),
+                      .row = _backend->createStack(group.section.get(), Axis::Horizontal),
+                      .button = {},
+                      .content = {},
+                      .label = {},
+                      .badge = {},
+                      .shown = std::nullopt};
+            item.row->setTestId("nav_row_" + entry.id);
+            item.row->setLayout({.width = Sizing::stretch(), .height = {}});
+            item.row->setAlign(Align::Center);
+            item.button = _backend->createButton(item.row.get());
+            item.button->setTestId("nav_" + entry.id);
+            item.button->setStyle(ButtonStyle::Item);
+            item.button->setLayout({.width = Sizing::stretch(), .height = {}});
+            wire(*item.button, entry, item.titles.front());
+            // The title and the badge are the button's content, so its selection spans both. The badge is hidden
+            // until a count is set; the button's accessible name carries the count, so the entry stays one
+            // control to assistive technology.
+            ContainerWidget& content = item.button->content();
+            item.content = _backend->createStack(&content, Axis::Horizontal);
+            item.content->setTestId("nav_content_" + entry.id);
+            item.content->setGap(1);
+            item.content->setAlign(Align::Center);
+            item.content->setLayout({.width = Sizing::stretch(), .height = {}});
+            item.label = _backend->createText(item.content.get());
+            item.label->setText(item.titles.front());
+            item.label->setTestId("nav_title_" + entry.id);
+            item.label->setLayout({.width = Sizing::stretch(), .height = {}});
+            item.badge = _backend->createBadge(item.content.get());
+            item.badge->setTestId("nav_badge_" + entry.id);
+            item.badge->setVisible(false);
+            group.items.push_back(std::move(item));
         }
     }
 
     void filter(std::string const& text) {
         _searchText = text;
-        std::string const wanted = lower(text);
+        refreshVisibility();
+    }
+
+    [[nodiscard]] Module const* moduleOf(std::string_view module) const {
+        auto const found = std::ranges::find(_modules, module, &Module::module);
+        return found == _modules.end() ? nullptr : &*found;
+    }
+
+    [[nodiscard]] Module* moduleOf(std::string_view module) {
+        auto const found = std::ranges::find(_modules, module, &Module::module);
+        return found == _modules.end() ? nullptr : &*found;
+    }
+
+    [[nodiscard]] bool listsModule(std::string_view module) const { return moduleOf(module) != nullptr; }
+
+    // The heading of the module's first group, through the label: what its row says.
+    [[nodiscard]] std::string moduleLabel(Module const& module) const {
+        auto const first = std::ranges::find(_groups, module.module, &Group::module);
+        if (first != _groups.end()) {
+            return headingOf(*first);
+        }
+        return _options.label ? _options.label(module.module) : module.module;
+    }
+
+    // The row's accessible name: the label, the count and whether the module is open.
+    void nameModule(Module const& module) const {
+        std::string name = moduleLabel(module);
+        if (module.shown && module.module != _openModule) {
+            name += ", " + module.shown->text;
+        }
+        if (module.failed) {
+            name += ", " + _failedWord;
+        }
+        name += ", " + (module.module == _openModule ? _openWord : _closedWord);
+        module.button->setAccessibleName(name);
+    }
+
+    // Shows what the search text, the module form and the open module leave: see `setModuleGroups`.
+    void refreshVisibility() {
+        std::string const wanted = lower(_searchText);
+        bool const collapsed = _moduleGroups && wanted.empty();
+        for (Module const& module : _modules) {
+            bool const single = module.entries <= 1;
+            bool const open = module.module == _openModule;
+            module.row->setVisible(collapsed && !single);
+            module.chevron->setText(open ? "▾" : "▸");
+            module.badge->setVisible(module.shown.has_value() && !open);
+            nameModule(module);
+        }
         for (Group& group : _groups) {
+            Module const* const module = moduleOf(group.module);
+            bool const single = module != nullptr && module->entries <= 1;
+            bool const open = group.module == _openModule;
             bool any = false;
             for (Item& item : group.items) {
-                bool const shown =
+                bool const matches =
                     wanted.empty() || std::ranges::any_of(item.titles, [&wanted](std::string const& title) {
                         return lower(title).contains(wanted);
                     });
-                item.row->setVisible(shown);
-                any = any || shown;
+                item.row->setVisible(matches);
+                any = any || matches;
             }
-            group.section->setVisible(any);
+            bool const firstOfModule = &group == &*std::ranges::find(_groups, group.module, &Group::module);
+            group.section->setVisible(any && (!collapsed || single || open));
+            // In the collapsed form the first group's heading is the module's row, and a single-entry module is
+            // its entry's row alone.
+            group.heading->setVisible(!_moduleGroups || !wanted.empty() ? true : !(firstOfModule || single));
         }
     }
 
@@ -527,6 +805,12 @@ private:
     std::unique_ptr<StackWidget> _pinRow;
     std::vector<std::unique_ptr<ButtonWidget>> _pinButtons;
     std::vector<Group> _groups;
+    std::vector<Module> _modules;
+    bool _moduleGroups = false;
+    std::string _openModule;
+    std::string _closedWord = "collapsed";
+    std::string _openWord = "expanded";
+    std::string _failedWord = "count unavailable";
     std::vector<std::string> _pins;
     std::string _current;
     std::string _searchText;

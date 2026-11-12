@@ -288,3 +288,10 @@ the cases that check them, so its passes say something about the terminal backen
 - **The shell factory receives the backend.** `ui::AppContext` names no renderer, since a frontend that generates its
   views has none to lend. A terminal renders through retained widgets, so its shell factory is given them.
 - **Best effort.** What a terminal cannot show (icons, pixel sizes, OS file drops) is kept or mapped to what it can.
+
+## Popover
+
+`createPopover` makes a container that draws its children in flow, under the parent's other children, while it is open and
+takes no room while it is closed: the terminal has no floating layer. It takes no focus; Escape is the widgets' own (the
+search field handles it), so the popover never reports a dismissal. A button menu's trigger with a `detail` writes the
+detail after the label, joined by a dot, on its one row; a menu entry with `heading` is drawn disabled.

@@ -365,6 +365,16 @@ inline Catalog corpusCatalog() {
         if (action == "Push_RenameAll" || action == "Lims_DeleteSample") {
             info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "changes", .record = "T_Row"}};
         }
+        // The shell parts' probe: a stateless model whose count reads a keyed row, and an action that changes it.
+        if (action == "Shell_Rows" || action == "Shell_Rename") {
+            info.modelType = "Lims_ClientModel";
+        }
+        if (action == "Shell_Rows") {
+            info.records = {rowsAtTop};
+        }
+        if (action == "Shell_Rename") {
+            info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "changes", .record = "T_Row"}};
+        }
         if (action == "Push_Reset") {
             info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "changesInstance", .record = std::nullopt}};
         }

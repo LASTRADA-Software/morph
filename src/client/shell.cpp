@@ -32,6 +32,9 @@
 #include <morph/ui/route_history.hpp>
 #include <morph/ui/service_client.hpp>
 #include <morph/ui/shell_frame.hpp>
+#include <morph/ui/shell_parts.hpp>
+#include <morph/ui/shell_parts_binding.hpp>
+#include <morph/ui/shell_parts_model.hpp>
 #include <morph/ui/view.hpp>
 #include <morph/ui/workspace.hpp>
 #include <optional>
@@ -159,6 +162,7 @@ public:
         // then the tabs, then the app document's root the tabs read, then the frame they sit in. The root goes before
         // the document host, whose interpreter runs its onUnmount.
         resetHead();
+        resetParts();
         _badges.reset();
         _workspace.reset();
         _appRoot.reset();
@@ -437,6 +441,7 @@ private:
                 if (auto const live = alive.lock(); live != nullptr && *live) {
                     unmount();
                     // After the screens that read it, and before the session changes hands; its counts go first.
+                    resetParts();
                     _badges.reset();
                     _appRoot.reset();
                     _source->signOut(done);
@@ -449,6 +454,7 @@ private:
     // session's catalog gets a new frame. Every tab of the old one is closed.
     void buildFrame() {
         resetHead();
+        resetParts();
         _badges.reset();
         _chatPanel.reset();
         _workspace.reset();
@@ -527,11 +533,18 @@ private:
         };
         tabs.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         tabs.hosts = &_hosts;
-        // The shell mounts the head row itself, in its top bar: an in-page head would show it a second time.
-        _workspace = std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs),
-                                                     &_frame->page(), ui::HeadPlacement::External);
+        // The shell mounts the head row itself, in its top bar: an in-page head would show it a second time. An
+        // application that declares the search, the inbox or the person's menu has the top bar for them, and its
+        // screens keep their heads in the page.
+        _headInPage =
+            _appDocument && _appDocument->shell &&
+            (!_appDocument->shell->search.empty() || _appDocument->shell->inbox || _appDocument->shell->principal);
+        _workspace =
+            std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs), &_frame->page(),
+                                            _headInPage ? ui::HeadPlacement::InPage : ui::HeadPlacement::External);
         mountApp();
         followBadges();
+        followParts();
         buildChat();
     }
 
@@ -591,6 +604,100 @@ private:
     // The frame is compact below `expanded`: with its sidebar, an 80-unit `medium` window would leave the page
     // narrower than any `compact` one, and without it the page is nearly the window.
     [[nodiscard]] static bool compactFrame(std::string_view widthClass) { return widthClass != "expanded"; }
+
+    // Drops what follows the declared parts: before the root and the frame they read go.
+    void resetParts() {
+        _parts.reset();
+        _deferred.reset();
+        _contextReady = true;
+    }
+
+    // The declared parts of the app document, read from the app root and drawn by the frame. Made after the root and
+    // the frame, and destroyed before either goes.
+    void followParts() {
+        if (_appRoot == nullptr || !_appDocument || !_appDocument->shell) {
+            return;
+        }
+        ui::ShellBindingOptions options;
+        options.model.moduleLabel = [this](std::string_view module) { return moduleLabelOf(module); };
+        options.model.screenTitle = [this](std::string_view screenId) { return screenTitleOf(screenId); };
+        options.model.catalogueLocales = [this] { return _catalogues.locales(); };
+        options.model.dirtyTabs = [this] { return _workspace ? _workspace->dirtyTabs() : std::size_t{0}; };
+        options.model.closeDirtyTabs = [this] {
+            if (_workspace) {
+                _workspace->closeDirtyTabs();
+            }
+        };
+        options.model.onProblem = [this](std::string const& text) { problem(text); };
+        options.open = [this](ui::ShellPartsModel::Target const& target) { openTarget(target); };
+        options.localeChosen = [this] { localeChosen(); };
+        options.contextReady = [this, alive = std::weak_ptr<bool>{_alive}](bool ready) { contextReady(ready, alive); };
+        _contextReady = !_appDocument->shell->context.has_value();
+        _parts = std::make_unique<ui::ShellPartsBinding>(*_session, *_appRoot, *_appDocument->shell, *_frame,
+                                                         std::move(options));
+    }
+
+    // The switcher answered, failed or is not declared: the screen that waited mounts.
+    void contextReady(bool ready, std::weak_ptr<bool> const& alive) {
+        _contextReady = ready;
+        if (!ready || !_deferred) {
+            return;
+        }
+        _context->executor().post([this, alive] {
+            auto const live = alive.lock();
+            if (live == nullptr || !*live || !_deferred || !_contextReady) {
+                return;
+            }
+            auto wanted = std::exchange(_deferred, std::nullopt);
+            _message.reset();
+            mount(wanted->first, wanted->second);
+        });
+    }
+
+    // Opens a screen a hit or the inbox names, as a navigator choice does.
+    void openTarget(ui::ShellPartsModel::Target const& target) {
+        _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, target] {
+            if (auto const live = alive.lock(); live != nullptr && *live) {
+                mount(target.screen, target.params);
+            }
+        });
+    }
+
+    // The person's menu changed the language: the same steps a document's `setLocale` takes.
+    void localeChosen() {
+        std::string const locale = currentLocale();
+        reportMissingFacts(locale);
+        relabel();
+        if (_options.onLocale) {
+            _options.onLocale(locale);
+        }
+    }
+
+    [[nodiscard]] std::string moduleLabelOf(std::string_view module) const {
+        ui::CatalogReply const* const catalog = _source == nullptr ? nullptr : _source->catalogReply();
+        if (catalog != nullptr) {
+            for (ui::CatalogEntry const& entry : catalog->entries) {
+                if (entry.module == module) {
+                    return ui::catalogLabel(_catalogues, entry.group.empty() ? entry.module : entry.group,
+                                            currentLocale());
+                }
+            }
+        }
+        return std::string{module};
+    }
+
+    [[nodiscard]] std::string screenTitleOf(std::string_view screenId) const {
+        ui::CatalogReply const* const catalog = _source == nullptr ? nullptr : _source->catalogReply();
+        if (catalog != nullptr) {
+            for (ui::CatalogEntry const& entry : catalog->entries) {
+                if (entry.id == screenId) {
+                    auto const titles = ui::catalogTitlesIn(entry, &_catalogues, currentLocale());
+                    return titles.empty() ? std::string{screenId} : titles.front();
+                }
+            }
+        }
+        return std::string{screenId};
+    }
 
     // The app document's navigation counts, copied onto the navigator's entries as they change: made after the root
     // and the frame, and destroyed before either goes. A count for a screen the navigator does not list is reported
@@ -672,6 +779,9 @@ private:
     // different tabs can share the same index at different times, and the same tab can shift index without
     // changing).
     void showActiveHead() {
+        if (_headInPage) {
+            return;
+        }
         std::optional<ui::WorkspaceTabId> const active = _workspace->model().active().peek();
         if (active == _headTab) {
             return;
@@ -907,6 +1017,17 @@ private:
         if (!_workspace) {
             buildFrame();
         }
+        // A screen that reads the scope mounts once the switcher has answered, so none fetches unscoped.
+        if (_parts && !_contextReady) {
+            _deferred = std::pair{screenId, params};
+            _message.emplace(
+                _context->runtime(), *_backend,
+                ui::busy(ui::Busy{.active = true,
+                                  .label = ui::shellText("morph.shell.loading", _session->formattingNow()),
+                                  .common = {.testId = "shell_loading"}}),
+                &_frame->page());
+            return false;
+        }
         // Opening a screen that is not public, by a route or a navigation, is using it as the principal the source
         // holds: the frame shows its chrome as it does for a start screen named so.
         if (!_signedIn && !_source->isPublic(screenId)) {
@@ -1079,6 +1200,14 @@ private:
     std::set<std::string, std::less<>> _badged;
     std::set<std::string, std::less<>> _unlistedBadges;
     std::optional<ui::Mounted> _message;
+    // The declared parts' model and what follows it; they go before the app root and the frame they read.
+    std::unique_ptr<ui::ShellPartsBinding> _parts;
+    // The screen that waits for the switcher's first answer, and whether the answer is in.
+    std::optional<std::pair<std::string, ui::ParamMap>> _deferred;
+    bool _contextReady = true;
+    // Whether the screens' heads are in their pages, because the top bar holds the declared parts.
+    bool _headInPage = false;
+
     // The active tab's head row, mounted into the frame's top-bar slot; reset together with its own comparison key
     // (never one without the other) ahead of _workspace, since both are built from the Workspace's own data and
     // mounted into the ShellFrame.

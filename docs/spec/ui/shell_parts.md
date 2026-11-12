@@ -100,8 +100,12 @@ the app root, mounted headless on the session as `AppRoot` already is:
 - one query per read: `shellContext`, `shellCount<i>` (`i` the place in `modules`), `shellSearch<i>`, `shellInbox<i>` and
   `shellPrincipal`; each body is an object of the request fields the declaration names, reading `{"env": "context"}`
   and `{"env": "locale"}` and, for a search, the state `shellSearchText`;
-- the state `shellSearchText`, written by the search field after a pause, and a `when` on each search query that holds
-  while the text is not empty.
+- the state `shellSearchText`, written by the search field on every edit, and on each search query a `when` that holds
+  while the text is not empty and a `debounce` of `kSearchPause`.
+
+A read that names a `contextField` also carries a `when` that holds once there is a scope, so with a switcher declared
+nothing is asked unscoped; it is asked as soon as the first option is the context, and again whenever the context
+changes. A read with no `contextField` is not held back.
 
 These names are reserved: a document that declares one of them is refused. Because they are queries, a part refreshes
 by the path a screen's query does and needs nothing the screens do not: on mount; when a record the reply holds changes
@@ -110,15 +114,16 @@ when the context or locale it reads changes; and when a stale entry is read agai
 therefore be a registered record; if it is not, the shell reports it once from the catalog's facts for the action, and
 the count is read on mount and on a context change only.
 
-**Search.** The field writes `shellSearchText` after `kSearchPause` (200 ms) with no further edit; each search query has
-`debounce` and `when`, so an edit before the pause ends replaces the pending request and a reply to an older text never
-replaces the hits of the current one. All sources are asked at once and drawn as they arrive, in `search` order. An empty
+**Search.** The field writes `shellSearchText` on every edit; each search query has `when` and a `debounce` of
+`kSearchPause` (200 ms), so a request is made when the pause has passed and an edit before it ends replaces the pending
+request; a reply to an older text never replaces the hits of the current one. Until the request is made the panel shows
+its busy row. All sources are asked at once and drawn as they arrive, in `search` order. An empty
 text asks nothing and clears the hits. At most `kSearchHitsPerSource` (8) hits of a source are drawn. Hits are queries
 too, so while the panel is open a change to a record they hold refreshes them.
 
-**Authorisation.** A part whose action the principal may not run (the loader's `topQueries` rule) is not drawn and not
-reported: that is the authoriser working. A frame with the inbox's sources all not permitted hides the button; a source
-not permitted contributes nothing to the sum.
+**Authorisation.** A read the server refuses with the error kind `denied` is the authoriser working: it is neither drawn
+nor reported. A denied switcher, count, search source or person's menu is left out; an inbox whose every source is denied
+draws no button, and a denied source contributes nothing to the sum.
 
 ## Typed values and the locale
 
@@ -127,8 +132,8 @@ money, number, date or quantity value, which the client writes in the session's 
 (`textOf(value, session.formatting())`), and a message reference (`{"t": key, "args": {…}}`), which resolves through the
 catalogue with its arguments formatted the same way. Every part's body reads `{"env": "locale"}` where it names a
 `localeField`; so a part reads again when the session's locale changes and the server may localise its own strings, and
-a typed value is re-written on a locale change with no new request. Counts are written with the locale's digit grouping
-(`1.234` in `de`) and a count above `kCountCap` (99) is drawn `99+`.
+a typed value is re-written on a locale change with no new request. A count above `kCountCap` (99) is drawn `99+`, so
+a badge never needs a digit group.
 
 ## The context
 
@@ -191,7 +196,8 @@ carry their own `navigation` badges). A count of zero draws no badge, and a modu
 The results are a **non-modal panel**, a `PopoverWidget` (a backend container, [`backend_contract.md`](backend_contract.md)),
 anchored under the search field. It floats over the main area on Qt Quick; on the terminal, which has no floating layer,
 it is the rows under the field, in flow. It is not a dialog: it takes no focus and dims nothing, **focus stays in the
-field**, and it closes on Escape, on choosing a hit, and when focus leaves the search.
+field**, and it closes on Escape (the field's key, as the panel takes no keys), on choosing a hit, and on a press outside the panel and its field where the backend reports one; a new
+edit opens it again.
 
 Hits are grouped under a heading per source (its `title`), each hit a row of its `kind`, `title` and `detail`. The first
 hit is highlighted when results arrive. Choosing a hit opens its screen with its params as a tab (`navigate`, the path a
@@ -215,8 +221,8 @@ Below `expanded` the sidebar is gone and the parts move:
 ## The terminal frontend
 
 The same widget tree is drawn by the terminal renderer, so each part is usable and unstyled: the switcher and the
-principal's menu are its menus, the trigger's two lines on one row joined by a dot; a module row has its count in
-brackets and `>` or `v` as its chevron; the search is a one-row input with the panel's rows under it; the inbox button's
+principal's menu are its menus, the trigger's two lines on one row joined by a dot; a module row has the chevron
+`▸` or `▾` and its count as a badge; the search is a one-row input with the panel's rows under it; the inbox button's
 caption ends with the count.
 
 ## Keyboard
@@ -227,8 +233,8 @@ caption ends with the count.
 - **Down** and **Up** in the field move the highlight over the hits, wrapping at the ends, while focus stays in the field.
   **Enter** opens the highlighted hit. **Shift Enter** opens every drawn hit as a tab, in order, at most
   `kSearchOpenAllLimit` (10); the first one opened is the active tab, and sources still in flight are not waited for. A
-  terminal that sends Shift Enter as Enter uses **Alt Enter**. **Escape** clears the highlight and closes the panel,
-  leaving the text; a second Escape on an empty field returns focus to the page.
+  terminal that sends Shift Enter as Enter uses **Alt Enter**. **Escape** closes the panel, leaving the text; Escape
+  again clears the text; Escape on an empty field returns focus to the page.
 - The switcher and the principal's menu are menus: their keys are the renderer's.
 
 ## Loading, empty and error states

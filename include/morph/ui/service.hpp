@@ -25,6 +25,7 @@
 #include "catalogue.hpp"
 #include "document.hpp"
 #include "file_store.hpp"
+#include "shell_parts.hpp"
 #include "theme.hpp"
 #include "value.hpp"
 
@@ -353,6 +354,44 @@ public:
         return added;
     }
 
+    /// @brief Declares the shell's parts (`docs/spec/ui/shell_parts.md`): a scope switcher,
+    ///        module counts, search, an inbox and the person's menu. They are written into the app document's `shell`
+    ///        member, so they travel in the file every client already reads; an application that added no app
+    ///        document gets an otherwise empty one, public.
+    ///
+    /// Refused when the app document with the parts does not load.
+    /// @param parts The parts.
+    /// @return Nothing, or the refusal.
+    std::expected<void, Refusal> setShellParts(ShellParts parts) {
+        _shellParts = std::move(parts);
+        auto found = std::ranges::find_if(_files, [](BundleFile const& file) { return file.kind == kAppFile; });
+        if (found == _files.end()) {
+            BundleFile file{.kind = std::string{kAppFile},
+                            .id = std::string{kAppFile},
+                            .bytes = R"({"vocab":"ui/1","id":"app"})",
+                            .isPublic = true};
+            auto patched = withShellParts(std::move(file));
+            if (!patched) {
+                return std::unexpected(std::move(patched.error()));
+            }
+            if (auto added = addApp(*patched); !added) {
+                return added;
+            }
+            _files.push_back(std::move(*patched));
+            _appSynthesised = true;
+            return {};
+        }
+        auto patched = withShellParts(*found);
+        if (!patched) {
+            return std::unexpected(std::move(patched.error()));
+        }
+        if (auto added = addApp(*patched); !added) {
+            return added;
+        }
+        *found = std::move(*patched);
+        return {};
+    }
+
     /// @brief Adds a vocabulary the bundle needs beyond `ui/1` and `expr/1`, such as `forms/1` or `files/1`. A
     ///        client that does not speak it is refused at `ui-hello`.
     /// @param vocabulary The vocabulary.
@@ -470,12 +509,24 @@ private:
         if (auto reason = detail::checkName(file.id, "a file id")) {
             return refuse(file.id, std::move(*reason));
         }
+        if (file.kind == kAppFile && _appSynthesised) {
+            // The app document `setShellParts` made stands in until the application adds its own.
+            std::erase_if(_files, [](BundleFile const& held) { return held.kind == kAppFile; });
+            _appSynthesised = false;
+        }
         if (std::ranges::any_of(
                 _files, [&file](BundleFile const& added) { return added.kind == file.kind && added.id == file.id; })) {
             return refuse(file.id, "the " + file.kind + " `" + file.id + "` is already added");
         }
         if (auto reason = detail::checkServable(file.bytes)) {
             return refuse(file.id, std::move(*reason));
+        }
+        if (file.kind == kAppFile && _shellParts) {
+            auto patched = withShellParts(std::move(file));
+            if (!patched) {
+                return std::unexpected(std::move(patched.error()));
+            }
+            file = std::move(*patched);
         }
         if (auto added = addKind(file); !added) {
             return added;
@@ -595,6 +646,19 @@ private:
         }
         _tokenFiles.emplace(file.id, std::move(*tokens));
         return {};
+    }
+
+    // The app document with the shell's parts written into its `shell` member.
+    [[nodiscard]] std::expected<BundleFile, Refusal> withShellParts(BundleFile file) const {
+        auto document = parseJson(file.bytes);
+        auto* const object = document ? std::get_if<Json::object_t>(&document->data) : nullptr;
+        auto shell = parseJson(glz::write_json(*_shellParts).value_or("{}"));
+        if (object == nullptr || !shell) {
+            return refuse(file.id, "the app document is a JSON object");
+        }
+        object->insert_or_assign("shell", std::move(*shell));
+        file.bytes = glz::write_json(*document).value_or(file.bytes);
+        return file;
     }
 
     std::expected<void, Refusal> addApp(BundleFile const& file) {
@@ -763,6 +827,8 @@ private:
     /// @brief The theme token files added, by file id, as `addFile` parsed them.
     std::map<std::string, TokenSet, std::less<>> _tokenFiles;
     std::vector<ActionRef> _appActions;
+    std::optional<ShellParts> _shellParts;
+    bool _appSynthesised = false;
     std::vector<std::string> _appModelTypes;
     std::set<std::string, std::less<>> _vocabularies{std::string{kExprVocabulary}, std::string{kVocabulary}};
 };

@@ -196,6 +196,11 @@ What a screen may not declare: `invalidates`, `patch` and `refreshOn`. A documen
 at the key. They would restate, per screen, what the action's effects already say once for every client, and the two
 would drift apart. The C++ builders offer none of them, so authored screens cannot name them.
 
+A shell that declares a scope switcher ([`spec/ui/shell_parts.md`](spec/ui/shell_parts.md)) holds the chosen scope as
+`{"env": "context"}`. A screen passes it into its query bodies itself; a change of scope makes every query that reads it
+fetch again, and a form with unsaved changes is never re-run silently: the shell asks before it discards them. The
+shell's own reads (the module counts, the inbox, the person's menu) refresh through the same effects as a screen's.
+
 ## Checklist for a new or changed action
 
 Work through it every time you add an action or change what one does. A coding agent should treat it as required.
