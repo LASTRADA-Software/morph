@@ -565,12 +565,15 @@ position.
 - **Labels.** A line without a `label` is labelled with its value at the places. Every text is formatted through
   the session's `FormatContext`, so a decimal takes the locale's separator.
 - **Bars.** A series whose `style` is `bars` lowers to `ChartStyle::Bars` with `joined` false. `barSlot` is the
-  smallest positive distance between two distinct positions among the points of `Bars` series that have a value
-  (position-less points are left out), or 1 when there is one such position or none; it is 0 with no `Bars` series.
-  With a `Bars` series, the horizontal axis spans every position widened by half `barSlot` at each end before its 5 %
-  padding is added, and the value axis includes the baseline, 0, in the values it spans before padding. A fixed
-  `yMin` above 0 or `yMax` below 0 leaves the baseline outside the axis, and the frontend clamps it to the nearer end.
-  Positions that are dates or instants give `barSlot` in milliseconds.
+  smallest positive distance between two distinct positions among the kept points of `Bars` series, gaps included,
+  or 1 when there is one such position or none; it is 0 with no `Bars` series. The horizontal axis spans every
+  position widened by half `barSlot` at each end before its 5 % padding is added. The value axis includes the
+  baseline, 0, in the values it spans when a `Bars` series has a value, and pads the baseline's side only when a value
+  or a reference line lies beyond 0 on it: with every value and line at or above 0 the axis starts at 0 with no
+  padding below, so the baseline is the plot's bottom edge, and with every one at or below 0 it ends at 0, the top
+  edge; values of both signs keep the padding at both ends. A fixed `yMin` above 0 or `yMax` below 0 leaves the
+  baseline outside the axis, and the frontend clamps it to the nearer end. Dates and instants give `barSlot` in
+  milliseconds.
 - **Overflow.** A range the checked arithmetic cannot hold is reported once, and the chart draws its summary alone.
 
 ## Development tools

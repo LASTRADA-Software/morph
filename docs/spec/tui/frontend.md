@@ -103,7 +103,7 @@ width: the terminal does not wrap it, so it has no unbreakable segment to keep w
 | Steps | a row per step: `[ ]` pending, `[>]` active, `[x]` done, `[!]` failed; the current one accented; unlabelled, the marks in one row joined by `─` that fills the width | — |
 | KeyValue | captions, then the values lined up after the widest, or after `captionWidth` cells when the node sets it: a caption and its colon longer than that column are cut with an ellipsis, since a cell row cannot wrap (the probe text keeps the whole caption); stacked, each pair two rows, the caption muted over its value, with no rule, since a rule would cost a row per pair and the muted caption already separates them. A toned value draws in its tone's style, bold; a value with spans draws them as a text's. Each pair is one row, so a caption is always on its value's line | — |
 | EmptyState | the title, the explanation, `[ action ]` | Enter, click on the action |
-| Chart | points in cells, below; its summary, muted and wrapped, when smaller than 20 by 5 cells; content size 40 by 8 | — |
+| Chart | points and bars in cells, below; its summary, muted and wrapped, when smaller than 20 by 5 cells; content size 40 by 8 | — |
 | Splitter | the panes and a handle between each two; without matching sizes a horizontal splitter places each pane by its width sizing (`layout::distribute` with content as a stretch of weight 1, a percent as a share of the whole width, handles included, and at least one cell), panes of equal weight sharing equally with the cells a division leaves over going to the last; every pane stays within its bounds, a drag included | dragging a handle; the release reports every size |
 | Collapsible | `▾ title` (the title bold) with the header beside it, the body below while open | Enter, Space, click on the title; the header stays live while closed |
 | DropZone | a dashed frame around its children | a paste while it has the focus is a drop (see below) |
@@ -123,6 +123,26 @@ that are not there. The points' labels take the row below the plot, each skipped
 drawn and the newest always drawn; the legend row (two or more series) is each glyph beside its label. At the
 content height a value is placed to within a fraction of the range, so the summary carries what a reader must not
 miss, and a document that needs the values shows a table too.
+
+**Bars in cells.** A `Bars` series is a run of block characters per position, drawn before the lines and the points.
+A group of *n* `Bars` series takes `n × w` columns, `w = max(1, ⌊0.8 × barSlot ÷ (xMax − xMin) × (columns − 1) ÷ n⌋)`
+columns for each series, starting at `columnOf(x) − ⌊n × w ÷ 2⌋`, series in order from the left. A bar's tip is
+`c(v) = (rows − 1) × (v − yMin) ÷ (yMax − yMin) + ½` rows above the plot's bottom edge, which is the centre of the row
+a tick or a line of value *v* is on, so a bar at a tick's value ends in that tick's row (a half-height cell, `▄`). The
+baseline `b` is 0 clamped into `yMin`..`yMax`; its boundary is the bottom edge when `b` is `yMin`, the top edge when
+it is `yMax`, else the row boundary nearest `c(b)`, halves upward. The height is `round(8 × (c(v) − boundary))`
+eighths of a row, taken upward for `v > b` and downward for `v < b` whatever the rounded sign (the direction is the
+sign of `v − b`), and at least 1 eighth: a nonzero distance from the baseline always shows, and `v = b` draws nothing.
+A cell a bar covers entirely is `█`; its end cell is `▁ ▂ ▃ ▄ ▅ ▆ ▇` for 1 to 7 eighths covered, counted from the cell's
+bottom edge for a bar growing up. A bar growing down covers a cell from its top edge: its end cell is the lower block
+of the *uncovered* eighths with the style's `inverse` set, so the terminal's own colours fill the part the bar leaves
+empty, not a guessed background. A bar is in its series' colour, a marked point's in its tone's style. A cross or
+open triangle takes the cell just beyond the tip's cell when that is inside the plot, else the tip's cell (a clipped
+bar's triangle is always in the tip's cell; a zero-extent clipped bar's is the cell next to the baseline). A note is
+written two cells after the bar's last column on the marker's row when it fits. The reference lines leave the cells a
+bar covers alone, their labels over the bars; where bars share a cell the one whose tip is nearer the baseline is in
+front, the later series on a tie. The legend marks a `Bars` series `█`. The labels under the plot are centred under
+the group. Series are told apart by their place in the group and the legend's order, as well as by colour.
 
 A text input, select or date-time input whose caption is shown (`setCaption(label, true)`) draws it on its own row
 above the control, one row taller; without it nothing changes. A radio select's rows, and a dropdown's list, keep
