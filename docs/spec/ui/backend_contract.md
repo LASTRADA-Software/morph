@@ -517,7 +517,7 @@ The headless reference backend and the test double for everything above the cont
   as `[label:value,…]`, a value with spans as its runs in brackets and a tone other than `Neutral` following as
   `;tone=<Tone>` (`[Serial number:[DEAB-902114;mono],Containers:180 needed;tone=Err]`), with `;` escaped in a caption
   or value so it cannot forge a tone; sizes as `[n,…]`; a chart's ranges as `[lo,hi]`, its ticks as `[text@value,…]`, its lines
-  as `[label@value;tone;style,…]` (`err`, `dashed`), and its series as `[label;joined;[point|…],…]` (a `Bars` series followed by `;bars` after its points, a `Line` series by nothing: `[Revenue;false;[Jan@0,12|Feb@1,15];bars]`), each point
+  as `[label@value;tone;style,…]` (`err`, `dashed`), and its series as `[label;joined;[point|…],…]` (a `Bars` series followed by `;bars` after its points, a `Line` series by nothing: `[Revenue;false;[Jan@0,12;;|Feb@1,15;;];bars]`), each point
   `xLabel@x,y;tone;note` with `y` as a number, `gap` for none, or the axis end followed by `↑` or `↓` for a clipped
   point, and the tone empty for an unmarked one; every chart number shortest-round-trip, so a log is the same on
   every platform; runs as `[Lot ,L-26-0381;mono]`, each run's text followed by `;strong` and

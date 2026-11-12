@@ -1572,8 +1572,8 @@ public:
     return text;
 }
 
-/// @brief A chart's series: `[entry,…]`, each entry `label;joined;[point|…]` and each point
-///        `xLabel@x,y;tone;note`, the tone empty for an unmarked point.
+/// @brief A chart's series: `[entry,…]`, each entry `label;joined;[point|…]`, followed by `;bars` for a `Bars` series,
+///        and each point `xLabel@x,y;tone;note`, the tone empty for an unmarked point.
 /// @param series The series.
 /// @return The text.
 [[nodiscard]] inline std::string formatChartSeries(std::vector<ChartSeries> const& series) {
@@ -1589,21 +1589,22 @@ public:
                     ";" + (point.tone.has_value() ? chartToneName(*point.tone) : std::string{}) + ";" +
                     formatChartText(point.note);
         }
-        text += "]";
+        text += std::string{"]"} + (one.style == ChartStyle::Bars ? ";bars" : "");
     }
     return text + "]";
 }
 
 /// @brief A fake `ChartWidget`: properties `yRange` and `xRange` (`[lo,hi]`), `yLabel`, `yTicks`
-///        (`[text@value,…]`), `lines` (`[label@value;tone;style,…]`), `series` (as `formatChartSeries` gives it) and
-///        `summary`, each set only when it changed. Numbers are written shortest-round-trip, so a log is the same on
-///        every platform.
+///        (`[text@value,…]`), `barSlot` (a number), `lines` (`[label@value;tone;style,…]`), `series` (as
+///        `formatChartSeries` gives it) and `summary`, each set only when it changed. Numbers are written
+///        shortest-round-trip, so a log is the same on every platform.
 class FakeChart final : public FakeLeaf<ChartWidget> {
 public:
     using FakeLeaf<ChartWidget>::FakeLeaf;
     void setData(ChartData const& data) override {
         update("yRange", std::format("[{},{}]", data.yMin, data.yMax));
         update("xRange", std::format("[{},{}]", data.xMin, data.xMax));
+        update("barSlot", std::format("{}", data.barSlot));
         update("yLabel", formatText(data.yLabel));
         update("yTicks", formatList(data.yTicks, [](ChartTick const& tick) {
                    return formatChartText(tick.text) + "@" + std::format("{}", tick.value);

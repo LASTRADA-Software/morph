@@ -1075,14 +1075,15 @@ inline constexpr std::array<KeySpec, 7> kChartKeys = {{{"summary", Shape::Expr, 
                                                        {"yLabel", Shape::Expr}}};
 /// @brief The keys of a chart's `series` part. The keys read per point are evaluated in the part's row scope, with
 ///        `row` the point's element.
-inline constexpr std::array<KeySpec, 8> kSeriesKeys = {{{"points", Shape::Expr, {}, kRequired},
+inline constexpr std::array<KeySpec, 9> kSeriesKeys = {{{"points", Shape::Expr, {}, kRequired},
                                                         {"y", Shape::Expr, {}, kRequired | kInner},
                                                         {"x", Shape::Expr, {}, kInner},
                                                         {"xLabel", Shape::Expr, {}, kInner},
                                                         {"tone", Shape::Expr, {}, kInner},
                                                         {"note", Shape::Expr, {}, kInner},
                                                         {"label", Shape::Expr},
-                                                        {"joined", Shape::Flag}}};
+                                                        {"joined", Shape::Flag},
+                                                        {"style", Shape::Text}}};
 /// @brief The keys of a chart's reference `line` part.
 inline constexpr std::array<KeySpec, 4> kLineKeys = {
     {{"value", Shape::Expr, {}, kRequired}, {"label", Shape::Expr}, {"tone", Shape::Expr}, {"style", Shape::Text}}};
@@ -3547,6 +3548,13 @@ private:
                 refuse(one.path, "`x` is on every series of a chart or on none");
             }
             checkChartTone(one);
+            std::string_view const style = one.name("style");
+            if (!style.empty() && style != "line" && style != "bars") {
+                refuse(pointerAppend(one.path, "style"), "a series `style` is `line` or `bars`");
+            }
+            if (style == "bars" && one.flag("joined")) {
+                refuse(pointerAppend(one.path, "joined"), "a `bars` series is not joined");
+            }
         }
         for (DocNodePtr const& line : node.partList("lines")) {
             checkChartTone(*line);

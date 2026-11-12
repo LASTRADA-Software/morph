@@ -8,6 +8,8 @@
 #include <core/tui/KeyCode.hpp>
 #include <core/tui/Modifier.hpp>
 #include <core/tui/Theme.hpp>
+#include <functional>
+#include <map>
 #include <morph/ui/theme.hpp>
 #include <string>
 #include <utility>
@@ -633,6 +635,9 @@ constexpr int kChartMinColumns = 20;
 constexpr int kChartMinRows = 5;
 constexpr int kChartGutterLimit = 8;
 constexpr std::array<std::string_view, 4> kSeriesGlyphs = {"●", "■", "▲", "◆"};
+// A bar's end cell: the lower 1 to 7 eighths of the cell.
+constexpr std::array<std::string_view, 8> kLowerBlocks = {"", "▁", "▂", "▃", "▄", "▅", "▆", "▇"};
+constexpr double kBarShare = 0.8;
 
 /// A series' style: normal text in `color.chart.<n>`'s default, in token order.
 ::core::tui::Style seriesStyle(::core::tui::Theme const& theme, std::size_t index) {
@@ -743,8 +748,146 @@ void ChartImpl::paintSummary(::core::tui::Canvas& canvas) const {
     }
 }
 
-// A line's row is drawn once, by the most severe line on it; its label is that line's.
-void ChartImpl::paintLines(::core::tui::Canvas& canvas, Plot const& plot, bool byLines) const {
+struct ChartImpl::BarLayout {
+    struct Cell {
+        std::string_view glyph;
+        ::core::tui::Style style;
+    };
+    /// A cell a bar marks beyond its tip, and the note beside it.
+    struct Mark {
+        int row = 0;
+        int column = 0;
+        std::string_view glyph;
+        ::core::tui::Style style;
+        int noteRow = 0;
+        int noteColumn = 0;
+        std::string note;
+    };
+    std::map<std::pair<int, int>, Cell> cells;
+    std::vector<Mark> marks;
+};
+
+// A bar's cells are laid out in eighths of a row from a baseline on a row boundary. The tip's height uses the same
+// linear map as `rowOf`, so a bar at a tick's value ends in the tick's row. Where bars share a cell the one whose
+// tip is nearer the baseline is drawn last, so it is in front.
+ChartImpl::BarLayout ChartImpl::barLayout(::core::tui::Theme const& theme, Plot const& plot) const {
+    BarLayout layout;
+    std::vector<std::size_t> barSeries;
+    for (std::size_t index = 0; index < _data.series.size(); ++index) {
+        if (_data.series.at(index).style == ui::ChartStyle::Bars) {
+            barSeries.push_back(index);
+        }
+    }
+    double const span = _data.yMax - _data.yMin;
+    if (barSeries.empty() || span <= 0 || _data.xMax <= _data.xMin || plot.columns < 1) {
+        return layout;
+    }
+    int const rows = plot.rows;
+    auto const heightOf = [&](double value) { return ((rows - 1) * (value - _data.yMin) / span) + 0.5; };
+    double const baseline = std::clamp(0.0, _data.yMin, _data.yMax);
+    int boundary = 0;
+    if (baseline >= _data.yMax) {
+        boundary = rows;
+    } else if (baseline > _data.yMin) {
+        boundary = static_cast<int>(std::floor(heightOf(baseline) + 0.5));
+    }
+    auto const count = static_cast<int>(barSeries.size());
+    double const slotColumns = _data.barSlot / (_data.xMax - _data.xMin) * (plot.columns - 1);
+    int const width = std::max(1, static_cast<int>(std::floor(kBarShare * slotColumns / count)));
+    struct Bar {
+        std::size_t series;
+        ui::ChartPoint const* point;
+        int firstColumn;
+        int eighths;  // signed: up from the baseline when positive
+    };
+    std::vector<Bar> bars;
+    for (int place = 0; place < count; ++place) {
+        std::size_t const series = barSeries.at(static_cast<std::size_t>(place));
+        for (ui::ChartPoint const& point : _data.series.at(series).points) {
+            if (!point.y.has_value()) {
+                continue;
+            }
+            int eighths = 0;
+            if (*point.y > baseline) {
+                eighths = std::max(1, static_cast<int>(std::lround(8 * (heightOf(*point.y) - boundary))));
+                eighths = std::min(eighths, (rows - boundary) * 8);
+            } else if (*point.y < baseline) {
+                eighths = -std::max(1, static_cast<int>(std::lround(8 * (boundary - heightOf(*point.y)))));
+                eighths = std::max(eighths, -boundary * 8);
+            }
+            bars.push_back(Bar{.series = series,
+                               .point = &point,
+                               .firstColumn = plot.columnOf(_data, point.x) - ((count * width) / 2) + (place * width),
+                               .eighths = eighths});
+        }
+    }
+    std::ranges::stable_sort(bars,
+                             [](Bar const& a, Bar const& b) { return std::abs(a.eighths) > std::abs(b.eighths); });
+    auto const inPlotColumns = [&plot](int column) {
+        return column >= plot.left && column < plot.left + plot.columns;
+    };
+    for (Bar const& bar : bars) {
+        ui::ChartPoint const& point = *bar.point;
+        ::core::tui::Style const style =
+            point.tone.has_value() ? toneStyle(theme, *point.tone) : seriesStyle(theme, bar.series);
+        bool const up = bar.eighths > 0;
+        int const extent = std::abs(bar.eighths);
+        // Cell k counts from the plot's bottom edge.
+        auto const rowOfCell = [&](int cell) { return plot.top + rows - 1 - cell; };
+        int const full = extent / 8;
+        int const part = extent % 8;
+        for (int column = bar.firstColumn; column < bar.firstColumn + width; ++column) {
+            if (!inPlotColumns(column)) {
+                continue;
+            }
+            for (int step = 0; step < full; ++step) {
+                layout.cells[{rowOfCell(up ? boundary + step : boundary - 1 - step), column}] = {"█", style};
+            }
+            if (part > 0) {
+                ::core::tui::Style end = style;
+                // A bar growing down covers the top of its end cell: the lower block of what it leaves uncovered,
+                // reversed, so the terminal's own colours fill that part.
+                end.inverse = !up;
+                layout.cells[{rowOfCell(up ? boundary + full : boundary - 1 - full), column}] = {
+                    kLowerBlocks.at(static_cast<std::size_t>(up ? part : 8 - part)), end};
+            }
+        }
+        int tip = up ? boundary + ((extent - 1) / 8) : boundary - 1 - ((extent - 1) / 8);
+        if (extent == 0) {
+            tip = point.clip == ui::ChartClip::Above ? rows - 1 : 0;
+        }
+        int const beyond = up ? tip + 1 : tip - 1;
+        bool const marked = point.tone.has_value() && point.clip == ui::ChartClip::None;
+        int markCell = tip;
+        if (marked && beyond >= 0 && beyond < rows) {
+            markCell = beyond;
+        }
+        int const lastColumn = bar.firstColumn + width - 1;
+        if (point.clip != ui::ChartClip::None || marked) {
+            layout.marks.push_back(BarLayout::Mark{
+                .row = rowOfCell(markCell),
+                .column = std::clamp(bar.firstColumn + ((width - 1) / 2), plot.left, plot.left + plot.columns - 1),
+                .glyph = point.clip == ui::ChartClip::Above ? "△" : (point.clip == ui::ChartClip::Below ? "▽" : "✕"),
+                .style = style,
+                .noteRow = rowOfCell(markCell),
+                .noteColumn = lastColumn + 2,
+                .note = point.note});
+        } else if (!point.note.empty()) {
+            layout.marks.push_back(BarLayout::Mark{.row = -1,
+                                                   .column = 0,
+                                                   .glyph = {},
+                                                   .style = style,
+                                                   .noteRow = rowOfCell(tip),
+                                                   .noteColumn = lastColumn + 2,
+                                                   .note = point.note});
+        }
+    }
+    return layout;
+}
+
+// A line's row is drawn once, by the most severe line on it; its label is that line's. A cell a bar covers keeps the
+// bar, a terminal cell holding one glyph; the label is written over it.
+void ChartImpl::paintLines(::core::tui::Canvas& canvas, Plot const& plot, bool byLines, BarLayout const& bars) const {
     auto const& theme = canvas.theme();
     std::vector<ui::ChartLine const*> rows(static_cast<std::size_t>(plot.top + plot.rows), nullptr);
     for (ui::ChartLine const& line : _data.lines) {
@@ -771,13 +914,30 @@ void ChartImpl::paintLines(::core::tui::Canvas& canvas, Plot const& plot, bool b
             glyph = "┄";
         }
         auto const& style = lineStyle(theme, line->tone);
-        canvas.drawHLine(static_cast<int>(row), plot.left, plot.columns, glyph, style);
+        for (int column = plot.left; column < plot.left + plot.columns; ++column) {
+            if (!bars.cells.contains({static_cast<int>(row), column})) {
+                canvas.put(static_cast<int>(row), column, glyph, style);
+            }
+        }
         if (byLines) {
             std::string const text = fitted(line->label, plot.left - 1);
             canvas.putString(static_cast<int>(row), plot.left - 1 - displayWidth(text), text, style);
         } else {
             int const width = std::min(displayWidth(line->label), plot.columns);
             canvas.putString(static_cast<int>(row), plot.left + plot.columns - width, line->label, style);
+        }
+    }
+}
+
+// The marks beyond the bars' tips, and the bars' notes, when they fit.
+void ChartImpl::paintBarMarks(::core::tui::Canvas& canvas, Plot const& plot, BarLayout const& bars) const {
+    for (BarLayout::Mark const& mark : bars.marks) {
+        if (mark.row >= 0) {
+            canvas.put(mark.row, mark.column, mark.glyph, mark.style);
+        }
+        int const room = plot.left + plot.columns - mark.noteColumn;
+        if (!mark.note.empty() && displayWidth(mark.note) <= room) {
+            canvas.putString(mark.noteRow, mark.noteColumn, mark.note, mark.style);
         }
     }
 }
@@ -793,6 +953,9 @@ void ChartImpl::paintPoints(::core::tui::Canvas& canvas, Plot const& plot) const
     };
     std::vector<Cell> cells;
     for (std::size_t series = 0; series < _data.series.size(); ++series) {
+        if (_data.series.at(series).style == ui::ChartStyle::Bars) {
+            continue;
+        }
         for (ui::ChartPoint const& point : _data.series.at(series).points) {
             if (!point.y.has_value()) {
                 continue;
@@ -864,7 +1027,11 @@ void ChartImpl::paintBelow(::core::tui::Canvas& canvas, Plot const& plot) const 
     if (_data.series.size() >= 2) {
         int column = plot.left;
         for (std::size_t index = 0; index < _data.series.size(); ++index) {
-            canvas.put(row, column, kSeriesGlyphs.at(index % kSeriesGlyphs.size()), seriesStyle(theme, index));
+            canvas.put(row, column,
+                       _data.series.at(index).style == ui::ChartStyle::Bars
+                           ? "█"
+                           : kSeriesGlyphs.at(index % kSeriesGlyphs.size()),
+                       seriesStyle(theme, index));
             column += 2;
             column += canvas.putString(row, column, _data.series.at(index).label, theme.textNormal) + 2;
         }
@@ -902,7 +1069,12 @@ void ChartImpl::paint(::core::tui::Canvas& canvas) {
     if (!_data.yLabel.empty()) {
         canvas.putString(0, 0, _data.yLabel, canvas.theme().textMuted);
     }
-    paintLines(canvas, plot, byLines);
+    BarLayout const bars = barLayout(canvas.theme(), plot);
+    for (auto const& [position, cell] : bars.cells) {
+        canvas.put(position.first, position.second, cell.glyph, cell.style);
+    }
+    paintLines(canvas, plot, byLines, bars);
+    paintBarMarks(canvas, plot, bars);
     paintPoints(canvas, plot);
     paintBelow(canvas, plot);
 }
