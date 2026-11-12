@@ -133,7 +133,7 @@ disappear, not to restyle the defaults. The theme is still applied.
 
 ## Surfaces
 
-A surface is a named set of colour roles a node and everything inside it draw with (`Common::surface`). Six are
+A surface is a named set of colour roles a node and everything inside it draw with (`Common::surface`). Seven are
 built in, so an application gets the shell's look with no theme file; a theme index's surface of the same name
 replaces one, and declares any other:
 
@@ -145,6 +145,7 @@ replaces one, and declares any other:
 | `toolbar` | `color.surface`, with a border `#e3e5ea` | the theme's |
 | `bar` | `color.surface`, with no border, radius or shadow; the bars `pinned` writes | the theme's |
 | `toolbarJoined` | the `bar`'s: `color.surface`, no border | the `bar`'s, through its own scheme whose every role is bound to `bar`'s, so a theme that restyles `bar` restyles it too and one that declares `toolbarJoined` replaces these roles alone; the shell draws its top bar on it while the page continues the head's block |
+| `paper` | `#ffffff`, with a `#d2d7de` hairline border and `elevation.card` | text `#1c1e21`, muted `#4d5461`, accent `#17784a`, border and divider `#d2d7de`, control fill `#ffffff`, the theme's tones for a light surface; the same in every theme, a dark one included, because it is the sheet of a document page ([`document_page.md`](document_page.md#the-page)) |
 
 A surface's `border.style` and `list.selection` are read like any token of it. While it is `dashed`, the outline of a button, a badge and an input on the surface is stroked in dashes (a `MorphDashedOutline`) in place of the solid border; the surface's own background has no border to dash, except a card's and a toolbar's, which stay solid. A round button or badge (`shape: round`) draws the surface's background with its own corners, half its height, so no square shows behind it. While a surface's `list.selection` is `fill`, a selected list item on it is marked by the selection colour alone, and its label and content draw in the surface's selection text, which is its text colour while it sets no `color.selectionText`.
 
