@@ -152,7 +152,7 @@ inline constexpr std::array<LocaleFacts, 2> kLocaleTable{{
     std::string out{shownSign};
     if (facts.placement == SymbolPlacement::Before) {
         out += listed->symbol;
-        char const last = listed->symbol.back();
+        char const last = listed->symbol.empty() ? ' ' : listed->symbol.back();
         if ((last >= 'A' && last <= 'Z') || (last >= 'a' && last <= 'z')) {
             out += " ";
         }

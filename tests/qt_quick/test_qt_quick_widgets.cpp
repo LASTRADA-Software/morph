@@ -917,8 +917,16 @@ TEST_CASE("qt_quick widgets: an empty date input's calendar opens on today's mon
 TEST_CASE("qt_quick widgets: the date picker's month header is English whatever the system locale", "[qt_quick]") {
     using morph::time::DateTime;
     using namespace std::chrono;
-    QLocale const previous = QLocale();
-    QLocale::setDefault(QLocale(QLocale::German, QLocale::Germany));
+    // Restored on every exit, a failed REQUIRE included.
+    struct DefaultLocale {
+        QLocale previous;
+        DefaultLocale() { QLocale::setDefault(QLocale(QLocale::German, QLocale::Germany)); }
+        ~DefaultLocale() { QLocale::setDefault(previous); }
+        DefaultLocale(DefaultLocale const&) = delete;
+        DefaultLocale& operator=(DefaultLocale const&) = delete;
+        DefaultLocale(DefaultLocale&&) = delete;
+        DefaultLocale& operator=(DefaultLocale&&) = delete;
+    } const german;
     Scene scene;
     auto input = scene.backend().createDateTimeInput(nullptr, ui::DateMode::Date, 0);
     input->setValue(
@@ -930,7 +938,30 @@ TEST_CASE("qt_quick widgets: the date picker's month header is English whatever 
     QQuickItem const* const header = findNamed(*scene.window().contentItem(), QStringLiteral("datePickerMonth"));
     REQUIRE(header != nullptr);
     CHECK(header->property("text").toString() == QStringLiteral("October 2026"));
-    QLocale::setDefault(previous);
+    // The week is the C locale's: English weekday names, Monday first.
+    QQuickItem const* const grid = findNamed(*scene.window().contentItem(), QStringLiteral("datePickerGrid"));
+    REQUIRE(grid != nullptr);
+    QLocale const weekLocale = grid->property("locale").toLocale();
+    CHECK(weekLocale.firstDayOfWeek() == Qt::Monday);
+    CHECK(weekLocale.dayName(Qt::Monday) == QStringLiteral("Monday"));
+}
+
+// Mutation: leave the re-show out of DateTimeImpl::setPattern (the field keeps showing the old pattern's text).
+TEST_CASE("qt_quick widgets: a date input shows its value again when the pattern changes", "[qt_quick]") {
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    Scene scene;
+    auto input = scene.backend().createDateTimeInput(nullptr, ui::DateMode::Date, 0);
+    input->setValue(morph::time::Timestamp{DateTime{year{2026}, month{11}, day{9}, hours{0}, minutes{0}, seconds{0}}});
+    scene.settle();
+    auto const shown = [&input] { return detail::baseOf(*input)->shownText(); };
+    CHECK(shown() == "2026-11-09");
+    input->setPattern("dd.MM.yyyy");
+    scene.settle();
+    CHECK(shown() == "09.11.2026");
+    input->setPattern("");
+    scene.settle();
+    CHECK(shown() == "2026-11-09");
 }
 
 TEST_CASE("qt_quick widgets: dates format and parse in a display zone", "[qt_quick]") {

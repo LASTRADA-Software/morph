@@ -54,8 +54,9 @@ throws `std::invalid_argument` for 0 and for a cap above `kMaxInlineFileBytes`, 
 `Interpreter::mountApp(doc)` mounts the app document (id `app`) as an `AppRoot`: its state, lets,
 queries and mutations, declared once for the session, and its `onMount`. Its `formatting` patterns become the
 session's (`Session::setDatePatterns`) and win over the locale table's patterns in every locale
-([`locale_table.md`](locale_table.md)), so every screen of the bundle writes and reads dates in them; a C++ host may
-set the same `FormatContext` fields directly. A `dateTimeInput` reads the pattern of its mode reactively, so a pattern a `setLocale` installs reaches the inputs
+([`locale_table.md`](locale_table.md)), so every screen of the bundle writes and reads dates in them; a C++ host sets
+its own patterns through `setDatePatterns` too, since a `setLocale` replaces a pattern set only through
+`setFormatting` with the locale's. A `dateTimeInput` reads the pattern of its mode reactively, so a pattern a `setLocale` installs reaches the inputs
 already mounted; the zone is read once, when the input is lowered. A second root on the same
 session, and a document whose id is not `app`, are refused. While it lives, `Session::appScope()`
 names its scope: `{"ref": "app.name"}` in any screen reads the name there, reactively, so a query of

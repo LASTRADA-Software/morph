@@ -14,7 +14,7 @@ MorphField {
     property bool edited: false
     // The display zone, minutes from UTC: the calendar's today is the zone's, not the system's.
     property int offsetMinutes: 0
-    // The pattern the field shows and reads its value in; empty is ISO. Set once.
+    // The pattern the field shows and reads its value in; empty is ISO. Set again when the session's pattern changes.
     property string pattern: ""
     // The field's day as C++ last read it, `{year, month (zero-based), day}`, or null when it names none.
     property var chosen: null

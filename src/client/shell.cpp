@@ -289,8 +289,11 @@ public:
     /// `t` re-resolves. Called each time a bundle is loaded.
     void installCatalogues() {
         _catalogues = _source->catalogues();
+        // Each line once per shell: a development poll installs them every second.
         for (std::string const& line : _catalogues.problems()) {
-            problem(line);
+            if (_reportedCatalogueProblems.insert(line).second) {
+                problem(line);
+            }
         }
         _session->setTranslations(_catalogues.provider());
     }
@@ -1053,6 +1056,8 @@ private:
     ui::MessageCatalogues _catalogues;
     // The locales already reported as having no formatting facts.
     std::set<std::string, std::less<>> _missingFacts;
+    // The catalogue problems already reported.
+    std::set<std::string, std::less<>> _reportedCatalogueProblems;
     // Whether the source's connection-state listener is registered.
     bool _followingConnection = false;
     // Whether the source's connect and event listeners are registered.

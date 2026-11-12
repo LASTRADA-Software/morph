@@ -16,6 +16,7 @@
 
 #include "../render/locale_format.hpp"
 #include "../util/rational.hpp"
+#include "locale_table.hpp"
 #include "value.hpp"
 
 /// @file
@@ -791,7 +792,10 @@ inline void formatPattern(std::vector<MessagePart> const& pattern, ValueRecord c
             continue;
         }
         Value const operand = numberOperand(value);
-        if (auto number = formatNumber(operand, locale.numeric)) {
+        // Only `:number` groups; a bare placeholder writes its digits as they are, so a year reads 2026.
+        render::NumericLocale const numeric =
+            function == MessageFunction::Number ? locale.numeric : withoutGrouping(locale.numeric);
+        if (auto number = formatNumber(operand, numeric)) {
             out.text += *number;
             continue;
         }

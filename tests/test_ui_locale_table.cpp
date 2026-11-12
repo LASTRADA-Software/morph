@@ -4,9 +4,11 @@
 // has installed them.
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstdint>
 #include <morph/ui/catalogue.hpp>
 #include <morph/ui/date_pattern.hpp>
 #include <morph/ui/locale_table.hpp>
+#include <morph/ui/message.hpp>
 #include <string>
 #include <utility>
 
@@ -175,4 +177,19 @@ TEST_CASE("catalogue: a label falls back from the locale to en to any locale to 
     // A key only another locale holds.
     CHECK(morph::ui::catalogLabel(catalogues, "group.c", "pl") == "Nur deutsch");
     CHECK(morph::ui::catalogLabel(catalogues, "Plain heading", "de") == "Plain heading");
+}
+
+// Mutation: group every numeric placeholder (the bare `{$year}` reads 2,026).
+TEST_CASE("locale table: a message groups only :number, not a bare placeholder", "[ui][locale][message]") {
+    morph::ui::ValueRecord const args{{"year", morph::ui::Value{std::int64_t{2026}}}};
+    auto const bare = morph::ui::parseMessage("Year {$year}");
+    auto const grouped = morph::ui::parseMessage("Year {$year :number}");
+    REQUIRE(bare);
+    REQUIRE(grouped);
+    for (auto const& [tag, groupedText] : {std::pair{"en", "Year 2,026"}, std::pair{"de", "Year 2.026"}}) {
+        INFO(tag);
+        morph::ui::MessageLocale const locale{.locale = tag, .numeric = morph::ui::localeFacts(tag).numeric};
+        CHECK(morph::ui::formatMessage(*bare, args, locale).text == "Year 2026");
+        CHECK(morph::ui::formatMessage(*grouped, args, locale).text == groupedText);
+    }
 }

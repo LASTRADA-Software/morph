@@ -84,12 +84,13 @@ A `Session` constructed alone keeps `FormatContext`'s own defaults (the C spelli
 shell always calls `setLocale` before the first mount, with `ShellOptions::locale` or `en`.
 
 **Reach.** The locale's decimal separator applies wherever a number is shown or typed through the session's facts: the
-display functions, plain text interpolation, `format`, MessageFormat `:number` and the entry of a number input. The
-group separator applies in `number`, `quantity`, `money` and `decimal` (which write through the same path), in a
-message's `:number` (a catalogue text is prose, as `number` is) and in what `parseDecimal` accepts; an integer shown
-through plain interpolation, `format` or an input stays ungrouped, `2026` and not `2,026`, in every
-locale. An integer that is meant to be read as a quantity is shown with `number`; one that is an identifier needs
-nothing.
+display functions, plain text interpolation, `format`, a message's placeholders (`{$n}` and `{$n :number}`) and the
+entry of a number input. The group separator applies in `number`, `quantity`, `money` and `decimal` (which write
+through the same path) and in a message's `:number` (a catalogue text is prose, as `number` is); `parseDecimal`
+accepts well-placed group separators. An integer shown through plain interpolation, `format`, a bare message
+placeholder or an input stays ungrouped, `2026` and not `2,026`, in every locale: `Year {$year}` reads `Year 2026` in
+`en` and in `de`, and `Year {$year :number}` reads `Year 2,026` and `Year 2.026`. An integer that is meant to be read as
+a quantity is shown with `number`; one that is an identifier needs nothing.
 
 `localeScope` (a scope inside a screen that writes in another locale) reads the same table; its own spec states
 whether a scope's locale pattern wins over the application's inside the scope.
@@ -98,7 +99,8 @@ whether a scope's locale pattern wins over the application's inside the scope.
 
 Qt Quick and the terminal read the session's `FormatContext`. Neither consults `QLocale` or the C library's locale,
 so the two write the same text; the date picker's month header takes its month names from the session, English as the
-`MMM` rule says, and not from `Qt.locale()`. `QLocale` may not override the table: two frontends that disagree on `1.234,50` make a
+`MMM` rule says, and not from `Qt.locale()`; its weekday names are English and its week starts on Monday, the C
+locale's, whatever the desktop's language. `QLocale` may not override the table: two frontends that disagree on `1.234,50` make a
 screen test's expectation depend on the frontend.
 
 ## Money

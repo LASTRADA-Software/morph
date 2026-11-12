@@ -116,7 +116,8 @@ Two functions give the navigator what it shows:
 - `catalogLabel(catalogues, text, locale)`: a heading or other text that may be a message key. It answers the message
   formatted with no arguments from the first of: the catalogue for `locale` (the exact tag, then each shorter tag), the
   `en` catalogue, any catalogue that holds the key; and `text` as written when none does. A heading has no fallback
-  text, so under a locale with no catalogue the person reads the `en` words, not a raw key.
+  text, so under a locale with no catalogue the person reads the `en` words, not a raw key. A screen title has its
+  own fallback text, which `catalogTitlesIn` shows when the locale has no catalogue.
 
 ## Design decisions
 

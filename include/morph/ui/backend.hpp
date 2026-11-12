@@ -847,8 +847,9 @@ public:
     virtual void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) = 0;
 
     /// @brief Sets the pattern the field shows its value in and reads typed text in (`formatDate`, `parseDate`), ISO
-    ///        being always read too. The mount calls it once, before the value, and only for a pattern that is not
-    ///        empty; a new field shows ISO.
+    ///        being always read too. The mount calls it before the value when the pattern is not empty, and again
+    ///        each time the session's pattern changes, an empty one included; the field then shows the value it holds
+    ///        in the new pattern. A new field shows ISO.
     /// @param pattern The pattern, such as `dd-MMM-yyyy HH:mm`.
     virtual void setPattern(std::string_view pattern) = 0;
 

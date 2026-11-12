@@ -125,7 +125,60 @@ std::shared_ptr<ui::UiService> serving(char const* en) {
     return std::make_shared<ui::UiService>(std::move(*built));
 }
 
+/// A public login screen and a private home, each showing the one message.
+constexpr std::string_view kLogin = R"({
+  "vocab": "ui/1", "id": "probe.login",
+  "view": { "kind": "text", "testId": "hello", "text": { "t": "probe.hello", "fallback": "Fallback" } } })";
+constexpr std::string_view kPrivateHome = R"({
+  "vocab": "ui/1", "id": "probe.home",
+  "view": { "kind": "text", "testId": "hello", "text": { "t": "probe.hello", "fallback": "Fallback" } } })";
+
+/// The two screens, with the English catalogue or without it.
+std::shared_ptr<ui::UiService> loginAndHome(bool withCatalogue) {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    for (auto const& [screenId, text] : {std::pair{"probe.login", kLogin}, std::pair{"probe.home", kPrivateHome}}) {
+        ui::CatalogEntry entry;
+        entry.id = screenId;
+        entry.isPublic = screenId == std::string_view{"probe.login"};
+        auto added = served.addScreen(std::move(entry), std::string{text});
+        REQUIRE(added);
+    }
+    if (withCatalogue) {
+        auto added =
+            served.addFile(ui::BundleFile{.kind = "messages", .id = "i18n/en.json", .bytes = kEn, .isPublic = false});
+        REQUIRE(added);
+    }
+    auto built = served.build();
+    REQUIRE(built);
+    return std::make_shared<ui::UiService>(std::move(*built));
+}
+
 }  // namespace
+
+// Mutation: drop installCatalogues from the reload a sign-in or sign-out makes (the login screen keeps reading
+// "Fallback").
+TEST_CASE("Client shell: the catalogues of the bundle a sign-out reload fetches are installed",
+          "[client][shell][locale]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    RedeployedSource source;
+    source.service = loginAndHome(false);
+    std::optional<Opened> opened;
+    source.open(context, [&opened](Opened result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    {
+        auto const shell = morph::client::mountShell(context, backend, std::move(*opened), source,
+                                                     morph::client::ShellOptions{.startScreen = "probe.home"});
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return textOf(backend, "hello") == "Fallback"; }));
+        // The server now serves the catalogue; the reload the sign-out makes fetches it.
+        source.service = loginAndHome(true);
+        auto const signOut = backend.find("Button", "testId", "shell_signOut");
+        REQUIRE(signOut.has_value());
+        backend.click(*signOut);
+        CHECK(pumpUntil(context.owner(), [&backend] { return textOf(backend, "hello") == "Hello"; }));
+    }
+    source.close();
+}
 
 // Mutations: drop the shell's setTranslations call (hello reads "Fallback"); skip the table switch in
 // Session::setLocale (eur reads "13196.40 EUR"); build the navigator's titles with catalogTitles instead of
@@ -192,9 +245,9 @@ TEST_CASE("Client shell: ShellOptions::locale starts the shell in that locale, a
         REQUIRE(pumpUntil(context.owner(), [&backend] { return textOf(backend, "hello") == "Hallo"; }));
         CHECK(textOf(backend, "eur") == "13.196,40 €");
         CHECK(heard.empty());
-        auto const english = backend.find("Button", "testId", "german");
-        REQUIRE(english.has_value());
-        backend.click(*english);
+        auto const german = backend.find("Button", "testId", "german");
+        REQUIRE(german.has_value());
+        backend.click(*german);
         REQUIRE(pumpUntil(context.owner(), [&heard] { return !heard.empty(); }));
         CHECK(heard == std::vector<std::string>{"de"});
     }
