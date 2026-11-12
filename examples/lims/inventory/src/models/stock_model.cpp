@@ -415,26 +415,8 @@ LotStockView StockModel::execute(const RecordOpeningLot& action) {
     std::string const principal = ::morph::session::current()->principal;
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    db::LotRecord lot;
-    lot.itemId = static_cast<std::int64_t>(item->id.Value());
-    lot.locationId = static_cast<std::int64_t>(location->id.Value());
-    lot.companyId = item->companyId.Value();
-    lot.siteId = location->siteId.Value();
-    lot.lotNumber = Lightweight::SqlAnsiString<32>{action.lotNumber};
-    lot.expiresAt = millisOf(action.expiresAt);
-    lot.onHandNum = 0;
-    lot.onHandDen = 1;
-    lot.unitCostNum = (*action.unitCost).numerator;
-    lot.unitCostDen = (*action.unitCost).denominator;
-    lot.reservationVersion = 0;
-    // The unique index on (item, lot number) refuses a second lot of the number; any other failure finds no such lot
-    // and surfaces.
-    guardedInsert([&] { mapper.Create(lot); },
-                  [&] { return inventory::lotNumberTaken(*action.item, action.lotNumber); },
-                  [&] {
-                      return Conflict{"RecordOpeningLot: lot " + action.lotNumber + " of " +
-                                      std::string{item->code.Value().ToStringView()} + " exists already"};
-                  });
+    auto const lot = inventory::createLot(mapper, "RecordOpeningLot", *item, *location, action.lotNumber,
+                                          action.expiresAt, *action.unitCost);
     static_cast<void>(inventory::moveLot(mapper, lot, MovementKind::Opening, quantity, "opening", principal));
     sqlTxn.Commit();
     return inventory::lotView(mapper, inventory::lotRecord(mapper, static_cast<std::int64_t>(lot.id.Value())));

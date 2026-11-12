@@ -5,14 +5,17 @@
 #include <morph/util/datetime.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
+#include <tuple>
 #include <utility>
 
+#include "billing_test_support.hpp"
 #include "clock.hpp"
 #include "lims/inventory/core/units.hpp"
 #include "lims/inventory/dto/order_dto.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
 #include "lims/inventory/models/procurement_model.hpp"
 #include "lims/inventory/models/stock_model.hpp"
+#include "lims/ledger/models/ledger_model.hpp"
 #include "lims/org/core/money.hpp"
 #include "lims/org/dto/limit_dto.hpp"
 #include "lims/org/models/org_model.hpp"
@@ -199,5 +202,31 @@ inline OpenOrder openOrder(CurrencyCode supplierCurrency = CurrencyCode::EUR) {
                                       ::morph::math::DecimalPlaces{places}}}}}});
     return OpenOrder{.order = std::move(order), .stock = approved.stock};
 }
+
+/// @brief `books()`, plus the stock (3100, asset), goods received not invoiced (1600, liability) and consumption
+///        (5100, expense) accounts in the seeded company's chart, made by `acc`, an accountant there; and a CHF to EUR
+///        rate of 0.95 from 1 November 2026. The rounding account 6900 is `books()`'s.
+inline void inventoryBooks() {
+    books();
+    ScopedPrincipal const acc{"acc"};
+    LedgerModel ledger;
+    for (auto const& [code, name, type] : {std::tuple{"3100", "Stock", AccountType::Asset},
+                                           std::tuple{"1600", "Goods received not invoiced", AccountType::Liability},
+                                           std::tuple{"5100", "Reagent consumption", AccountType::Expense}}) {
+        static_cast<void>(
+            ledger.execute(CreateAccount{.company = seededCompany(), .code = code, .name = name, .type = type}));
+    }
+    static_cast<void>(ledger.execute(SetExchangeRate{
+        .company = seededCompany(),
+        .from = CurrencyCode::CHF,
+        .to = CurrencyCode::EUR,
+        .validFrom = ::morph::time::Timestamp{at(2026, 11, 1, 0)},
+        .rate = Rate{::morph::math::Rational{::morph::math::Numerator{95}, ::morph::math::Denominator{100},
+                                             ::morph::math::DecimalPlaces{6}}}}));
+}
+
+/// @brief A server, the posting principal's client on it and the ledger port installed in a mode, as `PostingRig`
+///        gives billing: goods receipt posts through the same port.
+using ReceiptRig = PostingRig;
 
 }  // namespace lims::test

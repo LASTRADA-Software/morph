@@ -176,4 +176,46 @@ struct OrderLineRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"line_total_den"}> lineTotalDen{1};  // 10
 };
 
+/// @brief One goods receipt: a delivery against a purchase order, with its number and the ledger's entry.
+struct ReceiptRecord {
+    static constexpr std::string_view TableName = "inventory_receipts";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"order_id"}> orderId{0};                                 // 2
+    /// @brief `GR-<fiscal year>-<six digits>`, unique within the company.
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"number"}> number;  // 3
+    /// @brief `CurrencyCode` of the order.
+    Light::Field<int, Light::SqlRealName{"currency"}> currency{0};  // 4
+    /// @brief The value in the order's currency.
+    Light::Field<std::int64_t, Light::SqlRealName{"value_num"}> valueNum{0};  // 5
+    Light::Field<std::int64_t, Light::SqlRealName{"value_den"}> valueDen{1};  // 6
+    /// @brief The value in the company's currency, as the ledger carries it.
+    Light::Field<std::int64_t, Light::SqlRealName{"company_value_num"}> companyValueNum{0};  // 7
+    Light::Field<std::int64_t, Light::SqlRealName{"company_value_den"}> companyValueDen{1};  // 8
+    /// @brief The ledger's journal entry.
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"entry_id"}> entryId;  // 9
+    /// @brief The receipt's date, in epoch milliseconds.
+    Light::Field<std::int64_t, Light::SqlRealName{"received_at"}> receivedAt{0};           // 10
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"received_by"}> receivedBy;  // 11
+};
+
+/// @brief One lot a receipt created, and the order line it was delivered against.
+struct ReceiptLotRecord {
+    static constexpr std::string_view TableName = "inventory_receipt_lots";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"receipt_id"}> receiptId{0};                             // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"lot_id"}> lotId{0};                                     // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"order_line_id"}> orderLineId{0};                        // 3
+};
+
+/// @brief The next receipt number of a company's fiscal year.
+struct ReceiptNumberRecord {
+    static constexpr std::string_view TableName = "inventory_receipt_numbers";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"fiscal_year"}> fiscalYear{0};                           // 2
+    /// @brief The number the next receipt takes.
+    Light::Field<std::int64_t, Light::SqlRealName{"next"}> next{1};  // 3
+};
+
 }  // namespace lims::db

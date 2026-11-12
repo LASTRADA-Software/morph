@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "lims/inventory/dto/order_dto.hpp"
+#include "lims/inventory/dto/receipt_dto.hpp"
 #include "lims/inventory/dto/requisition_dto.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
 #include "lims/org/authorization/declared.hpp"
@@ -19,7 +20,7 @@
 /// locations and opening lots are a stock keeper's, at the company or at the site of the location; a requisition is
 /// raised, filled and submitted by anyone holding a role at its site, and approved by a purchase approver within a
 /// value limit, who is not the one who raised or submitted it; a supplier is registered, and an approved requisition
-/// ordered, by a purchaser at the company.
+/// ordered, by a purchaser at the company; goods are received against an order by a stock keeper at the company.
 
 namespace lims {
 
@@ -161,6 +162,18 @@ struct Authorization<CreatePurchaseOrder> {
     /// @param action The action.
     /// @return It; an empty company when there is no such requisition.
     [[nodiscard]] static Scope scopeOf(CreatePurchaseOrder const& action);
+};
+
+/// @brief Goods are received against an order by a stock keeper at the order's company.
+template <>
+struct Authorization<ReceiveGoods> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::StockKeeper;
+
+    /// @brief The company of the order the payload names.
+    /// @param action The action.
+    /// @return It; an empty company when there is no such order.
+    [[nodiscard]] static Scope scopeOf(ReceiveGoods const& action);
 };
 
 }  // namespace lims
