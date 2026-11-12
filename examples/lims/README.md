@@ -663,14 +663,18 @@ process over a local database (`--db`, default `lims.db`).
 
 `codecov.yml` has one component per module (`lims_lab`, `lims_org`, `lims_ledger`, `lims_billing`), each scoped to that
 module's model paths (`examples/lims/<m>/src/models/**` and `examples/lims/<m>/include/lims/<m>/models/**`) — the paths
-`examples/IMPLEMENTATION.md` rule 5's bar names — with a target 0.5 points below the module's own coverage as Codecov counts it (below).
+`examples/IMPLEMENTATION.md` rule 5's bar names — with a target 0.5 points below the module's own coverage as Codecov
+counts it (below).
 Inventory is Part C's and joins when Part C is measured; posting has no model.
 
 Measured the way CI measures: the `clang-coverage` preset configured with `MORPH_LADDER_RUNGS=lims` (CI passes `all`;
-the other rungs' binaries execute none of these sources), the whole tree built, every test but the stress cases run
-once (`ctest --preset clang-coverage -LE stress`, 5185 tests, all passed, with `LLVM_PROFILE_FILE=%p.profraw` so that each test
-process writes a profile of its own), then `scripts/coverage.sh`, which reports over all fifteen binaries in
-`coverage_objects.txt`. The line counts are llvm-cov's; the branch counts are llvm-cov's per instantiation, so they are
+the other rungs' binaries execute none of these sources), the whole tree built, and every test but the stress cases run
+(`ctest --preset clang-coverage -LE stress`, 5186 tests, all passed, with `LLVM_PROFILE_FILE=%p.profraw` so that each
+test process writes a profile of its own). The profile is a merge of runs, not of one clean run: the tests ran in slices,
+the tests of a slice that timed out were run again, and the profiles of all of them were merged with
+`llvm-profdata merge -sparse` (counters only add, so a rerun cannot lower a figure). The ledger-report tests were run
+once more after the last test was added, and their profiles were merged into the earlier one. `scripts/coverage.sh` then
+reports over all fifteen binaries in `coverage_objects.txt`. The line counts are llvm-cov's; the branch counts are llvm-cov's per instantiation, so they are
 higher than the aggregated figure the branch gate reports.
 
 Two figures describe each module, because llvm-cov and Codecov count differently. llvm-cov counts a line as covered
@@ -685,9 +689,9 @@ rounded down to one decimal, so that a small change which adds one partial line 
 |---|---|---|---|---|---|
 | lab | 1284/1299 = 98.85% | 336/354 | 1266 / 8 / 16 | 98.14% | 97.6% |
 | org | 591/591 = 100.00% | 198/216 | 554 / 0 / 11 | 98.05% | 97.5% |
-| ledger | 1142/1146 = 99.65% | 311/330 | 1089 / 2 / 15 | 98.46% | 97.9% |
+| ledger | 1144/1146 = 99.83% | 312/330 | 1092 / 0 / 14 | 98.73% | 98.2% |
 | billing | 1750/1752 = 99.89% | 441/466 | 1580 / 0 / 20 | 98.75% | 98.2% |
-| the four | 4767/4788 = 99.56% | 1286/1366 | | | |
+| the four | 4769/4788 = 99.60% | 1287/1366 | | | |
 
 llvm-cov warns `10020 functions have mismatched data` over the merged profile. The cause is inferred, not shown: the
 warning is the one llvm-cov gives when functions from different binaries carry different counter layouts, which fits
@@ -711,10 +715,10 @@ triggers raise `SQLITE_CONSTRAINT`, so the busy tests exercise the message fallb
 whatever its kind (a validation arm, a not-found arm, a stored enumerator out of range, a failed write that is not the
 lost race, a busy database, an update that changes no row): none is exempted because it looks defensive.
 
-What the rule leaves is the 10 lines below, each of which needs something the callers above cannot do: a statement of
+What the rule leaves is the 8 lines below, each of which needs something the callers above cannot do: a statement of
 the model's own that fails inside a read at a moment no caller controls, or an input the library generates or validates
-before the line. That each is unreachable is judged by reading the code, not shown by a test, except for the one line
-whose attempt is shown. llvm-cov counts 21 uncovered lines (4788 - 4767); the other 11 are lines that also run but hold
+before the line. That each is unreachable is judged by reading the code, not shown by a test. llvm-cov counts 19 uncovered
+lines (4788 - 4769); the other 11 are lines that also run but hold
 a region never entered, such as the row-id lambda of a table plan. Seven of the 11 were looked at and are such lambdas
 and one ternary; four were not identified.
 
@@ -725,17 +729,9 @@ and one ternary; four were not identified.
 - `sample_model.cpp:612-613` the `default` arm of `checkValue`, which has no other kind to reach; `:717-718`
   `alreadyDecided`'s empty-key guard: the function is private and its one caller has already refused an empty key.
 
-*ledger*
-- `ledger_report_model.cpp:277-278` a busy database on the totals' `SELECT`. A second connection holding
-  `BEGIN EXCLUSIVE` on the database file, with a 200 ms `busy_timeout` on the pool's connections and the pool drained
-  (`DbBusyFixture`'s recipe with the exclusive lock), does make the report's read busy, but an earlier read of the report is
-  turned away first (inferred from the type: the aggregate arm throws `Conflict`, this is the driver's exception), so
-  the aggregate `SELECT` is not the statement that fails. The report surfaces the driver's own error unchanged:
-  `Lightweight::SqlException: HY000 (5) - [SQLite]database is locked (5)`. A trigger does not fire on a `SELECT`, and
-  every statement of the report reads under the same lock, so no setup makes the aggregate fail alone. Re-open this
-  line if a way to fail only that statement is found.
+*ledger* has no uncovered line.
 
-*billing* and *org* have no uncovered line.
+*billing* and *org* have none either.
 
 The tests that cover the arms the rule reaches: not-found arms of the handlers by direct call
 (`RegisterSample`, `SaveSample`, `CreateSite`, `RevokeRole`, `SetValueLimit`, `CreateAccount`, `OpenPeriod`,
