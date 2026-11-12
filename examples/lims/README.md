@@ -1425,6 +1425,22 @@ caller cannot see are refused in the same words, because the role refusal of a r
 where this applies" and names no scope. Measured: declaring `scopeInPayload` on the rule changes nothing, since that
 refusal never reads it; appending the scope to those words makes the two refusals differ and the case fail.
 
+### 44. A purchase order is in its supplier's currency; the type does not know which (hypothesis 8, orders half of instance 2)
+
+An approved requisition becomes one purchase order to one supplier, in the supplier's currency. The purchaser prices
+every requisition line per stock unit; a line total is the quantity times the unit price, rounded half-up once to the
+currency's decimals, and the order total is their exact sum, every product and sum checked and an order that does not
+fit refused as `OutOfRange`. Ordering moves the requisition from approved to ordered by a conditional update in the
+order's transaction, and a unique index on the requisition settles two orders that raced: a requisition is ordered
+once. Ordering judges the purchaser's rule again before that write, as approving a requisition does (decision 43).
+
+**Hypothesis 8's runtime-currency half is confirmed for its second instance.** Measured in
+`tests/test_purchase_orders.cpp`: a unit price of 850.50 for a yen supplier is refused by the model (`fitsCurrency`),
+and the served form of `CreatePurchaseOrder` still advertises `x-decimalPlaces: 2`, for its nested price, because the
+declared precision is the type's. The currency is known only from the supplier's row, as an invoice's is from its
+client's (decision 33), and a stock quantity's unit from its item's (decision 42). Three places in two modules now carry an amount beside a
+field naming its unit and check the pair by hand.
+
 ### 48. A stock change in one company reaches another company's watching stock keeper (hypothesis 7, second instance)
 
 **Hypothesis 7 is confirmed for its second instance, and what leaks is the same as decision 40's `changes<>` case.**

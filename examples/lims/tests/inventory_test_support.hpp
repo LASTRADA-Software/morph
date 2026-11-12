@@ -9,9 +9,11 @@
 
 #include "clock.hpp"
 #include "lims/inventory/core/units.hpp"
+#include "lims/inventory/dto/order_dto.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
 #include "lims/inventory/models/procurement_model.hpp"
 #include "lims/inventory/models/stock_model.hpp"
+#include "lims/org/core/money.hpp"
 #include "lims/org/dto/limit_dto.hpp"
 #include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
@@ -138,6 +140,64 @@ inline RequisitionSetUp requisitionSetUp() {
         .estimate = Amount{::morph::math::Rational{::morph::math::Numerator{18000}, ::morph::math::Denominator{100},
                                                    ::morph::math::DecimalPlaces{2}}}});
     return setUp;
+}
+
+/// @brief What `approvedRequisition` made.
+struct ApprovedRequisition {
+    /// @brief The requisition, approved.
+    RequisitionView requisition;
+    /// @brief The stock `stockSetUp` made.
+    StockSetUp stock;
+};
+
+/// @brief What `openOrder` made.
+struct OpenOrder {
+    /// @brief The order, open.
+    PurchaseOrderView order;
+    /// @brief The stock `stockSetUp` made.
+    StockSetUp stock;
+};
+
+/// @brief `requisitionSetUp`, submitted by rita and approved by anna at 10:00 on 10 November 2026; `paul` is a
+///        purchaser at the seeded company.
+/// @return The approved requisition and the stock.
+inline ApprovedRequisition approvedRequisition() {
+    auto const setUp = requisitionSetUp();
+    ::morph::ladder::ScopedClockOverride const clock{at(2026, 11, 10, 10)};
+    {
+        ScopedPrincipal const rita{"rita"};
+        static_cast<void>(ProcurementModel{}.execute(SubmitRequisition{.requisitionId = setUp.draft.id}));
+    }
+    grant("paul", LimsRole::Purchaser);
+    ScopedPrincipal const anna{"anna"};
+    return ApprovedRequisition{
+        .requisition = ProcurementModel{}.execute(ApproveRequisition{.requisitionId = setUp.draft.id}),
+        .stock = setUp.stock};
+}
+
+/// @brief An order by `paul` for the approved requisition's 2 L, from "Merck" in @p supplierCurrency, at 85.00 a litre
+///        (8500 yen in JPY).
+/// @param supplierCurrency The supplier's currency.
+/// @return The open order and the stock.
+inline OpenOrder openOrder(CurrencyCode supplierCurrency = CurrencyCode::EUR) {
+    auto const approved = approvedRequisition();
+    auto const& requisition = approved.requisition;
+    ScopedPrincipal const paul{"paul"};
+    ProcurementModel procurement;
+    auto const supplier =
+        procurement.execute(CreateSupplier{.company = seededCompany(), .name = "Merck", .currency = supplierCurrency});
+    // 85.00 a litre is 8500/100; in yen, 8500/1.
+    constexpr std::int64_t price = 8500;
+    std::uint32_t const places = decimalsOf(supplierCurrency);
+    std::int64_t const denominator = places == 0U ? 1 : 100;
+    auto order = procurement.execute(CreatePurchaseOrder{
+        .requisition = requisition.id,
+        .supplier = supplier.id,
+        .prices = {OrderLinePrice{.line = requisition.lines.front().id,
+                                  .unitPrice = Amount{::morph::math::Rational{
+                                      ::morph::math::Numerator{price}, ::morph::math::Denominator{denominator},
+                                      ::morph::math::DecimalPlaces{places}}}}}});
+    return OpenOrder{.order = std::move(order), .stock = approved.stock};
 }
 
 }  // namespace lims::test

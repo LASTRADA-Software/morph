@@ -8,8 +8,10 @@
 #include <optional>
 #include <string>
 
+#include "lims/inventory/core/fault_hook.hpp"
 #include "lims/inventory/core/units.hpp"
 #include "lims/inventory/db/inventory_entity.hpp"
+#include "lims/inventory/dto/order_dto.hpp"
 #include "lims/inventory/dto/requisition_dto.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
 
@@ -27,6 +29,28 @@ namespace lims::inventory {
 /// @param sql The statement.
 /// @return The rows it changed.
 [[nodiscard]] std::size_t changedRows(Lightweight::DataMapper& mapper, std::string const& sql);
+
+/// @brief Moves requisition @p id from @p from by a conditional update, and counts the rows it changed.
+///
+/// A fault point sits before the write, so a test makes a concurrent action win it.
+/// @tparam Set Callable adding the columns to change to the update's builder.
+/// @tparam Guard Callable adding further columns the caller read and requires unchanged.
+/// @param mapper The caller's mapper, inside its transaction.
+/// @param id The requisition.
+/// @param from The state the caller read.
+/// @param set Adds the columns to change.
+/// @param guard Adds the further conditions.
+/// @return Whether exactly one row matched.
+template <typename Set, typename Guard>
+[[nodiscard]] bool moveRequisition(Lightweight::DataMapper& mapper, std::int64_t id, RequisitionState from,
+                                   Set const& set, Guard const& guard) {
+    inventoryFaultPoint("requisition.beforeStateChange", mapper.Connection());
+    auto query = mapper.Connection().Query(db::RequisitionRecord::TableName).Update();
+    set(query);
+    (void)query.Where("id", "=", id).Where("state", "=", static_cast<int>(from));
+    guard(query);
+    return changedRows(mapper, query.ToSql()) == 1U;
+}
 
 /// @brief Writes one movement and moves its lot's stock on hand by it, through the caller's transaction.
 ///
@@ -91,6 +115,42 @@ namespace lims::inventory {
 /// @return It, or nothing.
 [[nodiscard]] std::optional<db::RequisitionRecord> findRequisition(Lightweight::DataMapper& mapper,
                                                                    std::int64_t requisition);
+
+/// @brief The row of requisition @p requisition, read on a mapper of its own so the caller's transaction opens with
+///        its write.
+/// @param requisition The requisition.
+/// @param action The action's name, for the refusal.
+/// @return The row.
+/// @throws NotFound if there is no such requisition, or it is of a company the caller cannot see; the words are the
+///         same for both.
+[[nodiscard]] db::RequisitionRecord visibleRequisition(RequisitionId requisition, char const* action);
+
+/// @brief The row of supplier @p supplier.
+/// @param mapper The mapper to read through.
+/// @param supplier The supplier.
+/// @return It, or nothing.
+[[nodiscard]] std::optional<db::SupplierRecord> findSupplier(Lightweight::DataMapper& mapper, std::int64_t supplier);
+
+/// @brief The row of the purchase order made from requisition @p requisition.
+/// @param mapper The mapper to read through.
+/// @param requisition The requisition.
+/// @return It, or nothing.
+[[nodiscard]] std::optional<db::PurchaseOrderRecord> findOrderOf(Lightweight::DataMapper& mapper,
+                                                                 std::int64_t requisition);
+
+/// @brief The view of supplier @p row.
+/// @param row The row.
+/// @return The view.
+/// @throws ValidationError if the row stores a currency outside its enumeration.
+[[nodiscard]] SupplierView supplierView(db::SupplierRecord const& row);
+
+/// @brief The view of purchase order @p order, with its lines and each line's item code.
+/// @param mapper The mapper to read through.
+/// @param order The order.
+/// @return The view.
+/// @throws NotFound if there is no such order, or its supplier or a line's item does not exist.
+/// @throws ValidationError if a column holds a value outside its enumeration.
+[[nodiscard]] PurchaseOrderView orderView(Lightweight::DataMapper& mapper, std::int64_t order);
 
 /// @brief Whether a requisition's approval has escalated from its site to its company.
 /// @param requisition The row.

@@ -5,10 +5,12 @@
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
+#include "lims/inventory/dto/order_dto.hpp"
 #include "lims/inventory/dto/requisition_dto.hpp"
 
 /// @file
-/// `ProcurementModel`: the requisitions that ask to buy stock, and their approval.
+/// `ProcurementModel`: the requisitions that ask to buy stock, their approval, and the suppliers and purchase orders
+/// they become.
 
 namespace lims {
 
@@ -90,6 +92,53 @@ public:
     /// @param action Carries nothing.
     /// @return The requisitions by id; none for a caller with no principal.
     ListRequisitionsResult execute(const ListPendingRequisitions& action);
+
+    /// @brief Registers a supplier of a company, with the currency its orders are priced in.
+    /// @param action The company, name and currency.
+    /// @return The supplier.
+    /// @throws ValidationError if the request is malformed.
+    /// @throws NotFound if the company does not exist.
+    /// @throws Conflict if the company has a supplier of that name already.
+    /// @throws Forbidden through the action guard if the caller is not a purchaser at the company.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    SupplierView execute(const CreateSupplier& action);
+
+    /// @brief Lists a company's suppliers, when the caller can see the company.
+    /// @param action The company.
+    /// @return Its suppliers by id; none for a company the caller cannot see.
+    /// @throws ValidationError if no company is named.
+    ListSuppliersResult execute(const ListSuppliers& action);
+
+    /// @brief Orders an approved requisition from a supplier, in the supplier's currency.
+    ///
+    /// Every requisition line is priced once, per stock unit; a line total is the quantity times the unit price
+    /// rounded half-up once to the currency's decimals, and the order total is their exact sum. The requisition moves
+    /// from approved to ordered by a conditional update in the order's transaction, so it is ordered once.
+    /// @param action The requisition, supplier and one price per line.
+    /// @return The order, open.
+    /// @throws ValidationError if the request is malformed, the supplier is another company's, a line is priced twice,
+    ///         not at all or is not the requisition's, or a unit price is not positive or is not a whole number of
+    ///         the supplier's minor units.
+    /// @throws OutOfRange if a line total or the order total does not fit.
+    /// @throws NotFound if the requisition or the supplier is not visible to the caller.
+    /// @throws IllegalTransition if the requisition is not approved.
+    /// @throws Forbidden if the caller is not a purchaser at the requisition's company.
+    /// @throws Conflict if the requisition was ordered meanwhile.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    PurchaseOrderView execute(const CreatePurchaseOrder& action);
+
+    /// @brief Reads a purchase order, when the caller can see its company.
+    /// @param action The order.
+    /// @return The order.
+    /// @throws ValidationError if no order is named.
+    /// @throws NotFound if there is no such order, or it is of a company the caller cannot see.
+    PurchaseOrderView execute(const GetPurchaseOrder& action);
+
+    /// @brief Lists a company's purchase orders, when the caller can see the company.
+    /// @param action The company.
+    /// @return Its orders by id; none for a company the caller cannot see.
+    /// @throws ValidationError if no company is named.
+    ListPurchaseOrdersResult execute(const ListPurchaseOrders& action);
 };
 
 }  // namespace lims
@@ -112,5 +161,15 @@ BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::GetRequisition, "GetRequisi
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListRequisitions, "ListRequisitions",
                        ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListPendingRequisitions, "ListPendingRequisitions",
+                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::CreateSupplier, "CreateSupplier")
+BRIDGE_REGISTER_EFFECTS(lims::CreateSupplier, ::morph::effects::changes<lims::SupplierView>)
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListSuppliers, "ListSuppliers", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::CreatePurchaseOrder, "CreatePurchaseOrder")
+BRIDGE_REGISTER_EFFECTS(lims::CreatePurchaseOrder, ::morph::effects::changes<lims::PurchaseOrderView>,
+                        ::morph::effects::changes<lims::RequisitionView>)
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::GetPurchaseOrder, "GetPurchaseOrder",
+                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListPurchaseOrders, "ListPurchaseOrders",
                        ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

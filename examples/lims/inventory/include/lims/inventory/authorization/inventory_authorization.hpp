@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 
+#include "lims/inventory/dto/order_dto.hpp"
 #include "lims/inventory/dto/requisition_dto.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
 #include "lims/org/authorization/declared.hpp"
@@ -17,7 +18,8 @@
 /// The inventory module's declared authorization: a company's inventory settings are a supervisor's; its items,
 /// locations and opening lots are a stock keeper's, at the company or at the site of the location; a requisition is
 /// raised, filled and submitted by anyone holding a role at its site, and approved by a purchase approver within a
-/// value limit, who is not the one who raised or submitted it.
+/// value limit, who is not the one who raised or submitted it; a supplier is registered, and an approved requisition
+/// ordered, by a purchaser at the company.
 
 namespace lims {
 
@@ -143,6 +145,22 @@ struct Authorization<ApproveRequisition> {
     /// @param action The action.
     /// @return The two; each empty when there is no such requisition or no submission.
     [[nodiscard]] static std::array<std::optional<std::string>, 2> firstPerformersOf(ApproveRequisition const& action);
+};
+
+/// @brief A supplier is registered by a purchaser at its company.
+template <>
+struct Authorization<CreateSupplier> : CompanyRule<CreateSupplier, LimsRole::Purchaser> {};
+
+/// @brief A purchase order is placed by a purchaser at the requisition's company.
+template <>
+struct Authorization<CreatePurchaseOrder> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::Purchaser;
+
+    /// @brief The company of the requisition the payload names.
+    /// @param action The action.
+    /// @return It; an empty company when there is no such requisition.
+    [[nodiscard]] static Scope scopeOf(CreatePurchaseOrder const& action);
 };
 
 }  // namespace lims
