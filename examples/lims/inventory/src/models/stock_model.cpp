@@ -309,6 +309,12 @@ ListItemsResult StockModel::execute(const ListItems& action) {
     return result;
 }
 
+std::optional<InventorySettingsView> StockModel::settingsOf(CompanyId company) {
+    Lightweight::DataMapper mapper;
+    auto const row = settingsRow(mapper, company);
+    return row.has_value() ? std::optional{toView(*row)} : std::nullopt;
+}
+
 // An action handler: the registry calls it on the instance, like every other.
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 LocationView StockModel::execute(const CreateLocation& action) {

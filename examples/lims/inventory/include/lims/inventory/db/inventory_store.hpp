@@ -10,6 +10,7 @@
 
 #include "lims/inventory/core/units.hpp"
 #include "lims/inventory/db/inventory_entity.hpp"
+#include "lims/inventory/dto/requisition_dto.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
 
 /// @file
@@ -83,5 +84,25 @@ namespace lims::inventory {
 /// @return It.
 /// @throws NotFound if there is no such lot.
 [[nodiscard]] db::LotRecord lotRecord(Lightweight::DataMapper& mapper, std::int64_t lot);
+
+/// @brief The row of requisition @p requisition.
+/// @param mapper The mapper to read through.
+/// @param requisition The requisition.
+/// @return It, or nothing.
+[[nodiscard]] std::optional<db::RequisitionRecord> findRequisition(Lightweight::DataMapper& mapper,
+                                                                   std::int64_t requisition);
+
+/// @brief Whether a requisition's approval has escalated from its site to its company.
+/// @param requisition The row.
+/// @return `true` from its deadline on; a draft has no deadline yet.
+[[nodiscard]] bool requisitionEscalated(db::RequisitionRecord const& requisition);
+
+/// @brief The view of requisition @p requisition, with its lines and each line's item code.
+/// @param mapper The mapper to read through.
+/// @param requisition The requisition.
+/// @return The view.
+/// @throws NotFound if there is no such requisition, or a line's item does not exist.
+/// @throws ValidationError if a column holds a value outside its enumeration.
+[[nodiscard]] RequisitionView requisitionView(Lightweight::DataMapper& mapper, std::int64_t requisition);
 
 }  // namespace lims::inventory

@@ -62,4 +62,30 @@ LIGHTWEIGHT_SQL_MIGRATION(20261120000002, "Create inventory_movements") {
         .RequiredColumn("source", Varchar(128));
     plan.CreateIndex("idx_inventory_movements_item", "inventory_movements", {"item_id"});
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20261120000004, "Create inventory_requisitions and their lines") {
+    plan.CreateTableIfNotExists("inventory_requisitions")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("site_id", Bigint())
+        .RequiredColumn("reason", Varchar(128))
+        .RequiredColumn("state", Integer())
+        .RequiredColumn("requested_by", Varchar(64))
+        .RequiredColumn("submitted_by", Varchar(64))
+        .RequiredColumn("approved_by", Varchar(64))
+        .RequiredColumn("created_at", Bigint())
+        .RequiredColumn("submitted_at", Bigint())
+        .RequiredColumn("deadline_at", Bigint())
+        .RequiredColumn("total_num", Bigint())
+        .RequiredColumn("total_den", Bigint())
+        .RequiredColumn("currency", Integer());
+    plan.CreateTableIfNotExists("inventory_requisition_lines")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("requisition_id", Bigint())
+        .RequiredColumn("item_id", Bigint())
+        .RequiredColumn("quantity_num", Bigint())
+        .RequiredColumn("quantity_den", Bigint())
+        .RequiredColumn("estimate_num", Bigint())
+        .RequiredColumn("estimate_den", Bigint());
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

@@ -184,8 +184,10 @@ TEST_CASE("Hypothesis 7: a company-B invoice approval sends a company-A watcher 
         lims::OrgModel org;
         org.execute(lims::AssignRole{
             .principal = "ozzy", .role = lims::LimsRole::InvoiceApprover, .company = companyB, .site = {}});
-        org.execute(lims::SetValueLimit{
-            .principal = "ozzy", .company = companyB, .limit = lims::Amount{Rational{100000, DecimalPlaces{0}}}});
+        org.execute(lims::SetValueLimit{.principal = "ozzy",
+                                        .company = companyB,
+                                        .limit = lims::Amount{Rational{100000, DecimalPlaces{0}}},
+                                        .role = lims::LimsRole::InvoiceApprover});
     }
     {
         ScopedPrincipal const olga{"olga"};

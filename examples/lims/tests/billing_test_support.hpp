@@ -188,10 +188,10 @@ inline LabSample approvalSetUp() {
             .billingDay = Count{::morph::math::Rational{25, ::morph::math::DecimalPlaces{0}}}});
         OrgModel org;
         auto const limit = [&org](std::string principal, std::int64_t units) {
-            org.execute(
-                SetValueLimit{.principal = std::move(principal),
-                              .company = seededCompany(),
-                              .limit = Amount{::morph::math::Rational{units, ::morph::math::DecimalPlaces{2}}}});
+            org.execute(SetValueLimit{.principal = std::move(principal),
+                                      .company = seededCompany(),
+                                      .limit = Amount{::morph::math::Rational{units, ::morph::math::DecimalPlaces{2}}},
+                                      .role = LimsRole::InvoiceApprover});
         };
         limit("paula", 100);
         limit("carl", 1000);
@@ -327,11 +327,11 @@ private:
 inline InvoiceView approvedInvoice(std::string const& reference = "WW-1", CurrencyCode currency = CurrencyCode::EUR) {
     {
         ScopedPrincipal const sam{"sam"};
-        OrgModel{}.execute(SetValueLimit{
-            .principal = "carl",
-            .company = seededCompany(),
-            .limit = Amount{::morph::math::Rational{1000, ::morph::math::DecimalPlaces{2}}},
-        });
+        OrgModel{}.execute(
+            SetValueLimit{.principal = "carl",
+                          .company = seededCompany(),
+                          .limit = Amount{::morph::math::Rational{1000, ::morph::math::DecimalPlaces{2}}},
+                          .role = LimsRole::InvoiceApprover});
     }
     grantIfAbsent("carl", LimsRole::InvoiceApprover);
     auto const lab = publishedSample(reference);

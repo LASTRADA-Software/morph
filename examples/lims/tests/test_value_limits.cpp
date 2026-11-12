@@ -48,13 +48,20 @@ TEST_CASE("value limits: a supervisor sets a limit per principal and company, an
     auto const osaka = org.execute(lims::CreateCompany{
         .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April});
 
-    CHECK_FALSE(lims::OrgModel::valueLimit("bob", lims::test::seededCompany()).has_value());
-    auto const first = org.execute(
-        lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(500)});
+    CHECK_FALSE(
+        lims::OrgModel::valueLimit("bob", lims::test::seededCompany(), lims::LimsRole::InvoiceApprover).has_value());
+    auto const first = org.execute(lims::SetValueLimit{.principal = "bob",
+                                                       .company = lims::test::seededCompany(),
+                                                       .limit = euros(500),
+                                                       .role = lims::LimsRole::InvoiceApprover});
     CHECK(first.setBy == "alice");
-    org.execute(lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(800)});
-    CHECK(lims::OrgModel::valueLimit("bob", lims::test::seededCompany()) == Rational{800, DecimalPlaces{2}});
-    CHECK_FALSE(lims::OrgModel::valueLimit("bob", osaka.id).has_value());
+    org.execute(lims::SetValueLimit{.principal = "bob",
+                                    .company = lims::test::seededCompany(),
+                                    .limit = euros(800),
+                                    .role = lims::LimsRole::InvoiceApprover});
+    CHECK(lims::OrgModel::valueLimit("bob", lims::test::seededCompany(), lims::LimsRole::InvoiceApprover) ==
+          Rational{800, DecimalPlaces{2}});
+    CHECK_FALSE(lims::OrgModel::valueLimit("bob", osaka.id, lims::LimsRole::InvoiceApprover).has_value());
     CHECK(org.execute(lims::ListValueLimits{}).limits.size() == 1U);
 }
 
@@ -65,16 +72,21 @@ TEST_CASE("value limits: a limit must fit the company's currency and not be nega
     lims::OrgModel org;
     auto const osaka = org.execute(lims::CreateCompany{
         .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April});
-    CHECK_THROWS_AS(org.execute(lims::SetValueLimit{
-                        .principal = "bob",
-                        .company = osaka.id,
-                        .limit = lims::Amount{Rational{morph::math::Numerator{25}, morph::math::Denominator{2},
-                                                       DecimalPlaces{1}}}}),
-                    lims::ValidationError);
-    CHECK_THROWS_AS(org.execute(lims::SetValueLimit{.principal = "bob", .company = osaka.id, .limit = euros(-1)}),
-                    lims::ValidationError);
-    CHECK_THROWS_AS(org.execute(lims::SetValueLimit{.principal = "bob", .company = osaka.id, .limit = {}}),
-                    lims::ValidationError);
+    CHECK_THROWS_AS(
+        org.execute(lims::SetValueLimit{
+            .principal = "bob",
+            .company = osaka.id,
+            .limit = lims::Amount{Rational{morph::math::Numerator{25}, morph::math::Denominator{2}, DecimalPlaces{1}}},
+            .role = lims::LimsRole::InvoiceApprover}),
+        lims::ValidationError);
+    CHECK_THROWS_AS(
+        org.execute(lims::SetValueLimit{
+            .principal = "bob", .company = osaka.id, .limit = euros(-1), .role = lims::LimsRole::InvoiceApprover}),
+        lims::ValidationError);
+    CHECK_THROWS_AS(
+        org.execute(lims::SetValueLimit{
+            .principal = "bob", .company = osaka.id, .limit = {}, .role = lims::LimsRole::InvoiceApprover}),
+        lims::ValidationError);
 }
 
 TEST_CASE("value limits: only a supervisor of the company sets one", "[lims][limits][authorization]") {
@@ -83,10 +95,11 @@ TEST_CASE("value limits: only a supervisor of the company sets one", "[lims][lim
     lims::test::grant("carol", lims::LimsRole::InvoiceApprover);
     ScopedPrincipal const carol{"carol"};
     lims::OrgModel org;
-    CHECK_THROWS_AS(
-        ::morph::model::executeChecked(
-            org, lims::SetValueLimit{.principal = "carol", .company = lims::test::seededCompany(), .limit = euros(1)}),
-        lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::SetValueLimit{.principal = "carol",
+                                                                            .company = lims::test::seededCompany(),
+                                                                            .limit = euros(1),
+                                                                            .role = lims::LimsRole::InvoiceApprover}),
+                    lims::Forbidden);
 }
 
 TEST_CASE("value limits: findCompany answers a company's currency and fiscal-year start", "[lims][limits]") {
@@ -107,8 +120,10 @@ TEST_CASE("value limits: a list shows only the limits at companies the caller ca
     lims::CompanyView osaka;
     {
         ScopedPrincipal const alice{"alice"};
-        org.execute(
-            lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(500)});
+        org.execute(lims::SetValueLimit{.principal = "bob",
+                                        .company = lims::test::seededCompany(),
+                                        .limit = euros(500),
+                                        .role = lims::LimsRole::InvoiceApprover});
         osaka = org.execute(lims::CreateCompany{
             .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April});
         org.execute(lims::AssignRole{
@@ -116,17 +131,21 @@ TEST_CASE("value limits: a list shows only the limits at companies the caller ca
     }
     ScopedPrincipal const carol{"carol"};
     CHECK(org.execute(lims::ListValueLimits{}).limits.empty());
-    auto const yen = org.execute(lims::SetValueLimit{
-        .principal = "bob", .company = osaka.id, .limit = lims::Amount{Rational{50000, DecimalPlaces{0}}}});
+    auto const yen = org.execute(lims::SetValueLimit{.principal = "bob",
+                                                     .company = osaka.id,
+                                                     .limit = lims::Amount{Rational{50000, DecimalPlaces{0}}},
+                                                     .role = lims::LimsRole::InvoiceApprover});
     auto const listed = org.execute(lims::ListValueLimits{});
     REQUIRE(listed.limits.size() == 1U);
     CHECK(listed.limits.front().id == yen.id);
     CHECK((*listed.limits.front().limit).getDecimalPlaces() == DecimalPlaces{0});
-    CHECK(lims::OrgModel::valueLimit("bob", osaka.id) == Rational{50000, DecimalPlaces{0}});
-    CHECK_THROWS_AS(
-        ::morph::model::executeChecked(
-            org, lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(1)}),
-        lims::Forbidden);
+    CHECK(lims::OrgModel::valueLimit("bob", osaka.id, lims::LimsRole::InvoiceApprover) ==
+          Rational{50000, DecimalPlaces{0}});
+    CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::SetValueLimit{.principal = "bob",
+                                                                            .company = lims::test::seededCompany(),
+                                                                            .limit = euros(1),
+                                                                            .role = lims::LimsRole::InvoiceApprover}),
+                    lims::Forbidden);
 }
 
 // Mutation: drop `notOnSelf` from Authorization<SetValueLimit> (alice sets her own limit).
@@ -137,17 +156,23 @@ TEST_CASE("value limits: a supervisor does not set their own limit, another supe
     lims::OrgModel org;
     {
         ScopedPrincipal const alice{"alice"};
-        CHECK_THROWS_AS(::morph::model::executeChecked(org, lims::SetValueLimit{.principal = "alice",
-                                                                                .company = lims::test::seededCompany(),
-                                                                                .limit = euros(1'000'000)}),
-                        lims::Forbidden);
-        CHECK_FALSE(lims::OrgModel::valueLimit("alice", lims::test::seededCompany()).has_value());
+        CHECK_THROWS_AS(
+            ::morph::model::executeChecked(org, lims::SetValueLimit{.principal = "alice",
+                                                                    .company = lims::test::seededCompany(),
+                                                                    .limit = euros(1'000'000),
+                                                                    .role = lims::LimsRole::InvoiceApprover}),
+            lims::Forbidden);
+        CHECK_FALSE(lims::OrgModel::valueLimit("alice", lims::test::seededCompany(), lims::LimsRole::InvoiceApprover)
+                        .has_value());
     }
     ScopedPrincipal const dave{"dave"};
-    auto const set = org.execute(
-        lims::SetValueLimit{.principal = "alice", .company = lims::test::seededCompany(), .limit = euros(2000)});
+    auto const set = org.execute(lims::SetValueLimit{.principal = "alice",
+                                                     .company = lims::test::seededCompany(),
+                                                     .limit = euros(2000),
+                                                     .role = lims::LimsRole::InvoiceApprover});
     CHECK(set.setBy == "dave");
-    CHECK(lims::OrgModel::valueLimit("alice", lims::test::seededCompany()) == Rational{2000, DecimalPlaces{2}});
+    CHECK(lims::OrgModel::valueLimit("alice", lims::test::seededCompany(), lims::LimsRole::InvoiceApprover) ==
+          Rational{2000, DecimalPlaces{2}});
 }
 
 // Mutation: drop the unique index (the table then accepts a second row for the pair); make SetValueLimit always
@@ -157,10 +182,14 @@ TEST_CASE("value limits: a pair holds one row, which setting twice updates", "[l
     lims::test::grant("alice", lims::LimsRole::Supervisor);
     ScopedPrincipal const alice{"alice"};
     lims::OrgModel org;
-    auto const first = org.execute(
-        lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(500)});
-    auto const second = org.execute(
-        lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(900)});
+    auto const first = org.execute(lims::SetValueLimit{.principal = "bob",
+                                                       .company = lims::test::seededCompany(),
+                                                       .limit = euros(500),
+                                                       .role = lims::LimsRole::InvoiceApprover});
+    auto const second = org.execute(lims::SetValueLimit{.principal = "bob",
+                                                        .company = lims::test::seededCompany(),
+                                                        .limit = euros(900),
+                                                        .role = lims::LimsRole::InvoiceApprover});
     CHECK(second.id == first.id);
     auto const listed = org.execute(lims::ListValueLimits{});
     REQUIRE(listed.limits.size() == 1U);
@@ -171,6 +200,7 @@ TEST_CASE("value limits: a pair holds one row, which setting twice updates", "[l
     lims::db::ValueLimitRecord duplicate;
     duplicate.principal = Lightweight::SqlAnsiString<64>{"bob"};
     duplicate.company = static_cast<std::uint64_t>(*lims::test::seededCompany());
+    duplicate.role = static_cast<int>(lims::LimsRole::InvoiceApprover);
     duplicate.setBy = Lightweight::SqlAnsiString<64>{"alice"};
     CHECK_THROWS(mapper.Create(duplicate));
 }
@@ -185,10 +215,14 @@ TEST_CASE("value limits: a limit is seen by the company's supervisors and the pr
     lims::OrgModel org;
     {
         ScopedPrincipal const alice{"alice"};
-        org.execute(
-            lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(500)});
-        org.execute(
-            lims::SetValueLimit{.principal = "carol", .company = lims::test::seededCompany(), .limit = euros(700)});
+        org.execute(lims::SetValueLimit{.principal = "bob",
+                                        .company = lims::test::seededCompany(),
+                                        .limit = euros(500),
+                                        .role = lims::LimsRole::InvoiceApprover});
+        org.execute(lims::SetValueLimit{.principal = "carol",
+                                        .company = lims::test::seededCompany(),
+                                        .limit = euros(700),
+                                        .role = lims::LimsRole::InvoiceApprover});
         CHECK(org.execute(lims::ListValueLimits{}).limits.size() == 2U);
     }
     {
@@ -199,4 +233,50 @@ TEST_CASE("value limits: a limit is seen by the company's supervisors and the pr
     }
     ScopedPrincipal const nobody{"nobody"};
     CHECK(org.execute(lims::ListValueLimits{}).limits.empty());
+}
+
+// Mutation: let valueLimit and SetValueLimit's lookup ignore the role (the purchase limit replaces the invoice limit
+// and the two answers are equal).
+TEST_CASE("value limits: one principal has a limit per role at a company", "[lims][limits]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    auto const invoice = org.execute(lims::SetValueLimit{.principal = "bob",
+                                                         .company = lims::test::seededCompany(),
+                                                         .limit = euros(1000000),
+                                                         .role = lims::LimsRole::InvoiceApprover});
+    auto const purchase = org.execute(lims::SetValueLimit{.principal = "bob",
+                                                          .company = lims::test::seededCompany(),
+                                                          .limit = euros(500000),
+                                                          .role = lims::LimsRole::PurchaseApprover});
+    CHECK(invoice.id != purchase.id);
+    CHECK(purchase.role == lims::LimsRole::PurchaseApprover);
+    CHECK(lims::OrgModel::valueLimit("bob", lims::test::seededCompany(), lims::LimsRole::InvoiceApprover) ==
+          Rational{1000000, DecimalPlaces{2}});
+    CHECK(lims::OrgModel::valueLimit("bob", lims::test::seededCompany(), lims::LimsRole::PurchaseApprover) ==
+          Rational{500000, DecimalPlaces{2}});
+    CHECK_FALSE(lims::OrgModel::valueLimit("bob", lims::test::seededCompany(), lims::LimsRole::Verifier).has_value());
+    org.execute(lims::SetValueLimit{.principal = "bob",
+                                    .company = lims::test::seededCompany(),
+                                    .limit = euros(700000),
+                                    .role = lims::LimsRole::PurchaseApprover});
+    CHECK(lims::OrgModel::valueLimit("bob", lims::test::seededCompany(), lims::LimsRole::InvoiceApprover) ==
+          Rational{1000000, DecimalPlaces{2}});
+    CHECK(lims::OrgModel::valueLimit("bob", lims::test::seededCompany(), lims::LimsRole::PurchaseApprover) ==
+          Rational{700000, DecimalPlaces{2}});
+    CHECK(org.execute(lims::ListValueLimits{}).limits.size() == 2U);
+}
+
+// Mutation: drop the role condition from SetValueLimit::validate (a limit for the verifier role is stored).
+TEST_CASE("value limits: only a role that judges a value takes a limit", "[lims][limits]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    CHECK_THROWS_AS(org.execute(lims::SetValueLimit{.principal = "bob",
+                                                    .company = lims::test::seededCompany(),
+                                                    .limit = euros(1),
+                                                    .role = lims::LimsRole::Verifier}),
+                    lims::ValidationError);
 }

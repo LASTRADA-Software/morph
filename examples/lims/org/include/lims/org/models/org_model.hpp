@@ -168,12 +168,13 @@ public:
     /// @return The limits, by id.
     ListValueLimitsResult execute(const ListValueLimits& action);
 
-    /// @brief @p principal's value limit at @p company.
+    /// @brief @p principal's value limit at @p company for @p role.
     /// @param principal The principal.
     /// @param company The company.
-    /// @return The limit in the company's base currency; nothing when they have none.
+    /// @param role The role the limit is for.
+    /// @return The limit in the company's base currency; nothing when they have none for that role.
     [[nodiscard]] static std::optional<::morph::math::Rational> valueLimit(std::string_view principal,
-                                                                           CompanyId company);
+                                                                           CompanyId company, LimsRole role);
 
     /// @brief The company with @p company's id, for a module that keeps books in its currency.
     /// @param company The company.
