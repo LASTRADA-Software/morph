@@ -1437,8 +1437,8 @@ once. Ordering judges the purchaser's rule again before that write, as approving
 **Hypothesis 8's runtime-currency half is confirmed for its second instance.** Measured in
 `tests/test_purchase_orders.cpp`: a unit price of 850.50 for a yen supplier is refused by the model (`fitsCurrency`),
 and the served form of `CreatePurchaseOrder` still advertises `x-decimalPlaces: 2`, for its nested price, because the
-declared precision is the type's. The currency is known only from the supplier's row, as an invoice's is from its client's (decision 33),
-and a stock quantity's unit from its item's (decision 42). Three places in two modules now carry an amount beside a
+declared precision is the type's. The currency is known only from the supplier's row, as an invoice's is from its
+client's (decision 33), and a stock quantity's unit from its item's (decision 42). Three places in two modules now carry an amount beside a
 field naming its unit and check the pair by hand.
 
 ### 48. A stock change in one company reaches another company's watching stock keeper (hypothesis 7, second instance)

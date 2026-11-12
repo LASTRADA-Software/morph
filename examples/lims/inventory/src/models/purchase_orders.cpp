@@ -4,8 +4,8 @@
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
 #include <cstdint>
-#include <format>
 #include <map>
+#include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
 #include <vector>
@@ -96,8 +96,9 @@ struct PricedLine {
                                   " must be positive"};
         }
         if (!fitsCurrency(unitPrice, currency)) {
-            throw ValidationError{"CreatePurchaseOrder: a unit price of " + std::format("{:g}", unitPrice.toDouble()) +
-                                  " is not a whole number of " + std::string{currencyName(currency)}};
+            throw ValidationError{"CreatePurchaseOrder: a unit price of " +
+                                  ::morph::units::toDecimalString(Amount{unitPrice}) + " is not a whole number of " +
+                                  std::string{currencyName(currency)}};
         }
         priced.push_back(PricedLine{
             .line = &line, .unitPrice = unitPrice, .total = orderLineTotal(*line.quantity, unitPrice, currency)});
@@ -198,8 +199,8 @@ PurchaseOrderView ProcurementModel::execute(const CreatePurchaseOrder& action) {
         throw IllegalTransition{"CreatePurchaseOrder: only an approved requisition is ordered"};
     }
     auto const requisition = inventory::requisitionView(reader, *action.requisition);
-    auto const supplierRecord = inventory::supplierView(*supplier);
-    CurrencyCode const currency = supplierRecord.currency;
+    auto const supplierRow = inventory::supplierView(*supplier);
+    CurrencyCode const currency = supplierRow.currency;
     auto const priced = priceLines(requisition, action.prices, currency);
     ExactSum sum;
     for (PricedLine const& line : priced) {
@@ -232,18 +233,18 @@ PurchaseOrderView ProcurementModel::execute(const CreatePurchaseOrder& action) {
         order.orderedAt = nowMillis();
         mapper.Create(order);
         auto const orderId = static_cast<std::int64_t>(order.id.Value());
-        for (PricedLine const& priced_line : priced) {
+        for (PricedLine const& pricedLine : priced) {
             db::OrderLineRecord line;
             line.orderId = orderId;
-            line.itemId = *priced_line.line->item;
-            line.orderedNum = (*priced_line.line->quantity).numerator;
-            line.orderedDen = (*priced_line.line->quantity).denominator;
+            line.itemId = *pricedLine.line->item;
+            line.orderedNum = (*pricedLine.line->quantity).numerator;
+            line.orderedDen = (*pricedLine.line->quantity).denominator;
             line.receivedNum = 0;
             line.receivedDen = 1;
-            line.unitPriceNum = priced_line.unitPrice.numerator;
-            line.unitPriceDen = priced_line.unitPrice.denominator;
-            line.lineTotalNum = priced_line.total.numerator;
-            line.lineTotalDen = priced_line.total.denominator;
+            line.unitPriceNum = pricedLine.unitPrice.numerator;
+            line.unitPriceDen = pricedLine.unitPrice.denominator;
+            line.lineTotalNum = pricedLine.total.numerator;
+            line.lineTotalDen = pricedLine.total.denominator;
             mapper.Create(line);
         }
         auto link = mapper.Connection().Query(db::RequisitionRecord::TableName).Update();

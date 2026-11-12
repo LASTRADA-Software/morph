@@ -8,6 +8,7 @@
 #include <Lightweight/SqlStatement.hpp>
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <cstdint>
 #include <morph/core/action_guard.hpp>
@@ -26,6 +27,7 @@
 #include "lims/inventory/models/procurement_model.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/dto/company_dto.hpp"
+#include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 
 using lims::test::ScopedPrincipal;
@@ -135,7 +137,14 @@ TEST_CASE("Hypothesis 8: a yen order keeps whole yen by the model, not by the ty
             .requisition = requisition.id,
             .supplier = supplier.id,
             .prices = {lims::OrderLinePrice{.line = requisition.lines.front().id, .unitPrice = price(85050)}}}),
-        Catch::Matchers::ContainsSubstring("whole number of JPY"));
+        Catch::Matchers::ContainsSubstring("a unit price of 850.5 is not a whole number of JPY"));
+    // A price past six significant digits is printed exactly, with no exponent.
+    CHECK_THROWS_WITH(
+        procurement.execute(lims::CreatePurchaseOrder{
+            .requisition = requisition.id,
+            .supplier = supplier.id,
+            .prices = {lims::OrderLinePrice{.line = requisition.lines.front().id, .unitPrice = price(123456750)}}}),
+        Catch::Matchers::ContainsSubstring("a unit price of 1234567.5 is not"));
     // The type still says two places: the served form of a yen order line advertises them.
     auto const& schema = morph::forms::schemaJson<lims::CreatePurchaseOrder>();
     CHECK_THAT(schema, Catch::Matchers::ContainsSubstring(R"("x-decimalPlaces":2)"));
@@ -171,8 +180,7 @@ TEST_CASE("purchase orders: every requisition line is priced once, with a positi
     CHECK(order({{line, price(8500)}}).state == lims::OrderState::Open);
 }
 
-// Mutation: ignore the result of ExactSum::add in CreatePurchaseOrder (two lines of 9.2e18 yen each store a wrong
-// total); multiply the quantity by the price without the checked product (the one-line case saturates).
+// Mutation: multiply the quantity by the price without the checked product (the one-line case saturates).
 TEST_CASE("purchase orders: a total that does not fit is refused, and nothing is written",
           "[lims][inventory][order]") {
     DbFixture fixture;
@@ -192,8 +200,8 @@ TEST_CASE("purchase orders: a total that does not fit is refused, and nothing is
           lims::RequisitionState::Approved);
 }
 
-// Mutation: ignore the result of ExactSum::add in CreatePurchaseOrder (the order stores a total of the first line
-// alone, or a wrapped one).
+// Mutation: ignore the result of ExactSum::add in CreatePurchaseOrder (two lines of 9.2e18 yen each store a wrong
+// total, a wrapped one).
 TEST_CASE("purchase orders: lines whose sum does not fit are refused although each fits", "[lims][inventory][order]") {
     DbFixture fixture;
     auto const setUp = lims::test::requisitionSetUp();
@@ -288,15 +296,18 @@ TEST_CASE("purchase orders: the index settles two orders that raced past the sta
             .prices = {lims::OrderLinePrice{.line = requisition.lines.front().id, .unitPrice = price(8500)}}});
     };
     FaultHookGuard const hookGuard;
+    auto const companyId = std::to_string(*lims::test::seededCompany());
+    auto const siteId = std::to_string(*lims::test::seededSite());
     // A rival order row for the requisition lands before this order's insert, and the rival's requisition update
     // commits once this transaction has rolled back.
     lims::setInventoryFaultHook(
-        [id = *requisition.id, &supplier](std::string_view point, Lightweight::SqlConnection&) {
+        [id = *requisition.id, &supplier, &companyId, &siteId](std::string_view point, Lightweight::SqlConnection&) {
             if (point == "requisition.beforeStateChange") {
                 runOnOther(
                     "INSERT INTO inventory_orders (company_id, site_id, supplier_id, requisition_id, currency, state, "
-                    "total_num, total_den, ordered_by, ordered_at) VALUES (1, 1, " +
-                    std::to_string(*supplier.id) + ", " + std::to_string(id) + ", 0, 0, 100, 1, 'rival', 0)");
+                    "total_num, total_den, ordered_by, ordered_at) VALUES (" +
+                    companyId + ", " + siteId + ", " + std::to_string(*supplier.id) + ", " + std::to_string(id) +
+                    ", 0, 0, 100, 1, 'rival', 0)");
             } else if (point == "order.afterRollback") {
                 runOnOther("UPDATE inventory_requisitions SET state = 3 WHERE id = " + std::to_string(id));
             }
@@ -305,13 +316,14 @@ TEST_CASE("purchase orders: the index settles two orders that raced past the sta
     // A refusal that is not that race surfaces as itself: the same failure with the requisition still approved.
     runOnOther("UPDATE inventory_requisitions SET state = 2 WHERE id = " + std::to_string(*requisition.id));
     lims::setInventoryFaultHook(
-        [id = *requisition.id, &supplier](std::string_view point, Lightweight::SqlConnection&) {
+        [id = *requisition.id, &supplier, &companyId, &siteId](std::string_view point, Lightweight::SqlConnection&) {
             if (point == "requisition.beforeStateChange") {
                 runOnOther("DELETE FROM inventory_orders WHERE requisition_id = " + std::to_string(id));
                 runOnOther(
                     "INSERT INTO inventory_orders (company_id, site_id, supplier_id, requisition_id, currency, state, "
-                    "total_num, total_den, ordered_by, ordered_at) VALUES (1, 1, " +
-                    std::to_string(*supplier.id) + ", " + std::to_string(id) + ", 0, 0, 100, 1, 'rival', 0)");
+                    "total_num, total_den, ordered_by, ordered_at) VALUES (" +
+                    companyId + ", " + siteId + ", " + std::to_string(*supplier.id) + ", " + std::to_string(id) +
+                    ", 0, 0, 100, 1, 'rival', 0)");
             }
         });
     CHECK_THROWS_AS(place(), Lightweight::SqlException);
@@ -319,7 +331,10 @@ TEST_CASE("purchase orders: the index settles two orders that raced past the sta
           lims::RequisitionState::Approved);
 }
 
-// Mutation: drop the unique index on (company, name) from the migration; drop the lookup before the insert.
+// Mutation: drop the unique index on (company, name) from the migration (the Racer insert is stored beside the
+// supplier the hook made); turn the catch's re-read into a plain rethrow (the loser sees the database's error, not a
+// Conflict). The lookup before the insert is a fast path whose absence the catch hides: the duplicate Merck is
+// answered with a Conflict either way.
 TEST_CASE("suppliers: a name is taken once per company, and listed by id", "[lims][inventory][order]") {
     DbFixture fixture;
     lims::test::stockSetUp();
@@ -346,17 +361,18 @@ TEST_CASE("suppliers: a name is taken once per company, and listed by id", "[lim
     CHECK_THROWS_AS(procurement.execute(lims::ListSuppliers{}), lims::ValidationError);
     // The index refuses the second of two creates that raced past the lookup.
     FaultHookGuard const hookGuard;
-    lims::setInventoryFaultHook([](std::string_view point, Lightweight::SqlConnection&) {
-        if (point == "supplier.beforeInsert") {
-            runOnOther("INSERT INTO inventory_suppliers (company_id, name, currency) VALUES (1, 'Racer', 0)");
-        }
-    });
+    lims::setInventoryFaultHook(
+        [company = std::to_string(*lims::test::seededCompany())](std::string_view point, Lightweight::SqlConnection&) {
+            if (point == "supplier.beforeInsert") {
+                runOnOther("INSERT INTO inventory_suppliers (company_id, name, currency) VALUES (" + company +
+                           ", 'Racer', 0)");
+            }
+        });
     CHECK_THROWS_AS(procurement.execute(lims::CreateSupplier{.company = lims::test::seededCompany(), .name = "Racer"}),
                     lims::Conflict);
 }
 
-// Mutation: let a supplier of another company through (the supplier-company comparison); remove the visibility test
-// on the supplier (omar's supplier is found by paul).
+// Mutation: let a supplier of another company through (the supplier-company comparison).
 TEST_CASE("purchase orders: the supplier is the requisition's company's, and another company's reads as absent",
           "[lims][inventory][order]") {
     DbFixture fixture;
@@ -373,7 +389,7 @@ TEST_CASE("purchase orders: the supplier is the requisition's company's, and ano
         osakaSupplier = lims::ProcurementModel{}.execute(
             lims::CreateSupplier{.company = osaka, .name = "Kanto", .currency = lims::CurrencyCode::JPY});
     }
-    auto const order = [&](ScopedPrincipal const&, lims::SupplierId supplier) {
+    auto const order = [&](lims::SupplierId supplier) {
         return lims::ProcurementModel{}.execute(lims::CreatePurchaseOrder{
             .requisition = requisition.id,
             .supplier = supplier,
@@ -381,19 +397,40 @@ TEST_CASE("purchase orders: the supplier is the requisition's company's, and ano
     };
     {
         ScopedPrincipal const paul{"paul"};
-        CHECK_THROWS_WITH(order(paul, osakaSupplier.id),
-                          Catch::Matchers::ContainsSubstring("is not one of requisition"));
-        CHECK_THROWS_AS(order(paul, lims::SupplierId{9999}), lims::NotFound);
+        CHECK_THROWS_WITH(order(osakaSupplier.id), Catch::Matchers::ContainsSubstring("is not one of requisition"));
+        CHECK_THROWS_AS(order(lims::SupplierId{9999}), lims::NotFound);
     }
     ScopedPrincipal const omar{"omar"};
     // omar sees nothing of the seeded company: its requisition and its orders read as absent.
-    CHECK_THROWS_AS(order(omar, osakaSupplier.id), lims::NotFound);
+    CHECK_THROWS_AS(order(osakaSupplier.id), lims::NotFound);
     CHECK(lims::ProcurementModel{}
               .execute(lims::ListPurchaseOrders{.company = lims::test::seededCompany()})
               .orders.empty());
     CHECK(lims::ProcurementModel{}
               .execute(lims::ListSuppliers{.company = lims::test::seededCompany()})
               .suppliers.empty());
+}
+
+// Mutation: remove the visibility test on the supplier (paul, who sees only the seeded company, finds omar's Osaka
+// supplier and is told it is another company's instead of that it does not exist).
+TEST_CASE("purchase orders: a supplier of a company the caller cannot see reads as absent",
+          "[lims][inventory][order]") {
+    DbFixture fixture;
+    auto const requisition = lims::test::approvedRequisition().requisition;
+    auto const osaka = osakaWithPurchaser();
+    lims::SupplierView osakaSupplier;
+    {
+        ScopedPrincipal const omar{"omar"};
+        osakaSupplier = lims::ProcurementModel{}.execute(
+            lims::CreateSupplier{.company = osaka, .name = "Kanto", .currency = lims::CurrencyCode::JPY});
+    }
+    ScopedPrincipal const paul{"paul"};
+    CHECK_THROWS_WITH(
+        lims::ProcurementModel{}.execute(lims::CreatePurchaseOrder{
+            .requisition = requisition.id,
+            .supplier = osakaSupplier.id,
+            .prices = {lims::OrderLinePrice{.line = requisition.lines.front().id, .unitPrice = price(8500)}}}),
+        Catch::Matchers::ContainsSubstring("does not exist"));
 }
 
 // Mutation: make GetPurchaseOrder skip the visibility test (omar reads the seeded company's order).
@@ -468,4 +505,34 @@ TEST_CASE("purchase orders: ordering declares that it changes the order and the 
     };
     CHECK(records("CreatePurchaseOrder") == std::vector<std::string>{"Inventory_Order", "Inventory_Requisition"});
     CHECK(records("CreateSupplier") == std::vector<std::string>{"Inventory_Supplier"});
+}
+
+// The nested price list of CreatePurchaseOrder crosses each backend, and the model's refusal comes back through it.
+TEST_CASE("purchase orders: suppliers and orders across the backend matrix", "[lims][inventory][order][matrix]") {
+    using morph::ladder::testkit::Mode;
+    auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    DbFixture fixture;
+    auto const requisition = lims::test::approvedRequisition().requisition;
+    auto const supplier = lims::test::dispatchAs<lims::ProcurementModel>(
+        "paul",
+        lims::CreateSupplier{
+            .company = lims::test::seededCompany(), .name = "Kanto", .currency = lims::CurrencyCode::JPY},
+        mode);
+    CHECK(supplier.currency == lims::CurrencyCode::JPY);
+    auto const placeAt = [&](lims::Amount unitPrice) {
+        return lims::test::dispatchAs<lims::ProcurementModel>(
+            "paul",
+            lims::CreatePurchaseOrder{
+                .requisition = requisition.id,
+                .supplier = supplier.id,
+                .prices = {lims::OrderLinePrice{.line = requisition.lines.front().id, .unitPrice = unitPrice}}},
+            mode);
+    };
+    CHECK_THROWS_WITH(placeAt(price(85050)), Catch::Matchers::ContainsSubstring("whole number of JPY"));
+    auto const order = placeAt(lims::Amount{Rational{8500, DecimalPlaces{0}}});
+    CHECK(order.state == lims::OrderState::Open);
+    CHECK(order.supplier == supplier.id);
+    REQUIRE(order.lines.size() == 1U);
+    CHECK(*order.lines.front().unitPrice == Rational{8500, DecimalPlaces{0}});
 }
