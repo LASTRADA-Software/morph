@@ -389,8 +389,10 @@ namespace {
 /// @brief Sets @p principal's value limit at the seeded company to @p amount, as the supervisor.
 void setLimit(std::string principal, Rational amount) {
     ScopedPrincipal const sam{"sam"};
-    lims::OrgModel{}.execute(lims::SetValueLimit{
-        .principal = std::move(principal), .company = lims::test::seededCompany(), .limit = lims::Amount{amount}});
+    lims::OrgModel{}.execute(lims::SetValueLimit{.principal = std::move(principal),
+                                                 .company = lims::test::seededCompany(),
+                                                 .limit = lims::Amount{amount},
+                                                 .role = lims::LimsRole::InvoiceApprover});
 }
 
 }  // namespace

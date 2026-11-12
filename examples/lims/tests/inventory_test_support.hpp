@@ -10,7 +10,10 @@
 #include "clock.hpp"
 #include "lims/inventory/core/units.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
+#include "lims/inventory/models/procurement_model.hpp"
 #include "lims/inventory/models/stock_model.hpp"
+#include "lims/org/dto/limit_dto.hpp"
+#include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
 
 /// @file
@@ -87,6 +90,54 @@ inline LotStockView openingLot(ItemId item, LocationId location, std::string lot
         .unit = unit,
         .unitCost = Amount{::morph::math::Rational{::morph::math::Numerator{1250}, ::morph::math::Denominator{100},
                                                    ::morph::math::DecimalPlaces{2}}}});
+}
+
+/// @brief What `requisitionSetUp` made.
+struct RequisitionSetUp {
+    /// @brief The stock `stockSetUp` made.
+    StockSetUp stock;
+    /// @brief A draft requisition by `rita` at the seeded site for 2 L of the reagent, estimated at 180.00.
+    RequisitionView draft;
+};
+
+/// @brief `stockSetUp`, purchase approvers and their limits for requisitions, and a draft by `rita`, an analyst at the
+///        seeded site. Limits for the purchase approver role at the seeded company: `anna` 5000.00 and `tom` 10.00,
+///        approvers at the seeded site; `julia` 50000.00, approver at the company. Set at 09:00 on 10 November 2026.
+/// @return The ids and the draft.
+inline RequisitionSetUp requisitionSetUp() {
+    ::morph::ladder::ScopedClockOverride const clock{at(2026, 11, 10)};
+    RequisitionSetUp setUp{.stock = stockSetUp(), .draft = {}};
+    {
+        ScopedPrincipal const sam{"sam"};
+        OrgModel org;
+        auto const limit = [&org](std::string principal, std::int64_t cents) {
+            org.execute(SetValueLimit{.principal = std::move(principal),
+                                      .company = seededCompany(),
+                                      .limit = Amount{::morph::math::Rational{::morph::math::Numerator{cents},
+                                                                              ::morph::math::Denominator{100},
+                                                                              ::morph::math::DecimalPlaces{2}}},
+                                      .role = LimsRole::PurchaseApprover});
+        };
+        limit("anna", 500000);
+        limit("tom", 1000);
+        limit("julia", 5000000);
+    }
+    grant("anna", LimsRole::PurchaseApprover, Scope{seededSite()});
+    grant("tom", LimsRole::PurchaseApprover, Scope{seededSite()});
+    grant("julia", LimsRole::PurchaseApprover);
+    grant("rita", LimsRole::Analyst, Scope{seededSite()});
+    ScopedPrincipal const rita{"rita"};
+    ProcurementModel procurement;
+    auto const draft = procurement.execute(
+        CreateRequisition{.company = seededCompany(), .site = seededSite(), .reason = "Nitrate reagent for November"});
+    setUp.draft = procurement.execute(AddRequisitionLine{
+        .requisition = draft.id,
+        .item = setUp.stock.reagent,
+        .quantity = litres(2000),
+        .unit = StockUnit::litre,
+        .estimate = Amount{::morph::math::Rational{::morph::math::Numerator{18000}, ::morph::math::Denominator{100},
+                                                   ::morph::math::DecimalPlaces{2}}}});
+    return setUp;
 }
 
 }  // namespace lims::test

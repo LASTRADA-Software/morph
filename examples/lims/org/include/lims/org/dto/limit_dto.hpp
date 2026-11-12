@@ -10,6 +10,7 @@
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/strong_id.hpp"
 #include "lims/org/core/types.hpp"
+#include "lims/org/dto/role_dto.hpp"
 
 /// @file
 /// Value limits: the amount, in a company's base currency, up to which a principal may approve there.
@@ -18,7 +19,7 @@ namespace lims {
 
 LIMS_DEFINE_STRONG_ID(ValueLimitId);
 
-/// @brief Sets a principal's value limit at a company, replacing any they had there.
+/// @brief Sets a principal's value limit at a company for a role, replacing any they had there for it.
 struct SetValueLimit {
     using guard = ::lims::DeclaredRuleGuard;
 
@@ -28,18 +29,22 @@ struct SetValueLimit {
     CompanyId company;
     /// @brief The limit, in the company's base currency.
     Amount limit;
+    /// @brief The role the limit is for: `InvoiceApprover` or `PurchaseApprover`.
+    LimsRole role = LimsRole::InvoiceApprover;
 
     /// @brief Whether the request is well-formed.
-    /// @return `true` when a principal of at most 64 bytes, a company and a limit are named.
+    /// @return `true` when a principal of at most 64 bytes, a company, a limit and a role that judges a value are
+    /// named.
     [[nodiscard]] bool validate() const noexcept {
-        return !principal.empty() && principal.size() <= 64 && company.hasValue() && limit.hasValue();
+        return !principal.empty() && principal.size() <= 64 && company.hasValue() && limit.hasValue() &&
+               (role == LimsRole::InvoiceApprover || role == LimsRole::PurchaseApprover);
     }
 
     /// @brief Sent by its button, never per keystroke.
     static constexpr bool explicitSubmit = true;
 };
 
-/// @brief One principal's limit at one company.
+/// @brief One principal's limit at one company for one role.
 struct ValueLimitView {
     /// @brief Its id.
     ValueLimitId id;
@@ -47,6 +52,8 @@ struct ValueLimitView {
     std::string principal;
     /// @brief The company.
     CompanyId company;
+    /// @brief The role the limit is for.
+    LimsRole role = LimsRole::InvoiceApprover;
     /// @brief The limit, in the company's base currency.
     Amount limit;
     /// @brief Who set it.

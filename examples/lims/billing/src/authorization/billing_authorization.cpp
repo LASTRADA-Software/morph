@@ -83,10 +83,11 @@ void Authorization<ApproveInvoice>::checkState(ApproveInvoice const& action) {
 std::optional<::morph::math::Rational> Authorization<ApproveInvoice>::limitOf(std::string_view principal,
                                                                               Scope const& scope) {
     if (auto const* company = std::get_if<CompanyId>(&scope)) {
-        return OrgModel::valueLimit(principal, *company);
+        return OrgModel::valueLimit(principal, *company, LimsRole::InvoiceApprover);
     }
     auto const site = OrgModel::findSite(std::get<SiteId>(scope));
-    return site.has_value() ? OrgModel::valueLimit(principal, site->companyId) : std::nullopt;
+    return site.has_value() ? OrgModel::valueLimit(principal, site->companyId, LimsRole::InvoiceApprover)
+                            : std::nullopt;
 }
 
 std::array<std::optional<std::string>, 2> Authorization<ApproveInvoice>::firstPerformersOf(

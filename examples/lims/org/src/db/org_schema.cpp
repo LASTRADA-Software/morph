@@ -5,6 +5,7 @@
 
 #include "lims/org/core/types.hpp"
 #include "lims/org/db/org_entity.hpp"
+#include "lims/org/dto/role_dto.hpp"
 
 using namespace Lightweight::SqlColumnTypeDefinitions;
 using Lightweight::SqlForeignKeyReferenceDefinition;
@@ -68,5 +69,17 @@ LIGHTWEIGHT_SQL_MIGRATION(20261130000001, "Give people a display name") {
         .RequiredColumn("display_name", Varchar(128));
     // One name per person: the index settles two first namings of one principal.
     plan.CreateUniqueIndex("idx_org_people_principal", "org_people", {"principal"});
+}
+LIGHTWEIGHT_SQL_MIGRATION(20261120000003, "A value limit belongs to a role") {
+    plan.AlterTable("org_value_limits").AddNotRequiredColumn("role", Integer());
+    // Every limit set before limits had a role was an invoice approver's: no other role had one.
+    static_assert(static_cast<int>(lims::LimsRole::InvoiceApprover) == 5,
+                  "the statement spells the invoice approver role as a literal");
+    plan.Update("org_value_limits").Set("role", 5).WhereExpression("role IS NULL");
+    // The index of one limit per principal and company becomes one per principal, company and role. Lightweight's
+    // migration builder drops an index by column, not by name, so the drop is raw SQL.
+    plan.RawSql("DROP INDEX idx_org_value_limits_principal_company");
+    plan.CreateUniqueIndex("idx_org_value_limits_principal_company_role", "org_value_limits",
+                           {"principal", "company_id", "role"});
 }
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

@@ -365,19 +365,25 @@ TEST_CASE("declared authorization: lab declares capture and verify as a pair", "
     CHECK(Rule::separatedFrom == morph::model::ActionTraits<lims::CaptureConcentration>::typeId());
 }
 
-// Mutation: name an action that is not registered in one of ApproveInvoice's `separations`.
+// Mutation: name an action that is not registered in one of ApproveInvoice's or ApproveRequisition's `separations`.
 TEST_CASE("declared authorization: every several-pairs separation names a registered action",
           "[lims][authorization]") {
     STATIC_REQUIRE(lims::DeclaresSeparations<lims::ApproveInvoice>);
     STATIC_REQUIRE_FALSE(lims::DeclaresSeparation<lims::ApproveInvoice>);
-    using Rule = lims::Authorization<lims::ApproveInvoice>;
+    STATIC_REQUIRE(lims::DeclaresSeparations<lims::ApproveRequisition>);
+    STATIC_REQUIRE_FALSE(lims::DeclaresSeparation<lims::ApproveRequisition>);
     auto const& dispatcher = morph::model::detail::ActionDispatcher::instance();
     std::set<std::string> registered;
-    for (std::string_view const model : {"OrgModel", "SampleModel", "LedgerModel", "PriceListModel", "InvoiceModel"}) {
+    for (std::string_view const model :
+         {"OrgModel", "SampleModel", "LedgerModel", "PriceListModel", "InvoiceModel", "ProcurementModel"}) {
         auto const actions = dispatcher.actionsOf(model);
         registered.insert(actions.begin(), actions.end());
     }
-    for (auto const& pair : Rule::separations) {
+    for (auto const& pair : lims::Authorization<lims::ApproveInvoice>::separations) {
+        CAPTURE(pair.action);
+        CHECK(registered.contains(std::string{pair.action}));
+    }
+    for (auto const& pair : lims::Authorization<lims::ApproveRequisition>::separations) {
         CAPTURE(pair.action);
         CHECK(registered.contains(std::string{pair.action}));
     }
@@ -406,7 +412,7 @@ TEST_CASE("declared authorization: every lims action is guarded, deliberately op
     auto const& dispatcher = morph::model::detail::defaultDispatcher();
     for (std::string_view const model :
          {"OrgModel", "SampleModel", "AnalysisCatalogModel", "IgnitionModel", "LedgerModel", "LedgerReportModel",
-          "PriceListModel", "InvoiceModel", "InvoiceEditModel", "BillingRunModel", "StockModel"}) {
+          "PriceListModel", "InvoiceModel", "InvoiceEditModel", "BillingRunModel", "StockModel", "ProcurementModel"}) {
         for (auto const& actionId : dispatcher.actionsOf(model)) {
             CAPTURE(model, actionId);
             registered.insert(actionId);
@@ -436,7 +442,7 @@ TEST_CASE("declared authorization: every lims action is guarded, deliberately op
     std::set<std::string_view> const listed{"OrgModel",        "SampleModel",  "AnalysisCatalogModel",
                                             "IgnitionModel",   "LedgerModel",  "LedgerReportModel",
                                             "PriceListModel",  "InvoiceModel", "InvoiceEditModel",
-                                            "BillingRunModel", "StockModel"};
+                                            "BillingRunModel", "StockModel",   "ProcurementModel"};
     auto const underListedModel = [&](std::string_view actionId) {
         auto const models = dispatcher.modelsOf(actionId);
         return std::ranges::any_of(models, [&](std::string const& model) { return listed.contains(model); });
@@ -482,6 +488,13 @@ TEST_CASE("declared authorization: the edge's table lists every declared role, a
     CHECK(lims::app::requiredRole("CreateItem") == lims::LimsRole::StockKeeper);
     CHECK(lims::app::requiredRole("CreateLocation") == lims::LimsRole::StockKeeper);
     CHECK(lims::app::requiredRole("RecordOpeningLot") == lims::LimsRole::StockKeeper);
+    CHECK(lims::app::requiredRole("ApproveRequisition") == lims::LimsRole::PurchaseApprover);
+    // The raising, filling and submitting of a requisition declare some role at its site, whichever.
+    for (std::string_view const actionId : {"CreateRequisition", "AddRequisitionLine", "SubmitRequisition"}) {
+        CAPTURE(actionId);
+        CHECK(lims::app::requirementFor(actionId).has_value());
+        CHECK_FALSE(lims::app::requiredRole(actionId).has_value());
+    }
     // Some role, whichever: declared, but no specific role.
     CHECK(lims::app::requirementFor("CaptureConcentration").has_value());
     CHECK_FALSE(lims::app::requiredRole("CaptureConcentration").has_value());

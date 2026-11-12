@@ -156,6 +156,18 @@ void addOnce(std::vector<LimsRole>& roles, LimsRole role) {
     }
 }
 
+/// @brief The role a value-limit row is for.
+/// @param row The row.
+/// @return The role.
+/// @throws ValidationError if the row has no role or one outside `LimsRole`; a migrated row always has one.
+[[nodiscard]] LimsRole roleOf(db::ValueLimitRecord const& row) {
+    auto const role = row.role.Value();
+    if (!role.has_value() || *role < 0 || *role > kMaxRole) {
+        throw ValidationError{"value limit " + std::to_string(row.id.Value()) + " stores no role in its range"};
+    }
+    return static_cast<LimsRole>(*role);
+}
+
 /// @brief Maps a value-limit row to its view, its limit at @p currency's decimals.
 /// @param row The row.
 /// @param currency The company's base currency.
@@ -165,6 +177,7 @@ void addOnce(std::vector<LimsRole>& roles, LimsRole role) {
         .id = ValueLimitId{static_cast<std::int64_t>(row.id.Value())},
         .principal = std::string{row.principal.Value().ToStringView()},
         .company = CompanyId{static_cast<std::int64_t>(row.company.Value())},
+        .role = roleOf(row),
         .limit = Amount{::morph::math::Rational{::morph::math::Numerator{row.limitNum.Value()},
                                                 ::morph::math::Denominator{row.limitDen.Value()},
                                                 ::morph::math::DecimalPlaces{decimalsOf(currency)}}},
@@ -593,16 +606,19 @@ ValueLimitView OrgModel::execute(const SetValueLimit& action) {
     }
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    // At most one row per (principal, company): the table's unique index makes a second one impossible, and the
+    // At most one row per (principal, company, role): the table's unique index makes a second one impossible, and the
     // update below keeps the first.
-    auto existing = mapper.Query<db::ValueLimitRecord>()
-                        .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::principal>, "=", action.principal)
-                        .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::company>, "=", *action.company)
-                        .First();
+    auto existing =
+        mapper.Query<db::ValueLimitRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::principal>, "=", action.principal)
+            .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::company>, "=", *action.company)
+            .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::role>, "=", static_cast<int>(action.role))
+            .First();
     bool const exists = existing.has_value();
     db::ValueLimitRecord row = exists ? std::move(*existing) : db::ValueLimitRecord{};
     row.principal = Lightweight::SqlAnsiString<64>{action.principal};
     row.company = static_cast<std::uint64_t>(*action.company);
+    row.role = static_cast<int>(action.role);
     row.limitNum = limit.numerator;
     row.limitDen = limit.denominator;
     row.setBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
@@ -641,7 +657,8 @@ ListValueLimitsResult OrgModel::execute(const ListValueLimits& action) {
     return result;
 }
 
-std::optional<::morph::math::Rational> OrgModel::valueLimit(std::string_view principal, CompanyId company) {
+std::optional<::morph::math::Rational> OrgModel::valueLimit(std::string_view principal, CompanyId company,
+                                                            LimsRole role) {
     auto const view = findCompany(company);
     if (!view.has_value()) {
         return std::nullopt;
@@ -651,6 +668,7 @@ std::optional<::morph::math::Rational> OrgModel::valueLimit(std::string_view pri
         mapper.Query<db::ValueLimitRecord>()
             .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::principal>, "=", std::string{principal})
             .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::company>, "=", *company)
+            .Where(::Lightweight::FieldNameOf<&db::ValueLimitRecord::role>, "=", static_cast<int>(role))
             .First();
     if (!row.has_value()) {
         return std::nullopt;

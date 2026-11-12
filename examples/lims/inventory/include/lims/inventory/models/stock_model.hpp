@@ -5,6 +5,7 @@
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/table/query.hpp>
+#include <optional>
 
 #include "lims/inventory/dto/stock_dto.hpp"
 
@@ -97,6 +98,11 @@ public:
     /// @throws ValidationError if no item is named, the query is refused, or a row holds a value outside its
     ///         enumeration.
     ::morph::table::Page<StockMovementView> execute(const ListStockMovements& action);
+
+    /// @brief A company's inventory settings, whoever asks: for a module that needs them for a rule of its own.
+    /// @param company The company.
+    /// @return The settings, or nothing when the company has none.
+    [[nodiscard]] static std::optional<InventorySettingsView> settingsOf(CompanyId company);
 };
 
 }  // namespace lims

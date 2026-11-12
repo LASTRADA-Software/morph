@@ -270,7 +270,8 @@ TEST_CASE("OrgModel over the full backend-mode matrix: a supervisor sets a value
     const auto set = awaitQt(org.execute(
         lims::SetValueLimit{.principal = "bob",
                             .company = lims::test::seededCompany(),
-                            .limit = lims::Amount{morph::math::Rational{12345, morph::math::DecimalPlaces{2}}}}));
+                            .limit = lims::Amount{morph::math::Rational{12345, morph::math::DecimalPlaces{2}}},
+                            .role = lims::LimsRole::InvoiceApprover}));
     CHECK(set.principal == "bob");
     CHECK(set.setBy == "alice");
 
@@ -287,9 +288,10 @@ TEST_CASE("OrgModel over the full backend-mode matrix: a supervisor sets a value
     CHECK_THROWS_WITH(awaitQt(org.execute(lims::SetValueLimit{
                           .principal = "bob",
                           .company = lims::test::seededCompany(),
-                          .limit = lims::Amount{morph::math::Rational{1, morph::math::DecimalPlaces{2}}}})),
+                          .limit = lims::Amount{morph::math::Rational{1, morph::math::DecimalPlaces{2}}},
+                          .role = lims::LimsRole::InvoiceApprover})),
                       Catch::Matchers::ContainsSubstring(refusal));
-    CHECK(lims::OrgModel::valueLimit("bob", lims::test::seededCompany()) ==
+    CHECK(lims::OrgModel::valueLimit("bob", lims::test::seededCompany(), lims::LimsRole::InvoiceApprover) ==
           morph::math::Rational{12345, morph::math::DecimalPlaces{2}});
 }
 

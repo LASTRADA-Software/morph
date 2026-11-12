@@ -3,6 +3,7 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 
 /// @file
@@ -60,7 +61,7 @@ struct PersonRecord {
     Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"display_name"}> displayName;               // 2
 };
 
-/// @brief One principal's value limit at one company: at most one row per pair.
+/// @brief One principal's value limit at one company for one role: at most one row per triple.
 struct ValueLimitRecord {
     static constexpr std::string_view TableName = "org_value_limits";
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
@@ -70,6 +71,8 @@ struct ValueLimitRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"limit_den"}> limitDen{1};                               // 4
     Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"set_by"}> setBy;                            // 5
     Light::Field<std::int64_t, Light::SqlRealName{"set_at"}> setAt{0};                                     // 6
+    /// @brief `LimsRole` as its underlying integer; the migration that added the column fills every earlier row.
+    Light::Field<std::optional<int>, Light::SqlRealName{"role"}> role;  // 7
 };
 
 }  // namespace lims::db

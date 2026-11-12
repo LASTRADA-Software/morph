@@ -220,7 +220,7 @@ lims is built from modules, each its own library with its own include directory 
 | `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
 | `ledger/` | the chart of accounts, the monthly periods and the journal entries (balanced, unrounded, immutable once posted, corrected by reversal; postings recorded once per source key; a closed period freezes its balances; dated exchange rates; the trial balance, account balance and account ledger reports) | `org`, `posting` |
 | `billing/` | billing settings, billing clients and dated price lists with per-client prices | `org`, `posting` |
-| `inventory/` | items with a stock unit, locations at a site, lots with an expiry, stock on hand per lot and the movements that change it | `org`, `posting` |
+| `inventory/` | items with a stock unit, locations at a site, lots with an expiry, stock on hand per lot and the movements that change it, and requisitions approved within a value limit | `org`, `posting` |
 | `app/` | the server edge's `LimsAuthorizer`, and the tables it reads: `declaredRequirements` and `openMutatingActions` | every module |
 
 The server (`src/server/`), the screens (`screens/`) and the suites (`tests/`) belong to the app and link every
@@ -867,7 +867,7 @@ Two self-assignments remain by design, and neither goes through the declared rul
 with no supervisor anywhere (decision 23), including `prepareLocal`'s appointment of the local user, and the
 appointment of a company's creator as its first supervisor by `CreateCompany` (decision 24).
 
-A value limit is one row per principal and company, kept by a unique index on `(principal, company_id)`;
+A value limit is one row per principal, company and role, kept by a unique index on `(principal, company_id, role)`;
 `SetValueLimit` updates the row when there is one and inserts otherwise. `ListValueLimits` returns a limit only to the
 supervisors of its company and to the principal it belongs to, not to every holder of a role there.
 
@@ -1392,6 +1392,37 @@ unit is a fact of its row. The quantity is therefore a `Measure` (an exact decim
 tag. Purchase orders in a supplier's currency (decision 44) are hypothesis 8's named second instance; this is a third
 place the same shape is needed, recorded here and weighed with both when the seam is decided.
 
+### 43. A requisition is approved as an invoice is, with its own limit, and nothing shared but the declared rule (hypothesis 5, second instance)
+
+A requisition is raised at a site by anyone who holds a role there, and only its requester adds lines and submits
+it. Each line is an item, a quantity converted to the item's unit, and an estimated line total in the company's
+currency; the requisition's total is their exact sum, and an estimate or a total that does not fit is refused.
+`SubmitRequisition` records the submitter, the deadline (now plus the company's approval hours) and requires the
+total it read, so a line added meanwhile is a `Conflict` and not a stale amount for the approver's limit.
+`ApproveRequisition` is a purchase approver's, at the requisition's site before the deadline and at its company from
+it, within their limit for that role, and never the requester's or the submitter's. Each transition is a conditional
+update on the state read; two approvers acting at once give one approval and one `Conflict`, measured over ten
+rounds of two threads with no other failure. A value limit belongs to a principal, a company and a role, because one
+person approves invoices and requisitions up to different amounts; limits set before roles had them are the invoice
+approver's.
+
+**Hypothesis 5 is refuted for its second instance.** Measured in `tests/test_requisitions.cpp`: a requisition
+submitted on one rig is approved on another a day later in `Local`, `LocalSingleThread` and `Socket` mode; four eyes
+and the limit hold. The lifecycle needed no state outside the row, and shares no code with invoice approval but the
+declared authorization: each lifecycle wrote its own transition helper, pending list and escalation predicate
+(`requisitions.cpp`, 320 lines; `invoice_approval.cpp`, 250). Escalation is again a deadline the rule reads, not
+scheduled work (decision 35); and again an approver's open inbox is not told when the deadline passes. That is
+measured on a site approver's watching connection, with a requisition raised after the deadline in the same case as
+the control that the connection hears a change of the record. It is the same gap in a second module, so it is filed
+against `include/morph`; Part D Task 20 builds the deadline effect.
+
+**Declared authorization, third module.** The rule is declared once beside each action
+(`inventory_authorization.hpp`) and the framework's guard runs it; no handler makes the first authorization call.
+`ApproveRequisition` judges its rule again just before its write, as `ApproveInvoice` does (decision 41), and for the
+same reason: a role or limit changed since the guard ran is seen. Its order is the invoice's: the role where the
+requisition is visible, then its state, then the pairs and the limit. A requisition that does not exist and one the
+caller cannot see are refused in the same words, because the rule reads its scope from the row and names none.
+
 ### 48. A stock change in one company reaches another company's watching stock keeper (hypothesis 7, second instance)
 
 **Hypothesis 7 is confirmed for its second instance, and what leaks is the same as decision 40's `changes<>` case.**
@@ -1510,6 +1541,8 @@ from the manual), and the ledger reports that as `OutOfRange`.
   moving `lims_operators` into `org_role_assignments` is one `RawSql` `INSERT ... SELECT`
   (`lab/src/db/schema.cpp`, migration `20261109000004`), under IMPLEMENTATION.md rule 4's escape tier. Upstream: a
   search of LASTRADA-Software/Lightweight's issues for "migration insert select" finds none for this; none was filed.
+  Dropping an index by its name is raw SQL too: the migration builder drops an index by column
+  (`org/src/db/org_schema.cpp`, migration `20261120000003`).
 
 - **A conditional UPDATE is the query builder, not the DataMapper.** The ledger changes an entry's state or its
   reversed mark only where the row still holds what the action read (`state` is Draft; `reversed_by_id` is NULL), and

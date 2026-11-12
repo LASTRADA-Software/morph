@@ -2,6 +2,8 @@
 #include "lims/inventory/db/inventory_store.hpp"
 
 #include <Lightweight/SqlStatement.hpp>
+#include <algorithm>
+#include <string>
 #include <string_view>
 
 #include "lims/inventory/core/fault_hook.hpp"
@@ -20,6 +22,20 @@ using ::morph::math::Numerator;
 using ::morph::math::Rational;
 
 constexpr int kMaxStockUnit = static_cast<int>(StockUnit::piece);
+constexpr int kMaxRequisitionState = static_cast<int>(RequisitionState::Ordered);
+constexpr int kMaxCurrencyCode = static_cast<int>(CurrencyCode::JPY);
+
+/// @brief A column of text, as a string.
+/// @param field The column.
+/// @return Its text.
+[[nodiscard]] std::string textOf(auto const& field) { return std::string{field.Value().ToStringView()}; }
+
+/// @brief The instant a column holds, or an empty timestamp for a column not yet set.
+/// @param millis Epoch milliseconds; 0 until set.
+/// @return The timestamp.
+[[nodiscard]] ::morph::time::Timestamp instant(std::int64_t millis) {
+    return millis > 0 ? timestampFromMillis(millis) : ::morph::time::Timestamp{};
+}
 
 /// @brief The lot number a row stores, as text.
 /// @param lot The row.
@@ -132,6 +148,73 @@ db::LotRecord lotRecord(Lightweight::DataMapper& mapper, std::int64_t lot) {
         throw NotFound{"lot " + std::to_string(lot) + " does not exist"};
     }
     return rows.front();
+}
+
+std::optional<db::RequisitionRecord> findRequisition(Lightweight::DataMapper& mapper, std::int64_t requisition) {
+    auto rows = mapper.Query<db::RequisitionRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::RequisitionRecord::id>, "=", requisition)
+                    .All();
+    return rows.empty() ? std::nullopt : std::optional{rows.front()};
+}
+
+bool requisitionEscalated(db::RequisitionRecord const& requisition) {
+    return requisition.deadlineAt.Value() > 0 && nowMillis() >= requisition.deadlineAt.Value();
+}
+
+RequisitionView requisitionView(Lightweight::DataMapper& mapper, std::int64_t requisition) {
+    auto const row = findRequisition(mapper, requisition);
+    if (!row.has_value()) {
+        throw NotFound{"requisition " + std::to_string(requisition) + " does not exist"};
+    }
+    int const state = row->state.Value();
+    int const currency = row->currency.Value();
+    if (state < 0 || state > kMaxRequisitionState) {
+        throw ValidationError{"requisition " + std::to_string(requisition) + " stores a state outside its range"};
+    }
+    if (currency < 0 || currency > kMaxCurrencyCode) {
+        throw ValidationError{"requisition " + std::to_string(requisition) + " stores a currency outside its range"};
+    }
+    auto const code = static_cast<CurrencyCode>(currency);
+    auto const money = [code](std::int64_t numerator, std::int64_t denominator) {
+        return Amount{Rational{Numerator{numerator}, Denominator{denominator}, DecimalPlaces{decimalsOf(code)}}};
+    };
+    RequisitionView view{
+        .id = RequisitionId{requisition},
+        .company = CompanyId{row->companyId.Value()},
+        .site = SiteId{row->siteId.Value()},
+        .reason = textOf(row->reason),
+        .state = static_cast<RequisitionState>(state),
+        .lines = {},
+        .total = money(row->totalNum.Value(), row->totalDen.Value()),
+        .currency = code,
+        .requestedBy = textOf(row->requestedBy),
+        .submittedBy = textOf(row->submittedBy),
+        .approvedBy = textOf(row->approvedBy),
+        .submittedAt = instant(row->submittedAt.Value()),
+        .approvalDeadline = instant(row->deadlineAt.Value()),
+        .level = requisitionEscalated(*row) ? RequisitionLevel::Company : RequisitionLevel::Site,
+    };
+    auto lines = mapper.Query<db::RequisitionLineRecord>()
+                     .Where(::Lightweight::FieldNameOf<&db::RequisitionLineRecord::requisitionId>, "=", requisition)
+                     .All();
+    std::ranges::sort(lines, {}, [](db::RequisitionLineRecord const& line) { return line.id.Value(); });
+    for (auto const& line : lines) {
+        auto const item = findItem(mapper, line.itemId.Value());
+        if (!item.has_value()) {
+            throw NotFound{"requisition " + std::to_string(requisition) + ": item " +
+                           std::to_string(line.itemId.Value()) + " does not exist"};
+        }
+        view.lines.push_back(RequisitionLineView{
+            .id = RequisitionLineId{static_cast<std::int64_t>(line.id.Value())},
+            .item = ItemId{line.itemId.Value()},
+            .itemCode = textOf(item->code),
+            .quantity = Measure{Rational{Numerator{line.quantityNum.Value()}, Denominator{line.quantityDen.Value()},
+                                         DecimalPlaces{6}}},
+            .unit = stockUnitOf(*item),
+            .estimate = money(line.estimateNum.Value(), line.estimateDen.Value()),
+        });
+    }
+    return view;
 }
 
 }  // namespace lims::inventory

@@ -47,8 +47,8 @@ void seedOrgScenario() {
             anna.call<OrgModel>(AssignRole{.principal = login, .role = role, .company = {}, .site = site}));
     };
     auto const limit = [&anna](std::string const& login, CompanyId company, std::int64_t units) {
-        static_cast<void>(
-            anna.call<OrgModel>(SetValueLimit{.principal = login, .company = company, .limit = limitOf(units)}));
+        static_cast<void>(anna.call<OrgModel>(SetValueLimit{
+            .principal = login, .company = company, .limit = limitOf(units), .role = LimsRole::InvoiceApprover}));
     };
 
     // Dr. Anna Meyer, lab director: the supervisor of both companies, a verifier, an invoice approver to 10,000.00.
@@ -65,8 +65,8 @@ void seedOrgScenario() {
         AssignRole{.principal = "anna", .role = LimsRole::Verifier, .company = analytik.id, .site = {}}));
     static_cast<void>(julia.call<OrgModel>(
         AssignRole{.principal = "anna", .role = LimsRole::InvoiceApprover, .company = analytik.id, .site = {}}));
-    static_cast<void>(
-        julia.call<OrgModel>(SetValueLimit{.principal = "anna", .company = analytik.id, .limit = limitOf(1000000)}));
+    static_cast<void>(julia.call<OrgModel>(SetValueLimit{
+        .principal = "anna", .company = analytik.id, .limit = limitOf(1000000), .role = LimsRole::InvoiceApprover}));
 
     // Manpreet Kaur, analyst, at the Köln site.
     atSite("manpreet", LimsRole::Analyst, cologne.id);
