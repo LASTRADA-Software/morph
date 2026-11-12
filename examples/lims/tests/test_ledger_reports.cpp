@@ -26,6 +26,7 @@
 #include "lims/org/core/calendar.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/money.hpp"
+#include "lims/org/db/org_entity.hpp"
 #include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/backend_rig.hpp"
@@ -1180,4 +1181,88 @@ TEST_CASE("ledger reports: a stored line with a side out of range is refused by 
                                                         .from = morph::time::Timestamp{lims::test::at(2026, 11, 1, 0)},
                                                         .to = november(30)}),
                     lims::ValidationError);
+}
+
+// Mutation: delete the company lookup from SetExchangeRate (a rate is stored for a company that is not there).
+TEST_CASE("ledger rates: the handler refuses an unknown company on its own", "[lims][ledger][rates]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Accountant);
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    CHECK_THROWS_AS(ledger.execute(lims::SetExchangeRate{.company = lims::CompanyId{9999},
+                                                         .from = lims::CurrencyCode::USD,
+                                                         .to = lims::CurrencyCode::EUR,
+                                                         .validFrom = november(1),
+                                                         .rate = rate(92, 100)}),
+                    lims::NotFound);
+    Lightweight::DataMapper mapper;
+    CHECK(mapper.Query<lims::db::ExchangeRateRecord>().All().empty());
+}
+
+// Mutation: delete the company lookup behind a report (a report on a company whose row is gone answers an empty
+// balance at two decimals). A role row naming a company that is not there makes the company visible to its holder, so
+// the report reaches the lookup.
+TEST_CASE("ledger reports: a role over a company that is gone does not report on it", "[lims][ledger]") {
+    DbFixture fixture;
+    {
+        Lightweight::DataMapper mapper;
+        lims::db::RoleAssignmentRecord orphan;
+        orphan.principal = Lightweight::SqlAnsiString<64>{"orphan"};
+        orphan.role = static_cast<int>(lims::LimsRole::Accountant);
+        orphan.scopeKind = static_cast<int>(lims::ScopeKind::Company);
+        orphan.scopeId = 9999;
+        orphan.grantedBy = Lightweight::SqlAnsiString<64>{"lab-supervisor"};
+        mapper.Create(orphan);
+    }
+    ScopedPrincipal const principal{"orphan"};
+    CHECK_THROWS_AS(
+        lims::LedgerReportModel{}.execute(lims::TrialBalance{.company = lims::CompanyId{9999}, .asOf = november(30)}),
+        lims::NotFound);
+}
+
+// Mutation: drop the range check from an exchange rate's read (a stored currency outside its enumeration is cast to
+// one), or let a failed rate write that is not the lost race pass as a conflict.
+TEST_CASE("ledger rates: a stored currency out of range is refused on read, and a failed write surfaces",
+          "[lims][ledger][rates]") {
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    SECTION("a stored currency out of range") {
+        ledger.execute(lims::SetExchangeRate{.company = lims::test::seededCompany(),
+                                             .from = lims::CurrencyCode::USD,
+                                             .to = lims::CurrencyCode::EUR,
+                                             .validFrom = november(1),
+                                             .rate = rate(92, 100)});
+        Lightweight::DataMapper mapper;
+        auto rows = mapper.Query<lims::db::ExchangeRateRecord>().All();
+        REQUIRE(rows.size() == 1U);
+        rows.front().fromCurrency = 99;
+        mapper.Update(rows.front());
+        CHECK_THROWS_AS(ledger.execute(lims::ListExchangeRates{.company = lims::test::seededCompany()}),
+                        lims::ValidationError);
+    }
+    SECTION("a write that fails without a rate at its start surfaces as itself") {
+        lims::test::FailingStatements const failing{"ledger_exchange_rates", "INSERT", "injected: disk full"};
+        CHECK_THROWS_AS(ledger.execute(lims::SetExchangeRate{.company = lims::test::seededCompany(),
+                                                             .from = lims::CurrencyCode::USD,
+                                                             .to = lims::CurrencyCode::EUR,
+                                                             .validFrom = november(1),
+                                                             .rate = rate(92, 100)}),
+                        Lightweight::SqlException);
+    }
+}
+
+// Mutation: let a report's read failure that is neither an overflow nor a busy database answer an empty total.
+TEST_CASE("ledger reports: a read failure that is not an overflow surfaces as itself", "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    post("rep-1", units(1000));
+    ScopedPrincipal const alice{"alice"};
+    lims::test::runSql("ALTER TABLE ledger_entry_lines RENAME TO ledger_entry_lines_moved");
+    CHECK_THROWS_AS(lims::LedgerReportModel{}.execute(
+                        lims::TrialBalance{.company = lims::test::seededCompany(), .asOf = november(30)}),
+                    Lightweight::SqlException);
+    lims::test::runSql("ALTER TABLE ledger_entry_lines_moved RENAME TO ledger_entry_lines");
+    CHECK(trial().totalDebit.hasValue());
 }

@@ -200,3 +200,40 @@ TEST_CASE("value limits: a limit is seen by the company's supervisors and the pr
     ScopedPrincipal const nobody{"nobody"};
     CHECK(org.execute(lims::ListValueLimits{}).limits.empty());
 }
+
+// Mutation: delete the company lookup from SetValueLimit (a limit is stored for a company that is not there).
+TEST_CASE("value limits: the handler refuses an unknown company on its own", "[lims][limits]") {
+    DbFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::OrgModel org;
+    CHECK_THROWS_AS(
+        org.execute(lims::SetValueLimit{.principal = "bob", .company = lims::CompanyId{9999}, .limit = euros(5)}),
+        lims::NotFound);
+    Lightweight::DataMapper mapper;
+    CHECK(mapper.Query<lims::db::ValueLimitRecord>().All().empty());
+}
+
+// Mutation: drop the company lookup from ListValueLimits or valueLimit (a limit stored for a company whose row is gone
+// is listed for its principal and answered as a limit).
+TEST_CASE("value limits: a limit stored for a company that is gone is neither listed nor answered", "[lims][limits]") {
+    DbFixture fixture;
+    lims::test::grant("bob", lims::LimsRole::InvoiceApprover);
+    {
+        ScopedPrincipal const alice{"alice"};
+        lims::OrgModel{}.execute(
+            lims::SetValueLimit{.principal = "bob", .company = lims::test::seededCompany(), .limit = euros(500)});
+        Lightweight::DataMapper mapper;
+        lims::db::ValueLimitRecord orphan;
+        orphan.principal = Lightweight::SqlAnsiString<64>{"bob"};
+        orphan.company = 9999U;
+        orphan.limitNum = 700;
+        orphan.limitDen = 1;
+        orphan.setBy = Lightweight::SqlAnsiString<64>{"alice"};
+        mapper.Create(orphan);
+    }
+    ScopedPrincipal const bob{"bob"};
+    auto const listed = lims::OrgModel{}.execute(lims::ListValueLimits{});
+    REQUIRE(listed.limits.size() == 1U);
+    CHECK(*listed.limits.front().limit == Rational{500, DecimalPlaces{2}});
+    CHECK_FALSE(lims::OrgModel::valueLimit("bob", lims::CompanyId{9999}).has_value());
+}

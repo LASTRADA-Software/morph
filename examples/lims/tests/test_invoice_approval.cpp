@@ -23,6 +23,7 @@
 #include "clock.hpp"
 #include "lims/app/service_principals.hpp"
 #include "lims/billing/core/fault_hook.hpp"
+#include "lims/billing/db/billing_store.hpp"
 #include "lims/billing/models/billing_run_model.hpp"
 #include "lims/billing/models/invoice_model.hpp"
 #include "lims/org/dto/company_dto.hpp"
@@ -523,4 +524,76 @@ TEST_CASE("invoice approval: a submission in a company with no billing settings 
     CHECK_THROWS_AS(lims::test::dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = invoice.id}),
                     lims::NotFound);
     CHECK(read(invoice.id).state == lims::InvoiceState::Draft);
+}
+
+// Mutation: delete the invoice lookup from SubmitInvoice or the company lookup behind it (a submission of nothing, or
+// of an invoice whose company row is gone, answers success), or the state check from ApproveInvoice (a draft reaches
+// the value rule).
+TEST_CASE("invoice approval: the handlers refuse an unknown invoice, a missing company and a draft on their own",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::InvoiceModel invoices;
+    ScopedPrincipal const bea{"bea"};
+    CHECK_THROWS_AS(core::async::syncRun(invoices.execute(lims::SubmitInvoice{.invoiceId = lims::InvoiceId{9999}})),
+                    lims::NotFound);
+    CHECK_THROWS_AS(invoices.execute(lims::ApproveInvoice{.invoiceId = invoice.id}), lims::IllegalTransition);
+    execute("DELETE FROM org_companies");
+    CHECK_THROWS_AS(core::async::syncRun(invoices.execute(lims::SubmitInvoice{.invoiceId = invoice.id})),
+                    lims::NotFound);
+}
+
+// Mutation: delete the principal check from ListPendingApprovals (a call with no principal is answered as if it
+// came from one who sees everything).
+TEST_CASE("invoice approval: a pending list asked with no principal is empty", "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    auto const invoice = lims::test::draftedInvoice();
+    lims::test::submit(invoice);
+    lims::InvoiceModel invoices;
+    {
+        ScopedPrincipal const carl{"carl"};
+        REQUIRE(invoices.execute(lims::ListPendingApprovals{}).invoices.size() == 1U);
+    }
+    CHECK(invoices.execute(lims::ListPendingApprovals{}).invoices.empty());
+}
+
+// Mutation: delete the overflow guard in SubmitInvoice (the guarded conversion then fails as an empty optional, not as
+// OutOfRange, and the invoice would be valued at a wrapped gross).
+TEST_CASE("invoice approval: a foreign gross too large to convert exactly is refused at submission",
+          "[lims][billing][approval]") {
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    {
+        ScopedPrincipal const acc{"acc"};
+        lims::LedgerModel{}.execute(lims::SetExchangeRate{
+            .company = lims::test::seededCompany(),
+            .from = lims::CurrencyCode::USD,
+            .to = lims::CurrencyCode::EUR,
+            .validFrom = morph::time::Timestamp{lims::test::at(2026, 11, 1)},
+            .rate = lims::Rate{Rational{morph::math::Numerator{92}, morph::math::Denominator{100}, DecimalPlaces{6}}},
+        });
+    }
+    lims::test::billingSettings();
+    lims::test::PostingRig const posting{lims::PostingMode::Dispatched};
+    auto const lab = lims::test::publishedSample();
+    lims::test::billingFor(lab.client, lims::CurrencyCode::USD);
+    lims::test::relayLabEvents();
+    lims::InvoiceId invoiceId;
+    {
+        ScopedPrincipal const bea{"bea"};
+        invoiceId =
+            lims::InvoiceModel{}
+                .execute(lims::CreateInvoice{
+                    .company = lims::test::seededCompany(), .site = lims::test::seededSite(), .client = lab.client})
+                .id;
+    }
+    {
+        Lightweight::SqlStatement statement;
+        (void)statement.ExecuteDirect("UPDATE billing_invoices SET gross_num = 9000000000000000001, gross_den = 1");
+    }
+    CHECK_THROWS_AS(lims::test::dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = invoiceId}),
+                    lims::OutOfRange);
+    CHECK(lims::findInvoiceRecord(invoiceId).value_or(lims::db::InvoiceRecord{}).state.Value() ==
+          static_cast<int>(lims::InvoiceState::Draft));
 }

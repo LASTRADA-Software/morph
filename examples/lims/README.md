@@ -659,93 +659,88 @@ mounts every screen on Qt Quick offscreen. `morph_examples_client --app lims` ru
 process over a local database (`--db`, default `lims.db`).
 
 
-### 20. Model coverage is 96.43%, and measuring it found a real defect (§ coverage gate)
+### 20. Model coverage is 99.44%, and measuring it found a real defect (§ coverage gate)
 
 `codecov.yml` has one component per module (`lims_lab`, `lims_org`, `lims_ledger`, `lims_billing`), each scoped to that
 module's model paths (`examples/lims/<m>/src/models/**` and `examples/lims/<m>/include/lims/<m>/models/**`) — the paths
-`examples/IMPLEMENTATION.md` rule 5's bar names — with a target just below the module's own measured line coverage, so
-that lab and org keep the stricter bar they measure. Inventory is Part C's and joins when Part C is measured; posting
-has no model.
+`examples/IMPLEMENTATION.md` rule 5's bar names — with a target just below the module's own measured line coverage.
+Inventory is Part C's and joins when Part C is measured; posting has no model.
 
 Measured the way CI measures: the `clang-coverage` preset configured with `MORPH_LADDER_RUNGS=lims` (CI passes `all`;
 the other rungs' binaries execute none of these sources), the whole tree built, every test but the stress cases run
-(`ctest --preset clang-coverage -LE stress`, 5149 passed, 481 of them `ladder-lims`, with `LLVM_PROFILE_FILE=%p.profraw`
-so that each test process writes a profile of its own), then `scripts/coverage.sh`, which reports over all fifteen
-binaries in `coverage_objects.txt`. The line counts are llvm-cov's; the branch counts are llvm-cov's per instantiation,
-so they are higher than the aggregated figure the branch gate reports.
+once (`ctest --preset clang-coverage -LE stress`, 5184 passed, with `LLVM_PROFILE_FILE=%p.profraw` so that each test
+process writes a profile of its own), then `scripts/coverage.sh`, which reports over all fifteen binaries in
+`coverage_objects.txt`. The line counts are llvm-cov's; the branch counts are llvm-cov's per instantiation, so they are
+higher than the aggregated figure the branch gate reports.
 
 | Module | Lines | Branches | Target |
 |---|---|---|---|
-| lab | 1270/1299 = 97.77% | 329/354 | 97% |
-| org | 576/591 = 97.46% | 192/216 | 97% |
-| ledger | 1106/1149 = 96.26% | 293/332 | 96% |
-| billing | 1668/1752 = 95.21% | 398/466 | 95% |
-| the four | 4620/4791 = 96.43% | 1212/1368 | |
+| lab | 1284/1299 = 98.85% | 336/354 | 98.5% |
+| org | 591/591 = 100.00% | 198/216 | 99.5% |
+| ledger | 1143/1149 = 99.48% | 312/332 | 99% |
+| billing | 1746/1752 = 99.66% | 439/466 | 99.5% |
+| the four | 4764/4791 = 99.44% | 1285/1368 | |
 
-llvm-cov warns `10015 functions have mismatched data` over the merged profile. The cause is inferred, not shown: the
+llvm-cov warns `10020 functions have mismatched data` over the merged profile. The cause is inferred, not shown: the
 warning is the one llvm-cov gives when functions from different binaries carry different counter layouts, which fits
 fifteen binaries that instantiate the same inline and template functions differently; llvm-cov does not name the
 functions, and none was identified. A control argues that no model function is among them: a profile written by
 `ladder_lims_tests` and `ladder_lims_screen_tests` alone, each running one test, loads with no warning, and the
 *totals* of instrumented lines and functions for all seventeen model files equal the merged run's, file for file. Equal
 totals show that no model function is missing from the report. They do not show that no binary's counts for a model
-function were discarded, which could only lower a figure. The control was run on the earlier revision and not repeated;
-the warning count is the same 10015 on this one. The profile set was empty before the tests ran, so no stale profile is
-in the merge.
+function were discarded, which could only lower a figure. That control was run on an earlier revision and not repeated
+on this one. The profile set was empty before the tests ran, so no stale profile is in the merge.
 
-The 171 uncovered lines, by file. Every one of them is listed with the reason a call to the model cannot reach it, and
-no line is left that an action or a direct handler call reaches against rows the model itself wrote: each place that was recorded as reachable has a
-test that asserts its behaviour, and the three guards that carry money or dates (a foreign gross too large to convert, a
-foreign invoice posted on a date with no rate, a December period's end) were each shown to fail their test under a
-mutation of the guarded line. Where a line is called unreachable, that is judged by reading the code, not shown by a
-test. Five things recur. The dispatch path (`bridge.hpp`) refuses an action whose `validate()` is false before the
-handler runs, so a handler's own `validate()` arm is driven by calling `execute` directly, which the suite does; an arm
-listed here is one that no such call can reach. An action whose scope comes from an id (`Authorization<...>::scopeOf`)
-maps an id with no row to an empty company, which the guard refuses before the handler runs (checked by a test for
-`SetPrice` on an unknown list); the handler's not-found arm behind it is a second line of defence. A stored enumerator
-or currency outside its range needs a row written behind the model. An `isBusy` arm needs a second writer holding
-SQLite's lock, and a `throw;` rethrows a database error that is not the conflict being handled. A "row gone between two
-reads" arm needs a deletion between two statements of one action, and the model has no delete for those rows.
+**The rule for what is left uncovered.** A line stays uncovered only if no caller can reach it. A caller, here, is any of:
+an action through the bridge; a direct call to a handler (`execute`), which bypasses the scope guard and so reaches every
+not-found arm a guard would have refused first; a call to a public function; a row the test writes, changes or deletes
+below the model (the lims connection does not enforce foreign keys, so a dangling reference is a one-statement setup);
+and a database that refuses a statement, which a trigger raising an error, or ignoring the row, produces from the
+model's own real statement (`FailingStatements`, `SkippedStatements` and `ScopedTrigger` in
+`tests/lims_test_support.hpp`; a failure message containing "database is locked" is read as a busy database, which is
+how `isBusy` decides). Every arm those reach has a test that asserts its behaviour. The same rule applies to every arm,
+whatever its kind (a validation arm, a not-found arm, a stored enumerator out of range, a failed write that is not the
+lost race, a busy database, an update that changes no row): none is exempted because it looks defensive.
+
+What the rule leaves is the 16 lines below, each of which needs something the callers above cannot do: a statement of
+the model's own that fails inside a read (a trigger does not fire on `SELECT`), a row removed between two statements of
+one action by another connection that has committed (a trigger runs inside the writer's transaction, which a second
+connection does not see), or an input the library generates or validates before the line. That each is unreachable is
+judged by reading the code, not shown by a test. llvm-cov counts 27 uncovered lines (4791 - 4764); the other 11 are lines
+that also run but hold a region never entered, such as the row-id lambda of a table plan. Seven of the 11 were looked at
+and are such lambdas and one ternary; four were not identified.
 
 *lab*
-- `analysis_catalog_model.cpp:93-94` malformed-JSON arm of `renderSchemaFor` (its input is `schemaJson<A>()`);
-  `:230-231` dangling version (a declared foreign key forbids the row).
-- `sample_entry.cpp:205-206` unknown site and `:213-214`, `:280-281` a sample row gone between two reads; `:218-219` a
-  draft that does not encode.
-- `sample_model.cpp:218-219` unknown site (behind the site guard); `:612-613` the `default` arm, which `checkValue` has
-  no other kind to reach; `:717-718` `alreadyDecided`'s empty-key guard (validation refuses an empty key first);
-  `:862-863`, `:928-929` a conflict or result row gone between reads.
-
-*org* (`org_model.cpp`)
-- `:263-264`, `:587-588` unknown company, `:334-335` unknown assignment: behind the scope guard.
-- `:450-454` a concurrent first naming that won the unique index and then vanished, or another database error.
-- `:636-637`, `:647-648` a company row gone between two reads.
+- `analysis_catalog_model.cpp:93-94` malformed-JSON arm of `renderSchemaFor`; its input is `schemaJson<A>()`, which the
+  library generates.
+- `sample_entry.cpp:218-219` a working copy that does not encode; the encoder cannot fail on that type.
+- `sample_model.cpp:612-613` the `default` arm of `checkValue`, which has no other kind to reach; `:717-718`
+  `alreadyDecided`'s empty-key guard: the function is private and its one caller has already refused an empty key.
 
 *ledger*
-- `ledger_entries.cpp:85-86`, `:416-417`, `:430-431`, `:460-461`, `:594-595`, `:696-697` the not-found arms of the
-  loader's callers (behind the scope guard, or a row gone between reads); `:113-114` a stored state or currency out of
-  range; `:763-771` a busy database on the retry.
-- `ledger_model.cpp:44-45` a stored period state out of range; `:61-62` unknown company; `:186-187` unknown period
-  (behind the scope guard).
-- `ledger_rates.cpp:39-40` a stored currency out of range; `:127-128` unknown company; `:144` rethrow.
-- `ledger_report_model.cpp:103-104` unknown company; `:276-280` a busy database and the rethrow.
+- `ledger_entries.cpp:696-697` an entry gone between `recordedAs`, which already refuses a gone entry, and the read
+  after it.
+- `ledger_report_model.cpp:277-278` a busy database on the totals' `SELECT`.
 
 *billing*
-- `billing_run_model.cpp:76-77`, `:308-309` unknown run (behind the scope guard); `:81-82` stored state out of range;
-  `:159` rethrow.
-- `invoice_approval.cpp:36-37` unknown invoice; `:118-119` unknown company; `:196-197` the state check the guard
-  already made (the code says so); `:222-223` an empty principal, refused before the handler.
-- `invoice_drafts.cpp:51-56`, `:243-247` stored state or currency out of range; `:115-116` an unbilled line with no
-  amount (a corrupted row); `:164-165`, `:199-200` an invoice posted or a number series advanced meanwhile (needs
-  a second writer); `:171-172`, `:237-238` unknown invoice; `:176-177` unknown company; `:220-221` empty invoice id.
-- `invoice_edit_model.cpp:277-278`, `:293-294`, `:317-318` a line or invoice changed meanwhile (needs a second
-  writer).
-- `invoice_model.cpp:86-87` unknown line; `:153-154` unknown site, `:208-209` unknown company; `:176` rethrow;
-  `:252-253` an invoice the caller cannot see.
-- `invoice_posting.cpp:30-34`, `:51-55`, `:77-81` a busy database during posting (needs a second writer); `:122-123`
-  unknown company.
-- `price_list_model.cpp:46-47` stored currency out of range; `:129-130` unknown company; `:150`, `:284` rethrows;
-  `:427-428`, `:448-449` unknown price list (the second after a re-read); `:527-528` empty company.
+- `invoice_drafts.cpp:176-177` the company gone between the posting update and the read of the company; the read is on
+  another connection, which sees only committed rows.
+- `price_list_model.cpp:448-449` the price list gone between the check at the top of `SetPrice` and its re-read in the
+  insert; the two are consecutive reads.
+
+*org* has no uncovered line.
+
+The tests that cover the arms the rule reaches: not-found arms of the handlers by direct call
+(`RegisterSample`, `SaveSample`, `CreateSite`, `RevokeRole`, `SetValueLimit`, `CreateAccount`, `OpenPeriod`,
+`BeginClosePeriod`, `PostEntry`, `ReverseEntry`, `ClosePeriod`, `SetExchangeRate`, `CreatePriceList`, `SetPrice`,
+`AdvanceBillingRun`, `RecordBillableLine`, `CreateInvoice`, `SubmitInvoice`, `ResolveConflict`, `VerifyResult`, a report on
+a company that is gone, `settingsOf` and `findInvoiceRecord` with an empty id, `ListPendingApprovals` with no
+principal); a stored state, currency or side out of range for entries, periods, rates, price lists, billing lines,
+invoices and runs; a company, sample, entry, line, run, invoice or analysis row removed behind the model; and a write the
+database refuses (busy and not busy) for postings, rates, price lists, billing settings, display names, billable lines,
+runs and the invoice posting's two ways. The overflow guard on a foreign gross, the posting date with no rate and the
+December period's end were each shown to fail their test when the guarded line is mutated; the overflow guard's check
+reads `converted.value()`, so a removed guard fails as an unexpected `bad_optional_access` (run again for this round: the test failed with the guard deleted) and not through undefined behaviour. The other tests of this round were not mutated; each asserts the refusal's type, which a removed check would change to success or to another error, but that is reasoning, not a run.
 
 Measuring rather than assuming was worth it twice. The first measurement came
 in at 93.27%, and the gap was not padding: `AnalysisCatalogModel::attachActionLog`

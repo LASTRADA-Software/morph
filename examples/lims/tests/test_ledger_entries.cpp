@@ -4,6 +4,7 @@
 // corrected by reversal.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <algorithm>
 #include <array>
@@ -1820,4 +1821,90 @@ TEST_CASE("ledger entries: a source key whose entry is gone finds no posting", "
         }
     }
     CHECK_FALSE(ledger.execute(query).entryId.hasValue());
+}
+
+// Mutation: drop the range check from an entry's read (a stored state or currency outside its enumeration is cast to
+// one).
+TEST_CASE("ledger entries: an entry that stores a state or currency out of range is refused on read",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    auto const draft = accrual(ledger, morph::time::Timestamp{lims::test::at(2026, 11, 12)});
+    Lightweight::DataMapper mapper;
+    auto rows = mapper.Query<lims::db::EntryRecord>()
+                    .Where(::Lightweight::FieldNameOf<&lims::db::EntryRecord::id>, "=", *draft.id)
+                    .All();
+    REQUIRE(rows.size() == 1U);
+    auto original = rows.front();
+    SECTION("a state") {
+        rows.front().state = 9;
+        mapper.Update(rows.front());
+        CHECK_THROWS_AS(ledger.execute(lims::GetEntry{.entryId = draft.id}), lims::ValidationError);
+    }
+    SECTION("a currency") {
+        rows.front().currency = 99;
+        mapper.Update(rows.front());
+        CHECK_THROWS_AS(ledger.execute(lims::GetEntry{.entryId = draft.id}), lims::ValidationError);
+    }
+    mapper.Update(original);
+    CHECK(ledger.execute(lims::GetEntry{.entryId = draft.id}).lines.size() == 2U);
+}
+
+// Mutation: delete the entry lookup from PostEntry or ReverseEntry, the period lookup from PostEntry, or the period
+// lookup from ClosePeriod (each answers success for a row that is not there).
+TEST_CASE("ledger entries: the handlers refuse an unknown entry or period on their own", "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    CHECK_THROWS_AS(ledger.execute(lims::PostEntry{.entryId = lims::JournalEntryId{9999}}), lims::NotFound);
+    CHECK_THROWS_AS(ledger.execute(lims::ReverseEntry{.entryId = lims::JournalEntryId{9999},
+                                                      .date = morph::time::Timestamp{lims::test::at(2026, 11, 20)}}),
+                    lims::NotFound);
+    CHECK_THROWS_AS(ledger.execute(lims::ClosePeriod{.periodId = lims::PeriodId{9999}}), lims::NotFound);
+    // A draft whose period row has been removed behind the model.
+    auto const draft = accrual(ledger, morph::time::Timestamp{lims::test::at(2026, 11, 12)});
+    {
+        Lightweight::DataMapper mapper;
+        mapper.Query<lims::db::PeriodRecord>().Delete();
+    }
+    CHECK_THROWS_AS(ledger.execute(lims::PostEntry{.entryId = draft.id}), lims::NotFound);
+}
+
+// Mutation: let a posting's write failure that is not the lost race, or a busy database on the retry, pass as if the
+// write had succeeded.
+TEST_CASE("ledger entries: a posting whose write fails is refused, and a busy database is a Conflict",
+          "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    ScopedPrincipal const alice{"alice"};
+    SECTION("a failure that is not a lost race surfaces as itself") {
+        lims::test::FailingStatements const failing{"ledger_entries", "INSERT", "injected: disk full"};
+        CHECK_THROWS_AS(lims::LedgerModel::record(posting("fail-1", 1000)), Lightweight::SqlException);
+    }
+    SECTION("a busy database is a Conflict") {
+        lims::test::FailingStatements const busy{"ledger_entries", "INSERT", std::string{lims::test::kBusyMessage}};
+        CHECK_THROWS_AS(lims::LedgerModel::record(posting("busy-1", 1000)), lims::Conflict);
+    }
+    CHECK(entryCount() == 0U);
+}
+
+// Mutation: drop the entry lookup behind a recorded source key (a repeated posting whose entry is gone is answered
+// from nothing).
+TEST_CASE("ledger entries: a repeated posting whose recorded entry is gone is refused", "[lims][ledger]") {
+    DbFixture fixture;
+    books();
+    auto const first = lims::LedgerModel::record(posting("billing.invoice:vanished", 11900));
+    {
+        Lightweight::DataMapper mapper;
+        mapper.Query<lims::db::EntryLineRecord>()
+            .Where(::Lightweight::FieldNameOf<&lims::db::EntryLineRecord::entry>, "=", *first.entryId)
+            .Delete();
+        mapper.Query<lims::db::EntryRecord>()
+            .Where(::Lightweight::FieldNameOf<&lims::db::EntryRecord::id>, "=", *first.entryId)
+            .Delete();
+    }
+    CHECK_THROWS_AS(lims::LedgerModel::record(posting("billing.invoice:vanished", 11900)), lims::NotFound);
 }

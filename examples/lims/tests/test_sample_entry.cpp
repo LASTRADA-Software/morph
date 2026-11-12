@@ -330,3 +330,43 @@ TEST_CASE("sample entry: a refused rewrite of a stored sample is journaled in it
     CHECK(trail.back().outcome == morph::journal::Outcome::Failed);
     CHECK(trail.back().actionType == "SaveSample");
 }
+
+// Mutation: delete the site lookup from RegisterSample (a sample is written for a site that is not there), or from
+// SaveSample (a working copy naming a site that is not there is stored).
+TEST_CASE("sample entry: an unknown site is refused by the handlers on their own", "[lims][sample-entry]") {
+    lims::test::LabFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    auto const client = model.execute(lims::RegisterClient{.name = "Acme"});
+    CHECK_THROWS_AS(model.execute(lims::RegisterSample{
+                        .siteId = lims::SiteId{9999}, .clientId = client.clientId, .reference = "WW-1"}),
+                    lims::NotFound);
+    completeCopy(model);
+    model.execute(lims::HeaderSection{.clientId = client.clientId,
+                                      .reference = "WW-2",
+                                      .receivedOn = 20'000,
+                                      .remarks = {},
+                                      .siteId = lims::SiteId{9999}});
+    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::NotFound);
+    Lightweight::DataMapper mapper;
+    CHECK(mapper.Query<lims::db::SampleRecord>().All().empty());
+}
+
+// Mutation: delete the stored-sample lookup from SaveSample or DeleteSample (a working copy whose sample row has been
+// removed is rewritten, or deleted, as if the row were there).
+TEST_CASE("sample entry: a working copy of a sample whose row is gone is refused by save and by delete",
+          "[lims][sample-entry]") {
+    lims::test::LabFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    completeCopy(model);
+    auto const saved = model.execute(lims::SaveSample{});
+    REQUIRE(saved.error == lims::SaveError::none);
+    {
+        Lightweight::DataMapper mapper;
+        mapper.Query<lims::db::SampleEntryRecord>().Delete();
+        mapper.Query<lims::db::SampleRecord>().Delete();
+    }
+    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::NotFound);
+    CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::NotFound);
+}

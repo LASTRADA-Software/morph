@@ -3,6 +3,7 @@
 // Billing settings, billing clients and price lists with effective dates and per-client prices.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlError.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <morph/core/action_guard.hpp>
@@ -743,4 +744,51 @@ TEST_CASE("PriceListModel over the full backend-mode matrix: a price list and a 
     REQUIRE(shown.size() == 1U);
     CHECK(shown.front().prices.size() == 1U);
     CHECK(awaitQt(prices.execute(lims::ListBillingClients{})).clients.size() == 1U);
+}
+
+// Mutation: delete the company lookup from CreatePriceList (a list is written for a company that is not there), the
+// list lookup from SetPrice (a price is written for a list that is not there), or the engaged-company guard from
+// settingsOf (an empty id is looked up as company 0).
+TEST_CASE("price lists: the handlers refuse an unknown company or list on their own", "[lims][billing][prices]") {
+    DbFixture fixture;
+    ScopedPrincipal const bea{"bea"};
+    lims::PriceListModel model;
+    CHECK_THROWS_AS(model.execute(listFor(lims::CompanyId{9999})), lims::NotFound);
+    CHECK_THROWS_AS(model.execute(priceInCents(lims::PriceListId{9999}, 1, 100)), lims::NotFound);
+    CHECK_FALSE(lims::PriceListModel::settingsOf(lims::CompanyId{}).has_value());
+    Lightweight::DataMapper mapper;
+    CHECK(mapper.Query<lims::db::PriceListRecord>().All().empty());
+    CHECK(mapper.Query<lims::db::PriceRecord>().All().empty());
+}
+
+// Mutation: drop the range check from a price list's currency (a list that stores a currency outside its enumeration
+// is priced in one), or let a failed insert that is not the lost race answer success.
+TEST_CASE("price lists: a stored currency out of range is refused, and a failed insert surfaces as itself",
+          "[lims][billing][prices]") {
+    DbFixture fixture;
+    lims::test::grant("sam", lims::LimsRole::Supervisor);
+    ScopedPrincipal const sam{"sam"};
+    lims::PriceListModel model;
+    SECTION("a list's currency out of range") {
+        auto const list = model.execute(listFor(lims::test::seededCompany()));
+        lims::test::runSql("UPDATE billing_price_lists SET currency = 99");
+        CHECK_THROWS_AS(model.execute(priceInCents(list.id, 1, 100)), lims::ValidationError);
+    }
+    SECTION("a price list whose insert fails") {
+        lims::test::FailingStatements const failing{"billing_price_lists", "INSERT", "injected: disk full"};
+        CHECK_THROWS_AS(model.execute(listFor(lims::test::seededCompany())), Lightweight::SqlException);
+    }
+    SECTION("billing settings whose insert fails") {
+        lims::test::FailingStatements const failing{"billing_settings", "INSERT", "injected: disk full"};
+        CHECK_THROWS_AS(model.execute(lims::SetBillingSettings{
+                            .company = lims::test::seededCompany(),
+                            .receivableAccount = "1200",
+                            .revenueAccount = "4000",
+                            .taxAccount = "2200",
+                            .roundingAccount = "6900",
+                            .taxRate = lims::Rate{Rational{Numerator{19}, Denominator{100}, DecimalPlaces{6}}},
+                            .approvalHours = lims::Count{Rational{48, DecimalPlaces{0}}},
+                            .billingDay = lims::Count{Rational{25, DecimalPlaces{0}}}}),
+                        Lightweight::SqlException);
+    }
 }

@@ -5,6 +5,7 @@
 // schedule dispatches through an internal client, as the server's does.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -636,4 +637,48 @@ TEST_CASE("billing run: a request naming no run, batch or company is refused by 
     CHECK_THROWS_AS(model.execute(lims::AdvanceBillingRun{.runId = {}, .batch = batchOf(1)}), lims::ValidationError);
     CHECK_THROWS_AS(model.execute(lims::RunBillingSchedule{}), lims::ValidationError);
     CHECK_THROWS_AS(model.execute(lims::ListBillingRuns{}), lims::ValidationError);
+}
+
+// Mutation: delete the run lookup from AdvanceBillingRun (a batch is advanced against a run that is not there).
+TEST_CASE("billing run: advancing a run that is not there is refused by the handler", "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    ScopedPrincipal const bea{"bea"};
+    lims::BillingRunModel model;
+    CHECK_THROWS_AS(model.execute(lims::AdvanceBillingRun{.runId = lims::BillingRunId{9999}, .batch = batchOf(1)}),
+                    lims::NotFound);
+}
+
+// Mutation: drop the range check from a run's read (a stored state outside its enumeration is cast to one), or let a
+// start whose write fails for a reason other than the lost race answer success.
+TEST_CASE("billing run: a run that stores a state out of range is refused on read, and a failed start surfaces",
+          "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    ScopedPrincipal const bea{"bea"};
+    lims::BillingRunModel model;
+    SECTION("a state out of range") {
+        static_cast<void>(model.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}));
+        execute("UPDATE billing_runs SET state = 9");
+        CHECK_THROWS_AS(model.execute(lims::ListBillingRuns{.company = lims::test::seededCompany()}),
+                        lims::ValidationError);
+    }
+    SECTION("a write that fails without a run for the month surfaces as itself") {
+        lims::test::FailingStatements const failing{"billing_runs", "INSERT", "injected: disk full"};
+        CHECK_THROWS_AS(model.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}),
+                        Lightweight::SqlException);
+    }
+}
+
+// Mutation: drop the run lookup from the view a start answers with (a run removed before its view is read is
+// answered as an empty run).
+TEST_CASE("billing run: a run removed before its view is read is refused", "[lims][billing][run]") {
+    lims::test::LabFixture const fixture;
+    static_cast<void>(threeClientsToBill());
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 25)};
+    ScopedPrincipal const bea{"bea"};
+    lims::test::ScopedTrigger const vanishing{"AFTER INSERT ON billing_runs",
+                                              "DELETE FROM billing_runs WHERE id = NEW.id;"};
+    CHECK_THROWS_AS(lims::BillingRunModel{}.execute(lims::StartBillingRun{.company = lims::test::seededCompany()}),
+                    lims::NotFound);
 }

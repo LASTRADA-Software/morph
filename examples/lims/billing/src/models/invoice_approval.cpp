@@ -147,7 +147,9 @@ void requireNoOtherEditor(std::int64_t invoiceId) {
         if (!converted.has_value()) {
             throw OutOfRange{"SubmitInvoice: the gross is too large to convert exactly"};
         }
-        auto const valued = roundToCurrency(*converted, base);
+        // value(), not *: a guard removed by mistake then fails as a bad_optional_access rather than as undefined
+        // behaviour.
+        auto const valued = roundToCurrency(converted.value(), base);
         grossCompanyNum = valued.numerator;
         grossCompanyDen = valued.denominator;
     }

@@ -278,3 +278,48 @@ TEST_CASE("ledger chart: a list naming no company is refused", "[lims][ledger]")
     lims::LedgerModel ledger;
     CHECK_THROWS_AS(ledger.execute(lims::ListAccounts{}), lims::ValidationError);
 }
+
+// Mutation: delete the company lookup from CreateAccount or OpenPeriod (the row is written for a company that is not
+// there), or the period lookup from BeginClosePeriod (closing nothing answers success).
+TEST_CASE("ledger chart: the handlers refuse an unknown company or period on their own", "[lims][ledger]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Accountant);
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    lims::CompanyId const nowhere{9999};
+    CHECK_THROWS_AS(ledger.execute(lims::CreateAccount{
+                        .company = nowhere, .code = "1200", .name = "Receivables", .type = lims::AccountType::Asset}),
+                    lims::NotFound);
+    CHECK_THROWS_AS(ledger.execute(lims::OpenPeriod{.company = nowhere,
+                                                    .month = morph::time::Timestamp{lims::test::at(2026, 11, 3)}}),
+                    lims::NotFound);
+    CHECK_THROWS_AS(ledger.execute(lims::BeginClosePeriod{.periodId = lims::PeriodId{9999}}), lims::NotFound);
+    Lightweight::DataMapper mapper;
+    CHECK(mapper.Query<lims::db::AccountRecord>()
+              .Where(::Lightweight::FieldNameOf<&lims::db::AccountRecord::companyId>, "=", 9999)
+              .All()
+              .empty());
+    CHECK(mapper.Query<lims::db::PeriodRecord>()
+              .Where(::Lightweight::FieldNameOf<&lims::db::PeriodRecord::companyId>, "=", 9999)
+              .All()
+              .empty());
+}
+
+// Mutation: drop the range check from a period's read (a stored state outside its enumeration is cast to one).
+TEST_CASE("ledger chart: a period that stores a state out of range is refused on read", "[lims][ledger]") {
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Accountant);
+    ScopedPrincipal const alice{"alice"};
+    lims::LedgerModel ledger;
+    ledger.execute(lims::OpenPeriod{.company = lims::test::seededCompany(),
+                                    .month = morph::time::Timestamp{lims::test::at(2026, 11, 3)}});
+    Lightweight::DataMapper mapper;
+    auto rows = mapper.Query<lims::db::PeriodRecord>().All();
+    REQUIRE(rows.size() == 1U);
+    auto original = rows.front();
+    rows.front().state = 9;
+    mapper.Update(rows.front());
+    CHECK_THROWS_AS(ledger.execute(lims::ListPeriods{.company = lims::test::seededCompany()}), lims::ValidationError);
+    mapper.Update(original);
+    CHECK(ledger.execute(lims::ListPeriods{.company = lims::test::seededCompany()}).periods.size() == 1U);
+}

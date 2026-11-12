@@ -4,6 +4,7 @@
 // record's, not the type's.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -22,6 +23,7 @@
 #include "lims/app/event_wiring.hpp"
 #include "lims/billing/core/invoice_math.hpp"
 #include "lims/billing/db/billing_entity.hpp"
+#include "lims/billing/db/billing_store.hpp"
 #include "lims/billing/models/invoice_edit_model.hpp"
 #include "lims/billing/models/invoice_model.hpp"
 #include "lims/org/core/calendar.hpp"
@@ -550,4 +552,138 @@ TEST_CASE("invoices: removing one of two lines re-totals the invoice from the li
     CHECK(*edited.net == exact(10, 1, 2));
     CHECK(*edited.tax == exact(19, 10, 2));
     CHECK(*edited.gross == exact(119, 10, 2));
+}
+
+// Mutation: delete the site lookup from RecordBillableLine or the company lookup from CreateInvoice (a line or an
+// invoice is written for a site or company that is not there), or the engaged-id guard from findInvoiceRecord (an
+// empty id is looked up as invoice 0).
+TEST_CASE("invoices: the handlers refuse an unknown site or company on their own", "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    lims::InvoiceModel invoices;
+    {
+        ScopedPrincipal const service{"system:billing"};
+        CHECK_THROWS_AS(invoices.execute(lims::RecordBillableLine{
+                            .eventId = "evt-1",
+                            .result = lims::ResultId{1},
+                            .sample = lims::SampleId{1},
+                            .analysis = lims::AnalysisId{1},
+                            .client = lims::ClientId{1},
+                            .site = lims::SiteId{9999},
+                            .publishedAt = morph::time::Timestamp{lims::test::at(2026, 11, 10)}}),
+                        lims::NotFound);
+    }
+    ScopedPrincipal const bea{"bea"};
+    CHECK_THROWS_AS(
+        invoices.execute(lims::CreateInvoice{
+            .company = lims::CompanyId{9999}, .site = lims::test::seededSite(), .client = lims::ClientId{1}}),
+        lims::NotFound);
+    CHECK_FALSE(lims::findInvoiceRecord(lims::InvoiceId{}).has_value());
+    Lightweight::DataMapper mapper;
+    CHECK(mapper.Query<lims::db::BillableLineRecord>().All().empty());
+    CHECK(mapper.Query<lims::db::InvoiceRecord>().All().empty());
+}
+
+// Mutation: drop the range check from a stored line or invoice (a state or currency outside its enumeration is cast to
+// one), or the amount check from CreateInvoice (a line with no price is totalled as nothing).
+TEST_CASE("invoices: a stored line or invoice out of range, or an unpriced line, is refused",
+          "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    auto const lab = billedSample();
+    ScopedPrincipal const bea{"bea"};
+    lims::InvoiceModel invoices;
+    SECTION("a line that stores a state out of range") {
+        lims::test::runSql("UPDATE billing_lines SET state = 9");
+        CHECK_THROWS_AS(invoices.execute(lims::ListBillableLines{.company = {}, .client = lab.client, .sample = {}}),
+                        lims::ValidationError);
+    }
+    SECTION("a line that stores a currency out of range") {
+        lims::test::runSql("UPDATE billing_lines SET currency = 99");
+        CHECK_THROWS_AS(invoices.execute(lims::ListBillableLines{.company = {}, .client = lab.client, .sample = {}}),
+                        lims::ValidationError);
+    }
+    SECTION("a line with no amount is not drafted") {
+        lims::test::runSql("UPDATE billing_lines SET amount_num = NULL, amount_den = NULL");
+        CHECK_THROWS_AS(invoices.execute(invoiceOf(lab)), lims::ValidationError);
+    }
+    SECTION("an invoice that stores a state or currency out of range") {
+        auto const draft = invoices.execute(invoiceOf(lab));
+        lims::test::runSql("UPDATE billing_invoices SET state = 9");
+        CHECK_THROWS_AS(invoices.execute(lims::GetInvoice{.invoiceId = draft.id}), lims::ValidationError);
+        lims::test::runSql("UPDATE billing_invoices SET state = 0, currency = 99");
+        CHECK_THROWS_AS(invoices.execute(lims::GetInvoice{.invoiceId = draft.id}), lims::ValidationError);
+    }
+    SECTION("an invoice that is not there") {
+        CHECK_THROWS_AS(invoices.execute(lims::GetInvoice{.invoiceId = lims::InvoiceId{9999}}), lims::NotFound);
+    }
+}
+
+// Mutation: let GetInvoiceLease answer for an invoice of a company the caller holds no role at.
+TEST_CASE("invoices: the lease of an invoice the caller cannot see is refused as if it were not there",
+          "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    auto const lab = billedSample();
+    lims::InvoiceId invoice;
+    {
+        ScopedPrincipal const bea{"bea"};
+        invoice = lims::InvoiceModel{}.execute(invoiceOf(lab)).id;
+    }
+    ScopedPrincipal const nobody{"nobody"};
+    CHECK_THROWS_AS(lims::InvoiceModel{}.execute(lims::GetInvoiceLease{.invoiceId = invoice}), lims::NotFound);
+}
+
+// Mutation: let a failed line write that is not the lost race answer success (the event is acknowledged and no line
+// exists).
+TEST_CASE("invoices: a billable line whose write fails surfaces as itself", "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    ScopedPrincipal const service{"system:billing"};
+    lims::test::FailingStatements const failing{"billing_lines", "INSERT", "injected: disk full"};
+    CHECK_THROWS_AS(lims::InvoiceModel{}.execute(
+                        lims::RecordBillableLine{.eventId = "evt-9",
+                                                 .result = lims::ResultId{1},
+                                                 .sample = lims::SampleId{1},
+                                                 .analysis = lims::AnalysisId{1},
+                                                 .client = lims::ClientId{1},
+                                                 .site = lims::test::seededSite(),
+                                                 .publishedAt = morph::time::Timestamp{lims::test::at(2026, 11, 10)}}),
+                    Lightweight::SqlException);
+}
+
+// Mutation: drop the "exactly one row changed" check from RemoveInvoiceLine (a line taken off meanwhile is taken off
+// twice), from its re-total, or from SetInvoiceReference (a submitted invoice is renamed).
+TEST_CASE("invoices: an edit whose update changes no row is a Conflict", "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    auto const lab = billedSample();
+    insertLine(lab, lims::test::seededSite(), 9101, 10, lims::CurrencyCode::EUR);
+    ScopedPrincipal const bea{"bea"};
+    auto const draft = lims::InvoiceModel{}.execute(invoiceOf(lab));
+    REQUIRE(draft.lines.size() == 2U);
+    lims::InvoiceEditModel editor;
+    editor.execute(lims::LeaseInvoice{.invoiceId = draft.id});
+    SECTION("the line was taken off meanwhile") {
+        lims::test::SkippedStatements const skipped{"billing_lines", "UPDATE"};
+        CHECK_THROWS_AS(editor.execute(lims::RemoveInvoiceLine{.line = draft.lines.front().id}), lims::Conflict);
+    }
+    SECTION("the invoice was submitted meanwhile") {
+        lims::test::SkippedStatements const skipped{"billing_invoices", "UPDATE"};
+        CHECK_THROWS_AS(editor.execute(lims::RemoveInvoiceLine{.line = draft.lines.front().id}), lims::Conflict);
+        CHECK_THROWS_AS(editor.execute(lims::SetInvoiceReference{.reference = "PO-1"}), lims::Conflict);
+    }
+}
+
+// Mutation: drop the line lookup behind a consumed event (a repeated delivery whose line is gone is answered from
+// nothing).
+TEST_CASE("invoices: a repeated delivery whose recorded line is gone is refused", "[lims][billing][invoices]") {
+    lims::test::LabFixture const fixture;
+    ScopedPrincipal const service{"system:billing"};
+    lims::InvoiceModel invoices;
+    lims::RecordBillableLine const delivery{.eventId = "evt-repeat",
+                                            .result = lims::ResultId{1},
+                                            .sample = lims::SampleId{1},
+                                            .analysis = lims::AnalysisId{1},
+                                            .client = lims::ClientId{1},
+                                            .site = lims::test::seededSite(),
+                                            .publishedAt = morph::time::Timestamp{lims::test::at(2026, 11, 10)}};
+    static_cast<void>(invoices.execute(delivery));
+    lims::test::runSql("DELETE FROM billing_lines");
+    CHECK_THROWS_AS(invoices.execute(delivery), lims::NotFound);
 }

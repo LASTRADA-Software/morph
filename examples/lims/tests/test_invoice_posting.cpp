@@ -609,46 +609,6 @@ TEST_CASE("invoice posting: a foreign-currency invoice is not posted on a date t
     CHECK(posting.post(invoice).state == lims::InvoiceState::Posted);
 }
 
-// Mutation: submit a foreign-currency invoice whose converted gross overflows (the gross is stored wrapped).
-TEST_CASE("invoice posting: a foreign gross too large to convert exactly is refused at submission",
-          "[lims][billing][posting]") {
-    lims::test::LabFixture const fixture;
-    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
-    lims::test::books();
-    {
-        ScopedPrincipal const acc{"acc"};
-        lims::LedgerModel{}.execute(lims::SetExchangeRate{
-            .company = lims::test::seededCompany(),
-            .from = lims::CurrencyCode::USD,
-            .to = lims::CurrencyCode::EUR,
-            .validFrom = morph::time::Timestamp{lims::test::at(2026, 11, 1)},
-            .rate = lims::Rate{exact(92, 100, 6)},
-        });
-    }
-    lims::test::billingSettings();
-    lims::test::PostingRig const posting{PostingMode::Dispatched};
-    auto const lab = lims::test::publishedSample();
-    lims::test::billingFor(lab.client, lims::CurrencyCode::USD);
-    lims::test::relayLabEvents();
-    lims::InvoiceId invoiceId;
-    {
-        ScopedPrincipal const bea{"bea"};
-        invoiceId =
-            lims::InvoiceModel{}
-                .execute(lims::CreateInvoice{
-                    .company = lims::test::seededCompany(), .site = lims::test::seededSite(), .client = lab.client})
-                .id;
-    }
-    {
-        Lightweight::SqlStatement statement;
-        (void)statement.ExecuteDirect("UPDATE billing_invoices SET gross_num = 9000000000000000001, gross_den = 1");
-    }
-    CHECK_THROWS_AS(lims::test::dispatchAs<lims::InvoiceModel>("bea", lims::SubmitInvoice{.invoiceId = invoiceId}),
-                    lims::OutOfRange);
-    CHECK(lims::findInvoiceRecord(invoiceId).value_or(lims::db::InvoiceRecord{}).state.Value() ==
-          static_cast<int>(lims::InvoiceState::Draft));
-}
-
 // Mutation: delete the settings lookup of PostInvoice (the entry is built with no accounts).
 TEST_CASE("invoice posting: an approved invoice is not posted in a company with no billing settings",
           "[lims][billing][posting]") {
@@ -664,4 +624,89 @@ TEST_CASE("invoice posting: an approved invoice is not posted in a company with 
     }
     CHECK_THROWS_WITH(posting.post(invoice), Catch::Matchers::ContainsSubstring("has no billing settings"));
     CHECK(entries().empty());
+}
+
+// Mutation: delete the company lookup from PostInvoice (an invoice whose company row is gone is posted with the
+// wrong decimals).
+TEST_CASE("invoice posting: an approved invoice is not posted when its company row is gone",
+          "[lims][billing][posting]") {
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::Dispatched};
+    auto const invoice = lims::test::approvedInvoice();
+    lims::test::runSql("DELETE FROM org_companies");
+    CHECK_THROWS_WITH(posting.post(invoice), Catch::Matchers::ContainsSubstring("does not exist"));
+    CHECK(entries().empty());
+}
+
+// Mutation: let a busy database answer the posting as a success, or surface as the raw database error; the message
+// says whether the ledger's entry is already recorded.
+TEST_CASE("invoice posting: a busy database is a Conflict that says what was kept, another failure surfaces as itself",
+          "[lims][billing][posting]") {
+    auto const mode = GENERATE(PostingMode::Dispatched, PostingMode::SharedTransaction);
+    bool const dispatched = mode == PostingMode::Dispatched;
+    CAPTURE(mode);
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{mode};
+    auto const invoice = lims::test::approvedInvoice();
+    SECTION("busy") {
+        lims::test::FailingStatements const busy{"billing_number_series", "INSERT",
+                                                 std::string{lims::test::kBusyMessage}};
+        CHECK_THROWS_WITH(posting.post(invoice), Catch::Matchers::ContainsSubstring(
+                                                     dispatched ? "has its entry recorded" : "was not posted"));
+        CHECK(current(invoice).state == lims::InvoiceState::Approved);
+    }
+    SECTION("another failure") {
+        lims::test::FailingStatements const failing{"billing_number_series", "INSERT", "injected: disk full"};
+        CHECK_THROWS_WITH(posting.post(invoice), Catch::Matchers::ContainsSubstring("injected: disk full"));
+        CHECK(current(invoice).state == lims::InvoiceState::Approved);
+    }
+    CHECK(entries().size() == (dispatched ? 1U : 0U));
+}
+
+// Mutation: drop the "exactly one row changed" check from the posting update (an invoice posted meanwhile is numbered
+// twice) or from the number series' advance (a series that moved on meanwhile hands out a number twice).
+TEST_CASE("invoice posting: a posting whose update changes no row is a Conflict", "[lims][billing][posting]") {
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::SharedTransaction};
+    auto const first = lims::test::approvedInvoice("WW-1");
+    auto const second = lims::test::approvedInvoice("WW-2");
+    SECTION("the invoice was posted meanwhile") {
+        lims::test::SkippedStatements const skipped{"billing_invoices", "UPDATE", "NEW.state = 3"};
+        CHECK_THROWS_WITH(posting.post(first), Catch::Matchers::ContainsSubstring("was posted meanwhile"));
+        CHECK(current(first).state == lims::InvoiceState::Approved);
+    }
+    SECTION("the number series moved on meanwhile") {
+        CHECK(posting.post(first).number == "INV-2026-000001");
+        lims::test::SkippedStatements const skipped{"billing_number_series", "UPDATE"};
+        CHECK_THROWS_WITH(posting.post(second), Catch::Matchers::ContainsSubstring("moved on meanwhile"));
+        CHECK(current(second).state == lims::InvoiceState::Approved);
+    }
+}
+
+// Mutation: drop the invoice lookup after the posting update (an invoice removed by the update's own transaction is
+// numbered from nothing).
+TEST_CASE("invoice posting: an invoice removed after the update is refused and nothing is kept",
+          "[lims][billing][posting]") {
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::SharedTransaction};
+    auto const invoice = lims::test::approvedInvoice();
+    {
+        lims::test::ScopedTrigger const vanishing{"AFTER UPDATE ON billing_invoices WHEN NEW.state = 3",
+                                                  "DELETE FROM billing_invoices WHERE id = NEW.id;"};
+        CHECK_THROWS_WITH(posting.post(invoice), Catch::Matchers::ContainsSubstring("does not exist"));
+    }
+    CHECK(entries().empty());
+    CHECK(current(invoice).state == lims::InvoiceState::Approved);
 }

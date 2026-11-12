@@ -656,3 +656,14 @@ TEST_CASE("Listing conflicts needs an attached handler", "[lims][audit][offline]
     lims::SampleModel model;
     CHECK_THROWS_AS(model.execute(lims::ListConflicts{}), lims::NotFound);
 }
+
+// Mutation: delete the conflict lookup from ResolveConflict or the result lookup from VerifyResult (an unknown id
+// resolves or verifies nothing and answers success).
+TEST_CASE("verification: the handlers refuse an unknown conflict or result on their own", "[lims][verification]") {
+    lims::test::LabFixture fixture;
+    ScopedPrincipal const carol{"carol"};
+    lims::SampleModel model;
+    CHECK_THROWS_AS(model.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "no such"}),
+                    lims::NotFound);
+    CHECK_THROWS_AS(model.execute(lims::VerifyResult{.resultId = lims::ResultId{424242}}), lims::NotFound);
+}

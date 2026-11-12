@@ -319,10 +319,10 @@ component_management:
         - examples/lims/lab/include/lims/lab/models/**
       statuses:
         - type: project
-          target: 97%
+          target: 98.5%
           informational: true
         - type: patch
-          target: 97%
+          target: 98.5%
           informational: true
 
     - component_id: lims_org
@@ -332,10 +332,10 @@ component_management:
         - examples/lims/org/include/lims/org/models/**
       statuses:
         - type: project
-          target: 97%
+          target: 99.5%
           informational: true
         - type: patch
-          target: 97%
+          target: 99.5%
           informational: true
 
     - component_id: lims_ledger
@@ -345,10 +345,10 @@ component_management:
         - examples/lims/ledger/include/lims/ledger/models/**
       statuses:
         - type: project
-          target: 96%
+          target: 99%
           informational: true
         - type: patch
-          target: 96%
+          target: 99%
           informational: true
 
     - component_id: lims_billing
@@ -358,10 +358,10 @@ component_management:
         - examples/lims/billing/include/lims/billing/models/**
       statuses:
         - type: project
-          target: 95%
+          target: 99.5%
           informational: true
         - type: patch
-          target: 95%
+          target: 99.5%
           informational: true
 
 # Always post the coverage-comparison comment on a PR, even on the first upload
