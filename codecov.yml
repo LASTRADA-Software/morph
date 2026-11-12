@@ -308,9 +308,11 @@ component_management:
           target: auto
           informational: true
 
-    # lims: one component per module, each target just below that module's own measured line coverage
-    # (scripts/coverage.sh over every test but the stress ones), so that lab and org keep the stricter bar
-    # they measure and ledger and billing are held to theirs. Inventory is Part C's and joins when Part C's
+    # lims: one component per module, each target 0.5 points below that module's coverage as Codecov counts it
+    # (hits / (hits + misses + partials) over the uploaded coverage.lcov, after scripts/coverage.sh over every
+    # test but the stress ones): lab 98.14, org 98.05, ledger 98.46, billing 98.75. llvm-cov's line figure is
+    # higher, because it counts a line that runs as covered even when a branch arm on it is never taken.
+    # Inventory is Part C's and joins when Part C's
     # definition of done is measured.
     - component_id: lims_lab
       name: "application ladder rung 3 (examples/lims lab models)"
@@ -319,10 +321,10 @@ component_management:
         - examples/lims/lab/include/lims/lab/models/**
       statuses:
         - type: project
-          target: 98.5%
+          target: 97.6%
           informational: true
         - type: patch
-          target: 98.5%
+          target: 97.6%
           informational: true
 
     - component_id: lims_org
@@ -332,10 +334,10 @@ component_management:
         - examples/lims/org/include/lims/org/models/**
       statuses:
         - type: project
-          target: 99.5%
+          target: 97.5%
           informational: true
         - type: patch
-          target: 99.5%
+          target: 97.5%
           informational: true
 
     - component_id: lims_ledger
@@ -345,10 +347,10 @@ component_management:
         - examples/lims/ledger/include/lims/ledger/models/**
       statuses:
         - type: project
-          target: 99%
+          target: 97.9%
           informational: true
         - type: patch
-          target: 99%
+          target: 97.9%
           informational: true
 
     - component_id: lims_billing
@@ -358,10 +360,10 @@ component_management:
         - examples/lims/billing/include/lims/billing/models/**
       statuses:
         - type: project
-          target: 99.5%
+          target: 98.2%
           informational: true
         - type: patch
-          target: 99.5%
+          target: 98.2%
           informational: true
 
 # Always post the coverage-comparison comment on a PR, even on the first upload
