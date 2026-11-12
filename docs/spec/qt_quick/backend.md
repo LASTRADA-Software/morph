@@ -311,6 +311,16 @@ state, so its look follows the selection alone; its `clicked` fires the row's `t
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 
+A spanning cell (`setRowSpans` writes the row's `rowSpans`, a list of `[column, rows]`) is parented to its origin row
+but is as tall as the rows it covers together with the rule between them: `MorphTable` gives each row the cumulative
+`y` and `height` of the rows after it, so the cell's height is read from them, not from the row alone, and the origin
+row is raised (`z`) above the rows it covers so the cell is drawn over their backgrounds and rules. The cell has its
+origin row's background fill in its column (tone, selection, hover, focus), which hides the rule under it. A covered
+row's cell in that column is `visible: false`, so it takes no focus, no tap, no accessible node and no width in the
+column's cache, and a row's height is the tallest of its other cells and the covered-row shares of any spanning cell;
+a spanning cell taller than the rows it covers adds the shortfall to the last of them. A tap on a spanning cell is
+the origin row's tap. `Accessible` has no cell extent, so assistive technology reads the cell in its origin row.
+
 A heading row (`setRowHeading`, the row's `heading`) places its one cell from the first inset across the select
 column and every column, less two insets; its `TapHandler`, Enter and select box are off, and `shownRows` (the rows the
 current row, Ctrl+A and the select-all box run over) leaves it out, as does a content column's width scan. Its

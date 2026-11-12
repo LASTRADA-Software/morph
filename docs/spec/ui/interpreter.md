@@ -407,7 +407,14 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   `{id, label}`. `onActivate` runs in the activated row's scope. `rowTone` is evaluated in each row's
   scope and gives the row its tone: `"neutral"`, `"info"`, `"ok"`, `"warn"`, `"err"`, or `null` for
   none; another value shows no tone and is reported once for the table (`rowTone is <v>; a tone is
-  neutral, info, ok, warn or err`). The selection the table shows is a slot over the bound `selection`
+  neutral, info, ok, warn or err`). `rowSpans` is evaluated in each row's scope as a slot, like `rowTone`, and gives the
+  row its `TableRowView::spans`: a list of `{column, rows}` records, `column` a column's id (a derived column's too)
+  turned into its index and `rows` an integer from 1. A record that is not of that shape, names an id the table has
+  not, or has a `rows` that is no integer of at least 1 is dropped and reported once for the table (`rowSpans is <v>;
+  a span is {column: a column's id, rows: an integer from 1}`); `null` and `[]` give none. What follows from the rows'
+  order (a span past the last row, over a group heading, onto a covered column) is the mount's to refuse. The
+  pipeline pages before the table sees its rows, so a span reaching past the page's last row is refused and
+  reported. The table's sort is the one `options.sort` carries: while it names a column the table draws no spans. The selection the table shows is a slot over the bound `selection`
   (each item a key), or over the table's own selection when no key binds it; a bound value that is `null`
   selects nothing, and one that is neither a list nor `null` selects nothing and is reported once at the
   table's `selection` path. A user's change sets the table's own selection when no key binds one, then

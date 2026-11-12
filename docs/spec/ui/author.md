@@ -239,7 +239,7 @@ expression of one),
   (with `event` the new keys), `sort` (a list of `sortKey`s, controlled when given), `onSortChange` (with `event` the
   new sort), `pageSize` and `page`, `group` (a `TableGroup{by, heading}`: a heading row before each run of rows
   sharing `by`, read in a row scope whose row is the run record), `filters` and `highlightKey` (which the loader takes on a `dataTable` only),
-  `rowTone` (each row's tone, which the client draws), `selectColumn` (written only when `true`), `selectAllLabel`,
+  `rowTone` (each row's tone, which the client draws), `rowSpans` (each row's spans, in the row scope: a list of `{column, rows}`), `selectColumn` (written only when `true`), `selectAllLabel`,
   `rowLabel` (each row's name, in the row scope), `onActivate`, `empty` (the nodes shown in
   its place while its rows are an empty list), `valign`), and optionally a row-scope builder that returns the
   columns; `cells({...})` makes columns from cells alone. **`dataTable<A>(model, body, options)`**
