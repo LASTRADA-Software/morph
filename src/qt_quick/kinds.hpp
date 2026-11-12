@@ -553,6 +553,8 @@ public:
     void setSelectAllLabel(std::string_view label) override;
     void setRowLabel(ui::Widget& row, std::string_view label) override;
     void setRowHeading(ui::Widget& row) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) override;
     void setSelection(std::vector<ui::Key> const& keys) override;
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
@@ -587,6 +589,10 @@ protected:
 
 private:
     void mark() const;
+    /// Works out which cells span and which are covered from the rows as they stand (without @p leaving), clipping a
+    /// span that runs past the last row or onto a heading, hides the covered cells and tells each row its spans and
+    /// the columns above cover.
+    void planSpans(ItemBase const* leaving);
     /// Writes `alternate` on every row but @p leaving: true at each odd position.
     void stripe(ItemBase const* leaving) const noexcept;
     [[nodiscard]] std::vector<ui::Key> existingSelection() const;
@@ -609,6 +615,10 @@ private:
     // The same keys, in row order, for a range or Ctrl+A over rows that are not realized.
     std::vector<ui::Key> _existingOrder;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
+    /// Each row's effective spans, as last told.
+    std::unordered_map<ItemBase const*, std::vector<ui::RowSpan>> _spans;
+    /// Whether any row has been told it spans or is covered, so a table that never spans does no work.
+    bool _planned = false;
 };
 
 /// A row of a table: the horizontal stack the mount makes for it, placing its cells by column.

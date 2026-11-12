@@ -600,7 +600,10 @@ std::vector<::core::tui::Rect> ContainerBase::childAreas(::core::tui::Size /*siz
 void ContainerBase::placeChildren(std::span<::core::tui::Rect const> areas) const {
     auto area = areas.begin();
     for (auto* child : _children) {
-        child->place(area != areas.end() ? *area : ::core::tui::Rect{});
+        // A lifted cell is placed by the table that lifted it.
+        if (!child->lifted()) {
+            child->place(area != areas.end() ? *area : ::core::tui::Rect{});
+        }
         if (area != areas.end()) {
             ++area;
         }

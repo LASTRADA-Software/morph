@@ -110,6 +110,19 @@ public:
         settle();
     }
 
+    // A click at the middle of the widget's drawn bounds: for a cell over several rows, the line of the middle row.
+    void clickCentre(ui::Widget& widget) override {
+        settle();
+        auto const bounds = WidgetBase::of(widget).view().screenBounds();
+        if (bounds.width > 0 && bounds.height > 0) {
+            int const x = bounds.x + (bounds.width / 2);
+            int const y = bounds.y + (bounds.height / 2);
+            send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = x + 1, .y = y + 1});
+            send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = x + 1, .y = y + 1});
+        }
+        settle();
+    }
+
     // Select all (Ctrl+Shift+A), then the text pasted over the selection, so the field takes it as one edit; an
     // empty text deletes the selection.
     void type(ui::Widget& widget, std::string_view text) override {

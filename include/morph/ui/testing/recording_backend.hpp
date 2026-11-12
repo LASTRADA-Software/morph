@@ -1886,6 +1886,22 @@ public:
         return row.has_value() && _headings.contains(*row);
     }
 
+    /// @brief Records the row's property `rowSpans`: `column:rows` pairs joined by commas, `none` for an empty list.
+    /// @param row   One of this table's rows.
+    /// @param spans The row's effective spans.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowSpans(Widget& row, std::vector<RowSpan> const& spans) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowSpans of a widget that is not this table's row"};
+        }
+        std::string text;
+        for (RowSpan const& span : spans) {
+            text += (text.empty() ? "" : ",") + std::to_string(span.column) + ":" + std::to_string(span.rows);
+        }
+        store().set(rowId, "rowSpans", text.empty() ? std::string{"none"} : text);
+    }
+
     /// @brief Records the row's property `tone` (`none` for no tone).
     /// @param row One of this table's rows.
     /// @param tone The tone, or none.

@@ -1696,3 +1696,81 @@ TEST_CASE("qt_quick table: a virtualized table's stretch column caches only grow
     CHECK(tableItem.property("columnCache").toList().at(0).toReal() == wide);
     CHECK(tableItem.property("leastCache").toList().at(0).toReal() == wideLeast);
 }
+
+namespace {
+
+// The y of an item's top edge and bottom edge in the table's coordinates.
+std::pair<qreal, qreal> verticalExtent(QQuickItem const& item, QQuickItem const& table) {
+    QPointF const top = item.mapToItem(&table, QPointF{0, 0});
+    return {top.y(), top.y() + item.height()};
+}
+
+}  // namespace
+
+// Mutation: leave `setRowSpans` empty (the cell stays one row tall and the covered cells show), or skip the `covered`
+// flag (the covered cells stay visible), or place the cell by the row's height (it ends with its row).
+TEST_CASE("qt_quick table: a spanning cell reaches the foot of the rows it covers, and the covered cells are hidden",
+          "[qt_quick][span]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{1}, ui::Key{2}, ui::Key{3}}, ui::SelectionMode::Single);
+    // The first column stretches its cells down the rows they cover, so a spanning cell fills its block.
+    table.table->setColumns(
+        {{.label = "Name", .width = ui::Sizing::fixed(12), .valign = ui::Align::Stretch}, {.label = "Mass"}});
+    scene.settle();
+    QQuickItem& tableItem = Scene::itemOf(*table.table);
+    QQuickItem const& first = Scene::itemOf(*table.cells.at(0));
+    qreal const oneRow = first.height();
+    table.table->setRowSpans(*table.rows.at(0), {{.column = 0, .rows = 3}});
+    scene.settle();
+    auto const [top, bottom] = verticalExtent(first, tableItem);
+    QQuickItem const& last = Scene::itemOf(*table.cells.at(5));
+    CHECK(first.height() > 2.5 * oneRow);
+    // The cell, which a row of its own height would end before, reaches the third row's foot.
+    CHECK(bottom >= verticalExtent(last, tableItem).second - 1.0);
+    CHECK(top <= verticalExtent(Scene::itemOf(*table.cells.at(1)), tableItem).first + 1.0);
+    // The covered rows' cells in that column are hidden, the other columns' are not.
+    CHECK_FALSE(Scene::itemOf(*table.cells.at(2)).isVisible());
+    CHECK_FALSE(Scene::itemOf(*table.cells.at(4)).isVisible());
+    CHECK(Scene::itemOf(*table.cells.at(3)).isVisible());
+    // Clearing the span returns everything.
+    table.table->setRowSpans(*table.rows.at(0), {});
+    scene.settle();
+    CHECK(Scene::itemOf(*table.cells.at(2)).isVisible());
+    CHECK(first.height() < 1.5 * oneRow);
+}
+
+// Mutation: let `cover` write `true` on uncovering (the cell the document hid shows again).
+TEST_CASE("qt_quick table: uncovering a cell the document hid leaves it hidden", "[qt_quick][span]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{1}, ui::Key{2}}, ui::SelectionMode::Single);
+    table.cells.at(2)->setVisible(false);
+    table.table->setRowSpans(*table.rows.at(0), {{.column = 0, .rows = 2}});
+    scene.settle();
+    CHECK_FALSE(Scene::itemOf(*table.cells.at(2)).isVisible());
+    table.table->setRowSpans(*table.rows.at(0), {});
+    scene.settle();
+    CHECK_FALSE(Scene::itemOf(*table.cells.at(2)).isVisible());
+}
+
+// Mutation: leave the backdrop's tap handler out (the click lands on the covered row), or let the row's own handler
+// take a tap in a spanning column (the row is toggled twice).
+TEST_CASE(
+    "qt_quick table: a click on the part of a spanning cell over a covered row selects the row that gives the span",
+    "[qt_quick][span]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{1}, ui::Key{2}, ui::Key{3}}, ui::SelectionMode::Multiple);
+    std::vector<std::vector<ui::Key>> reported;
+    table.table->setOnSelectionChange([&reported](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) {
+        reported.push_back(std::move(keys));
+    });
+    table.table->setRowSpans(*table.rows.at(0), {{.column = 0, .rows = 3}});
+    scene.settle();
+    // The cell's centre lies over the second row.
+    scene.click(Scene::itemOf(*table.cells.at(0)), Qt::ControlModifier);
+    REQUIRE(reported.size() == 1);
+    CHECK(reported.back() == std::vector<ui::Key>{ui::Key{1}});
+    // A click on the covered row's other column is that row's own.
+    scene.click(Scene::itemOf(*table.cells.at(3)), Qt::ControlModifier);
+    REQUIRE(reported.size() == 2);
+    CHECK(reported.back() == std::vector<ui::Key>{ui::Key{1}, ui::Key{2}});
+}

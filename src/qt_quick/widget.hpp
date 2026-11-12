@@ -98,6 +98,11 @@ public:
     void takeHover(std::function<void()> onHover) const;
     void takeFocus() const;
 
+    /// Hides the widget's item while a spanning cell above covers it (@p covered), or shows it again as its own
+    /// visibility says. The flag is kept apart from `setVisible`, so uncovering never shows a cell the document hid.
+    void cover(bool covered);
+    /// Whether a spanning cell covers the widget.
+    [[nodiscard]] bool covered() const noexcept { return _covered; }
     /// The widget's own visibility flag, as its last `setVisible` left it.
     [[nodiscard]] bool ownVisible() const noexcept { return _visible; }
     /// The widget's own enablement flag, as its last `setEnabled` left it.
@@ -117,6 +122,7 @@ private:
     Relay* _relay;
     ContainerCore* _container = nullptr;
     bool _visible = true;
+    bool _covered = false;
     bool _enabled = true;
 };
 

@@ -311,20 +311,26 @@ state, so its look follows the selection alone; its `clicked` fires the row's `t
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 
-A spanning cell (`setRowSpans` writes the row's `rowSpans`, a list of `[column, rows]`) is drawn in an overlay layer
-of `MorphTable` above the rows, not in its row. `MorphTable` computes, at table level, each spanning cell's rectangle
-from its origin row's `y` and the last covered row's `y` and `height`, and the shortfall of a cell taller than the rows
-it covers, which it writes to the last covered row as an extra height that row's `placeOnce` adds; a spanning cell is
-left out of its origin row's `tallest` and `implicitHeight`, and its height never feeds back into one. The overlay draws,
-under the cell, `scheme.surface` and then a second instance of the `tableRow` part's `background` component, sized to
-the cell and given the origin row's tone, stripe, selected, hover and current marks, with its `rule` hidden; a restyle
-is thus instantiated twice per spanning cell. The overlay has a `TapHandler` and a `HoverHandler` of its own that
-forward to the origin row, because an event below the origin row's bounds reaches the covered row's handlers
-otherwise. A covered cell is hidden by a `covered` flag of `ItemBase`, combined with the cell's own visibility
-(`ownVisible() && !covered`, so uncovering restores what the mount set and never shows a cell the document hid): a
-covered cell takes no focus and no tap, has no accessible node, and is left out of `widestCell` and the column caches
-as a hidden cell is. `MorphTable` recomputes coverage when rows move, are added or removed, or their spans change.
-`Accessible` has no cell extent, so assistive technology reads the cell in its origin row.
+A spanning cell (`setRowSpans`; `TableImpl::planSpans` resolves it against the rows as they stand, each time a row
+comes, goes, moves or is told its spans) stays a cell of its origin row, left out of that row's `tallest` and
+`implicitHeight`, and overflows the row downward: `MorphTableRow.spanPlan` (`[{column, rows}]`, the spans clipped to the
+rows that remain) names the cell, and the table gives the row `spanBlocks` (`[{column, height}]`, the summed
+`implicitHeight` of the rows the cell covers) and the last covered row a `spanExtra`, the lines the cell needs
+beyond them, which that row's `placeOnce` adds; both are worked out at table level (`recomputeSpans`, once per event
+loop turn, from the rows' `ownHeight`), as no row can see another's, and the cell's height never feeds back into a
+row's own. The origin row is drawn above every row below it (C++ writes `z` as the count of rows from it to the end),
+so the cell lies over the rows it covers, also when a covered row is itself an origin in another column. Under the
+cell, in its column, the row has a `spanBackdrop`: `scheme.surface` first, which hides the covered rows' rules, then a
+second instance of the `tableRow` part's `background` component (a restyle is instantiated once more per spanning
+cell), laid out as wide as the row and cut to the column so the row's own marks fall where they do on the row, and
+given the origin row's tone, stripe, selected, hover and current state; its rule is thus the block's foot. The backdrop
+has a `TapHandler` and a `HoverHandler` of its own, since a point below the origin row's bounds reaches the covered
+row's handlers otherwise; its tap is the origin row's tap (`MorphTableRow.tapped`), and a row ignores a tap that
+lands in a spanning or a covered column. A covered cell is hidden by `ItemBase::cover`, a flag kept apart from the
+cell's own visibility (`ownVisible() && !covered`, so uncovering restores what the mount set and never shows a cell the
+document hid): it takes no focus and no tap, has no accessible node, and is left out of `widestCell` and the column
+caches as a hidden cell is. `Accessible` has no cell extent, so assistive technology reads the cell in its origin
+row.
 
 A heading row (`setRowHeading`, the row's `heading`) places its one cell from the first inset across the select
 column and every column, less two insets; its `TapHandler`, Enter and select box are off, and `shownRows` (the rows the

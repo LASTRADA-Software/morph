@@ -150,7 +150,14 @@ QObject* ItemBase::part(char const* name) const {
 void ItemBase::showVisible(bool visible) {
     _visible = visible;
     if (_item != nullptr) {
-        _item->setVisible(visible);
+        _item->setVisible(visible && !_covered);
+    }
+}
+
+void ItemBase::cover(bool covered) {
+    _covered = covered;
+    if (_item != nullptr) {
+        _item->setVisible(_visible && !_covered);
     }
 }
 
