@@ -48,7 +48,7 @@ constexpr int kMaxCurrencyCode = static_cast<int>(CurrencyCode::JPY);
 
 std::size_t changedRows(Lightweight::DataMapper& mapper, std::string const& sql) {
     Lightweight::SqlStatement statement{mapper.Connection()};
-    return static_cast<std::size_t>(statement.ExecuteDirect(sql).NumRowsAffected());
+    return statement.ExecuteDirect(sql).NumRowsAffected();
 }
 
 Rational moveLot(Lightweight::DataMapper& mapper, db::LotRecord const& lot, MovementKind kind,
