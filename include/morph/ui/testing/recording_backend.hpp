@@ -118,6 +118,9 @@ template <typename Special>
         if (!entry.description.empty()) {
             formatted += ";description=" + text(entry.description);
         }
+        if (entry.heading) {
+            formatted += ";heading";
+        }
         if (!entry.items.empty()) {
             formatted += formatMenu(entry.items);
         }
@@ -1246,6 +1249,9 @@ public:
         if (trigger.emphasis != ButtonEmphasis::Normal) {
             set("emphasis", enumName(trigger.emphasis));
         }
+        if (!trigger.detail.empty()) {
+            set("detail", formatText(trigger.detail));
+        }
     }
     void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) override {
         callbacks().path = std::move(onActivate);
@@ -1673,6 +1679,15 @@ public:
     void setDescriptionSpans(std::vector<TextSpan> const& spans) override {
         set("descriptionSpans", formatSpans(spans));
     }
+    void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
+};
+
+/// @brief A fake `PopoverWidget`: properties `open` and `width`.
+class FakePopover final : public FakeContainer<PopoverWidget> {
+public:
+    using FakeContainer<PopoverWidget>::FakeContainer;
+    void setOpen(bool open) override { set("open", formatBool(open)); }
+    void setWidth(int units) override { set("width", std::to_string(units)); }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
 };
 
@@ -2179,6 +2194,9 @@ public:
     [[nodiscard]] std::unique_ptr<ToastWidget> createToast(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeToast>(_store, "Toast", parent);
     }
+    [[nodiscard]] std::unique_ptr<PopoverWidget> createPopover(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakePopover>(_store, "Popover", parent);
+    }
     [[nodiscard]] std::unique_ptr<BusyWidget> createBusy(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeBusy>(_store, "Busy", parent);
     }
@@ -2639,7 +2657,8 @@ public:
     /// @throws std::logic_error when the widget is none of those, is a banner that is not dismissible, or is a badge
     ///         that is not removable.
     void dismiss(int widgetId) {
-        detail::Record const& record = expectKind(widgetId, "dismiss", {"Dialog", "Drawer", "Banner", "Badge"});
+        detail::Record const& record =
+            expectKind(widgetId, "dismiss", {"Dialog", "Drawer", "Banner", "Badge", "Popover"});
         if (record.kind == "Banner" && !flagIs(record, "dismissible", true)) {
             throw std::logic_error{"RecordingBackend: dismiss of Banner#" + std::to_string(widgetId) +
                                    ", which is not dismissible"};
@@ -2995,7 +3014,8 @@ private:
 
     // A dialog or drawer shows nothing until it is opened.
     [[nodiscard]] static bool isClosedDialog(detail::Record const& record) {
-        return (record.kind == "Dialog" || record.kind == "Drawer") && !flagIs(record, "open", true);
+        return (record.kind == "Dialog" || record.kind == "Drawer" || record.kind == "Popover") &&
+               !flagIs(record, "open", true);
     }
 
     // A closed collapsible section hides its content, the child on the way in, unless that child is its header.

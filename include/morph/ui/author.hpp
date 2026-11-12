@@ -3361,6 +3361,11 @@ namespace detail {
 /// @return The command.
 [[nodiscard]] inline Command setLocale(std::string const& locale) { return detail::command("setLocale", locale); }
 
+/// @brief `setContext`: asks the shell to change the scope its switcher holds.
+/// @param value The option's value, an expression.
+/// @return The command.
+[[nodiscard]] inline Command setContext(AnyHandle const& value) { return detail::command("setContext", value.json()); }
+
 /// @brief The role of a notification.
 enum class Role : std::uint8_t {
     Info,     ///< Information.

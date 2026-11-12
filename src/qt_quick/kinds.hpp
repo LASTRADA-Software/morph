@@ -494,6 +494,19 @@ public:
 
 using DrawerImpl = OverlayImpl<ui::DrawerWidget>;
 
+/// A popover: a non-modal panel under its container that floats over the content and takes no room.
+class PopoverImpl final : public ContainerItemWidget<ui::PopoverWidget> {
+public:
+    PopoverImpl(Context& context, ui::ContainerWidget* parent);
+    void setOpen(bool open) override;
+    void setWidth(int units) override;
+    void setOnDismiss(ui::Action onDismiss) override;
+
+protected:
+    /// Drawn as the theme's card whatever surface encloses it.
+    [[nodiscard]] QObject* scheme() const override { return context().themeObject("cardScheme"); }
+};
+
 class SplitterImpl final : public ContainerItemWidget<ui::SplitterWidget> {
 public:
     SplitterImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axis);

@@ -124,6 +124,10 @@ std::unique_ptr<ui::DialogWidget> Backend::createDialog(ui::ContainerWidget* par
     return std::make_unique<detail::DialogImpl>(*_context, QStringLiteral("MorphDialog"), parent);
 }
 
+std::unique_ptr<ui::PopoverWidget> Backend::createPopover(ui::ContainerWidget* parent) {
+    return std::make_unique<detail::PopoverImpl>(*_context, parent);
+}
+
 std::unique_ptr<ui::ToastWidget> Backend::createToast(ui::ContainerWidget* parent) {
     return std::make_unique<detail::ToastImpl>(*_context, parent);
 }

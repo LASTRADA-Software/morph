@@ -1074,3 +1074,99 @@ TEMPLATE_TEST_CASE("qt_quick overlays: the shadow is elevation.dialog, and the c
         CHECK(shadow->property("color").value<QColor>() == QColor{0x10, 0x20, 0x30, 0x40});
     }
 }
+
+// A popover is a panel that belongs to its container: it floats, so opening it changes nothing of the container's
+// layout, and it takes no focus, so the field it serves keeps it.
+TEST_CASE(
+    "qt_quick popover: floats under its container, takes no room and no focus, and holds its content out of reach "
+    "while closed",
+    "[qt_quick]") {
+    Scene scene;
+    auto box = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto field = scene.backend().createTextInput(box.get(), ui::TextInputMode::SingleLine);
+    auto popover = scene.backend().createPopover(box.get());
+    popover->setWidth(30);
+    auto inside = scene.backend().createButton(popover.get());
+    inside->setLabel("hit");
+    scene.settle();
+    QQuickItem& boxItem = Scene::itemOf(*box);
+    qreal const closedHeight = boxItem.height();
+    CHECK_FALSE(Scene::itemOf(*inside).isVisible());
+
+    field->focus();
+    popover->setOpen(true);
+    scene.settle();
+    CHECK(Scene::itemOf(*inside).isVisible());
+    CHECK(boxItem.height() == closedHeight);
+    // Under the container's box, not inside it.
+    QPointF const hit = Scene::itemOf(*inside).mapToItem(&boxItem, QPointF{0, 0});
+    CHECK(hit.y() >= boxItem.height());
+    CHECK(Scene::controlOf(*field).hasActiveFocus());
+
+    popover->setOpen(false);
+    scene.settle();
+    CHECK_FALSE(Scene::itemOf(*inside).isVisible());
+}
+
+// A popover reports a dismissal the user caused, a press outside it and its container, and none for a close the
+// document asked for: the document already knows about its own close. It takes no keys, so Escape in the field it
+// serves is the field's to handle and leaves the popover to its owner.
+TEST_CASE(
+    "qt_quick popover: a press outside dismisses it, a close the document asked for does not, and the field "
+    "keeps focus throughout",
+    "[qt_quick]") {
+    Scene scene;
+    auto root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto box = scene.backend().createStack(root.get(), ui::Axis::Vertical);
+    auto field = scene.backend().createTextInput(box.get(), ui::TextInputMode::SingleLine);
+    auto popover = scene.backend().createPopover(box.get());
+    popover->setWidth(30);
+    auto inside = scene.backend().createButton(popover.get());
+    inside->setLabel("hit");
+    int dismissals = 0;
+    popover->setOnDismiss([&dismissals] { ++dismissals; });
+    scene.settle();
+
+    // A close the document asked for is no dismissal.
+    field->focus();
+    popover->setOpen(true);
+    scene.settle();
+    popover->setOpen(false);
+    scene.settle();
+    CHECK(dismissals == 0);
+
+    // A press outside both the panel and its container (the window's far corner) closes it and reports it.
+    popover->setOpen(true);
+    scene.settle();
+    CHECK(Scene::itemOf(*inside).isVisible());
+    QTest::mouseClick(&scene.window(), Qt::LeftButton, {},
+                      QPoint{scene.window().width() - 2, scene.window().height() - 2});
+    scene.settle();
+    CHECK(dismissals == 1);
+    CHECK_FALSE(Scene::itemOf(*inside).isVisible());
+
+    // A press on the panel's own content, or on the field it serves, leaves it open.
+    popover->setOpen(true);
+    scene.settle();
+    scene.click(Scene::itemOf(*field));
+    CHECK(dismissals == 1);
+    CHECK(Scene::itemOf(*inside).isVisible());
+    CHECK(Scene::controlOf(*field).hasActiveFocus());
+
+    // Escape goes to the focused field, not to the panel: the panel stays open and the field keeps the focus.
+    scene.key(Qt::Key_Escape);
+    CHECK(dismissals == 1);
+    CHECK(Scene::itemOf(*inside).isVisible());
+    CHECK(Scene::controlOf(*field).hasActiveFocus());
+}
+
+// A trigger with a detail draws it as a second line.
+TEST_CASE("qt_quick menu: a trigger with a detail names both lines", "[qt_quick]") {
+    Scene scene;
+    auto menu = scene.backend().createMenu(nullptr, ui::MenuStyle::Button);
+    menu->setTrigger(
+        ui::MenuTrigger{.label = "Rheinlab", .icon = {}, .emphasis = ui::ButtonEmphasis::Normal, .detail = "Koeln"});
+    scene.settle();
+    CHECK(Scene::itemOf(*menu).property("triggerDetail").toString() == "Koeln");
+    CHECK(Scene::itemOf(*menu).property("triggerText").toString() == "Rheinlab\nKoeln");
+}

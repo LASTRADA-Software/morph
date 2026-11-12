@@ -371,6 +371,9 @@ struct MenuEntry {
     bool separator = false;
     /// @brief A muted line of help shown with the entry; empty shows none.
     std::string description;
+    /// @brief Whether the entry is a label that is not a command: drawn as muted text, exposed as static text, never
+    ///        chosen or opened. Its other fields are empty.
+    bool heading = false;
 
     /// @brief Memberwise equality, submenus included.
     /// @return Whether every field matches.
@@ -385,6 +388,8 @@ struct MenuTrigger {
     std::string icon;
     /// @brief The trigger's emphasis, as a button's.
     ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+    /// @brief A second line under the label; empty for none. The accessible name is the label, then the detail.
+    std::string detail;
 
     /// @brief Memberwise equality.
     /// @return Whether every field matches.
@@ -1113,6 +1118,28 @@ public:
     virtual ContainerWidget& footer() = 0;
 };
 
+/// @brief A non-modal panel that belongs to another widget: the results of a search under its field. It takes no
+///        keyboard focus, dims nothing and traps nothing, so focus stays where it was.
+///
+/// It is anchored under its parent container's box and aligned to the box's leading edge. A backend with a floating
+/// layer draws it over the content and gives it no room in the parent's layout; a backend without one draws its
+/// children in flow, under the parent's other children. A new popover is closed.
+class PopoverWidget : public ContainerWidget {
+public:
+    /// @brief Shows or hides it. Never calls the `onDismiss` handler.
+    /// @param open Whether it is shown.
+    virtual void setOpen(bool open) = 0;
+
+    /// @brief Sets its width.
+    /// @param units The width in units; 0 is the parent's width.
+    virtual void setWidth(int units) = 0;
+
+    /// @brief Sets what a user dismissal calls: a press outside both the panel and its parent, where the backend
+    ///        reports one. The panel takes no keyboard focus, so Escape reaches the widgets that have it, not this.
+    /// @param onDismiss The handler; empty does nothing.
+    virtual void setOnDismiss(Action onDismiss) = 0;
+};
+
 /// @brief Panes along the axis fixed at creation, with handles between them that the user drags.
 class SplitterWidget : public ContainerWidget {
 public:
@@ -1293,6 +1320,11 @@ public:
     /// @param parent The container to append to, or null for a root.
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<ToastWidget> createToast(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a non-modal panel anchored under @p parent (see `PopoverWidget`), closed.
+    /// @param parent The container it belongs to and is anchored under, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<PopoverWidget> createPopover(ContainerWidget* parent) = 0;
 
     /// @brief Makes a progress indicator.
     /// @param parent The container to append to, or null for a root.

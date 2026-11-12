@@ -8,6 +8,8 @@ and the page the workspace's tabs sit on. It is built from backend widgets, so e
 - [Shape](#shape)
 - [Signed in and signed out](#signed-in-and-signed-out)
 - [The compact form](#the-compact-form)
+- [Declared parts](#declared-parts)
+- [Module groups](#module-groups)
 - [Toast](#toast)
 - [Design decisions](#design-decisions)
 
@@ -110,6 +112,63 @@ again, restores the bar's step 2 and the line's steps 3 and 3, and hides the men
 and the sign-in state combine: signed out, the sidebar and the top bar stay hidden in either form. The frame does not
 decide when to be compact; the generic client's rule is in [`client/client.md`](../client/client.md#the-shell). A
 compact frame has no navigator search: the menu lists every entry.
+
+## Declared parts
+
+An application's [`ShellParts`](shell_parts.md) are drawn by the frame from state the client sets; the frame asks no
+action itself. `setParts(ShellPartsView)` installs them (`shell_parts_view.hpp`). `ShellPartsView` is the frame's whole
+input:
+
+| Member | Holds |
+|---|---|
+| `context` | the switcher: `shown`, `options` (each `label`, `detail`, `group`), `chosen` (an index, or none), `enabled` |
+| `search` | `shown`, `hint`, `sources` (each `title`, `failed`, `pending`, `hits` of `kind`, `title`, `detail`) |
+| `inbox` | `shown`, `title`, `count` (none while unanswered), `failed` |
+| `principal` | `shown`, `name`, `subtitle`, `detail`, `roles` (each `label`, `detail`), `locales` and `formats` (each `tag`, `label`), `chosenLocale`, `chosenFormat` |
+| `labels` | the texts the frame draws that are not data: the catalogue-resolved strings of `morph.shell.*` |
+
+The search text, the highlight and whether the panel is open are the frame's own state, because they follow the person's
+typing and keys; `setSearchText` of the model receives each edit. `ShellPartsHandlers` is what the frame reports:
+`onContext(index)`, `onSearchText(text)`, `onSearchOpen(source, hit)`, `onSearchOpenAll()`, `onInbox()`,
+`onLocale(index)` and `onFormat(index)`; the frame's `setPartsHandlers` installs them. `ShellPartsBinding`
+(`shell_parts_binding.hpp`) joins a `ShellPartsModel` that reads the parts to a frame: it follows the model into
+`setParts`, the module counts into `Navigator::setModuleBadge`, and the handlers back into the model. A frame with no
+parts installed has none of these widgets visible.
+
+`confirm(message, yes, no, done)` asks a yes-or-no question in a dialog over the frame (`shell_confirm`, with
+`shell_confirm_yes` and `shell_confirm_no`) and answers once; Escape answers no.
+
+The widgets, by test id: `shell_context` (the sidebar's top, under `shell_application`); in the top bar's line, in this
+order, `shell_search` (a text input; Ctrl K focuses it) with `shell_search_popover` under it holding
+`shell_search_results`, `shell_inbox` with its sibling badge `shell_inbox_count` and its error marker, and
+`shell_principal_menu`. `shell_search_popover` is a `PopoverWidget` whose dismissal closes the panel; its rows are `shell_search_busy`,
+`shell_search_source_<n>`, `shell_search_failed_<n>`, `shell_search_hit_<source>_<place>` and `shell_search_empty`. With parts, the top bar's
+title and head slots are not used: the client mounts the workspace `HeadPlacement::InPage`, and `shell_head_trail` and
+`shell_head_principal` stay hidden. The sidebar's principal text and sign-out button are hidden while a principal menu is
+shown; the navigator's search field is hidden while a search part is shown (`Navigator::setSearchShown`).
+
+Compact, the switcher, the module groups and the principal's menu are entries of `shell_nav_menu` (below), and the search
+and the inbox are icon buttons of the bar (`shell_search_open`, `shell_inbox`); `shell_search_open` shows
+`shell_search_overlay`, a full-window overlay with the same field and results.
+
+The navigation menu's entries are, in order: the switcher submenu (when the context is shown), a separator, the
+navigator's `menuEntries()`, a separator and the principal submenu (when shown), then, for a frame with no principal
+menu and a sign-out handler, the sign-out entry. The frame keeps the list it built and maps a chosen path through it, not
+by position.
+
+## Module groups
+
+`Navigator::setModuleGroups(true)` makes the navigator one group per module: each module is one row
+(`nav_module_<module>`) holding the module's label, a chevron, and, from `setModuleBadge(module, badge)`, its count
+while the module is closed; only the open module (`openModule()`, `setOpenModule(module)`; opening one closes the other)
+lists its entries, under the headings of the module's own groups as sections. `setCurrent` opens the module of the
+current screen and `setOpenModule` keeps the person's choice until the next `setCurrent` to another module. A module
+with one entry is that entry's row. A row's accessible name carries its count and whether it is open. Pins stay above the
+modules. `setSearchShown(false)` hides the navigator's own search.
+
+`menuEntries()` changes with module groups: one submenu per module whose label carries the count after it, holding the
+module's groups as heading entries and its screens, and no submenu for a one-entry module (that entry is a plain item).
+Without module groups it is what it was.
 
 ## Toast
 

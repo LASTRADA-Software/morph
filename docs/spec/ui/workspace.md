@@ -158,6 +158,12 @@ and the placement), so a hidden copy is in neither the layout nor the accessibil
 | `inline` | `HeadParts::inlineLead` | `head_lead_inline`, `head_subtitle_inline`, `head_status_inline_<n>` | stretches, with no minimum: it fills the width the title line gives it, so its subtitle wraps there |
 | `end` | inside `HeadParts::trail`, between the tools and the actions | `head_lead_end`, `head_subtitle_end`, `head_status_end_<n>` | content-sized |
 
+A shell whose application declares [parts](shell_parts.md) (search, inbox or the principal's menu) builds its workspace
+with `HeadPlacement::InPage`: the head is in the page, the top bar holds the parts, and `headPartsForActive()` is not
+mounted into the frame. A screen reads the shell's scope as `{"env": "context"}`, and the workspace opens the screens a
+search hit names as tabs (`navigate`, `as: tab`) in the order given, the first one active. `Workspace::dirtyTabs()` counts
+the tabs with unsaved changes and `closeDirtyTabs()` closes them without asking, for the shell's scope switch.
+
 A lead at the `end` counts as trail content. In the page (`HeadPlacement::InPage`) the tab bar carries the title, so
 `inline` draws as `below` there, and `end` sits in the trail. `activeLeadPlacement()` is a tracked read of the active
 head's place (`Below` with no active tab), `activeHeadOneLine()` of whether the head has no eyebrow and nothing under the

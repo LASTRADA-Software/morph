@@ -18,13 +18,15 @@ MorphWidget {
     // The trigger of a button-style menu: its label, icon name and emphasis (0 normal, 1 primary, 2 danger, 3 ghost).
     property string triggerLabel: ""
     property string triggerIcon: ""
+    // A second line under the label, muted-looking by position; the accessible name is the label, then the detail.
+    property string triggerDetail: ""
     property int triggerEmphasis: 0
     // What the trigger shows as text: its label; for an icon-only trigger nothing when the theme draws the icon, the
     // glyph of the framework's icon of that name (`Theme.iconGlyphs`), and otherwise its accessible name, so it is
     // never blank.
     readonly property string triggerText: {
         if (root.triggerLabel !== "")
-            return root.triggerLabel
+            return root.triggerDetail !== "" ? root.triggerLabel + "\n" + root.triggerDetail : root.triggerLabel
         if (root.triggerIcon !== "" && Theme.iconSource(root.triggerIcon) !== "")
             return ""
         const glyph = Theme.iconGlyphs[root.triggerIcon]
@@ -32,7 +34,7 @@ MorphWidget {
     }
     // A button-style menu's item is its one accessible node, as a button's is: it carries the trigger's name, the
     // menu-button role and the press action, and the control inside it is not a second node.
-    defaultName: root.triggerLabel
+    defaultName: root.triggerDetail !== "" ? root.triggerLabel + ", " + root.triggerDetail : root.triggerLabel
     defaultRole: root.buttonStyle ? Accessible.ButtonMenu : Accessible.Client
     Accessible.onPressAction: {
         if (root.buttonStyle)
@@ -234,7 +236,7 @@ MorphWidget {
                     }
                     ItemDelegate {
                         id: entryButton
-                        font: Theme.bodyFont
+                        font: entry.modelData.heading === true ? Theme.overlineFont : Theme.bodyFont
                         visible: entry.modelData.separator !== true
                         Layout.fillWidth: true
                         text: root.entryText(entry.modelData)
@@ -253,7 +255,7 @@ MorphWidget {
                                    ? Theme.cardScheme.hover : "transparent"
                         }
                         enabled: entry.modelData.enabled
-                        Accessible.role: Accessible.MenuItem
+                        Accessible.role: entry.modelData.heading === true ? Accessible.StaticText : Accessible.MenuItem
                         Accessible.description: entry.modelData.description ? entry.modelData.description : ""
                         onClicked: {
                             const path = root.openPath.concat([entry.index])

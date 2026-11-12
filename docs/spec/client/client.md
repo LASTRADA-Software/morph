@@ -119,6 +119,19 @@ destroyed before either goes, so it never writes into a navigator that is gone o
 first visible badge is its count; a count no longer given is taken away. A count for a screen the navigator does not
 list is reported once per screen, while the navigator lists anything (a signed-out frame lists nothing).
 
+When the app document declares [shell parts](../ui/shell_parts.md), the shell builds the workspace with
+`HeadPlacement::InPage` and reads the parts from the app root's queries (`AppRoot::query`), each in an effect made
+after the root and the frame and destroyed before either goes: the switcher's options, the module counts (onto
+`Navigator::setModuleBadge`), the inbox sources, the principal's reply and the search hits (onto
+`ShellFrame::setParts`). It writes the chosen context to the session (`Session::setContext`, the `env` name `context`)
+and installs the frame's choices: the switcher, the search text (written to the app state `shellSearchText` on every edit; the search queries wait `kSearchPause`
+before they ask), Ctrl K, a hit opening a tab from a task posted to the owner, and the principal menu's language and
+format choices (`Session::setLocale`, `Session::setFormatLocale`, then `ShellOptions::onLocale`). It installs the session's
+context handler (`Session::setContextHandler`, `setContextOffered`): it refuses a value not among the options, and asks once before discarding unsaved tabs
+(`Workspace::dirtyTabs`, `closeDirtyTabs`). The start screen is opened only after the switcher answered or failed, and
+the page shows a busy widget until then. Every reply that fails is reported through `onProblem`. A sign-in or sign-out
+rebuilds the frame and the root and clears the context.
+
 An app document that does not load, or that the interpreter refuses, is reported through `onProblem`, and the
 screens mount without it. A development reload that changes the app document loads and reports it, and the new
 document takes effect at the next frame build (a sign-in or sign-out); the root is not remounted in place.

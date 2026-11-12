@@ -253,6 +253,17 @@ void ScrollImpl::paint(::core::tui::Canvas& canvas) { _scroller.paint(*this, can
 
 bool ScrollImpl::wheel(int delta) { return _scroller.wheel(*this, delta); }
 
+void PopoverImpl::setOpen(bool open) { applyVisible(open); }
+
+::core::tui::Size PopoverImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Vertical, 0); }
+
+std::vector<::core::tui::Rect> PopoverImpl::childAreas(::core::tui::Size size) const {
+    return stackAreas(children(), {.x = 0, .y = 0, .width = size.width, .height = size.height},
+                      StackSpec{.axis = ui::Axis::Vertical});
+}
+
+void PopoverImpl::paint(::core::tui::Canvas& canvas) { placeChildren(childAreas(canvas.size())); }
+
 ::core::tui::Size SlotImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Vertical, 0); }
 
 ::core::tui::Size SlotImpl::contentInsets() const {
