@@ -655,12 +655,12 @@ namespace {
 /// Amounts and the rate compare by value, so a figure written with other decimals is the same figure; the
 /// entry's author and generated memo are not part of the request.
 /// @param mapper The open mapper.
-/// @param recorded The recorded entry, as loaded.
+/// @param loaded The recorded entry, as loaded.
 /// @param request The request.
 /// @return Whether they agree.
-[[nodiscard]] bool recordedAs(Lightweight::DataMapper& mapper, LoadedEntry const& recorded,
+[[nodiscard]] bool recordedAs(Lightweight::DataMapper& mapper, LoadedEntry const& loaded,
                               PostingRequest const& request) {
-    auto const stored = toView(mapper, recorded);
+    auto const stored = toView(mapper, loaded);
     if (millisOf(stored.date) != millisOf(request.date) || stored.sourceReference != request.sourceReference ||
         stored.currency != request.currency || *stored.rate != *request.rate ||
         stored.lines.size() != request.lines.size()) {
