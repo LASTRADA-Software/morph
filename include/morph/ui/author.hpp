@@ -5078,10 +5078,10 @@ struct BadgeOptions {
 }
 
 /// @brief A `steps` node.
-/// @param items    The steps, `[{label, state}]`.
+/// @param items    The steps, `[{label, state, detail}]`; `detail` is an optional muted second line.
 /// @param current  The current step.
 /// @param labelled Whether the labels are drawn, a condition; absent draws them. Unlabelled, the steps still carry
-///                 their labels as accessible names.
+///                 their labels, details and states as accessible names.
 /// @return The node.
 [[nodiscard]] inline Node steps(AnyHandle const& items, AnyHandle const& current = {},
                                 AnyHandle const& labelled = {}) {

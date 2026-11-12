@@ -373,6 +373,9 @@ void StepsImpl::setLabelled(bool labelled) {
 
 namespace {
 
+// The cells a step's detail takes after its label: a space and the detail in brackets; none for an empty detail.
+int detailWidth(ui::Step const& step) { return step.detail.empty() ? 0 : displayWidth(step.detail) + 3; }
+
 // A step's mark, three cells wide.
 std::string_view stepMark(ui::StepState state) {
     if (state == ui::StepState::Active) {
@@ -394,7 +397,7 @@ std::string_view stepMark(ui::StepState state) {
     }
     int widest = 0;
     for (auto const& step : _steps) {
-        widest = std::max(widest, displayWidth(step.label) + 4);
+        widest = std::max(widest, 4 + displayWidth(step.label) + detailWidth(step));
     }
     return {.width = widest, .height = static_cast<int>(_steps.size())};
 }
@@ -448,7 +451,13 @@ void paintLabelledSteps(::core::tui::Canvas& canvas, std::vector<ui::Step> const
             mark = "[!] ";
         }
         auto const& style = stepStyle(theme, step.state, current == index);
-        canvas.putString(static_cast<int>(index), 0, std::string{mark} + step.label, style);
+        auto const row = static_cast<int>(index);
+        canvas.putString(row, 0, std::string{mark} + step.label, style);
+        // The detail is dropped, whole, from a row too narrow for it; the label is cut by the canvas as before.
+        int const labelEnd = 4 + displayWidth(step.label);
+        if (detailWidth(step) > 0 && labelEnd + detailWidth(step) <= canvas.width()) {
+            canvas.putString(row, labelEnd, " [" + step.detail + "]", theme.textMuted);
+        }
     }
 }
 

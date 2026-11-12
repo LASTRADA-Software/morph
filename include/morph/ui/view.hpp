@@ -1384,9 +1384,13 @@ struct Step {
     std::string label;
     /// @brief Where it stands.
     StepState state = StepState::Pending;
+    /// @brief A muted second line, who and when; empty draws none. Qt Quick draws it under the label, cut at the
+    ///        label's width; the terminal draws it after the label in brackets, and drops it from a row too narrow
+    ///        for both.
+    std::string detail;
 
     /// @brief Memberwise equality.
-    /// @return Whether label and state match.
+    /// @return Whether label, state and detail match.
     bool operator==(Step const&) const = default;
 };
 
@@ -1396,8 +1400,9 @@ struct Steps {
     Prop<std::vector<Step>> items;
     /// @brief The step to highlight, by position; `nullopt` or a position past the last highlights none.
     Prop<std::optional<std::size_t>> current;
-    /// @brief Whether the indicator draws the steps' labels; unlabelled, it draws only the marks and connectors, and
-    ///        each step keeps its label as its accessible name.
+    /// @brief Whether the indicator draws the steps' labels; unlabelled, it draws only the marks and connectors
+    ///        and no detail. Labelled or not, a step's accessible name is its label, its detail when nonempty and its
+    ///        state when it has one, joined by `, `.
     Prop<bool> labelled = true;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
