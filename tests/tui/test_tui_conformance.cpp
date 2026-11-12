@@ -110,13 +110,14 @@ public:
         settle();
     }
 
-    // A click at the middle of the widget's drawn bounds: for a cell over several rows, the line of the middle row.
-    void clickCentre(ui::Widget& widget) override {
+    // A click at the horizontal middle of one widget's drawn bounds and the vertical middle of another's.
+    void clickAt(ui::Widget& across, ui::Widget& along) override {
         settle();
-        auto const bounds = WidgetBase::of(widget).view().screenBounds();
-        if (bounds.width > 0 && bounds.height > 0) {
-            int const x = bounds.x + (bounds.width / 2);
-            int const y = bounds.y + (bounds.height / 2);
+        auto const column = WidgetBase::of(across).view().screenBounds();
+        auto const line = WidgetBase::of(along).view().screenBounds();
+        if (column.width > 0 && line.height > 0) {
+            int const x = column.x + (column.width / 2);
+            int const y = line.y + (line.height / 2);
             send(core::tui::MouseEvent{.type = Type::Press, .button = 0, .x = x + 1, .y = y + 1});
             send(core::tui::MouseEvent{.type = Type::Release, .button = 0, .x = x + 1, .y = y + 1});
         }

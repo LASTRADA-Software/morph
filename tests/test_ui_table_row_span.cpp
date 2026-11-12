@@ -3,6 +3,7 @@
 // A table row's spans (`TableRowView::spans`): what the mount resolves and tells the widget, as the recording backend
 // shows it, and the document's `rowSpans`.
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -56,7 +57,15 @@ struct Fixture {
         std::vector<ui::TableColumn> columns{{.label = "A"}, {.label = "B"}, {.label = "C"}};
         columns.front().sortable = sortable;
         return ui::table<Line>(
-            std::move(columns), [this] { return lines.get(); }, [](Line const& line) { return ui::Key{line.id}; },
+            std::move(columns),
+            [this] {
+                std::vector<Line> rows = lines.get();
+                if (sort.get().has_value()) {
+                    std::ranges::reverse(rows);  // a sort reorders the rows in the same batch as it changes
+                }
+                return rows;
+            },
+            [](Line const& line) { return ui::Key{line.id}; },
             [](Signal<Line> const& line) {
                 std::size_t const count = line.peek().heading ? 1 : 3;
                 std::vector<ui::Node> cells;
@@ -165,6 +174,31 @@ TEST_CASE("row spans: a sorted table draws no spans, silently, and has them back
     fixture.sort.set(std::nullopt);
     fixture.owner.runAll();
     CHECK(fixture.spansOf(1) == "0:3");
+}
+
+// Mutation: resolve the spans in an Effect of their own for the sort (it runs against the rows' old order and reports
+// a run past the last row that no row's final place has).
+TEST_CASE("row spans: a sort that reorders the rows is never reported as a span overrun, engaging or clearing it",
+          "[ui][table]") {
+    Fixture fixture{three()};
+    ui::Mounted const mounted{fixture.runtime, fixture.backend, fixture.view(true)};
+    CHECK(fixture.spansOf(1) == "0:3");
+    // Engaged: the spanning row lands last, where a resolve with the sort not yet seen would find it overrunning.
+    fixture.sort.set(ui::TableSort{.column = 0, .direction = ui::SortDirection::Descending});
+    fixture.owner.runAll();
+    CHECK(fixture.spansOf(1) == "none");
+    CHECK(fixture.probe.count(site::kRowSpanOverrun) == 0);
+    // Cleared: the rows are back in order at once, and the spans with them.
+    fixture.sort.set(std::nullopt);
+    fixture.owner.runAll();
+    CHECK(fixture.spansOf(1) == "0:3");
+    CHECK(fixture.probe.count(site::kRowSpanOverrun) == 0);
+    // Engaged and cleared again in one batch of the owner's turns.
+    fixture.sort.set(ui::TableSort{.column = 0, .direction = ui::SortDirection::Ascending});
+    fixture.sort.set(std::nullopt);
+    fixture.owner.runAll();
+    CHECK(fixture.spansOf(1) == "0:3");
+    CHECK(fixture.probe.count(site::kRowSpanOverrun) == 0);
 }
 
 // Mutation: leave the threshold out of the resolve (a virtualized table keeps its spans).

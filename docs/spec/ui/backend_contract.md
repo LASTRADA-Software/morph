@@ -788,8 +788,9 @@ Each case is named by the rule it checks:
 55. In a table of three rows whose first row spans its first column down all three, that cell's top is the first
     row's other cell's top and its bottom the last row's other cell's bottom, to a unit, and the second row's cell in
     that column has no bounds.
-56. In that table a click on the spanning cell selects the first row's key, though the click lands on the second
-    row's line.
+56. In that table, with the spanning column's cells placed at the top of their rows, a click in the spanning cell's
+    column at the third row's line, below the cell's content, selects the first row's key: a click anywhere on the
+    span's height is a click on the span.
 
 ### What the probe cannot reach
 

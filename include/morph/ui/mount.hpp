@@ -148,6 +148,9 @@ struct KeyedRow;
 /// @brief What a table is told around each pass that changes its rows: before it starts, and after it has brought the
 ///        rows into the snapshot's order, with the rows in their container's order.
 struct RowsObserver {
+    /// @brief Called inside the rows Effect, tracked, before each pass: what it reads re-runs the pass, so a change
+    ///        that arrives with a change of rows is seen in the same run, never in an Effect of its own.
+    std::function<void()> track;
     /// @brief Called before a pass that mounts, moves or removes rows.
     std::function<void()> begin;
     /// @brief Called after the pass, with the table's rows: realized rows first, in the container's order.
@@ -1614,20 +1617,20 @@ private:
             bind(scope, spec.selectAllLabel, [&widget](std::string const& label) { widget.setSelectAllLabel(label); });
         }
         widget.setOnActivate(event(spec.onActivate));
-        if (std::ranges::any_of(spec.columns, &TableColumn::sortable)) {
-            bind(scope, spec.sort, [&widget](std::optional<TableSort> const& sort) { widget.setSort(sort); });
+        bool const sortable = std::ranges::any_of(spec.columns, &TableColumn::sortable);
+        reactive::Computed<std::optional<TableSort>>* sortValue = nullptr;
+        if (sortable) {
+            sortValue =
+                bind(scope, spec.sort, [&widget](std::optional<TableSort> const& sort) { widget.setSort(sort); });
             widget.setOnSort(event(spec.onSort));
         }
         auto& spans = scope.make<SpanTable>();
         spans.columns = spec.columns.size();
         spans.threshold = spec.virtualize.threshold;
-        if (std::ranges::any_of(spec.columns, &TableColumn::sortable)) {
-            // The sort counts where it is wired: a table with no sortable column shows no sort.
-            bind(scope, spec.sort, [this, &widget, &spans](std::optional<TableSort> const& sort) {
-                spans.sorted = sort.has_value();
-                resolveSpans(widget, spans);
-            });
-        }
+        // The sort counts where it is wired: a table with no sortable column shows no sort. It is read inside the
+        // rows Effect, not in an Effect of its own: a sort change arrives together with the rows' new order, and two
+        // Effects would resolve the spans in either order, one of them against the wrong rows.
+        spans.sorted = sortable && sortValue == nullptr && spec.sort.constant().has_value();
         mountRows(
             scope, spec.rows, widget,
             [this, &widget, &spans](reactive::Scope& rowScope, Node const& node, Widget& rowWidget, Key const& key) {
@@ -1659,6 +1662,12 @@ private:
             },
             &spec.virtualize,
             RowsObserver{
+                .track =
+                    [&spans, sortValue] {
+                        if (sortValue != nullptr) {
+                            spans.sorted = sortValue->get().has_value();
+                        }
+                    },
                 .begin = [&spans] { ++spans.reconciling; },
                 .end =
                     [this, &widget, &spans](std::vector<KeyedRow> const& rows) {
@@ -1739,9 +1748,12 @@ private:
         };
         scope.effect([this, &session, &rows, &container, &range, threshold = virtualize->threshold,
                       overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay,
-                      around] {
+                      around, track = observer.track] {
             std::vector<Key> const keys = session.pull();  // tracked: the rows are this Effect's only source
-            VisibleRange const window = range.peek();      // untracked: a scroll alone must not re-run this Effect
+            if (track) {
+                track();
+            }
+            VisibleRange const window = range.peek();  // untracked: a scroll alone must not re-run this Effect
             around([&] {
                 underOverlay(overlay, [&] {
                     _rt->untracked([&] {

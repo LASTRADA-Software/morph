@@ -252,8 +252,9 @@ void TableImpl::planSpans(ItemBase const* leaving) {
         if (QQuickItem* const rowItem = row.item(); rowItem != nullptr) {
             rowItem->setZ(origin ? static_cast<qreal>(rows.size() - index) : 0.0);
         }
-        for (auto const [column, cell] : std::views::enumerate(row.children())) {
-            cell->cover(covered.at(index).at(static_cast<std::size_t>(column)));
+        auto const& cells = row.children();
+        for (std::size_t column = 0; column < cells.size(); ++column) {
+            cells.at(column)->cover(covered.at(index).at(column));
         }
     }
     _planned = any;

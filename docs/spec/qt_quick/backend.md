@@ -318,13 +318,15 @@ rows that remain) names the cell, and the table gives the row `spanBlocks` (`[{c
 `implicitHeight` of the rows the cell covers) and the last covered row a `spanExtra`, the lines the cell needs
 beyond them, which that row's `placeOnce` adds; both are worked out at table level (`recomputeSpans`, once per event
 loop turn, from the rows' `ownHeight`), as no row can see another's, and the cell's height never feeds back into a
-row's own. The origin row is drawn above every row below it (C++ writes `z` as the count of rows from it to the end),
-so the cell lies over the rows it covers, also when a covered row is itself an origin in another column. Under the
+row's own. The cell is not drawn in a layer of the table above the rows: it stays a child of its origin row, so its
+focus, its accessible node and its key handling are the row's, and the row is drawn above every row below it (C++
+writes `z` as the count of rows from it to the end), so the cell lies over the rows it covers, also when a covered row
+is itself an origin in another column. Under the
 cell, in its column, the row has a `spanBackdrop`: `scheme.surface` first, which hides the covered rows' rules, then a
 second instance of the `tableRow` part's `background` component (a restyle is instantiated once more per spanning
 cell), laid out as wide as the row and cut to the column so the row's own marks fall where they do on the row, and
 given the origin row's tone, stripe, selected, hover and current state; its rule is thus the block's foot. The backdrop
-has a `TapHandler` and a `HoverHandler` of its own, since a point below the origin row's bounds reaches the covered
+has a `TapHandler` and a blocking `HoverHandler` of its own, since a point below the origin row's bounds reaches the covered
 row's handlers otherwise; its tap is the origin row's tap (`MorphTableRow.tapped`), and a row ignores a tap that
 lands in a spanning or a covered column. A covered cell is hidden by `ItemBase::cover`, a flag kept apart from the
 cell's own visibility (`ownVisible() && !covered`, so uncovering restores what the mount set and never shows a cell the

@@ -110,10 +110,15 @@ public:
     /// @param widget The button.
     virtual void click(Widget& widget) = 0;
 
-    /// @brief Clicks a widget at the middle of what it covers, as a user pointing at its centre would. The default is
-    ///        `click`, for a backend whose click already lands there.
-    /// @param widget The widget.
-    virtual void clickCentre(Widget& widget) { click(widget); }
+    /// @brief Clicks at the horizontal middle of one widget and the vertical middle of another, as a user pointing
+    ///        at a place that no single widget marks would: the column of @p across, the line of @p along. The
+    ///        default is `click` on @p across, for a backend that reads no geometry.
+    /// @param across The widget whose horizontal middle is clicked.
+    /// @param along The widget whose vertical middle is clicked.
+    virtual void clickAt(Widget& across, Widget& along) {
+        static_cast<void>(along);
+        click(across);
+    }
 
     /// @brief Replaces a text field's text as a user typing would: whatever the field held is cleared first (select
     ///        all, or delete), so it ends up holding exactly @p text. `onChange` may see intermediate texts.
@@ -2410,16 +2415,18 @@ struct Measured {
 }
 
 /// @brief A table of three rows of two columns whose first row's first cell spans all three rows: the first column
-///        stretches its cells down their rows, and every cell is a container, which fills its column.
+///        places its cells down their rows by @p valign, and every cell is a container, which fills its column.
 /// @param rows      The rows' keys, one per row, in order.
+/// @param valign    How the first column places its cells down their rows.
 /// @param options   The table's options.
 /// @return The table.
-[[nodiscard]] inline Node spanTable(reactive::Signal<std::vector<Entry>> const& rows, TableOptions options = {}) {
+[[nodiscard]] inline Node spanTable(reactive::Signal<std::vector<Entry>> const& rows, Align valign,
+                                    TableOptions options = {}) {
     auto const filled = [](std::string text) {
         return ui::column({.children = {ui::text({.text = std::move(text)})}});
     };
     return insideColumn(ui::table<Entry>(
-        {{.label = "Span", .width = Sizing::fixed(10), .valign = Align::Stretch},
+        {{.label = "Span", .width = Sizing::fixed(10), .valign = valign},
          {.label = "Text", .width = Sizing::fixed(20)}},
         [&rows] { return rows.get(); }, [](Entry const& entry) { return Key{entry.id}; },
         std::function<TableRowView(reactive::Signal<Entry> const&)>{[filled](reactive::Signal<Entry> const& entry) {
@@ -2433,14 +2440,13 @@ struct Measured {
 }
 
 /// @brief Case: a table cell that spans three rows is drawn over all three: it starts at or above the first row's
-/// other
-///        cell and reaches at or below the third row's.
+///        other cell and reaches at or below the third row's, and the second row's cell in its column has no bounds.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> spanningCellCoversItsRows(ConformanceProbe& probe) {
     reactive::Signal<std::vector<Entry>> const rows{
         probe.runtime(), {{.id = 1, .label = "a"}, {.id = 2, .label = "b"}, {.id = 3, .label = "c"}}};
-    Mounted const view{probe.runtime(), probe.backend(), spanTable(rows)};
+    Mounted const view{probe.runtime(), probe.backend(), spanTable(rows, Align::Stretch)};
     probe.settle();
     Checks checks;
     Geometry geometry{probe, checks};
@@ -2448,10 +2454,16 @@ struct Measured {
     std::vector<Widget*> const first = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 0);
     std::vector<Widget*> const last = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 2);
     checks.that(first.size() == 2 && last.size() == 2, "the table holds a row of two cells at its first and third");
-    if (first.size() == 2 && last.size() == 2) {
+    std::vector<Widget*> const second = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 1);
+    checks.that(second.size() == 2, "the table holds a row of two cells at its second");
+    if (first.size() == 2 && second.size() == 2 && last.size() == 2) {
         WidgetBounds const spanning = geometry.of(*first.front());
         WidgetBounds const top = geometry.of(*first.back());
         WidgetBounds const bottom = geometry.of(*last.back());
+        WidgetBounds const covered = geometry.of(*second.front());
+        checks.that(covered.width <= 0 || covered.height <= 0,
+                    "the covered cell has no bounds: " + std::to_string(covered.width) + " by " +
+                        std::to_string(covered.height));
         checks.that(spanning.y <= top.y + 1.0, "the spanning cell starts at the first row's other cell: " +
                                                    std::to_string(spanning.y) + " against " + std::to_string(top.y));
         checks.that(spanning.y + spanning.height >= bottom.y + bottom.height - 1.0,
@@ -2462,8 +2474,9 @@ struct Measured {
     return checks.result();
 }
 
-/// @brief Case: a click in the part of a spanning cell that lies over a covered row selects the row that gives the
-///        span, not the covered one.
+/// @brief Case: a click anywhere on a spanning cell's height selects the row that gives the span, not the covered
+///        one: also on a line the cell's content does not reach. The cell is placed at the top of its block, and the
+///        click lands on the third row's line, below it.
 /// @param probe The backend under test.
 /// @return `nullopt`, or what went wrong.
 [[nodiscard]] inline std::optional<std::string> clickOnSpanningCellSelectsItsRow(ConformanceProbe& probe) {
@@ -2471,21 +2484,25 @@ struct Measured {
         probe.runtime(), {{.id = 1, .label = "a"}, {.id = 2, .label = "b"}, {.id = 3, .label = "c"}}};
     std::vector<Key> reported;
     Mounted const view{probe.runtime(), probe.backend(),
-                       spanTable(rows, {.selectionMode = SelectionMode::Single,
-                                        .onSelectionChange = [&reported](std::vector<Key> keys, SelectionChange) {
-                                            reported = std::move(keys);
-                                        }})};
+                       spanTable(rows, Align::Start,
+                                 {.selectionMode = SelectionMode::Single,
+                                  .onSelectionChange = [&reported](std::vector<Key> keys, SelectionChange) {
+                                      reported = std::move(keys);
+                                  }})};
     probe.settle();
     Checks checks;
     Widget const* const table = probe.childAt(rootContainer(view), 0);
     std::vector<Widget*> const first = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 0);
     checks.that(first.size() == 2, "the table holds a row of two cells at its first");
+    std::vector<Widget*> const last = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 2);
+    checks.that(last.size() == 2, "the table holds a row of two cells at its third");
     // A click reaches the cell where it is drawn, so a probe that reads no geometry has nothing to click.
     Geometry geometry{probe, checks};
-    if (first.size() == 2 && geometry.of(*first.front()).height > 0) {
-        probe.clickCentre(*first.front());
+    if (first.size() == 2 && last.size() == 2 && geometry.of(*first.front()).height > 0) {
+        probe.clickAt(*first.front(), *last.back());
         probe.settle();
-        checks.text("the keys reported after a click on the middle of the spanning cell", "1", keyTexts(reported));
+        checks.text("the keys reported after a click on the spanning cell's column at the third row's line", "1",
+                    keyTexts(reported));
     }
     return checks.result();
 }

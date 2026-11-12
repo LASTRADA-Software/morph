@@ -390,6 +390,7 @@ MorphWidget {
             }
             HoverHandler {
                 id: backdropHover
+                blocking: true  // the covered row under the pointer is not hovered as well
                 onHoveredChanged: root.spanHovered = backdropHover.hovered
             }
             TapHandler {

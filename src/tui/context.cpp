@@ -21,6 +21,7 @@ WidgetBase* Context::ownerOf(::core::tui::Component const* view) const {
 void Context::forget(WidgetBase& widget) {
     std::erase(roots, &widget);
     std::erase(popups, &widget);
+    std::erase(spanTables, &widget);
     if (pressed == &widget) {
         pressed = nullptr;
     }

@@ -90,6 +90,13 @@ public:
     void clickWith(::core::tui::Point cell, ::core::tui::Modifier modifiers) override;
     [[nodiscard]] bool wheel(int delta) override;
 
+    /// Works out which cells span and which are covered from the shown rows' order and their spans, clipping a span
+    /// that runs past the last row or onto a heading, lifts the spanning cells into the table's view and hides the
+    /// covered ones, and finds the lines a spanning cell needs beyond the rows it covers.
+    /// Runs before every frame's layout, as well as in the frame, so the table is sized by rows that already
+    /// lack their lifted cells.
+    void planSpans();
+
 protected:
     void childForgotten(WidgetBase& child) override;
 
@@ -102,15 +109,13 @@ private:
         std::size_t first = 0;  ///< The origin's place among the shown rows.
         std::size_t last = 0;   ///< The last covered row's place.
     };
-    /// Works out which cells span and which are covered from the shown rows' order and their spans, clipping a span
-    /// that runs past the last row or onto a heading, lifts the spanning cells into the table's view and hides the
-    /// covered ones, and finds the lines a spanning cell needs beyond the rows it covers.
-    void planSpans();
     /// The lines of @p row: its natural height, a line at least, and what a spanning cell it ends needs besides.
     [[nodiscard]] int heightOf(WidgetBase const& row) const;
     /// The area of each spanning cell for a table of @p size: the lines of the rows it covers, clipped to those
-    /// shown, and its column's cells; empty while none shows.
-    [[nodiscard]] std::vector<::core::tui::Rect> spanAreas(::core::tui::Size size) const;
+    /// shown, and its column's cells, placed down them by the column's `valign`; empty while none shows. With
+    /// @p blocks, those lines and cells before the placement: where a click selects the cell's origin row.
+    [[nodiscard]] std::vector<::core::tui::Rect> spanAreas(::core::tui::Size size,
+                                                           std::vector<::core::tui::Rect>* blocks = nullptr) const;
     /// The origin row of the spanning cell at @p cell, or null.
     [[nodiscard]] WidgetBase* spanOriginAt(::core::tui::Point cell) const;
     /// The cells before the first column: the marks, and the select column's box when it is drawn.

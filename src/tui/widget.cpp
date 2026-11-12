@@ -25,6 +25,7 @@
 #include "tui/display_widgets.hpp"
 #include "tui/drag.hpp"
 #include "tui/layout.hpp"
+#include "tui/table_widget.hpp"
 
 namespace morph::tui::detail {
 
@@ -1065,6 +1066,11 @@ void fit(Context& context) {
     auto& screen = *context.screen;
     if (context.pressed != nullptr && screen.pointerCapture() != &context.pressed->view()) {
         context.endPress();
+    }
+    // Before any size is asked: what a span lifts or covers decides its table's rows' heights. Planning may drop the
+    // table from the list, so the loop walks a copy.
+    for (auto* const table : std::vector<WidgetBase*>{context.spanTables}) {
+        static_cast<TableImpl*>(table)->planSpans();
     }
     // Several roots share the screen as a column, in the order they were made: each takes the height it asks for,
     // and the last shown one what is left. A single root takes the whole screen.

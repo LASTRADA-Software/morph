@@ -114,6 +114,9 @@ void TableImpl::setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spa
         _spans.erase(&base);
     } else {
         _spans.insert_or_assign(&base, spans);
+        if (std::ranges::find(context().spanTables, this) == context().spanTables.end()) {
+            context().spanTables.push_back(this);
+        }
     }
     refresh();
 }
@@ -126,6 +129,10 @@ int TableImpl::heightOf(WidgetBase const& row) const {
 // The rows' order decides coverage, so it is worked out here, from the rows as they are, and never when a row is told
 // its spans: rows moving under an unchanged span change what is covered.
 void TableImpl::planSpans() {
+    if (_spans.empty() && _plan.empty()) {
+        std::erase(context().spanTables, this);
+        return;  // nothing spans and nothing is lifted: every cell is in its row already
+    }
     auto const rows = shownChildren();
     auto const cellsOf = [](WidgetBase* row) {
         auto* const stack = dynamic_cast<ContainerBase*>(row);
@@ -212,8 +219,12 @@ void TableImpl::planSpans() {
     }
 }
 
-std::vector<::core::tui::Rect> TableImpl::spanAreas(::core::tui::Size size) const {
+std::vector<::core::tui::Rect> TableImpl::spanAreas(::core::tui::Size size,
+                                                    std::vector<::core::tui::Rect>* blocks) const {
     std::vector<::core::tui::Rect> areas(_plan.size());
+    std::vector<::core::tui::Rect> unused;
+    std::vector<::core::tui::Rect>& block = blocks != nullptr ? *blocks : unused;
+    block.assign(_plan.size(), {});
     auto const rows = shownChildren();
     auto const widths = columnWidths(size.width);
     int const header = _showHeader ? 1 : 0;
@@ -230,7 +241,7 @@ std::vector<::core::tui::Rect> TableImpl::spanAreas(::core::tui::Size size) cons
         line -= heightOf(*rows.at(index - 1));
         start.at(index - 1) = line;
     }
-    for (auto const [place, area] : std::views::zip(_plan, areas)) {
+    for (auto const [place, area, lines] : std::views::zip(_plan, areas, block)) {
         if (place.column >= widths.size() || place.last >= rows.size()) {
             continue;
         }
@@ -251,14 +262,19 @@ std::vector<::core::tui::Rect> TableImpl::spanAreas(::core::tui::Size size) cons
                 .y = top + alignedOffset(down, height, space),
                 .width = widths.at(place.column),
                 .height = height};
+        lines = {.x = left, .y = top, .width = widths.at(place.column), .height = space};
     }
     return areas;
 }
 
 WidgetBase* TableImpl::spanOriginAt(::core::tui::Point cell) const {
-    for (auto const [place, area] : std::views::zip(_plan, spanAreas(_size))) {
-        if (!area.empty() && cell.x >= area.x && cell.x < area.x + area.width && cell.y >= area.y &&
-            cell.y < area.y + area.height) {
+    // The whole block the cell stands for, not the part its content is drawn on: a click on a blank line of it, under
+    // a centred or top-aligned cell, is still a click on the span.
+    std::vector<::core::tui::Rect> blocks;
+    static_cast<void>(spanAreas(_size, &blocks));
+    for (auto const [place, block] : std::views::zip(_plan, blocks)) {
+        if (!block.empty() && cell.x >= block.x && cell.x < block.x + block.width && cell.y >= block.y &&
+            cell.y < block.y + block.height) {
             return place.origin;
         }
     }
