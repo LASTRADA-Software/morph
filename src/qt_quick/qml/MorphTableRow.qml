@@ -13,9 +13,9 @@ import QtQuick.Layouts
 // A cell that spans (`spanPlan`, written by C++) covers the rows below its own. It stays a cell of this row, left out
 // of the row's height, and is placed down the `spanBlocks` height the table gives it; the row is drawn above the rows
 // it covers (C++ sets `z`), and under the cell sits a `spanBackdrop` in the column: an opaque surface with this row's
-// background, the look of the row over the whole block, and a tap and hover handler of its own, since the block lies
-// outside the row's bounds, which the row's handlers would not reach. A row ignores a tap in a spanning or covered
-// column: the backdrop took it.
+// background, the look of the row over the whole block, and a tap handler of its own, since the block lies outside
+// the row's bounds, which the row's handlers would not reach. Hover is the row's own: its `containmentMask` takes in
+// the blocks. A row ignores a tap in a spanning or covered column: the backdrop took it.
 MorphWidget {
     id: root
 
@@ -35,7 +35,7 @@ MorphWidget {
     // What draws under the cells: MorphTableRowBackground, or the `tableRow` restyle. C++ sets it when it makes the
     // row, and the row hands its state to the instance.
     property Component background: null
-    readonly property bool hovered: rowHover.hovered || root.spanHovered
+    readonly property bool hovered: rowHover.hovered
     readonly property bool current: root.holdsFocus(Window.activeFocusItem)
     onCurrentChanged: {
         if (current && root.table)
@@ -55,8 +55,6 @@ MorphWidget {
     property var coveredColumns: []
     property var spanBlocks: []
     property real spanExtra: 0
-    // Whether the pointer is over a spanning cell's backdrop.
-    property bool spanHovered: false
     // The height of the row's own cells and background, without what a spanning cell adds.
     readonly property real ownHeight: Math.max(cells.implicitHeight,
                                                root.backgroundItem ? root.backgroundItem.implicitHeight : 0)
@@ -328,6 +326,22 @@ MorphWidget {
         id: rowHover
     }
 
+    // Hover is delivered only to an item whose bounds hold the pointer, so the part of a spanning cell below the row
+    // is part of the row for it: the row's own rectangle and the blocks of its spanning cells.
+    containmentMask: QtObject {
+        function contains(point: point): bool {
+            if (point.x >= 0 && point.x < root.width && point.y >= 0 && point.y < root.height)
+                return true
+            for (const span of root.spanPlan) {
+                const left = root.columnLeft(span.column)
+                if (span.column < root.widths.length && point.x >= left && point.x < left + root.widths[span.column] &&
+                        point.y >= 0 && point.y < root.blockHeight(span.column))
+                    return true
+            }
+            return false
+        }
+    }
+
     Repeater {
         model: root.spanPlan
         delegate: Item {
@@ -387,11 +401,6 @@ MorphWidget {
                 property: "selectColumn"
                 value: root.table ? root.table.selectColumn : false
                 when: spanLoader.item !== null && ("selectColumn" in spanLoader.item)
-            }
-            HoverHandler {
-                id: backdropHover
-                blocking: true  // the covered row under the pointer is not hovered as well
-                onHoveredChanged: root.spanHovered = backdropHover.hovered
             }
             TapHandler {
                 onTapped: root.tapped(point.modifiers, tapCount, point.position.x + backdrop.x,

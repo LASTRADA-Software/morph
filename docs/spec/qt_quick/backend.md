@@ -326,9 +326,11 @@ cell, in its column, the row has a `spanBackdrop`: `scheme.surface` first, which
 second instance of the `tableRow` part's `background` component (a restyle is instantiated once more per spanning
 cell), laid out as wide as the row and cut to the column so the row's own marks fall where they do on the row, and
 given the origin row's tone, stripe, selected, hover and current state; its rule is thus the block's foot. The backdrop
-has a `TapHandler` and a blocking `HoverHandler` of its own, since a point below the origin row's bounds reaches the covered
-row's handlers otherwise; its tap is the origin row's tap (`MorphTableRow.tapped`), and a row ignores a tap that
-lands in a spanning or a covered column. A covered cell is hidden by `ItemBase::cover`, a flag kept apart from the
+has a `TapHandler` of its own, since a point below the origin row's bounds does not reach the row's handlers; its tap
+is the origin row's tap (`MorphTableRow.tapped`), and a row ignores a tap that lands in a spanning or a covered column.
+Hover is delivered only to an item whose bounds hold the pointer, so the row's `containmentMask` takes in the blocks of
+its spanning cells beside its own rectangle: the row's `HoverHandler` is then hovered over any part of the cell, and
+the covered row under the pointer is not, as the origin row is raised above it. A covered cell is hidden by `ItemBase::cover`, a flag kept apart from the
 cell's own visibility (`ownVisible() && !covered`, so uncovering restores what the mount set and never shows a cell the
 document hid): it takes no focus and no tap, has no accessible node, and is left out of `widestCell` and the column
 caches as a hidden cell is. `Accessible` has no cell extent, so assistive technology reads the cell in its origin

@@ -15,6 +15,7 @@ namespace morph::tui::detail {
 
 class ContainerBase;
 class DragController;
+class TableImpl;
 class WidgetBase;
 
 /// Which way keyboard focus moves.
@@ -55,7 +56,7 @@ struct Context {
     std::vector<WidgetBase*> popups;
     /// Tables holding row spans (or cells they lifted), whose spans `fit` plans before any size is asked: a lifted
     /// cell leaves its row's natural height, and the table is sized by its rows.
-    std::vector<WidgetBase*> spanTables;
+    std::vector<TableImpl*> spanTables;
     /// The clock every widget reads the time from (a table telling a double click from two clicks); a test may
     /// replace it.
     std::function<std::chrono::steady_clock::time_point()> now = [] { return std::chrono::steady_clock::now(); };

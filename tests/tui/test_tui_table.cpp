@@ -1130,6 +1130,25 @@ TEST_CASE("tui table: a click on a spanning cell, on a line of a covered row, se
     CHECK(selections.back() == std::vector<ui::Key>{key(2)});
 }
 
+// Mutation: leave the plan alone when a row goes (the click reads the removed origin row's freed spanning cell, and
+// selects the freed row; ASan reports it).
+TEST_CASE("tui table: a click between removing a span's origin row and the next draw selects the row under it",
+          "[tui][table][span]") {
+    Harness harness{30, 6};
+    Fruit fruit{harness, ui::SelectionMode::Single};
+    fruit.addRow(harness, key(3), "plum", "7");
+    fruit.addRow(harness, key(4), "pear", "9");
+    std::vector<std::vector<ui::Key>> selections;
+    fruit.table->setOnSelectionChange(
+        [&](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) { selections.push_back(std::move(keys)); });
+    fruit.table->setRowSpans(*fruit.rows.at(0), {{.column = 0, .rows = 3}});
+    static_cast<void>(harness.draw());
+    fruit.removeRow(0);
+    // No draw has run: the rows are kiwi, plum and pear on lines 1 to 3, and line 3 in the first column is pear's.
+    CHECK(harness.click({.x = 4, .y = 3}) == EventResult::Handled);
+    CHECK(selections == std::vector<std::vector<ui::Key>>{{key(4)}});
+}
+
 // Mutation: place the spanning cell without the table's clip (it draws above the header, or not at all).
 TEST_CASE("tui table: a span whose origin row has scrolled off the top still shows its text on the covered lines",
           "[tui][table][span]") {

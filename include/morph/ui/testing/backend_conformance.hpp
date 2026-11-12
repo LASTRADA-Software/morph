@@ -2496,13 +2496,18 @@ struct Measured {
     checks.that(first.size() == 2, "the table holds a row of two cells at its first");
     std::vector<Widget*> const last = table == nullptr ? std::vector<Widget*>{} : rowCells(probe, *table, 2);
     checks.that(last.size() == 2, "the table holds a row of two cells at its third");
-    // A click reaches the cell where it is drawn, so a probe that reads no geometry has nothing to click.
+    // A click reaches the cell where it is drawn, so a spanning cell with no bounds is a failure of its own: skipping
+    // the click would let a frontend that hides the cell pass.
     Geometry geometry{probe, checks};
-    if (first.size() == 2 && last.size() == 2 && geometry.of(*first.front()).height > 0) {
-        probe.clickAt(*first.front(), *last.back());
-        probe.settle();
-        checks.text("the keys reported after a click on the spanning cell's column at the third row's line", "1",
-                    keyTexts(reported));
+    if (first.size() == 2 && last.size() == 2) {
+        bool const drawn = geometry.of(*first.front()).height > 0;
+        checks.that(drawn, "the spanning cell has bounds to click on");
+        if (drawn) {
+            probe.clickAt(*first.front(), *last.back());
+            probe.settle();
+            checks.text("the keys reported after a click on the spanning cell's column at the third row's line", "1",
+                        keyTexts(reported));
+        }
     }
     return checks.result();
 }

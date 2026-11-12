@@ -1628,8 +1628,8 @@ private:
         spans.columns = spec.columns.size();
         spans.threshold = spec.virtualize.threshold;
         // The sort counts where it is wired: a table with no sortable column shows no sort. It is read inside the
-        // rows Effect, not in an Effect of its own: a sort change arrives together with the rows' new order, and two
-        // Effects would resolve the spans in either order, one of them against the wrong rows.
+        // rows Effect, not in an Effect of its own, so that two Effects cannot resolve the spans in either order,
+        // one of them against the wrong rows. A sort bound to a server query can still clear before the rows reorder.
         spans.sorted = sortable && sortValue == nullptr && spec.sort.constant().has_value();
         mountRows(
             scope, spec.rows, widget,
@@ -1749,7 +1749,8 @@ private:
         scope.effect([this, &session, &rows, &container, &range, threshold = virtualize->threshold,
                       overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay,
                       around, track = observer.track] {
-            std::vector<Key> const keys = session.pull();  // tracked: the rows are this Effect's only source
+            // tracked: the rows are one source, and the sort that `track` reads is the other
+            std::vector<Key> const keys = session.pull();
             if (track) {
                 track();
             }

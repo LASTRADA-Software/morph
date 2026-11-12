@@ -368,6 +368,9 @@ void TableImpl::childForgotten(WidgetBase& child) {
     _headings.erase(&child);
     _spans.erase(&child);
     _extraLines.erase(&child);
+    // The plan points at rows and at the cells lifted out of them, and is rebuilt only by the next fit: until then a
+    // click would hit-test a block of a row that is gone, and read its freed cell.
+    _plan.clear();
     if (_lastClick.row == &child) {
         _lastClick = {};
     }

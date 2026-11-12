@@ -1774,3 +1774,29 @@ TEST_CASE(
     REQUIRE(reported.size() == 2);
     CHECK(reported.back() == std::vector<ui::Key>{ui::Key{1}, ui::Key{2}});
 }
+
+// Mutation: leave the backdrop's HoverHandler out (the origin row is not hovered over the part of its cell below its
+// bounds), or let it not block (the covered row is hovered as well).
+TEST_CASE("qt_quick table: hovering the part of a spanning cell over a covered row hovers the row that gives the span",
+          "[qt_quick][span]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{1}, ui::Key{2}, ui::Key{3}}, ui::SelectionMode::Single);
+    table.table->setRowSpans(*table.rows.at(0), {{.column = 0, .rows = 3}});
+    scene.settle();
+    QQuickItem& origin = Scene::itemOf(*table.rows.at(0));
+    QQuickItem& covered = Scene::itemOf(*table.rows.at(1));
+    // Away from the table's rows, nothing is hovered.
+    QTest::mouseMove(&scene.window(), QPoint{1, 1});
+    scene.settle();
+    CHECK_FALSE(origin.property("hovered").toBool());
+    // The cell's centre lies over the second row, below the origin row's own bounds.
+    QTest::mouseMove(&scene.window(), Scene::centreOf(Scene::itemOf(*table.cells.at(0))));
+    scene.settle();
+    CHECK(origin.property("hovered").toBool());
+    CHECK_FALSE(covered.property("hovered").toBool());
+    // Beside the span, the covered row is the hovered one.
+    QTest::mouseMove(&scene.window(), Scene::centreOf(Scene::itemOf(*table.cells.at(3))));
+    scene.settle();
+    CHECK_FALSE(origin.property("hovered").toBool());
+    CHECK(covered.property("hovered").toBool());
+}

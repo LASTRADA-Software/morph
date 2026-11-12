@@ -1069,8 +1069,8 @@ void fit(Context& context) {
     }
     // Before any size is asked: what a span lifts or covers decides its table's rows' heights. Planning may drop the
     // table from the list, so the loop walks a copy.
-    for (auto* const table : std::vector<WidgetBase*>{context.spanTables}) {
-        static_cast<TableImpl*>(table)->planSpans();
+    for (auto* const table : std::vector<TableImpl*>{context.spanTables}) {
+        table->planSpans();
     }
     // Several roots share the screen as a column, in the order they were made: each takes the height it asks for,
     // and the last shown one what is left. A single root takes the whole screen.

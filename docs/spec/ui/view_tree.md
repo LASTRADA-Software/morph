@@ -498,9 +498,11 @@ span is a property of the row, not of the cell.
   spans last sent to the widget for each row.
 - A row's `spans` binding, in the row's scope, stores the request in that state. During a reconcile it only marks the
   state dirty; outside one (a row's `spans` changing on its own) it resolves at once.
-- The sort is read by the rows Effect itself, not by an Effect of its own: a sort change arrives together with the
-  rows' new order, and two Effects would resolve against either order. Whether the sort is engaged and the rows'
-  order are therefore always from the same pass.
+- The sort is read by the rows Effect itself, not by an Effect of its own, so two Effects cannot resolve against either
+  order. Whether the sort is engaged and the rows' order come from the same pass when the rows source reorders in the
+  batch that sets the sort (a local sort). A sort bound to state that drives a server query does not: clearing it
+  re-runs the Effect while the rows are still in the sorted order, and the resolve can report one spurious
+  `kRowSpanOverrun` until the rows arrive.
 
 The resolve walks the rows top to bottom, one column at a time, and diffs the result against what was last sent:
 `TableWidget::setRowSpans` is called for each row whose effective spans changed, the last call for a row with an empty
