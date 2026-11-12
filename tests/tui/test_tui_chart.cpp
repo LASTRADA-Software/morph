@@ -180,3 +180,45 @@ TEST_CASE("tui chart: several bars series stand side by side, a gap keeps its se
     CHECK(rows.at(8) == "   " + blocks("█", 5) + std::string(9, ' ') + blocks("█", 10));
     CHECK(rows.at(9) == " █ a  █ b");
 }
+
+// Mutation: put a zero-height bar's cross on the plot's bottom row (extent 0 falling back to cell 0).
+TEST_CASE("tui chart: a marked bar of the baseline's value has its cross and note beside the baseline",
+          "[tui][chart]") {
+    Harness harness{30, 10};
+    auto const chart = harness.make<ChartImpl>(nullptr);
+    ui::ChartData data = bars();
+    data.yMin = -4.0;
+    data.yMax = 4.0;
+    data.series.front().points = {{.x = 0.0, .y = 0.0, .tone = ui::Tone::Err, .note = "z"}, {.x = 1.0, .y = -1.0}};
+    chart->setData(data);
+    Rows const rows = harness.draw();
+    REQUIRE(rows.size() >= 5);
+    // The baseline is on the boundary 9 * 4 / 8 + 1/2 = 5 rows up, so the cross is in cell 5, which is row 4, on the
+    // bar's middle column 8, and its note two columns after the bar's last column 13.
+    CHECK(rows.at(4) == std::string(8, ' ') + "✕" + std::string(6, ' ') + "z");
+}
+
+// Mutation: draw the bars in series order (the taller bar of the later series then hides the shorter one's end block).
+TEST_CASE("tui chart: where two bars share a column the shorter one is in front", "[tui][chart]") {
+    Harness harness{30, 10};
+    auto const chart = harness.make<ChartImpl>(nullptr);
+    ui::ChartData data = bars();
+    // A slot of 0.56 columns gives each of the two series one column; the positions 0 and 0.04 are columns 8 and 9,
+    // so b at the first position and a at the second both stand in column 8.
+    data.barSlot = 0.04;
+    data.series = {{.label = "a",
+                    .joined = false,
+                    .style = ui::ChartStyle::Bars,
+                    .points = {{.x = 0.0, .y = 1.0}, {.x = 0.04, .y = 3.0}}},
+                   {.label = "b",
+                    .joined = false,
+                    .style = ui::ChartStyle::Bars,
+                    .points = {{.x = 0.0, .y = 8.0}, {.x = 0.04, .y = 1.0}}}};
+    chart->setData(data);
+    Rows const rows = harness.draw();
+    REQUIRE(rows.size() == 10);
+    // The legend takes a row, so the plot is nine rows: 3 is 28 eighths (three cells and a half block), 8 is 68.
+    CHECK(rows.at(5) == std::string(8, ' ') + "▄");
+    CHECK(rows.at(6) == std::string(8, ' ') + "█");
+    CHECK(rows.at(7) == std::string(7, ' ') + "▄█▄");
+}

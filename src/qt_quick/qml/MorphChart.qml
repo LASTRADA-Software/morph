@@ -2,8 +2,8 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 
-// Points or bars against a numeric axis, with horizontal reference lines, painted on one Canvas from the ChartData the C++
-// widget writes as `chart`. Every text arrives formatted; only positions are computed here. The axis labels (the
+// Points or bars against a numeric axis, with horizontal reference lines, painted on one Canvas from the ChartData the
+// C++ widget writes as `chart`. Every text arrives formatted; only positions are computed here. The axis labels (the
 // reference lines' when three or more label the axis, else the ticks) sit in a gutter at the left, the points' labels
 // in a row below the plot, and the legend below that when there are two or more series. A series is told apart by
 // its shape as well as its colour, a marked point by a cross no series uses, and a clipped point by an open triangle
@@ -153,7 +153,8 @@ MorphWidget {
             const groupWidth = Math.max(barSeries.length, 0.8 * data.barSlot * (right - left) / xSpan)
             const barWidth = groupWidth / Math.max(1, barSeries.length)
             // A bar's centre and its tip's side: up for a value above the baseline or beyond the upper end.
-            const barCentre = (index, point) => px(point.x) - groupWidth / 2 + (barSeries.indexOf(index) + 0.5) * barWidth
+            const barCentre = (index, point) =>
+                px(point.x) - groupWidth / 2 + (barSeries.indexOf(index) + 0.5) * barWidth
             const barUp = point => point.clip === 2 || (point.clip === 0 && point.y >= baseline)
             const bars = []
             for (const index of barSeries) {

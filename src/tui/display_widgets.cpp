@@ -830,7 +830,9 @@ ChartImpl::BarLayout ChartImpl::barLayout(::core::tui::Theme const& theme, Plot 
         ui::ChartPoint const& point = *bar.point;
         ::core::tui::Style const style =
             point.tone.has_value() ? toneStyle(theme, *point.tone) : seriesStyle(theme, bar.series);
-        bool const up = bar.eighths > 0;
+        // A bar of the baseline's own value has no extent; it counts as upward, as on Qt Quick, unless it is clipped
+        // below.
+        bool const up = bar.eighths > 0 || (bar.eighths == 0 && point.clip != ui::ChartClip::Below);
         int const extent = std::abs(bar.eighths);
         // Cell k counts from the plot's bottom edge.
         auto const rowOfCell = [&](int cell) { return plot.top + rows - 1 - cell; };
@@ -854,12 +856,16 @@ ChartImpl::BarLayout ChartImpl::barLayout(::core::tui::Theme const& theme, Plot 
         }
         int tip = up ? boundary + ((extent - 1) / 8) : boundary - 1 - ((extent - 1) / 8);
         if (extent == 0) {
-            tip = point.clip == ui::ChartClip::Above ? rows - 1 : 0;
+            // The cell beside the baseline, which is where the cross goes; a clipped one is at the axis end.
+            tip = std::clamp(up ? boundary : boundary - 1, 0, rows - 1);
+            if (point.clip != ui::ChartClip::None) {
+                tip = point.clip == ui::ChartClip::Above ? rows - 1 : 0;
+            }
         }
         int const beyond = up ? tip + 1 : tip - 1;
         bool const marked = point.tone.has_value() && point.clip == ui::ChartClip::None;
         int markCell = tip;
-        if (marked && beyond >= 0 && beyond < rows) {
+        if (marked && extent > 0 && beyond >= 0 && beyond < rows) {
             markCell = beyond;
         }
         int const lastColumn = bar.firstColumn + width - 1;
