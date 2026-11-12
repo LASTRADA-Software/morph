@@ -31,6 +31,9 @@ struct ShellBindingOptions {
     ShellModelOptions model;
     /// @brief Opens a screen as a tab: a chosen hit, or the inbox.
     std::function<void(ShellPartsModel::Target const&)> open;
+    /// @brief Opens several hits as tabs, in order, and leaves the first one the active tab (Shift Enter). Empty:
+    ///        Shift Enter opens nothing.
+    std::function<void(std::vector<ShellPartsModel::Target> const&)> openAll;
     /// @brief The person's menu changed the language, after the session took it.
     std::function<void()> localeChosen;
     /// @brief Called each time the switcher's readiness changes, and once at the start.
@@ -40,25 +43,25 @@ struct ShellBindingOptions {
 /// @brief The declared parts of a shell, read and drawn.
 ///
 /// It makes the model, the effects that follow it and the frame's handlers, and takes them away in its destructor.
-/// Neither copyable nor movable; it borrows the session, the app root, the parts and the frame, and must go before
-/// any of them.
+/// Neither copyable nor movable; it keeps its own copy of the parts, and borrows the session, the app root and the
+/// frame, and must go before any of them.
 class ShellPartsBinding {
 public:
     /// @brief The binding.
     /// @param session The session. Borrowed.
     /// @param root    The app root whose queries the parts are. Borrowed.
-    /// @param parts   The parts. Borrowed.
+    /// @param parts   The parts; copied.
     /// @param frame   The frame that draws them. Borrowed.
     /// @param options What it asks of its client.
     ShellPartsBinding(Session& session MORPH_LIFETIMEBOUND, AppRoot& root MORPH_LIFETIMEBOUND,
                       ShellParts const& parts MORPH_LIFETIMEBOUND, ShellFrame& frame MORPH_LIFETIMEBOUND,
                       ShellBindingOptions options)
-        : _session{&session}, _frame{&frame}, _parts{&parts}, _options{std::move(options)} {
+        : _session{&session}, _frame{&frame}, _parts{parts}, _options{std::move(options)} {
         ShellModelOptions modelOptions = _options.model;
         modelOptions.confirmDiscard = [this](std::size_t tabs, std::function<void(bool)> done) {
             ask(tabs, std::move(done));
         };
-        _model = std::make_unique<ShellPartsModel>(session, root, parts, std::move(modelOptions));
+        _model = std::make_unique<ShellPartsModel>(session, root, _parts, std::move(modelOptions));
         ShellPartsModel* const model = _model.get();
         ShellPartsHandlers handlers;
         handlers.onContext = [model](std::size_t index) { model->chooseContext(index); };
@@ -69,10 +72,8 @@ public:
             }
         };
         handlers.onSearchOpenAll = [this, model] {
-            for (ShellPartsModel::Target const& target : model->allHits()) {
-                if (_options.open) {
-                    _options.open(target);
-                }
+            if (_options.openAll) {
+                _options.openAll(model->allHits());
             }
         };
         handlers.onInbox = [this, model] {
@@ -89,7 +90,7 @@ public:
         };
         handlers.onFormat = [model](std::size_t index) { model->chooseFormat(index); };
         _frame->setPartsHandlers(std::move(handlers));
-        if (!parts.modules.empty()) {
+        if (!_parts.modules.empty()) {
             _frame->navigator().setModuleGroups(true);
         }
         reactive::Runtime& runtime = session.runtime();
@@ -124,6 +125,13 @@ public:
         _view.reset();
         _frame->setPartsHandlers({});
         _frame->setParts(ShellPartsView{});
+        if (!_parts.modules.empty()) {
+            Navigator& navigator = _frame->navigator();
+            for (ModuleCount const& declared : _parts.modules) {
+                navigator.setModuleBadge(declared.module, std::nullopt);
+            }
+            navigator.setModuleGroups(false);
+        }
         _model.reset();
     }
 
@@ -166,7 +174,7 @@ private:
                                          ", which the navigator does not list");
             }
         }
-        for (ModuleCount const& declared : _parts->modules) {
+        for (ModuleCount const& declared : _parts.modules) {
             if (!shown.contains(declared.module)) {
                 navigator.setModuleBadge(declared.module, std::nullopt);
             }
@@ -175,7 +183,7 @@ private:
 
     Session* _session;
     ShellFrame* _frame;
-    ShellParts const* _parts;
+    ShellParts _parts;
     ShellBindingOptions _options;
     std::unique_ptr<ShellPartsModel> _model;
     std::set<std::string, std::less<>> _unlisted;

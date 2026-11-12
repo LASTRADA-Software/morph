@@ -1613,22 +1613,18 @@ private:
             refuse("/shell", "`shell` is the shell's parts: context, modules, search, inbox, principal, searchHint");
         }
         checkShellParts(parts);
-        auto reserved = [](std::string const& name) { return name.starts_with("shell"); };
-        for (auto const& model : doc.scope.models) {
-            if (reserved(model.name)) {
-                refuse(model.path, "names beginning `shell` are reserved for the shell's parts");
+        auto const checkNames = [](auto const& declarations) {
+            for (auto const& entry : declarations) {
+                if (shell_names::reserved(entry.name)) {
+                    refuse(entry.path, "`" + entry.name + "` is reserved: the shell's parts declare it");
+                }
             }
-        }
-        for (auto const& state : doc.scope.state) {
-            if (reserved(state.name)) {
-                refuse(state.path, "names beginning `shell` are reserved for the shell's parts");
-            }
-        }
-        for (auto const& query : doc.scope.queries) {
-            if (reserved(query.name)) {
-                refuse(query.path, "names beginning `shell` are reserved for the shell's parts");
-            }
-        }
+        };
+        checkNames(doc.scope.models);
+        checkNames(doc.scope.state);
+        checkNames(doc.scope.lets);
+        checkNames(doc.scope.queries);
+        checkNames(doc.scope.mutations);
         auto lowered = parseJson(lowerShellParts(parts));
         auto const* const loweredObject = lowered ? std::get_if<Json::object_t>(&lowered->data) : nullptr;
         if (loweredObject == nullptr) {

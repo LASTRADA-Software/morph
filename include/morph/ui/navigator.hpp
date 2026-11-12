@@ -93,6 +93,7 @@ public:
         _pinRow = backend.createStack(_root.get(), Axis::Horizontal);
         _pinRow->setTestId("navigator_pins");
         listEntries();
+        arrange();
         std::vector<std::string> stored = std::move(_options.pins);
         _options.pins.clear();
         for (std::string& screenId : stored) {
@@ -250,6 +251,7 @@ public:
             return;
         }
         _moduleGroups = grouped;
+        arrange();
         refreshVisibility();
         changed();
     }
@@ -445,7 +447,8 @@ private:
             moduleMenu(out);
             return out;
         }
-        for (Group const& group : _groups) {
+        for (Group const* const listed : catalogOrder()) {
+            Group const& group = *listed;
             std::string const heading = headingOf(group);
             MenuEntry submenu;
             MenuSlot slot;
@@ -707,6 +710,55 @@ private:
         }
     }
 
+    // The groups in the order the catalog first names each (module, group) pair: the order of the sidebar and the menu
+    // while modules are not grouped.
+    [[nodiscard]] std::vector<Group const*> catalogOrder() const {
+        std::vector<Group const*> out;
+        for (CatalogEntry const& entry : _options.entries) {
+            auto const found = std::ranges::find_if(_groups, [&entry](Group const& candidate) {
+                return candidate.module == entry.module && candidate.group == entry.group;
+            });
+            if (found != _groups.end() && !std::ranges::contains(out, &*found)) {
+                out.push_back(&*found);
+            }
+        }
+        return out;
+    }
+
+    // Places the groups' sections: module by module, each under its module's row, while modules are grouped; in
+    // catalog order otherwise. A catalog that never interleaves its modules has one order, and nothing moves.
+    void arrange() {
+        std::vector<Group const*> const listed = catalogOrder();
+        bool interleaved = false;
+        for (std::size_t index = 0; index < listed.size(); ++index) {
+            interleaved = interleaved || listed.at(index) != &_groups.at(index);
+        }
+        bool const moduleMajor = _moduleGroups || !interleaved;
+        if (moduleMajor == _moduleMajor) {
+            return;
+        }
+        _moduleMajor = moduleMajor;
+        // After the search field and the pins.
+        std::size_t at = 2;
+        if (moduleMajor) {
+            for (Module& module : _modules) {
+                _root->moveChild(*module.row, at++);
+                for (Group& group : _groups) {
+                    if (group.module == module.module) {
+                        _root->moveChild(*group.section, at++);
+                    }
+                }
+            }
+            return;
+        }
+        for (Module& module : _modules) {
+            _root->moveChild(*module.row, at++);
+        }
+        for (Group const* const group : listed) {
+            _root->moveChild(*group->section, at++);
+        }
+    }
+
     void filter(std::string const& text) {
         _searchText = text;
         refreshVisibility();
@@ -807,6 +859,8 @@ private:
     std::vector<Group> _groups;
     std::vector<Module> _modules;
     bool _moduleGroups = false;
+    // Whether the sections are placed module by module, which is how they are made.
+    bool _moduleMajor = true;
     std::string _openModule;
     std::string _closedWord = "collapsed";
     std::string _openWord = "expanded";

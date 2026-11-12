@@ -573,7 +573,7 @@ private:
             add(std::move(person), NavTarget::Kind::Principal, 0);
         } else if (_onSignOut) {
             add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
-            add(MenuEntry{.label = "Sign out", .description = _principalName}, NavTarget::Kind::SignOut, 0);
+            add(MenuEntry{.label = _parts.labels.signOut, .description = _principalName}, NavTarget::Kind::SignOut, 0);
         }
         _navMenu->setItems(entries);
     }
@@ -694,6 +694,29 @@ private:
             rows.clear();
             texts.clear();
         }
+        // Takes the widgets out of sight and out of reach of a lookup by id, until they are destroyed.
+        void hide() {
+            for (HitRow& row : rows) {
+                row.button->setVisible(false);
+                row.button->setTestId({});
+            }
+            for (auto& text : texts) {
+                text->setVisible(false);
+                text->setTestId({});
+            }
+        }
+    };
+
+    // Counts the click handlers of hit rows that are running, for the lifetime of the rows they belong to.
+    class DispatchScope {
+    public:
+        explicit DispatchScope(int& depth) : _depth{depth} { ++_depth; }
+        DispatchScope(DispatchScope const&) = delete;
+        DispatchScope& operator=(DispatchScope const&) = delete;
+        ~DispatchScope() { --_depth; }
+
+    private:
+        int& _depth;
     };
 
     [[nodiscard]] bool barParts() const noexcept {
@@ -816,6 +839,7 @@ private:
         // The top bar.
         _tools->setVisible(bar);
         _leadBlock->setVisible(!bar);
+        _signOut->setLabel(labels.signOut);
         _searchBox->setVisible(_parts.search.shown && !_compact);
         _searchOpenButton->setVisible(_parts.search.shown && _compact);
         _searchOpenButton->setAccessibleName(labels.search);
@@ -825,6 +849,8 @@ private:
         _overlay->setTitle(labels.search);
         _overlay->setDismissLabel(labels.close);
         _overlayInput->setAccessibleName(labels.search);
+        _resultsBody->setAccessibleName(labels.searchResults);
+        _overlayBody->setAccessibleName(labels.searchResults);
         _overlayInput->setPlaceholder(_parts.search.hint.empty() ? labels.search : _parts.search.hint);
         showSearch();
         // The inbox.
@@ -957,7 +983,8 @@ private:
         }
         if (_onSignOut) {
             separator();
-            add(MenuEntry{.label = "Sign out"}, PrincipalChoice{.kind = PrincipalChoice::Kind::SignOut, .index = 0});
+            add(MenuEntry{.label = labels.signOut},
+                PrincipalChoice{.kind = PrincipalChoice::Kind::SignOut, .index = 0});
         }
         return entries;
     }
@@ -1017,7 +1044,7 @@ private:
         for (std::size_t source = 0; source < _parts.search.sources.size(); ++source) {
             std::size_t const size = _parts.search.sources.at(source).hits.size();
             if (flat < size) {
-                return std::pair{source, flat};
+                return std::pair{_parts.search.sources.at(source).source, flat};
             }
             flat -= size;
         }
@@ -1079,25 +1106,72 @@ private:
             } else if (!_searchText.empty()) {
                 clearSearch();
             } else {
+                if (_compact) {
+                    _overlay->setOpen(false);
+                }
                 _content->focus();
             }
         }
     }
 
     // The panel and the overlay's body from the view.
+    //
+    // The rows are rebuilt only when what they draw changed, so a row that holds focus keeps it while an unrelated
+    // part of the view changes. Rows replaced from inside a hit row's own click handler are kept, hidden, until the
+    // next call outside any handler: the handler runs from the widget being replaced.
     void showSearch() {
+        if (_dispatching == 0) {
+            _retired.clear();
+        }
         bool const wanted = _parts.search.shown && !_searchText.empty();
         bool const open = wanted && !_searchDismissed && !_compact;
+        bool const overlay = wanted && _compact;
         _popoverOpen = open;
         _popover->setOpen(open);
-        _panelResults.clear();
-        _overlayResults.clear();
+        std::string key = resultsKey(open, overlay);
+        if (key == _resultsKey) {
+            return;
+        }
+        _resultsKey = std::move(key);
+        retire(_panelResults);
+        retire(_overlayResults);
         if (open) {
             renderResults(*_resultsBody, _panelResults);
         }
-        if (wanted && _compact) {
+        if (overlay) {
             renderResults(*_overlayBody, _overlayResults);
         }
+    }
+
+    // Everything the results draw, as one text: equal texts draw the same widgets.
+    [[nodiscard]] std::string resultsKey(bool panel, bool overlay) const {
+        std::string key = std::string{panel ? "1" : "0"} + (overlay ? "1" : "0");
+        if (!panel && !overlay) {
+            return key;
+        }
+        ShellLabels const& labels = _parts.labels;
+        key += labels.searching + "\x1f" + labels.searchEmpty + "\x1f" + labels.searchFailed + "\x1f" + _searchText +
+               "\x1f" + (_highlight ? std::to_string(*_highlight) : std::string{"-"}) + "\x1f";
+        for (ShellSourceView const& source : _parts.search.sources) {
+            key += std::to_string(source.source) + "\x1e" + source.title + "\x1e" + (source.failed ? "F" : "-") +
+                   (source.pending ? "P" : "-");
+            for (ShellHitView const& hit : source.hits) {
+                key += "\x1e" + hit.kind + "\x1d" + hit.title + "\x1d" + hit.detail;
+            }
+            key += "\x1f";
+        }
+        return key;
+    }
+
+    // Drops a column's widgets, or keeps them out of sight while a hit row's handler is running.
+    void retire(ResultsColumn& column) {
+        if (_dispatching == 0) {
+            column.clear();
+            return;
+        }
+        column.hide();
+        _retired.push_back(std::move(column));
+        column = ResultsColumn{};
     }
 
     void renderResults(StackWidget& into, ResultsColumn& column) {
@@ -1124,13 +1198,13 @@ private:
             if (source.hits.empty() && !source.failed) {
                 continue;
             }
-            text(source.title, TextRole::Overline, "shell_search_source_" + std::to_string(index));
+            text(source.title, TextRole::Overline, "shell_search_source_" + std::to_string(source.source));
             if (source.failed) {
                 text(source.title + " " + labels.searchFailed, TextRole::Muted,
-                     "shell_search_failed_" + std::to_string(index));
+                     "shell_search_failed_" + std::to_string(source.source));
             }
             for (std::size_t hit = 0; hit < source.hits.size(); ++hit, ++flat) {
-                addHitRow(into, column, source.hits.at(hit), index, hit, _highlight == flat);
+                addHitRow(into, column, source.hits.at(hit), source.source, hit, _highlight == flat);
             }
         }
         if (!pending && !failed && hitCount() == 0) {
@@ -1151,6 +1225,7 @@ private:
         name += hit.detail.empty() ? "" : ", " + hit.detail;
         row.button->setAccessibleName(name);
         row.button->setOnClick([this, source, place] {
+            DispatchScope const running{_dispatching};
             if (_handlers.onSearchOpen) {
                 _handlers.onSearchOpen(source, place);
             }
@@ -1249,6 +1324,10 @@ private:
     std::function<void(bool)> _confirmDone;
     ResultsColumn _panelResults;
     ResultsColumn _overlayResults;
+    // Rows replaced while one of their own handlers ran; destroyed at the next `showSearch` outside a handler.
+    std::vector<ResultsColumn> _retired;
+    std::string _resultsKey;
+    int _dispatching = 0;
     ShellPartsView _parts;
     ShellPartsHandlers _handlers;
     std::vector<NavTarget> _navTargets;

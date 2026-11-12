@@ -363,33 +363,13 @@ public:
     /// @param parts The parts.
     /// @return Nothing, or the refusal.
     std::expected<void, Refusal> setShellParts(ShellParts parts) {
-        _shellParts = std::move(parts);
-        auto found = std::ranges::find_if(_files, [](BundleFile const& file) { return file.kind == kAppFile; });
-        if (found == _files.end()) {
-            BundleFile file{.kind = std::string{kAppFile},
-                            .id = std::string{kAppFile},
-                            .bytes = R"({"vocab":"ui/1","id":"app"})",
-                            .isPublic = true};
-            auto patched = withShellParts(std::move(file));
-            if (!patched) {
-                return std::unexpected(std::move(patched.error()));
-            }
-            if (auto added = addApp(*patched); !added) {
-                return added;
-            }
-            _files.push_back(std::move(*patched));
-            _appSynthesised = true;
-            return {};
+        // A refused call leaves the parts as they were, so the next app document is not judged by them.
+        std::optional<ShellParts> previous = std::exchange(_shellParts, std::move(parts));
+        auto done = applyShellParts(previous.has_value());
+        if (!done) {
+            _shellParts = std::move(previous);
         }
-        auto patched = withShellParts(*found);
-        if (!patched) {
-            return std::unexpected(std::move(patched.error()));
-        }
-        if (auto added = addApp(*patched); !added) {
-            return added;
-        }
-        *found = std::move(*patched);
-        return {};
+        return done;
     }
 
     /// @brief Adds a vocabulary the bundle needs beyond `ui/1` and `expr/1`, such as `forms/1` or `files/1`. A
@@ -522,7 +502,7 @@ private:
             return refuse(file.id, std::move(*reason));
         }
         if (file.kind == kAppFile && _shellParts) {
-            auto patched = withShellParts(std::move(file));
+            auto patched = withShellParts(std::move(file), false);
             if (!patched) {
                 return std::unexpected(std::move(patched.error()));
             }
@@ -648,13 +628,48 @@ private:
         return {};
     }
 
-    // The app document with the shell's parts written into its `shell` member.
-    [[nodiscard]] std::expected<BundleFile, Refusal> withShellParts(BundleFile file) const {
+    // Writes `_shellParts` into the app document, or into a synthesised one. @p replace says the app document may
+    // already hold parts this registry wrote.
+    std::expected<void, Refusal> applyShellParts(bool replace) {
+        auto found = std::ranges::find_if(_files, [](BundleFile const& file) { return file.kind == kAppFile; });
+        if (found == _files.end()) {
+            BundleFile file{.kind = std::string{kAppFile},
+                            .id = std::string{kAppFile},
+                            .bytes = R"({"vocab":"ui/1","id":"app"})",
+                            .isPublic = true};
+            auto patched = withShellParts(std::move(file), false);
+            if (!patched) {
+                return std::unexpected(std::move(patched.error()));
+            }
+            if (auto added = addApp(*patched); !added) {
+                return added;
+            }
+            _files.push_back(std::move(*patched));
+            _appSynthesised = true;
+            return {};
+        }
+        auto patched = withShellParts(*found, replace);
+        if (!patched) {
+            return std::unexpected(std::move(patched.error()));
+        }
+        if (auto added = addApp(*patched); !added) {
+            return added;
+        }
+        *found = std::move(*patched);
+        return {};
+    }
+
+    // The app document with the shell's parts written into its `shell` member. A document that already declares
+    // `shell` is refused unless @p replace says the registry wrote it.
+    [[nodiscard]] std::expected<BundleFile, Refusal> withShellParts(BundleFile file, bool replace) const {
         auto document = parseJson(file.bytes);
         auto* const object = document ? std::get_if<Json::object_t>(&document->data) : nullptr;
         auto shell = parseJson(glz::write_json(*_shellParts).value_or("{}"));
         if (object == nullptr || !shell) {
             return refuse(file.id, "the app document is a JSON object");
+        }
+        if (!replace && object->contains("shell")) {
+            return refuse(file.id, "the app document declares its own `shell`, and the registry was given parts too");
         }
         object->insert_or_assign("shell", std::move(*shell));
         file.bytes = glz::write_json(*document).value_or(file.bytes);

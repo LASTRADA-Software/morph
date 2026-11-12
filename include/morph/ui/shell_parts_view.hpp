@@ -61,6 +61,9 @@ struct ShellHitView {
 
 /// @brief One source's hits under its heading.
 struct ShellSourceView {
+    /// @brief The source's place in the declaration, which is what a handler is told: a denied source is left out of
+    ///        the view, so the view's own order is not the declaration's.
+    std::size_t source = 0;
     /// @brief The heading.
     std::string title;
     /// @brief Whether the source could not be searched.
@@ -183,6 +186,8 @@ struct ShellLabels {
     std::string countFailed = "count unavailable";
     /// @brief The close button of the compact search overlay.
     std::string close = "Close";
+    /// @brief The sign-out entry's caption.
+    std::string signOut = "Sign out";
 
     /// @brief Memberwise equality.
     /// @return Whether every member matches.

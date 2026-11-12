@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
-
+#include <algorithm>
 #include <cstddef>
 #include <glaze/glaze.hpp>
 #include <map>
@@ -185,6 +185,25 @@ inline constexpr std::string_view kPrincipal = "shellPrincipal";
 /// @param index The place.
 /// @return `shellInbox<index>`.
 [[nodiscard]] inline std::string inbox(std::size_t index) { return "shellInbox" + std::to_string(index); }
+
+/// @brief Whether a name is one the shell's parts declare: the search text, the switcher and the person's queries, and
+///        a model alias, count, search or inbox query followed by its number.
+/// @param name A name declared in the app document's scope.
+/// @return True when the lowering of the parts would declare it.
+[[nodiscard]] inline bool reserved(std::string_view name) {
+    if (name == kSearchText || name == kContext || name == kPrincipal) {
+        return true;
+    }
+    for (std::string_view const prefix : {"shellModel", "shellCount", "shellSearch", "shellInbox"}) {
+        if (name.starts_with(prefix)) {
+            std::string_view const digits = name.substr(prefix.size());
+            if (!digits.empty() && std::ranges::all_of(digits, [](char c) { return c >= '0' && c <= '9'; })) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 }  // namespace shell_names
 
 /// @brief A count as a badge shows it: the number, or `99+` above `kCountCap`.

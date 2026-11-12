@@ -5,6 +5,7 @@
 // A probe application on the scripted dispatcher and the recording backend.
 
 #include <algorithm>
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstddef>
@@ -142,11 +143,15 @@ struct Rig {
     std::unique_ptr<ui::ShellFrame> frame;
     std::unique_ptr<ui::ShellPartsBinding> binding;
     std::vector<ui::ShellPartsModel::Target> opened;
+    std::vector<std::vector<ui::ShellPartsModel::Target>> openedAll;
     std::vector<std::string> problems;
     std::size_t dirty = 0;
     int closedDirty = 0;
+    int signedOut = 0;
 
-    explicit Rig(ui::ShellParts declared) : parts{std::move(declared)} {
+    /// @param declared The parts.
+    /// @param facts    What the catalog says (`screenListed`, `moduleListed`, `replyIsRecord`); the rest is ignored.
+    explicit Rig(ui::ShellParts declared, ui::ShellModelOptions facts = {}) : parts{std::move(declared)} {
         std::string const text =
             std::string{R"({"vocab":"ui/1","id":"app","shell":)"} + glz::write_json(parts).value_or("{}") + "}";
         document = ui::testing::loadOrFail(text, ui::testing::corpusCatalog());
@@ -156,12 +161,19 @@ struct Rig {
         ui::ShellFrameOptions options;
         options.applicationName = "lims";
         options.navigator.entries = entries();
+        options.onSignOut = [this] { ++signedOut; };
         frame = std::make_unique<ui::ShellFrame>(h.backend, nullptr, std::move(options));
         ui::ShellBindingOptions binding_options;
+        binding_options.model.screenListed = std::move(facts.screenListed);
+        binding_options.model.moduleListed = std::move(facts.moduleListed);
+        binding_options.model.replyIsRecord = std::move(facts.replyIsRecord);
         binding_options.model.dirtyTabs = [this] { return dirty; };
         binding_options.model.closeDirtyTabs = [this] { ++closedDirty; };
         binding_options.model.onProblem = [this](std::string const& message) { problems.push_back(message); };
         binding_options.open = [this](ui::ShellPartsModel::Target const& target) { opened.push_back(target); };
+        binding_options.openAll = [this](std::vector<ui::ShellPartsModel::Target> const& targets) {
+            openedAll.push_back(targets);
+        };
         binding = std::make_unique<ui::ShellPartsBinding>(h.session, *root, *document->shell, *frame,
                                                           std::move(binding_options));
         h.settle();
@@ -433,9 +445,273 @@ TEST_CASE("shell parts: Shift Enter opens every hit, Escape closes the panel, an
     r.reply("Lims_ClientSearchBilling", R"({"hits":[]})");
     CHECK(r.h.backend.press(search, "Shift+Enter"));
     r.h.settle();
-    REQUIRE(r.opened.size() == 2);
-    CHECK(r.opened.at(0).screen == "a");
-    CHECK(r.opened.at(1).screen == "b");
+    REQUIRE(r.openedAll.size() == 1);
+    REQUIRE(r.openedAll.front().size() == 2);
+    CHECK(r.openedAll.front().at(0).screen == "a");
+    CHECK(r.openedAll.front().at(1).screen == "b");
+    CHECK(r.opened.empty());
+}
+
+// Mutation: ShellPartsModel::sourceHits drops `target.params = *params->asRecord();`.
+TEST_CASE("shell parts: Enter opens the highlighted hit with its params", "[ui][shell][parts]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    int const search = r.id("TextInput", "shell_search");
+    r.h.backend.edit(search, "s");
+    r.h.settle();
+    r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+    r.reply("Lims_ClientSearchLab",
+            R"({"hits":[{"screen":"lims.lab.sample","params":{"id":7,"mode":"edit"},"title":"S-7"}]})");
+    r.reply("Lims_ClientSearchBilling", R"({"hits":[]})");
+    r.h.backend.submit(search, "s");
+    r.h.settle();
+    REQUIRE(r.opened.size() == 1);
+    CHECK(r.opened.front().screen == "lims.lab.sample");
+    REQUIRE(r.opened.front().params.contains("id"));
+    CHECK(*r.opened.front().params.at("id").asInt() == 7);
+    REQUIRE(r.opened.front().params.contains("mode"));
+    CHECK(*r.opened.front().params.at("mode").asString() == "edit");
+}
+
+// Mutation: the frame reports the view's own place of a source, not the declared one (the indices shift when a source
+// is left out).
+TEST_CASE("shell parts: a denied search source is left out and the other sources' hits open as themselves",
+          "[ui][shell][parts]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    int const search = r.id("TextInput", "shell_search");
+    r.h.backend.edit(search, "s");
+    r.h.settle();
+    r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+    r.h.fail(r.h.dispatcher.last("Lims_ClientSearchLab"), "denied");
+    r.reply("Lims_ClientSearchBilling",
+            R"({"hits":[{"screen":"lims.billing.invoice","params":{"id":3},"title":"INV-3"}]})");
+    CHECK_FALSE(r.has("Text", "shell_search_source_0"));
+    CHECK(r.has("Text", "shell_search_source_1"));
+    CHECK(r.problems.empty());
+    // Enter opens the billing hit, not whatever the lab's query holds.
+    r.h.backend.submit(search, "s");
+    r.h.settle();
+    REQUIRE(r.opened.size() == 1);
+    CHECK(r.opened.front().screen == "lims.billing.invoice");
+    CHECK(*r.opened.front().params.at("id").asInt() == 3);
+}
+
+TEST_CASE("shell parts: a click on a hit of a source after a denied one opens that hit", "[ui][shell][parts]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    r.h.backend.edit(r.id("TextInput", "shell_search"), "s");
+    r.h.settle();
+    r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+    r.h.fail(r.h.dispatcher.last("Lims_ClientSearchLab"), "denied");
+    r.reply("Lims_ClientSearchBilling", R"({"hits":[{"screen":"lims.billing.invoice","title":"INV-3"}]})");
+    r.h.backend.click(r.id("Button", "shell_search_hit_1_0"));
+    r.h.settle();
+    REQUIRE(r.opened.size() == 1);
+    CHECK(r.opened.front().screen == "lims.billing.invoice");
+}
+
+// Mutation: sourceHits reads a failed source's last value.
+TEST_CASE("shell parts: Shift Enter opens only the hits the panel draws", "[ui][shell][parts]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    int const search = r.id("TextInput", "shell_search");
+    r.h.backend.edit(search, "x");
+    r.h.settle();
+    r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+    r.reply("Lims_ClientSearchLab", R"({"hits":[{"screen":"a","title":"A"}]})");
+    r.reply("Lims_ClientSearchBilling", R"({"hits":[{"screen":"c","title":"C"}]})");
+    r.h.backend.edit(search, "xy");
+    r.h.settle();
+    r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+    r.reply("Lims_ClientSearchLab", R"({"hits":[{"screen":"a","title":"A"}]})");
+    r.h.fail(r.h.dispatcher.last("Lims_ClientSearchBilling"));
+    CHECK(r.has("Text", "shell_search_failed_1"));
+    CHECK(r.h.backend.press(search, "Shift+Enter"));
+    r.h.settle();
+    REQUIRE(r.openedAll.size() == 1);
+    REQUIRE(r.openedAll.front().size() == 1);
+    CHECK(r.openedAll.front().front().screen == "a");
+}
+
+// Mutation: the model stops reporting a failed count, a failed inbox source or search source, a malformed person's
+// reply or a dropped hit; or the catalog's facts are not asked.
+TEST_CASE("shell parts: each failure reaches onProblem once", "[ui][shell][parts]") {
+    ui::ShellModelOptions facts;
+    facts.screenListed = [](std::string_view id) { return id != "lims.approvals"; };
+    facts.moduleListed = [](std::string_view module) { return module != "billing"; };
+    facts.replyIsRecord = [](std::string_view action) { return action != "Shell_Rows"; };
+    Rig r{fullParts(), std::move(facts)};
+    auto const times = [&r](std::string_view needle) {
+        return std::ranges::count_if(r.problems, [needle](std::string const& text) { return text.contains(needle); });
+    };
+    // What the catalog says is reported as soon as the parts are made.
+    CHECK(times("names the screen lims.approvals") == 1);
+    CHECK(times("names the module billing") == 1);
+    CHECK(times("the reply of Shell_Rows is not a registered record") == 1);
+    CHECK(times("the reply of Lims_ClientCount is not a registered record") == 0);
+
+    r.reply("Lims_ClientScopes", kScopes);
+    r.h.fail(r.h.dispatcher.last("Lims_ClientCount"));
+    r.reply("Shell_Rows", R"({"total":"many"})");
+    r.h.fail(r.h.dispatcher.last("Lims_ClientApprovalsLab"));
+    r.reply("Lims_ClientApprovalsBilling", R"({"n":1})");
+    r.reply("Lims_ClientPerson", R"({"role":"x"})");
+    r.h.backend.edit(r.id("TextInput", "shell_search"), "s");
+    r.h.settle();
+    r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+    r.reply("Lims_ClientSearchLab", R"({"hits":[{"title":"no screen"},{"screen":"a","title":"A"}]})");
+    r.h.fail(r.h.dispatcher.last("Lims_ClientSearchBilling"));
+    // Settling again draws the parts again, and nothing is reported twice.
+    r.h.session.setLocale("de");
+    r.h.session.setLocale("en");
+    r.h.settle();
+    CHECK(times("shellCount1: the read failed") == 1);
+    CHECK(times("shellCount0: the reply has no non-negative integer `total`") == 1);
+    CHECK(times("shellInbox1: the read failed") == 1);
+    CHECK(times("shell principal: the reply has no `name`") == 1);
+    CHECK(times("shellSearch0: a hit has no string `screen`") == 1);
+    CHECK(times("shellSearch1: the read failed") == 1);
+}
+
+// Mutation: Escape on an empty field of the compact overlay moves focus and leaves the overlay open.
+TEST_CASE("shell parts: Escape in the compact search overlay closes it, and the results panel is named",
+          "[ui][shell][parts]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    r.frame->setCompact(true);
+    r.h.settle();
+    r.h.backend.click(r.id("Button", "shell_search_open"));
+    REQUIRE(r.prop("Dialog", "shell_search_overlay", "open") == "true");
+    int const input = r.id("TextInput", "shell_search_overlay_input");
+    CHECK(r.h.backend.press(input, "Escape"));
+    r.h.settle();
+    CHECK(r.prop("Dialog", "shell_search_overlay", "open") == "false");
+    CHECK(r.prop("Column", "shell_search_overlay_results", "a11yName") == "Search results");
+}
+
+TEST_CASE("shell parts: the results panel is named, and sign out follows the language", "[ui][shell][parts]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    r.reply("Lims_ClientPerson", R"({"name":"Anna","roles":[]})");
+    CHECK(r.prop("Column", "shell_search_results", "a11yName") == "Search results");
+    CHECK(r.h.backend.prop(r.id("Menu", "shell_principal_menu"), "items").contains("Sign out"));
+    r.h.session.setLocale("de");
+    r.h.settle();
+    CHECK(r.prop("Column", "shell_search_results", "a11yName") != "Search results");
+    CHECK(r.prop("Button", "shell_signOut", "label") == "Abmelden");
+    std::string const items = r.h.backend.prop(r.id("Menu", "shell_principal_menu"), "items");
+    CHECK(items.contains("Abmelden"));
+    CHECK_FALSE(items.contains("Sign out"));
+    r.frame->setCompact(true);
+    r.h.settle();
+    CHECK(r.h.backend.prop(r.id("Menu", "shell_nav_menu"), "items").contains("Abmelden"));
+}
+
+// Mutation: contextView shows the switcher whatever the answer was.
+TEST_CASE("shell parts: a switcher the server refuses is left out, and the start screen is not held",
+          "[ui][shell][parts]") {
+    Rig r{fullParts()};
+    CHECK_FALSE(r.binding->contextReady());
+    r.h.fail(r.h.dispatcher.last("Lims_ClientScopes"), "denied");
+    r.h.settle();
+    CHECK(r.binding->contextReady());
+    CHECK(r.prop("Menu", "shell_context", "visible") == "false");
+    CHECK(r.problems.empty());
+    // A read that needs a scope waits for one, and the unscoped ones are asked.
+    CHECK(r.h.dispatcher.count("Lims_ClientSearchLab") == 0);
+    CHECK(r.h.dispatcher.count("Shell_Rows") == 0);
+    CHECK(r.h.dispatcher.count("Lims_ClientApprovalsBilling") == 1);
+}
+
+// Mutation: showSearch destroys the hit rows at once, inside the click handler that is running.
+TEST_CASE("shell parts: the rows of a hit stay alive until its own click handler has returned", "[ui][shell][parts]") {
+    Harness h;
+    ui::ShellFrameOptions options;
+    options.applicationName = "lims";
+    options.navigator.entries = entries();
+    ui::ShellFrame frame{h.backend, nullptr, std::move(options)};
+    ui::ShellPartsView withHit;
+    withHit.search.shown = true;
+    withHit.search.sources.push_back(
+        ui::ShellSourceView{.source = 0,
+                            .title = "Lab",
+                            .failed = false,
+                            .pending = false,
+                            .hits = {ui::ShellHitView{.kind = "", .title = "S-7", .detail = ""}}});
+    ui::ShellPartsView withoutHit;
+    withoutHit.search.shown = true;
+    bool hitDestroyedInside = false;
+    bool ran = false;
+    ui::ShellPartsHandlers handlers;
+    handlers.onSearchText = [&](std::string const& text) {
+        if (!text.empty()) {
+            return;
+        }
+        // What the model does when the text is cleared: the view changes under the running handler.
+        std::size_t const before = h.backend.log().size();
+        frame.setParts(withoutHit);
+        ran = true;
+        auto const& log = h.backend.log();
+        hitDestroyedInside = std::any_of(log.begin() + static_cast<std::ptrdiff_t>(before), log.end(),
+                                         [](std::string const& line) { return line.contains("destroy Button"); });
+    };
+    handlers.onSearchOpen = [](std::size_t, std::size_t) {};
+    frame.setPartsHandlers(std::move(handlers));
+    frame.setParts(withHit);
+    int const search = h.backend.find("TextInput", "testId", "shell_search").value();
+    h.backend.edit(search, "s");
+    h.settle();
+    frame.setParts(withHit);
+    int const row = h.backend.find("Button", "testId", "shell_search_hit_0_0").value();
+    h.backend.click(row);
+    h.settle();
+    CHECK(ran);
+    CHECK_FALSE(hitDestroyedInside);
+    // Once the handler has returned, a later change of the view takes the old rows away.
+    frame.setParts(withHit);
+    frame.setParts(withoutHit);
+    CHECK_FALSE(h.backend.find("Button", "testId", "shell_search_hit_0_0").has_value());
+}
+
+// Mutation: the navigator places its groups module by module for every catalog.
+TEST_CASE("shell parts: without module groups a catalog that interleaves modules keeps its own order",
+          "[ui][shell][parts]") {
+    Harness h;
+    ui::ShellFrameOptions options;
+    options.applicationName = "lims";
+    options.navigator.entries = {entry("a.x", "A", "x"), entry("b.y", "B", "y"), entry("a.z", "A", "z")};
+    ui::ShellFrame frame{h.backend, nullptr, std::move(options)};
+    // The sidebar lists the sections in the order the widgets are placed.
+    auto const sections = [&h] {
+        std::string const tree = h.backend.dump();
+        return std::array{tree.find("navigator_group_A/x_section"), tree.find("navigator_group_B/y_section"),
+                          tree.find("navigator_group_A/z_section")};
+    };
+    auto const plain = sections();
+    REQUIRE(plain.at(0) != std::string::npos);
+    CHECK(plain.at(0) < plain.at(1));
+    CHECK(plain.at(1) < plain.at(2));
+    frame.navigator().setModuleGroups(true);
+    h.settle();
+    auto const grouped = sections();
+    CHECK(grouped.at(0) < grouped.at(2));
+    CHECK(grouped.at(2) < grouped.at(1));
+    frame.navigator().setModuleGroups(false);
+    h.settle();
+    CHECK(sections() == plain);
+}
+
+// Mutation: ~ShellPartsBinding leaves the modules collapsed.
+TEST_CASE("shell parts: taking the binding away gives the navigator its plain groups back", "[ui][shell][parts]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    r.reply("Shell_Rows", R"({"total":3})");
+    r.frame->navigator().setCurrent("lims.lab.samples");
+    CHECK(r.prop("Column", "navigator_group_billing/Billing_section", "visible") == "false");
+    r.binding.reset();
+    r.h.settle();
+    CHECK(r.prop("Column", "navigator_group_billing/Billing_section", "visible") != "false");
 }
 
 TEST_CASE("shell parts: a search with no hits says so, in words", "[ui][shell][parts]") {
@@ -561,6 +837,26 @@ TEST_CASE(
     REQUIRE_FALSE(clash.has_value());
     CHECK(clash.error().reason.contains("reserved"));
 
+    // Every name the lowering declares is reserved, whatever kind of declaration takes it; others beginning
+    // `shell` are the document's own.
+    auto const letClash =
+        ui::loadDocumentText(R"({"vocab":"ui/1","id":"app","let":{"shellCount0":1},"shell":)" + shell + "}",
+                             ui::LoadOptions{.catalog = catalog});
+    REQUIRE_FALSE(letClash.has_value());
+    CHECK(letClash.error().reason.contains("reserved"));
+    auto const mutationClash =
+        ui::loadDocumentText(R"({"vocab":"ui/1","id":"app","models":{"m":{"type":"Lims_ClientModel"}},)"
+                             R"("mutations":{"shellInbox0":{"model":"m","action":"Shell_Rename"}},"shell":)" +
+                                 shell + "}",
+                             ui::LoadOptions{.catalog = catalog});
+    REQUIRE_FALSE(mutationClash.has_value());
+    CHECK(mutationClash.error().reason.contains("reserved"));
+    auto const own = ui::loadDocumentText(
+        R"({"vocab":"ui/1","id":"app","state":{"shellHelp":{"init":""},"shellCounter":{"init":0}},"shell":)" + shell +
+            "}",
+        ui::LoadOptions{.catalog = catalog});
+    CHECK(own.has_value());
+
     ui::ShellParts twice = fullParts();
     twice.modules.push_back(twice.modules.front());
     auto const repeated =
@@ -592,6 +888,42 @@ TEST_CASE("shell parts: the registry writes the parts into the app document the 
         carried = carried || std::ranges::any_of(file.holders, [](auto const& holder) {
                       return holder.kind == "app" && holder.id == "app";
                   });
+        if (std::ranges::any_of(file.holders, [](auto const& holder) { return holder.kind == "app"; })) {
+            CHECK(file.bytes.contains(R"("shell":{)"));
+            CHECK(file.bytes.contains("Lims_ClientScopes"));
+        }
     }
     CHECK(carried);
+}
+
+// Mutation: setShellParts keeps the parts it refused; or an app document's own `shell` is overwritten.
+TEST_CASE("shell parts: the registry refuses parts that do not load, and an app document that has its own",
+          "[ui][shell][parts]") {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::ShellParts bad = fullParts();
+    bad.modules.push_back(bad.modules.front());
+    CHECK_FALSE(served.setShellParts(bad).has_value());
+    // The refused parts are not applied to the app document added next.
+    ui::BundleFile app{.kind = std::string{ui::kAppFile},
+                       .id = std::string{ui::kAppFile},
+                       .bytes = R"({"vocab":"ui/1","id":"app"})",
+                       .isPublic = true};
+    CHECK(served.addFile(app).has_value());
+    auto const built = served.build();
+    REQUIRE(built.has_value());
+    for (auto const& [hash, file] : (*built)->files) {
+        static_cast<void>(hash);
+        CHECK_FALSE(file.bytes.contains("Lims_ClientScopes"));
+    }
+
+    ui::UiRegistry other{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::BundleFile own{.kind = std::string{ui::kAppFile},
+                       .id = std::string{ui::kAppFile},
+                       .bytes = std::string{R"({"vocab":"ui/1","id":"app","shell":)"} +
+                                glz::write_json(fullParts()).value_or("{}") + "}",
+                       .isPublic = true};
+    REQUIRE(other.addFile(own).has_value());
+    auto const refused = other.setShellParts(fullParts());
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().reason.contains("its own `shell`"));
 }

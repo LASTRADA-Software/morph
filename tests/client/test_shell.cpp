@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <expected>
 #include <functional>
 #include <memory>
@@ -1056,6 +1057,105 @@ TEST_CASE("Client shell: the start screen mounts once the switcher has answered,
         CHECK(backend.prop(*menu, "label").contains("North"));
         backend.chooseMenuEntry(*menu, {1});
         REQUIRE(pumpUntil(context.owner(), [&backend] { return shown(backend, "scoped") == "s"; }));
+    }
+    source.close();
+}
+
+namespace {
+
+/// A second screen, so that a search has two tabs to open.
+constexpr std::string_view kSecondScreen = R"({
+  "vocab": "ui/1", "id": "probe.second",
+  "view": { "kind": "text", "testId": "second", "text": "Second" } })";
+
+/// Two screens of one module, with a search over both, a count of the module, and an inbox naming a screen the
+/// catalog does not list.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> searchBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}, probe::searchCatalog()};
+    for (auto const& [id, text] : {std::pair{"probe.width", kWidthScreen}, std::pair{"probe.second", kSecondScreen}}) {
+        ui::CatalogEntry entry;
+        entry.id = id;
+        entry.title = id;
+        entry.module = "probe";
+        entry.isPublic = false;
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    ui::ShellParts parts;
+    parts.modules = {ui::ModuleCount{.module = "probe",
+                                     .model = "Probe_Model",
+                                     .action = "Probe_Count",
+                                     .countField = "n",
+                                     .contextField = {},
+                                     .localeField = {}}};
+    parts.search = {ui::SearchSource{.module = "probe",
+                                     .title = "Probe",
+                                     .model = "Probe_Model",
+                                     .action = "Probe_Search",
+                                     .queryField = "q",
+                                     .resultsField = "hits",
+                                     .contextField = {},
+                                     .localeField = {}}};
+    parts.inbox = ui::InboxEntry{.screen = "probe.missing",
+                                 .sources = {ui::ModuleCount{.module = "probe",
+                                                             .model = "Probe_Model",
+                                                             .action = "Probe_Count",
+                                                             .countField = "n",
+                                                             .contextField = {},
+                                                             .localeField = {}}}};
+    if (auto set = served.setShellParts(std::move(parts)); !set) {
+        return std::unexpected(std::move(set.error()));
+    }
+    return served.build();
+}
+
+}  // namespace
+
+// Mutation: openTargets opens each hit once, so the last one opened stays the active tab.
+TEST_CASE("Client shell: Shift Enter opens every hit and the first one is the active tab", "[client][shell][parts]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &searchBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        std::vector<std::string> problems;
+        auto const shell = client::mountShell(
+            context, backend, std::move(*opened), source,
+            client::ShellOptions{.startScreen = "probe.width",
+                                 .onProblem = [&problems](std::string const& text) { problems.push_back(text); }});
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return !tabCaptions(backend).empty(); }));
+        auto const search = backend.find("TextInput", "testId", "shell_search");
+        REQUIRE(search.has_value());
+        backend.edit(*search, "w");
+        // The request waits out its pause on the manual clock.
+        REQUIRE(pumpUntil(context.owner(),
+                          [&backend] { return backend.find("Text", "testId", "shell_search_busy").has_value(); }));
+        context.clock().advance(std::chrono::milliseconds{ui::kSearchPause});
+        bool const drawn = pumpUntil(context.owner(), [&backend] {
+            return backend.find("Button", "testId", "shell_search_hit_0_1").has_value();
+        });
+        REQUIRE(drawn);
+        CHECK(backend.press(*search, "Shift+Enter"));
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return tabCaptions(backend).contains(','); }));
+        auto const bars = backend.all("Tabs");
+        REQUIRE_FALSE(bars.empty());
+        // The screens declare no identity, so every hit opens a tab: the start screen's, then the first hit's, then
+        // the second's. The first hit's tab is the one left active.
+        CAPTURE(tabCaptions(backend));
+        CHECK(backend.prop(bars.front(), "selected") == "1");
+        // The catalog's facts are reported by the client.
+        auto const once = [&problems](std::string_view needle) {
+            return std::ranges::count_if(problems,
+                                         [needle](std::string const& text) { return text.contains(needle); });
+        };
+        CHECK(once("names the screen probe.missing, which the catalog does not list") == 1);
+        // The module count and the inbox source read the same action.
+        CHECK(once("the reply of Probe_Count is not a registered record") == 2);
     }
     source.close();
 }

@@ -101,7 +101,8 @@ namespace morph::ui {
                        .language = shellText("morph.shell.language", format),
                        .formats = shellText("morph.shell.formats", format),
                        .countFailed = shellText("morph.shell.countFailed", format),
-                       .close = shellText("morph.shell.close", format)};
+                       .close = shellText("morph.shell.close", format),
+                       .signOut = shellText("morph.shell.signOut", format)};
 }
 
 /// @brief What the model asks of its client.
@@ -110,6 +111,13 @@ struct ShellModelOptions {
     std::function<std::string(std::string_view module)> moduleLabel;
     /// @brief The title of a screen in the catalog, for the inbox button.
     std::function<std::string(std::string_view screen)> screenTitle;
+    /// @brief Whether the catalog lists a screen. Empty: every screen is taken to be listed.
+    std::function<bool(std::string_view screen)> screenListed;
+    /// @brief Whether the catalog lists a module. Empty: every module is taken to be listed.
+    std::function<bool(std::string_view module)> moduleListed;
+    /// @brief Whether the catalog says an action's reply holds a registered record, which is what makes a read of it
+    ///        refresh when the record changes. Empty: every action is taken to.
+    std::function<bool(std::string_view action)> replyIsRecord;
     /// @brief The locales the bundle has catalogues for, for a menu that lists none of its own.
     std::function<std::vector<std::string>()> catalogueLocales;
     /// @brief How many open tabs hold unsaved changes.
@@ -141,8 +149,10 @@ public:
           _options{std::move(options)},
           _chosen{session.runtime(), Value{}},
           _answered{session.runtime(), !parts.context.has_value()},
-          _searchText{session.runtime(), std::string{}} {
+          _searchText{session.runtime(), std::string{}},
+          _optionList{session.runtime(), std::vector<Option>{}} {
         _session->setContextHandler([this](Value const& value) { return requestContext(value); });
+        checkDeclaration();
         if (_parts->context) {
             _follow = std::make_unique<reactive::Effect>(_session->runtime(), [this] { followOptions(); });
         }
@@ -200,6 +210,9 @@ public:
                 continue;
             }
             ModuleState state{.module = declared.module, .count = std::nullopt, .failed = read.failed};
+            if (read.failed) {
+                problem("shell count " + shell_names::count(index) + ": the read failed");
+            }
             if (!read.failed && !read.pending) {
                 state.count = countOf(read.value, declared.countField, shell_names::count(index));
                 state.failed = !state.count.has_value() && !read.value.isNull();
@@ -212,8 +225,9 @@ public:
     /// @brief Chooses an option of the switcher, as the person does: the same checks as the command's.
     /// @param index The option's place in the last answer.
     void chooseContext(std::size_t index) {
-        if (index < _optionList.size()) {
-            static_cast<void>(requestContext(_optionList.at(index).value));
+        std::vector<Option> const& options = _optionList.peek();
+        if (index < options.size()) {
+            static_cast<void>(requestContext(options.at(index).value));
         }
     }
 
@@ -222,9 +236,10 @@ public:
     /// @param value The option's value.
     /// @return Whether the request was accepted: the value is an option's. The switch itself may wait for the answer.
     bool requestContext(Value const& value) {
+        std::vector<Option> const& options = _optionList.peek();
         auto const found =
-            std::ranges::find_if(_optionList, [&value](Option const& option) { return option.value == value; });
-        if (found == _optionList.end()) {
+            std::ranges::find_if(options, [&value](Option const& option) { return option.value == value; });
+        if (found == options.end()) {
             return false;
         }
         if (value == _chosen.peek()) {
@@ -317,7 +332,42 @@ private:
     struct Option {
         Value value;
         ShellOptionView shown;
+
+        bool operator==(Option const&) const = default;
     };
+
+    // What the catalog can say about the declaration, reported once at the start: a screen or module it does not list,
+    // and a count whose reply is not a registered record (it is then read on mount and on a context change only).
+    void checkDeclaration() const {
+        auto const screen = [this](std::string const& id, std::string const& part) {
+            if (_options.screenListed && !_options.screenListed(id)) {
+                problem("shell " + part + " names the screen " + id + ", which the catalog does not list");
+            }
+        };
+        auto const module = [this](std::string const& id, std::string const& part) {
+            if (_options.moduleListed && !_options.moduleListed(id)) {
+                problem("shell " + part + " names the module " + id + ", which the catalog does not list");
+            }
+        };
+        auto const record = [this](ModuleCount const& count, std::string const& part) {
+            if (_options.replyIsRecord && !_options.replyIsRecord(count.action)) {
+                problem("shell " + part + ": the reply of " + count.action +
+                        " is not a registered record, so the count is read on mount and on a context change only");
+            }
+        };
+        for (std::size_t index = 0; index < _parts->modules.size(); ++index) {
+            record(_parts->modules.at(index), "count " + shell_names::count(index));
+        }
+        for (SearchSource const& source : _parts->search) {
+            module(source.module, "search");
+        }
+        if (_parts->inbox) {
+            screen(_parts->inbox->screen, "inbox");
+            for (std::size_t index = 0; index < _parts->inbox->sources.size(); ++index) {
+                record(_parts->inbox->sources.at(index), "inbox " + shell_names::inbox(index));
+            }
+        }
+    }
 
     // Reports a problem once per text.
     void problem(std::string const& text) const {
@@ -430,17 +480,18 @@ private:
             problem("shell context: the scope switcher's read failed");
         }
         _session->runtime().untracked([&] {
-            _optionList = std::move(options);
-            _session->setContextOffered(!_optionList.empty());
-            if (_optionList.empty()) {
+            _optionList.set(std::move(options));
+            std::vector<Option> const& held = _optionList.peek();
+            _session->setContextOffered(!held.empty());
+            if (held.empty()) {
                 if (!_chosen.peek().isNull()) {
                     apply(Value{});
                 }
             } else {
-                bool const present = std::ranges::any_of(
-                    _optionList, [this](Option const& option) { return option.value == _chosen.peek(); });
+                bool const present =
+                    std::ranges::any_of(held, [this](Option const& option) { return option.value == _chosen.peek(); });
                 if (!present) {
-                    apply(_optionList.front().value);
+                    apply(held.front().value);
                 }
             }
             if (settled && !_answered.peek()) {
@@ -459,20 +510,28 @@ private:
         if (!_parts->context) {
             return out;
         }
-        // Reading the query and the chosen value makes the view follow both.
-        static_cast<void>(_root->query(shell_names::kContext));
+        // A switcher the server refuses is the authoriser working: it is left out.
+        if (_root->query(shell_names::kContext).denied) {
+            return out;
+        }
         Value const chosen = _chosen.get();
+        std::vector<Option> const& options = _optionList.get();
         out.shown = true;
-        for (std::size_t index = 0; index < _optionList.size(); ++index) {
-            ShellOptionView shown = _optionList.at(index).shown;
-            out.options.push_back(std::move(shown));
-            if (_optionList.at(index).value == chosen) {
+        for (std::size_t index = 0; index < options.size(); ++index) {
+            out.options.push_back(options.at(index).shown);
+            if (options.at(index).value == chosen) {
                 out.chosen = index;
             }
         }
         out.enabled = !out.options.empty();
         static_cast<void>(format);
         return out;
+    }
+
+    // Whether a reply item is a hit: it names a screen and has a title.
+    [[nodiscard]] static bool isHit(Value const& item) {
+        Value const* const screen = item.field("screen");
+        return screen != nullptr && screen->asString() != nullptr && item.field("title") != nullptr;
     }
 
     [[nodiscard]] std::vector<Target> sourceHits(std::size_t source) const {
@@ -482,18 +541,20 @@ private:
         }
         SearchSource const& declared = _parts->search.at(source);
         AppRoot::QueryRead const read = _root->query(shell_names::search(source));
+        // The hits of a source the view does not draw are not the person's to open.
+        if (read.denied || read.failed) {
+            return out;
+        }
         Value const* const list = read.value.field(declared.resultsField);
         ValueList const* const items = list == nullptr ? nullptr : list->asList();
         if (items == nullptr) {
             return out;
         }
         for (Value const& item : *items) {
-            Value const* const screen = item.field("screen");
-            Value const* const title = item.field("title");
-            if (screen == nullptr || screen->asString() == nullptr || title == nullptr ||
-                out.size() >= kSearchHitsPerSource) {
+            if (!isHit(item) || out.size() >= kSearchHitsPerSource) {
                 continue;
             }
+            Value const* const screen = item.field("screen");
             Target target{.screen = *screen->asString(), .params = {}};
             if (Value const* const params = item.field("params"); params != nullptr && params->asRecord() != nullptr) {
                 target.params = *params->asRecord();
@@ -520,6 +581,7 @@ private:
                 continue;
             }
             ShellSourceView shown;
+            shown.source = source;
             std::string title = translate(declared.title, format);
             if (title.empty() && _options.moduleLabel) {
                 title = _options.moduleLabel(declared.module);
@@ -527,18 +589,24 @@ private:
             shown.title = title.empty() ? declared.module : title;
             shown.pending = read.pending;
             shown.failed = read.failed;
-            if (!read.failed) {
+            std::string const query = shell_names::search(source);
+            if (read.failed) {
+                problem("shell search " + query + ": the read failed");
+            } else {
                 Value const* const list = read.value.field(declared.resultsField);
                 ValueList const* const items = list == nullptr ? nullptr : list->asList();
+                if (items == nullptr && !read.value.isNull()) {
+                    problem("shell search " + query + ": the reply has no list `" + declared.resultsField + "`");
+                }
                 for (Value const& item : items == nullptr ? ValueList{} : *items) {
-                    Value const* const screen = item.field("screen");
-                    Value const* const hitTitle = item.field("title");
-                    if (screen == nullptr || screen->asString() == nullptr || hitTitle == nullptr) {
+                    if (!isHit(item)) {
+                        problem("shell search " + query +
+                                ": a hit has no string `screen` or no `title` and is dropped");
                         continue;
                     }
                     if (shown.hits.size() < kSearchHitsPerSource) {
                         shown.hits.push_back(ShellHitView{.kind = memberText(item, "kind", format),
-                                                          .title = describe(*hitTitle, format),
+                                                          .title = describe(*item.field("title"), format),
                                                           .detail = memberText(item, "detail", format)});
                     }
                 }
@@ -566,6 +634,7 @@ private:
             permitted = true;
             if (read.failed) {
                 out.failed = true;
+                problem("shell inbox " + shell_names::inbox(index) + ": the read failed");
             } else if (!read.pending) {
                 if (auto const count = countOf(read.value, declared.countField, shell_names::inbox(index))) {
                     sum += *count;
@@ -604,6 +673,11 @@ private:
             return out;
         }
         out.shown = true;
+        if (read.failed) {
+            problem("shell principal: the read failed");
+        } else if (!read.value.isNull() && read.value.field(declared.nameField) == nullptr) {
+            problem("shell principal: the reply has no `" + declared.nameField + "`");
+        }
         out.name = memberText(read.value, declared.nameField, format);
         out.subtitle = memberText(read.value, declared.subtitleField, format);
         out.detail = memberText(read.value, declared.detailField, format);
@@ -652,7 +726,7 @@ private:
     reactive::Signal<Value> _chosen;
     reactive::Signal<bool> _answered;
     reactive::Signal<std::string> _searchText;
-    std::vector<Option> _optionList;
+    reactive::Signal<std::vector<Option>> _optionList;
     mutable std::set<std::string> _reported;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
     std::unique_ptr<reactive::Effect> _follow;

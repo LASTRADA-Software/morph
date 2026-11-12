@@ -621,6 +621,9 @@ private:
         ui::ShellBindingOptions options;
         options.model.moduleLabel = [this](std::string_view module) { return moduleLabelOf(module); };
         options.model.screenTitle = [this](std::string_view screenId) { return screenTitleOf(screenId); };
+        options.model.screenListed = [this](std::string_view screenId) { return screenListedIn(screenId); };
+        options.model.moduleListed = [this](std::string_view module) { return moduleListedIn(module); };
+        options.model.replyIsRecord = [this](std::string_view action) { return replyIsRecord(action); };
         options.model.catalogueLocales = [this] { return _catalogues.locales(); };
         options.model.dirtyTabs = [this] { return _workspace ? _workspace->dirtyTabs() : std::size_t{0}; };
         options.model.closeDirtyTabs = [this] {
@@ -630,6 +633,7 @@ private:
         };
         options.model.onProblem = [this](std::string const& text) { problem(text); };
         options.open = [this](ui::ShellPartsModel::Target const& target) { openTarget(target); };
+        options.openAll = [this](std::vector<ui::ShellPartsModel::Target> const& targets) { openTargets(targets); };
         options.localeChosen = [this] { localeChosen(); };
         options.contextReady = [this, alive = std::weak_ptr<bool>{_alive}](bool ready) { contextReady(ready, alive); };
         _contextReady = !_appDocument->shell->context.has_value();
@@ -661,6 +665,51 @@ private:
                 mount(target.screen, target.params);
             }
         });
+    }
+
+    // Opens several screens as tabs in order and leaves the first the active tab: it is activated again once the rest
+    // are open, since each opening makes its own tab the active one.
+    void openTargets(std::vector<ui::ShellPartsModel::Target> const& targets) {
+        _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, targets] {
+            auto const live = alive.lock();
+            if (live == nullptr || !*live) {
+                return;
+            }
+            std::optional<std::size_t> first;
+            for (ui::ShellPartsModel::Target const& target : targets) {
+                mount(target.screen, target.params);
+                if (!first && _workspace) {
+                    first = _workspace->active();
+                }
+            }
+            if (first && _workspace) {
+                _workspace->activate(*first);
+            }
+        });
+    }
+
+    [[nodiscard]] bool screenListedIn(std::string_view screenId) const {
+        ui::CatalogReply const* const catalog = _source == nullptr ? nullptr : _source->catalogReply();
+        return catalog == nullptr || std::ranges::any_of(catalog->entries, [screenId](ui::CatalogEntry const& entry) {
+                   return entry.id == screenId;
+               });
+    }
+
+    [[nodiscard]] bool moduleListedIn(std::string_view module) const {
+        ui::CatalogReply const* const catalog = _source == nullptr ? nullptr : _source->catalogReply();
+        return catalog == nullptr || std::ranges::any_of(catalog->entries, [module](ui::CatalogEntry const& entry) {
+                   return entry.module == module;
+               });
+    }
+
+    // Whether the catalog says an action's reply holds a registered record; an action it does not know is taken to.
+    [[nodiscard]] bool replyIsRecord(std::string_view action) const {
+        if (_source == nullptr) {
+            return true;
+        }
+        ui::Catalog const catalog = _source->catalog();
+        auto const info = catalog.action ? catalog.action(action) : std::nullopt;
+        return !info || !info->records.empty();
     }
 
     // The person's menu changed the language: the same steps a document's `setLocale` takes.
