@@ -1287,8 +1287,11 @@ and five handlers judge their rule again just before their write: `BeginClosePer
 performers are read once more). The second judgment reads on the rule's own connection, so it sees committed rows and
 not the handler's transaction, which has written nothing yet; what it adds is that a role or limit changed since the
 guard ran is seen. `SubmitInvoice` is judged once, by the guard: its only write is a conditional update on the
-invoice's state and gross, which refuses a stale submission by itself. What makes `ApproveInvoice` safe against a
-concurrent approval is likewise its conditional update from `Submitted`, not the second judgment. The first role assignment on a lab with no
+invoice's state and gross, which refuses a stale submission by itself; a role revoked while it awaits the rate lookup
+is not seen, and the submission stands. `ApproveInvoice` judges committed rows rather than its own transaction's
+because a submitted invoice's gross and performers cannot change: there is no way back to `Draft`, and every edit is
+conditional on `Draft`. Its conditional update from `Submitted` then binds what was judged to what is written, and is
+also what makes it safe against a concurrent approval, not the second judgment. The first role assignment on a lab with no
 supervisor is exempt in the guard (`Authorization<AssignRole>::bootstrapOpen`).
 
 **Unknown ids.** A caller who names a row that does not exist, and holds a role somewhere, is refused in words rather

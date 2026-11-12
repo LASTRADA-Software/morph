@@ -197,8 +197,10 @@ InvoiceView InvoiceModel::execute(const ApproveInvoice& action) {
     }
     // Judged again just before the write: the guard ran it first, on every path, and this reads the scope, the gross
     // and the performers once more, so a role or limit changed since is seen. The rule reads on its own connection, so
-    // it sees committed rows, not this transaction's; this transaction has written nothing yet. What makes the write
-    // safe against a concurrent approval is the conditional update below.
+    // it sees committed rows, not this transaction's; this transaction has written nothing yet. That is enough because
+    // a submitted invoice's gross and performers cannot change (every edit is conditional on Draft, and nothing
+    // returns an invoice to Draft), and the conditional update below on Submitted binds what was judged to what is
+    // written; it is also what makes the write safe against a concurrent approval.
     requireAuthorized(action);
     if (!updateInvoiceIf(mapper, static_cast<std::int64_t>(row.id.Value()), InvoiceState::Submitted, [](auto& query) {
             query.Set("state", static_cast<int>(InvoiceState::Approved))
