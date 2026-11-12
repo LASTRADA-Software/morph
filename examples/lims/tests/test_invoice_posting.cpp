@@ -710,3 +710,26 @@ TEST_CASE("invoice posting: an invoice removed after the update is refused and n
     CHECK(entries().empty());
     CHECK(current(invoice).state == lims::InvoiceState::Approved);
 }
+
+// Mutation: drop the company lookup after the posting update (an invoice that now names a company with no row is
+// numbered against a company that does not exist).
+TEST_CASE("invoice posting: an invoice that names a company with no row after the update is refused",
+          "[lims][billing][posting]") {
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{lims::test::at(2026, 11, 20)};
+    lims::test::books();
+    lims::test::billingSettings();
+    lims::test::PostingRig posting{PostingMode::SharedTransaction};
+    auto const invoice = lims::test::approvedInvoice();
+    {
+        lims::test::ScopedTrigger const renamed{"AFTER UPDATE ON billing_invoices WHEN NEW.state = 3",
+                                                "UPDATE billing_invoices SET company_id = 9999 WHERE id = NEW.id;"};
+        // In process, so that the refusal keeps its type; over a socket it reaches a client as its message only.
+        ScopedPrincipal const bea{"bea"};
+        lims::InvoiceModel invoices;
+        CHECK_THROWS_AS(core::async::syncRun(invoices.execute(lims::PostInvoice{.invoiceId = invoice.id})),
+                        lims::NotFound);
+    }
+    CHECK(entries().empty());
+    CHECK(current(invoice).state == lims::InvoiceState::Approved);
+}

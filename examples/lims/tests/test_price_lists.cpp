@@ -748,13 +748,17 @@ TEST_CASE("PriceListModel over the full backend-mode matrix: a price list and a 
 
 // Mutation: delete the company lookup from CreatePriceList (a list is written for a company that is not there), the
 // list lookup from SetPrice (a price is written for a list that is not there), or the engaged-company guard from
-// settingsOf (an empty id is looked up as company 0).
+// settingsOf (an empty id is looked up as company 0), or the list lookup from storePrice, which is public and so also
+// reached without the handler.
 TEST_CASE("price lists: the handlers refuse an unknown company or list on their own", "[lims][billing][prices]") {
     DbFixture fixture;
     ScopedPrincipal const bea{"bea"};
     lims::PriceListModel model;
     CHECK_THROWS_AS(model.execute(listFor(lims::CompanyId{9999})), lims::NotFound);
     CHECK_THROWS_AS(model.execute(priceInCents(lims::PriceListId{9999}, 1, 100)), lims::NotFound);
+    CHECK_THROWS_AS(
+        static_cast<void>(lims::PriceListModel::storePrice(priceInCents(lims::PriceListId{9999}, 1, 100), {})),
+        lims::NotFound);
     CHECK_FALSE(lims::PriceListModel::settingsOf(lims::CompanyId{}).has_value());
     Lightweight::DataMapper mapper;
     CHECK(mapper.Query<lims::db::PriceListRecord>().All().empty());

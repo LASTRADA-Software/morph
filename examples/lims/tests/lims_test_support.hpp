@@ -186,8 +186,9 @@ inline constexpr std::string_view kBusyMessage = "database is locked";
 /// @brief Makes every statement of one kind on one table fail with a chosen message, until it goes out of scope.
 ///
 /// The statement the model issues is the real one; a trigger refuses it, so the model's own handling of a database
-/// failure runs. A message containing "database is locked" reads as a busy database (`isBusy`), anything else as a
-/// failure that is not.
+/// failure runs. A message containing "database is locked" reads as a busy database through `isBusy`'s message
+/// fallback (its error code is SQLITE_CONSTRAINT, not SQLITE_BUSY), anything else as a failure that is not. Each
+/// instance has a name of its own, and a `'` in the message is doubled.
 class FailingStatements {
 public:
     /// @param table The table.
@@ -196,9 +197,9 @@ public:
     /// @param when An optional condition over `NEW` or `OLD`, as SQL; empty fails every statement.
     FailingStatements(std::string const& table, std::string const& event, std::string const& message,
                       std::string const& when = {})
-        : _name{"lims_test_fail_" + table + "_" + event} {
+        : _name{"lims_test_fail_" + table + "_" + event + "_" + std::to_string(++_made)} {
         runSql("CREATE TRIGGER " + _name + " BEFORE " + event + " ON " + table +
-               (when.empty() ? "" : " WHEN " + when) + " BEGIN SELECT RAISE(ABORT, '" + message + "'); END");
+               (when.empty() ? "" : " WHEN " + when) + " BEGIN SELECT RAISE(ABORT, '" + quoted(message) + "'); END");
     }
 
     FailingStatements(FailingStatements const&) = delete;
@@ -213,6 +214,14 @@ public:
     }
 
 private:
+    static std::string quoted(std::string text) {
+        for (auto at = text.find('\''); at != std::string::npos; at = text.find('\'', at + 2)) {
+            text.insert(at, 1, '\'');
+        }
+        return text;
+    }
+
+    static inline int _made = 0;
     std::string _name;
 };
 
@@ -226,7 +235,7 @@ public:
     /// @param event `UPDATE` or `DELETE`.
     /// @param when An optional condition over `NEW` or `OLD`, as SQL; empty skips every row.
     SkippedStatements(std::string const& table, std::string const& event, std::string const& when = {})
-        : _name{"lims_test_skip_" + table + "_" + event} {
+        : _name{"lims_test_skip_" + table + "_" + event + "_" + std::to_string(++_made)} {
         runSql("CREATE TRIGGER " + _name + " BEFORE " + event + " ON " + table +
                (when.empty() ? "" : " WHEN " + when) + " BEGIN SELECT RAISE(IGNORE); END");
     }
@@ -243,6 +252,7 @@ public:
     }
 
 private:
+    static inline int _made = 0;
     std::string _name;
 };
 
