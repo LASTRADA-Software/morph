@@ -474,7 +474,7 @@ container) takes part in no drag.
 a menu of search results under a field. It is non-modal and takes no focus, so focus stays where it was; it dims
 nothing; it is anchored under its parent container's box and aligned to its leading edge, with a width of its own
 (`setWidth(units)`; 0 is the parent's width). `setOpen(bool)` shows or hides it and never calls `onDismiss`;
-`setOnDismiss(handler)` is called when the backend sees a press outside both the popover and its parent, or Escape while focus is inside the panel; focus that stays in the field the panel serves keeps Escape for that field, which closes the panel itself. On a
+`setOnDismiss(handler)` is called when the backend sees a press outside both the popover and its parent; Escape belongs to the field the panel serves, which closes the panel itself. On a
 backend with a floating layer (Qt Quick) it floats over the content and takes no space in its parent's layout; on a
 backend without one (the terminal) it is the rows under the parent, in flow. The recording backend records `open`,
 `width` and its children. `MenuEntry::heading` is a label in a menu that is not a command: drawn as muted text, exposed

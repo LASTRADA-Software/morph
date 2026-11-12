@@ -107,7 +107,9 @@ A read that names a `contextField` also carries a `when` that holds once there i
 nothing is asked unscoped; it is asked as soon as the first option is the context, and again whenever the context
 changes. A read with no `contextField` is not held back.
 
-These names are reserved: a document that declares one of them is refused. Because they are queries, a part refreshes
+These names are reserved: a document that declares one of them, as a model alias, state, `let`, query or mutation, is
+refused. They are `shellSearchText`, `shellContext`, `shellPrincipal`, and `shellModel`, `shellCount`, `shellSearch` or
+`shellInbox` followed by a number; a name that only begins with `shell` is the document's own. Because they are queries, a part refreshes
 by the path a screen's query does and needs nothing the screens do not: on mount; when a record the reply holds changes
 (on this client or another: an action's `BRIDGE_REGISTER_EFFECTS`, [`KEEPING-SCREENS-CURRENT`](../../KEEPING-SCREENS-CURRENT.md));
 when the context or locale it reads changes; and when a stale entry is read again. A count action's reply type should
@@ -122,7 +124,8 @@ text asks nothing and clears the hits. At most `kSearchHitsPerSource` (8) hits o
 too, so while the panel is open a change to a record they hold refreshes them.
 
 **Authorisation.** A read the server refuses with the error kind `denied` is the authoriser working: it is neither drawn
-nor reported. A denied switcher, count, search source or person's menu is left out; an inbox whose every source is denied
+nor reported. A denied switcher (neither the switcher nor, with no scope, the reads that need one are drawn or asked), count, search
+source or person's menu is left out; an inbox whose every source is denied
 draws no button, and a denied source contributes nothing to the sum.
 
 ## Typed values and the locale
@@ -147,15 +150,18 @@ declared `contextField` is the whole mechanism.
   With no switcher declared the context is `null` and nothing waits.
 - **Equality** is by JSON value: the integer `1` and the string `"1"` are different options.
 - **A vanished option.** When the options are refreshed and the chosen value is no longer among them, the first option
-  becomes the context. With no options the context is `null` and the switcher draws disabled.
+  becomes the context. With no options the context is `null` and the switcher draws disabled. A read that names a
+  `contextField` waits for a context, so while there is none, because the switcher answered with no option or was
+  refused, nothing scoped is asked; the parts that name no `contextField` are asked as usual. The start screen does not
+  wait on a switcher that failed or was refused.
 - **Held** for the session: not stored between runs, not shared between clients; a sign-in or sign-out clears it.
 
 ## Changing the context
 
 Two ways, one rule. The person chooses an option in the switcher, or a screen runs the `ui/1` command
 `{"setContext": e}`, `e` an expression whose value is an option's value. The command is handled by the shell
-(`InterpreterHost::setContext`): it refuses a value that is not among the current options (reported, nothing changes),
-and it is not a host command, so the shell registers nothing globally and nothing outlives the frame. `{"can":
+(the session's context handler, `Session::setContextHandler`): it refuses a value that is not among the current options
+(reported, nothing changes), and it is not a host command, so the shell registers nothing globally and nothing outlives the frame. `{"can":
 "context"}` is true exactly while a switcher with at least one option is installed, and false otherwise, so a banner
 offers the button only where it works. A refusal that came from the scope can therefore offer a button that runs it.
 
@@ -232,9 +238,9 @@ caption ends with the count.
   with a dialog open, which is modal, it does not reach the frame.
 - **Down** and **Up** in the field move the highlight over the hits, wrapping at the ends, while focus stays in the field.
   **Enter** opens the highlighted hit. **Shift Enter** opens every drawn hit as a tab, in order, at most
-  `kSearchOpenAllLimit` (10); the first one opened is the active tab, and sources still in flight are not waited for. A
+  `kSearchOpenAllLimit` (10); the first one opened is the active tab (the client opens the first again last), and sources still in flight are not waited for. A
   terminal that sends Shift Enter as Enter uses **Alt Enter**. **Escape** closes the panel, leaving the text; Escape
-  again clears the text; Escape on an empty field returns focus to the page.
+  again clears the text; Escape on an empty field returns focus to the page; in the compact search overlay it closes the overlay.
 - The switcher and the principal's menu are menus: their keys are the renderer's.
 
 ## Loading, empty and error states
