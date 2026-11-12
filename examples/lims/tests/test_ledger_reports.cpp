@@ -1268,13 +1268,13 @@ TEST_CASE("ledger reports: a read failure that is not an overflow surfaces as it
 }
 
 // Mutation: let a report's read failure that names a busy database surface as the driver's exception.
-TEST_CASE("ledger reports: a read the database reports as busy is turned into a conflict", "[lims][ledger]") {
+TEST_CASE("ledger reports: a read failure whose message names busy is turned into a conflict", "[lims][ledger]") {
     DbFixture fixture;
     books();
     post("rep-1", units(1000));
     ScopedPrincipal const alice{"alice"};
     // The view's body names a table called "busy" that does not exist, so the aggregate over the lines fails with
-    // a message that isBusy reads as a busy database.
+    // "no such table: main.busy"; isBusy's message fallback matches the word "busy" and reads it as a busy database.
     lims::test::runSql("ALTER TABLE ledger_entry_lines RENAME TO ledger_entry_lines_moved");
     lims::test::runSql("CREATE VIEW ledger_entry_lines AS SELECT * FROM busy");
     CHECK_THROWS_AS(lims::LedgerReportModel{}.execute(

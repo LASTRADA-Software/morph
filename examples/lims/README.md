@@ -659,31 +659,31 @@ mounts every screen on Qt Quick offscreen. `morph_examples_client --app lims` ru
 process over a local database (`--db`, default `lims.db`).
 
 
-### 20. Model coverage is 99.56%, and measuring it found a real defect (§ coverage gate)
+### 20. Model coverage is 99.60%, and measuring it found a real defect (§ coverage gate)
 
-`codecov.yml` has one component per module (`lims_lab`, `lims_org`, `lims_ledger`, `lims_billing`), each scoped to that
-module's model paths (`examples/lims/<m>/src/models/**` and `examples/lims/<m>/include/lims/<m>/models/**`) — the paths
-`examples/IMPLEMENTATION.md` rule 5's bar names — with a target 0.5 points below the module's own coverage as Codecov
-counts it (below).
-Inventory is Part C's and joins when Part C is measured; posting has no model.
+`codecov.yml` has one component per module (`lims_lab`, `lims_org`, `lims_ledger`, `lims_billing`), each scoped to
+that module's model paths (`examples/lims/<m>/src/models/**` and `examples/lims/<m>/include/lims/<m>/models/**`) —
+the paths `examples/IMPLEMENTATION.md` rule 5's bar names — with a target 0.5 points below the module's own coverage
+as Codecov counts it (below). Inventory is Part C's and joins when Part C is measured; posting has no model.
 
 Measured the way CI measures: the `clang-coverage` preset configured with `MORPH_LADDER_RUNGS=lims` (CI passes `all`;
-the other rungs' binaries execute none of these sources), the whole tree built, and every test but the stress cases run
-(`ctest --preset clang-coverage -LE stress`, 5186 tests, all passed, with `LLVM_PROFILE_FILE=%p.profraw` so that each
-test process writes a profile of its own). The profile is a merge of runs, not of one clean run: the tests ran in slices,
-the tests of a slice that timed out were run again, and the profiles of all of them were merged with
+the other rungs' binaries execute none of these sources), the whole tree built, and every test but the stress cases
+run (`ctest --preset clang-coverage -LE stress`, 5186 tests, all passed, with `LLVM_PROFILE_FILE=%p.profraw` so that
+each test process writes a profile of its own). The profile is a merge of runs, not of one clean run: the tests ran
+in slices, the tests of a slice that timed out were run again, and the profiles of all of them were merged with
 `llvm-profdata merge -sparse` (counters only add, so a rerun cannot lower a figure). The ledger-report tests were run
-once more after the last test was added, and their profiles were merged into the earlier one. `scripts/coverage.sh` then
-reports over all fifteen binaries in `coverage_objects.txt`. The line counts are llvm-cov's; the branch counts are llvm-cov's per instantiation, so they are
-higher than the aggregated figure the branch gate reports.
+once more after the last test was added, and their profiles were merged into the earlier one. `scripts/coverage.sh`
+then reports over all fifteen binaries in `coverage_objects.txt`. The line counts are llvm-cov's; the branch counts
+are llvm-cov's per instantiation, so they are higher than the aggregated figure the branch gate reports.
 
 Two figures describe each module, because llvm-cov and Codecov count differently. llvm-cov counts a line as covered
-when it runs. Codecov, as `codecov.yml` documents for its core components, counts `hits / (hits + misses + partials)`,
-where a line that runs but holds a branch arm never taken is a partial and not a hit. The Codecov figure is computed
-from the `coverage.lcov` that CI uploads: a line with `DA` 0 is a miss, a line with `DA` above 0 and any `BRDA` entry
-taken 0 times or `-` is a partial. It is a computation from the local file, not an observed Codecov report. **The
-targets follow the Codecov figure**, because that is the number Codecov compares them with; each is 0.5 points below it,
-rounded down to one decimal, so that a small change which adds one partial line does not turn the status red.
+when it runs. Codecov, as `codecov.yml` documents for its core components, counts `hits / (hits + misses +
+partials)`, where a line that runs but holds a branch arm never taken is a partial and not a hit. The Codecov figure
+is computed from the `coverage.lcov` that CI uploads: a line with `DA` 0 is a miss, a line with `DA` above 0 and any
+`BRDA` entry taken 0 times or `-` is a partial. It is a computation from the local file, not an observed Codecov
+report. **The targets follow the Codecov figure**, because that is the number Codecov compares them with; each is 0.5
+points below it, rounded down to one decimal, so that a small change which adds one partial line does not turn the
+status red.
 
 | Module | llvm-cov lines | llvm-cov branches | Codecov hits / misses / partials | Codecov | Target (project and patch) |
 |---|---|---|---|---|---|
@@ -700,27 +700,28 @@ functions, and none was identified. A control argues that no model function is a
 `ladder_lims_tests` and `ladder_lims_screen_tests` alone, each running one test, loads with no warning, and the
 *totals* of instrumented lines and functions for all seventeen model files equal the merged run's, file for file. Equal
 totals show that no model function is missing from the report. They do not show that no binary's counts for a model
-function were discarded, which could only lower a figure. That control was run on an earlier revision and not repeated
-on this one. The profile set was empty before the tests ran, so no stale profile is in the merge.
+function were discarded, which could only lower a figure. That control was run on an earlier revision and not
+repeated on this one. The profile set was empty before the tests ran, so no stale profile is in the merge.
 
-**The rule for what is left uncovered.** A line stays uncovered only if no caller can reach it. A caller, here, is any of:
-an action through the bridge; a direct call to a handler (`execute`), which bypasses the scope guard and so reaches every
-not-found arm a guard would have refused first; a call to a public function; a row the test writes, changes or deletes
-below the model (the lims connection does not enforce foreign keys, so a dangling reference is a one-statement setup);
-and a database that refuses a statement, which a trigger raising an error, or ignoring the row, produces from the
-model's own real statement (`FailingStatements`, `SkippedStatements` and `ScopedTrigger` in
+**The rule for what is left uncovered.** A line stays uncovered only if no caller can reach it. A caller, here, is
+any of: an action through the bridge; a direct call to a handler (`execute`), which bypasses the scope guard and so
+reaches every not-found arm a guard would have refused first; a call to a public function; a row the test writes,
+changes or deletes below the model (the lims connection does not enforce foreign keys, so a dangling reference is a
+one-statement setup); and a database that refuses a statement, which a trigger raising an error, or ignoring the row,
+produces from the model's own real statement (`FailingStatements`, `SkippedStatements` and `ScopedTrigger` in
 `tests/lims_test_support.hpp`; `isBusy` decides on the driver's native error code first, 5 or 6, and falls back to
 the message, so a failure message containing "database is locked" is read as a busy database by that fallback. The
-triggers raise `SQLITE_CONSTRAINT`, so the busy tests exercise the message fallback and not the code branch). Every arm those reach has a test that asserts its behaviour. The same rule applies to every arm,
-whatever its kind (a validation arm, a not-found arm, a stored enumerator out of range, a failed write that is not the
-lost race, a busy database, an update that changes no row): none is exempted because it looks defensive.
+triggers raise `SQLITE_CONSTRAINT`, so the busy tests exercise the message fallback and not the code branch). Every
+arm those reach has a test that asserts its behaviour. The same rule applies to every arm, whatever its kind (a
+validation arm, a not-found arm, a stored enumerator out of range, a failed write that is not the lost race, a busy
+database, an update that changes no row): none is exempted because it looks defensive.
 
-What the rule leaves is the 8 lines below, each of which needs something the callers above cannot do: a statement of
-the model's own that fails inside a read at a moment no caller controls, or an input the library generates or validates
-before the line. That each is unreachable is judged by reading the code, not shown by a test. llvm-cov counts 19 uncovered
-lines (4788 - 4769); the other 11 are lines that also run but hold
-a region never entered, such as the row-id lambda of a table plan. Seven of the 11 were looked at and are such lambdas
-and one ternary; four were not identified.
+What the rule leaves is the 8 lines below, each of which needs something the callers above cannot do: an input the
+library generates or validates before the line, a branch with no other case to take, or a guard its only caller has
+already satisfied. That each is unreachable is judged by reading the code, not shown by a test. llvm-cov counts 19
+uncovered lines (4788 - 4769); the other 11 are lines that also run but hold a region never entered, such as the
+row-id lambda of a table plan. Seven of the 11 were looked at and are such lambdas and one ternary; four were not
+identified.
 
 *lab*
 - `analysis_catalog_model.cpp:93-94` malformed-JSON arm of `renderSchemaFor`; its input is `schemaJson<A>()`, which the
@@ -733,30 +734,28 @@ and one ternary; four were not identified.
 
 *billing* and *org* have none either.
 
-The tests that cover the arms the rule reaches: not-found arms of the handlers by direct call
-(`RegisterSample`, `SaveSample`, `CreateSite`, `RevokeRole`, `SetValueLimit`, `CreateAccount`, `OpenPeriod`,
-`BeginClosePeriod`, `PostEntry`, `ReverseEntry`, `ClosePeriod`, `SetExchangeRate`, `CreatePriceList`, `SetPrice`,
-`AdvanceBillingRun`, `RecordBillableLine`, `CreateInvoice`, `SubmitInvoice`, `ResolveConflict`, `VerifyResult`, a report on
-a company that is gone, the price-list lookup of `storePrice`, which is public, `settingsOf` and `findInvoiceRecord` with an empty id, `ListPendingApprovals` with no
-principal); a stored state, currency or side out of range for entries, periods, rates, price lists, billing lines,
-invoices and runs; a company, sample, entry, line, run, invoice or analysis row removed behind the model; and a write the
-database refuses (busy and not busy) for postings, rates, price lists, billing settings, display names, billable lines,
-runs and the invoice posting's two ways. The overflow guard on a foreign gross, the posting date with no rate, the December period's end, the price-list lookup of
-`storePrice` and the company lookup after the posting update were each shown to fail their test when the guarded line is
-mutated (the last two by changing the refusal's type, which the test asserts). The overflow guard's check reads
-`converted.value()`, so a removed guard fails as an unexpected `bad_optional_access` and not through undefined
-behaviour. The other tests assert the refusal's type, which a removed check would change to success or to another error;
-that is reasoning, not a run.
+The tests that cover the arms the rule reaches: not-found arms of the handlers by direct call (`RegisterSample`,
+`SaveSample`, `CreateSite`, `RevokeRole`, `SetValueLimit`, `CreateAccount`, `OpenPeriod`, `BeginClosePeriod`,
+`PostEntry`, `ReverseEntry`, `ClosePeriod`, `SetExchangeRate`, `CreatePriceList`, `SetPrice`, `AdvanceBillingRun`,
+`RecordBillableLine`, `CreateInvoice`, `SubmitInvoice`, `ResolveConflict`, `VerifyResult`, a report on a company that
+is gone, the price-list lookup of `storePrice`, which is public, `settingsOf` and `findInvoiceRecord` with an empty
+id, `ListPendingApprovals` with no principal); a stored state, currency or side out of range for entries, periods,
+rates, price lists, billing lines, invoices and runs; a company, sample, entry, line, run, invoice or analysis row
+removed behind the model; and a write the database refuses (busy and not busy) for postings, rates, price lists,
+billing settings, display names, billable lines, runs and the invoice posting's two ways; and a ledger report whose
+read fails with a message the busy check matches. The overflow guard on a foreign gross, the posting date with no
+rate, the December period's end, the price-list lookup of `storePrice` and the company lookup after the posting
+update were each shown to fail their test when the guarded line is mutated (the last two by changing the refusal's
+type, which the test asserts). The overflow guard's check reads `converted.value()`, so a removed guard fails as an
+unexpected `bad_optional_access` and not through undefined behaviour. The other tests assert the refusal's type,
+which a removed check would change to success or to another error; that is reasoning, not a run.
 
-Measuring rather than assuming was worth it twice. The first measurement came
-in at 93.27%, and the gap was not padding: `AnalysisCatalogModel::attachActionLog`
-had no caller at all, so the catalogue's entire journaling path was
-unverified — and the audit trail's `VerifyResult` branch was **dead**, because
-verifications were journaled under an *empty* entity key. That was a real
-defect rather than a coverage artifact: a sample's audit trail silently
-omitted the second pair of eyes, which is the one thing a four-eyes record
-exists to show. Fixed by rekeying the journal to the result's own sample
-(same for conflict resolutions), and pinned by its own test.
+Measuring rather than assuming was worth it twice. The first measurement came in at 93.27%, and the gap was not
+padding: `AnalysisCatalogModel::attachActionLog` had no caller at all, so the catalogue's entire journaling path was
+unverified — and the audit trail's `VerifyResult` branch was **dead**, because verifications were journaled under an
+*empty* entity key. That was a real defect rather than a coverage artifact: a sample's audit trail silently omitted
+the second pair of eyes, which is the one thing a four-eyes record exists to show. Fixed by rekeying the journal to
+the result's own sample (same for conflict resolutions), and pinned by its own test.
 
 ### 21. lims is built from modules, and the boundary is a link boundary
 
