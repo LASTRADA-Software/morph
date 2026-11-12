@@ -298,13 +298,6 @@ the `render::TranslationProvider`, the `UnitTable`, the display zone's offset an
   is that calendar day at any offset, and `dateTime` shows it as midnight of that day in the display
   zone, as a date input does. `""` is `null` without a report.
 
-- **Under a locale scope.** Inside a `localeScope` ([`document_page.md`](document_page.md#the-locale-scope)) the context
-  an expression reads is the session's with the scope's locale, its row of the locale table (separators, sign, currency
-  placement) and the date patterns the application declared, else that row's; `t` resolves in the scope's locale. The
-  environment's `formatting()` answers it, so every function above, `format`, `parseDecimal` and a message's
-  `:number` follow the scope with no change to the function. `{"env": "locale"}` and `session.locale` stay the
-  session's. The units, the display zone and the `DateFormatter` are the session's.
-
 - `dateRange(from, to)` writes two days as one span, each read as `date` reads (an instant is shifted to the
   display zone first): `20–24 Oct 2026` within a month, `28 Oct – 3 Nov 2026` within a year, `30 Dec 2026 – 2 Jan
   2027` across years, and a single day when both are the same. The days are unpadded and the month is the English
@@ -323,6 +316,14 @@ except `MMM` beside a number, so `ddMMyyyy` is refused. So every text it writes 
 read in the pattern and then as ISO 8601 (`yyyy-MM-dd`, `yyyy-MM-dd HH:mm`, `yyyy-MM-ddTHH:mm` in the display zone, or
 a full instant), so a pasted ISO date still works; text read with `xxx` takes its instant from the offset it names,
 so `24-Oct-2026 09:41 +02:00` is 07:41 UTC whatever the display zone.
+
+- **Under a locale scope.** Inside a `localeScope` ([`document_page.md`](document_page.md#the-locale-scope)) the context
+  an expression reads is the session's with the scope's locale, its row of the locale table (separators, sign, currency
+  placement) and the date patterns the application declared, else that row's; `t` resolves in the scope's locale. The
+  environment's `formatting()` answers it, so `number`, `decimal`, `quantity`, `money`, `date`, `dateTime`,
+  `dateRange`, `format` and a message's `:number` follow the scope with no change to the function. `parseDecimal` is
+  entry and always reads the session's facts, as does every parse of typed text. `{"env": "locale"}` stays the
+  session's. The units, the display zone and the `DateFormatter` are the session's.
 
 ## Messages
 

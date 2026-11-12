@@ -240,6 +240,12 @@ span the column while their content lines up with the body's, and the shell, whi
 does not inset the page around it. When the top bar always shows (it has nodes and none has a `visible` condition) the column also says it is `headJoined`: the bar continues the head's block, and the divided column's rule under the bar is the block's. A hand-made column draws its bars as written. A splitter pane may be pinned: a stretching
 splitter gives each pane its height, and a pinned pane keeps its bars at the pane's ends.
 
+**A document page.** `page`, `pageRegion` and `localeScope` lay a fixed-size sheet out in millimetres and format a subtree
+in another locale. `page` takes `width`, `height` and `margins`, `pageRegion` takes `anchor`, `x`, `y`, `width` and
+`height`, and `localeScope` takes `locale`; the common keys each honours and the refusals the loader makes (a non-region
+child of a `page`, a region outside a page, a pinned region with an offset, a region leaving the sheet, an empty margin
+box, any layout key a sheet sizes itself without) are in [`document_page.md`](document_page.md#the-document-form-and-the-author-api).
+
 A `DocNode` is a node or a structured part of one. Its properties stay keyed by their document
 keys — `props` (expressions), `events` (command lists, a custom node's events as `on.<event>`),
 `children` (node lists), `parts` (records such as columns and tabs), `names` (plain strings) and

@@ -401,6 +401,14 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `CollapsibleWidget` | `setTitle`, `setHeader(child)` (at most once), `setOpen` | `setOnToggle(open)`, with the state the user asked for |
 | `DropZoneWidget` | `setAccept(extensions)`, `setMultiple` (both once) | `setOnDrop(paths)` |
 | `CustomWidget` | `setTextProp(name, text)`, `setBoolProp(name, bool)`, `setNumberProp(name, double)` | `setOnEvent(event, payload)` |
+| `PageWidget` (a `ContainerWidget`) | — (made by `createPage(parent, PageGeometry)`; the geometry is a factory argument) | — |
+| `PageRegionWidget` (a `ContainerWidget`) | — (made by `createPageRegion(parent, RegionGeometry)`) | — |
+
+A page asks its container for a natural width of the sheet, a least width of 0 and a height that follows the width it is given
+([`document_page.md`](document_page.md#size-request)); the mount sets its role (`document`) and surface (`paper`). The
+recording backend records `size`, `margins`, `scale` and `displayed` on a `Page`, and `anchor`, `rect` and `overflow` on a
+`PageRegion`, and logs a change of the derived `scale`, `displayed`, `rect` and `overflow` (`setPageAvailableWidth`,
+`setRegionContentHeight`).
 
 **The width class.** `IViewBackend::widthClass()` is the class of the surface the backend draws on, now, and
 `setOnWidthClass(listener)` registers the one listener told of each later change, on the owner and outside any layout
