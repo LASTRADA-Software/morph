@@ -392,7 +392,7 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `BannerWidget` | `setTone`, `setText`, `setSpans`, `setActionLabel`, `setDismissible` (once), `setActionStyle(style, stretch)` (once, only for a style that is not `Ghost` or a stretched action: a `Link` draws the action inside the message at the span marked `action`, else after it, and stays a button to assistive technology; a `Button` is framed; a stretched action takes a line of its own, as wide as the banner) | `setOnAction`, `setOnDismiss` |
 | `BadgeWidget` | `setTone`, `setText`, `setIcon` (once), `setStyle` (once, only for `Outline`), `setShape` (once, only for `Round`), `setMono` (once, only for `true`) | `setOnRemove(onRemove, label)`: only for a removable badge, which then draws a remove control after its text (the framework icon `close`) named `label`, and takes the focus; Delete, Backspace, Enter or Space on it, or a click on its control, calls `onRemove`. A badge without it takes no focus |
 | `ProgressWidget` | `setValue(optional<double>)`, `setLabel` | — |
-| `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)`, `setLabelled(bool)` (pure; the mount calls it only when the document gives `labelled`) | — |
+| `StepsWidget` | `setSteps(vector<Step>)` (each `Step` is `{label, state, detail}`; a nonempty `detail` is drawn as the step's muted second line on Qt Quick and after the label in brackets on the terminal, an empty one is drawn as nothing), `setCurrent(optional<size_t>)`, `setLabelled(bool)` (pure; the mount calls it only when the document gives `labelled`) | — |
 | `KeyValueWidget` | `setItems(vector<KeyValueItem>)`, `setCaptionPlacement` (once, only for `Above`), `setCaptionWidth` (once, only when the node gives a width) | — |
 | `EmptyStateWidget` | `setTitle`, `setText`, `setIcon` (once), `setActionLabel` | `setOnAction` |
 | `ChartWidget` | `setData(ChartData)`, at mount and on every change (`view_tree.md`, Chart data); it takes no focus | — |
@@ -513,7 +513,7 @@ The headless reference backend and the test double for everything above the cont
   ISO-8601 UTC instant with milliseconds, `empty` for an empty `Timestamp`; sizing as `content`,
   `fixed(n)` or `stretch(n)`, a layout as `width/height`; lists as `[a,b]`; options as
   `[key:label,…]`; columns as `[label:sizing,…]`; a slider's range as `minimum..maximum/step`;
-  a fraction in its shortest decimal form (`0.25`); steps as `[label:State,…]`; key-value pairs
+  a fraction in its shortest decimal form (`0.25`); steps as `[label:State,…]`, a nonempty detail following its step as `;detail=<text>` (`[Received:Done;detail=A. Weber 09:14,Verified:Active]`), a `;` in a label or detail escaped as in key-value pairs; key-value pairs
   as `[label:value,…]`, a value with spans as its runs in brackets and a tone other than `Neutral` following as
   `;tone=<Tone>` (`[Serial number:[DEAB-902114;mono],Containers:180 needed;tone=Err]`), with `;` escaped in a caption
   or value so it cannot forge a tone; sizes as `[n,…]`; a chart's ranges as `[lo,hi]`, its ticks as `[text@value,…]`, its lines
