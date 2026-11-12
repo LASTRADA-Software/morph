@@ -277,7 +277,16 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
 - **Unavailable entries** are disabled, with their reason as the tooltip, and neither open nor prefetch.
 - **Search.** The search (`navigator_search`) shows the entries one of whose titles contains the text, ignoring
   ASCII case, and the headings of the groups that still show an entry.
-  - `NavigatorOptions::titles` gives an entry's titles, one per locale (spec 6 §19), and the first one is shown.
+  - `NavigatorOptions::titles` gives an entry's titles, one per locale (spec 6 §19), and the first one is shown;
+    the client gives the active locale's first (`catalogTitlesIn`). The title text's test id is `nav_title_<id>`.
+  - The heading is the group, or the module when the entry has no group, through `NavigatorOptions::label` when one
+    is given and as written when not (there is no `module / group` join); the test ids
+    `navigator_group_<module>/<group>` are unchanged.
+  - `relabel()` re-reads every entry's titles and every heading, and so updates the entry buttons and their accessible
+    names (with their badges, "Review, 4"), the pin buttons, the group headings and the search filter over the new
+    titles; it keeps the pins, the current entry, the badges and the search text. It then calls the on-changed handler
+    so `menuEntries()` follows. The client calls it on a locale
+    change and after a reload that changed a catalogue.
   - Without it, the title is `catalogTitles(entry, nullptr)`: the entry's string, or a message reference's
     `fallback`, else the entry's id.
   - `focusSearch()` is what the navigator's shortcut calls.

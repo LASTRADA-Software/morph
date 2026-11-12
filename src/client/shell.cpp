@@ -16,6 +16,7 @@
 #include <morph/core/wire.hpp>
 #include <morph/reactive/scheduler.hpp>
 #include <morph/reactive/signal.hpp>
+#include <morph/ui/catalogue.hpp>
 #include <morph/ui/chat/client.hpp>
 #include <morph/ui/chat/panel.hpp>
 #include <morph/ui/dev_reload.hpp>
@@ -25,6 +26,7 @@
 #include <morph/ui/host_vocabulary.hpp>
 #include <morph/ui/inspector.hpp>
 #include <morph/ui/interpreter.hpp>
+#include <morph/ui/locale_table.hpp>
 #include <morph/ui/mount.hpp>
 #include <morph/ui/navigator.hpp>
 #include <morph/ui/route_history.hpp>
@@ -207,6 +209,8 @@ public:
         sessionOptions.developmentTools = _options.dev ? ui::DevelopmentTools::On : ui::DevelopmentTools::Off;
         sessionOptions.watcher = source.watcher();
         _session = std::make_unique<ui::Session>(_context->runtime(), std::move(sessionOptions));
+        installCatalogues();
+        applyLocale(_options.locale.empty() ? std::string{"en"} : _options.locale);
         _chatHost.connect(*_session);
         followWidthClass();
         followConnection(source);
@@ -231,6 +235,17 @@ public:
                 });
             },
             [this] { signOut(); }, [this](std::string const& text) { problem(text); });
+        _application->setLocaleSink([this, alive = std::weak_ptr<bool>{_alive}](std::string const& locale) {
+            auto const live = alive.lock();
+            if (live == nullptr || !*live) {
+                return;
+            }
+            reportMissingFacts(locale);
+            relabel();
+            if (_options.onLocale) {
+                _options.onLocale(locale);
+            }
+        });
         hostOptions.application = _application.get();
         hostOptions.diagnostics = [this](ui::Refusal const& refusal) { problem(refusal.message()); };
         _host = std::make_unique<Host>(
@@ -268,6 +283,45 @@ public:
                 });
             });
         }
+    }
+
+    /// Reads the source's catalogues, reports each that did not load, and gives the session their provider, so every
+    /// `t` re-resolves. Called each time a bundle is loaded.
+    void installCatalogues() {
+        _catalogues = _source->catalogues();
+        // Each line once per shell: a development poll installs them every second.
+        for (std::string const& line : _catalogues.problems()) {
+            if (_reportedCatalogueProblems.insert(line).second) {
+                problem(line);
+            }
+        }
+        _session->setTranslations(_catalogues.provider());
+    }
+
+    /// Makes @p locale the session's: its catalogue, and its number, money and date facts from the locale table.
+    void applyLocale(std::string const& locale) {
+        _session->setLocale(locale);
+        reportMissingFacts(locale);
+    }
+
+    /// Reports a locale the table has no facts for, once per tag: its numbers, money and dates are written as `en`'s.
+    void reportMissingFacts(std::string const& locale) {
+        if (ui::findLocaleFacts(locale) == nullptr && _missingFacts.insert(locale).second) {
+            problem("no formatting facts for locale `" + locale + "`; numbers, money and dates use en's");
+        }
+    }
+
+    /// The session's locale, which the navigator reads when it draws a title or a heading.
+    [[nodiscard]] std::string currentLocale() const {
+        return _session ? _session->formattingNow().locale : std::string{"en"};
+    }
+
+    /// Draws the navigator's titles and headings again in the session's locale, and the top bar's caption.
+    void relabel() {
+        if (_frame) {
+            _frame->navigator().relabel();
+        }
+        showActiveTitle();
     }
 
     /// Writes the client's platform, its source's backend name and its connection state into the session before the
@@ -422,6 +476,12 @@ private:
         ui::ShellFrameOptions frame;
         frame.applicationName = _source->bundle() != nullptr ? _source->bundle()->applicationId : std::string{};
         frame.navigator.entries = entries;
+        frame.navigator.titles = [this](ui::CatalogEntry const& entry) {
+            return ui::catalogTitlesIn(entry, &_catalogues, currentLocale());
+        };
+        frame.navigator.label = [this](std::string_view text) {
+            return ui::catalogLabel(_catalogues, text, currentLocale());
+        };
         frame.navigator.onOpen = [this](std::string const& screenId) {
             // Posted: the navigator's button is a widget of the frame, which a mount may rebuild.
             _context->executor().post([this, alive = std::weak_ptr<bool>{_alive}, screenId] {
@@ -741,6 +801,7 @@ private:
                     return;
                 }
                 loadDocuments(*_source->bundle());
+                installCatalogues();
                 showPermitted();
                 _changed = true;
                 _signedIn = signingIn;
@@ -908,7 +969,15 @@ private:
     // Loads the documents a development poll found changed and remounts the shown screen when its own changed; a
     // document that does not load, or that the interpreter refuses, keeps the old one and is reported.
     void reloadChanged(std::vector<std::string> const& changed) {
-        if (changed.empty() || _host == nullptr || _source->bundle() == nullptr || _reloading) {
+        if (_host == nullptr || _source->bundle() == nullptr || _reloading) {
+            return;
+        }
+        // The poll answers only for a bundle that changed, and a catalogue is not a document: the catalogues are
+        // read again whether or not a document changed, so a catalogue-only change reaches every `t` and the
+        // navigator.
+        installCatalogues();
+        relabel();
+        if (changed.empty()) {
             return;
         }
         std::vector<ui::MountedScreen> mounted;
@@ -983,6 +1052,12 @@ private:
     // What the chat panel document reads and runs; it outlives the session it is connected to.
     ui::HostVocabulary _chatHost;
     std::unique_ptr<ui::Session> _session;
+    // The bundle's message catalogues, read again with each bundle load; the navigator's labels read them.
+    ui::MessageCatalogues _catalogues;
+    // The locales already reported as having no formatting facts.
+    std::set<std::string, std::less<>> _missingFacts;
+    // The catalogue problems already reported.
+    std::set<std::string, std::less<>> _reportedCatalogueProblems;
     // Whether the source's connection-state listener is registered.
     bool _followingConnection = false;
     // Whether the source's connect and event listeners are registered.
@@ -1183,6 +1258,14 @@ bool ApplicationHost::saveFile(ui::InlineFile const& file, std::string const& op
 
 void ApplicationHost::setNotifySink(std::function<bool(std::string const&, std::string const&)> sink) {
     _notifySink = std::move(sink);
+}
+
+void ApplicationHost::setLocaleSink(std::function<void(std::string const&)> sink) { _localeSink = std::move(sink); }
+
+void ApplicationHost::setLocale(std::string const& locale) {
+    if (_localeSink) {
+        _localeSink(locale);
+    }
 }
 
 bool ApplicationHost::notify(std::string const& text, std::string const& role) {

@@ -60,8 +60,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
             ui::text({.text = kit::money(decimalOf(1234567, 1, 0), "JPY")}).testId("jpy"),
             ui::text({.text = kit::balance(decimalOf(-1319640, 100, 2), "EUR")}).testId("credit"),
             ui::text({.text = kit::day(ui::AnyHandle{"2026-11-09T09:00:00Z"})}).testId("day"),
-            ui::text({.text = kit::statusWord<lims::BillingRunState>(ui::AnyHandle{"FinishedWithFailures"})})
-                .testId("state"),
+            ui::text({.text = kit::statusWord<lims::InvoiceState>(ui::AnyHandle{"Submitted"})}).testId("state"),
             ui::text({.text = ui::t("lims.billing.draftFor", "Draft for {$client}",
                                     {{"client", ui::AnyHandle{"Stadtwerke Köln"}}})})
                 .testId("argument"),
@@ -170,13 +169,10 @@ std::string formatted(morph::ui::MessageCatalogues const& catalogues, std::strin
 
 }  // namespace
 
-// What the shell shows today: no client installs the bundle's catalogues or a locale's number formats, so a screen
-// shows the evaluator's own money form (the amount at the currency's places followed by its code) and every `t` shows
-// its fallback. The day follows the application document's date pattern. The catalogue case below measures the
-// messages themselves.
-// Mutations: make statusWord show the enumerator's name (the state reads "FinishedWithFailures"); leave
+// The application's date pattern holds in every locale: `09.11.2026` would need lims to declare no pattern.
+// Mutations: make statusWord show the enumerator's name (the state reads "Submitted"); leave
 // addApplicationDocument out of kitBundle (the day reads "2026-11-09").
-TEST_CASE("lims kit: money, balances, days and states as the shell shows them", "[lims-screens][kit]") {
+TEST_CASE("lims kit: money, balances, days and states in words, in English and German", "[lims-screens][kit]") {
     morph::ladder::testkit::DbFixture fixture;
     ScreenHarness harness{morph::client::LocalApp{.name = "lims-kit", .bundle = &kitBundle, .setUp = {}},
                           std::string{kProbe},
@@ -184,12 +180,20 @@ TEST_CASE("lims kit: money, balances, days and states as the shell shows them", 
                           {},
                           morph::client::LocalSetup{.db = {}, .user = "tech"}};
     lims::screens::test::reportProblems(harness);
-    CHECK(harness.waitForText("eur", "13196.40 EUR"));
-    CHECK(harness.waitForText("jpy", "1234567 JPY"));
-    CHECK(harness.waitForText("credit", "13196.40 EUR Cr"));
+    CHECK(harness.waitForText("eur", "\u20ac13,196.40"));
+    CHECK(harness.waitForText("jpy", "\u00a51,234,567"));
+    CHECK(harness.waitForText("credit", "\u20ac13,196.40 Cr"));
     CHECK(harness.waitForText("day", "09-Nov-2026"));
-    CHECK(harness.waitForText("state", "Finished with failures"));
+    CHECK(harness.waitForText("state", "Waiting for approval"));
     CHECK(harness.waitForText("argument", "Draft for Stadtwerke Köln"));
+
+    harness.click("german");
+    CHECK(harness.waitForText("eur", "13.196,40\u00a0\u20ac"));
+    CHECK(harness.waitForText("jpy", "1.234.567\u00a0\u00a5"));
+    CHECK(harness.waitForText("credit", "13.196,40\u00a0\u20ac H"));
+    CHECK(harness.waitForText("day", "09-Nov-2026"));
+    CHECK(harness.waitForText("state", "Wartet auf Freigabe"));
+    CHECK(harness.waitForText("argument", "Entwurf für Stadtwerke Köln"));
 }
 
 // Mutations: write `lims.billing.draftFor`'s pattern as `Draft for {client}` (MessageFormat 2 reads it as literal

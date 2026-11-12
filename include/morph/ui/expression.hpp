@@ -32,6 +32,7 @@
 #include "../util/datetime.hpp"
 #include "../util/rational.hpp"
 #include "date_pattern.hpp"
+#include "locale_table.hpp"
 #include "message.hpp"
 #include "value.hpp"
 
@@ -276,8 +277,8 @@ inline constexpr std::array<FunctionSpec, 50> kFunctions = {{
     {"quantity", 1, 2, {kindBit(TypeKind::Quantity), kindBit(TypeKind::String), 0}, TypeKind::String},
     {"money",
      2,
-     2,
-     {kindBit(TypeKind::Int) | kindBit(TypeKind::Decimal), kindBit(TypeKind::String), 0},
+     3,
+     {kindBit(TypeKind::Int) | kindBit(TypeKind::Decimal), kindBit(TypeKind::String), kindBit(TypeKind::String)},
      TypeKind::String},
     {"date",
      1,
@@ -1291,6 +1292,8 @@ struct FormatContext {
     render::NumericLocale numeric{};
     /// @brief The message catalogue; empty shows every fallback.
     render::TranslationProvider translations;
+    /// @brief How `money` writes a currency. Empty `symbols` (the default) writes every currency by its code.
+    CurrencyFacts currency{};
     /// @brief The units quantities convert through.
     UnitTable units;
     /// @brief The display zone's offset from UTC, in minutes.
@@ -2360,13 +2363,13 @@ private:
             return std::string{*flag ? "true" : "false"};
         }
         if (Quantity const* const quantity = value.asQuantity()) {
-            auto number = formatNumber(value, context.numeric);
+            auto number = formatNumber(value, withoutGrouping(context.numeric));
             if (!number) {
                 return std::nullopt;
             }
             return *number + " " + unitDisplay(quantity->unit, context.units);
         }
-        if (auto number = formatNumber(value, context.numeric)) {
+        if (auto number = formatNumber(value, withoutGrouping(context.numeric))) {
             return number;
         }
         if (time::DateTime const* const instant = value.asTimestamp()) {
@@ -2926,7 +2929,16 @@ private:
                 if (!text) {
                     return mismatch(expr, "the result overflows");
                 }
-                return render::formatCanonicalNumber(*text, context.numeric) + " " + *currency;
+                MoneyForm form = MoneyForm::Symbol;
+                if (args.size() > 2) {
+                    std::string const* const named = args.at(2).asString();
+                    if (named == nullptr || (*named != "symbol" && *named != "code")) {
+                        return mismatch(expr, "`money`'s form is \"symbol\" or \"code\"");
+                    }
+                    form = *named == "code" ? MoneyForm::Code : MoneyForm::Symbol;
+                }
+                return placeCurrency(render::formatCanonicalNumber(*text, context.numeric), *currency,
+                                     context.currency, context.numeric, form);
             }
             case FunctionId::Date:
             case FunctionId::DateTime: {

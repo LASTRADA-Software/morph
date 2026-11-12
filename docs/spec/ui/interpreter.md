@@ -53,9 +53,11 @@ throws `std::invalid_argument` for 0 and for a cap above `kMaxInlineFileBytes`, 
 
 `Interpreter::mountApp(doc)` mounts the app document (id `app`) as an `AppRoot`: its state, lets,
 queries and mutations, declared once for the session, and its `onMount`. Its `formatting` patterns become the
-session's (`Session::setDatePatterns`), so every screen of the bundle writes and reads dates in them; a C++ host may
-set the same `FormatContext` fields directly. A `dateTimeInput` reads the pattern of its mode once, untracked, when
-it is lowered, as it reads the zone: a pattern changed later applies to inputs mounted later. A second root on the same
+session's (`Session::setDatePatterns`) and win over the locale table's patterns in every locale
+([`locale_table.md`](locale_table.md)), so every screen of the bundle writes and reads dates in them; a C++ host sets
+its own patterns through `setDatePatterns` too, since a `setLocale` replaces a pattern set only through
+`setFormatting` with the locale's. A `dateTimeInput` reads the pattern of its mode reactively, so a pattern a `setLocale` installs reaches the inputs
+already mounted; the zone is read once, when the input is lowered. A second root on the same
 session, and a document whose id is not `app`, are refused. While it lives, `Session::appScope()`
 names its scope: `{"ref": "app.name"}` in any screen reads the name there, reactively, so a query of
 the app document runs once however many screens read it, and `{"set": "app.name"}` writes the root's
@@ -296,7 +298,8 @@ its target does not resolve, and when the host does not support it.
   A switch that commits after its screen is gone touches nothing of it.
 - `set` of `app.name` writes the app root's state (below); with no app root it goes to the host's
   `setAppValue`.
-- `setLocale` replaces the session's locale, so every `t` re-resolves, and tells the host.
+- `setLocale` replaces the session's locale and installs the locale table's number, money and date facts
+  ([`locale_table.md`](locale_table.md)), so every `t` and display function re-resolves, and tells the host.
 - `signIn` clears the cache and hands the host the mutation's reply, secret fields included (it runs
   inside the mutation's `onSuccess`, before they are removed); `signOut` clears the cache.
 - `upload` marks its transfer pending, follows the host's progress, and on success runs its mutation
