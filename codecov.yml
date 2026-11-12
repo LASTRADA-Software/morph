@@ -308,15 +308,52 @@ component_management:
           target: auto
           informational: true
 
-    - component_id: lims
-      name: "application ladder rung 3 (examples/lims models)"
+    # lims: one component per module, each target just below that module's own measured line coverage
+    # (scripts/coverage.sh over every test but the stress ones), so that lab and org keep the stricter bar
+    # they measure and ledger and billing are held to theirs. Inventory is Part C's and joins when Part C's
+    # definition of done is measured.
+    - component_id: lims_lab
+      name: "application ladder rung 3 (examples/lims lab models)"
       paths:
         - examples/lims/lab/src/models/**
         - examples/lims/lab/include/lims/lab/models/**
+      statuses:
+        - type: project
+          target: 96%
+          informational: true
+        - type: patch
+          target: 96%
+          informational: true
+
+    - component_id: lims_org
+      name: "application ladder rung 3 (examples/lims org models)"
+      paths:
         - examples/lims/org/src/models/**
         - examples/lims/org/include/lims/org/models/**
+      statuses:
+        - type: project
+          target: 97%
+          informational: true
+        - type: patch
+          target: 97%
+          informational: true
+
+    - component_id: lims_ledger
+      name: "application ladder rung 3 (examples/lims ledger models)"
+      paths:
         - examples/lims/ledger/src/models/**
         - examples/lims/ledger/include/lims/ledger/models/**
+      statuses:
+        - type: project
+          target: 94%
+          informational: true
+        - type: patch
+          target: 94%
+          informational: true
+
+    - component_id: lims_billing
+      name: "application ladder rung 3 (examples/lims billing models)"
+      paths:
         - examples/lims/billing/src/models/**
         - examples/lims/billing/include/lims/billing/models/**
       statuses:
