@@ -62,6 +62,9 @@ public:
     /// @param action The requisition.
     /// @return The requisition, approved.
     /// @throws ValidationError if the request is malformed.
+    /// @throws NotFound if there is no such requisition, or the caller cannot see its company; through the action
+    /// guard
+    ///         the same case reads as a `Forbidden` that says nothing of the requisition.
     /// @throws IllegalTransition if the requisition is not submitted.
     /// @throws Forbidden if the caller is not a purchase approver where the requisition is, raised or submitted it,
     ///         has no value limit for the role there, or has one below its total.

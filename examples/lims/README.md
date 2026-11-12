@@ -1421,7 +1421,9 @@ against `include/morph`; Part D Task 20 builds the deadline effect.
 `ApproveRequisition` judges its rule again just before its write, as `ApproveInvoice` does (decision 41), and for the
 same reason: a role or limit changed since the guard ran is seen. Its order is the invoice's: the role where the
 requisition is visible, then its state, then the pairs and the limit. A requisition that does not exist and one the
-caller cannot see are refused in the same words, because the rule reads its scope from the row and names none.
+caller cannot see are refused in the same words, because the role refusal of a rule with a state check is spelled "...
+where this applies" and names no scope. Measured: declaring `scopeInPayload` on the rule changes nothing, since that
+refusal never reads it; appending the scope to those words makes the two refusals differ and the case fail.
 
 ### 48. A stock change in one company reaches another company's watching stock keeper (hypothesis 7, second instance)
 

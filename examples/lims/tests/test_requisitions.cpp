@@ -303,16 +303,26 @@ lims::Amount money(std::int64_t cents) {
                                               morph::math::DecimalPlaces{2}}};
 }
 
-/// @brief What @p error says with the number @p id taken out, so two refusals about different ids compare.
+/// @brief What @p error says with the whole number @p id taken out, so two refusals about different ids compare.
+///        A number that only contains @p id's digits, such as 12 beside id 1, stays.
 /// @param error The failure.
 /// @param id The id.
 /// @return The words.
 std::string withoutId(std::exception const& error, std::int64_t id) {
-    std::string words = error.what();
-    for (auto at = words.find(std::to_string(id)); at != std::string::npos; at = words.find(std::to_string(id))) {
-        words.replace(at, std::to_string(id).size(), "N");
+    auto const digits = std::to_string(id);
+    auto const isDigit = [](char c) { return c >= '0' && c <= '9'; };
+    std::string const words = error.what();
+    std::string out;
+    for (std::size_t at = 0; at < words.size();) {
+        if (words.compare(at, digits.size(), digits) == 0 && (at == 0 || !isDigit(words[at - 1])) &&
+            (at + digits.size() == words.size() || !isDigit(words[at + digits.size()]))) {
+            out += 'N';
+            at += digits.size();
+        } else {
+            out += words[at++];
+        }
     }
-    return words;
+    return out;
 }
 
 /// @brief The words of the refusal @p call raises.
@@ -349,8 +359,9 @@ lims::CompanyId kenjiAtOsaka() {
 
 }  // namespace
 
-// Mutation: make Authorization<ApproveRequisition>::scopeOf name the requisition's own site for a requisition that
-// exists (kenji's refusal on the real requisition then differs from his refusal on a missing id).
+// Mutation: append the scope to the role refusal in `requireAuthorized`'s state-check branch ("... where this applies
+// site 1"). An existing requisition then has a scope to name and a missing id does not, so kenji's two refusals
+// differ. Declaring `scopeInPayload` on Authorization<ApproveRequisition> changes nothing: that branch never reads it.
 TEST_CASE("requisitions: a missing requisition and another company's are refused in the same words",
           "[lims][inventory][requisition]") {
     DbFixture fixture;
@@ -381,6 +392,50 @@ TEST_CASE("requisitions: a missing requisition and another company's are refused
     CHECK(readReal == refusalOf(get(kMissing), kMissing));
     CHECK(procurement.execute(lims::ListRequisitions{.company = lims::test::seededCompany()}).requisitions.empty());
     CHECK(procurement.execute(lims::ListPendingRequisitions{}).requisitions.empty());
+}
+
+// Mutation: make Authorization<SubmitRequisition>::scopeOf answer an empty site (rita, an analyst at the site, is
+// refused), or Authorization<CreateRequisition> drop `anyRole` (sven, with no role, is let in).
+TEST_CASE("requisitions: raising, filling and submitting need some role at the site, through the guard",
+          "[lims][inventory][requisition]") {
+    DbFixture fixture;
+    auto const setUp = lims::test::requisitionSetUp();
+    lims::ProcurementModel procurement;
+    auto const create = [&](std::string const& principal) {
+        ScopedPrincipal const who{principal};
+        return ::morph::model::executeChecked(
+            procurement,
+            lims::CreateRequisition{
+                .company = lims::test::seededCompany(), .site = lims::test::seededSite(), .reason = "Guard"});
+    };
+    auto const addLine = [&](std::string const& principal) {
+        ScopedPrincipal const who{principal};
+        return ::morph::model::executeChecked(procurement,
+                                              lims::AddRequisitionLine{.requisition = setUp.draft.id,
+                                                                       .item = setUp.stock.reagent,
+                                                                       .quantity = lims::test::litres(1000),
+                                                                       .unit = lims::StockUnit::litre,
+                                                                       .estimate = money(100)});
+    };
+    auto const submit = [&](std::string const& principal) {
+        ScopedPrincipal const who{principal};
+        return ::morph::model::executeChecked(procurement, lims::SubmitRequisition{.requisitionId = setUp.draft.id});
+    };
+    // sven holds no role: the guard refuses before the handler could say anything about the requester.
+    CHECK_THROWS_WITH(create("sven"), Catch::Matchers::ContainsSubstring("role"));
+    CHECK_THROWS_AS(create("sven"), lims::Forbidden);
+    CHECK_THROWS_AS(addLine("sven"), lims::Forbidden);
+    CHECK_THROWS_AS(submit("sven"), lims::Forbidden);
+    CHECK_THROWS_WITH(addLine("sven"), !Catch::Matchers::ContainsSubstring("only its requester"));
+    CHECK_THROWS_WITH(submit("sven"), !Catch::Matchers::ContainsSubstring("only its requester"));
+    // tom holds a role at the site, so the guard lets him in; the handler then refuses him as not the requester.
+    CHECK(create("tom").state == lims::RequisitionState::Draft);
+    CHECK_THROWS_WITH(addLine("tom"), Catch::Matchers::ContainsSubstring("only its requester"));
+    CHECK_THROWS_WITH(submit("tom"), Catch::Matchers::ContainsSubstring("only its requester"));
+    // rita, an analyst at the site, raises, fills and submits.
+    CHECK(create("rita").state == lims::RequisitionState::Draft);
+    CHECK(addLine("rita").lines.size() == 2);
+    CHECK(submit("rita").state == lims::RequisitionState::Submitted);
 }
 
 // Mutation: drop checkState from Authorization<ApproveRequisition> (anna, approving a draft, is told who raised it).
