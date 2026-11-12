@@ -311,15 +311,20 @@ state, so its look follows the selection alone; its `clicked` fires the row's `t
 rows that have them, as the contract's "Selection by key" says; a user's change reports exactly the existing rows
 selected.
 
-A spanning cell (`setRowSpans` writes the row's `rowSpans`, a list of `[column, rows]`) is parented to its origin row
-but is as tall as the rows it covers together with the rule between them: `MorphTable` gives each row the cumulative
-`y` and `height` of the rows after it, so the cell's height is read from them, not from the row alone, and the origin
-row is raised (`z`) above the rows it covers so the cell is drawn over their backgrounds and rules. The cell has its
-origin row's background fill in its column (tone, selection, hover, focus), which hides the rule under it. A covered
-row's cell in that column is `visible: false`, so it takes no focus, no tap, no accessible node and no width in the
-column's cache, and a row's height is the tallest of its other cells and the covered-row shares of any spanning cell;
-a spanning cell taller than the rows it covers adds the shortfall to the last of them. A tap on a spanning cell is
-the origin row's tap. `Accessible` has no cell extent, so assistive technology reads the cell in its origin row.
+A spanning cell (`setRowSpans` writes the row's `rowSpans`, a list of `[column, rows]`) is drawn in an overlay layer
+of `MorphTable` above the rows, not in its row. `MorphTable` computes, at table level, each spanning cell's rectangle
+from its origin row's `y` and the last covered row's `y` and `height`, and the shortfall of a cell taller than the rows
+it covers, which it writes to the last covered row as an extra height that row's `placeOnce` adds; a spanning cell is
+left out of its origin row's `tallest` and `implicitHeight`, and its height never feeds back into one. The overlay draws,
+under the cell, `scheme.surface` and then a second instance of the `tableRow` part's `background` component, sized to
+the cell and given the origin row's tone, stripe, selected, hover and current marks, with its `rule` hidden; a restyle
+is thus instantiated twice per spanning cell. The overlay has a `TapHandler` and a `HoverHandler` of its own that
+forward to the origin row, because an event below the origin row's bounds reaches the covered row's handlers
+otherwise. A covered cell is hidden by a `covered` flag of `ItemBase`, combined with the cell's own visibility
+(`ownVisible() && !covered`, so uncovering restores what the mount set and never shows a cell the document hid): a
+covered cell takes no focus and no tap, has no accessible node, and is left out of `widestCell` and the column caches
+as a hidden cell is. `MorphTable` recomputes coverage when rows move, are added or removed, or their spans change.
+`Accessible` has no cell extent, so assistive technology reads the cell in its origin row.
 
 A heading row (`setRowHeading`, the row's `heading`) places its one cell from the first inset across the select
 column and every column, less two insets; its `TapHandler`, Enter and select box are off, and `shownRows` (the rows the
