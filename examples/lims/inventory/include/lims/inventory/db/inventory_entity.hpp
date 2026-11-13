@@ -239,14 +239,11 @@ struct ConsumptionEventRecord {
     Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"event_id"}> eventId;                       // 1
     Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 2
     Light::Field<std::int64_t, Light::SqlRealName{"sample_id"}> sampleId{0};                               // 3
-    /// @brief What the lots could not cover, each shortfall as held in its item's unit, added.
-    Light::Field<std::int64_t, Light::SqlRealName{"shortfall_num"}> shortfallNum{0};  // 4
-    Light::Field<std::int64_t, Light::SqlRealName{"shortfall_den"}> shortfallDen{1};  // 5
     /// @brief The cost of the stock taken, in the company's currency.
-    Light::Field<std::int64_t, Light::SqlRealName{"cost_num"}> costNum{0};  // 6
-    Light::Field<std::int64_t, Light::SqlRealName{"cost_den"}> costDen{1};  // 7
+    Light::Field<std::int64_t, Light::SqlRealName{"cost_num"}> costNum{0};  // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"cost_den"}> costDen{1};  // 5
     /// @brief The ledger's entry for the cost; empty while none is recorded, which is always so when the cost is nil.
-    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"entry_id"}> entryId;  // 8
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"entry_id"}> entryId;  // 6
 };
 
 }  // namespace lims::db

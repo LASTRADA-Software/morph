@@ -1564,7 +1564,9 @@ negative quantity naming no lot), not a refusal, because a refused event holds b
 a consumption is the sum, per lot taken, of the quantity times the lot's unit cost, rounded half-up per lot to the
 company's currency; it is posted through the one ledger port as a debit to the consumption account against a credit to
 stock, under the source key `inventory.consumption:<event id>`, and fixed by the committed consumption, never
-recomputed, so a repeated posting has the same body and the ledger answers the first entry. In
+recomputed. A redelivery whose cost is still owed first asks the ledger for the entry under that key and, when there is
+one, stores it without building the posting again, because the accounts come from the settings and a change to them
+between the deliveries would make the ledger refuse the repeat as another body. In
 `PostingMode::SharedTransaction` the entry commits with the consumption; in `PostingMode::Dispatched` the consumption
 commits with its cost and no entry, then the handler (a `Task`) awaits the ledger and stores the entry by a conditional
 update, and a redelivered event whose consumption holds a cost and no entry is posted then: the consumer's answer to a
@@ -1572,29 +1574,51 @@ redelivery includes "the posting is still owed". A consumption with a cost and n
 moved, because committing it would owe a posting nobody makes; a recipe is refused for a company with no inventory
 settings for the same reason.
 
-**Hypothesis 2 is refuted for its second instance.** Measured in `tests/test_consumption.cpp`: a relay that delivers
-both events and dies before marking, then a fresh relay over the same database, leaves each lot as the first delivery
-left it, the books with the two entries the first delivery made, and the outbox empty. What `lims/app` gained for the
-second consumer is wiring: `InventoryEventSink`, the router and `labEventRouter`, 58 lines in `event_wiring.cpp` (the
-header adds declarations and their documentation), and no delivery loop or cursor: the only `for`s are the router's
-search for the route of an event type, the sinks' filters over what they delivered (the `IActionLog` read API) and the
-router's pass over its sinks for `flush` and `entries`; a search of `app/` and inventory for cursor, last id,
-position and offset finds nothing. What inventory hand-wrote for idempotence is 35 lines counted as billing's 70 were:
-`consumedRow` and `consumptionOfEvent` (24; billing's adapter and `lineOfEvent` were 50), the race catch in
-`storeConsumption` (8; billing's 11) and the unique index with the event id column (3; billing's table and index 8).
-Inventory took the cheaper form decision 32 named: its consumption's own row is the dedup record, so it has no adapter
-and no second table (the table holds the consumption's shortfall, cost and entry beside the event id, 11 more lines
-that are the consumption's and not the guarantee's). It still copied the lookup before the write and the race catch
-after it, in the same shape.
+**Hypothesis 2 is refuted for its second instance.** The criterion is decision 32's: each event received exactly once
+in effect across a restart, only wiring in `lims/app`, and no per-consumer delivery loop or cursor. Measured in
+`tests/test_consumption.cpp`: a relay that delivers both events and dies before marking, then a fresh relay over the
+same database, leaves each lot as the first delivery left it, the books with the two entries the first delivery made,
+and the outbox empty. There is no delivery loop or cursor: the only `for`s in `event_wiring.cpp` are the router's search
+for the route of an event type, the sinks' filters over what they delivered (the `IActionLog` read API) and the router's
+pass over its sinks for `flush` and `entries`; a search of `app/` and inventory for cursor, last id, position and offset
+finds nothing. The word "wiring" does not describe all of `event_wiring.cpp`, which is 58 lines for this consumer:
 
-The routing sink decision 32 inferred from reading `OutboxRelay` was needed, and is wiring: one pass of the relay
-delivers both event types through `LabEventRouter`, which refuses an event type it has no route for (measured, same
-file), and a consumer that refuses an event still holds back every event behind it.
+- `InventoryEventSink` is 30 of them, a near-verbatim copy of `BillingEventSink` (31): check the event type, decode the
+  payload, dispatch one action through the internal client, record the entry as delivered, and an `entries()` filter
+  that is identical. Only the event type, the payload type and the action's fields differ. That is a per-consumer
+  dispatch adapter, hand-written for each consumer of a multi-type outbox, which is what the hypothesis names
+  ("delivering events to a model consumer needs hand-rolled code per consumer"), not configuration of morph's relay. It
+  has no loop and no cursor, so it does not change the verdict word the criterion gives; it is the first half of the
+  seam below.
+- The router and `labEventRouter` are the rest. `OutboxRelay` has one sink, so a second event type needs a sink that
+  chooses by type; the router refuses an event type it has no route for (measured, same file) rather than let the relay
+  delete it unconsumed.
 
-That is the same hand-rolled guarantee in a second module: a consumer-side "consume once by event id over the
-consumer's own row" with the lost race settled by a unique index and answered with the winner's result. It is mechanism
-(bookmarks or a CRM consuming an outbox would need it unchanged) and it has now been needed twice, so it is a seam to
-specify; nothing is built for it here.
+What inventory hand-wrote for idempotence is 35 lines, counted as billing's 70 were: `consumedRow` and
+`consumptionOfEvent` (24; billing's adapter and `lineOfEvent` were 50), the race catch in `storeConsumption` (8;
+billing's 11) and the unique index with the event id column (3; billing's table and index 8). The 35 is a lower bound.
+It leaves out what exists only so that a redelivery can be answered with the original consumption: the movement's
+`event_id` column and its index, `MovementRecord::eventId`, `moveLot`'s event id parameter and its plumbing, and the
+`event_id` filter in `consumptionView`, about 14 more lines by a hand count of the diff. Billing needed none of them,
+because its line is its own record of the event. So "35 against 70" is not half the cost.
+
+Decision 32 said that if the second consumer copies the adapter, the lookup and the race catch, that is a framework seam
+to promote. This instance copied two of those three parts, the lookup and the race catch, in the same shape
+(`storeConsumption` is `storeLine` with the names changed, comment included). It took no consumer-side adapter: it took
+the cheaper form decision 32 named, in which the consumption's own row is the dedup record. The adapter that was copied is the sink, a
+different adapter, one level out. Read literally the condition is therefore met in part; read for what it is for,
+whether the same hand-rolled guarantee is needed twice, it is met, and the verdict on the hypothesis is not changed by
+the difference.
+
+Task 8 must specify both halves of the seam, not the second alone:
+
+- Delivering an event to a model action: the dispatch adapter, with the router that chooses it by event type. Two
+  sinks differ only in event type, payload type and action.
+- The consumer-side once-only record: look an event id up before the write, settle a lost race by a unique index, and
+  answer the winner's result. It has been needed twice, over two different rows.
+
+That a consumer of another outbox (bookmarks, a CRM) would need both unchanged is inferred from the shape of the two
+copies; it was not measured. Nothing is built for the seam here.
 
 ### 48. A stock change in one company reaches another company's watching stock keeper (hypothesis 7, second instance)
 

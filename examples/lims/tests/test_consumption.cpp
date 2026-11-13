@@ -285,8 +285,9 @@ TEST_CASE("Hypothesis 2: a capture consumes once, across a relay that dies befor
     CHECK(lims::drainLabOutbox().empty());
 }
 
-// Mutation: drop the unique index on inventory_consumed_events (the two racing deliveries both consume: the answer
-// holds two movements and L-EARLY 5 mL).
+// Mutation: make the unique index on inventory_consumed_events a plain index. The loser then consumes again from
+// the lots as the winner left them, so its posting has another body and the ledger refuses it ("already recorded for a
+// different posting"); the case fails on that exception, at the loser's call.
 TEST_CASE("consumption: two deliveries of one event that race past the lookup consume once",
           "[lims][inventory][events]") {
     lims::test::LabFixture const fixture;
@@ -357,7 +358,6 @@ TEST_CASE("consumption: an expired lot and a lot at another site are not used", 
     CHECK(onHand().at("L-EARLY") == milli(15));
     CHECK(onHand().at("L-STALE") == milli(1000));
     CHECK(onHand().at("L-ANNEX") == milli(1000));
-    CHECK(*view.shortfall == milli(0));
 }
 
 TEST_CASE("consumption: an analysis with no recipe is consumed and moves nothing", "[lims][inventory][events]") {
@@ -434,8 +434,9 @@ TEST_CASE("consumption: its cost is posted once, at each lot's unit cost", "[lim
     CHECK(onHand().at("L-LATE") == milli(990));
 }
 
-// Mutation: make unpostedCost always empty (no consumption is posted after its commit: the redelivery posts nothing
-// and no entry exists).
+// Mutation: make unpostedCost answer nothing from its second call on, with a static call counter (the first delivery
+// still posts and dies at the fault point; the redelivery posts nothing, so the books keep no entry and the fault
+// point is not reached a second time).
 TEST_CASE("consumption: a dispatched cost posting that failed is posted when the event is redelivered",
           "[lims][inventory][events]") {
     auto const mode = GENERATE(lims::PostingMode::Dispatched, lims::PostingMode::SharedTransaction);
@@ -467,6 +468,56 @@ TEST_CASE("consumption: a dispatched cost posting that failed is posted when the
     CHECK(reached.load() == (mode == lims::PostingMode::Dispatched ? 2 : 0));
     CHECK(onHand().at("L-EARLY") == milli(15));
     REQUIRE(entries().size() == 1);
+    REQUIRE(consumedEntries().size() == 1);
+    CHECK(consumedEntries().front() == *entries().front().id);
+    CHECK(lims::drainLabOutbox().empty());
+}
+
+// Mutation: in StockModel::execute(RecordConsumption), delete the `port.find` block and its early return (the
+// redelivery builds the posting from the settings of that day, and the ledger refuses it as another body).
+TEST_CASE("consumption: a redelivery after a change of account codes records the entry the ledger holds",
+          "[lims][inventory][events]") {
+    lims::test::LabFixture const fixture;
+    ScopedClockOverride const clock{at(2026, 11, 10)};
+    lims::test::inventoryBooks();
+    static_cast<void>(lims::test::consumptionSetUp());
+    lims::test::ReceiptRig const rig{lims::PostingMode::Dispatched};
+    static_cast<void>(lims::test::readyToPublish("WW-1"));
+    FaultHookGuard const guard;
+    std::atomic<int> reached{0};
+    lims::setInventoryFaultHook([&reached](std::string_view point, Lightweight::SqlConnection&) {
+        if (point == "consumption.afterPost" && reached.fetch_add(1) == 0) {
+            throw std::runtime_error{"server stopped between the ledger's entry and its storage"};
+        }
+    });
+    CHECK_THROWS_WITH(lims::test::relayLabEvents(),
+                      Catch::Matchers::ContainsSubstring("server stopped between the ledger's entry"));
+    // The ledger holds the entry; the consumption does not refer to it yet.
+    REQUIRE(entries().size() == 1);
+    REQUIRE(consumedEntries().size() == 1);
+    CHECK_FALSE(consumedEntries().front().has_value());
+    {
+        ScopedPrincipal const acc{"acc"};
+        lims::LedgerModel ledger;
+        for (auto const& [code, type] :
+             {std::pair{"3200", lims::AccountType::Asset}, std::pair{"5200", lims::AccountType::Expense}}) {
+            static_cast<void>(ledger.execute(lims::CreateAccount{
+                .company = lims::test::seededCompany(), .code = code, .name = code, .type = type}));
+        }
+    }
+    {
+        ScopedPrincipal const sam{"sam"};
+        static_cast<void>(lims::StockModel{}.execute(
+            lims::SetInventorySettings{.company = lims::test::seededCompany(),
+                                       .stockAccount = "3200",
+                                       .grniAccount = "1600",
+                                       .consumptionAccount = "5200",
+                                       .roundingAccount = "6900",
+                                       .approvalHours = lims::Count{morph::math::Rational{48, DecimalPlaces{0}}}}));
+    }
+    CHECK(lims::test::relayLabEvents() == 1);
+    REQUIRE(entries().size() == 1);
+    CHECK(entries().front().lines.at(0).accountCode == "5100");
     REQUIRE(consumedEntries().size() == 1);
     CHECK(consumedEntries().front() == *entries().front().id);
     CHECK(lims::drainLabOutbox().empty());

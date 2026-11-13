@@ -59,9 +59,6 @@ struct ConsumptionView {
     /// @brief The movements the event made, lot by lot, then the shortfall movement of an item the lots could not
     ///        cover.
     std::vector<StockMovementView> movements;
-    /// @brief What the lots could not cover: the shortfall movements' quantities added, each as held in its item's
-    ///        unit; the movements tell the items apart.
-    Measure shortfall;
 };
 
 }  // namespace lims

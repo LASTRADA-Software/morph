@@ -168,8 +168,6 @@ LIGHTWEIGHT_SQL_MIGRATION(20261120000007, "Create inventory recipes and consumed
         .RequiredColumn("event_id", Varchar(128))
         .RequiredColumn("company_id", Bigint())
         .RequiredColumn("sample_id", Bigint())
-        .RequiredColumn("shortfall_num", Bigint())
-        .RequiredColumn("shortfall_den", Bigint())
         .RequiredColumn("cost_num", Bigint())
         .RequiredColumn("cost_den", Bigint())
         .Column("entry_id", Bigint());

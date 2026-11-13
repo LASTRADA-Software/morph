@@ -124,8 +124,6 @@ using ::morph::math::Rational;
         .eventId = eventId,
         .sample = SampleId{consumed.sampleId.Value()},
         .movements = {},
-        .shortfall = Measure{Rational{Numerator{consumed.shortfallNum.Value()},
-                                      Denominator{consumed.shortfallDen.Value()}, DecimalPlaces{6}}},
     };
     std::map<std::int64_t, StockUnit> units;
     for (auto const& row : rows) {
@@ -163,12 +161,11 @@ using ::morph::math::Rational;
 /// @param recipe The recipe line.
 /// @param currency The company's currency, which the lots' costs are in.
 /// @param cost Receives the cost of the stock taken, each lot's rounded half-up to @p currency.
-/// @param shortfall Receives what the lots could not cover, added to what it holds.
 /// @throws Conflict if a lot moved since it was read.
 /// @throws OutOfRange if a quantity or the cost does not fit.
 /// @throws NotFound if the recipe's item does not exist.
 void takeRecipeLine(Lightweight::DataMapper& mapper, RecordConsumption const& action, db::RecipeRecord const& recipe,
-                    CurrencyCode currency, ExactSum& cost, Rational& shortfall) {
+                    CurrencyCode currency, ExactSum& cost) {
     auto const item = inventory::findItem(mapper, recipe.itemId.Value());
     if (!item.has_value()) {
         throw NotFound{"RecordConsumption: item " + std::to_string(recipe.itemId.Value()) + " does not exist"};
@@ -222,11 +219,6 @@ void takeRecipeLine(Lightweight::DataMapper& mapper, RecordConsumption const& ac
     movement.source = Lightweight::SqlAnsiString<128>{action.eventId};
     movement.eventId = Lightweight::SqlAnsiString<128>{action.eventId};
     mapper.Create(movement);
-    auto const total = ::morph::math::checkedAdd(shortfall, remaining);
-    if (!total.has_value()) {
-        throw OutOfRange{"RecordConsumption: the shortfall does not fit"};
-    }
-    shortfall = *total;
 }
 
 /// @brief Writes the consumption of @p action and records its event id, in one transaction. In
@@ -258,12 +250,9 @@ void takeRecipeLine(Lightweight::DataMapper& mapper, RecordConsumption const& ac
                        .All();
     std::ranges::sort(recipes, {}, [](db::RecipeRecord const& row) { return row.id.Value(); });
     ExactSum cost;
-    Rational shortfall{0, DecimalPlaces{6}};
     for (auto const& recipe : recipes) {
-        takeRecipeLine(mapper, action, recipe, owner->baseCurrency, cost, shortfall);
+        takeRecipeLine(mapper, action, recipe, owner->baseCurrency, cost);
     }
-    consumed.shortfallNum = shortfall.numerator;
-    consumed.shortfallDen = shortfall.denominator;
     Rational const total = cost.total();
     if (total.numerator > 0) {
         consumed.costNum = total.numerator;
@@ -412,15 +401,30 @@ ListRecipesResult StockModel::execute(const ListRecipes& action) {
     if (!owner.has_value()) {
         throw NotFound{"RecordConsumption: company " + std::to_string(*company) + " does not exist"};
     }
-    // Owed only when the consumption committed without its posting: in `PostingMode::Dispatched` always, and in either
-    // mode after a first delivery that died between the commit and the posting.
+    // Owed only when the consumption committed without its posting: in `PostingMode::Dispatched` for a first
+    // delivery, and in either mode for a row an earlier delivery committed under `Dispatched` and then died before
+    // posting. In `SharedTransaction` the posting commits with the consumption, so a first delivery owes nothing.
     auto const cost = unpostedCost(action.eventId, owner->baseCurrency);
     if (!cost.has_value()) {
         co_return view;
     }
-    auto const settings = StockModel::settingsOf(company);
     auto const& port = ledgerPort();
-    if (!settings.has_value() || !port.post) {
+    if (!port.post || !port.find) {
+        throw ValidationError{"RecordConsumption: the consumption of " + action.eventId +
+                              " cannot be posted: no ledger is wired"};
+    }
+    // An entry under this event's key is the first commit of an earlier attempt that died before the entry was stored.
+    // The consumption is recorded against that entry as it stands, without building the posting again: the cost is
+    // frozen by the committed row, but the accounts come from the settings, and building the request from the
+    // settings of today would be refused by the ledger as a different posting after a change to either account.
+    std::string const sourceKey = "inventory.consumption:" + action.eventId;
+    auto const earlier = co_await port.find(PostingQuery{.company = company, .sourceKey = sourceKey});
+    if (earlier.entryId.hasValue()) {
+        recordEntry(action.eventId, JournalEntryId{*earlier.entryId});
+        co_return view;
+    }
+    auto const settings = StockModel::settingsOf(company);
+    if (!settings.has_value()) {
         throw ValidationError{"RecordConsumption: the consumption of " + action.eventId +
                               " cannot be posted: no ledger is wired, or the company has no inventory settings"};
     }
@@ -439,6 +443,12 @@ ListRecipesResult StockModel::execute(const ListRecipes& action) {
         inventoryFaultPoint("consumption.afterCommit", mapper.Connection());
     }
     auto const posted = co_await port.post(std::move(request));
+    {
+        Lightweight::DataMapper mapper;
+        // Between the ledger's entry and its storage on the consumption: a stop here leaves an entry nothing refers
+        // to.
+        inventoryFaultPoint("consumption.afterPost", mapper.Connection());
+    }
     recordEntry(action.eventId, posted.entryId);
     co_return view;
 }
