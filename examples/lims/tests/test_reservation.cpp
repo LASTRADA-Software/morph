@@ -80,7 +80,7 @@ morph::session::Context as(std::string const& principal) {
 
 }  // namespace
 
-// Mutation: skip the availability check against other samples' live reservations (bob reserves the 40 mL alice holds).
+// Mutation: make availableOf ignore every reservation (bob reserves the 40 mL alice holds).
 TEST_CASE("reservation: a second bench is told who holds the last lot, and takes it once it lapses",
           "[lims][inventory][reservation]") {
     DbFixture fixture;
@@ -118,9 +118,8 @@ TEST_CASE("reservation: a bench that goes away releases its reservation", "[lims
     CHECK(holderOf(101).empty());
 }
 
-// The lesson Part B paid for: two benches at once give one reservation and one refusal naming its holder, never a raw
-// SQL error. Mutation: insert the reservation rows before bumping the lot's reservation_version (both benches reserve
-// the same 40 mL in some round).
+// Two benches at once give one reservation and one refusal naming its holder, never a raw SQL error.
+// Mutation: make bumpVersion report success without writing (both benches reserve the same 40 mL in some round).
 TEST_CASE("reservation: two benches racing for the last lot give one reservation and one named refusal",
           "[lims][inventory][reservation]") {
     DbFixture fixture;
@@ -161,7 +160,7 @@ TEST_CASE("reservation: two benches racing for the last lot give one reservation
     }
 }
 
-// Mutation: as above (both benches hold the lot in some round).
+// Mutation: as above (both benches hold the lot in some round, and the run does not finish).
 TEST_CASE("reservation: while the winner's bench lives, the loser is refused naming it",
           "[lims][inventory][reservation]") {
     DbFixture fixture;
@@ -243,8 +242,6 @@ lims::RecordConsumption deliveryFor(std::string eventId, std::int64_t sample) {
 
 }  // namespace
 
-// Mutation: skip the other-token check on the sample's rows in the planning read and the write (bob reserves the
-// sample alice holds).
 TEST_CASE("reservation: a sample's reservation has one holder", "[lims][inventory][reservation]") {
     DbFixture fixture;
     static_cast<void>(lims::test::consumptionSetUp());
@@ -478,7 +475,6 @@ TEST_CASE("reservation: a sample's reservation is read by those who see its comp
     CHECK(view.expiresAt == morph::time::Timestamp{at(2026, 11, 10, 10)});
 }
 
-// Mutation: leave ReserveForSample's registration off the model (the bridge refuses it in every mode).
 TEST_CASE("reservation: the actions across the backend matrix", "[lims][inventory][reservation][matrix]") {
     auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
