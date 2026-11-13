@@ -4,9 +4,9 @@
 // series, and the ledger records its value against goods received not invoiced. Measured in both posting modes under
 // a failure injected between the halves.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlConnection.hpp>
 #include <algorithm>
-#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -14,6 +14,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <exception>
+#include <memory>
 #include <morph/core/effects.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/session/session_auth.hpp>
@@ -22,7 +23,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -31,6 +31,7 @@
 #include "inventory_test_support.hpp"
 #include "lims/inventory/core/fault_hook.hpp"
 #include "lims/inventory/core/stock_math.hpp"
+#include "lims/inventory/db/inventory_entity.hpp"
 #include "lims/inventory/models/procurement_model.hpp"
 #include "lims/inventory/models/stock_model.hpp"
 #include "lims/ledger/core/balance.hpp"
@@ -541,6 +542,39 @@ TEST_CASE("goods receipt: a stranded receipt received again with other lines is 
     CHECK(entryCount() == 1);
 }
 
+// Two receipts of one order that read the same ordinal and send different lines: the loser is told another receipt
+// took the ordinal, not that its own earlier attempt stranded an entry. The race's end state is built directly: the
+// first receipt's row is moved to another order, so the second one reads ordinal 1 while a receipt holds the entry
+// bound to that key. Mutation: always answer with the stranded-attempt refusal (the loser is told to send what the
+// winner sent).
+TEST_CASE("goods receipt: a receipt that lost the ordinal to another receipt is told so",
+          "[lims][inventory][receipt]") {
+    DbFixture fixture;
+    lims::test::inventoryBooks();
+    auto const opened = lims::test::openOrder(lims::CurrencyCode::EUR);
+    lims::test::ReceiptRig const rig{lims::PostingMode::Dispatched};
+    auto const won =
+        receive(opened.order, opened.stock.coldRoom, {Delivered{"W-1", litres(500), lims::StockUnit::litre}});
+    {
+        Lightweight::DataMapper mapper;
+        auto row = mapper.Query<lims::db::ReceiptRecord>().All().front();
+        row.orderId = row.orderId.Value() + 1000;
+        mapper.Update(row);
+    }
+    REQUIRE(entryCount() == 1);
+    try {
+        static_cast<void>(
+            receive(opened.order, opened.stock.coldRoom, {Delivered{"L-1", litres(1000), lims::StockUnit::litre}}));
+        FAIL("the receipt was accepted");
+    } catch (std::exception const& error) {
+        std::string const text = error.what();
+        CHECK(text.contains("taken meanwhile by another receipt"));
+        CHECK_FALSE(text.contains("receive it again as first sent"));
+    }
+    CHECK(entryCount() == 1);
+    CHECK(won.entry == entries().front().id);
+}
+
 // Hypothesis 1, one shared transaction. Mutation: commit inventory's transaction before postIn (the failure leaves the
 // receipt).
 TEST_CASE("Hypothesis 1: a receipt in one shared transaction that fails leaves nothing and no hole",
@@ -570,9 +604,10 @@ TEST_CASE("Hypothesis 1: a receipt in one shared transaction that fails leaves n
     CHECK(retried.entry == entries().front().id);
 }
 
-// What each way keeps of the ledger's own action: its rule (the posting principal's service role), its effect on a
-// watching connection. The control is inventory's own effect, which both keep. Mutation: in SharedTransaction,
-// dispatch a repeat RecordPosting after the commit (the accountant hears it: the shared case's silence check fails).
+// What each way keeps of the ledger's own action: its authorization, its effect on a watching connection, its journal
+// entry. The control is inventory's own effect, which both keep. Mutation: in SharedTransaction, dispatch a repeat
+// RecordPosting after the commit (the accountant hears it, and the journal holds it: the shared case's silence and
+// journal checks fail).
 TEST_CASE("Hypothesis 1: what a receipt in one shared transaction gives up", "[lims][inventory][receipt][h1]") {
     auto const mode = GENERATE(lims::PostingMode::Dispatched, lims::PostingMode::SharedTransaction);
     CAPTURE(mode);
@@ -580,38 +615,48 @@ TEST_CASE("Hypothesis 1: what a receipt in one shared transaction gives up", "[l
     DbFixture fixture;
     lims::test::inventoryBooks();
     auto const opened = lims::test::openOrder(lims::CurrencyCode::EUR);
-    // The ledger's rule, first, while the posting principal holds no role: the dispatched receipt is refused by the
-    // edge's role table before the ledger's rule can run, and the shared one succeeds because inventory writes the
-    // entry itself.
-    {
-        lims::test::ReceiptRig withheld{mode, lims::test::PostingRole::Withheld};
+
+    // Authorization, first. With no role anywhere the edge's role table refuses the dispatched receipt's first call
+    // before the ledger's rule can run; with the role at another company only, the edge lets the calls through and the
+    // ledger's own rule at this company refuses RecordPosting. The refusals cross the dispatch as messages, so each is
+    // matched by what it says. The shared receipt is refused by neither: inventory writes the entry itself.
+    std::int64_t lotNumber = 1200;
+    for (auto const& [role, refusal] :
+         {std::pair{lims::test::PostingRole::Withheld, std::string_view{"unauthorized"}},
+          std::pair{lims::test::PostingRole::ElsewhereOnly, std::string_view{"does not hold the service role"}}}) {
+        lims::test::ReceiptRig phase{mode, role};
         auto const entriesBefore = entryCount();
-        auto const first = [&] {
-            return receiveOver(withheld, opened.order, opened.stock.coldRoom,
-                               {Delivered{"MK-1102", litres(1000), lims::StockUnit::litre}});
+        auto const receiveHalfLitre = [&] {
+            return receiveOver(phase, opened.order, opened.stock.coldRoom,
+                               {Delivered{"MK-" + std::to_string(++lotNumber), litres(500), lims::StockUnit::litre}});
         };
         if (dispatched) {
-            CHECK_THROWS_WITH(first(), Catch::Matchers::ContainsSubstring("unauthorized"));
+            CHECK_THROWS_WITH(receiveHalfLitre(), Catch::Matchers::ContainsSubstring(std::string{refusal}));
             CHECK(entryCount() == entriesBefore);
             CHECK(lotCount() == 0);
         } else {
-            CHECK(first().number == "GR-2026-000001");
+            CHECK_FALSE(receiveHalfLitre().number.empty());
             CHECK(entryCount() == entriesBefore + 1);
         }
     }
-    // The ledger's effect: an accountant watching the ledger hears the dispatched receipt's entry and not the shared
-    // one's; the stock keeper hears inventory's own change in both.
+
+    // Effects and journal: an accountant watching the ledger, a stock keeper watching receipts, every action
+    // journaled.
+    auto const journal = std::make_shared<lims::test::Recorder>();
+    morph::journal::ScopedActionLog const log{journal};
     lims::test::ReceiptRig rig{mode};
     auto const accountant = rig.rig().connect();
     auto const keeper = rig.rig().connect();
     REQUIRE(accountant->watch({"Ledger_Entry"}, as("acc")).kind == "ok");
     REQUIRE(keeper->watch({"Inventory_Receipt"}, as("kim")).kind == "ok");
     static_cast<void>(receiveOver(rig, opened.order, opened.stock.coldRoom,
-                                  {Delivered{"MK-1101", litres(1000), lims::StockUnit::litre}}));
+                                  {Delivered{"MK-1101", litres(500), lims::StockUnit::litre}}));
     CHECK(ServerConnection::eventually([&] { return keeper->heardOf("Inventory_Receipt"); }));
-    bool const ledgerHeard =
-        ServerConnection::eventually([&] { return accountant->heardOf("Ledger_Entry"); }, std::chrono::seconds{1});
+    bool const ledgerHeard = ServerConnection::eventually([&] { return accountant->heardOf("Ledger_Entry"); },
+                                                          std::chrono::milliseconds{1500});
     CHECK(ledgerHeard == dispatched);
+    CHECK(journal->holds("ProcurementModel", "ReceiveGoods"));
+    CHECK(journal->holds("LedgerModel", "RecordPosting") == dispatched);
 }
 
 // Mutation: take the number before the ledger call in Dispatched mode (a failed receipt consumes one, and the retry is
@@ -761,19 +806,22 @@ TEST_CASE("goods receipt: receiving declares that it changes the receipt, the lo
           std::vector<std::string>{"Inventory_Lot", "Inventory_Movement", "Inventory_Order", "Inventory_Receipt"});
 }
 
-// The new actions cross every backend: the Task handler, its nested lines, the reads.
+// The new actions cross every backend: the Task handler suspends on the dispatched ledger calls and on the rate of a
+// foreign-currency order, and resumes on each backend's executor.
 TEST_CASE("goods receipt: receiving and reading across the backend matrix", "[lims][inventory][receipt][matrix]") {
     auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
     lims::test::inventoryBooks();
-    auto const opened = lims::test::openOrder(lims::CurrencyCode::EUR);
-    lims::test::ReceiptRig const rig{lims::PostingMode::SharedTransaction};
+    auto const opened = lims::test::openOrder(lims::CurrencyCode::CHF);
+    lims::test::ReceiptRig const rig{lims::PostingMode::Dispatched};
     auto const receipt = receive(opened.order, opened.stock.coldRoom,
                                  {Delivered{"MK-1101", litres(1000), lims::StockUnit::litre},
                                   Delivered{"MK-1102", millilitres(1000), lims::StockUnit::millilitre}},
                                  mode);
     CHECK(receipt.number == "GR-2026-000001");
+    CHECK(entryCount() == 1);
+    CHECK(receipt.entry == entries().front().id);
     auto const read =
         lims::test::dispatchAs<lims::ProcurementModel>("kim", lims::GetReceipt{.receiptId = receipt.id}, mode);
     CHECK(read.entry == receipt.entry);

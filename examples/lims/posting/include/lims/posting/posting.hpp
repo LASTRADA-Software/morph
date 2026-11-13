@@ -24,6 +24,10 @@ namespace lims {
 
 LIMS_DEFINE_STRONG_ID(JournalEntryId);
 
+/// @brief The code of the ledger's refusal of a source key that is already bound to a different posting body. A poster
+///        tells it from the ledger's other refusals by this code, not by its wording.
+inline constexpr std::string_view kSourceKeyOtherBodyCode = "lims.posting.sourceKeyOtherBody";
+
 /// @brief Whether @p code can name a ledger account: 1 to 16 upper-case letters and digits. Upper-case only, so that
 /// two
 ///        codes differing only in case cannot coexist in a chart.

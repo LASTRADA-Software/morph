@@ -1459,11 +1459,12 @@ converges on the recorded entry), and a retry with other lines is refused naming
 
 **Hypothesis 1 is confirmed for its second instance.** Measured in `tests/test_goods_receipt.cpp`: in one shared
 transaction a failure between the halves leaves nothing and no hole in the receipt numbers, but the ledger's entry is
-not heard by a watching accountant, and is not refused by the ledger's rule (a receipt succeeds with the posting
-principal holding no role, where the dispatched one is refused); dispatched, the ledger keeps both, and a failure
-between the halves leaves an entry for goods that are not on hand until the receipt is retried, which converges on the
-same entry by its source key. That the shared transaction also leaves the ledger's action out of the journal is
-inferred from decision 38's measurement of the same mechanism, not measured here. The two postings needed the same
+not heard by a watching accountant and not journaled as the ledger's own action, and is not refused by the ledger's
+rule (a receipt succeeds both with the posting principal holding no role and with it holding the role at another
+company only, where the dispatched receipt is refused, in the first case by the edge's role table and in the second by
+`RecordPosting`'s own rule at the receipt's company); dispatched, the ledger keeps all three, and a failure between the
+halves leaves an entry for goods that are not on hand until the receipt is retried, which converges on the same entry
+by its source key. The two postings needed the same
 thing and neither has it: two models' actions committed as one fact, each keeping its authorization, effects and
 journal.
 

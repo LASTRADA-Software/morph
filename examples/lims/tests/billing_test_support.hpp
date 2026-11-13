@@ -3,8 +3,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <morph/journal/action_log.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -259,6 +261,36 @@ inline void billingSettings() {
         .billingDay = Count{::morph::math::Rational{25, ::morph::math::DecimalPlaces{0}}},
     });
 }
+
+/// @brief An action log that keeps what it is given: whose actions were journaled.
+class Recorder final : public morph::journal::IActionLog {
+public:
+    void append(morph::journal::LogEntry entry) override {
+        std::scoped_lock const lock{_mutex};
+        _entries.push_back(std::move(entry));
+    }
+    void flush() override {}
+    [[nodiscard]] std::vector<morph::journal::LogEntry> entries(std::string_view entityKey = {}) const override {
+        std::scoped_lock const lock{_mutex};
+        std::vector<morph::journal::LogEntry> matching;
+        for (auto const& entry : _entries) {
+            if (entityKey.empty() || entry.entityKey == entityKey) {
+                matching.push_back(entry);
+            }
+        }
+        return matching;
+    }
+    /// @brief Whether @p modelType journaled @p actionType.
+    [[nodiscard]] bool holds(std::string_view modelType, std::string_view actionType) const {
+        return std::ranges::any_of(entries(), [&](morph::journal::LogEntry const& entry) {
+            return entry.modelType == modelType && entry.actionType == actionType;
+        });
+    }
+
+private:
+    mutable std::mutex _mutex;
+    std::vector<morph::journal::LogEntry> _entries;
+};
 
 /// @brief Whether the posting principal holds the service role a `PostingRig` installs it with.
 enum class PostingRole : std::uint8_t {

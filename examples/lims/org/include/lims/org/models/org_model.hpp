@@ -140,6 +140,12 @@ public:
     /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
     [[nodiscard]] static std::vector<CompanyId> visibleCompanies(std::string_view principal);
 
+    /// @brief Whether the authenticated principal can see @p company.
+    /// @param company The company.
+    /// @return Whether a role of theirs reaches it.
+    /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
+    [[nodiscard]] static bool callerSees(CompanyId company);
+
     /// @brief Whether any principal holds `Supervisor` anywhere.
     /// @return Whether one does.
     [[nodiscard]] static bool supervisorExists();

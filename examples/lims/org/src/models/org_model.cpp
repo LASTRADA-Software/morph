@@ -376,6 +376,11 @@ RevokeRoleResult OrgModel::execute(const RevokeRole& action) {
     return RevokeRoleResult{.assignmentId = action.assignmentId};
 }
 
+bool OrgModel::callerSees(CompanyId company) {
+    auto const companies = visibleCompanies(currentPrincipal());
+    return std::ranges::find(companies, company) != companies.end();
+}
+
 // An action handler: the registry calls it on the instance, like every other.
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ListRoleAssignmentsResult OrgModel::execute(const ListRoleAssignments& action) {

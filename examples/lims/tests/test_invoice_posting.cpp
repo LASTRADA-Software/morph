@@ -52,36 +52,6 @@ struct FaultHookGuard {
     ~FaultHookGuard() { lims::setFaultHook({}); }
 };
 
-/// @brief An action log that keeps what it is given: whose actions were journaled.
-class Recorder final : public morph::journal::IActionLog {
-public:
-    void append(morph::journal::LogEntry entry) override {
-        std::scoped_lock const lock{_mutex};
-        _entries.push_back(std::move(entry));
-    }
-    void flush() override {}
-    [[nodiscard]] std::vector<morph::journal::LogEntry> entries(std::string_view entityKey = {}) const override {
-        std::scoped_lock const lock{_mutex};
-        std::vector<morph::journal::LogEntry> matching;
-        for (auto const& entry : _entries) {
-            if (entityKey.empty() || entry.entityKey == entityKey) {
-                matching.push_back(entry);
-            }
-        }
-        return matching;
-    }
-    /// @brief Whether @p modelType journaled @p actionType.
-    [[nodiscard]] bool holds(std::string_view modelType, std::string_view actionType) const {
-        return std::ranges::any_of(entries(), [&](morph::journal::LogEntry const& entry) {
-            return entry.modelType == modelType && entry.actionType == actionType;
-        });
-    }
-
-private:
-    mutable std::mutex _mutex;
-    std::vector<morph::journal::LogEntry> _entries;
-};
-
 /// @brief The seeded company's entries, as acc sees them.
 [[nodiscard]] std::vector<lims::JournalEntryView> entries() {
     ScopedPrincipal const acc{"acc"};
@@ -320,7 +290,7 @@ TEST_CASE("Hypothesis 1: what the shared transaction gives up of the ledger's ac
     }
 
     // Effects and journal: an accountant watching the ledger, a clerk watching invoices, every action journaled.
-    auto const journal = std::make_shared<Recorder>();
+    auto const journal = std::make_shared<lims::test::Recorder>();
     morph::journal::ScopedActionLog const log{journal};
     lims::test::PostingRig posting{mode};
     auto const invoice = lims::test::approvedInvoice("WW-2");

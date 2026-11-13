@@ -8,6 +8,7 @@
 #include <exception>
 #include <format>
 #include <map>
+#include <morph/core/action_refusal.hpp>
 #include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
@@ -37,17 +38,6 @@ using ::morph::math::DecimalPlaces;
 using ::morph::math::Denominator;
 using ::morph::math::Numerator;
 using ::morph::math::Rational;
-
-/// @brief The words the ledger refuses a repeated source key with when the body differs.
-constexpr std::string_view kOtherBody = "already recorded for a different posting";
-
-/// @brief Whether the caller can see @p company.
-/// @param company The company.
-/// @return Whether a role of theirs reaches it.
-[[nodiscard]] bool visible(CompanyId company) {
-    auto const companies = OrgModel::visibleCompanies(currentPrincipal());
-    return std::ranges::find(companies, company) != companies.end();
-}
 
 /// @brief One receipt line after every check: what it delivers and what it is worth.
 struct PlannedLine {
@@ -233,12 +223,6 @@ void claimOrderLines(Lightweight::DataMapper& mapper, ReceiptInput const& input)
 [[noreturn]] void refuseLostRace(ReceiptInput const& input, Lightweight::SqlException const& error,
                                  bool entryRecorded) {
     Lightweight::DataMapper reread;
-    for (PlannedLine const& line : input.lines) {
-        if (inventory::lotNumberTaken(static_cast<std::int64_t>(line.item.id.Value()), line.input->lotNumber)) {
-            throw Conflict{"ReceiveGoods: lot " + line.input->lotNumber +
-                           " was taken meanwhile; receive the delivery again with another lot number"};
-        }
-    }
     for (Claim const& claim : input.claims) {
         auto const rows = reread.Query<db::OrderLineRecord>()
                               .Where(::Lightweight::FieldNameOf<&db::OrderLineRecord::id>, "=", claim.line)
@@ -264,6 +248,33 @@ void claimOrderLines(Lightweight::DataMapper& mapper, ReceiptInput const& input)
                                       : " was not received, try again")};
     }
     throw error;
+}
+
+/// @brief The refusal of a receipt whose source key the ledger holds for a different body.
+///
+/// Two causes look alike to the ledger. The entry is held by a receipt when another keeper's receipt of the same
+/// order took this ordinal first: the delivery sent again is the order's next receipt and succeeds. Otherwise the
+/// entry is a stranded earlier attempt of this ordinal, which only the same lines can complete.
+/// @param input The receipt.
+/// @param ordinal The receipt's ordinal within its order.
+/// @param recorded The ledger's entry under the receipt's source key.
+/// @return The refusal to throw.
+[[nodiscard]] Conflict otherBodyRefusal(ReceiptInput const& input, std::int64_t ordinal,
+                                        PostingResult const& recorded) {
+    if (recorded.entryId.hasValue()) {
+        Lightweight::DataMapper reader;
+        auto const holders = reader.Query<db::ReceiptRecord>()
+                                 .Where(::Lightweight::FieldNameOf<&db::ReceiptRecord::entryId>, "=", *recorded.entryId)
+                                 .All();
+        if (!holders.empty()) {
+            return Conflict{"ReceiveGoods: receipt " + std::to_string(ordinal) + " of order " +
+                            std::to_string(input.order) + " was taken meanwhile by another receipt; try again"};
+        }
+    }
+    return Conflict{"ReceiveGoods: receipt " + std::to_string(ordinal) + " of order " + std::to_string(input.order) +
+                    " was posted as entry " +
+                    (recorded.entryId.hasValue() ? std::to_string(*recorded.entryId) : std::string{"?"}) +
+                    " with other lines; receive it again as first sent"};
 }
 
 /// @brief Records the ledger's entry through inventory's own mapper and writes the receipt: both halves in one
@@ -336,7 +347,7 @@ void claimOrderLines(Lightweight::DataMapper& mapper, ReceiptInput const& input)
         auto const orders = reader.Query<db::PurchaseOrderRecord>()
                                 .Where(::Lightweight::FieldNameOf<&db::PurchaseOrderRecord::id>, "=", *action.order)
                                 .All();
-        if (orders.empty() || !visible(CompanyId{orders.front().companyId.Value()})) {
+        if (orders.empty() || !OrgModel::callerSees(CompanyId{orders.front().companyId.Value()})) {
             throw NotFound{"ReceiveGoods: order " + std::to_string(*action.order) + " does not exist"};
         }
         auto const& order = orders.front();
@@ -509,8 +520,8 @@ void claimOrderLines(Lightweight::DataMapper& mapper, ReceiptInput const& input)
         std::exception_ptr refused;
         try {
             posted = co_await port.post(std::move(request));
-        } catch (std::exception const& error) {
-            if (std::string_view{error.what()}.find(kOtherBody) == std::string_view::npos) {
+        } catch (::morph::model::ActionRefusal const& error) {
+            if (error.code() != kSourceKeyOtherBodyCode) {
                 throw;
             }
             refused = std::current_exception();
@@ -520,10 +531,7 @@ void claimOrderLines(Lightweight::DataMapper& mapper, ReceiptInput const& input)
                 earlier.entryId.hasValue()
                     ? earlier
                     : co_await port.find(PostingQuery{.company = input.company, .sourceKey = sourceKey});
-            throw Conflict{"ReceiveGoods: receipt " + std::to_string(ordinal) + " of order " +
-                           std::to_string(*action.order) + " was posted as entry " +
-                           (recorded.entryId.hasValue() ? std::to_string(*recorded.entryId) : std::string{"?"}) +
-                           " with other lines; receive it again as first sent"};
+            throw otherBodyRefusal(input, ordinal, recorded);
         }
         receiptId = receiveAfterLedger(*posted, input);
     }
@@ -541,7 +549,7 @@ ReceiptView ProcurementModel::execute(const GetReceipt& action) {
     auto const rows = mapper.Query<db::ReceiptRecord>()
                           .Where(::Lightweight::FieldNameOf<&db::ReceiptRecord::id>, "=", *action.receiptId)
                           .All();
-    if (rows.empty() || !visible(CompanyId{rows.front().companyId.Value()})) {
+    if (rows.empty() || !OrgModel::callerSees(CompanyId{rows.front().companyId.Value()})) {
         throw NotFound{"GetReceipt: receipt " + std::to_string(*action.receiptId) + " does not exist"};
     }
     return inventory::receiptView(mapper, *action.receiptId);
@@ -554,7 +562,7 @@ ListReceiptsResult ProcurementModel::execute(const ListReceipts& action) {
         throw ValidationError{"ListReceipts: a company is required"};
     }
     ListReceiptsResult result;
-    if (!visible(action.company)) {
+    if (!OrgModel::callerSees(action.company)) {
         return result;
     }
     Lightweight::DataMapper mapper;
