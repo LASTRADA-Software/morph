@@ -19,6 +19,9 @@ namespace lims::screens {
 /// @brief The application's id, as `ui-hello` names it.
 inline constexpr std::string_view kApplicationId = "lims";
 
+/// @brief The application's version, which the registry serves and the shell's foot shows.
+inline constexpr std::string_view kApplicationVersion = "1.0";
+
 /// @brief Registers a client and a sample, then opens the sample's lifecycle.
 inline constexpr std::string_view kRegister = "lims.register";
 

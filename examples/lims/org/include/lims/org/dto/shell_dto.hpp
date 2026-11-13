@@ -28,13 +28,14 @@ namespace lims {
 ///
 /// The scope's value, the company's id, is what the shell hands every screen as its context. A scope is a company and
 /// not a company-and-site pair because a context is a single string or integer, and every list a screen reads is keyed
-/// by company; the sites the person can see in it are the scope's detail line.
+/// by company; the detail line is the company's base currency and how many of its sites the person can see.
 struct ScopeOption {
     /// @brief The company; the option's value.
     CompanyId company;
     /// @brief The company's name.
     std::string label;
-    /// @brief The sites of the company the person can see, comma-separated.
+    /// @brief The company's base currency code and, when the person can see any, the number of its sites that they can
+    ///        see: `EUR · 2 sites`.
     std::string detail;
     /// @brief The company's base currency.
     CurrencyCode currency = CurrencyCode::EUR;

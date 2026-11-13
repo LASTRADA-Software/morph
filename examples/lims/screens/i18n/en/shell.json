@@ -1,4 +1,7 @@
 {
+  "lims.shell.about.heading": "lims",
+  "lims.shell.about.summary": "lims keeps a laboratory's samples, results, invoices, ledger and stock in one place.",
+  "lims.shell.about.title": "About lims",
   "lims.shell.search.accounts": "Accounts",
   "lims.shell.search.invoices": "Invoices",
   "lims.shell.search.samples": "Samples",

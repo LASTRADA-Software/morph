@@ -118,8 +118,8 @@ void insertInvoice(Lightweight::DataMapper& mapper, lims::CompanyId company, lim
 
 }  // namespace
 
-// Mutations: list every company whatever the caller holds (stranger lists both); put every site of a company in its
-// detail (tech's second scope reads "Annex, Osaka lab").
+// Mutations: list every company whatever the caller holds (stranger lists both); count the sites of every company
+// rather than the caller's (tech's second scope reads "JPY · 2 sites"); leave the currency out of the detail.
 TEST_CASE("shell: the scopes are the companies the caller can see, with the sites of them the caller can see",
           "[lims][org][shell]") {
     DbFixture fixture;
@@ -136,12 +136,12 @@ TEST_CASE("shell: the scopes are the companies the caller can see, with the site
         REQUIRE(scopes.size() == 2);
         CHECK(scopes.at(0).company == lims::test::seededCompany());
         CHECK(scopes.at(0).label == "Main laboratory");
-        CHECK(scopes.at(0).detail == "Main site");
+        CHECK(scopes.at(0).detail == "EUR · 1 site");
         CHECK(scopes.at(0).currency == lims::CurrencyCode::EUR);
         CHECK(scopes.at(0).decimals == countOf(2));
         CHECK(scopes.at(1).company == second.company);
         CHECK(scopes.at(1).label == "Osaka branch");
-        CHECK(scopes.at(1).detail == "Annex");
+        CHECK(scopes.at(1).detail == "JPY · 1 site");
         CHECK(scopes.at(1).currency == lims::CurrencyCode::JPY);
         CHECK(scopes.at(1).decimals == countOf(0));
     }

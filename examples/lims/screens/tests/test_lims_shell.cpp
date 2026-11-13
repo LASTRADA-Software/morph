@@ -40,6 +40,7 @@
 #include "scenario/org_scenario.hpp"
 #include "scenario/scenario_client.hpp"
 #include "screen_test_support.hpp"
+#include "shell_screens.hpp"
 
 namespace {
 
@@ -236,6 +237,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
         {moduleProbe<lims::InvoiceModel, lims::CountPendingApprovals, lims::InvoiceModel, lims::ApproveInvoice>(
              "lims.approvals"),
          "lims.approvals", "shell", false});
+    entries.push_back({lims::screens::aboutScreen(), lims::screens::kAbout, "shell", false});
     std::vector<ui::RegisteredScreen const*> registered;
     for (Entry const& entry : entries) {
         auto added = registry.add(entry.screen);
@@ -252,8 +254,8 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
             return std::unexpected(std::move(added.error()));
         }
     }
-    return finish(served, lims::screens::ShellAvailability{.modules = {"lab", "billing", "ledger", "inventory"},
-                                                           .approvals = true});
+    return finish(served, lims::screens::ShellAvailability{
+                              .modules = {"lab", "billing", "ledger", "inventory"}, .approvals = true, .about = true});
 }
 
 /// @brief The lab as the scenario has it: anna supervises the seeded company, and the scenario's people hold their
@@ -301,6 +303,18 @@ struct Shown {
     bool searchEmpty = false;
     /// @brief The modules the navigator draws a group for, in the order tried.
     std::vector<std::string> modules;
+    /// @brief The product mark's title.
+    std::string brand;
+    /// @brief The version in the sidebar's foot.
+    std::string version;
+    /// @brief The connection state in the sidebar's foot.
+    std::string connection;
+    /// @brief Whether the help button was drawn.
+    bool helpDrawn = false;
+    /// @brief The initials in the person's trigger.
+    std::string avatar;
+    /// @brief The screens mounted after the help button was pressed.
+    std::vector<std::string> afterHelp;
 };
 
 /// @brief Whether a widget of @p kind with @p testId exists.
@@ -394,6 +408,19 @@ Shown signedIn(std::string const& login, bool expectHits) {
             shown.modules.push_back(module);
         }
     }
+    shown.brand = harness.text("shell_brand_title").value_or("");
+    shown.version = harness.text("shell_version").value_or("");
+    shown.connection = harness.text("shell_connection").value_or("");
+    shown.helpDrawn = drawn(harness, "Button", "shell_help");
+    if (auto const person = harness.backend().find("Menu", "testId", "shell_principal_menu")) {
+        shown.avatar = harness.backend().prop(*person, "avatar");
+    }
+    if (auto const help = harness.backend().find("Button", "testId", "shell_help")) {
+        harness.backend().click(*help);
+        static_cast<void>(harness.waitFor(
+            [&harness] { return !harness.mounted().empty() && harness.mounted().back() == lims::screens::kAbout; }));
+        shown.afterHelp = harness.mounted();
+    }
     shown.afterSignIn.assign(harness.problems().begin() + static_cast<std::ptrdiff_t>(shown.beforeSignIn.size()),
                              harness.problems().end());
     return shown;
@@ -449,7 +476,8 @@ TEST_CASE("lims shell: a screen that does not read the context stays where it wa
 // The people lims has who hold a role see every module's screens: once signed in, the shell draws the switcher with
 // the companies they can see, the person's menu with their name and roles, a group per module and the ledger's hit for
 // a search, and reports nothing. Mutations: the shell draws no parts (the waits for the switcher and the person's menu
-// fail); ListMyScopes names every site in a company's detail (the analyst's switcher line is not "Köln").
+// fail); ListMyScopes names the sites in a company's detail instead of its currency and their number (the analyst's
+// switcher line is not "EUR · 2 sites").
 TEST_CASE("lims shell: the scenario's analyst and accountant are drawn their scopes, their name and the search",
           "[lims-screens][shell][auth]") {
     morph::ladder::testkit::DbFixture fixture;
@@ -464,10 +492,17 @@ TEST_CASE("lims shell: the scenario's analyst and accountant are drawn their sco
     CHECK(julia.switcherDrawn);
     CHECK(julia.scope == "Rheinlab Analytik GmbH");
     CHECK(julia.scopes ==
-          "[Rheinlab Analytik GmbH;checked=true;description=Köln\\, Leverkusen,"
-          "Rheinlab Japan K.K.;checked=false;description=Osaka]");
+          "[Rheinlab Analytik GmbH;checked=true;description=EUR · 2 sites,"
+          "Rheinlab Japan K.K.;checked=false;description=JPY · 1 site]");
     CHECK(julia.personDrawn);
     CHECK(julia.person == "Julia Schneider");
+    CHECK(julia.avatar == "JS");
+    CHECK(julia.brand == "lims");
+    CHECK(julia.version == "v1.0");
+    CHECK(julia.connection == "Connected");
+    CHECK(julia.helpDrawn);
+    REQUIRE_FALSE(julia.afterHelp.empty());
+    CHECK(julia.afterHelp.back() == std::string{lims::screens::kAbout});
     CHECK(julia.personEntries.contains("Supervisor"));
     CHECK(julia.personEntries.contains("Accountant"));
     CHECK(julia.personEntries.contains("InvoiceApprover"));
@@ -482,9 +517,10 @@ TEST_CASE("lims shell: the scenario's analyst and accountant are drawn their sco
     CHECK(manpreet.beforeSignIn.empty());
     CHECK(manpreet.switcherDrawn);
     CHECK(manpreet.scope == "Rheinlab Analytik GmbH");
-    CHECK(manpreet.scopes == "[Rheinlab Analytik GmbH;checked=true;description=Köln]");
+    CHECK(manpreet.scopes == "[Rheinlab Analytik GmbH;checked=true;description=EUR · 1 site]");
     CHECK(manpreet.personDrawn);
     CHECK(manpreet.person == "Manpreet Kaur");
+    CHECK(manpreet.avatar == "MK");
     CHECK(manpreet.personEntries.contains("Analyst"));
     CHECK_FALSE(manpreet.personEntries.contains("Accountant"));
     CHECK(manpreet.searchHeadings == std::vector<std::string>{"Accounts"});
@@ -510,6 +546,7 @@ TEST_CASE("lims shell: a person with no role is drawn the shell without the modu
     CHECK(shown.scopes == "[]");
     CHECK(shown.personDrawn);
     CHECK(shown.person == "Tobias Krüger");
+    CHECK(shown.avatar == "TK");
     CHECK(shown.personEntries.contains("Sign out"));
     CHECK(shown.searchEmpty);
     CHECK(shown.searchHeadings.empty());

@@ -607,6 +607,7 @@ void addLegacyScreens(ui::ScreenRegistry& screens, std::vector<ListedScreen>& li
             available.modules.push_back(screen.module);
         }
         available.approvals = available.approvals || screen.id == kApprovals;
+        available.about = available.about || screen.id == kAbout;
     }
     return available;
 }
@@ -687,8 +688,9 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
             return std::unexpected(screen.registered.error());
         }
     }
-    morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = std::string{kApplicationId}, .version = "1.0"},
-                                 screens.catalog()};
+    morph::ui::UiRegistry served{
+        morph::ui::ApplicationInfo{.id = std::string{kApplicationId}, .version = std::string{kApplicationVersion}},
+        screens.catalog()};
     for (ListedScreen const& screen : listed) {
         morph::ui::CatalogEntry entry;
         entry.id = screen.id;

@@ -271,16 +271,14 @@ ListMyScopesResult OrgModel::execute(const ListMyScopes& action) {
     auto const sites = execute(ListSites{}).sites;
     ListMyScopesResult result;
     for (CompanyView const& company : execute(ListCompanies{}).companies) {
-        std::vector<std::string> names;
+        std::size_t visibleSites = 0;
         for (SiteView const& site : sites) {
-            if (site.companyId == company.id) {
-                names.push_back(site.name);
-            }
+            visibleSites += site.companyId == company.id ? 1U : 0U;
         }
-        std::ranges::sort(names);
-        std::string detail;
-        for (std::string const& name : names) {
-            detail += (detail.empty() ? "" : ", ") + name;
+        // The company's base currency, then how many of its sites the caller can see: "EUR · 2 sites".
+        std::string detail{currencyName(company.baseCurrency)};
+        if (visibleSites > 0) {
+            detail += " · " + std::to_string(visibleSites) + (visibleSites == 1 ? " site" : " sites");
         }
         result.scopes.push_back(ScopeOption{
             .company = company.id,

@@ -12,6 +12,10 @@
 
 namespace lims::screens {
 
+/// @brief The about screen, which the shell's help button opens.
+/// @return The screen.
+[[nodiscard]] morph::ui::author::Screen aboutScreen();
+
 /// @brief Registers the shell module's screens and lists them for the bundle.
 /// @param screens The registry the screens are added to.
 /// @param listed The list the bundle's catalog entries are built from; the module's screens are appended to it.

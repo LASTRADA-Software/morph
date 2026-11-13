@@ -20,6 +20,7 @@
 #include "lims/org/dto/role_dto.hpp"
 #include "lims/org/dto/shell_dto.hpp"
 #include "lims/org/models/org_model.hpp"
+#include "lims_screens.hpp"
 
 namespace lims::screens {
 
@@ -74,6 +75,11 @@ constexpr std::array<ModuleDeclaration, 4> kModules{{
 
 ui::ShellParts shellParts(ShellAvailability const& available) {
     ui::ShellParts parts;
+    parts.brand =
+        ui::BrandMark{.title = "lims", .icon = {}, .version = std::string{"v"} + std::string{kApplicationVersion}};
+    if (available.about) {
+        parts.help = ui::HelpEntry{.screen = std::string{kAbout}, .model = {}, .action = {}, .params = {}};
+    }
     parts.context = ui::ContextSwitch{.model = "OrgModel",
                                       .action = "ListMyScopes",
                                       .localeField = {},
