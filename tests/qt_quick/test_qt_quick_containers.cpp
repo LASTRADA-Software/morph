@@ -3495,3 +3495,94 @@ TEST_CASE("qt_quick containers: a grid's cells lie on whole pixels, so a clippin
         }
     }
 }
+
+// Mutations: read the screen's DPI for the sheet (the size changes with it), size the page by its content only (the
+// narrow window keeps the sheet at 794 px), place a content-sized footer from the top (its bottom edge moves with its
+// content), and take the offset from the margin box (the window lies 10 mm lower).
+TEST_CASE("qt_quick page: the sheet is 96 px to 25.4 mm, scaled to the width it is given, regions lie at their places",
+          "[qt_quick][page]") {
+    namespace ui = morph::ui;
+    Scene scene;
+    ui::PageGeometry const a4{.width = ui::Mm{210}, .height = ui::Mm{297}, .margins = ui::PageMargins{ui::Mm{10}}};
+    auto page = scene.backend().createPage(nullptr, a4);
+    auto window = scene.backend().createPageRegion(page.get(), {.anchor = ui::PageAnchor::Offset,
+                                                                .x = ui::Mm{20},
+                                                                .y = ui::Mm{45},
+                                                                .width = ui::Mm{85},
+                                                                .height = ui::Mm{45}});
+    auto footer = scene.backend().createPageRegion(page.get(), {.anchor = ui::PageAnchor::Bottom});
+    auto footerText = scene.backend().createText(footer.get());
+    footerText->setText("Footer");
+    scene.settle();
+    constexpr double kPixelsPerMm = 96.0 / 25.4;
+    QQuickItem const& sheet = Scene::itemOf(*page);
+    // The window is 800 px wide: the sheet at its own size, A4 at 794 x 1123.
+    CHECK(sheet.width() == Catch::Approx(210 * kPixelsPerMm).margin(1));
+    CHECK(sheet.height() == Catch::Approx(297 * kPixelsPerMm).margin(1));
+    QQuickItem const& windowItem = Scene::itemOf(*window);
+    CHECK(windowItem.x() == Catch::Approx(20 * kPixelsPerMm).margin(1));
+    CHECK(windowItem.y() == Catch::Approx(45 * kPixelsPerMm).margin(1));
+    CHECK(windowItem.width() == Catch::Approx(85 * kPixelsPerMm).margin(1));
+    // The footer lies on the bottom margin, whatever its content asks for.
+    QQuickItem const& footerItem = Scene::itemOf(*footer);
+    CHECK(footerItem.height() > 0);
+    CHECK(footerItem.y() + footerItem.height() == Catch::Approx((297 - 10) * kPixelsPerMm).margin(1));
+    // Narrower than the sheet: scaled down, uniformly, with the height following.
+    scene.window().resize(397, 600);
+    scene.settle();
+    scene.settle();
+    double const scale = sheet.width() / (210 * kPixelsPerMm);
+    CHECK(scale == Catch::Approx(0.5).margin(0.01));
+    CHECK(sheet.height() == Catch::Approx(297 * kPixelsPerMm * scale).margin(1));
+    // The inner item, not the regions, carries the scale.
+    CHECK(windowItem.parentItem()->scale() == Catch::Approx(scale).margin(0.001));
+    CHECK(windowItem.x() == Catch::Approx(20 * kPixelsPerMm).margin(1));
+    // Wider again: never up.
+    scene.window().resize(1600, 600);
+    scene.settle();
+    scene.settle();
+    CHECK(sheet.width() == Catch::Approx(210 * kPixelsPerMm).margin(1));
+}
+
+// The vocabulary before pages, measured: what a column of fixed size says about a sheet. A column of stated height
+// with a stretching spacer holds a footer at its bottom, so pinning alone is expressible; units are not millimetres.
+TEST_CASE("qt_quick page: without pages, a fixed column pins a footer but its size is in units, not millimetres",
+          "[qt_quick][page][probe]") {
+    Scene scene;
+    auto sheet = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    sheet->setLayout({.width = ui::Sizing::fixed(210), .height = ui::Sizing::fixed(297)});
+    auto body = scene.backend().createText(sheet.get());
+    body->setText("Body");
+    auto gap = scene.backend().createSpacer(sheet.get());
+    auto footer = scene.backend().createText(sheet.get());
+    footer->setText("Footer");
+    scene.settle();
+    QQuickItem const& column = Scene::itemOf(*sheet);
+    QQuickItem const& footerItem = Scene::itemOf(*footer);
+    // The footer lies on the column's bottom edge.
+    CHECK(footerItem.y() + footerItem.height() == Catch::Approx(column.height()).margin(1));
+    // 210 units are not 210 mm: the size follows the font.
+    CHECK(column.width() != Catch::Approx(210 * 96.0 / 25.4).margin(20));
+}
+
+// Mutation: leave `overflow` unwritten (the mark stays hidden).
+TEST_CASE("qt_quick page: a region whose content does not fit shows its overflow mark", "[qt_quick][page]") {
+    Scene scene;
+    ui::PageGeometry const a4{.width = ui::Mm{210}, .height = ui::Mm{297}, .margins = ui::PageMargins{ui::Mm{10}}};
+    auto page = scene.backend().createPage(nullptr, a4);
+    auto box = scene.backend().createPageRegion(page.get(), {.anchor = ui::PageAnchor::Offset,
+                                                             .x = ui::Mm{20},
+                                                             .y = ui::Mm{45},
+                                                             .width = ui::Mm{85},
+                                                             .height = ui::Mm{5}});
+    auto first = scene.backend().createText(box.get());
+    first->setText("one");
+    auto second = scene.backend().createText(box.get());
+    second->setText("two");
+    scene.settle();
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*box);
+    auto const* const mark = item.findChild<QQuickItem*>(QStringLiteral("overflowMark"));
+    REQUIRE(mark != nullptr);
+    CHECK(mark->isVisible());
+}

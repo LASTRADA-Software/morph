@@ -86,6 +86,8 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphCollapsible.qml
         qml/MorphSectionHeader.qml
         qml/MorphDropZone.qml
+        qml/MorphPage.qml
+        qml/MorphPageRegion.qml
         qml/MorphCheckIndicator.qml
         qml/MorphChevron.qml
     OUTPUT_TARGETS morph_qt_quick_qml_output_targets
@@ -108,6 +110,7 @@ add_library(morph_qt_quick STATIC
     keys.hpp
     kinds.hpp
     leaves.cpp
+    page.cpp
     relay.cpp
     relay.hpp
     scheduler.cpp

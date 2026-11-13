@@ -1010,6 +1010,34 @@ public:
         applyFacts(_format.peek()->locale);
     }
 
+    /// @brief The facts a locale scope writes in: the session's with @p tag's row of the locale table (separators,
+    ///        sign, currency placement) and the date patterns the application declared, else that row's. The facts
+    ///        come from the tag alone, whatever `setFormatLocale` chose. A tracked read of the session's facts.
+    /// @param tag The scope's BCP 47 tag.
+    /// @return The facts; `locale` is @p tag, and a tag the table does not list writes with `en`'s row.
+    [[nodiscard]] std::shared_ptr<FormatContext const> scopedFormatting(std::string_view tag) const {
+        FormatContext next = *_format.get();
+        LocaleFacts const& facts = localeFacts(tag);
+        next.locale = std::string{tag};
+        next.numeric = facts.numeric;
+        next.currency = facts.currency;
+        next.datePattern = _declaredDate.empty() ? std::string{facts.datePattern} : _declaredDate;
+        next.dateTimePattern = _declaredDateTime.empty() ? std::string{facts.dateTimePattern} : _declaredDateTime;
+        return std::make_shared<FormatContext const>(std::move(next));
+    }
+
+    /// @brief The session's own facts, shared. A tracked read.
+    /// @return They.
+    [[nodiscard]] std::shared_ptr<FormatContext const> sharedFormatting() const { return _format.get(); }
+
+    /// @brief Whether a locale scope's tag is one to report: the locale table lists no row for it, and no scope has
+    ///        reported it before. The answer is true once per tag for the session's lifetime.
+    /// @param tag The tag.
+    /// @return Whether to report it now.
+    [[nodiscard]] bool firstUnlistedLocale(std::string const& tag) {
+        return findLocaleFacts(tag) == nullptr && _unlistedLocales.insert(tag).second;
+    }
+
     /// @brief The tag chosen with `setFormatLocale`.
     /// @return It; empty when the facts follow the language.
     [[nodiscard]] std::string const& formatLocale() const noexcept { return _formatLocale; }
@@ -1542,6 +1570,7 @@ private:
     reactive::Signal<bool> _contextOffered;
     std::function<bool(Value const&)> _contextHandler;
     std::string _formatLocale;
+    std::set<std::string, std::less<>> _unlistedLocales;
     std::function<HostCommandResult(std::string const&, Value const&)> _hostCommandRunner;
     std::map<std::string, std::shared_ptr<detail::CacheEntry>, std::less<>> _entries;
     std::vector<detail::QueryRuntime*> _mounted;
@@ -1909,6 +1938,14 @@ public:
     std::vector<std::unique_ptr<MutationRuntime>> mutations;
     /// @brief Its checks.
     std::vector<std::unique_ptr<CheckRuntime>> checks;
+    /// @brief For a locale scope's scope, the formatting facts it writes in; `nullptr` for any other scope.
+    reactive::Computed<std::shared_ptr<FormatContext const>>* localeFormat = nullptr;
+
+    /// @brief The formatting facts of this place: the innermost enclosing locale scope's, else the session's. A
+    ///        tracked read.
+    /// @return They.
+    [[nodiscard]] FormatContext const& formatting() const;
+
     /// @brief The reactive nodes it owns; declared last, so they go first.
     reactive::Scope nodes;
 };
@@ -1961,6 +1998,10 @@ public:
     /// @brief The session's formatting facts.
     /// @return They.
     [[nodiscard]] FormatContext const& formatting() const override;
+
+    /// @brief The session's formatting facts, which typed text is read in whatever locale scope encloses it.
+    /// @return They.
+    [[nodiscard]] FormatContext const& entryFormatting() const override;
 
     /// @brief Reports to the screen's diagnostics.
     /// @param path   The expression's path.
@@ -2831,6 +2872,8 @@ public:
     std::vector<Refusal> diagnostics;
     /// @brief The paths and reasons already reported.
     std::set<std::string, std::less<>> reported;
+    /// The sheet whose regions are being lowered, while they are.
+    std::optional<PageGeometry> pageBeingLowered;
     /// @brief The customization choices, by point.
     reactive::Signal<ValueRecord> prefs;
     /// @brief The points' defaults.
@@ -2923,6 +2966,12 @@ private:
     void reportActionBarGaps(DocNode const& bar, LowerCtx const& ctx);
     /// A drop zone. Its own function, so a deep document stacks only what this kind needs per level.
     Node lowerDropZone(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A page, its regions lowered with its geometry in hand.
+    Node lowerPage(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A page region; only a page lowers one.
+    Node lowerPageRegion(DocNode const& node, LowerCtx const& ctx, ElementState* element);
+    /// A locale scope: a holder column over a scope that writes in another locale.
+    Node lowerLocaleScope(DocNode const& node, LowerCtx const& ctx);
     Node lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     /// The leaf-like kinds, from `text` to `menu`; empty for any other kind. They are lowered apart from the
     /// containers so that a deep document does not stack their locals once per level: `lowerKind` recurses into
@@ -3042,19 +3091,18 @@ private:
             return Prop<T>{std::move(fallback)};
         }
         if (expr->kind == ExprKind::Literal) {
-            return Prop<T>{convert(expr->literal, session.formatting())};
+            return Prop<T>{convert(expr->literal, ctx.scope->formatting())};
         }
-        return Prop<T>{ui::slot(
-            nextSlot(), [scope = ctx.scope, bindings = ctx.bindings, expr, convert, session = &session]() -> T {
-                return convert(evalIn(*scope, bindings.get(), expr), session->formatting());
-            })};
+        return Prop<T>{ui::slot(nextSlot(), [scope = ctx.scope, bindings = ctx.bindings, expr, convert]() -> T {
+            return convert(evalIn(*scope, bindings.get(), expr), scope->formatting());
+        })};
     }
 
     /// @brief A text's role: a literal one as the loader checked it; a computed one evaluated in its slot, where a
     ///        name of no role is reported once for its path and drawn `Normal`.
     Prop<TextRole> roleProp(LowerCtx const& ctx, ExprPtr const& expr);
     /// A key-value item: its caption, its value or spans, and its tone, each problem reported once at @p path.
-    KeyValueItem keyValueItemOf(Value const& item, std::string const& path);
+    KeyValueItem keyValueItemOf(Value const& item, std::string const& path, RtScope const& scope);
     /// A text's or a banner's `spans`, reported once at its path when it drops a run.
     Prop<std::vector<TextSpan>> spansProp(LowerCtx const& ctx, ExprPtr const& expr);
 
@@ -3419,7 +3467,7 @@ public:
         if (!_core->doc().menuLabel) {
             return "More actions";
         }
-        return detail::textOf(detail::evalIn(*_scope, nullptr, _core->doc().menuLabel), _core->session.formatting());
+        return detail::textOf(detail::evalIn(*_scope, nullptr, _core->doc().menuLabel), _scope->formatting());
     }
 
     /// @brief Runs a head menu entry's `onClick` as a user event in the screen scope, in one batch.
@@ -4388,7 +4436,18 @@ inline Value ScopeEnv::client(ExprKind form, std::string_view name) const {
     return _scope->core.session.client(form, name);
 }
 
-inline FormatContext const& ScopeEnv::formatting() const { return _scope->core.session.formatting(); }
+inline FormatContext const& RtScope::formatting() const {
+    for (RtScope const* scope = this; scope != nullptr; scope = scope->parent.get()) {
+        if (scope->localeFormat != nullptr) {
+            return *scope->localeFormat->get();
+        }
+    }
+    return core.session.formatting();
+}
+
+inline FormatContext const& ScopeEnv::formatting() const { return _scope->formatting(); }
+
+inline FormatContext const& ScopeEnv::entryFormatting() const { return _scope->core.session.formatting(); }
 
 inline void ScopeEnv::report(std::string_view path, std::string_view reason) const {
     _scope->core.report(path, reason);
@@ -5020,9 +5079,8 @@ inline void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vect
             bool const* const flag = asserted.asBool();
             return flag != nullptr && !*flag;
         });
-        made->message = &scope.nodes.computed([&scope, expr = check.message, session = &session] {
-            return textOf(evalIn(scope, nullptr, expr), session->formatting());
-        });
+        made->message = &scope.nodes.computed(
+            [&scope, expr = check.message] { return textOf(evalIn(scope, nullptr, expr), scope.formatting()); });
         for (std::string const& target : check.targets) {
             NameRef const* const found = scope.find(target);
             if (found != nullptr && found->category == NameCategory::Element) {
@@ -6006,7 +6064,7 @@ inline void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Do
             return;
         }
         case CommandKind::Notify: {
-            std::string const text = textOf(eval(command.value), session.formatting());
+            std::string const text = textOf(eval(command.value), ctx.scope->formatting());
             finish(host != nullptr && host->notify(text, command.option) ? true : unsupported(command, "`notify`"));
             return;
         }
@@ -6550,9 +6608,9 @@ inline std::optional<InlineFile> ScreenCore::inlineDownload(
         return std::nullopt;
     }
     return InlineFile{
-        .name = textOf(name, session.formatting()),
+        .name = textOf(name, ctx.scope->formatting()),
         .mediaType = command.mediaType
-                         ? textOf(evalIn(*ctx.scope, ctx.bindings.get(), command.mediaType), session.formatting())
+                         ? textOf(evalIn(*ctx.scope, ctx.bindings.get(), command.mediaType), ctx.scope->formatting())
                          : std::string{},
         .bytes = *std::move(bytes)};
 }
@@ -7389,7 +7447,7 @@ inline Prop<TextRole> ScreenCore::roleProp(LowerCtx const& ctx, ExprPtr const& e
     }
     return slotProp<TextRole>([this, scope = ctx.scope, bindings = ctx.bindings, expr] {
         Value const value = evalIn(*scope, bindings.get(), expr);
-        std::optional<TextRole> const role = roleNamed(textOf(value, session.formatting()));
+        std::optional<TextRole> const role = roleNamed(textOf(value, scope->formatting()));
         if (!role) {
             report(expr->path, "role is " + canonicalJson(value) + "; " + std::string{kRoleNames});
         }
@@ -7416,8 +7474,8 @@ inline Prop<std::string> ScreenCore::surfaceOf(DocNode const& node, LowerCtx con
     });
 }
 
-inline KeyValueItem ScreenCore::keyValueItemOf(Value const& item, std::string const& path) {
-    FormatContext const& format = session.formatting();
+inline KeyValueItem ScreenCore::keyValueItemOf(Value const& item, std::string const& path, RtScope const& scope) {
+    FormatContext const& format = scope.formatting();
     Value const* const label = item.field("label");
     Value const* const value = item.field("value");
     KeyValueItem out{.label = label == nullptr ? std::string{} : textOf(*label, format),
@@ -7457,8 +7515,8 @@ inline Node ScreenCore::lowerGroup(DocNode const& node, LowerCtx const& ctx, Ele
     std::ranges::move(children, std::back_inserter(column));
     if (ExprPtr const description = node.prop("description")) {
         Text line{.text = bindProp<std::string>(ctx, description, std::string{}, stringOf), .role = TextRole::Muted};
-        line.common.visible = slotProp<bool>([scope = ctx.scope, bindings = ctx.bindings, description, this] {
-            return !textOf(evalIn(*scope, bindings.get(), description), session.formatting()).empty();
+        line.common.visible = slotProp<bool>([scope = ctx.scope, bindings = ctx.bindings, description] {
+            return !textOf(evalIn(*scope, bindings.get(), description), scope->formatting()).empty();
         });
         column.push_back(ui::text(std::move(line)));
     }
@@ -7496,7 +7554,7 @@ inline Prop<std::vector<TextSpan>> ScreenCore::spansProp(LowerCtx const& ctx, Ex
         bool dropped = false;
         bool badTone = false;
         std::vector<TextSpan> spans =
-            spansOf(evalIn(*scope, bindings.get(), expr), session.formatting(), dropped, &badTone);
+            spansOf(evalIn(*scope, bindings.get(), expr), scope->formatting(), dropped, &badTone);
         if (dropped) {
             report(expr->path, kSpansReason);
         }
@@ -7606,7 +7664,7 @@ inline void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, Eleme
     }
     common.surface = surfaceOf(node, ctx);
     if (ExprPtr const autofocus = node.prop("autofocus")) {
-        common.autofocus = boolOf(once(ctx, autofocus), session.formatting());
+        common.autofocus = boolOf(once(ctx, autofocus), ctx.scope->formatting());
     }
     for (DocNodePtr const& a11y : node.partList("a11y")) {
         common.a11y.name = bindProp<std::string>(ctx, a11y->prop("name"), std::string{}, stringOf);
@@ -7686,7 +7744,7 @@ inline MenuItem ScreenCore::menuItemOf(DocNode const& part, LowerCtx const& ctx)
         item.onSelect = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
     }
     if (ExprPtr const icon = part.prop("icon")) {
-        item.icon = textOf(once(ctx, icon), session.formatting());
+        item.icon = textOf(once(ctx, icon), ctx.scope->formatting());
     }
     item.keys = std::string{part.name("keys")};
     if (ExprPtr const checked = part.prop("checked")) {
@@ -7754,8 +7812,8 @@ inline std::vector<HeadToolModel> ScreenCore::lowerHeadTools(std::span<DocNodePt
         }
         if (!search) {
             model.options = slotProp<std::vector<SelectOption>>(
-                [this, scope = ctx.scope, bindings = ctx.bindings, options = part->prop("options")] {
-                    return selectOptions(evalIn(*scope, bindings.get(), options), session.formatting());
+                [scope = ctx.scope, bindings = ctx.bindings, options = part->prop("options")] {
+                    return selectOptions(evalIn(*scope, bindings.get(), options), scope->formatting());
                 });
             model.selected = slotProp<std::optional<Key>>([scope = ctx.scope, bindings = ctx.bindings,
                                                            selected = part->prop("selected")]() -> std::optional<Key> {
@@ -7837,7 +7895,7 @@ inline std::vector<BadgeModel> ScreenCore::lowerBadgeParts(std::span<DocNodePtr 
 class ScreenCore::KindKit {
 public:
     KindKit(ScreenCore& core, DocNode const& node, LowerCtx const& ctx, ElementState* element)
-        : _core{core}, _node{node}, _ctx{ctx}, _element{element}, _format{core.session.formatting()} {}
+        : _core{core}, _node{node}, _ctx{ctx}, _element{element}, _format{ctx.scope->formatting()} {}
 
     // The children under @p key, each lowered with @p gap as the gap of the list around it.
     [[nodiscard]] std::vector<Node> children(std::string_view key, int gap = 0) const {
@@ -7952,7 +8010,7 @@ private:
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of ui/1.
 inline std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     std::string_view const kind = node.kind;
-    FormatContext const& format = session.formatting();
+    FormatContext const& format = ctx.scope->formatting();
     KindKit const kit{*this, node, ctx, element};
     if (kind == "text") {
         Text spec{.role = roleProp(ctx, node.prop("role"))};
@@ -8103,7 +8161,7 @@ inline std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx
     if (kind == "select") {
         Select spec;
         spec.options = slotProp<std::vector<SelectOption>>(
-            [this, element] { return selectOptions(element->rows->get(), session.formatting()); });
+            [scope = ctx.scope, element] { return selectOptions(element->rows->get(), scope->formatting()); });
         spec.selected = slotProp<std::optional<Key>>([read = kit.read("selected")]() -> std::optional<Key> {
             Value const selected = read();
             return selected.isNull() ? std::nullopt : std::optional<Key>{keyOf(selected)};
@@ -8125,7 +8183,7 @@ inline std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx
         // A computed style of no known name is reported once and drawn as a dropdown; the loader refuses a constant
         // one.
         if (ExprPtr const style = node.prop("style")) {
-            std::string const name = textOf(once(ctx, style), session.formatting());
+            std::string const name = textOf(once(ctx, style), ctx.scope->formatting());
             if (name == "radio") {
                 spec.style = SelectStyle::Radio;
             } else if (name == "segmented") {
@@ -8326,7 +8384,7 @@ inline std::optional<Node> ScreenCore::lowerDisplay(DocNode const& node, LowerCt
     if (kind == "steps") {
         Steps spec;
         spec.items =
-            slotProp<std::vector<Step>>([this, scope = ctx.scope, bindings = ctx.bindings, expr = node.prop("items")] {
+            slotProp<std::vector<Step>>([scope = ctx.scope, bindings = ctx.bindings, expr = node.prop("items")] {
                 std::vector<Step> steps;
                 Value const items = evalIn(*scope, bindings.get(), expr);
                 if (ValueList const* const list = items.asList()) {
@@ -8336,9 +8394,9 @@ inline std::optional<Node> ScreenCore::lowerDisplay(DocNode const& node, LowerCt
                         Value const* const detail = item.field("detail");
                         std::string const name = state == nullptr ? std::string{} : textOf(*state, {});
                         steps.push_back(
-                            Step{.label = label == nullptr ? std::string{} : textOf(*label, session.formatting()),
+                            Step{.label = label == nullptr ? std::string{} : textOf(*label, scope->formatting()),
                                  .state = stepStateOf(name),
-                                 .detail = detail == nullptr ? std::string{} : textOf(*detail, session.formatting())});
+                                 .detail = detail == nullptr ? std::string{} : textOf(*detail, scope->formatting())});
                     }
                 }
                 return steps;
@@ -8368,7 +8426,7 @@ inline std::optional<Node> ScreenCore::lowerDisplay(DocNode const& node, LowerCt
                 Value const items = evalIn(*scope, bindings.get(), expr);
                 if (ValueList const* const list = items.asList()) {
                     for (Value const& item : *list) {
-                        out.push_back(keyValueItemOf(item, expr->path));
+                        out.push_back(keyValueItemOf(item, expr->path, *scope));
                     }
                 }
                 return out;
@@ -8531,6 +8589,60 @@ inline Node ScreenCore::lowerDropZone(DocNode const& node, LowerCtx const& ctx, 
     return ui::dropZone(std::move(spec));
 }
 
+inline Node ScreenCore::lowerPage(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    KindKit const kit{*this, node, ctx, element};
+    Page spec;
+    spec.geometry = pageGeometryOf(node);
+    std::optional<PageGeometry> const outer = std::exchange(pageBeingLowered, spec.geometry);
+    spec.children = kit.children("children");
+    pageBeingLowered = outer;
+    commonOf(node, ctx, element, spec.common);
+    return ui::page(std::move(spec));
+}
+
+inline Node ScreenCore::lowerPageRegion(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
+    if (!pageBeingLowered) {
+        report(node.path, "a page region belongs in a page");
+        return ui::text(Text{.text = std::string{}, .role = TextRole::Muted});
+    }
+    KindKit const kit{*this, node, ctx, element};
+    PageRegion spec;
+    spec.geometry = regionGeometryOf(node, *pageBeingLowered);
+    std::optional<PageGeometry> const outer = std::exchange(pageBeingLowered, std::nullopt);
+    spec.children = kit.children("children");
+    pageBeingLowered = outer;
+    commonOf(node, ctx, element, spec.common);
+    return ui::pageRegion(std::move(spec));
+}
+
+inline Node ScreenCore::lowerLocaleScope(DocNode const& node, LowerCtx const& ctx) {
+    auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+    ExprPtr const locale = node.prop("locale");
+    inner->localeFormat = &inner->nodes.computed([this, scope = ctx.scope, bindings = ctx.bindings,
+                                                  locale]() -> std::shared_ptr<FormatContext const> {
+        Value const value = evalIn(*scope, bindings.get(), locale);
+        std::string const* const tag = value.asString();
+        if (tag == nullptr && !value.isNull()) {
+            report(locale->path, "the locale is " + canonicalJson(value) + "; a locale is a BCP 47 tag, a string");
+        }
+        if (tag == nullptr || tag->empty()) {
+            return session.sharedFormatting();
+        }
+        if (session.firstUnlistedLocale(*tag)) {
+            report(locale->path, "no formatting facts for locale `" + *tag + "`; numbers, money and dates use en's");
+        }
+        return session.scopedFormatting(*tag);
+    });
+    LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary, .listGap = 0};
+    std::vector<Node> children;
+    for (DocNodePtr const& child : node.nodes("children")) {
+        children.push_back(lower(*child, innerCtx));
+    }
+    Column holder = listColumn(std::move(children), 0);
+    holder.holder = true;
+    return ui::column(std::move(holder));
+}
+
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of ui/1.
 inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     std::string_view const kind = node.kind;
@@ -8599,6 +8711,15 @@ inline Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, Elem
         reportActionBarGaps(node, ctx);
         commonOf(node, ctx, element, spec.common);
         return ui::actionBar(std::move(spec));
+    }
+    if (kind == "page") {
+        return lowerPage(node, ctx, element);
+    }
+    if (kind == "pageRegion") {
+        return lowerPageRegion(node, ctx, element);
+    }
+    if (kind == "localeScope") {
+        return lowerLocaleScope(node, ctx);
     }
     if (kind == "boundary") {
         return lowerBoundary(node, ctx);
@@ -9221,7 +9342,7 @@ inline Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, El
             .description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf),
             .child = std::move(body),
             .onDismiss = std::move(onDismiss),
-            .side = side && textOf(once(ctx, side), session.formatting()) == "start" ? Side::Start : Side::End};
+            .side = side && textOf(once(ctx, side), ctx.scope->formatting()) == "start" ? Side::Start : Side::End};
         if (ExprPtr const spans = node.prop("descriptionSpans")) {
             spec.descriptionSpans = spansProp(ctx, spans);
         }
@@ -9496,7 +9617,7 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
     // itself, which is moved into `ui::table<Value>(...)` further down and so cannot be read from inside a lambda
     // that outlives this function) so the default-cell closure can apply each column's role to its generated cell.
     std::vector<TextRole> roles;
-    FormatContext const& format = session.formatting();
+    FormatContext const& format = ctx.scope->formatting();
     // The table's `valign` is the default of every column that gives none; the loader checked both names.
     Align const tableValign = cellPlaceNamed(node.name("valign")).value_or(Align::Center);
     if (ExprPtr const derived = node.prop("columns")) {
@@ -9596,12 +9717,12 @@ inline Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, Elem
                 out.push_back(lowerAll(nodes, rowCtx));
                 continue;
             }
-            out.push_back(ui::text(Text{.text = slotProp<std::string>([this, &row, field = fields.at(index)] {
-                                            Value const* const value = row.get().field(field);
-                                            return value == nullptr ? std::string{}
-                                                                    : textOf(*value, session.formatting());
-                                        }),
-                                        .role = roles.at(index)}));
+            out.push_back(
+                ui::text(Text{.text = slotProp<std::string>([scope = rowCtx.scope, &row, field = fields.at(index)] {
+                                  Value const* const value = row.get().field(field);
+                                  return value == nullptr ? std::string{} : textOf(*value, scope->formatting());
+                              }),
+                              .role = roles.at(index)}));
         }
         if (!out.empty()) {
             // The row's first cell owns the row's scope, which lives as long as the row's node: a cell is placed by
@@ -9884,7 +10005,7 @@ inline std::vector<detail::ChartRawPoint> ScreenCore::chartPoints(DocNode const&
                                                                   detail::ChartAxisKinds& kinds) {
     // A chart is a picture of a few hundred values; a larger set is a table's.
     static constexpr std::size_t kMaxPoints = 1000;
-    FormatContext const& format = session.formatting();
+    FormatContext const& format = scope.formatting();
     ExprPtr const pointsExpr = series.prop("points");
     Value const listed = evalIn(scope, bindings, pointsExpr);
     ValueList const* const list = listed.asList();
@@ -9973,7 +10094,7 @@ inline std::vector<detail::ChartRawPoint> ScreenCore::chartPoints(DocNode const&
 inline std::vector<detail::ChartRawLine> ScreenCore::chartLines(DocNode const& node, RtScope const& scope,
                                                                 Bindings const* bindings,
                                                                 std::optional<std::string>& unit) {
-    FormatContext const& format = session.formatting();
+    FormatContext const& format = scope.formatting();
     std::vector<detail::ChartRawLine> lines;
     for (DocNodePtr const& part : node.partList("lines")) {
         ExprPtr const valueExpr = part->prop("value");
@@ -10073,7 +10194,7 @@ inline void ScreenCore::chartSeries(ChartData& data, DocNode const& node, RtScop
             drawn.style = ChartStyle::Bars;
         }
         if (ExprPtr const label = part->prop("label")) {
-            drawn.label = textOf(evalIn(scope, bindings, label), session.formatting());
+            drawn.label = textOf(evalIn(scope, bindings, label), scope.formatting());
         }
         drawn.joined = drawn.style == ChartStyle::Line && (!part->flags.contains("joined") || part->flag("joined"));
         for (detail::ChartRawPoint& point : series.at(index)) {
@@ -10096,7 +10217,7 @@ inline void ScreenCore::chartSeries(ChartData& data, DocNode const& node, RtScop
 }
 
 inline ChartData ScreenCore::chartData(DocNode const& node, RtScope const& scope, Bindings const* bindings) {
-    FormatContext const& format = session.formatting();
+    FormatContext const& format = scope.formatting();
     ChartData data;
     data.summary = textOf(evalIn(scope, bindings, node.prop("summary")), format);
     if (ExprPtr const label = node.prop("yLabel")) {
@@ -10636,7 +10757,7 @@ inline std::vector<TextSpan> Screen::headSpans(ExprPtr const& expr) const {
     bool dropped = false;
     bool badTone = false;
     std::vector<TextSpan> spans =
-        detail::spansOf(detail::evalIn(*_scope, nullptr, expr), _core->session.formatting(), dropped, &badTone);
+        detail::spansOf(detail::evalIn(*_scope, nullptr, expr), _scope->formatting(), dropped, &badTone);
     if (dropped) {
         _core->report(expr->path, detail::kSpansReason);
     }

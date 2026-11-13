@@ -18,7 +18,7 @@ Rendering a page to a file or a printer is not here: a sheet is drawn on the scr
 | `ui::PageRegion` / `ui::pageRegion(RegionGeometry, children)` | A region of a sheet; `RegionGeometry{anchor, x, y, width, height}`. |
 | `ui::PageAnchor` | `Top`, `Bottom` or `Offset`. |
 | `ui::layoutPage(geometry, regions, availableWidth)` | The pure function both frontends and the recording backend lay a page out with; answers a `PageLayout`. |
-| `ui::toCells(rect, pitch, contentCells)` | The terminal's conversion of a millimetre rectangle to cells, in `page_layout.hpp` so a test reaches it without a terminal. |
+| `ui::toCells(rect, pitch)`, `ui::toCells(rect, anchor, pitch, contentRows)` | The terminal's conversion of a millimetre rectangle to cells, in `page_layout.hpp` so a test reaches it without a terminal; the second is for a region of no stated height. |
 | `ui::author::page(Nodes, PageOptions)`, `pageRegion(Nodes, RegionOptions)`, `localeScope(Nodes, AnyHandle)` | The server-side builders; the document kinds `page`, `pageRegion` and `localeScope`. |
 | `ui::PageWidget`, `ui::PageRegionWidget` | The backend widgets ([Backend contract](#backend-contract)). |
 
@@ -58,10 +58,11 @@ Four things a sheet needs have no word in `ui/1`, each for a reason stated by th
 - **A locale for a subtree.** The formatting facts belong to the session; a screen can switch them for everyone
   (`setLocale`), not for the words of one sheet.
 
-A footer held at the bottom of a sheet is the one thing a stack can already do approximately: a column of fixed height
-with a `stretch` spacer before the footer. It is still a region here, because the page has no content-derived height
-and a region anchored at the bottom takes its place from the margin box, whatever its own height is
-([Regions](#regions)).
+A footer held at the bottom of a sheet is the one thing a stack can already do: a column of stated height with a
+`stretch` spacer before the footer lays the footer's bottom edge on the column's (measured on Qt Quick, in the
+frontend's test). That is not enough here. The column's size is in units, so a `fixed(210)` is 210 characters wide
+by the theme font (measured, and not 794 px), and the footer rides on a sibling spacer, not on a margin; a region
+anchored at the bottom takes its place from the margin box whatever its own height is ([Regions](#regions)).
 
 ## Lengths
 
@@ -70,7 +71,8 @@ and a region anchored at the bottom takes its place from the margin box, whateve
 standards write them. Reasoning: a page's geometry is compared in tests and travels in a document; a floating-point
 length would make `margins sum to the width` and "the footer's bottom edge equals the margin box's" depend on rounding,
 while a micrometre is finer than anything a screen or a printer resolves and an integer count compares exactly. The
-document form is a number in millimetres; a number finer than a micrometre is rounded to it. The
+document form is an integer count of micrometres, because a document carries exact numbers and a number with a
+fraction is refused (`98.5` mm is `98500`); the author API takes millimetres and writes the count. The
 recording backend writes it in the shortest decimal form (`98.5`, `210`).
 
 The conversion from `double` is implicit so a geometry reads as a standard writes it. A NaN or an infinity is refused
@@ -225,21 +227,21 @@ machines and reflow when a window moves to another screen, while the theme's own
 The units a region's children use stay theme units (`Theme.unitWidth`) as everywhere; only the page's and the regions'
 rectangles are millimetres. The page is an `Item` of its displayed size holding an inner `Item` of the sheet's pixel size
 with `scale` set to the layout's scale and `transformOrigin: Item.TopLeft`, so regions, text and hit-testing share one
-transform; regions are children of the inner item in node order.
+transform; regions are children of the inner item in node order. The page reports the width its layout gave once the layout pass is over, because the scale changes the height and the layout may answer with another width.
 
 **Terminal**: 10 columns per 25.4 mm across and 6 rows per 25.4 mm down, the typewriter pitch (10 characters and
 6 lines to the inch). A cell is about twice as tall as wide, so a page of typed text at this pitch has the proportion of
 a page of text: A4 is 83 columns by 70 rows (82.68 and 70.16, rounded to the nearest), an 85 mm × 45 mm window 33 columns
-by 10 rows. `ui::toCells(rect, pitch, contentCells)` converts by rounding **edges**, not sizes:
+by 10 rows. `ui::toCells` converts by rounding **edges**, not sizes:
 `left = round(x · 10 / 25.4)`, `right = round((x + width) · 10 / 25.4)`, the width is `right − left`, and rows
 likewise with 6. Two regions that touch in millimetres touch in cells, and a rounded size never drifts from a neighbour's
-edge. A region of no stated height is `contentCells` rows tall, where the terminal measured its content in rows: its
+edge. A region of no stated height is `contentRows` rows tall, where the terminal measured its content in rows: its
 anchored edge (the top of a `Top` or `Offset` region, the bottom of a `Bottom` one) is the rounded edge and the other
-edge is `contentCells` away, so a footer of three rows is three rows after rounding. The terminal gives `layoutPage` that
-height as `contentCells · 25.4 / 6` mm, rounded to the micrometre.
+edge is `contentRows` away, so a footer of three rows is three rows after rounding. The terminal gives `layoutPage` that
+height as `contentRows · 25.4 / 6` mm, rounded to the micrometre.
 
 **The terminal's sheet edge.** `paper` draws nothing on a cell grid, so the sheet is drawn inside a one-cell frame
-(box-drawing characters): the footprint is the sheet's cells plus two columns and two rows, and the conversion from
+(box-drawing characters, which pans with the sheet: a side that has panned out of view is not drawn): the footprint is the sheet's cells plus two columns and two rows, and the conversion from
 millimetres to cells stays exact inside the frame.
 
 **The terminal does not scale** (`scale` is 1 whatever the viewport). A viewport narrower than the sheet shows its left
@@ -260,24 +262,24 @@ The document gains three node kinds. `page` and `pageRegion` lower to `ui::Page`
 lowers to a holder column ([The locale scope](#the-locale-scope)).
 
 ```json
-{"kind": "page", "width": 210, "height": 297,
- "margins": {"top": 10, "right": 20, "bottom": 15, "left": 20},
+{"kind": "page", "width": 210000, "height": 297000,
+ "margins": {"lit": {"top": 10000, "right": 20000, "bottom": 15000, "left": 20000}},
  "a11y": {"name": …},
  "children": [
-   {"kind": "pageRegion", "anchor": "offset", "x": 20, "y": 45, "width": 85, "height": 45, "children": […]},
+   {"kind": "pageRegion", "anchor": "offset", "x": 20000, "y": 45000, "width": 85000, "height": 45000, "children": […]},
    {"kind": "pageRegion", "anchor": "bottom", "children": […]}]}
 ```
 
 | Key | Kinds | Shape |
 |---|---|---|
-| `width`, `height` | `page` | Literal numbers in millimetres, required. |
-| `margins` | `page` | A literal number (every side), or a record of `top`, `right`, `bottom`, `left` (a side left out is 0); default 0. |
+| `width`, `height` | `page` | Literal integers in micrometres, required. |
+| `margins` | `page` | A literal integer (every side), or a literal record of `top`, `right`, `bottom`, `left` (a side left out is 0); default 0. |
 | `anchor` | `pageRegion` | The literal `"top"`, `"bottom"` or `"offset"`, required. |
-| `x`, `y`, `width`, `height` | `pageRegion` | Literal numbers in millimetres; `x`, `y` default 0 and only `"offset"` accepts them; `width` and `height` optional. |
+| `x`, `y`, `width`, `height` | `pageRegion` | Literal integers in micrometres; `x`, `y` default 0 and only `"offset"` accepts them; `width` and `height` optional. |
 | `locale` | `localeScope` | An expression, required: the BCP 47 tag the scope formats in. |
 | `children` | all three | `page`: `pageRegion` nodes only. `pageRegion`, `localeScope`: any nodes. |
 
-Geometry is literal, not computed: it is set once, as a sizing is; a computed length would make the sheet's layout
+Geometry is literal, not computed: it is set once, as a sizing is, and a document that gives a non-literal or non-integer length is refused; a computed length would make the sheet's layout
 depend on data and its scale a reactive value.
 
 **The common keys** (`id`, `visible`, `enabled`, `tooltip`, `sizing`, the four bounds, `alignSelf`, `bleed`, `span`,
@@ -311,7 +313,7 @@ its content. The clipping is shown, not silent: a reader of an invoice must not 
 last rows for the whole list.
 
 - **Qt Quick** draws a fade over the region's last line with a `…` glyph at its end.
-- **The terminal** draws `…` in the last row of the clipped rectangle, at its first column.
+- **The terminal** draws `…` in the last row of the clipped rectangle, at its last column.
 - The recording backend records `overflow=true` on the region ([Recording backend](#recording-backend)).
 
 ## The locale scope

@@ -702,6 +702,51 @@ QtObject {
         chart3: theme.barScheme.chart3
         chart4: theme.barScheme.chart4
     }
+    // The sheet of a document page: every role a literal, so none comes from the theme and a dark theme does not put
+    // light colours on white. A theme may replace it by name.
+    readonly property MorphScheme paperScheme: MorphScheme {
+        surface: "#ffffff"
+        text: "#1c1e21"
+        muted: "#4d5461"
+        accent: "#17784a"
+        focus: "#17784a"
+        selection: "#e2f4e8"
+        selectionText: "#1c1e21"
+        hasSelectionText: true
+        border: "#d2d7de"
+        neutral: "#4d5461"
+        neutralBg: "#264d5461"
+        neutralBorder: "#4d5461"
+        neutralDot: "#4d5461"
+        hover: "#141d1d1f"
+        track: "#d2d7de"
+        controlSurface: "#ffffff"
+        controlBorder: "#c3c9d2"
+        divider: "#e6e9ed"
+        listSelectionFill: false
+        error: "#9b1c1c"
+        success: "#17602f"
+        info: "#1f3fa8"
+        warn: "#7a4a00"
+        successBg: "#2617602f"
+        successBorder: "#17602f"
+        successDot: "#17602f"
+        warnBg: "#267a4a00"
+        warnBorder: "#7a4a00"
+        warnDot: "#7a4a00"
+        errorBg: "#269b1c1c"
+        errorBorder: "#9b1c1c"
+        errorDot: "#9b1c1c"
+        infoBg: "#261f3fa8"
+        infoBorder: "#1f3fa8"
+        infoDot: "#1f3fa8"
+        tableHeader: "#fafbfc"
+        tableHeaderRule: "#dde1e6"
+        chart1: "#0072b2"
+        chart2: "#c25400"
+        chart3: "#00805e"
+        chart4: "#a8508a"
+    }
     property var extraSchemes: ({})
     readonly property Component schemeComponent: Component {
         MorphScheme {}
@@ -724,6 +769,8 @@ QtObject {
             return barScheme
         case "toolbarJoined":
             return toolbarJoinedScheme
+        case "paper":
+            return paperScheme
         default:
             if (!(name in extraSchemes))
                 extraSchemes[name] = schemeComponent.createObject(theme) as MorphScheme
@@ -738,7 +785,7 @@ QtObject {
 
     // Whether a surface name is one the theme draws a background for.
     function draws(name: string): bool {
-        return name === "page" || name === "card" || name === "sidebar" || name === "toolbar" || name === "toolbarJoined" || name === "bar" || (name in extraSchemes)
+        return name === "page" || name === "card" || name === "sidebar" || name === "toolbar" || name === "toolbarJoined" || name === "paper" || name === "bar" || (name in extraSchemes)
     }
 
     // A text role's colour: Normal, Muted, Heading, Error, Success.

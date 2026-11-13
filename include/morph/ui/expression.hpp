@@ -1354,6 +1354,11 @@ public:
     /// @return The context the display functions and `t` use.
     [[nodiscard]] virtual FormatContext const& formatting() const = 0;
 
+    /// @brief The facts typed text is read in: the person's own, whatever place the expression is evaluated in. A
+    ///        locale scope changes how values are shown, not how a person types, so `parseDecimal` reads these.
+    /// @return The context `parseDecimal` uses; by default the display facts.
+    [[nodiscard]] virtual FormatContext const& entryFormatting() const { return formatting(); }
+
     /// @brief Reports a runtime error of an expression.
     /// @param path   The JSON Pointer of the expression node that failed.
     /// @param reason What went wrong.
@@ -2984,7 +2989,7 @@ private:
                     return mismatch(expr, "`parseDecimal` takes text and places from 0 to 18");
                 }
                 // Text that does not spell a number is what an entry holds while it is typed: `null`, not an error.
-                if (auto parsed = render::parseDecimal(*text, context.numeric, declared)) {
+                if (auto parsed = render::parseDecimal(*text, _env->entryFormatting().numeric, declared)) {
                     return Decimal{*parsed};
                 }
                 return Value{};

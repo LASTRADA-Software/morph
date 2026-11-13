@@ -9,8 +9,13 @@
 #include <iterator>
 #include <limits>
 #include <numeric>
+#include <optional>
+#include <ranges>
+#include <span>
 #include <string>
 #include <utility>
+
+#include "tui/container_widgets.hpp"
 
 namespace morph::tui::detail {
 
@@ -495,6 +500,192 @@ void DropZoneImpl::drop(std::vector<std::string> paths) {
     if (handler) {
         handler(std::move(paths));
     }
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────
+
+namespace {
+
+constexpr ui::CellPitch kPitch{.columns = 10, .rows = 6};
+
+}  // namespace
+
+int PageRegionImpl::contentRows() const { return stackNaturalSize(children(), ui::Axis::Vertical, 0).height; }
+
+::core::tui::Size PageRegionImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Vertical, 0); }
+
+std::vector<::core::tui::Rect> PageRegionImpl::childAreas(::core::tui::Size size) const {
+    return stackAreas(children(), {.x = 0, .y = 0, .width = size.width, .height = size.height},
+                      StackSpec{.axis = ui::Axis::Vertical});
+}
+
+void PageRegionImpl::paint(::core::tui::Canvas& canvas) {
+    placeChildren(childAreas(canvas.size()));
+    if (_overflow && canvas.height() > 0) {
+        canvas.putString(canvas.height() - 1, std::max(0, canvas.width() - 1), "…", canvas.theme().textMuted);
+    }
+}
+
+std::vector<PageImpl::Placed> PageImpl::place() const {
+    std::vector<PageImpl::Placed> placed;
+    int const sheetRows = ui::rowsOf(_geometry.height, kPitch);
+    for (WidgetBase const* const child : children()) {
+        auto const* const region = dynamic_cast<PageRegionImpl const*>(child);
+        if (region == nullptr) {
+            placed.push_back({});
+            continue;
+        }
+        ui::RegionGeometry const& geometry = region->geometry();
+        int const rows = region->contentRows();
+        ui::Mm const content = ui::Mm{static_cast<double>(rows) * 25.4 / kPitch.rows};
+        ui::RegionSpec const spec{.geometry = geometry, .contentHeight = content};
+        ui::RegionLayout const layout = ui::layoutPage(_geometry, std::span{&spec, 1}, std::nullopt).regions.front();
+        ui::CellRect const cells = geometry.height ? ui::toCells(layout.rect, kPitch)
+                                                   : ui::toCells(layout.rect, geometry.anchor, kPitch, rows);
+        bool const overflow =
+            geometry.height ? rows > cells.height : cells.row < 0 || cells.row + cells.height > sheetRows;
+        placed.push_back({.area = {.x = cells.column, .y = cells.row, .width = cells.width, .height = cells.height},
+                          .overflow = overflow});
+    }
+    return placed;
+}
+
+int PageImpl::frameWidth() const { return ui::columnsOf(_geometry.width, kPitch) + 2; }
+
+::core::tui::Size PageImpl::naturalSize() const {
+    return {.width = frameWidth(), .height = ui::rowsOf(_geometry.height, kPitch) + 2};
+}
+
+std::vector<::core::tui::Rect> PageImpl::childAreas(::core::tui::Size size) const {
+    static_cast<void>(size);
+    std::vector<::core::tui::Rect> areas;
+    for (Placed const& placed : place()) {
+        areas.push_back(placed.area.empty() ? placed.area : placed.area.offset(1 - _pan, 1));
+    }
+    return areas;
+}
+
+bool PageImpl::wantsFocus() const { return _viewport < frameWidth() && ScrollViewport::wantsFocus(*this); }
+
+void PageImpl::followFocus(::core::tui::Size viewport) {
+    auto const* const focused = context().screen->focusedComponent();
+    bool const inside = focused != nullptr && focused != &view() && isWithin(focused, view());
+    if (!inside) {
+        _followed = nullptr;
+        return;
+    }
+    std::vector<WidgetBase const*> chain;
+    for (auto const* widget = context().ownerOf(focused); widget != nullptr; widget = widget->container()) {
+        chain.push_back(widget);
+        if (widget->container() == this) {
+            break;
+        }
+    }
+    if (chain.empty() || chain.back()->container() != this) {
+        return;
+    }
+    auto const areas = childAreas(viewport);
+    auto const found = std::ranges::find(children(), chain.back());
+    if (found == children().end()) {
+        return;
+    }
+    // The region's cells at pan 0, then down to the focused widget as the containers between place it.
+    auto area = areas.at(static_cast<std::size_t>(std::distance(children().begin(), found))).offset(_pan, 0);
+    for (auto const [inner, outer] :
+         std::views::zip(chain | std::views::reverse | std::views::drop(1), chain | std::views::reverse)) {
+        auto const* const container = dynamic_cast<ContainerBase const*>(outer);
+        if (container == nullptr || area.empty()) {
+            break;
+        }
+        auto const within = container->childAreas(area.size());
+        auto const at = std::ranges::find(container->children(), inner);
+        if (at == container->children().end() || within.size() != container->children().size()) {
+            break;
+        }
+        auto const slot = within.at(static_cast<std::size_t>(std::distance(container->children().begin(), at)));
+        auto const placed = slot.offset(area.x, area.y).intersect(area);
+        if (slot.empty() || placed.empty()) {
+            break;
+        }
+        area = placed;
+    }
+    if (area.empty() || (focused == _followed && area == _followedArea)) {
+        return;
+    }
+    _followed = focused;
+    _followedArea = area;
+    // Columns of the sheet, which sits one cell right of the frame's edge.
+    int const first = area.x;
+    int const last = first + area.width;
+    int const room = std::max(1, viewport.width);
+    if (last > _pan + room) {
+        _pan = last - room;
+    }
+    _pan = std::min(_pan, first);
+}
+
+void PageImpl::paint(::core::tui::Canvas& canvas) {
+    _viewport = canvas.size().width;
+    int const maxPan = std::max(0, frameWidth() - _viewport);
+    followFocus(canvas.size());
+    _pan = std::clamp(_pan, 0, maxPan);
+    auto const natural = naturalSize();
+    auto const& theme = canvas.theme();
+    // The frame is the sheet's: it moves with the pan, and a side that has panned out of view is not drawn.
+    auto const& frame = hasFocus() ? theme.textAccent : theme.textMuted;
+    auto const put = [&](int column, int row, std::string_view glyph) {
+        if (column >= 0 && column < canvas.size().width && row < canvas.size().height) {
+            canvas.putString(row, column, glyph, frame);
+        }
+    };
+    int const last = natural.width - 1;
+    int const bottom = natural.height - 1;
+    for (int column = 1; column < last; ++column) {
+        put(column - _pan, 0, "─");
+        put(column - _pan, bottom, "─");
+    }
+    for (int row = 1; row < bottom; ++row) {
+        put(-_pan, row, "│");
+        put(last - _pan, row, "│");
+    }
+    put(-_pan, 0, "┌");
+    put(last - _pan, 0, "┐");
+    put(-_pan, bottom, "└");
+    put(last - _pan, bottom, "┘");
+    std::vector<Placed> const placed = place();
+    std::size_t index = 0;
+    for (WidgetBase* const child : children()) {
+        if (auto* const region = dynamic_cast<PageRegionImpl*>(child)) {
+            region->setOverflow(placed.at(index).overflow);
+        }
+        ++index;
+    }
+    placeChildren(childAreas(canvas.size()));
+}
+
+::core::tui::EventResult PageImpl::key(::core::tui::KeyEvent const& key) {
+    using ::core::tui::KeyCode;
+    if (::core::tui::withoutLockKeys(key.modifiers) != ::core::tui::Modifier::None) {
+        return ::core::tui::EventResult::Ignored;
+    }
+    int const maxPan = std::max(0, frameWidth() - _viewport);
+    int target = _pan;
+    if (key.key == KeyCode::Left) {
+        target = _pan - 1;
+    } else if (key.key == KeyCode::Right) {
+        target = _pan + 1;
+    } else if (key.key == KeyCode::Home) {
+        target = 0;
+    } else if (key.key == KeyCode::End) {
+        target = maxPan;
+    }
+    target = std::clamp(target, 0, maxPan);
+    if (target == _pan) {
+        return ::core::tui::EventResult::Ignored;
+    }
+    _pan = target;
+    refresh();
+    return ::core::tui::EventResult::Handled;
 }
 
 }  // namespace morph::tui::detail

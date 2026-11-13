@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -1723,6 +1724,163 @@ public:
     void setOnToggle(std::function<void(bool)> onToggle) override { callbacks().toggle = std::move(onToggle); }
 };
 
+class FakePageRegion;
+
+/// @brief A fake `PageWidget`: properties `size`, `margins`, `scale` and `displayed`. The derived ones follow the
+///        width the backend offers pages (`RecordingBackend::setPageAvailableWidth`) and are logged when they change.
+class FakePage final : public FakeContainer<PageWidget> {
+public:
+    /// @brief Records a page.
+    /// @param store     Where it records itself.
+    /// @param parent    The container it is appended to, or null.
+    /// @param geometry  The sheet.
+    /// @param available The width the backend offers pages.
+    /// @param pages     The pages of the backend, which this one joins.
+    FakePage(std::shared_ptr<RecordStore> store, Widget const* parent, PageGeometry const& geometry,
+             std::optional<Mm> available, std::shared_ptr<std::vector<FakePage*>> pages)
+        : FakeContainer<PageWidget>(std::move(store), "Page", parent, initialProps(geometry, available)),
+          _geometry{geometry},
+          _available{available},
+          _pages{std::move(pages)} {
+        _pages->push_back(this);
+    }
+
+    /// @brief Leaves the backend's pages.
+    ~FakePage() override { std::erase(*_pages, this); }
+
+    FakePage(FakePage const&) = delete;
+    FakePage& operator=(FakePage const&) = delete;
+    FakePage(FakePage&&) = delete;
+    FakePage& operator=(FakePage&&) = delete;
+
+    /// @brief The sheet.
+    /// @return Its geometry.
+    [[nodiscard]] PageGeometry const& geometry() const noexcept { return _geometry; }
+
+    /// @brief Changes the width the page is offered and records what follows from it.
+    /// @param available The width; absent is unlimited.
+    void offer(std::optional<Mm> available) {
+        _available = available;
+        relayout();
+    }
+
+    /// @brief Adds a region to the layout, in creation order.
+    /// @param region The region.
+    void adopt(FakePageRegion& region) { _regions.push_back(&region); }
+
+    /// @brief Forgets a region.
+    /// @param region The region.
+    void release(FakePageRegion& region) { std::erase(_regions, &region); }
+
+    /// @brief Lays the page out and records each derived property that changed.
+    void relayout();
+
+private:
+    [[nodiscard]] static PropList initialProps(PageGeometry const& geometry, std::optional<Mm> available) {
+        PageLayout const layout = layoutPage(geometry, {}, available);
+        PageMargins const& m = geometry.margins;
+        return {{"size", geometry.width.text() + "x" + geometry.height.text()},
+                {"margins", m.top.text() + "," + m.right.text() + "," + m.bottom.text() + "," + m.left.text()},
+                {"scale", formatFraction(layout.scale)},
+                {"displayed", layout.displayedWidth.text() + "x" + layout.displayedHeight.text()}};
+    }
+
+    void setIfChanged(std::string_view name, std::string value) {
+        if (store().at(id()).props[std::string{name}] != value) {
+            set(name, std::move(value));
+        }
+    }
+
+    PageGeometry _geometry;
+    std::optional<Mm> _available;
+    std::vector<FakePageRegion*> _regions;
+    std::shared_ptr<std::vector<FakePage*>> _pages;
+};
+
+/// @brief A fake `PageRegionWidget`: properties `anchor`, `rect` and `overflow`; the last two follow the page's
+///        layout and the content height the test gives.
+class FakePageRegion final : public FakeContainer<PageRegionWidget> {
+public:
+    /// @brief Records a region.
+    /// @param store    Where it records itself.
+    /// @param parent   Its page.
+    /// @param geometry Its place.
+    /// @throws std::logic_error when @p parent is not a page of this backend.
+    FakePageRegion(std::shared_ptr<RecordStore> store, ContainerWidget* parent, RegionGeometry const& geometry)
+        : FakeContainer<PageRegionWidget>(std::move(store), "PageRegion", parent, initialProps(parent, geometry)),
+          _page{dynamic_cast<FakePage*>(parent)},
+          _geometry{geometry} {
+        _page->adopt(*this);
+    }
+
+    /// @brief Leaves the page's layout.
+    ~FakePageRegion() override { _page->release(*this); }
+
+    FakePageRegion(FakePageRegion const&) = delete;
+    FakePageRegion& operator=(FakePageRegion const&) = delete;
+    FakePageRegion(FakePageRegion&&) = delete;
+    FakePageRegion& operator=(FakePageRegion&&) = delete;
+
+    /// @brief The region's place.
+    /// @return Its geometry.
+    [[nodiscard]] RegionGeometry const& geometry() const noexcept { return _geometry; }
+
+    /// @brief The content's height.
+    /// @return It; `0` until `setContentHeight`.
+    [[nodiscard]] Mm contentHeight() const noexcept { return _contentHeight; }
+
+    /// @brief Gives the content's height and relays the page out.
+    /// @param height The height.
+    void setContentHeight(Mm height) {
+        _contentHeight = height;
+        _page->relayout();
+    }
+
+    /// @brief Records a changed `rect` or `overflow`.
+    /// @param layout The region's resolved place.
+    void show(RegionLayout const& layout) {
+        std::string const rect = layout.rect.text();
+        std::string const overflow = formatBool(layout.overflow);
+        if (store().at(id()).props["rect"] != rect) {
+            set("rect", rect);
+        }
+        if (store().at(id()).props["overflow"] != overflow) {
+            set("overflow", overflow);
+        }
+    }
+
+private:
+    [[nodiscard]] static PropList initialProps(ContainerWidget* parent, RegionGeometry const& geometry) {
+        auto const* const page = dynamic_cast<FakePage const*>(parent);
+        if (page == nullptr) {
+            throw std::logic_error{"RecordingBackend: a page region's parent is a page"};
+        }
+        RegionSpec const spec{.geometry = geometry, .contentHeight = {}};
+        RegionLayout const layout = layoutPage(page->geometry(), std::span{&spec, 1}, std::nullopt).regions.front();
+        return {{"anchor", anchorName(geometry.anchor)},
+                {"rect", layout.rect.text()},
+                {"overflow", formatBool(layout.overflow)}};
+    }
+
+    FakePage* _page;
+    RegionGeometry _geometry;
+    Mm _contentHeight{};
+};
+
+inline void FakePage::relayout() {
+    std::vector<RegionSpec> specs;
+    specs.reserve(_regions.size());
+    for (FakePageRegion const* region : _regions) {
+        specs.push_back({region->geometry(), region->contentHeight()});
+    }
+    PageLayout const layout = layoutPage(_geometry, specs, _available);
+    setIfChanged("scale", formatFraction(layout.scale));
+    setIfChanged("displayed", layout.displayedWidth.text() + "x" + layout.displayedHeight.text());
+    for (std::size_t i = 0; i < _regions.size(); ++i) {
+        _regions[i]->show(layout.regions[i]);
+    }
+}
+
 /// @brief A fake `DropZoneWidget`: properties `accept` (`[.ext,…]`), `multiple`.
 class FakeDropZone final : public FakeContainer<DropZoneWidget> {
 public:
@@ -2249,6 +2407,40 @@ public:
     [[nodiscard]] std::unique_ptr<CollapsibleWidget> createCollapsible(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeCollapsible>(_store, "Collapsible", parent);
     }
+    /// @brief A fake page, offered the width `setPageAvailableWidth` gave.
+    /// @param parent   The container to append to, or null for a root.
+    /// @param geometry The sheet.
+    /// @return The widget.
+    [[nodiscard]] std::unique_ptr<PageWidget> createPage(ContainerWidget* parent,
+                                                         PageGeometry const& geometry) override {
+        return std::make_unique<detail::FakePage>(_store, parent, geometry, _pageWidth, _pages);
+    }
+
+    /// @brief A fake page region.
+    /// @param parent   Its page.
+    /// @param geometry Its place.
+    /// @return The widget.
+    [[nodiscard]] std::unique_ptr<PageRegionWidget> createPageRegion(ContainerWidget* parent,
+                                                                     RegionGeometry const& geometry) override {
+        return std::make_unique<detail::FakePageRegion>(_store, parent, geometry);
+    }
+
+    /// @brief Sets the width every page is offered, as a container of that width would, and relays the pages out.
+    /// @param width The width; absent is unlimited, the default.
+    void setPageAvailableWidth(std::optional<Mm> width) {
+        _pageWidth = width;
+        for (detail::FakePage* page : std::vector(*_pages)) {
+            page->offer(width);
+        }
+    }
+
+    /// @brief Gives a page region's content height, which a region of no stated height takes as its own.
+    /// @param regionId The region.
+    /// @param height   The content's height.
+    void setRegionContentHeight(int regionId, Mm height) {
+        dynamic_cast<detail::FakePageRegion&>(*_store->at(regionId).widget).setContentHeight(height);
+    }
+
     [[nodiscard]] std::unique_ptr<DropZoneWidget> createDropZone(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeDropZone>(_store, "DropZone", parent);
     }
@@ -3042,6 +3234,8 @@ private:
     }
 
     std::shared_ptr<detail::RecordStore> _store = std::make_shared<detail::RecordStore>();
+    std::optional<Mm> _pageWidth;
+    std::shared_ptr<std::vector<detail::FakePage*>> _pages = std::make_shared<std::vector<detail::FakePage*>>();
     std::unordered_set<std::string> _components;
     std::string _widthClass = "expanded";
     std::function<void(std::string const&)> _onWidthClass;

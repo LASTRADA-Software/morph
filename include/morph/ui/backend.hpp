@@ -1175,6 +1175,16 @@ public:
     virtual void setOnToggle(std::function<void(bool)> onToggle) = 0;
 };
 
+/// @brief A sheet of fixed physical size (docs/spec/ui/document_page.md). Its children are
+///        `PageRegionWidget`s. The geometry is a factory argument; the page reads the width its container gives it
+///        from the container's layout, asks for the sheet's width as its natural width, no least width, and a height
+///        that follows the width it is given, and displays the sheet scaled by `min(1, width / sheet width)`.
+class PageWidget : public ContainerWidget {};
+
+/// @brief A rectangle of a page that holds its children as a vertical stack, clipped to the rectangle. The geometry
+///        is a factory argument. A region whose content does not fit draws an overflow mark.
+class PageRegionWidget : public ContainerWidget {};
+
 /// @brief A region that takes files dropped from the operating system.
 class DropZoneWidget : public ContainerWidget {
 public:
@@ -1413,6 +1423,20 @@ public:
     /// @param parent The container to append to, or null for a root.
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<DropZoneWidget> createDropZone(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a page.
+    /// @param parent   The container to append to, or null for a root.
+    /// @param geometry The sheet's size and margins; valid (`PageGeometry::problem`).
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<PageWidget> createPage(ContainerWidget* parent,
+                                                                 PageGeometry const& geometry) = 0;
+
+    /// @brief Makes a page region.
+    /// @param parent   The page to append to.
+    /// @param geometry The region's place; valid on the page.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<PageRegionWidget> createPageRegion(ContainerWidget* parent,
+                                                                             RegionGeometry const& geometry) = 0;
 
     /// @brief Loads the component a `custom` node names, if this backend can. The only factory that may return null:
     ///        null means "not loaded", and the mount shows the node's fallback instead. A backend that loads no
