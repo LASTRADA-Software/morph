@@ -59,7 +59,7 @@ what goes in the request is in the declaration. A request with neither is `{}`.
 | Type | Members | The action answers |
 |---|---|---|
 | `ContextSwitch` | `model`, `action`, `localeField`, `optionsField`, `labelField`, `valueField`, `detailField`, `groupField` | a reply whose `optionsField` is a list of objects. Each has a `label` (`labelField`), a `value` (`valueField`, a string or an integer), and optionally a `detail` (`detailField`, a second line) and a `group` (`groupField`, a heading the option sits under; adjacent options with the same group share one heading). An option such as "all sites" is just an option the application returns |
-| `ModuleCount` | `module`, `model`, `action`, `countField`, `contextField`, `localeField` | a reply whose `countField` is a non-negative integer: the module's open work. `module` is a `CatalogEntry::module`; one entry per module, because an action type belongs to one model |
+| `ModuleCount` | `module`, `model`, `action`, `countField`, `contextField`, `localeField` | a reply whose `countField` is a non-negative integer, or the wire form of a `morph::units::Quantity` whose magnitude is a whole number (written as its exact value, `{"num":7,"den":1,"dp":0}`; a `unit` member, when present, is the application's and is not read): the module's open work. `module` is a `CatalogEntry::module`; one entry per module, because an action type belongs to one model |
 | `SearchSource` | `module`, `title`, `model`, `action`, `queryField`, `resultsField`, `contextField`, `localeField` | a request with a string member `queryField` (the typed text) and a reply whose `resultsField` is a list of hits. `title` heads the source's hits: a catalogue key or text; empty uses the module's label |
 | `InboxEntry` | `screen`, `sources` | `screen` is the screen id the button opens; `sources` is a list of `ModuleCount`; the button's count is the sum of the counts of the sources that answered |
 | `PrincipalMenu` | `model`, `action`, `contextField`, `localeField`, `nameField`, `detailField`, `subtitleField`, `rolesField`, `locales`, `formats` | a reply with the person's name (`nameField`), optionally a detail line for the menu (`detailField`) and a line under the name in the trigger (`subtitleField`), and `rolesField`, a list of roles |
@@ -85,10 +85,21 @@ the app document takes effect at the next frame build, as every other member of 
 
 The loader checks the declaration when the document loads and refuses it, naming the path: a `module` listed twice in
 `modules` or `search`; an empty field name that must not be empty; a `locales` or `formats` tag listed twice; an inbox
-with no sources. A catalog entry the declaration names (the inbox's `screen`, a `module`) that the catalog does not list
-is reported by the client, since the catalog is known to the client and not to the loader. An action that is not
-registered is the loader's usual action refusal; a reply that lacks a named field is the client's report
+with no sources.
+
+**What the server checks.** `UiRegistry::setShellParts(parts, reads)` also checks every name a part gives against the
+*full* registry, whoever may see it, and refuses an unknown one there, naming the path (`/shell/search/0/module`): a
+`module` of `modules` or `search` that no registered screen's entry has, the inbox's `screen` that no entry has, and
+an action the catalog does not know (the loader's usual refusal). `build` makes the same check, for a screen added after
+the parts. A misconfiguration is therefore the application's to see when the bundle is built, not something a client
+reports to a person. A reply that lacks a named field is the client's report
 ([Failure and refusal](#failure-and-refusal)).
+
+**The catalog's facts.** The actions a part reads are named by no screen, so the catalog would not know them. `reads`
+is the `ui::Catalog` the application builds, with `author::CatalogFacts::action<Model, Action>()` for each, from the
+same facts a screen's builders gather; `setShellParts` consults it behind the registry's own catalog for the actions
+the parts name, and the `ui-catalog` reply carries their facts (model, effects, records) as it carries a screen's. A
+refused call leaves the catalog as it was.
 
 ## How a part is read
 
@@ -96,7 +107,10 @@ At load, `shell` is lowered to declarations of the app document's own scope, and
 the app root, mounted headless on the session as `AppRoot` already is:
 
 - one model alias per distinct model, `"instance": "shared"`, so a part and a screen reading the same model share one
-  instance and one cache;
+  instance and one cache. A model that keeps state (`ModelFacts<M>::stateless` is false) is refused a shared instance:
+  one instance would hold one person's state for every client that reads it. The application reads a part's action
+  from a stateless model, as it declares a model stateless for a screen; a model that holds state for a person and also
+  answers a count puts the count on a stateless model beside it;
 - one query per read: `shellContext`, `shellCount<i>` (`i` the place in `modules`), `shellSearch<i>`, `shellInbox<i>` and
   `shellPrincipal`; each body is an object of the request fields the declaration names, reading `{"env": "context"}`
   and `{"env": "locale"}` and, for a search, the state `shellSearchText`;
@@ -124,9 +138,17 @@ text asks nothing and clears the hits. At most `kSearchHitsPerSource` (8) hits o
 too, so while the panel is open a change to a record they hold refreshes them.
 
 **Authorisation.** A read the server refuses with the error kind `denied` is the authoriser working: it is neither drawn
-nor reported. A denied switcher (neither the switcher nor, with no scope, the reads that need one are drawn or asked), count, search
+nor reported. A server's refusal reaches the client as the `err` message `unauthorized`, which the session's default
+error classifier names `denied` (`ui::detail::defaultErrorKind`); that covers a read made before anyone is signed in,
+as the public sign-in screen's shell makes, as well as one a signed-in person's roles do not permit. Any other failure
+of a read is still reported. A denied switcher (neither the switcher nor, with no scope, the reads that need one are drawn or asked), count, search
 source or person's menu is left out; an inbox whose every source is denied
 draws no button, and a denied source contributes nothing to the sum.
+
+**Hidden from this person.** A part that names a module, or an inbox that names a screen, that the catalog does not list
+to this person (the authoriser hides it, or nobody is signed in and it is not public) is left out in the same way: no
+count, no search source, no button, and nothing reported. Its reads are not drawn, and their failures are not reported.
+Whether a name is real is the server's check at load; whether it is visible is the catalog the client holds.
 
 ## Typed values and the locale
 
@@ -274,7 +296,8 @@ which a renderer draws as muted text and exposes as static text, not as a disabl
 ## Failure and refusal
 
 A part is a convenience, so a failure of one never blocks the rest of the frame, and every failure is reported through
-`ShellOptions::onProblem`, once per part: a reply that lacks a named field, a count that is not a non-negative integer,
+`ShellOptions::onProblem`, once per part: a reply that lacks a named field, a count that is not a non-negative integer
+or a whole quantity,
 a hit that is dropped, an action the dispatcher refuses for any reason other than authorisation. A part that failed draws
 as the [states](#loading-empty-and-error-states) say: an error marker, a failed-source line, the switcher disabled. The
 start waits for the switcher only until it fails.

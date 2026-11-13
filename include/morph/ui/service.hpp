@@ -359,17 +359,34 @@ public:
     ///        member, so they travel in the file every client already reads; an application that added no app
     ///        document gets an otherwise empty one, public.
     ///
-    /// Refused when the app document with the parts does not load.
+    /// Refused when the app document with the parts does not load, and when a part names a module, a screen or an
+    /// action that the registry does not hold at all: this is the check of a misconfiguration, and it is made against
+    /// every screen registered, whoever may see it, so a screen hidden from some person is still a screen. The
+    /// screens are therefore added before the parts; `build` makes the same check, for a screen added after.
+    ///
+    /// The actions a part reads are not named by any screen, so the catalog does not know them yet: @p reads adds
+    /// their facts, from the same `CatalogFacts` a screen's builders gather, to the registry's catalog for the
+    /// lifetime of the registry, so the `ui-catalog` reply carries them as it carries a screen's.
     /// @param parts The parts.
+    /// @param reads The facts of the models and actions the parts read; their lookups are consulted after the
+    ///              registry's own. Empty: the parts read only what a screen already names.
     /// @return Nothing, or the refusal.
-    std::expected<void, Refusal> setShellParts(ShellParts parts) {
-        // A refused call leaves the parts as they were, so the next app document is not judged by them.
+    std::expected<void, Refusal> setShellParts(ShellParts parts, Catalog reads = {}) {
+        // A refused call leaves the parts and the catalog as they were, so the next app document is not judged by them.
+        Catalog previousCatalog = _catalog;
         std::optional<ShellParts> previous = std::exchange(_shellParts, std::move(parts));
-        auto done = applyShellParts(previous.has_value());
-        if (!done) {
+        _catalog = withReads(std::move(_catalog), std::move(reads));
+        std::expected<void, Refusal> outcome = [&]() -> std::expected<void, Refusal> {
+            if (auto named = checkShellNames()) {
+                return std::unexpected(std::move(*named));
+            }
+            return applyShellParts(previous.has_value());
+        }();
+        if (!outcome) {
             _shellParts = std::move(previous);
+            _catalog = std::move(previousCatalog);
         }
-        return done;
+        return outcome;
     }
 
     /// @brief Adds a vocabulary the bundle needs beyond `ui/1` and `expr/1`, such as `forms/1` or `files/1`. A
@@ -380,6 +397,7 @@ public:
     /// @brief Builds the bundle.
     ///
     /// Refused when a screen names a delivered component (`qml`) whose hash no `component` file has, when the
+    /// shell's parts name a module or a screen that no registered screen has, when the
     /// bundle holds more than `kMaxBundleFiles` files or entries, and when it needs more than `kMaxListItems`
     /// vocabularies or a vocabulary name longer than `kMaxNameBytes`. A theme file's token that nothing reads is
     /// logged at warn and does not refuse the build.
@@ -721,11 +739,73 @@ private:
         return std::nullopt;
     }
 
+    /// @brief @p base with the model and action lookups of @p reads behind its own.
+    /// @param base  The catalog held.
+    /// @param reads The facts to add.
+    /// @return The catalog that answers from @p base first and from @p reads where @p base does not know.
+    [[nodiscard]] static Catalog withReads(Catalog base, Catalog reads) {
+        if (reads.model) {
+            base.model = [first = std::move(base.model), second = std::move(reads.model)](
+                             std::string_view typeId) -> std::optional<ModelInfo> {
+                auto found = first ? first(typeId) : std::nullopt;
+                return found ? found : second(typeId);
+            };
+        }
+        if (reads.action) {
+            base.action = [first = std::move(base.action), second = std::move(reads.action)](
+                              std::string_view actionId) -> std::optional<ActionInfo> {
+                auto found = first ? first(actionId) : std::nullopt;
+                return found ? found : second(actionId);
+            };
+        }
+        return base;
+    }
+
+    /// @brief Checks the modules and screens the shell's parts name against every screen registered.
+    ///
+    /// An action a part names is checked by the app document's load, against the catalog.
+    /// @return The refusal for the first name no screen has, or nothing.
+    [[nodiscard]] std::optional<Refusal> checkShellNames() const {
+        if (!_shellParts) {
+            return std::nullopt;
+        }
+        auto const hasModule = [this](std::string const& module) {
+            return module.empty() || std::ranges::any_of(_screens, [&module](Screen const& screen) {
+                       return screen.served.entry.module == module;
+                   });
+        };
+        auto const hasScreen = [this](std::string const& id) {
+            return std::ranges::any_of(_screens, [&id](Screen const& screen) { return screen.served.entry.id == id; });
+        };
+        auto const unknown = [](std::string path, std::string const& kind, std::string const& name) {
+            return Refusal{.document = std::string{kAppFile},
+                           .path = std::move(path),
+                           .reason = "the shell names the " + kind + " `" + name + "`, which no screen registered has"};
+        };
+        for (std::size_t index = 0; index < _shellParts->modules.size(); ++index) {
+            if (auto const& module = _shellParts->modules.at(index).module; !hasModule(module)) {
+                return unknown("/shell/modules/" + std::to_string(index) + "/module", "module", module);
+            }
+        }
+        for (std::size_t index = 0; index < _shellParts->search.size(); ++index) {
+            if (auto const& module = _shellParts->search.at(index).module; !hasModule(module)) {
+                return unknown("/shell/search/" + std::to_string(index) + "/module", "module", module);
+            }
+        }
+        if (_shellParts->inbox && !hasScreen(_shellParts->inbox->screen)) {
+            return unknown("/shell/inbox/screen", "screen", _shellParts->inbox->screen);
+        }
+        return std::nullopt;
+    }
+
     /// @brief What `build` refuses: a delivered component missing from the bundle, a theme some combination of which
-    ///        does not resolve, and the bounds.
+    ///        does not resolve, a name the shell's parts give that no screen has, and the bounds.
     /// @return The refusal, or nothing.
     [[nodiscard]] std::optional<Refusal> checkBuildable() const {
         if (auto refusal = checkThemes()) {
+            return refusal;
+        }
+        if (auto refusal = checkShellNames()) {
             return refusal;
         }
         std::set<std::string, std::less<>> componentHashes;

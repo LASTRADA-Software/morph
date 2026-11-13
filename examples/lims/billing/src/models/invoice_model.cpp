@@ -293,20 +293,20 @@ OpenWork<InvoiceView> InvoiceModel::execute(const CountOpenInvoiceWork& action) 
     if (!action.validate()) {
         throw ValidationError{"CountOpenInvoiceWork: a company is required"};
     }
-    OpenWork<InvoiceView> work;
     if (!isVisible(action.company)) {
-        return work;
+        return openWork<InvoiceView>(0);
     }
+    std::int64_t open = 0;
     Lightweight::DataMapper mapper;
     for (InvoiceState const state : {InvoiceState::Draft, InvoiceState::Submitted}) {
-        work.count += static_cast<std::int64_t>(
+        open += static_cast<std::int64_t>(
             mapper.Query<db::InvoiceRecord>()
                 .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::companyId>, "=", *action.company)
                 .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::state>, "=", static_cast<int>(state))
                 .All()
                 .size());
     }
-    return work;
+    return openWork<InvoiceView>(open);
 }
 
 // An action handler: the registry calls it on the instance, like every other.

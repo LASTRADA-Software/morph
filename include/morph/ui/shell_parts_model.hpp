@@ -111,9 +111,11 @@ struct ShellModelOptions {
     std::function<std::string(std::string_view module)> moduleLabel;
     /// @brief The title of a screen in the catalog, for the inbox button.
     std::function<std::string(std::string_view screen)> screenTitle;
-    /// @brief Whether the catalog lists a screen. Empty: every screen is taken to be listed.
+    /// @brief Whether the catalog lists a screen. A part that names one the catalog does not list is left out, not
+    ///        reported: the authoriser hides it from this person. Empty: every screen is taken to be listed.
     std::function<bool(std::string_view screen)> screenListed;
-    /// @brief Whether the catalog lists a module. Empty: every module is taken to be listed.
+    /// @brief Whether the catalog lists a module. A part that names one the catalog does not list is left out, not
+    ///        reported: the authoriser hides it from this person. Empty: every module is taken to be listed.
     std::function<bool(std::string_view module)> moduleListed;
     /// @brief Whether the catalog says an action's reply holds a registered record, which is what makes a read of it
     ///        refresh when the record changes. Empty: every action is taken to.
@@ -200,13 +202,13 @@ public:
     };
 
     /// @brief Every declared module's count. A tracked read.
-    /// @return The counts, in declaration order, a denied one left out.
+    /// @return The counts, in declaration order; a denied one, and one of a module the catalog does not list, left out.
     [[nodiscard]] std::vector<ModuleState> moduleCounts() const {
         std::vector<ModuleState> out;
         for (std::size_t index = 0; index < _parts->modules.size(); ++index) {
             ModuleCount const& declared = _parts->modules.at(index);
             AppRoot::QueryRead const read = _root->query(shell_names::count(index));
-            if (read.denied) {
+            if (read.denied || moduleHidden(declared.module)) {
                 continue;
             }
             ModuleState state{.module = declared.module, .count = std::nullopt, .failed = read.failed};
@@ -336,19 +338,19 @@ private:
         bool operator==(Option const&) const = default;
     };
 
-    // What the catalog can say about the declaration, reported once at the start: a screen or module it does not list,
-    // and a count whose reply is not a registered record (it is then read on mount and on a context change only).
+    // A module or screen the catalog does not list is hidden from this person by the authoriser, so the part that
+    // names it is left out without a word. An unknown name is the server's refusal at load, not the client's report.
+    [[nodiscard]] bool moduleHidden(std::string const& module) const {
+        return !module.empty() && _options.moduleListed && !_options.moduleListed(module);
+    }
+
+    [[nodiscard]] bool screenHidden(std::string const& screen) const {
+        return _options.screenListed && !_options.screenListed(screen);
+    }
+
+    // What the catalog can say about the declaration, reported once at the start: a count whose reply is not a
+    // registered record (it is then read on mount and on a context change only).
     void checkDeclaration() const {
-        auto const screen = [this](std::string const& id, std::string const& part) {
-            if (_options.screenListed && !_options.screenListed(id)) {
-                problem("shell " + part + " names the screen " + id + ", which the catalog does not list");
-            }
-        };
-        auto const module = [this](std::string const& id, std::string const& part) {
-            if (_options.moduleListed && !_options.moduleListed(id)) {
-                problem("shell " + part + " names the module " + id + ", which the catalog does not list");
-            }
-        };
         auto const record = [this](ModuleCount const& count, std::string const& part) {
             if (_options.replyIsRecord && !_options.replyIsRecord(count.action)) {
                 problem("shell " + part + ": the reply of " + count.action +
@@ -356,13 +358,11 @@ private:
             }
         };
         for (std::size_t index = 0; index < _parts->modules.size(); ++index) {
-            record(_parts->modules.at(index), "count " + shell_names::count(index));
+            if (!moduleHidden(_parts->modules.at(index).module)) {
+                record(_parts->modules.at(index), "count " + shell_names::count(index));
+            }
         }
-        for (SearchSource const& source : _parts->search) {
-            module(source.module, "search");
-        }
-        if (_parts->inbox) {
-            screen(_parts->inbox->screen, "inbox");
+        if (_parts->inbox && !screenHidden(_parts->inbox->screen)) {
             for (std::size_t index = 0; index < _parts->inbox->sources.size(); ++index) {
                 record(_parts->inbox->sources.at(index), "inbox " + shell_names::inbox(index));
             }
@@ -431,11 +431,25 @@ private:
         return found == nullptr ? std::string{} : describe(*found, format);
     }
 
+    // A count is a JSON integer, or the wire form of a `morph::units::Quantity`, whose magnitude is a whole number: a
+    // `Quantity` is written as its exact value (`num`, `den`, `dp`), which a client reads as a decimal, and with a
+    // `unit` as a quantity. The unit is the application's and is not read. Anything else, and a negative number, is not
+    // a count.
     [[nodiscard]] std::optional<long long> countOf(Value const& reply, std::string const& field,
                                                    std::string const& query) const {
         Value const* const found = reply.field(field);
-        std::int64_t const* const number = found == nullptr ? nullptr : found->asInt();
-        if (number == nullptr || *number < 0) {
+        std::optional<std::int64_t> number;
+        if (found != nullptr) {
+            if (std::int64_t const* const plain = found->asInt()) {
+                number = *plain;
+            } else if (Decimal const* const exact = found->asDecimal(); exact != nullptr && exact->value.denominator == 1) {
+                number = exact->value.numerator;
+            } else if (Quantity const* const quantity = found->asQuantity();
+                       quantity != nullptr && quantity->value.denominator == 1) {
+                number = quantity->value.numerator;
+            }
+        }
+        if (!number || *number < 0) {
             if (!reply.isNull()) {
                 problem("shell count " + query + ": the reply has no non-negative integer `" + field + "`");
             }
@@ -542,7 +556,7 @@ private:
         SearchSource const& declared = _parts->search.at(source);
         AppRoot::QueryRead const read = _root->query(shell_names::search(source));
         // The hits of a source the view does not draw are not the person's to open.
-        if (read.denied || read.failed) {
+        if (read.denied || read.failed || moduleHidden(declared.module)) {
             return out;
         }
         Value const* const list = read.value.field(declared.resultsField);
@@ -577,7 +591,7 @@ private:
         for (std::size_t source = 0; source < _parts->search.size(); ++source) {
             SearchSource const& declared = _parts->search.at(source);
             AppRoot::QueryRead const read = _root->query(shell_names::search(source));
-            if (read.denied) {
+            if (read.denied || moduleHidden(declared.module)) {
                 continue;
             }
             ShellSourceView shown;
@@ -618,7 +632,7 @@ private:
 
     [[nodiscard]] ShellInboxView inboxView(FormatContext const& format) const {
         ShellInboxView out;
-        if (!_parts->inbox) {
+        if (!_parts->inbox || screenHidden(_parts->inbox->screen)) {
             return out;
         }
         static_cast<void>(format);

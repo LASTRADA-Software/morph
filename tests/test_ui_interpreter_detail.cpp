@@ -83,6 +83,16 @@ TEST_CASE("interpreter: the default error kinds name the bridge's own failures",
     CHECK(defaultErrorKind(std::make_exception_ptr(42)) == "error");
 }
 
+// Mutation: drop the unauthorized arm of defaultErrorKind (a server's refusal is classified `error`, so a shell part
+// the signed-out sign-in screen asks for is reported as a failure).
+TEST_CASE("interpreter: a server's refusal is the error kind denied, and only that exact text", "[ui][interpreter]") {
+    using ui::detail::defaultErrorKind;
+    CHECK(defaultErrorKind(std::make_exception_ptr(std::runtime_error{"unauthorized"})) == "denied");
+    CHECK(defaultErrorKind(std::make_exception_ptr(std::runtime_error{"unauthorized: the ledger is closed"})) ==
+          "error");
+    CHECK(defaultErrorKind(std::make_exception_ptr(std::runtime_error{""})) == "error");
+}
+
 // Mutation: report a non-standard exception's text as empty instead of `unknown error`.
 TEST_CASE("interpreter: a failure's text is what() or `unknown error`", "[ui][interpreter]") {
     using ui::detail::failureText;

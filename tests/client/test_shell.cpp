@@ -1068,8 +1068,7 @@ constexpr std::string_view kSecondScreen = R"({
   "vocab": "ui/1", "id": "probe.second",
   "view": { "kind": "text", "testId": "second", "text": "Second" } })";
 
-/// Two screens of one module, with a search over both, a count of the module, and an inbox naming a screen the
-/// catalog does not list.
+/// Two screens of one module, with a search over both, a count of the module, and an inbox opening one of them.
 std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> searchBundle() {
     ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}, probe::searchCatalog()};
     for (auto const& [id, text] : {std::pair{"probe.width", kWidthScreen}, std::pair{"probe.second", kSecondScreen}}) {
@@ -1097,7 +1096,7 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> searchBundle
                                      .resultsField = "hits",
                                      .contextField = {},
                                      .localeField = {}}};
-    parts.inbox = ui::InboxEntry{.screen = "probe.missing",
+    parts.inbox = ui::InboxEntry{.screen = "probe.second",
                                  .sources = {ui::ModuleCount{.module = "probe",
                                                              .model = "Probe_Model",
                                                              .action = "Probe_Count",
@@ -1148,12 +1147,10 @@ TEST_CASE("Client shell: Shift Enter opens every hit and the first one is the ac
         // the second's. The first hit's tab is the one left active.
         CAPTURE(tabCaptions(backend));
         CHECK(backend.prop(bars.front(), "selected") == "1");
-        // The catalog's facts are reported by the client.
         auto const once = [&problems](std::string_view needle) {
             return std::ranges::count_if(problems,
                                          [needle](std::string const& text) { return text.contains(needle); });
         };
-        CHECK(once("names the screen probe.missing, which the catalog does not list") == 1);
         // The module count and the inbox source read the same action.
         CHECK(once("the reply of Probe_Count is not a registered record") == 2);
     }

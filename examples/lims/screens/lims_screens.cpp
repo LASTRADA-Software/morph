@@ -688,9 +688,6 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
             return std::unexpected(screen.registered.error());
         }
     }
-    if (auto facts = registerShellFacts(screens); !facts) {
-        return std::unexpected(std::move(facts.error()));
-    }
     morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = std::string{kApplicationId}, .version = "1.0"},
                                  screens.catalog()};
     for (ListedScreen const& screen : listed) {
@@ -712,7 +709,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
     if (auto added = addCatalogues(served); !added) {
         return std::unexpected(std::move(added.error()));
     }
-    if (auto set = served.setShellParts(shellParts(availableToShell(listed))); !set) {
+    if (auto set = served.setShellParts(shellParts(availableToShell(listed)), shellReads()); !set) {
         return std::unexpected(std::move(set.error()));
     }
     return served.build();

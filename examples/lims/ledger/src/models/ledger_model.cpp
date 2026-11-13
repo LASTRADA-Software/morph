@@ -178,18 +178,17 @@ OpenWork<PeriodView> LedgerModel::execute(const CountClosingPeriods& action) {
     if (!action.validate()) {
         throw ValidationError{"CountClosingPeriods: a company is required"};
     }
-    OpenWork<PeriodView> work;
     if (!visible(action.company)) {
-        return work;
+        return openWork<PeriodView>(0);
     }
     Lightweight::DataMapper mapper;
-    work.count = static_cast<std::int64_t>(
+    auto const closing = static_cast<std::int64_t>(
         mapper.Query<db::PeriodRecord>()
             .Where(::Lightweight::FieldNameOf<&db::PeriodRecord::companyId>, "=", *action.company)
             .Where(::Lightweight::FieldNameOf<&db::PeriodRecord::state>, "=", static_cast<int>(PeriodState::Closing))
             .All()
             .size());
-    return work;
+    return openWork<PeriodView>(closing);
 }
 
 // An action handler: the registry calls it on the instance, like every other.

@@ -496,7 +496,7 @@ namespace detail {
     }
 }
 
-/// @brief The default error kinds: the bridge's own failures, and `error` for the rest.
+/// @brief The default error kinds: the bridge's own failures, a server's refusal (`denied`), and `error` for the rest.
 /// @param error The failure.
 /// @return The kind.
 [[nodiscard]] inline std::string defaultErrorKind(std::exception_ptr const& error) {
@@ -510,6 +510,9 @@ namespace detail {
         return "timeout";
     } catch (backend::BackendChangedError const&) {
         return "backendChanged";
+    } catch (std::runtime_error const& refused) {
+        // The server's authoriser says no with this one text, and no exception type tells it from another failure.
+        return std::string_view{refused.what()} == wire::kUnauthorizedMessage ? "denied" : "error";
     } catch (...) {
         return "error";
     }

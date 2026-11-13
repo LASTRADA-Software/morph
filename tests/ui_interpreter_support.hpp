@@ -131,6 +131,17 @@ public:
         call.promise.reject(std::make_exception_ptr(KindedError{std::move(kind), text}));
     }
 
+    /// @brief Answers a call as a transport does a server's `err`: a plain `std::runtime_error` carrying the text,
+    ///        whose kind the session's own classifier decides.
+    /// @param index The call.
+    /// @param text  The `err` message.
+    void failWithMessage(std::size_t index, std::string const& text) {
+        Call& call = calls.at(index);
+        REQUIRE_FALSE(call.answered);
+        call.answered = true;
+        call.promise.reject(std::make_exception_ptr(std::runtime_error{text}));
+    }
+
 private:
     class Channel final : public ModelChannel {
     public:
@@ -483,7 +494,7 @@ struct Harness {
                                                     } catch (KindedError const& kinded) {
                                                         return kinded.kind;
                                                     } catch (...) {
-                                                        return "error";
+                                                        return ui::detail::defaultErrorKind(error);
                                                     }
                                                 },
                                                 .developmentTools = tools,
@@ -549,6 +560,14 @@ struct Harness {
     /// @param kind  The error kind.
     void fail(std::size_t index, std::string kind = "error") {
         dispatcher.fail(index, std::move(kind));
+        settle();
+    }
+
+    /// @brief Answers a call with a server's `err` message, as a transport raises it, and lets the owner run.
+    /// @param index The call.
+    /// @param text  The message.
+    void failWithMessage(std::size_t index, std::string const& text) {
+        dispatcher.failWithMessage(index, text);
         settle();
     }
 

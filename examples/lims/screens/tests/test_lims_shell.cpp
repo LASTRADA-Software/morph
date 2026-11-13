@@ -81,7 +81,7 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
     if (auto added = lims::screens::addCatalogues(served); !added) {
         return std::unexpected(std::move(added.error()));
     }
-    if (auto set = served.setShellParts(lims::screens::shellParts(available)); !set) {
+    if (auto set = served.setShellParts(lims::screens::shellParts(available), lims::screens::shellReads()); !set) {
         return std::unexpected(std::move(set.error()));
     }
     return served.build();
@@ -110,9 +110,6 @@ ui::Screen accountsProbe(bool contextBound) {
 /// @return The bundle, or the refusal.
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> scopedBundle(bool contextBound) {
     ui::ScreenRegistry registry;
-    if (auto facts = lims::screens::registerShellFacts(registry); !facts) {
-        return std::unexpected(facts.error());
-    }
     auto registered = registry.add(accountsProbe(contextBound));
     if (!registered) {
         return std::unexpected(registered.error());
@@ -211,9 +208,6 @@ ui::Screen homeProbe(std::string_view id) {
 /// @return The bundle, or the refusal.
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> modulesBundle() {
     ui::ScreenRegistry registry;
-    if (auto facts = lims::screens::registerShellFacts(registry); !facts) {
-        return std::unexpected(facts.error());
-    }
     struct Entry {
         ui::Screen screen;
         std::string_view id;
@@ -366,7 +360,7 @@ TEST_CASE("lims shell: a screen that does not read the context stays where it wa
 }
 
 // The people lims has who hold a role see every module's screens, and the shell reports nothing to them once they
-// are signed in. Mutation: declare the inbox's screen without registering it (the client reports it as unlisted).
+// are signed in. Mutation: declare the inbox's screen without registering it (the registry refuses the bundle).
 TEST_CASE("lims shell: the parts for the scenario's analyst and accountant report no problem",
           "[lims-screens][shell][auth]") {
     morph::ladder::testkit::DbFixture fixture;
@@ -380,17 +374,20 @@ TEST_CASE("lims shell: the parts for the scenario's analyst and accountant repor
     }
 }
 
-// A person who holds no role is refused the billing and ledger models, so the catalog does not list those modules
-// to them; the client reports the declaration's search sources, counts and inbox against that catalog as unlisted,
-// though the person is simply not permitted them. The case passes while the client reports it and fails once it does
-// not, at which point the tag comes off.
-TEST_CASE("lims shell: a person with no role is reported modules the catalog hides from them",
-          "[lims-screens][shell][auth][!shouldfail]") {
+// A person who holds no role is refused the billing and ledger models, so the catalog does not list those modules to
+// them; the client leaves the declaration's search sources, counts and inbox that name them out, and reports nothing,
+// because the authoriser is working. Mutation: report the parts naming a module the catalog hides.
+TEST_CASE("lims shell: a person with no role is not reported modules the catalog hides from them",
+          "[lims-screens][shell][auth]") {
     morph::ladder::testkit::DbFixture fixture;
     seedPeople();
     auto const shown = signedIn("tobias");
     for (std::string const& problem : shown.afterSignIn) {
         UNSCOPED_INFO("tobias (after sign-in): " << problem);
     }
+    for (std::string const& problem : shown.beforeSignIn) {
+        UNSCOPED_INFO("tobias (before sign-in): " << problem);
+    }
     CHECK(shown.afterSignIn.empty());
+    CHECK(shown.beforeSignIn.empty());
 }

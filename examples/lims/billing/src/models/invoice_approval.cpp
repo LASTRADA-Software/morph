@@ -259,7 +259,7 @@ OpenWork<InvoiceView> InvoiceModel::execute(const CountPendingApprovals& action)
         throw ValidationError{"CountPendingApprovals: a company is required"};
     }
     auto const pending = execute(ListPendingApprovals{}).invoices;
-    return OpenWork<InvoiceView>{.count = std::ranges::count(pending, action.company, &InvoiceView::company)};
+    return openWork<InvoiceView>(std::ranges::count(pending, action.company, &InvoiceView::company));
 }
 
 }  // namespace lims

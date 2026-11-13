@@ -889,6 +889,12 @@ template <class T>
 /// constant can close without breaking the documented contract.
 inline constexpr std::string_view kExecuteTimeoutMessage = "timeout";
 
+/// @brief The `err` message a server replies with when its authoriser refuses a call (`RemoteServer`), or when nobody
+///        is signed in for a call that needs a principal.
+///
+/// A client maps a failure carrying exactly this text to the error kind `denied` (`ui::detail::defaultErrorKind`).
+inline constexpr std::string_view kUnauthorizedMessage = "unauthorized";
+
 /// @brief Builds a `hello` envelope announcing the sender's protocol version.
 ///
 /// Exchanged once per connection, before any `register`/`execute`. See

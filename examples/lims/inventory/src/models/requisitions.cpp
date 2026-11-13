@@ -289,7 +289,7 @@ OpenWork<RequisitionView> ProcurementModel::execute(const CountPendingRequisitio
         throw ValidationError{"CountPendingRequisitions: a company is required"};
     }
     auto const pending = execute(ListPendingRequisitions{}).requisitions;
-    return OpenWork<RequisitionView>{.count = std::ranges::count(pending, action.company, &RequisitionView::company)};
+    return openWork<RequisitionView>(std::ranges::count(pending, action.company, &RequisitionView::company));
 }
 
 }  // namespace lims

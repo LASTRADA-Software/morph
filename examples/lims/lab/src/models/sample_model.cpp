@@ -385,7 +385,7 @@ OpenWork<SampleView> SampleDirectoryModel::execute(const CountSamplesToVerify& a
     }
     auto const page =
         samplesWhere(action.company, "state", ::morph::table::FilterEntry{.eq = std::string{"ToBeVerified"}}, 1);
-    return OpenWork<SampleView>{.count = page.total.value_or(0)};
+    return openWork<SampleView>(page.total.value_or(0));
 }
 
 // An action handler: the registry calls it on the instance, like every other.

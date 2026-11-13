@@ -538,16 +538,12 @@ TEST_CASE("shell parts: Shift Enter opens only the hits the panel draws", "[ui][
 // reply or a dropped hit; or the catalog's facts are not asked.
 TEST_CASE("shell parts: each failure reaches onProblem once", "[ui][shell][parts]") {
     ui::ShellModelOptions facts;
-    facts.screenListed = [](std::string_view id) { return id != "lims.approvals"; };
-    facts.moduleListed = [](std::string_view module) { return module != "billing"; };
     facts.replyIsRecord = [](std::string_view action) { return action != "Shell_Rows"; };
     Rig r{fullParts(), std::move(facts)};
     auto const times = [&r](std::string_view needle) {
         return std::ranges::count_if(r.problems, [needle](std::string const& text) { return text.contains(needle); });
     };
     // What the catalog says is reported as soon as the parts are made.
-    CHECK(times("names the screen lims.approvals") == 1);
-    CHECK(times("names the module billing") == 1);
     CHECK(times("the reply of Shell_Rows is not a registered record") == 1);
     CHECK(times("the reply of Lims_ClientCount is not a registered record") == 0);
 
@@ -876,9 +872,94 @@ TEST_CASE(
     CHECK(unknown.error().reason.contains("does not read this name"));
 }
 
+namespace {
+
+/// Registers the screens `fullParts` names modules and an inbox screen of: lab and billing screens, and the approvals.
+void addScreens(ui::UiRegistry& served) {
+    for (auto const& [id, module] : {std::pair<std::string, std::string>{"lims.lab.samples", "lab"},
+                                     {"lims.billing.invoices", "billing"},
+                                     {"lims.approvals", ""}}) {
+        ui::CatalogEntry made;
+        made.id = id;
+        made.title = "t";
+        made.module = module;
+        REQUIRE(served
+                    .addScreen(std::move(made), R"({"vocab":"ui/1","id":")" + id +
+                                                    R"(","view":{"kind":"text","text":"x"}})")
+                    .has_value());
+    }
+}
+
+}  // namespace
+
+// Mutation: moduleHidden / screenHidden are not asked (the part that names what the catalog hides is reported, or drawn).
+TEST_CASE("shell parts: a part naming a module or screen the catalog hides is left out and nothing is reported",
+          "[ui][shell][parts]") {
+    ui::ShellModelOptions facts;
+    facts.screenListed = [](std::string_view id) { return id != "lims.approvals"; };
+    facts.moduleListed = [](std::string_view module) { return module != "billing"; };
+    Rig r{fullParts(), std::move(facts)};
+    r.reply("Lims_ClientScopes", kScopes);
+    r.reply("Shell_Rows", R"({"total":3})");
+    r.reply("Lims_ClientCount", R"({"open":4})");
+    r.reply("Lims_ClientPerson", R"({"name":"Ada"})");
+    r.h.backend.edit(r.id("TextInput", "shell_search"), "s");
+    r.h.settle();
+    r.h.advance(std::chrono::milliseconds{ui::kSearchPause});
+    r.reply("Lims_ClientSearchLab", R"({"hits":[{"screen":"lims.lab.samples","title":"S-1"}]})");
+    r.reply("Lims_ClientSearchBilling", R"({"hits":[{"screen":"lims.billing.invoices","title":"INV-1"}]})");
+    r.h.settle();
+    CHECK(r.problems.empty());
+    // The listed module is drawn; the hidden module has no count, no search heading, and the hidden screen no button.
+    CHECK(r.prop("Badge", "nav_module_badge_lab", "text") == "3");
+    CHECK(r.prop("Badge", "nav_module_badge_billing", "visible") == "false");
+    CHECK(r.has("Text", "shell_search_source_0"));
+    CHECK_FALSE(r.has("Text", "shell_search_source_1"));
+    CHECK(r.prop("Row", "shell_inbox_group", "visible") == "false");
+}
+
+// Mutation: countOf reads only a plain integer (a quantity count is reported as no integer), or accepts a fraction.
+TEST_CASE("shell parts: a count may be a whole quantity, and a fraction is not a count", "[ui][shell][parts]") {
+    Rig r{fullParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    // A `morph::units::Quantity` is written as its exact value alone; with a unit it is a quantity.
+    r.reply("Shell_Rows", R"({"total":{"num":7,"den":1,"dp":0}})");
+    CHECK(r.prop("Badge", "nav_module_badge_lab", "text") == "7");
+    CHECK(r.problems.empty());
+    r.reply("Lims_ClientCount", R"({"open":{"num":1,"den":2,"dp":1}})");
+    CHECK(std::ranges::count_if(r.problems, [](std::string const& text) {
+              return text.contains("shellCount1: the reply has no non-negative integer `open`");
+          }) == 1);
+    // With its unit it is a quantity, and counts the same.
+    r.reply("Lims_ClientApprovalsBilling", R"({"n":{"num":2,"den":1,"dp":0,"unit":"count"}})");
+    r.reply("Lims_ClientApprovalsLab", R"({"waiting":3})");
+    CHECK(r.prop("Badge", "shell_inbox_count", "text") == "5");
+}
+
+// Mutation: defaultErrorKind classifies the server's refusal as `error`: the signed-out sign-in screen reports the
+// reads it cannot make yet, and the switcher stays drawn.
+TEST_CASE("shell parts: reads a server refuses as unauthorized are left out and not reported", "[ui][shell][parts]") {
+    Rig r{fullParts()};
+    r.h.failWithMessage(r.h.dispatcher.last("Lims_ClientScopes"), "unauthorized");
+    r.h.failWithMessage(r.h.dispatcher.last("Lims_ClientPerson"), "unauthorized");
+    r.h.failWithMessage(r.h.dispatcher.last("Lims_ClientApprovalsBilling"), "unauthorized");
+    CHECK(r.problems.empty());
+    CHECK(r.prop("Menu", "shell_context", "visible") == "false");
+    CHECK(r.prop("Menu", "shell_principal_menu", "visible") == "false");
+}
+
+TEST_CASE("shell parts: a read that fails for any reason but the server's refusal is reported", "[ui][shell][parts]") {
+    Rig r{fullParts()};
+    r.h.failWithMessage(r.h.dispatcher.last("Lims_ClientPerson"), "the database is on fire");
+    CHECK(std::ranges::count_if(r.problems, [](std::string const& text) {
+              return text.contains("shell principal: the read failed");
+          }) == 1);
+}
+
 TEST_CASE("shell parts: the registry writes the parts into the app document the bundle carries",
           "[ui][shell][parts]") {
     ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    addScreens(served);
     REQUIRE(served.setShellParts(fullParts()).has_value());
     auto const built = served.build();
     REQUIRE(built.has_value());
@@ -896,10 +977,89 @@ TEST_CASE("shell parts: the registry writes the parts into the app document the 
     CHECK(carried);
 }
 
+// Mutation: checkShellNames is skipped (a module, a screen or an action no registered screen has is carried in the
+// bundle, and every client then reports it).
+TEST_CASE("shell parts: the registry refuses a part that names a module, a screen or an action it does not hold",
+          "[ui][shell][parts]") {
+    auto const refusalOf = [](auto const& change, ui::Catalog catalog = {}) {
+        ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}, std::move(catalog)};
+        addScreens(served);
+        ui::ShellParts parts = fullParts();
+        change(parts);
+        return served.setShellParts(std::move(parts));
+    };
+    auto const unchanged = [](ui::ShellParts&) {};
+    CHECK(refusalOf(unchanged).has_value());
+
+    auto const module = refusalOf([](ui::ShellParts& parts) { parts.search.front().module = "labb"; });
+    REQUIRE_FALSE(module.has_value());
+    CHECK(module.error().reason.contains("module `labb`"));
+    CHECK(module.error().path == "/shell/search/0/module");
+
+    auto const count = refusalOf([](ui::ShellParts& parts) { parts.modules.back().module = "bilingg"; });
+    REQUIRE_FALSE(count.has_value());
+    CHECK(count.error().path == "/shell/modules/1/module");
+
+    auto const screen = refusalOf([](ui::ShellParts& parts) { parts.inbox->screen = "lims.approvalz"; });
+    REQUIRE_FALSE(screen.has_value());
+    CHECK(screen.error().reason.contains("screen `lims.approvalz`"));
+
+    // An action the catalog does not know is the load's refusal, once a catalog is given.
+    ui::Catalog known;
+    known.model = [](std::string_view) -> std::optional<ui::ModelInfo> { return ui::ModelInfo{.stateless = true}; };
+    known.action = [](std::string_view id) -> std::optional<ui::ActionInfo> {
+        if (id == "Lims_ClientScopes") {
+            return ui::ActionInfo{.modelType = "Lims_ClientModel"};
+        }
+        return std::nullopt;
+    };
+    auto const action = refusalOf(unchanged, known);
+    REQUIRE_FALSE(action.has_value());
+    CAPTURE(action.error().reason);
+    CHECK(action.error().reason.contains("is not in the catalog"));
+}
+
+// Mutation: setShellParts ignores `reads` (the actions only the parts name are not in the catalog, and the app
+// document is refused at load).
+TEST_CASE("shell parts: the facts given with the parts are the catalog of the actions they read", "[ui][shell][parts]") {
+    ui::ShellParts parts;
+    parts.context = ui::ContextSwitch{.model = "Lims_ClientModel",
+                                      .action = "Lims_ClientScopes",
+                                      .localeField = {},
+                                      .optionsField = "options",
+                                      .labelField = "label",
+                                      .valueField = "value",
+                                      .detailField = {},
+                                      .groupField = {}};
+    ui::Catalog base;
+    base.action = [](std::string_view) -> std::optional<ui::ActionInfo> { return std::nullopt; };
+    base.model = [](std::string_view) -> std::optional<ui::ModelInfo> { return std::nullopt; };
+    ui::UiRegistry refused{ui::ApplicationInfo{.id = "probe", .version = "1"}, base};
+    CHECK_FALSE(refused.setShellParts(parts).has_value());
+
+    ui::Catalog reads;
+    reads.action = [](std::string_view id) -> std::optional<ui::ActionInfo> {
+        return id == "Lims_ClientScopes" ? std::optional<ui::ActionInfo>{ui::ActionInfo{.modelType = "Lims_ClientModel"}}
+                                         : std::nullopt;
+    };
+    reads.model = [](std::string_view id) -> std::optional<ui::ModelInfo> {
+        return id == "Lims_ClientModel" ? std::optional<ui::ModelInfo>{ui::ModelInfo{.stateless = true}} : std::nullopt;
+    };
+    ui::UiRegistry accepted{ui::ApplicationInfo{.id = "probe", .version = "1"}, base};
+    auto const set = accepted.setShellParts(parts, reads);
+    CAPTURE(set.has_value() ? std::string{} : set.error().reason);
+    REQUIRE(set.has_value());
+    auto const built = accepted.build();
+    REQUIRE(built.has_value());
+    REQUIRE((*built)->actions.has_value());
+    CHECK((*built)->actions->contains("Lims_ClientScopes"));
+}
+
 // Mutation: setShellParts keeps the parts it refused; or an app document's own `shell` is overwritten.
 TEST_CASE("shell parts: the registry refuses parts that do not load, and an app document that has its own",
           "[ui][shell][parts]") {
     ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    addScreens(served);
     ui::ShellParts bad = fullParts();
     bad.modules.push_back(bad.modules.front());
     CHECK_FALSE(served.setShellParts(bad).has_value());
@@ -917,6 +1077,7 @@ TEST_CASE("shell parts: the registry refuses parts that do not load, and an app 
     }
 
     ui::UiRegistry other{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    addScreens(other);
     ui::BundleFile own{.kind = std::string{ui::kAppFile},
                        .id = std::string{ui::kAppFile},
                        .bytes = std::string{R"({"vocab":"ui/1","id":"app","shell":)"} +

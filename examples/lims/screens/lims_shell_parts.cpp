@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <morph/ui/author.hpp>
 #include <utility>
 
 #include "lims/billing/dto/invoice_dto.hpp"
@@ -109,33 +110,20 @@ ui::ShellParts shellParts(ShellAvailability const& available) {
     return parts;
 }
 
-std::expected<void, morph::ui::Refusal> registerShellFacts(morph::ui::author::ScreenRegistry& screens) {
-    namespace author = morph::ui::author;
-    auto const screen = author::screen("lims.shell-facts", [](author::Scope& scope) {
-        auto const org = scope.model<OrgModel>("org");
-        auto const directory = scope.model<SampleDirectoryModel>("directory");
-        auto const invoices = scope.model<InvoiceModel>("invoices");
-        auto const ledger = scope.model<LedgerModel>("ledger");
-        auto const procurement = scope.model<ProcurementModel>("procurement");
-        auto const stock = scope.model<StockModel>("stock");
-        static_cast<void>(scope.query<ListMyScopes>("scopes", org));
-        static_cast<void>(scope.query<GetSignedInUser>("person", org));
-        static_cast<void>(scope.query<CountSamplesToVerify>("samplesToVerify", directory));
-        static_cast<void>(scope.query<SearchSamples>("sampleSearch", directory));
-        static_cast<void>(scope.query<CountOpenInvoiceWork>("invoiceWork", invoices));
-        static_cast<void>(scope.query<CountPendingApprovals>("pendingApprovals", invoices));
-        static_cast<void>(scope.query<SearchInvoices>("invoiceSearch", invoices));
-        static_cast<void>(scope.query<CountClosingPeriods>("closingPeriods", ledger));
-        static_cast<void>(scope.query<SearchAccounts>("accountSearch", ledger));
-        static_cast<void>(scope.query<CountPendingRequisitions>("pendingRequisitions", procurement));
-        static_cast<void>(scope.query<SearchStock>("stockSearch", stock));
-        return author::text({.text = "The shell's reads"});
-    });
-    auto registered = screens.add(screen);
-    if (!registered) {
-        return std::unexpected(registered.error());
-    }
-    return {};
+morph::ui::Catalog shellReads() {
+    morph::ui::author::CatalogFacts facts;
+    facts.action<OrgModel, ListMyScopes>();
+    facts.action<OrgModel, GetSignedInUser>();
+    facts.action<SampleDirectoryModel, CountSamplesToVerify>();
+    facts.action<SampleDirectoryModel, SearchSamples>();
+    facts.action<InvoiceModel, CountOpenInvoiceWork>();
+    facts.action<InvoiceModel, CountPendingApprovals>();
+    facts.action<InvoiceModel, SearchInvoices>();
+    facts.action<LedgerModel, CountClosingPeriods>();
+    facts.action<LedgerModel, SearchAccounts>();
+    facts.action<ProcurementModel, CountPendingRequisitions>();
+    facts.action<StockModel, SearchStock>();
+    return facts.catalog();
 }
 
 }  // namespace lims::screens

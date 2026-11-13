@@ -177,8 +177,8 @@ TEST_CASE("shell: the lab counts the samples to verify and finds samples by refe
     lims::SampleDirectoryModel lab;
     {
         ScopedPrincipal const tech{"tech"};
-        CHECK(lab.execute(lims::CountSamplesToVerify{.company = lims::test::seededCompany()}).count == 1);
-        CHECK(lab.execute(lims::CountSamplesToVerify{.company = second.company}).count == 1);
+        CHECK(lab.execute(lims::CountSamplesToVerify{.company = lims::test::seededCompany()}).count == countOf(1));
+        CHECK(lab.execute(lims::CountSamplesToVerify{.company = second.company}).count == countOf(1));
 
         auto const found = lab.execute(lims::SearchSamples{.query = "ww", .company = lims::test::seededCompany()});
         CHECK(titlesOf(found.hits) == std::vector<std::string>{"WW-1", "WW-2"});
@@ -198,8 +198,8 @@ TEST_CASE("shell: the lab counts the samples to verify and finds samples by refe
         CHECK(lab.execute(lims::SearchSamples{.query = {}, .company = lims::test::seededCompany()}).hits.empty());
     }
     ScopedPrincipal const visitor{"visitor"};
-    CHECK(lab.execute(lims::CountSamplesToVerify{.company = lims::test::seededCompany()}).count == 1);
-    CHECK(lab.execute(lims::CountSamplesToVerify{.company = second.company}).count == 0);
+    CHECK(lab.execute(lims::CountSamplesToVerify{.company = lims::test::seededCompany()}).count == countOf(1));
+    CHECK(lab.execute(lims::CountSamplesToVerify{.company = second.company}).count == countOf(0));
     auto const hidden = lab.execute(lims::SearchSamples{.query = "WW", .company = second.company});
     CHECK(hidden.hits.empty());
     CHECK(hidden.total == countOf(0));
@@ -231,8 +231,8 @@ TEST_CASE(
     lims::InvoiceModel invoices;
     ScopedPrincipal const clerk{"bea"};
     // One draft became a submitted invoice; the other seeded rows are approved or posted.
-    CHECK(invoices.execute(lims::CountOpenInvoiceWork{.company = lims::test::seededCompany()}).count == 1);
-    CHECK(invoices.execute(lims::CountOpenInvoiceWork{.company = second.company}).count == 1);
+    CHECK(invoices.execute(lims::CountOpenInvoiceWork{.company = lims::test::seededCompany()}).count == countOf(1));
+    CHECK(invoices.execute(lims::CountOpenInvoiceWork{.company = second.company}).count == countOf(1));
 
     auto const byClient =
         invoices.execute(lims::SearchInvoices{.query = "water", .company = lims::test::seededCompany()});
@@ -247,8 +247,8 @@ TEST_CASE(
     CHECK(invoices.execute(lims::SearchInvoices{.query = "inv-2026", .company = second.company}).hits.empty());
 
     ScopedPrincipal const carl{"carl"};
-    CHECK(invoices.execute(lims::CountPendingApprovals{.company = lims::test::seededCompany()}).count == 1);
-    CHECK(invoices.execute(lims::CountPendingApprovals{.company = second.company}).count == 0);
+    CHECK(invoices.execute(lims::CountPendingApprovals{.company = lims::test::seededCompany()}).count == countOf(1));
+    CHECK(invoices.execute(lims::CountPendingApprovals{.company = second.company}).count == countOf(0));
     CHECK_THROWS_AS(invoices.execute(lims::CountOpenInvoiceWork{}), lims::ValidationError);
 }
 
@@ -270,8 +270,8 @@ TEST_CASE("shell: the ledger counts the periods being closed and finds accounts 
     auto const osaka = ledger.execute(
         lims::OpenPeriod{.company = second.company, .month = morph::time::Timestamp{lims::test::at(2026, 11, 1)}});
     ledger.execute(lims::BeginClosePeriod{.periodId = osaka.id});
-    CHECK(ledger.execute(lims::CountClosingPeriods{.company = lims::test::seededCompany()}).count == 1);
-    CHECK(ledger.execute(lims::CountClosingPeriods{.company = second.company}).count == 1);
+    CHECK(ledger.execute(lims::CountClosingPeriods{.company = lims::test::seededCompany()}).count == countOf(1));
+    CHECK(ledger.execute(lims::CountClosingPeriods{.company = second.company}).count == countOf(1));
 
     ledger.execute(lims::CreateAccount{.company = lims::test::seededCompany(),
                                        .code = "1200",
@@ -317,8 +317,8 @@ TEST_CASE("shell: inventory counts the requisitions waiting for the caller and f
         ScopedPrincipal const anna{"anna"};
         morph::ladder::ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
         lims::ProcurementModel procurement;
-        CHECK(procurement.execute(lims::CountPendingRequisitions{.company = lims::test::seededCompany()}).count == 1);
-        CHECK(procurement.execute(lims::CountPendingRequisitions{.company = second.company}).count == 0);
+        CHECK(procurement.execute(lims::CountPendingRequisitions{.company = lims::test::seededCompany()}).count == countOf(1));
+        CHECK(procurement.execute(lims::CountPendingRequisitions{.company = second.company}).count == countOf(0));
         CHECK_THROWS_AS(procurement.execute(lims::CountPendingRequisitions{}), lims::ValidationError);
     }
     for (int n = 1; n <= 10; ++n) {

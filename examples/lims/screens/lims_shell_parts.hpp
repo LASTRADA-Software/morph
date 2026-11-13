@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <expected>
-#include <morph/ui/author.hpp>
 #include <morph/ui/bundle.hpp>
+#include <morph/ui/document.hpp>
 #include <morph/ui/shell_parts.hpp>
 #include <string>
 #include <string_view>
@@ -36,13 +35,11 @@ struct ShellAvailability {
 /// @return The parts.
 [[nodiscard]] morph::ui::ShellParts shellParts(ShellAvailability const& available);
 
-/// @brief Tells the registry which models and actions the shell's parts read.
+/// @brief The catalog facts of the models and actions the shell's parts read.
 ///
-/// The load-time checks of a document know only the models and actions that registered screens name, and no screen
-/// reads a module's count or search: the shell does. This registers a document that names them, so the registry's
-/// catalog holds their facts, and never lists it, so no client is offered it.
-/// @param screens The registry the bundle's screens are registered in.
-/// @return Nothing, or the refusal of the document.
-[[nodiscard]] std::expected<void, morph::ui::Refusal> registerShellFacts(morph::ui::author::ScreenRegistry& screens);
+/// No screen reads a module's count or search: the shell does, so the registry's catalog does not know them from the
+/// screens. Passed to `UiRegistry::setShellParts` beside the parts, so the catalog holds them as it holds a screen's.
+/// @return The lookups over the facts.
+[[nodiscard]] morph::ui::Catalog shellReads();
 
 }  // namespace lims::screens

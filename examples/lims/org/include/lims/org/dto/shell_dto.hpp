@@ -56,15 +56,31 @@ struct ListMyScopesResult {
 
 /// @brief How much of a module's work is open at a company, for the shell's badge.
 ///
-/// A plain integer, not a `Count`: the shell reads the member as a JSON number and a `Count` is written as a quantity.
+/// The shell reads the member as a whole quantity, which is how a `Count` is written.
 /// One template, instantiated per module with the record the count is derived from, so that each module's count is its
 /// own record type and refreshes when that module's records change, not when another module's do.
 /// @tparam Source The record whose change changes the count.
 template <typename Source>
 struct OpenWork {
     /// @brief The number of open items.
-    std::int64_t count = 0;
+    Count count;
 };
+
+/// @brief A whole number of items.
+/// @param value The number; not negative.
+/// @return It as a `Count`.
+[[nodiscard]] inline Count wholeCount(std::int64_t value) {
+    return Count{::morph::math::Rational{value, ::morph::math::DecimalPlaces{0}}};
+}
+
+/// @brief A module's open work.
+/// @tparam Source The record whose change changes the count.
+/// @param open How many items are open.
+/// @return The reply.
+template <typename Source>
+[[nodiscard]] OpenWork<Source> openWork(std::int64_t open) {
+    return OpenWork<Source>{.count = wholeCount(open)};
+}
 
 /// @brief The most hits one search answers.
 inline constexpr std::size_t kSearchHitLimit = 8;
@@ -138,7 +154,7 @@ inline constexpr std::string_view kStock = "lims.inventory.stock";
 template <typename Source>
 [[nodiscard]] SearchHits<Source> hitsOf(std::vector<SearchHit> found, std::int64_t total) {
     SearchHits<Source> out;
-    out.total = Count{::morph::math::Rational{total, ::morph::math::DecimalPlaces{0}}};
+    out.total = wholeCount(total);
     if (found.size() > kSearchHitLimit) {
         found.resize(kSearchHitLimit);
     }
