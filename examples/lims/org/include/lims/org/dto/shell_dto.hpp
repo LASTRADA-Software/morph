@@ -39,7 +39,7 @@ struct ScopeDetail {
     std::string t;
     /// @brief The English pattern shown when the catalogue has none.
     std::string fallback;
-    /// @brief The values the pattern's `{name}` tokens stand for.
+    /// @brief The values the pattern's `{$name}` tokens stand for.
     ScopeDetailArgs args;
 };
 
