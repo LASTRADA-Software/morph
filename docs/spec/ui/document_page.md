@@ -398,8 +398,9 @@ directly in the scope's subtree, up to the first node that opens a scope of its 
 a select's or checkbox's value, a table's selection, sort and paging, a dialog's openness. What is lost is everything
 declared below such a node, and everything the frontend holds:
 
-- the inputs and local `state` of a dialog's or drawer's body, of a list or collection row, of a `boundary` and of a
-  `custom` node's fallback, which are rebuilt at their initial values;
+- the inputs and local `state` of a dialog's or drawer's body, of a list or collection row, of a `switch` case's body
+  and of a `custom` node's fallback, which are rebuilt at their initial values (a `boundary` declares into the
+  enclosing scope, so what it holds survives);
 - a mutation still in flight in one of those scopes, whose owner is gone;
 - keyboard focus, the caret and the text selection, and an input method's composition;
 - the scroll offset of a `scroll` inside the scope, and which collapsible sections are open.
