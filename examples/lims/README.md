@@ -1646,18 +1646,18 @@ deletes only the rows of the instance that sends it.
 over a real `RemoteServer`: closing the holder's connection frees the reservation, and the second bench takes the lot
 without waiting for the hour. The race was measured over ten rounds of two threads with both benches alive: one
 reservation and one named refusal each round, and no other failure. The hook is again the instance's destructor, with
-again its costs (decision 37): database work on whatever thread drops the last reference (inferred, as in decision 37, from
-`closeConnection`'s documentation; not measured for either lease), a
-failure that can only be logged, and nothing released by a crash. And again the lapse is not told: a bench watching
-`Inventory_Reservation` and `Inventory_Lot` hears nothing of a lapse on disconnect over a one-second window, measured on
-the same connection; a release, which is an action, is heard.
+again its costs (decision 37): database work on whatever thread drops the last reference (inferred, as in decision 37,
+from `closeConnection`'s documentation; not measured for either lease), a failure that can only be logged, and nothing
+released by a crash. And again the lapse is not told: a bench watching `Inventory_Reservation` and `Inventory_Lot` hears
+nothing of a lapse on disconnect over a one-second window, measured on the same connection; a release, which is an
+action, is heard.
 
-The second lease copied the first's mechanism. By a hand count, 42 lines: the token generator (8: lines 43-50 of
-`inventory/src/models/reservation_model.cpp`), the destructor's release (17: 374-390), the moved-on check adapted to the
-lot's version (13: 52-64) and the expiry rule (4: the constant at 41-42 of the same file, the filters at lines 119 and
-129 of `inventory/src/db/inventory_store.cpp`); `isBusy` is org's and was called, not copied. None of them is about
-stock. That is the same hand-rolled guarantee in a second module: a lease tied to a connection, released on close, and
-not told to watchers as a change.
+The second lease copied the first's mechanism. By a hand count, 42 lines: the token generator (8: `newToken` in
+`inventory/src/models/reservation_model.cpp`), the destructor's release (17: `ReservationModel::~ReservationModel`), the
+moved-on check adapted to the lot's version (13: `lotMovedOn`) and the expiry rule (4: the lease-length constant in the
+same file, and the two expiry filters in `inventory/src/db/inventory_store.cpp`); `isBusy` is org's and was called, not
+copied. None of them is about stock. That is the same hand-rolled guarantee in a second module: a lease tied to a
+connection, released on close, and not told to watchers as a change.
 
 The verdict stands: the condition was a release through an existing hook without a timer of the model's own, and that
 was measured. What follows from it is that two modules now hand-roll a lease, and both lapses reach no watcher: a

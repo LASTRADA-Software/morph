@@ -119,9 +119,10 @@ TEST_CASE("reservation: a bench that goes away releases its reservation", "[lims
 }
 
 // Two benches at once give one reservation and one refusal naming its holder, never a raw SQL error.
-// This case does not detect a bumpVersion that writes nothing (it passed under that mutation, in 30 assertions):
-// its benches exclude each other through the busy database as well. The next case, which keeps both benches alive and
-// the lot's version moving, is the detector.
+// This case does not detect a bumpVersion that writes nothing: it accepts two reservations by design (a bench that
+// finishes releases its rows before the other reads, so a round where both reserve is legitimate), and a lot whose
+// version never moves lets both reserve, which these CHECKs cannot tell from a sequential round. The next case, which
+// keeps both benches alive and the lot's version moving, is the detector.
 TEST_CASE("reservation: two benches racing for the last lot give one reservation and one named refusal",
           "[lims][inventory][reservation]") {
     DbFixture fixture;
@@ -426,6 +427,39 @@ TEST_CASE("reservation: a bench that lost a lot to a live winner is given the ne
     CHECK(holderOf(102) == "bob");
     CHECK(stockByLot().at("L-EARLY").second == milli(25));
     CHECK(stockByLot().at("L-LATE").second == milli(25));
+}
+
+// Mutation: raise the plain "not enough" refusal where planning finds the holders gone (alice is refused for stock
+// that covers her).
+TEST_CASE("reservation: a bench whose rival lets go between two reads in planning is given the lot",
+          "[lims][inventory][reservation]") {
+    DbFixture fixture;
+    lastLot();
+    ScopedClockOverride const nine{at(2026, 11, 10, 9)};
+    FaultHookGuard const guard;
+    lims::ReservationModel aliceBench;
+    lims::ReservationModel bobBench;
+    {
+        ScopedPrincipal const bob{"bob"};
+        REQUIRE(bobBench.execute(reserve(102)).holder == "bob");
+    }
+    bool fired = false;
+    lims::setInventoryFaultHook([&](std::string_view point, Lightweight::SqlConnection&) {
+        if (point != "reservation.beforeHolders" || fired) {
+            return;
+        }
+        fired = true;
+        ScopedPrincipal const bob{"bob"};
+        static_cast<void>(bobBench.execute(lims::ReleaseReservation{}));
+    });
+    ScopedPrincipal const alice{"alice"};
+    auto const held = aliceBench.execute(reserve(101));
+    CHECK(fired);
+    CHECK(held.holder == "alice");
+    REQUIRE(held.lots.size() == 1);
+    CHECK(held.lots.front().lotNumber == "L-EARLY");
+    CHECK(holderOf(101) == "alice");
+    CHECK(holderOf(102).empty());
 }
 
 // Mutation: leave the sample test out of the write transaction (alice, whose lot no one touched, takes bob's sample

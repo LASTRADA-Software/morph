@@ -263,6 +263,9 @@ struct Attempt {
                 }
             }
             if (!chosen.has_value()) {
+                // A fault point sits between the free-stock reads and the holder read, so a test lets a holder go in
+                // between.
+                inventoryFaultPoint("reservation.beforeHolders", reader.Connection());
                 auto const holders = holdersOn(reader, lots, token);
                 if (holders.empty()) {
                     // Stock that covers the need but was short of it a moment ago means the holders let go between
