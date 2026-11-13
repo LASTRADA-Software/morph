@@ -35,6 +35,23 @@ struct AnalysisPublished {
     ::morph::time::Timestamp publishedAt;
 };
 
+/// @brief The event type of a captured result.
+inline constexpr std::string_view kResultCaptured = "lab.ResultCaptured";
+
+/// @brief A result was captured: a measurement was made, whatever it read.
+struct ResultCaptured {
+    /// @brief The result.
+    ResultId result;
+    /// @brief Its sample.
+    SampleId sample;
+    /// @brief The analysis definition it was captured under.
+    AnalysisId analysis;
+    /// @brief The sample's site.
+    SiteId site;
+    /// @brief When it was captured.
+    ::morph::time::Timestamp capturedAt;
+};
+
 /// @brief Every event lab committed and no relay has marked, oldest first, as journal entries: `actionType` is the
 ///        event type, `idempotencyKey` the event id, `payload` the event as JSON.
 /// @return The entries; reading them changes nothing.

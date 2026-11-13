@@ -83,6 +83,8 @@ struct MovementRecord {
     Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"by"}> by;  // 8
     /// @brief What caused it: `opening`, `receipt:<id>` or the consuming event's id.
     Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"source"}> source;  // 9
+    /// @brief The consuming event's id; empty for a movement no event made.
+    Light::Field<std::optional<Light::SqlAnsiString<128>>, Light::SqlRealName{"event_id"}> eventId;  // 10
 };
 
 /// @brief One requisition: a request to buy, raised at a site and approved by a purchase approver.
@@ -216,6 +218,32 @@ struct ReceiptNumberRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"fiscal_year"}> fiscalYear{0};                           // 2
     /// @brief The number the next receipt takes.
     Light::Field<std::int64_t, Light::SqlRealName{"next"}> next{1};  // 3
+};
+
+/// @brief How much of an item one analysis of a company uses.
+struct RecipeRecord {
+    static constexpr std::string_view TableName = "inventory_recipes";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"analysis_id"}> analysisId{0};                           // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"item_id"}> itemId{0};                                   // 3
+    /// @brief The quantity, in the item's unit.
+    Light::Field<std::int64_t, Light::SqlRealName{"quantity_num"}> quantityNum{0};  // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"quantity_den"}> quantityDen{1};  // 5
+};
+
+/// @brief One event inventory consumed. Its unique event id is the record that the event was consumed once.
+struct ConsumptionEventRecord {
+    static constexpr std::string_view TableName = "inventory_consumed_events";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"event_id"}> eventId;                       // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"sample_id"}> sampleId{0};                               // 3
+    /// @brief The cost of the stock taken, in the company's currency.
+    Light::Field<std::int64_t, Light::SqlRealName{"cost_num"}> costNum{0};  // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"cost_den"}> costDen{1};  // 5
+    /// @brief The ledger's entry for the cost; empty while none is recorded, which is always so when the cost is nil.
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"entry_id"}> entryId;  // 6
 };
 
 }  // namespace lims::db

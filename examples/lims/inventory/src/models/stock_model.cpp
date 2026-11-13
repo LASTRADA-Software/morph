@@ -34,19 +34,6 @@ using ::morph::math::Rational;
 constexpr std::int64_t kMinApprovalHours = 1;
 // A year: the deadline `now + hours × 3,600,000` ms cannot overflow.
 constexpr std::int64_t kMaxApprovalHours = 8760;
-constexpr int kMaxMovementKind = static_cast<int>(MovementKind::Shortfall);
-
-/// @brief The movement kind a row stores.
-/// @param row The row.
-/// @return The kind.
-/// @throws ValidationError if the row stores a kind outside its enumeration.
-[[nodiscard]] MovementKind kindOf(db::MovementRecord const& row) {
-    int const kind = row.kind.Value();
-    if (kind < 0 || kind > kMaxMovementKind) {
-        throw ValidationError{"movement " + std::to_string(row.id.Value()) + " stores a kind outside its range"};
-    }
-    return static_cast<MovementKind>(kind);
-}
 
 /// @brief Throws `NotFound` unless @p company exists.
 /// @param where The action, for the message.
@@ -105,21 +92,6 @@ auto guardedInsert(Insert const& insert, Exists const& exists, MakeConflict cons
         .company = CompanyId{row.companyId.Value()},
         .site = SiteId{row.siteId.Value()},
         .name = std::string{row.name.Value().ToStringView()},
-    };
-}
-
-[[nodiscard]] StockMovementView toView(db::MovementRecord const& row, StockUnit unit) {
-    return StockMovementView{
-        .id = MovementId{static_cast<std::int64_t>(row.id.Value())},
-        .item = ItemId{row.itemId.Value()},
-        .lot = row.lotId.Value().has_value() ? LotId{*row.lotId.Value()} : LotId{},
-        .kind = kindOf(row),
-        .quantity = Measure{Rational{Numerator{row.quantityNum.Value()}, Denominator{row.quantityDen.Value()},
-                                     DecimalPlaces{6}}},
-        .unit = unit,
-        .at = timestampFromMillis(row.at.Value()),
-        .by = std::string{row.by.Value().ToStringView()},
-        .source = std::string{row.source.Value().ToStringView()},
     };
 }
 
@@ -455,7 +427,7 @@ StockOnHandResult StockModel::execute(const StockOnHand& action) {
         for (auto const& row : mapper.Query<db::MovementRecord>()
                                    .Where(::Lightweight::FieldNameOf<&db::MovementRecord::itemId>, "=", *action.item)
                                    .All()) {
-            rows.push_back(toView(row, unit));
+            rows.push_back(inventory::movementView(row, unit));
         }
     }
     std::ranges::sort(rows, {}, [](StockMovementView const& movement) { return *movement.id; });

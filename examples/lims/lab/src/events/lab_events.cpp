@@ -48,6 +48,28 @@ void writeAnalysisPublished(Lightweight::DataMapper& mapper, db::SampleRecord co
     }
 }
 
+void writeResultCaptured(Lightweight::DataMapper& mapper, db::SampleRecord const& sample,
+                         db::ResultRecord const& result, std::int64_t analysisId, std::string const& principal) {
+    std::int64_t const now = nowMillis();
+    ResultCaptured const event{
+        .result = ResultId{static_cast<std::int64_t>(result.id.Value())},
+        .sample = SampleId{static_cast<std::int64_t>(sample.id.Value())},
+        .analysis = AnalysisId{analysisId},
+        .site = SiteId::fromOptional(sample.siteId.Value()),
+        .capturedAt = timestampFromMillis(result.capturedAt.Value()),
+    };
+    db::LabOutboxRecord row;
+    // The sample's version, already moved by the capture, makes a re-capture of the same result a new event.
+    row.eventId = Lightweight::SqlAnsiString<128>{std::string{kResultCaptured} + ":" + std::to_string(*event.result) +
+                                                  ":" + std::to_string(sample.version.Value())};
+    row.eventType = Lightweight::SqlAnsiString<64>{std::string{kResultCaptured}};
+    row.entityKey = Lightweight::SqlAnsiString<64>{std::to_string(*event.sample)};
+    row.payload = Lightweight::SqlDynamicAnsiString<4096>{glz::write_json(event).value_or(std::string{})};
+    row.principal = Lightweight::SqlAnsiString<64>{principal};
+    row.recordedAt = now;
+    mapper.Create(row);
+}
+
 std::vector<::morph::journal::LogEntry> drainLabOutbox() {
     Lightweight::DataMapper mapper;
     auto rows = mapper.Query<db::LabOutboxRecord>().All();

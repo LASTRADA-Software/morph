@@ -653,6 +653,7 @@ ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentrati
     auto sampleRow = loadSample(mapper, *sampleId);
     sampleRow.version = sampleRow.version.Value() + 1;
     mapper.Update(sampleRow);
+    writeResultCaptured(mapper, sampleRow, row, static_cast<std::int64_t>(version.analysis.Value()), author);
 
     if (!(*opKey).empty()) {
         // Inside this transaction, on this connection, and nowhere else: a

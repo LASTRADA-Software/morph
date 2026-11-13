@@ -60,4 +60,28 @@ struct ReceiptToPost {
 /// @throws OutOfRange if a conversion or a sum does not fit an `int64`.
 [[nodiscard]] PostingRequest receiptPostingFor(ReceiptToPost const& receipt);
 
+/// @brief What a consumption gives the ledger to post.
+struct ConsumptionToPost {
+    /// @brief The company whose books it goes in.
+    CompanyId company;
+    /// @brief The company's currency, in which the cost is valued.
+    CurrencyCode currency = CurrencyCode::EUR;
+    /// @brief When the stock was used: the result's capture.
+    ::morph::time::Timestamp date;
+    /// @brief The event that consumed it.
+    std::string eventId;
+    /// @brief The cost of the stock taken, rounded to the currency's decimals.
+    ::morph::math::Rational cost;
+    /// @brief The account the cost is expensed to.
+    std::string consumptionAccount;
+    /// @brief The account stock is valued on.
+    std::string stockAccount;
+};
+
+/// @brief The posting of a consumption: a debit to the consumption account against a credit to the stock account, for
+///        the cost, at a rate of one.
+/// @param consumption The consumption.
+/// @return The request, whose source key is `inventory.consumption:<event id>`.
+[[nodiscard]] PostingRequest consumptionPostingFor(ConsumptionToPost const& consumption);
+
 }  // namespace lims

@@ -152,4 +152,28 @@ LIGHTWEIGHT_SQL_MIGRATION(20261120000006, "Create inventory receipts, their lots
     plan.CreateUniqueIndex("idx_inventory_receipt_numbers_year", "inventory_receipt_numbers",
                            {"company_id", "fiscal_year"});
 }
+LIGHTWEIGHT_SQL_MIGRATION(20261120000007, "Create inventory recipes and consumed events") {
+    plan.CreateTableIfNotExists("inventory_recipes")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("analysis_id", Bigint())
+        .RequiredColumn("item_id", Bigint())
+        .RequiredColumn("quantity_num", Bigint())
+        .RequiredColumn("quantity_den", Bigint());
+    // One quantity of an item per analysis and company; setting it again replaces it.
+    plan.CreateUniqueIndex("idx_inventory_recipes_line", "inventory_recipes",
+                           {"company_id", "analysis_id", "item_id"});
+    plan.CreateTableIfNotExists("inventory_consumed_events")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("event_id", Varchar(128))
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("sample_id", Bigint())
+        .RequiredColumn("cost_num", Bigint())
+        .RequiredColumn("cost_den", Bigint())
+        .Column("entry_id", Bigint());
+    // An event is consumed once: the index refuses the second of two deliveries that raced past the lookup.
+    plan.CreateUniqueIndex("idx_inventory_consumed_events_event", "inventory_consumed_events", {"event_id"});
+    plan.AlterTable("inventory_movements").AddNotRequiredColumn("event_id", Varchar(128));
+    plan.CreateIndex("idx_inventory_movements_event", "inventory_movements", {"event_id"});
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)
