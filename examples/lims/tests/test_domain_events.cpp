@@ -59,21 +59,23 @@ TEST_CASE("domain events: publishing a sample writes one outbox row per result, 
           "[lims][events]") {
     lims::test::LabFixture const fixture;
     auto const ready = lims::test::readyToPublish();
-    CHECK(lims::drainLabOutbox().empty());
+    // The capture wrote its own event; the publication has written none yet.
+    REQUIRE(lims::drainLabOutbox().size() == 1U);
+    CHECK(lims::drainLabOutbox().at(0).actionType == lims::kResultCaptured);
     {
         ScopedPrincipal const alice{"alice"};
         lims::SampleModel bench;
         bench.execute(lims::OpenSample{.sampleId = ready.sample});
         auto const published = bench.execute(lims::PublishSample{});
         auto const rows = lims::drainLabOutbox();
-        REQUIRE(rows.size() == 1U);
-        CHECK(rows.at(0).actionType == lims::kAnalysisPublished);
-        CHECK(rows.at(0).idempotencyKey == "lab.AnalysisPublished:" + std::to_string(*ready.results.at(0)) + ":" +
+        REQUIRE(rows.size() == 2U);
+        CHECK(rows.at(1).actionType == lims::kAnalysisPublished);
+        CHECK(rows.at(1).idempotencyKey == "lab.AnalysisPublished:" + std::to_string(*ready.results.at(0)) + ":" +
                                                std::to_string(*published.version));
-        CHECK(rows.at(0).principal == "alice");
+        CHECK(rows.at(1).principal == "alice");
     }
-    // Draining is not consuming: the row stays until it is marked relayed.
-    CHECK(lims::drainLabOutbox().size() == 1U);
+    // Draining is not consuming: the rows stay until they are marked relayed.
+    CHECK(lims::drainLabOutbox().size() == 2U);
 }
 
 TEST_CASE("domain events: a refused publish writes no outbox row", "[lims][events]") {
@@ -84,7 +86,9 @@ TEST_CASE("domain events: a refused publish writes no outbox row", "[lims][event
     bench.execute(lims::OpenSample{.sampleId = lab.sample});
     bench.execute(lims::ReturnForRework{.reason = "re-run the nitrate"});
     CHECK_THROWS_AS(::morph::model::executeChecked(bench, lims::PublishSample{}), lims::IllegalTransition);
-    CHECK(lims::drainLabOutbox().empty());
+    // Only the capture's event: the refused publication wrote none.
+    REQUIRE(lims::drainLabOutbox().size() == 1U);
+    CHECK(lims::drainLabOutbox().at(0).actionType == lims::kResultCaptured);
 }
 
 // Hypothesis 2. Mutation: make lineOfEvent always empty (the redelivery is refused at the unique index and the relay
@@ -107,17 +111,17 @@ TEST_CASE("Hypothesis 2: an event bills once, across a relay that dies before ma
         dying.markRelayed = [](std::span<morph::journal::LogEntry const> /*rows*/) {
             throw std::runtime_error{"process killed before marking the batch"};
         };
-        dying.sink = std::make_shared<lims::app::BillingEventSink>(events);
+        dying.sink = lims::app::labEventRouter(events);
         CHECK_THROWS_WITH(dying.relay(), Catch::Matchers::ContainsSubstring("process killed"));
     }
     auto const afterCrash = linesOf(lab.sample);
     REQUIRE(afterCrash.size() == 1U);
     CHECK(afterCrash.at(0).state == lims::BillableLineState::Unbilled);
     CHECK(*afterCrash.at(0).amount == morph::math::Rational{40, morph::math::DecimalPlaces{2}});
-    CHECK(lims::drainLabOutbox().size() == 1U);
+    CHECK(lims::drainLabOutbox().size() == 2U);
 
-    // The restart: a fresh relay over the same database redelivers the event, and billing recognises it.
-    CHECK(lims::test::relayLabEvents() == 1U);
+    // The restart: a fresh relay over the same database redelivers both events, and each consumer recognises its own.
+    CHECK(lims::test::relayLabEvents() == 2U);
     auto const afterRestart = linesOf(lab.sample);
     REQUIRE(afterRestart.size() == 1U);
     CHECK(afterRestart.at(0).id == afterCrash.at(0).id);
@@ -128,7 +132,7 @@ TEST_CASE("Hypothesis 2: an event bills once, across a relay that dies before ma
 TEST_CASE("domain events: a line with no price in force is recorded unpriced, not refused", "[lims][events]") {
     lims::test::LabFixture const fixture;
     auto const lab = lims::test::publishedSample();
-    CHECK(lims::test::relayLabEvents() == 1U);
+    CHECK(lims::test::relayLabEvents() == 2U);
     lims::test::grant("bea", lims::LimsRole::BillingClerk);
     auto const lines = linesOf(lab.sample);
     REQUIRE(lines.size() == 1U);
@@ -143,7 +147,7 @@ TEST_CASE("Hypothesis 2: an event the consumer refuses holds back every event af
     auto const lab = lims::test::publishedSample();
     lims::test::billingFor(lab.client);
     CHECK_THROWS_WITH(lims::test::relayLabEvents(), Catch::Matchers::ContainsSubstring("action failed validation"));
-    CHECK(lims::drainLabOutbox().size() == 2U);
+    CHECK(lims::drainLabOutbox().size() == 3U);
     CHECK(linesOf(lab.sample).empty());
 }
 
@@ -213,13 +217,13 @@ TEST_CASE("domain events: the relay acts as a service principal that holds the s
                                          std::string{lims::app::kEventsPrincipal}};
         CHECK_THROWS_WITH(lims::app::relayLabEvents(events), Catch::Matchers::ContainsSubstring("unauthorized"));
     }
-    CHECK(lims::drainLabOutbox().size() == 1U);
+    CHECK(lims::drainLabOutbox().size() == 2U);
     CHECK(linesOf(lab.sample).empty());
     // Granted the role, the same relay delivers.
     lims::test::grantService(std::string{lims::app::kEventsPrincipal});
     lims::app::InternalClient events{rig.server(), lims::test::kServiceSecret,
                                      std::string{lims::app::kEventsPrincipal}};
-    CHECK(lims::app::relayLabEvents(events) == 1U);
+    CHECK(lims::app::relayLabEvents(events) == 2U);
     CHECK(linesOf(lab.sample).size() == 1U);
 }
 
@@ -259,7 +263,7 @@ TEST_CASE("domain events: a client registered for billing whose list starts afte
             .amount = lims::Amount{morph::math::Rational{40, morph::math::DecimalPlaces{2}}},
         });
     }
-    CHECK(lims::test::relayLabEvents() == 1U);
+    CHECK(lims::test::relayLabEvents() == 2U);
     auto const lines = linesOf(lab.sample);
     REQUIRE(lines.size() == 1U);
     CHECK(lines.at(0).state == lims::BillableLineState::Unpriced);
@@ -321,7 +325,7 @@ TEST_CASE("domain events: a line recorded by the relay is fanned out to a connec
     CHECK_FALSE(watcher->heardOf("Billing_Line"));
     lims::app::InternalClient events{rig.server(), lims::test::kServiceSecret,
                                      std::string{lims::app::kEventsPrincipal}};
-    CHECK(lims::app::relayLabEvents(events) == 1U);
+    CHECK(lims::app::relayLabEvents(events) == 2U);
     CHECK(morph::ladder::testkit::pumpUntil([&watcher] { return watcher->heardOf("Billing_Line"); }));
     watcher->close();
 }

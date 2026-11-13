@@ -63,13 +63,21 @@ template <typename Set, typename Guard>
 /// @param quantity The change in the item's unit: positive in, negative out.
 /// @param source What caused it.
 /// @param principal Who.
+/// @param eventId The event that caused it, when one did; the movement is found by it afterwards.
 /// @return The lot's new stock on hand.
 /// @throws Conflict if the lot changed since it was read.
 /// @throws ValidationError if the movement would take the lot below zero.
 /// @throws OutOfRange if the new stock on hand does not fit.
 ::morph::math::Rational moveLot(Lightweight::DataMapper& mapper, db::LotRecord const& lot, MovementKind kind,
                                 ::morph::math::Rational const& quantity, std::string const& source,
-                                std::string const& principal);
+                                std::string const& principal, std::optional<std::string> const& eventId = {});
+
+/// @brief The view of a movement.
+/// @param row The movement's row.
+/// @param unit The unit of the movement's item.
+/// @return The view.
+/// @throws ValidationError if the row stores a kind outside `MovementKind`.
+[[nodiscard]] StockMovementView movementView(db::MovementRecord const& row, StockUnit unit);
 
 /// @brief The view of a lot, with its live reserved quantity.
 /// @param mapper The mapper to read through.

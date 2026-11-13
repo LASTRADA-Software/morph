@@ -1549,6 +1549,53 @@ by its source key. The two postings needed the same
 thing and neither has it: two models' actions committed as one fact, each keeping its authorization, effects and
 journal.
 
+### 46. A captured result consumes reagent from the first-expiring lot, through the same relay, routed by type (hypothesis 2, second instance)
+
+An analysis's reagent use is declared in inventory, per company: a quantity of an item per analysis, referring to the
+analysis by its shared id, because lab cannot know items. Lab writes `lab.ResultCaptured` into its outbox in the
+capture's transaction (every capture path writes it: entry, replayed offline capture, a conflict applied anyway), with
+the event id `lab.ResultCaptured:<result>:<sample version>`, so a re-capture is a new event and consumes again. The
+relay's one sink is now `lims::app::LabEventRouter`, which hands each event to the consumer its type is routed to,
+analysis-published to billing and result-captured to inventory, and refuses a type with no route rather than let the
+relay delete it unconsumed. `RecordConsumption`, sent only by the server's own client, takes each recipe line from the
+lots of the item at the event's site that have not expired (a lot is usable through its expiry instant), first-expiring
+first, each lot's movement conditional on its stock as read; what the lots cannot cover is a shortfall movement (a
+negative quantity naming no lot), not a refusal, because a refused event holds back every event behind it. The cost of
+a consumption is the sum, per lot taken, of the quantity times the lot's unit cost, rounded half-up per lot to the
+company's currency; it is posted through the one ledger port as a debit to the consumption account against a credit to
+stock, under the source key `inventory.consumption:<event id>`, and fixed by the committed consumption, never
+recomputed, so a repeated posting has the same body and the ledger answers the first entry. In
+`PostingMode::SharedTransaction` the entry commits with the consumption; in `PostingMode::Dispatched` the consumption
+commits with its cost and no entry, then the handler (a `Task`) awaits the ledger and stores the entry by a conditional
+update, and a redelivered event whose consumption holds a cost and no entry is posted then: the consumer's answer to a
+redelivery includes "the posting is still owed". A consumption with a cost and no ledger wired is refused with nothing
+moved, because committing it would owe a posting nobody makes; a recipe is refused for a company with no inventory
+settings for the same reason.
+
+**Hypothesis 2 is refuted for its second instance.** Measured in `tests/test_consumption.cpp`: a relay that delivers
+both events and dies before marking, then a fresh relay over the same database, leaves each lot as the first delivery
+left it, the books with the two entries the first delivery made, and the outbox empty. What `lims/app` gained for the
+second consumer is wiring: `InventoryEventSink`, the router and `labEventRouter`, 58 lines in `event_wiring.cpp` (the
+header adds declarations and their documentation), and no delivery loop or cursor: the only `for`s are the router's
+search for the route of an event type, the sinks' filters over what they delivered (the `IActionLog` read API) and the
+router's pass over its sinks for `flush` and `entries`; a search of `app/` and inventory for cursor, last id,
+position and offset finds nothing. What inventory hand-wrote for idempotence is 35 lines counted as billing's 70 were:
+`consumedRow` and `consumptionOfEvent` (24; billing's adapter and `lineOfEvent` were 50), the race catch in
+`storeConsumption` (8; billing's 11) and the unique index with the event id column (3; billing's table and index 8).
+Inventory took the cheaper form decision 32 named: its consumption's own row is the dedup record, so it has no adapter
+and no second table (the table holds the consumption's shortfall, cost and entry beside the event id, 11 more lines
+that are the consumption's and not the guarantee's). It still copied the lookup before the write and the race catch
+after it, in the same shape.
+
+The routing sink decision 32 inferred from reading `OutboxRelay` was needed, and is wiring: one pass of the relay
+delivers both event types through `LabEventRouter`, which refuses an event type it has no route for (measured, same
+file), and a consumer that refuses an event still holds back every event behind it.
+
+That is the same hand-rolled guarantee in a second module: a consumer-side "consume once by event id over the
+consumer's own row" with the lost race settled by a unique index and answered with the winner's result. It is mechanism
+(bookmarks or a CRM consuming an outbox would need it unchanged) and it has now been needed twice, so it is a seam to
+specify; nothing is built for it here.
+
 ### 48. A stock change in one company reaches another company's watching stock keeper (hypothesis 7, second instance)
 
 **Hypothesis 7 is confirmed for its second instance, and what leaks is the same as decision 40's `changes<>` case.**

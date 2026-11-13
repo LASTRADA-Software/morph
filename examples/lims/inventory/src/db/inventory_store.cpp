@@ -21,6 +21,7 @@ using ::morph::math::Denominator;
 using ::morph::math::Numerator;
 using ::morph::math::Rational;
 
+constexpr int kMaxMovementKind = static_cast<int>(MovementKind::Shortfall);
 constexpr int kMaxStockUnit = static_cast<int>(StockUnit::piece);
 constexpr int kMaxRequisitionState = static_cast<int>(RequisitionState::Ordered);
 constexpr int kMaxOrderState = static_cast<int>(OrderState::Received);
@@ -53,7 +54,8 @@ std::size_t changedRows(Lightweight::DataMapper& mapper, std::string const& sql)
 }
 
 Rational moveLot(Lightweight::DataMapper& mapper, db::LotRecord const& lot, MovementKind kind,
-                 Rational const& quantity, std::string const& source, std::string const& principal) {
+                 Rational const& quantity, std::string const& source, std::string const& principal,
+                 std::optional<std::string> const& eventId) {
     Rational const before{Numerator{lot.onHandNum.Value()}, Denominator{lot.onHandDen.Value()}, DecimalPlaces{6}};
     auto const after = ::morph::math::checkedAdd(before, quantity);
     if (!after.has_value()) {
@@ -81,8 +83,30 @@ Rational moveLot(Lightweight::DataMapper& mapper, db::LotRecord const& lot, Move
     movement.at = nowMillis();
     movement.by = Lightweight::SqlAnsiString<64>{principal};
     movement.source = Lightweight::SqlAnsiString<128>{source};
+    if (eventId.has_value()) {
+        movement.eventId = Lightweight::SqlAnsiString<128>{*eventId};
+    }
     mapper.Create(movement);
     return *after;
+}
+
+StockMovementView movementView(db::MovementRecord const& row, StockUnit unit) {
+    int const kind = row.kind.Value();
+    if (kind < 0 || kind > kMaxMovementKind) {
+        throw ValidationError{"movement " + std::to_string(row.id.Value()) + " stores a kind outside its range"};
+    }
+    return StockMovementView{
+        .id = MovementId{static_cast<std::int64_t>(row.id.Value())},
+        .item = ItemId{row.itemId.Value()},
+        .lot = row.lotId.Value().has_value() ? LotId{*row.lotId.Value()} : LotId{},
+        .kind = static_cast<MovementKind>(kind),
+        .quantity = Measure{Rational{Numerator{row.quantityNum.Value()}, Denominator{row.quantityDen.Value()},
+                                     DecimalPlaces{6}}},
+        .unit = unit,
+        .at = timestampFromMillis(row.at.Value()),
+        .by = std::string{row.by.Value().ToStringView()},
+        .source = std::string{row.source.Value().ToStringView()},
+    };
 }
 
 LotStockView lotView(Lightweight::DataMapper& mapper, db::LotRecord const& lot) {

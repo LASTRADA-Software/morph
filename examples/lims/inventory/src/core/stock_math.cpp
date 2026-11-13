@@ -68,4 +68,23 @@ PostingRequest receiptPostingFor(ReceiptToPost const& receipt) {
     return request;
 }
 
+PostingRequest consumptionPostingFor(ConsumptionToPost const& consumption) {
+    PostingRequest request{.company = consumption.company,
+                           .date = consumption.date,
+                           .sourceKey = "inventory.consumption:" + consumption.eventId,
+                           .sourceReference = "consumption " + consumption.eventId,
+                           .currency = consumption.currency,
+                           .rate = Rate{::morph::math::Rational{1, ::morph::math::DecimalPlaces{6}}},
+                           .lines = {}};
+    request.lines.push_back(PostingLine{.accountCode = consumption.consumptionAccount,
+                                        .side = PostingSide::Debit,
+                                        .amount = Amount{consumption.cost},
+                                        .companyAmount = Amount{consumption.cost}});
+    request.lines.push_back(PostingLine{.accountCode = consumption.stockAccount,
+                                        .side = PostingSide::Credit,
+                                        .amount = Amount{consumption.cost},
+                                        .companyAmount = Amount{consumption.cost}});
+    return request;
+}
+
 }  // namespace lims

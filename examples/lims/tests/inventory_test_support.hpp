@@ -225,6 +225,41 @@ inline void inventoryBooks() {
                                              ::morph::math::DecimalPlaces{6}}}}));
 }
 
+/// @brief What `consumptionSetUp` made.
+struct ConsumptionSetUp {
+    /// @brief The stock.
+    StockSetUp stock;
+    /// @brief The lots: `L-EARLY` (0.040 L, expiring 31 January 2027) and `L-LATE` (1 L, expiring 30 June 2027).
+    LotStockView early;
+    /// @brief The later lot.
+    LotStockView late;
+};
+
+/// @brief `stockSetUp`, lots of the reagent in the cold room, and a recipe: each analysis of id 1 to 20 uses 25 mL of
+///        the reagent. The events principal holds the service role at the seeded company.
+/// @param withLateLot Whether `L-LATE` is recorded; without it, `L-EARLY` is the last lot.
+/// @return The ids; `late` is empty without the late lot.
+inline ConsumptionSetUp consumptionSetUp(bool withLateLot = true) {
+    ConsumptionSetUp setUp{.stock = stockSetUp(), .early = {}, .late = {}};
+    setUp.early = openingLot(setUp.stock.reagent, setUp.stock.coldRoom, "L-EARLY", at(2027, 1, 31), litres(40),
+                             StockUnit::litre);
+    if (withLateLot) {
+        setUp.late = openingLot(setUp.stock.reagent, setUp.stock.coldRoom, "L-LATE", at(2027, 6, 30), litres(1000),
+                                StockUnit::litre);
+    }
+    ScopedPrincipal const kim{"kim"};
+    StockModel stock;
+    for (std::int64_t analysis = 1; analysis <= 20; ++analysis) {
+        static_cast<void>(stock.execute(SetRecipe{.company = seededCompany(),
+                                                  .analysis = AnalysisId{analysis},
+                                                  .item = setUp.stock.reagent,
+                                                  .quantity = millilitres(25),
+                                                  .unit = StockUnit::millilitre}));
+    }
+    grantService(std::string{app::kEventsPrincipal});
+    return setUp;
+}
+
 /// @brief A server, the posting principal's client on it and the ledger port installed in a mode, as `PostingRig`
 ///        gives billing: goods receipt posts through the same port.
 using ReceiptRig = PostingRig;

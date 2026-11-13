@@ -117,6 +117,6 @@ TEST_CASE(
     // Dispatched: the relay, through the events client on the same server.
     lims::app::InternalClient events{rig.server(), lims::test::kServiceSecret,
                                      std::string{lims::app::kEventsPrincipal}};
-    REQUIRE(lims::app::relayLabEvents(events) == 1U);
+    REQUIRE(lims::app::relayLabEvents(events) == 2U);
     CHECK(ServerConnection::eventually([&] { return watcher->heardOf("Billing_Line"); }));
 }
