@@ -202,7 +202,8 @@ public:
     };
 
     /// @brief Every declared module's count. A tracked read.
-    /// @return The counts, in declaration order; a denied one, and one of a module the catalog does not list, left out.
+    /// @return The counts, in declaration order; a denied one, and one of a module the catalog does not list, left
+    /// out.
     [[nodiscard]] std::vector<ModuleState> moduleCounts() const {
         std::vector<ModuleState> out;
         for (std::size_t index = 0; index < _parts->modules.size(); ++index) {
@@ -433,8 +434,8 @@ private:
 
     // A count is a JSON integer, or the wire form of a `morph::units::Quantity`, whose magnitude is a whole number: a
     // `Quantity` is written as its exact value (`num`, `den`, `dp`), which a client reads as a decimal, and with a
-    // `unit` as a quantity. The unit is the application's and is not read. Anything else, and a negative number, is not
-    // a count.
+    // `unit` as a quantity. The unit is the application's and is not read. Anything else, and a negative number, is
+    // not a count.
     [[nodiscard]] std::optional<long long> countOf(Value const& reply, std::string const& field,
                                                    std::string const& query) const {
         Value const* const found = reply.field(field);
@@ -442,7 +443,8 @@ private:
         if (found != nullptr) {
             if (std::int64_t const* const plain = found->asInt()) {
                 number = *plain;
-            } else if (Decimal const* const exact = found->asDecimal(); exact != nullptr && exact->value.denominator == 1) {
+            } else if (Decimal const* const exact = found->asDecimal();
+                       exact != nullptr && exact->value.denominator == 1) {
                 number = exact->value.numerator;
             } else if (Quantity const* const quantity = found->asQuantity();
                        quantity != nullptr && quantity->value.denominator == 1) {

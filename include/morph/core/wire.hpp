@@ -895,6 +895,29 @@ inline constexpr std::string_view kExecuteTimeoutMessage = "timeout";
 /// A client maps a failure carrying exactly this text to the error kind `denied` (`ui::detail::defaultErrorKind`).
 inline constexpr std::string_view kUnauthorizedMessage = "unauthorized";
 
+/// @brief The failure of a control request (`register`, `attach`, `instances`) that the server's authoriser refused.
+///
+/// Its `what()` reads `"<request> failed: unauthorized"`, as any other control failure's does; the type is what tells
+/// a client the authoriser said no, since the text is no longer exactly `kUnauthorizedMessage`.
+class UnauthorizedError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+/// @brief The exception a failed control request settles with.
+///
+/// @param what    The request: `"register"`, `"attach"`, `"instances"`.
+/// @param message The `err` reply's message.
+/// @return An `UnauthorizedError` when @p message is `kUnauthorizedMessage`, else a `std::runtime_error`; both read
+///         `"<what> failed: <message>"`.
+[[nodiscard]] inline std::exception_ptr controlFailure(std::string_view what, std::string const& message) {
+    std::string const text = std::string{what} + " failed: " + message;
+    if (message == kUnauthorizedMessage) {
+        return std::make_exception_ptr(UnauthorizedError{text});
+    }
+    return std::make_exception_ptr(std::runtime_error{text});
+}
+
 /// @brief Builds a `hello` envelope announcing the sender's protocol version.
 ///
 /// Exchanged once per connection, before any `register`/`execute`. See

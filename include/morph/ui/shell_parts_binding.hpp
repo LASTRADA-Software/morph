@@ -168,8 +168,13 @@ private:
             if (state.count && *state.count > 0) {
                 badge = NavigatorBadge{.text = shellCountText(*state.count), .tone = Tone::Neutral};
             }
-            // A module the navigator does not list is one this person may not see: its count has nowhere to go.
-            static_cast<void>(navigator.setModuleBadge(state.module, badge, state.failed));
+            // The model leaves out every module the catalog does not list, so a module the navigator then does not
+            // list means the two disagree about the catalog: reported, once per module.
+            if (!navigator.setModuleBadge(state.module, badge, state.failed) && _options.model.onProblem &&
+                _unlisted.insert(state.module).second) {
+                _options.model.onProblem("the shell's module count names " + state.module +
+                                         ", which the catalog lists and the navigator does not");
+            }
         }
         for (ModuleCount const& declared : _parts.modules) {
             if (!shown.contains(declared.module)) {
@@ -183,6 +188,7 @@ private:
     ShellParts _parts;
     ShellBindingOptions _options;
     std::unique_ptr<ShellPartsModel> _model;
+    std::set<std::string, std::less<>> _unlisted;
     std::unique_ptr<reactive::Effect> _view;
     std::unique_ptr<reactive::Effect> _counts;
     std::unique_ptr<reactive::Effect> _ready;

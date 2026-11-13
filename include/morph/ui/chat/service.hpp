@@ -137,7 +137,7 @@ public:
     [[nodiscard]] std::string handle(wire::Envelope const& request, session::IAuthorizer const& authorizer,
                                      backend::ConnectionFacts& facts) override {
         if (!authorizer.authorize(request.session, "ui", "chat")) {
-            return err(request, "unauthorized");
+            return err(request, std::string{wire::kUnauthorizedMessage});
         }
         if (request.kind == kTurnKind) {
             return Shared::startTurn(_shared, request, facts.cid);

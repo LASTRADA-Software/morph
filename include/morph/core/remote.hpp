@@ -2195,7 +2195,8 @@ private:
                 // deployer opts into gating registration by overriding
                 // authorizeRegister. No instance is constructed on denial.
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 // A `shared` register naming a primary is a register-or-attach
@@ -2244,7 +2245,8 @@ private:
                 }
                 stampVerifiedPrincipal(env, cid);
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 acquireSharedInstance(env, reply, cid, ::morph::exec::detail::ModelId{env.modelId});
@@ -2261,7 +2263,8 @@ private:
                 // by an unauthenticated or unauthorized caller either.
                 stampVerifiedPrincipal(env, cid);
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 applyAssign(env);
@@ -2276,7 +2279,8 @@ private:
                 // can refuse listing without refusing use. It discloses the live
                 // key set to anyone admitted — see docs/spec/security.md.
                 if (!_authorizer->authorize(env.session, env.typeId, {})) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 handleInstances(env, reply);
@@ -2293,7 +2297,8 @@ private:
                 // payload fingerprint of every action — so it must not be
                 // reachable by a caller the server would not let execute.
                 if (!_authorizer->authorize(env.session, env.typeId, {})) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, _dispatcher.schemasJson(env.typeId))));
@@ -2310,7 +2315,8 @@ private:
                 // names no type, so both ids are empty; it lets a verifying
                 // authorizer refuse a caller with no valid token outright.
                 if (!_authorizer->authorize(env.session, {}, {})) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 // Per-instance authorization: consult the hook with the recorded
@@ -2319,7 +2325,8 @@ private:
                 // down an instance it does not own.
                 if (const auto* inst = _instances.find(mid);
                     inst != nullptr && !_authorizer->authorizeInstance(env.session, {}, {}, mid.v, inst->owner)) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 // Release exactly the reference *this* connection (`cid`, the
@@ -2401,8 +2408,8 @@ private:
         MORPH_ZONE("RemoteServer::dispatchExecute");
         MORPH_ZONE_TEXT(env.session.requestId);
         noteOwner("RemoteServer::admitExecute");
-        auto reject = [&env, &reply](const char* message) {
-            reply(::morph::wire::encode(::morph::wire::makeErr(message, env.callId)));
+        auto reject = [&env, &reply](std::string_view message) {
+            reply(::morph::wire::encode(::morph::wire::makeErr(std::string{message}, env.callId)));
         };
         // Authenticated and authorized together, once, on entry: one look at
         // the token answers both, so a token cannot pass one check and expire
@@ -2421,7 +2428,7 @@ private:
             return;
         }
         if (!admission.allowed) {
-            reject("unauthorized");
+            reject(::morph::wire::kUnauthorizedMessage);
             return;
         }
         // Make the identity authoritative: the principal verified on entry
@@ -2451,7 +2458,7 @@ private:
         // env.session carries the verified principal (stamped just above), so an
         // ownership authorizer compares the recorded owner against it.
         if (!_authorizer->authorizeInstance(env.session, env.modelType, env.actionType, mid.v, inst->owner)) {
-            reject("unauthorized");
+            reject(::morph::wire::kUnauthorizedMessage);
             return;
         }
         // Action-evolution policy gate (opt-in; see `PayloadCompleteness`).
@@ -2463,7 +2470,7 @@ private:
             const std::string missing = missingRequiredFields(env.modelType, env.actionType, env.body);
             if (!missing.empty()) {
                 const std::string message = "payload missing required field(s): " + missing;
-                reject(message.c_str());
+                reject(message);
                 return;
             }
         }
@@ -3016,7 +3023,7 @@ public:
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
-        throw std::runtime_error("register failed: " + reply.message);
+        std::rethrow_exception(::morph::wire::controlFailure("register", reply.message));
     }
 
     /// @brief Acquires an instance on the server for @p request and settles
@@ -3333,7 +3340,8 @@ private:
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
-        throw std::runtime_error((request.current.v == 0U ? "register failed: " : "attach failed: ") + reply.message);
+        std::rethrow_exception(
+            ::morph::wire::controlFailure(request.current.v == 0U ? "register" : "attach", reply.message));
     }
 
     void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {

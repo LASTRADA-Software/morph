@@ -59,10 +59,16 @@ what goes in the request is in the declaration. A request with neither is `{}`.
 | Type | Members | The action answers |
 |---|---|---|
 | `ContextSwitch` | `model`, `action`, `localeField`, `optionsField`, `labelField`, `valueField`, `detailField`, `groupField` | a reply whose `optionsField` is a list of objects. Each has a `label` (`labelField`), a `value` (`valueField`, a string or an integer), and optionally a `detail` (`detailField`, a second line) and a `group` (`groupField`, a heading the option sits under; adjacent options with the same group share one heading). An option such as "all sites" is just an option the application returns |
-| `ModuleCount` | `module`, `model`, `action`, `countField`, `contextField`, `localeField` | a reply whose `countField` is a non-negative integer, or the wire form of a `morph::units::Quantity` whose magnitude is a whole number (written as its exact value, `{"num":7,"den":1,"dp":0}`; a `unit` member, when present, is the application's and is not read): the module's open work. `module` is a `CatalogEntry::module`; one entry per module, because an action type belongs to one model |
+| `ModuleCount` | `module`, `model`, `action`, `countField`, `contextField`, `localeField` | a count (below) |
 | `SearchSource` | `module`, `title`, `model`, `action`, `queryField`, `resultsField`, `contextField`, `localeField` | a request with a string member `queryField` (the typed text) and a reply whose `resultsField` is a list of hits. `title` heads the source's hits: a catalogue key or text; empty uses the module's label |
 | `InboxEntry` | `screen`, `sources` | `screen` is the screen id the button opens; `sources` is a list of `ModuleCount`; the button's count is the sum of the counts of the sources that answered |
 | `PrincipalMenu` | `model`, `action`, `contextField`, `localeField`, `nameField`, `detailField`, `subtitleField`, `rolesField`, `locales`, `formats` | a reply with the person's name (`nameField`), optionally a detail line for the menu (`detailField`) and a line under the name in the trigger (`subtitleField`), and `rolesField`, a list of roles |
+
+A **count** is the module's open work, in the reply's `countField`. `module` is a `CatalogEntry::module`; there is one
+entry per module, because an action type belongs to one model. A count is a non-negative integer, or the wire form of
+a `morph::units::Quantity` whose magnitude is a whole number: a `Quantity` is written as its exact value,
+`{"num":7,"den":1,"dp":0}`, and with a `unit` member as a quantity. Either is read when whole and non-negative; the
+`unit`, when present, is the application's and is not read.
 
 A **role** is a string, or an object with `label` and optionally `detail` (a scope line such as the limit it holds).
 `locales` is the list of language tags the menu offers; empty derives it from the bundle's message catalogues
@@ -90,8 +96,9 @@ with no sources.
 **What the server checks.** `UiRegistry::setShellParts(parts, reads)` also checks every name a part gives against the
 *full* registry, whoever may see it, and refuses an unknown one there, naming the path (`/shell/search/0/module`): a
 `module` of `modules` or `search` that no registered screen's entry has, the inbox's `screen` that no entry has, and
-an action the catalog does not know (the loader's usual refusal). `build` makes the same check, for a screen added after
-the parts. A misconfiguration is therefore the application's to see when the bundle is built, not something a client
+an action the catalog does not know (the loader's usual refusal). Screens are added before the parts: registered
+screens are never removed, so a screen added after them cannot make a name they give unknown, and `build` does not
+check again. A misconfiguration is therefore the application's to see when the bundle is built, not something a client
 reports to a person. A reply that lacks a named field is the client's report
 ([Failure and refusal](#failure-and-refusal)).
 
@@ -99,7 +106,7 @@ reports to a person. A reply that lacks a named field is the client's report
 is the `ui::Catalog` the application builds, with `author::CatalogFacts::action<Model, Action>()` for each, from the
 same facts a screen's builders gather; `setShellParts` consults it behind the registry's own catalog for the actions
 the parts name, and the `ui-catalog` reply carries their facts (model, effects, records) as it carries a screen's. A
-refused call leaves the catalog as it was.
+later call replaces the facts of an earlier one, and a refused call leaves the catalog as it was.
 
 ## How a part is read
 
@@ -141,13 +148,15 @@ too, so while the panel is open a change to a record they hold refreshes them.
 nor reported. A server's refusal reaches the client as the `err` message `unauthorized`, which the session's default
 error classifier names `denied` (`ui::detail::defaultErrorKind`); that covers a read made before anyone is signed in,
 as the public sign-in screen's shell makes, as well as one a signed-in person's roles do not permit. Any other failure
-of a read is still reported. A denied switcher (neither the switcher nor, with no scope, the reads that need one are drawn or asked), count, search
-source or person's menu is left out; an inbox whose every source is denied
+of a read is still reported. A denied switcher (neither the switcher nor, with no scope, the reads that need one are
+drawn or asked), count, search source or person's menu is left out; an inbox whose every source is denied
 draws no button, and a denied source contributes nothing to the sum.
 
-**Hidden from this person.** A part that names a module, or an inbox that names a screen, that the catalog does not list
-to this person (the authoriser hides it, or nobody is signed in and it is not public) is left out in the same way: no
-count, no search source, no button, and nothing reported. Its reads are not drawn, and their failures are not reported.
+**Hidden from this person.** A part that names a module, or an inbox that names a screen, that the catalog does not
+list to this person (the authoriser hides it, or nobody is signed in and it is not public) is left out in the same
+way: no count, no search source, no button, and nothing reported. Its reads are not drawn, and their failures are not
+reported. They are still sent: the queries are mounted at load for every part, so a hidden part's read is asked, and
+refused, on every context change and refresh, and holding it back is not required.
 Whether a name is real is the server's check at load; whether it is visible is the catalog the client holds.
 
 ## Typed values and the locale
@@ -297,8 +306,8 @@ which a renderer draws as muted text and exposes as static text, not as a disabl
 
 A part is a convenience, so a failure of one never blocks the rest of the frame, and every failure is reported through
 `ShellOptions::onProblem`, once per part: a reply that lacks a named field, a count that is not a non-negative integer
-or a whole quantity,
-a hit that is dropped, an action the dispatcher refuses for any reason other than authorisation. A part that failed draws
+or a whole quantity, a hit that is dropped, a count of a module that the catalog lists and the navigator does not (the
+two disagree), an action the dispatcher refuses for any reason other than authorisation. A part that failed draws
 as the [states](#loading-empty-and-error-states) say: an error marker, a failed-source line, the switcher disabled. The
 start waits for the switcher only until it fails.
 

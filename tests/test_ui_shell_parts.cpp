@@ -151,7 +151,10 @@ struct Rig {
 
     /// @param declared The parts.
     /// @param facts    What the catalog says (`screenListed`, `moduleListed`, `replyIsRecord`); the rest is ignored.
-    explicit Rig(ui::ShellParts declared, ui::ShellModelOptions facts = {}) : parts{std::move(declared)} {
+    /// @param navigated The navigator's entries.
+    explicit Rig(ui::ShellParts declared, ui::ShellModelOptions facts = {},
+                 std::vector<ui::CatalogEntry> navigated = entries())
+        : parts{std::move(declared)} {
         std::string const text =
             std::string{R"({"vocab":"ui/1","id":"app","shell":)"} + glz::write_json(parts).value_or("{}") + "}";
         document = ui::testing::loadOrFail(text, ui::testing::corpusCatalog());
@@ -160,7 +163,7 @@ struct Rig {
         root = std::move(*mounted);
         ui::ShellFrameOptions options;
         options.applicationName = "lims";
-        options.navigator.entries = entries();
+        options.navigator.entries = std::move(navigated);
         options.onSignOut = [this] { ++signedOut; };
         frame = std::make_unique<ui::ShellFrame>(h.backend, nullptr, std::move(options));
         ui::ShellBindingOptions binding_options;
@@ -884,15 +887,16 @@ void addScreens(ui::UiRegistry& served) {
         made.title = "t";
         made.module = module;
         REQUIRE(served
-                    .addScreen(std::move(made), R"({"vocab":"ui/1","id":")" + id +
-                                                    R"(","view":{"kind":"text","text":"x"}})")
+                    .addScreen(std::move(made),
+                               R"({"vocab":"ui/1","id":")" + id + R"(","view":{"kind":"text","text":"x"}})")
                     .has_value());
     }
 }
 
 }  // namespace
 
-// Mutation: moduleHidden / screenHidden are not asked (the part that names what the catalog hides is reported, or drawn).
+// Mutation: moduleHidden / screenHidden are not asked (the part that names what the catalog hides is reported, or
+// drawn).
 TEST_CASE("shell parts: a part naming a module or screen the catalog hides is left out and nothing is reported",
           "[ui][shell][parts]") {
     ui::ShellModelOptions facts;
@@ -916,6 +920,30 @@ TEST_CASE("shell parts: a part naming a module or screen the catalog hides is le
     CHECK(r.has("Text", "shell_search_source_0"));
     CHECK_FALSE(r.has("Text", "shell_search_source_1"));
     CHECK(r.prop("Row", "shell_inbox_group", "visible") == "false");
+}
+
+// Mutation: showCounts ignores setModuleBadge's false (the catalog and the navigator disagree, silently).
+TEST_CASE("shell parts: a counted module the navigator does not list is reported once", "[ui][shell][parts]") {
+    std::vector<ui::CatalogEntry> lacking = entries();
+    std::erase_if(lacking, [](ui::CatalogEntry const& made) { return made.module == "billing"; });
+    Rig r{fullParts(), {}, std::move(lacking)};
+    r.reply("Lims_ClientScopes", kScopes);
+    r.reply("Shell_Rows", R"({"total":3})");
+    r.reply("Lims_ClientCount", R"({"open":4})");
+    CHECK(r.prop("Badge", "nav_module_badge_lab", "text") == "3");
+    CHECK(std::ranges::count_if(r.problems, [](std::string const& text) {
+              return text.contains(
+                  "the shell's module count names billing, which the catalog lists and the "
+                  "navigator does not");
+          }) == 1);
+    // Reading again, after the scope changes, does not report the same module twice.
+    r.problems.clear();
+    r.h.backend.chooseMenuEntry(r.id("Menu", "shell_context"), {3});
+    r.h.settle();
+    r.reply("Shell_Rows", R"({"total":4})");
+    r.reply("Lims_ClientCount", R"({"open":5})");
+    CHECK(r.prop("Badge", "nav_module_badge_lab", "text") == "4");
+    CHECK(r.problems.empty());
 }
 
 // Mutation: countOf reads only a plain integer (a quantity count is reported as no integer), or accepts a fraction.
@@ -1021,7 +1049,8 @@ TEST_CASE("shell parts: the registry refuses a part that names a module, a scree
 
 // Mutation: setShellParts ignores `reads` (the actions only the parts name are not in the catalog, and the app
 // document is refused at load).
-TEST_CASE("shell parts: the facts given with the parts are the catalog of the actions they read", "[ui][shell][parts]") {
+TEST_CASE("shell parts: the facts given with the parts are the catalog of the actions they read",
+          "[ui][shell][parts]") {
     ui::ShellParts parts;
     parts.context = ui::ContextSwitch{.model = "Lims_ClientModel",
                                       .action = "Lims_ClientScopes",
@@ -1039,11 +1068,13 @@ TEST_CASE("shell parts: the facts given with the parts are the catalog of the ac
 
     ui::Catalog reads;
     reads.action = [](std::string_view id) -> std::optional<ui::ActionInfo> {
-        return id == "Lims_ClientScopes" ? std::optional<ui::ActionInfo>{ui::ActionInfo{.modelType = "Lims_ClientModel"}}
-                                         : std::nullopt;
+        return id == "Lims_ClientScopes"
+                   ? std::optional<ui::ActionInfo>{ui::ActionInfo{.modelType = "Lims_ClientModel"}}
+                   : std::nullopt;
     };
     reads.model = [](std::string_view id) -> std::optional<ui::ModelInfo> {
-        return id == "Lims_ClientModel" ? std::optional<ui::ModelInfo>{ui::ModelInfo{.stateless = true}} : std::nullopt;
+        return id == "Lims_ClientModel" ? std::optional<ui::ModelInfo>{ui::ModelInfo{.stateless = true}}
+                                        : std::nullopt;
     };
     ui::UiRegistry accepted{ui::ApplicationInfo{.id = "probe", .version = "1"}, base};
     auto const set = accepted.setShellParts(parts, reads);
@@ -1053,6 +1084,42 @@ TEST_CASE("shell parts: the facts given with the parts are the catalog of the ac
     REQUIRE(built.has_value());
     REQUIRE((*built)->actions.has_value());
     CHECK((*built)->actions->contains("Lims_ClientScopes"));
+}
+
+// Mutation: setShellParts composes the reads onto the catalog already composed (the facts of an earlier call stay).
+TEST_CASE("shell parts: a later setShellParts replaces the facts of an earlier one", "[ui][shell][parts]") {
+    ui::ShellParts parts;
+    parts.context = ui::ContextSwitch{.model = "Lims_ClientModel",
+                                      .action = "Lims_ClientScopes",
+                                      .localeField = {},
+                                      .optionsField = "options",
+                                      .labelField = "label",
+                                      .valueField = "value",
+                                      .detailField = {},
+                                      .groupField = {}};
+    ui::Catalog base;
+    base.action = [](std::string_view) -> std::optional<ui::ActionInfo> { return std::nullopt; };
+    base.model = [](std::string_view) -> std::optional<ui::ModelInfo> { return std::nullopt; };
+    ui::Catalog reads;
+    reads.action = [](std::string_view id) -> std::optional<ui::ActionInfo> {
+        return id == "Lims_ClientScopes"
+                   ? std::optional<ui::ActionInfo>{ui::ActionInfo{.modelType = "Lims_ClientModel"}}
+                   : std::nullopt;
+    };
+    reads.model = [](std::string_view id) -> std::optional<ui::ModelInfo> {
+        return id == "Lims_ClientModel" ? std::optional<ui::ModelInfo>{ui::ModelInfo{.stateless = true}}
+                                        : std::nullopt;
+    };
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}, base};
+    REQUIRE(served.setShellParts(parts, reads).has_value());
+    // The second call gives no facts, so the first call's are no longer the catalog's.
+    auto const second = served.setShellParts(parts);
+    REQUIRE_FALSE(second.has_value());
+    CHECK(second.error().reason.contains("is not in the catalog"));
+    // A refused call leaves the facts of the call before it.
+    REQUIRE(served.setShellParts(parts, reads).has_value());
+    CHECK_FALSE(served.setShellParts(parts).has_value());
+    CHECK(served.build().has_value());
 }
 
 // Mutation: setShellParts keeps the parts it refused; or an app document's own `shell` is overwritten.

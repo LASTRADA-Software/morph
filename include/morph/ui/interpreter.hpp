@@ -510,8 +510,14 @@ namespace detail {
         return "timeout";
     } catch (backend::BackendChangedError const&) {
         return "backendChanged";
+    } catch (model::ActionRefusal const&) {
+        // An action's own refusal is an answer about its data, whatever its message says, never the authoriser's.
+        return "error";
+    } catch (wire::UnauthorizedError const&) {
+        // A refused control request (register, attach): its text carries the request's name before the refusal.
+        return "denied";
     } catch (std::runtime_error const& refused) {
-        // The server's authoriser says no with this one text, and no exception type tells it from another failure.
+        // The authoriser says no to an execute with this one text; no exception type tells it from another failure.
         return std::string_view{refused.what()} == wire::kUnauthorizedMessage ? "denied" : "error";
     } catch (...) {
         return "error";

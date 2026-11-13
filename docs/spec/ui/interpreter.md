@@ -42,7 +42,9 @@ Read this before changing what a mounted document does. What a document may say 
 `staleTime` is measured on, how long an unused entry is kept (five minutes), the `Catalog`
 (`stateless` decides an alias's default instance; an action's `secretFields` are never cached or kept
 in `result`) and the error classifier (the bridge's own failures map to `offline`, `timeout` and
-`backendChanged`; a server's refusal, the `err` message `unauthorized`, to `denied`; everything else is `error`) and the `watcher`, which sends the cache's `watch` and `unwatch` requests
+`backendChanged`; a server's refusal, the `err` message `unauthorized` of an execute or a refused register or attach,
+to `denied`; an `ActionRefusal` and everything else is `error`) and the `watcher`, which sends the cache's `watch` and
+`unwatch` requests
 (`ui::watcherOver` builds one over a remote source's exchange; empty for a local source), and `maxInlineFileBytes`,
 the most bytes a document moves inline in one file (default `kDefaultInlineFileBytes`, 1 MiB). `Session` construction
 throws `std::invalid_argument` for 0 and for a cap above `kMaxInlineFileBytes`, ⌊(`wire::kMaxEnvelopeBytes` −
