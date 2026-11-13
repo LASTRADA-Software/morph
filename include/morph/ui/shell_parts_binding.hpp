@@ -89,6 +89,15 @@ public:
             }
         };
         handlers.onFormat = [model](std::size_t index) { model->chooseFormat(index); };
+        handlers.onHelp = [this, model] {
+            if (auto const target = model->helpScreen()) {
+                if (_options.open) {
+                    _options.open(*target);
+                }
+            } else {
+                static_cast<void>(model->runHelp());
+            }
+        };
         _frame->setPartsHandlers(std::move(handlers));
         if (!_parts.modules.empty()) {
             _frame->navigator().setModuleGroups(true);
@@ -138,6 +147,10 @@ public:
     /// @brief The model.
     /// @return It.
     [[nodiscard]] ShellPartsModel& model() noexcept { return *_model; }
+
+    /// @brief Tells the frame the client's connection state, which its foot draws.
+    /// @param state The state.
+    void setConnection(ConnectionState state) { _model->setConnection(state); }
 
     /// @brief Whether the switcher has answered, failed, or none is declared. A tracked read.
     /// @return Whether the start screen may mount.

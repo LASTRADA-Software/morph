@@ -797,6 +797,9 @@ private:
         if (_shellParts->inbox && !hasScreen(_shellParts->inbox->screen)) {
             return unknown("/shell/inbox/screen", "screen", _shellParts->inbox->screen);
         }
+        if (_shellParts->help && !_shellParts->help->screen.empty() && !hasScreen(_shellParts->help->screen)) {
+            return unknown("/shell/help/screen", "screen", _shellParts->help->screen);
+        }
         return std::nullopt;
     }
 

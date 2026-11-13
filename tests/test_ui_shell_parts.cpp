@@ -851,8 +851,8 @@ TEST_CASE(
     REQUIRE_FALSE(mutationClash.has_value());
     CHECK(mutationClash.error().reason.contains("reserved"));
     auto const own = ui::loadDocumentText(
-        R"({"vocab":"ui/1","id":"app","state":{"shellHelp":{"init":""},"shellCounter":{"init":0}},"shell":)" + shell +
-            "}",
+        R"({"vocab":"ui/1","id":"app","state":{"shellHelper":{"init":""},"shellCounter":{"init":0}},"shell":)" +
+            shell + "}",
         ui::LoadOptions{.catalog = catalog});
     CHECK(own.has_value());
 
@@ -1154,4 +1154,268 @@ TEST_CASE("shell parts: the registry refuses parts that do not load, and an app 
     auto const refused = other.setShellParts(fullParts());
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().reason.contains("its own `shell`"));
+}
+
+namespace {
+
+/// Every part, with the product mark, its version and a help button that opens a screen.
+ui::ShellParts chromeParts() {
+    ui::ShellParts parts = fullParts();
+    parts.brand = ui::BrandMark{.title = "Lims", .icon = {}, .version = "v4.2"};
+    parts.help = ui::HelpEntry{.screen = "lims.about", .model = {}, .action = {}, .params = {}};
+    return parts;
+}
+
+}  // namespace
+
+// Mutation: ShellFrame::showBrand leaves the application's name visible beside the mark, or draws no first letter in
+// the square.
+TEST_CASE("shell parts: the brand stands where the application's name did, and the version in the foot",
+          "[ui][shell][parts]") {
+    Rig r{chromeParts()};
+    CHECK(r.prop("Row", "shell_brand", "visible") == "true");
+    CHECK(r.prop("Text", "shell_brand_title", "text") == "Lims");
+    // Without an icon the square holds the title's first letter.
+    CHECK(r.prop("Badge", "shell_brand_mark", "text") == "L");
+    CHECK(r.prop("Text", "shell_application", "visible") == "false");
+    CHECK(r.prop("Text", "shell_version", "text") == "v4.2");
+    CHECK(r.prop("Text", "shell_version", "visible") == "true");
+
+    // An icon of the theme's set replaces the letter.
+    ui::ShellParts withIcon = chromeParts();
+    withIcon.brand->icon = "flask";
+    Rig iconed{withIcon};
+    CHECK(iconed.prop("Badge", "shell_brand_mark", "icon") == "flask");
+    CHECK(iconed.prop("Badge", "shell_brand_mark", "text").empty());
+
+    // A frame with no brand keeps the application's name and draws no version.
+    Rig plain{fullParts()};
+    CHECK(plain.prop("Row", "shell_brand", "visible") == "false");
+    CHECK(plain.prop("Text", "shell_application", "visible") != "false");
+    CHECK(plain.prop("Text", "shell_version", "visible") == "false");
+}
+
+// Mutation: ShellFrame::showBrand makes the mark only once (a changed icon is never drawn).
+TEST_CASE("shell parts: a brand whose icon changes is drawn again with the new icon", "[ui][shell][parts]") {
+    Rig r{chromeParts()};
+    ui::ShellPartsView view = r.binding->model().view();
+    view.brand.icon = "flask";
+    r.frame->setParts(view);
+    CHECK(r.prop("Badge", "shell_brand_mark", "icon") == "flask");
+    view.brand.icon = "beaker";
+    r.frame->setParts(view);
+    CHECK(r.prop("Badge", "shell_brand_mark", "icon") == "beaker");
+    CHECK(r.h.backend.all("Badge").size() >= 1);
+    view.brand.icon.clear();
+    r.frame->setParts(view);
+    CHECK(r.prop("Badge", "shell_brand_mark", "text") == "L");
+}
+
+// Mutation: ShellPartsBinding's help handler opens nothing, or drops the declared params.
+TEST_CASE("shell parts: the help button opens its screen with the declared params", "[ui][shell][parts]") {
+    ui::ShellParts parts = chromeParts();
+    parts.help->params = {{"tab", std::string{"licence"}}, {"page", 2.0}, {"wide", true}};
+    Rig r{parts};
+    CHECK(r.prop("Button", "shell_help", "visible") == "true");
+    CHECK(r.prop("Button", "shell_help", "label") == "?");
+    CHECK(r.prop("Button", "shell_help", "a11yName") == "Help");
+    r.h.backend.click(r.id("Button", "shell_help"));
+    r.h.settle();
+    REQUIRE(r.opened.size() == 1);
+    CHECK(r.opened.front().screen == "lims.about");
+    CHECK(r.opened.front().params.at("tab") == ui::Value{"licence"});
+    CHECK(r.opened.front().params.at("page") == ui::Value{2});
+    CHECK(r.opened.front().params.at("wide") == ui::Value{true});
+
+    // The accessible name follows the language.
+    r.h.session.setLocale("de");
+    r.h.settle();
+    CHECK(r.prop("Button", "shell_help", "a11yName") == "Hilfe");
+}
+
+// Mutation: the help button runs nothing for an action (the dispatcher sees no call), or sends no params.
+TEST_CASE("shell parts: the help button runs its action with the declared params", "[ui][shell][parts]") {
+    ui::ShellParts parts = fullParts();
+    parts.help = ui::HelpEntry{.screen = {},
+                               .model = "Lims_ClientModel",
+                               .action = "Lims_ClientHelp",
+                               .params = {{"topic", std::string{"shell"}}, {"page", 2.0}}};
+    Rig r{parts};
+    CHECK(r.h.dispatcher.count("Lims_ClientHelp") == 0);
+    r.h.backend.click(r.id("Button", "shell_help"));
+    r.h.settle();
+    REQUIRE(r.h.dispatcher.count("Lims_ClientHelp") == 1);
+    std::string const body = r.h.dispatcher.calls.at(r.h.dispatcher.last("Lims_ClientHelp")).body;
+    CHECK(body.contains(R"("topic":"shell")"));
+    CHECK(body.contains(R"("page":2)"));
+    CHECK(r.opened.empty());
+    // A refused run is reported once, as any part's failure is.
+    r.h.fail(r.h.dispatcher.last("Lims_ClientHelp"));
+    r.h.settle();
+    CHECK(r.problems.size() == 1);
+}
+
+// Mutation: ShellPartsModel::helpView ignores screenListed (the button opens a screen the person cannot see).
+TEST_CASE("shell parts: a help screen the catalog hides from the person leaves the button out", "[ui][shell][parts]") {
+    ui::ShellModelOptions facts;
+    facts.screenListed = [](std::string_view id) { return id != "lims.about"; };
+    Rig r{chromeParts(), std::move(facts)};
+    CHECK(r.prop("Button", "shell_help", "visible") == "false");
+    CHECK(r.problems.empty());
+    Rig none{fullParts()};
+    CHECK(none.prop("Button", "shell_help", "visible") == "false");
+}
+
+// Mutation: the compact navigation menu lacks the help entry, or maps its path to another entry.
+TEST_CASE("shell parts: compact, help is an entry of the navigation menu and the foot ends it", "[ui][shell][parts]") {
+    Rig r{chromeParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    r.reply("Lims_ClientPerson", R"({"name":"Anna","roles":[]})");
+    r.binding->setConnection(ui::ConnectionState::Reconnecting);
+    r.frame->setCompact(true);
+    r.h.settle();
+    CHECK(r.prop("Button", "shell_help", "visible") == "false");
+    int const menu = r.id("Menu", "shell_nav_menu");
+    std::string const items = r.h.backend.prop(menu, "items");
+    CHECK(items.contains("Help"));
+    CHECK(items.contains("Reconnecting… · v4.2;enabled=false;heading"));
+    r.h.backend.chooseMenuEntry(menu, {6});
+    r.h.settle();
+    REQUIRE(r.opened.size() == 1);
+    CHECK(r.opened.front().screen == "lims.about");
+}
+
+TEST_CASE("shell parts: initials are the first letters of the first and last names, titles skipped",
+          "[ui][shell][parts]") {
+    CHECK(ui::shellInitials("Dr. Anna Meyer") == "AM");
+    CHECK(ui::shellInitials("Julia Schneider") == "JS");
+    CHECK(ui::shellInitials("  anna   de la  cruz ") == "AC");
+    CHECK(ui::shellInitials("Cher") == "C");
+    CHECK(ui::shellInitials("Dr.") == "D");
+    CHECK(ui::shellInitials("Ünal Çelik") == "ÜÇ");
+    CHECK(ui::shellInitials("").empty());
+    CHECK(ui::shellInitials("   ").empty());
+}
+
+// Mutation: ShellPartsModel::principalView leaves the initials empty, or the frame passes none to the trigger; the
+// switcher's caret is None.
+TEST_CASE("shell parts: the person's trigger carries an avatar and the switcher's an up-and-down chevron",
+          "[ui][shell][parts]") {
+    Rig r{chromeParts()};
+    r.reply("Lims_ClientScopes", kScopes);
+    r.reply("Lims_ClientPerson", R"({"name":"Dr. Anna Meyer","role":"Lab director","roles":[]})");
+    int const person = r.id("Menu", "shell_principal_menu");
+    CHECK(r.h.backend.prop(person, "avatar") == "AM");
+    CHECK(r.h.backend.prop(person, "caret") == "Down");
+    CHECK(r.prop("Menu", "shell_context", "caret") == "UpDown");
+    CHECK(r.prop("Menu", "shell_context", "avatar").empty());
+}
+
+// Mutation: ShellFrame::showBrand draws one state's words for every state, or none for Offline.
+TEST_CASE("shell parts: the foot says whether the client is connected, reconnecting or offline, in the language",
+          "[ui][shell][parts]") {
+    Rig r{chromeParts()};
+    // The client says nothing until it knows: no state is drawn.
+    CHECK(r.prop("Text", "shell_connection", "visible") == "false");
+    r.binding->setConnection(ui::ConnectionState::Connected);
+    r.h.settle();
+    CHECK(r.prop("Text", "shell_connection", "text") == "Connected");
+    CHECK(r.prop("Text", "shell_connection_dot", "role") == "Success");
+    r.binding->setConnection(ui::ConnectionState::Reconnecting);
+    r.h.settle();
+    CHECK(r.prop("Text", "shell_connection", "text") == "Reconnecting…");
+    r.binding->setConnection(ui::ConnectionState::Offline);
+    r.h.settle();
+    CHECK(r.prop("Text", "shell_connection", "text") == "Offline");
+    CHECK(r.prop("Text", "shell_connection_dot", "role") == "Error");
+    r.binding->setConnection(ui::ConnectionState::Reconnecting);
+    r.h.session.setLocale("de");
+    r.h.settle();
+    CHECK(r.prop("Text", "shell_connection", "text") == "Verbindung wird wiederhergestellt…");
+    r.binding->setConnection(ui::ConnectionState::Connected);
+    r.h.settle();
+    CHECK(r.prop("Text", "shell_connection", "text") == "Verbunden");
+    CHECK(r.prop("Row", "shell_footer", "visible") == "true");
+}
+
+// Mutation: checkShellParts accepts a help button with both, or neither, of a screen and an action; or a brand with
+// no title.
+TEST_CASE("shell parts: the loader refuses a help button without one destination, and a nameless brand",
+          "[ui][shell][parts]") {
+    auto const refusalOf = [](auto const& change) -> std::optional<ui::Refusal> {
+        ui::ShellParts parts = chromeParts();
+        change(parts);
+        std::string const text =
+            std::string{R"({"vocab":"ui/1","id":"app","shell":)"} + glz::write_json(parts).value_or("{}") + "}";
+        auto loaded = ui::loadDocumentText(text, ui::LoadOptions{.catalog = ui::testing::corpusCatalog()});
+        if (loaded) {
+            return std::nullopt;
+        }
+        return loaded.error();
+    };
+    CHECK_FALSE(refusalOf([](ui::ShellParts&) {}).has_value());
+
+    auto const neither = refusalOf([](ui::ShellParts& parts) { parts.help->screen.clear(); });
+    REQUIRE(neither.has_value());
+    CHECK(neither->path == "/shell/help");
+
+    auto const both = refusalOf([](ui::ShellParts& parts) { parts.help->action = "Lims_ClientHelp"; });
+    REQUIRE(both.has_value());
+    CHECK(both->path == "/shell/help");
+
+    auto const modelless = refusalOf([](ui::ShellParts& parts) {
+        parts.help->screen.clear();
+        parts.help->action = "Lims_ClientHelp";
+    });
+    REQUIRE(modelless.has_value());
+    CHECK(modelless->path == "/shell/help/model");
+
+    auto const strayModel = refusalOf([](ui::ShellParts& parts) { parts.help->model = "Lims_ClientModel"; });
+    REQUIRE(strayModel.has_value());
+    CHECK(strayModel->path == "/shell/help/model");
+
+    auto const nameless = refusalOf([](ui::ShellParts& parts) { parts.brand->title.clear(); });
+    REQUIRE(nameless.has_value());
+    CHECK(nameless->path == "/shell/brand/title");
+
+    // The name the button's action is lowered under is the shell's: a document of its own cannot take it.
+    ui::ShellParts action = chromeParts();
+    action.help = ui::HelpEntry{.screen = {}, .model = "Lims_ClientModel", .action = "Lims_ClientHelp", .params = {}};
+    std::string const text = std::string{R"({"vocab":"ui/1","id":"app","state":{"shellHelp":{"init":1}},"shell":)"} +
+                             glz::write_json(action).value_or("{}") + "}";
+    CHECK_FALSE(ui::loadDocumentText(text, ui::LoadOptions{.catalog = ui::testing::corpusCatalog()}).has_value());
+}
+
+// Mutation: checkShellNames skips the help screen, or the loader's catalog check skips the lowered mutation.
+TEST_CASE("shell parts: the registry refuses a help button that names a screen or an action it does not hold",
+          "[ui][shell][parts]") {
+    auto const refusalOf = [](ui::ShellParts parts, ui::Catalog catalog = {}) {
+        ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}, std::move(catalog)};
+        addScreens(served);
+        return served.setShellParts(std::move(parts));
+    };
+    ui::ShellParts screen = fullParts();
+    screen.help = ui::HelpEntry{.screen = "lims.lab.samples", .model = {}, .action = {}, .params = {}};
+    CHECK(refusalOf(screen).has_value());
+    screen.help->screen = "lims.abou";
+    auto const unknown = refusalOf(screen);
+    REQUIRE_FALSE(unknown.has_value());
+    CHECK(unknown.error().path == "/shell/help/screen");
+    CHECK(unknown.error().reason.contains("screen `lims.abou`"));
+
+    ui::ShellParts action = fullParts();
+    action.help = ui::HelpEntry{.screen = {}, .model = "Lims_ClientModel", .action = "Lims_ClientHelp", .params = {}};
+    CHECK(refusalOf(action).has_value());
+    ui::Catalog known;
+    known.model = [](std::string_view) -> std::optional<ui::ModelInfo> { return ui::ModelInfo{.stateless = true}; };
+    known.action = [](std::string_view id) -> std::optional<ui::ActionInfo> {
+        if (id != "Lims_ClientHelp") {
+            return ui::ActionInfo{.modelType = "Lims_ClientModel"};
+        }
+        return std::nullopt;
+    };
+    auto const missing = refusalOf(action, known);
+    REQUIRE_FALSE(missing.has_value());
+    CAPTURE(missing.error().reason);
+    CHECK(missing.error().reason.contains("is not in the catalog"));
 }

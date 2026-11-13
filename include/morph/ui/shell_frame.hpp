@@ -546,6 +546,26 @@ private:
         }
     }
 
+    // The words of a connection state.
+    [[nodiscard]] std::string connectionText(ConnectionState state) const {
+        ShellLabels const& labels = _parts.labels;
+        return state == ConnectionState::Connected      ? labels.connected
+               : state == ConnectionState::Reconnecting ? labels.reconnecting
+                                                        : labels.offline;
+    }
+
+    // The foot's words: the connection state, then the version, joined by a dot.
+    [[nodiscard]] std::string footText() const {
+        std::string text;
+        if (_parts.connection) {
+            text = connectionText(*_parts.connection);
+        }
+        if (_parts.brand.shown && !_parts.brand.version.empty()) {
+            text += (text.empty() ? "" : " · ") + _parts.brand.version;
+        }
+        return text;
+    }
+
     // The navigation menu: the scope switcher, the navigator's entries (the modules as submenus when they are
     // grouped), the person's menu, and a sign-out entry where no person's menu holds one. `_navTargets` says what
     // each top-level entry is, so a chosen path is mapped by what the frame built and not by a position.
@@ -567,6 +587,10 @@ private:
         for (std::size_t index = 0; index < navigation.size(); ++index) {
             add(std::move(navigation.at(index)), NavTarget::Kind::Navigator, firstNavigation);
         }
+        if (_parts.help.shown) {
+            add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
+            add(MenuEntry{.label = _parts.labels.help}, NavTarget::Kind::Help, 0);
+        }
         if (_parts.principal.shown) {
             add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
             MenuEntry person = principalMenuEntry();
@@ -574,6 +598,15 @@ private:
         } else if (_onSignOut) {
             add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
             add(MenuEntry{.label = _parts.labels.signOut, .description = _principalName}, NavTarget::Kind::SignOut, 0);
+        }
+        // The sidebar's foot is not on screen, so its text ends the menu as a heading.
+        if (std::string const foot = footText(); !foot.empty()) {
+            add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
+            MenuEntry heading;
+            heading.label = foot;
+            heading.heading = true;
+            heading.enabled = false;
+            add(std::move(heading), NavTarget::Kind::Separator, 0);
         }
         _navMenu->setItems(entries);
     }
@@ -594,6 +627,11 @@ private:
             case NavTarget::Kind::SignOut:
                 if (_onSignOut && path.size() == 1) {
                     _onSignOut();
+                }
+                return;
+            case NavTarget::Kind::Help:
+                if (path.size() == 1 && _handlers.onHelp) {
+                    _handlers.onHelp();
                 }
                 return;
             case NavTarget::Kind::Context:
@@ -664,7 +702,7 @@ private:
 
     // What a top-level entry of the navigation menu is.
     struct NavTarget {
-        enum class Kind : std::uint8_t { Context, Navigator, Principal, SignOut, Separator };
+        enum class Kind : std::uint8_t { Context, Navigator, Principal, SignOut, Help, Separator };
         Kind kind = Kind::Separator;
         // For a navigator entry, the index of the first one among the menu's entries.
         std::size_t offset = 0;
@@ -720,13 +758,24 @@ private:
     };
 
     [[nodiscard]] bool barParts() const noexcept {
-        return _parts.search.shown || _parts.inbox.shown || _parts.principal.shown;
+        return _parts.search.shown || _parts.inbox.shown || _parts.principal.shown || _parts.help.shown;
     }
 
     // The widgets the parts are drawn with, all hidden until `setParts` says otherwise.
     void buildParts() {
+        // The product mark stands where the application's name does, above the switcher.
+        _brand = _backend.createStack(_side.get(), Axis::Horizontal);
+        _side->moveChild(*_brand, 2);
+        _brand->setGap(2);
+        _brand->setAlign(Align::Center);
+        _brand->setTestId("shell_brand");
+        _brand->setVisible(false);
+        makeBrandMark({});
+        _brandTitle = _backend.createText(_brand.get());
+        _brandTitle->setRole(TextRole::Heading);
+        _brandTitle->setTestId("shell_brand_title");
         _context = _backend.createMenu(_side.get(), MenuStyle::Button);
-        _side->moveChild(*_context, 2);
+        _side->moveChild(*_context, 3);
         _context->setTestId("shell_context");
         _context->setVisible(false);
         _context->setOnActivate([this](std::vector<std::size_t> const& path) {
@@ -788,6 +837,15 @@ private:
         _inboxError->setTestId("shell_inbox_error");
         _inboxError->setText("!");
         _inboxError->setVisible(false);
+        _help = _backend.createButton(_tools.get());
+        _help->setTestId("shell_help");
+        _help->setLabel("?");
+        _help->setVisible(false);
+        _help->setOnClick([this] {
+            if (_handlers.onHelp) {
+                _handlers.onHelp();
+            }
+        });
         _principalMenu = _backend.createMenu(_tools.get(), MenuStyle::Button);
         _principalMenu->setTestId("shell_principal_menu");
         _principalMenu->setVisible(false);
@@ -812,7 +870,65 @@ private:
         _overlayBody->setTestId("shell_search_overlay_results");
         _overlayBody->setGap(1);
 
+        // The sidebar's foot: the connection state, then the application's version at the far end.
+        _footer = _backend.createStack(_side.get(), Axis::Horizontal);
+        _footer->setGap(2);
+        _footer->setAlign(Align::Center);
+        _footer->setTestId("shell_footer");
+        _footer->setVisible(false);
+        _footerDot = _backend.createText(_footer.get());
+        _footerDot->setText("●");
+        _footerDot->setTestId("shell_connection_dot");
+        _footerState = _backend.createText(_footer.get());
+        _footerState->setRole(TextRole::Muted);
+        _footerState->setTestId("shell_connection");
+        _footerState->setLayout({.width = Sizing::stretch(), .height = {}});
+        _footerVersion = _backend.createText(_footer.get());
+        _footerVersion->setRole(TextRole::Muted);
+        _footerVersion->setTestId("shell_version");
+
         _root->setKeys({"Ctrl+K"}, [this](std::string const&) { focusSearch(); });
+    }
+
+    // The brand's square. A badge takes its icon once, so a mark with another icon is made again, at the row's start.
+    void makeBrandMark(std::string const& icon) {
+        _brandMark = _backend.createBadge(_brand.get());
+        _brand->moveChild(*_brandMark, 0);
+        _brandMark->setTestId("shell_brand_mark");
+        _brandMark->setTone(Tone::Ok);
+        _brandMark->setShape(ControlShape::Round);
+        if (!icon.empty()) {
+            _brandMark->setIcon(icon);
+        }
+        _brandIcon = icon;
+    }
+
+    // The product mark and the foot.
+    void showBrand() {
+        ShellBrandView const& brand = _parts.brand;
+        _name->setVisible(!brand.shown);
+        _brand->setVisible(brand.shown);
+        if (brand.shown) {
+            if (brand.icon != _brandIcon) {
+                makeBrandMark(brand.icon);
+            }
+            // Without an icon the square holds the title's first letter.
+            _brandMark->setText(brand.icon.empty() && !brand.title.empty() ? detail::firstLetter(brand.title)
+                                                                           : std::string{});
+            _brandTitle->setText(brand.title);
+        }
+        bool const connection = _parts.connection.has_value();
+        _footer->setVisible(connection || (brand.shown && !brand.version.empty()));
+        _footerDot->setVisible(connection);
+        _footerState->setVisible(connection);
+        if (connection) {
+            _footerState->setText(connectionText(*_parts.connection));
+            _footerDot->setRole(*_parts.connection == ConnectionState::Connected      ? TextRole::Success
+                                : *_parts.connection == ConnectionState::Reconnecting ? TextRole::Muted
+                                                                                      : TextRole::Error);
+        }
+        _footerVersion->setVisible(brand.shown && !brand.version.empty());
+        _footerVersion->setText(brand.version);
     }
 
     // Everything the parts draw, from the view and the frame's form.
@@ -832,7 +948,9 @@ private:
             _context->setTrigger(MenuTrigger{.label = label.empty() ? labels.scope : label,
                                              .icon = {},
                                              .emphasis = ButtonEmphasis::Normal,
-                                             .detail = detail});
+                                             .detail = detail,
+                                             .avatar = {},
+                                             .caret = MenuCaret::UpDown});
             _context->setEnabled(_parts.context.enabled);
             _context->setAccessibleName(labels.scope + ": " + label + (detail.empty() ? "" : ", " + detail));
         }
@@ -875,10 +993,18 @@ private:
         _principalMenu->setVisible(person.shown && !_compact);
         if (person.shown) {
             _principalMenu->setItems(principalEntries());
-            _principalMenu->setTrigger(MenuTrigger{
-                .label = person.name, .icon = {}, .emphasis = ButtonEmphasis::Ghost, .detail = person.subtitle});
+            _principalMenu->setTrigger(MenuTrigger{.label = person.name,
+                                                   .icon = {},
+                                                   .emphasis = ButtonEmphasis::Ghost,
+                                                   .detail = person.subtitle,
+                                                   .avatar = person.initials,
+                                                   .caret = MenuCaret::Down});
             _principalMenu->setAccessibleName(labels.signedInAs + " " + person.name);
         }
+        // The help button.
+        _help->setVisible(_parts.help.shown && !_compact);
+        _help->setAccessibleName(labels.help);
+        showBrand();
         _principal->setVisible(!_principalInHead && !person.shown);
         _signOut->setVisible(static_cast<bool>(_onSignOut) && !person.shown);
         _navigator->setSearchShown(!_parts.search.shown);
@@ -1303,6 +1429,14 @@ private:
     std::unique_ptr<StackWidget> _chatSlot;
     std::unique_ptr<SpacerWidget> _chatBottom;
     std::unique_ptr<SpacerWidget> _chatEnd;
+    std::unique_ptr<StackWidget> _brand;
+    std::unique_ptr<BadgeWidget> _brandMark;
+    std::unique_ptr<TextWidget> _brandTitle;
+    std::unique_ptr<StackWidget> _footer;
+    std::unique_ptr<TextWidget> _footerDot;
+    std::unique_ptr<TextWidget> _footerState;
+    std::unique_ptr<TextWidget> _footerVersion;
+    std::unique_ptr<ButtonWidget> _help;
     std::unique_ptr<MenuWidget> _context;
     std::unique_ptr<StackWidget> _tools;
     std::unique_ptr<StackWidget> _searchBox;
@@ -1339,6 +1473,7 @@ private:
     bool _popoverOpen = false;
     std::function<void()> _onSignOut;
     std::string _principalName;
+    std::string _brandIcon;
     std::string _titleText;
     std::vector<TextSpan> _titleSpans;
     std::string _headSurface;

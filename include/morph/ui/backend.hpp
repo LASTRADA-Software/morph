@@ -380,6 +380,13 @@ struct MenuEntry {
     bool operator==(MenuEntry const&) const = default;
 };
 
+/// @brief The marker a button-style menu's trigger draws after its text, to say that it opens.
+enum class MenuCaret : std::uint8_t {
+    None,    ///< No marker.
+    Down,    ///< A chevron pointing down: a menu of actions or of a person.
+    UpDown,  ///< An up and a down chevron: a menu that chooses one of several values, such as a scope.
+};
+
 /// @brief The trigger of a button-style menu.
 struct MenuTrigger {
     /// @brief The trigger's text and accessible name; empty for an icon-only trigger.
@@ -390,6 +397,12 @@ struct MenuTrigger {
     ButtonEmphasis emphasis = ButtonEmphasis::Normal;
     /// @brief A second line under the label; empty for none. The accessible name is the label, then the detail.
     std::string detail;
+    /// @brief Initials drawn in a filled circle before the label (a person's avatar); empty for none. The terminal
+    ///        draws them in brackets.
+    std::string avatar;
+    /// @brief The marker drawn after the text. The terminal's trigger always ends in a marker, since it has no frame
+    ///        to say that it opens; `None` and `Down` both draw a down chevron there.
+    MenuCaret caret = MenuCaret::None;
 
     /// @brief Memberwise equality.
     /// @return Whether every field matches.

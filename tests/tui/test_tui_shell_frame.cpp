@@ -318,3 +318,56 @@ TEST_CASE("tui shell frame: the declared parts are drawn, each usable on the ter
     CHECK(std::ranges::any_of(after,
                               [](std::string const& row) { return row.contains("Sample") && row.contains("S-7"); }));
 }
+
+// Mutation: MenuButtonImpl::triggerText drops the avatar, or draws a down chevron for the switcher; the frame leaves
+// the brand, the help button or the foot out.
+TEST_CASE("tui shell frame: the brand, the help button, the avatar, the chevrons and the foot are drawn",
+          "[tui][shell]") {
+    FramedPage wide{160};
+    ui::ShellPartsView view;
+    view.brand = ui::ShellBrandView{.shown = true, .title = "Lims", .icon = {}, .version = "v4.2"};
+    view.context =
+        ui::ShellContextView{.shown = true,
+                             .options = {ui::ShellOptionView{.label = "Koeln", .detail = "EUR", .group = {}}},
+                             .chosen = 0,
+                             .enabled = true};
+    view.help = ui::ShellHelpView{.shown = true};
+    view.principal = ui::ShellPrincipalView{
+        .shown = true, .name = "Anna Meyer", .subtitle = "Lab director", .initials = "AM", .detail = {}};
+    view.connection = ui::ConnectionState::Reconnecting;
+    wide.frame->setParts(view);
+    static_cast<void>(wide.loop.runUntilIdle());
+    wide.backend.fit();
+    wide.screen.draw();
+    std::vector<std::string> rows = rowsOf(wide.screen);
+    auto const shown = [&rows](std::string const& text) {
+        return std::ranges::any_of(rows, [&text](std::string const& row) { return row.contains(text); });
+    };
+    CHECK(shown("Lims"));
+    // The switcher's marker says it chooses a value; the person's says it opens.
+    CHECK(shown("Koeln · EUR ↕"));
+    CHECK(shown("[[AM] Anna Meyer · Lab director ▾]"));
+    CHECK(shown("[ ? ]"));
+    CHECK(shown("Reconnecting…"));
+    CHECK(shown("v4.2"));
+
+    view.connection = ui::ConnectionState::Offline;
+    wide.frame->setParts(view);
+    static_cast<void>(wide.loop.runUntilIdle());
+    wide.backend.fit();
+    wide.screen.draw();
+    rows = rowsOf(wide.screen);
+    CHECK(shown("Offline"));
+    CHECK_FALSE(shown("Reconnecting…"));
+
+    // A frame that knows nothing of the connection draws no foot.
+    view.connection.reset();
+    view.brand.version.clear();
+    wide.frame->setParts(view);
+    static_cast<void>(wide.loop.runUntilIdle());
+    wide.backend.fit();
+    wide.screen.draw();
+    rows = rowsOf(wide.screen);
+    CHECK_FALSE(shown("Offline"));
+    CHECK_FALSE(shown("v4.2"));
+}

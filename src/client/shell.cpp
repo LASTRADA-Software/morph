@@ -335,6 +335,7 @@ public:
         _session->setEnvironmentValue("platform", ui::Value{std::string{platformName()}});
         _session->setEnvironmentValue("backend", ui::Value{source.backendName()});
         _session->setEnvironmentValue("online", ui::Value{source.online()});
+        showConnection(source.online());
         if (_followingConnection) {
             return;
         }
@@ -342,8 +343,34 @@ public:
         source.onOnline([this, alive = std::weak_ptr<bool>{_alive}](bool online) {
             if (auto const live = alive.lock(); live != nullptr && *live && _session) {
                 _session->setEnvironmentValue("online", ui::Value{online});
+                showConnection(online);
             }
         });
+    }
+
+    /// Takes the connection state the sidebar's foot draws from the transport: connected while it is up, reconnecting
+    /// from the moment it drops (every transport retries by itself), and offline once it has stayed down for
+    /// `kOfflineAfter`.
+    void showConnection(bool online) {
+        _offlineTimer.cancel();
+        _connection = online ? ui::ConnectionState::Connected : ui::ConnectionState::Reconnecting;
+        if (!online) {
+            _offlineTimer =
+                _context->scheduler().after(ui::kOfflineAfter, [this, alive = std::weak_ptr<bool>{_alive}] {
+                    if (auto const live = alive.lock(); live != nullptr && *live) {
+                        _connection = ui::ConnectionState::Offline;
+                        passConnection();
+                    }
+                });
+        }
+        passConnection();
+    }
+
+    /// Hands the connection state to the declared parts, which draw it, when there are any.
+    void passConnection() {
+        if (_parts) {
+            _parts->setConnection(_connection);
+        }
     }
 
     /// Writes the backend's width class into the session before the first mount, then each change of it, so every
@@ -536,9 +563,9 @@ private:
         // The shell mounts the head row itself, in its top bar: an in-page head would show it a second time. An
         // application that declares the search, the inbox or the person's menu has the top bar for them, and its
         // screens keep their heads in the page.
-        _headInPage =
-            _appDocument && _appDocument->shell &&
-            (!_appDocument->shell->search.empty() || _appDocument->shell->inbox || _appDocument->shell->principal);
+        _headInPage = _appDocument && _appDocument->shell &&
+                      (!_appDocument->shell->search.empty() || _appDocument->shell->inbox ||
+                       _appDocument->shell->principal || _appDocument->shell->help);
         _workspace =
             std::make_unique<ui::Workspace>(_context->runtime(), *_backend, *_host, std::move(tabs), &_frame->page(),
                                             _headInPage ? ui::HeadPlacement::InPage : ui::HeadPlacement::External);
@@ -639,6 +666,7 @@ private:
         _contextReady = !_appDocument->shell->context.has_value();
         _parts = std::make_unique<ui::ShellPartsBinding>(*_session, *_appRoot, *_appDocument->shell, *_frame,
                                                          std::move(options));
+        passConnection();
     }
 
     // The switcher answered, failed or is not declared: the screen that waited mounts.
@@ -1230,6 +1258,8 @@ private:
     std::set<std::string, std::less<>> _reportedCatalogueProblems;
     // Whether the source's connection-state listener is registered.
     bool _followingConnection = false;
+    ui::ConnectionState _connection = ui::ConnectionState::Connected;
+    reactive::TimerHandle _offlineTimer;
     // Whether the source's connect and event listeners are registered.
     bool _listening = false;
     std::unique_ptr<ApplicationHost> _application;

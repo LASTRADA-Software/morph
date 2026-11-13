@@ -164,6 +164,9 @@ void MenuImpl::setTrigger(ui::MenuTrigger const& trigger) {
     write("triggerLabel", toQString(trigger.label));
     write("triggerDetail", toQString(trigger.detail));
     write("triggerIcon", toQString(trigger.icon));
+    write("triggerAvatar", toQString(trigger.avatar));
+    // MorphMenu's `triggerCaret`: 0 none, 1 down, 2 up and down.
+    write("triggerCaret", trigger.caret == ui::MenuCaret::Down ? 1 : trigger.caret == ui::MenuCaret::UpDown ? 2 : 0);
     // MorphMenu's `triggerEmphasis`: 0 normal, 1 primary, 2 danger, 3 ghost.
     int shown = 0;
     if (trigger.emphasis == ui::ButtonEmphasis::Primary) {

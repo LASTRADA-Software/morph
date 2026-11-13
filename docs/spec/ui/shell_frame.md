@@ -124,13 +124,19 @@ input:
 | `context` | the switcher: `shown`, `options` (each `label`, `detail`, `group`), `chosen` (an index, or none), `enabled` |
 | `search` | `shown`, `hint`, `sources` (each `title`, `failed`, `pending`, `hits` of `kind`, `title`, `detail`) |
 | `inbox` | `shown`, `title`, `count` (none while unanswered), `failed` |
-| `principal` | `shown`, `name`, `subtitle`, `detail`, `roles` (each `label`, `detail`), `locales` and `formats` (each `tag`, `label`), `chosenLocale`, `chosenFormat` |
+| `principal` | `shown`, `name`, `subtitle`, `detail`, `roles`, `locales`, `formats`, `chosenLocale`, `chosenFormat` |
+| `brand` | `shown`, `title`, `icon`, `version` |
+| `help` | `shown` |
+| `connection` | the client's `ConnectionState`, or none while the client does not say |
 | `labels` | the texts the frame draws that are not data: the catalogue-resolved strings of `morph.shell.*` |
+
+A role has a `label` and a `detail`; `locales` and `formats` are lists of `tag` and `label`; the principal's `initials`
+fill the avatar. `ConnectionState` is `Connected`, `Reconnecting` or `Offline`.
 
 The search text, the highlight and whether the panel is open are the frame's own state, because they follow the person's
 typing and keys; `setSearchText` of the model receives each edit. `ShellPartsHandlers` is what the frame reports:
 `onContext(index)`, `onSearchText(text)`, `onSearchOpen(source, hit)`, `onSearchOpenAll()`, `onInbox()`,
-`onLocale(index)` and `onFormat(index)`; the frame's `setPartsHandlers` installs them. `ShellPartsBinding`
+`onLocale(index)`, `onFormat(index)` and `onHelp()`; the frame's `setPartsHandlers` installs them. `ShellPartsBinding`
 (`shell_parts_binding.hpp`) joins a `ShellPartsModel` that reads the parts to a frame: it follows the model into
 `setParts`, the module counts into `Navigator::setModuleBadge`, and the handlers back into the model. A frame with no
 parts installed has none of these widgets visible.
@@ -138,10 +144,14 @@ parts installed has none of these widgets visible.
 `confirm(message, yes, no, done)` asks a yes-or-no question in a dialog over the frame (`shell_confirm`, with
 `shell_confirm_yes` and `shell_confirm_no`) and answers once; Escape answers no.
 
-The widgets, by test id: `shell_context` (the sidebar's top, under `shell_application`); in the top bar's line, in this
-order, `shell_search` (a text input; Ctrl K focuses it) with `shell_search_popover` under it holding
-`shell_search_results`, `shell_inbox` with its sibling badge `shell_inbox_count` and its error marker, and
-`shell_principal_menu`. `shell_search_popover` is a `PopoverWidget` whose dismissal closes the panel; its rows are `shell_search_busy`,
+The widgets, by test id: `shell_brand` (the sidebar's top, where `shell_application` stood: `shell_brand_mark`, a
+round badge holding the declared icon or, without one, the title's first letter, then `shell_brand_title`) and
+`shell_context` under it; in the top bar's line, in this order, `shell_search` (a text input; Ctrl K focuses it) with
+`shell_search_popover` under it holding `shell_search_results`, `shell_inbox` with its sibling badge
+`shell_inbox_count` and its error marker, `shell_help` (a button captioned `?`, named by `labels.help`) and
+`shell_principal_menu`; and at the sidebar's foot `shell_footer`, a row of `shell_connection_dot` (`Success`, muted or
+`Error` by state), `shell_connection` (the state's words, stretching) and `shell_version`.
+`shell_search_popover` is a `PopoverWidget` whose dismissal closes the panel; its rows are `shell_search_busy`,
 `shell_search_source_<n>`, `shell_search_failed_<n>`, `shell_search_hit_<source>_<place>` and `shell_search_empty`. With parts, the top bar's
 title and head slots are not used: the client mounts the workspace `HeadPlacement::InPage`, and `shell_head_trail` and
 `shell_head_principal` stay hidden. The sidebar's principal text and sign-out button are hidden while a principal menu is
@@ -152,8 +162,10 @@ and the inbox are icon buttons of the bar (`shell_search_open`, `shell_inbox`); 
 `shell_search_overlay`, a full-window overlay with the same field and results.
 
 The navigation menu's entries are, in order: the switcher submenu (when the context is shown), a separator, the
-navigator's `menuEntries()`, a separator and the principal submenu (when shown), then, for a frame with no principal
-menu and a sign-out handler, the sign-out entry. The frame keeps the list it built and maps a chosen path through it, not
+navigator's `menuEntries()`, a separator and the help entry (when shown), a separator and the principal submenu (when
+shown), then, for a frame with no principal menu and a sign-out handler, the sign-out entry, and last, after a
+separator, a heading entry holding the foot's words (`Connected · v4.2`), since the compact frame has no sidebar to put
+the foot in. The frame keeps the list it built and maps a chosen path through it, not
 by position.
 
 ## Module groups

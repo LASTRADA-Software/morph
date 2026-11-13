@@ -3835,6 +3835,28 @@ public:
         return true;
     }
 
+    /// @brief Runs a mutation of the app document, as a `run` command does.
+    /// @param name The mutation.
+    /// @param body The body it is run with.
+    /// @param done Called once the run settles, with whether it succeeded; empty for none.
+    /// @return Whether the document declares the mutation.
+    bool runMutation(std::string_view name, Value body, std::function<void(bool succeeded)> done = {}) {
+        detail::NameRef const* const found = _scope->find(name);
+        if (found == nullptr || found->category != detail::NameCategory::Mutation) {
+            return false;
+        }
+        detail::MutationRuntime& mutation = *found->mutation;
+        _core->runtime().batch([&] {
+            mutation.run(std::move(body), std::make_shared<detail::Bindings>(),
+                         [done = std::move(done)](bool succeeded, Value const& /*reply*/) {
+                             if (done) {
+                                 done(succeeded);
+                             }
+                         });
+        });
+        return true;
+    }
+
     /// @brief The diagnostics reported so far.
     /// @return They.
     [[nodiscard]] std::vector<Refusal> const& diagnostics() const noexcept { return _core->diagnostics; }

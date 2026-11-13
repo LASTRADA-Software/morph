@@ -1170,3 +1170,74 @@ TEST_CASE("qt_quick menu: a trigger with a detail names both lines", "[qt_quick]
     CHECK(Scene::itemOf(*menu).property("triggerDetail").toString() == "Koeln");
     CHECK(Scene::itemOf(*menu).property("triggerText").toString() == "Rheinlab\nKoeln");
 }
+
+namespace {
+
+/// The item named @p name inside @p root, or null.
+QQuickItem* namedItem(QQuickItem const& root, char const* name) {
+    for (QQuickItem* const item : root.findChildren<QQuickItem*>()) {
+        if (item->objectName() == QLatin1String{name}) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: MorphMenu passes no avatar or caret to the trigger's content (neither item is visible), or MorphCaret
+// draws the up-and-down chevron one chevron tall.
+TEST_CASE("qt_quick menu: a trigger draws its avatar before the label and its chevron after it", "[qt_quick]") {
+    Scene scene;
+    auto menu = scene.backend().createMenu(nullptr, ui::MenuStyle::Button);
+    menu->setTrigger(ui::MenuTrigger{.label = "Anna Meyer", .icon = {}, .emphasis = ui::ButtonEmphasis::Ghost});
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*menu);
+    qreal const plainWidth = item.implicitWidth();
+    REQUIRE(namedItem(item, "contentAvatar") != nullptr);
+    REQUIRE(namedItem(item, "contentCaret") != nullptr);
+    CHECK_FALSE(namedItem(item, "contentAvatar")->isVisible());
+    CHECK_FALSE(namedItem(item, "contentCaret")->isVisible());
+
+    menu->setTrigger(ui::MenuTrigger{.label = "Anna Meyer",
+                                     .icon = {},
+                                     .emphasis = ui::ButtonEmphasis::Ghost,
+                                     .detail = "Lab director",
+                                     .avatar = "AM",
+                                     .caret = ui::MenuCaret::Down});
+    scene.settle();
+    QQuickItem const* const avatar = namedItem(item, "contentAvatar");
+    QQuickItem const* const caret = namedItem(item, "contentCaret");
+    QQuickItem const* const label = namedItem(item, "contentLabel");
+    REQUIRE(avatar != nullptr);
+    REQUIRE(caret != nullptr);
+    REQUIRE(label != nullptr);
+    CHECK(avatar->isVisible());
+    CHECK(caret->isVisible());
+    CHECK(item.property("triggerAvatar").toString() == "AM");
+    CHECK(item.property("triggerCaret").toInt() == 1);
+    // A circle, level with the label's lines, before the label; the chevron after the label, inside the trigger.
+    CHECK(avatar->width() == avatar->height());
+    CHECK(avatar->width() > 0);
+    CHECK(avatar->x() + avatar->width() <= label->x());
+    CHECK(caret->x() >= label->x() + label->width());
+    CHECK(caret->x() + caret->width() <= item.width() + 0.5);
+    CHECK(item.implicitWidth() > plainWidth);
+    auto const* const initials = namedItem(*avatar, "contentAvatarText");
+    REQUIRE(initials != nullptr);
+    CHECK(initials->property("text").toString() == "AM");
+    qreal const downHeight = caret->height();
+
+    // The scope switcher's chevron is an up and a down one.
+    menu->setTrigger(ui::MenuTrigger{.label = "Rheinlab",
+                                     .icon = {},
+                                     .emphasis = ui::ButtonEmphasis::Normal,
+                                     .detail = {},
+                                     .avatar = {},
+                                     .caret = ui::MenuCaret::UpDown});
+    scene.settle();
+    CHECK(item.property("triggerCaret").toInt() == 2);
+    CHECK_FALSE(namedItem(item, "contentAvatar")->isVisible());
+    CHECK(namedItem(item, "contentCaret")->isVisible());
+    CHECK(namedItem(item, "contentCaret")->height() > downHeight);
+}
