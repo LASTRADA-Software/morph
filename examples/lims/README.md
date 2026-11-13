@@ -221,11 +221,11 @@ lims is built from modules, each its own library with its own include directory 
 | Module | Holds | Links |
 |---|---|---|
 | `org/` (shared) | the error set, the model support every module uses, sign-in, companies and sites, role assignments, and declared authorization | nothing in lims |
-| `posting/` (shared) | the posting contract: `PostingRequest` and `PostingResult`, DTOs only | `org` |
+| `posting/` (shared) | the posting contract: `PostingRequest` and `PostingResult`, and the port a poster reaches the ledger through | `org` |
 | `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
 | `ledger/` | the chart of accounts, the monthly periods and the journal entries (balanced, unrounded, immutable once posted, corrected by reversal; postings recorded once per source key; a closed period freezes its balances; dated exchange rates; the trial balance, account balance and account ledger reports) | `org`, `posting` |
 | `billing/` | billing settings, billing clients, dated price lists with per-client prices, billable lines from lab's events, invoices with approval, the edit lease, posting to the ledger and the billing run | `org`, `posting` |
-| `inventory/` | items with a stock unit, locations at a site, lots with an expiry, stock on hand per lot and the movements that change it, requisitions approved within a value limit, suppliers, and purchase orders in the supplier's currency | `org`, `posting` |
+| `inventory/` | items with a stock unit, locations at a site, lots with an expiry, stock on hand per lot and the movements that change it, requisitions approved within a value limit, suppliers, purchase orders in the supplier's currency, and goods receipts that post their value | `org`, `posting` |
 | `app/` | the server edge's `LimsAuthorizer` and the tables it reads (`declaredRequirements` and `openMutatingActions`), the server's own clients (`InternalClient`), the event relay, the ledger port and the billing schedule | every module |
 
 The server (`src/server/`), the screens (`screens/`) and the suites (`tests/`) belong to the app and link every
@@ -1521,6 +1521,33 @@ and the served form of `CreatePurchaseOrder` still advertises `x-decimalPlaces: 
 declared precision is the type's. The currency is known only from the supplier's row, as an invoice's is from its
 client's (decision 33), and a stock quantity's unit from its item's (decision 42). Three places in two modules now carry an amount beside a
 field naming its unit and check the pair by hand.
+
+### 45. A goods receipt posts its value as an invoice does, and meets the same choice (hypothesis 1, second instance)
+
+`ReceiveGoods` takes a delivery against an open order: each line a new lot at a location of the order's site, its
+quantity converted to the item's unit, several lots to one order line allowed, and never more than was ordered. The
+receipt is valued at the order's prices in the supplier's currency, each line rounded half-up once, and posted
+through the one ledger port the app installs (which now lives in `posting`, because two posters reach it: an
+amendment of the design's "request and result DTOs only" for that module): a debit to stock per line, converted at the
+ledger's rate on the receipt's date and rounded per line, against one credit to goods received not invoiced for the
+total, rounded once, and a line to the rounding account for what the per-line rounding left. A lot's unit cost is its
+line's company-currency value over its quantity, exactly. The number, `GR-<fiscal year>-<six digits>`, is gap-free per
+company and fiscal year, assigned in inventory's commit. A receipt is refused without a rate on its date, for a lot
+number the item already has, and beyond what was ordered, each before the ledger is called; two receipts against the
+last of an order line give one receipt and one `Conflict`. A dispatched attempt that fails after the ledger call is
+retried under the same source key with the same body (the body carries no lot number, so a corrected lot number
+converges on the recorded entry), and a retry with other lines is refused naming the entry, never posted twice.
+
+**Hypothesis 1 is confirmed for its second instance.** Measured in `tests/test_goods_receipt.cpp`: in one shared
+transaction a failure between the halves leaves nothing and no hole in the receipt numbers, but the ledger's entry is
+not heard by a watching accountant and not journaled as the ledger's own action, and is not refused by the ledger's
+rule (a receipt succeeds both with the posting principal holding no role and with it holding the role at another
+company only, where the dispatched receipt is refused, in the first case by the edge's role table and in the second by
+`RecordPosting`'s own rule at the receipt's company); dispatched, the ledger keeps all three, and a failure between the
+halves leaves an entry for goods that are not on hand until the receipt is retried, which converges on the same entry
+by its source key. The two postings needed the same
+thing and neither has it: two models' actions committed as one fact, each keeping its authorization, effects and
+journal.
 
 ### 48. A stock change in one company reaches another company's watching stock keeper (hypothesis 7, second instance)
 

@@ -690,8 +690,10 @@ namespace {
     auto const entry = std::stoll(*known);
     auto const first = loadWritten(mapper, entry);
     if (!recordedAs(mapper, first, request)) {
-        throw Conflict{"record: source key " + request.sourceKey +
-                       " is already recorded for a different posting; a corrected document needs a new key"};
+        throw Conflict{std::string{kSourceKeyOtherBodyCode},
+                       {},
+                       "record: source key " + request.sourceKey +
+                           " is already recorded for a different posting; a corrected document needs a new key"};
     }
     return PostingResult{.entryId = JournalEntryId{entry}, .date = timestampFromMillis(first.header.dateMs.Value())};
 }

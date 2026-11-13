@@ -14,14 +14,19 @@
 #include "lims/org/core/types.hpp"
 
 /// @file
-/// The posting contract: a poster (billing, and inventory later) maps its document to a `PostingRequest`; the ledger
-/// validates and records it and answers a `PostingResult`. DTOs only. Neither side includes the other: the app hands
-/// one to the other. It also holds the rule an account code must satisfy, which the ledger's chart applies and every
-/// poster's settings check.
+/// The posting contract: a poster (billing, inventory) maps its document to a `PostingRequest`; the ledger validates
+/// and records it and answers a `PostingResult`. This header holds the contract's DTOs; `ledger_port.hpp` holds the
+/// one port every poster reaches the ledger through, here rather than in a poster because two posters share it and the
+/// app installs it once. Neither side includes the other: the app hands one to the other. It also holds the rule an
+/// account code must satisfy, which the ledger's chart applies and every poster's settings check.
 
 namespace lims {
 
 LIMS_DEFINE_STRONG_ID(JournalEntryId);
+
+/// @brief The code of the ledger's refusal of a source key that is already bound to a different posting body. A poster
+///        tells it from the ledger's other refusals by this code, not by its wording.
+inline constexpr std::string_view kSourceKeyOtherBodyCode = "lims.posting.sourceKeyOtherBody";
 
 /// @brief Whether @p code can name a ledger account: 1 to 16 upper-case letters and digits. Upper-case only, so that
 /// two

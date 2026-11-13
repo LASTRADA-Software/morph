@@ -40,12 +40,12 @@
 #include "lims/app/ledger_wiring.hpp"
 #include "lims/app/lims_authorizer.hpp"
 #include "lims/app/service_principals.hpp"
-#include "lims/billing/core/ledger_port.hpp"
 #include "lims/lab/db/database.hpp"
 #include "lims/lab/models/ignition_model.hpp"
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/org/models/auth_model.hpp"
 #include "lims/org/models/org_model.hpp"
+#include "lims/posting/ledger_port.hpp"
 
 namespace {
 

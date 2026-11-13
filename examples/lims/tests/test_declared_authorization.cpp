@@ -491,6 +491,7 @@ TEST_CASE("declared authorization: the edge's table lists every declared role, a
     CHECK(lims::app::requiredRole("ApproveRequisition") == lims::LimsRole::PurchaseApprover);
     CHECK(lims::app::requiredRole("CreateSupplier") == lims::LimsRole::Purchaser);
     CHECK(lims::app::requiredRole("CreatePurchaseOrder") == lims::LimsRole::Purchaser);
+    CHECK(lims::app::requiredRole("ReceiveGoods") == lims::LimsRole::StockKeeper);
     // The raising, filling and submitting of a requisition declare some role at its site, whichever.
     for (std::string_view const actionId : {"CreateRequisition", "AddRequisitionLine", "SubmitRequisition"}) {
         CAPTURE(actionId);

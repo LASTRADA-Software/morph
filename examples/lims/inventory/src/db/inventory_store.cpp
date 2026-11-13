@@ -143,6 +143,76 @@ bool lotNumberTaken(std::int64_t item, std::string const& lotNumber) {
                 .empty();
 }
 
+db::LotRecord createLot(Lightweight::DataMapper& mapper, char const* action, db::ItemRecord const& item,
+                        db::LocationRecord const& location, std::string const& lotNumber,
+                        ::morph::time::Timestamp const& expiresAt, Rational const& unitCost) {
+    db::LotRecord lot;
+    lot.itemId = static_cast<std::int64_t>(item.id.Value());
+    lot.locationId = static_cast<std::int64_t>(location.id.Value());
+    lot.companyId = item.companyId.Value();
+    lot.siteId = location.siteId.Value();
+    lot.lotNumber = Lightweight::SqlAnsiString<32>{lotNumber};
+    lot.expiresAt = millisOf(expiresAt);
+    lot.onHandNum = 0;
+    lot.onHandDen = 1;
+    lot.unitCostNum = unitCost.numerator;
+    lot.unitCostDen = unitCost.denominator;
+    lot.reservationVersion = 0;
+    try {
+        mapper.Create(lot);
+    } catch (Lightweight::SqlException const&) {
+        if (lotNumberTaken(static_cast<std::int64_t>(item.id.Value()), lotNumber)) {
+            throw Conflict{std::string{action} + ": lot " + lotNumber + " of " + textOf(item.code) +
+                           " exists already"};
+        }
+        throw;
+    }
+    return lot;
+}
+
+ReceiptView receiptView(Lightweight::DataMapper& mapper, std::int64_t receipt) {
+    auto const rows = mapper.Query<db::ReceiptRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::ReceiptRecord::id>, "=", receipt)
+                          .All();
+    if (rows.empty()) {
+        throw NotFound{"receipt " + std::to_string(receipt) + " does not exist"};
+    }
+    auto const& row = rows.front();
+    int const currency = row.currency.Value();
+    if (currency < 0 || currency > kMaxCurrencyCode) {
+        throw ValidationError{"receipt " + std::to_string(receipt) + " stores a currency outside its range"};
+    }
+    auto const company = OrgModel::findCompany(CompanyId{row.companyId.Value()});
+    if (!company.has_value()) {
+        throw NotFound{"receipt " + std::to_string(receipt) + ": its company does not exist"};
+    }
+    auto const code = static_cast<CurrencyCode>(currency);
+    ReceiptView view{
+        .id = ReceiptId{receipt},
+        .number = textOf(row.number),
+        .order = PurchaseOrderId{row.orderId.Value()},
+        .company = CompanyId{row.companyId.Value()},
+        .currency = code,
+        .value = Amount{Rational{Numerator{row.valueNum.Value()}, Denominator{row.valueDen.Value()},
+                                 DecimalPlaces{decimalsOf(code)}}},
+        .companyValue =
+            Amount{Rational{Numerator{row.companyValueNum.Value()}, Denominator{row.companyValueDen.Value()},
+                            DecimalPlaces{decimalsOf(company->baseCurrency)}}},
+        .lots = {},
+        .entry = row.entryId.Value().has_value() ? JournalEntryId{*row.entryId.Value()} : JournalEntryId{},
+        .date = instant(row.receivedAt.Value()),
+        .receivedBy = textOf(row.receivedBy),
+    };
+    auto lots = mapper.Query<db::ReceiptLotRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ReceiptLotRecord::receiptId>, "=", receipt)
+                    .All();
+    std::ranges::sort(lots, {}, [](db::ReceiptLotRecord const& lot) { return lot.id.Value(); });
+    for (auto const& lot : lots) {
+        view.lots.push_back(LotId{lot.lotId.Value()});
+    }
+    return view;
+}
+
 db::LotRecord lotRecord(Lightweight::DataMapper& mapper, std::int64_t lot) {
     auto rows = mapper.Query<db::LotRecord>().Where(::Lightweight::FieldNameOf<&db::LotRecord::id>, "=", lot).All();
     if (rows.empty()) {

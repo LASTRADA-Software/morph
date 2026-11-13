@@ -123,4 +123,33 @@ LIGHTWEIGHT_SQL_MIGRATION(20261120000005, "Create inventory suppliers, orders an
         .RequiredColumn("line_total_num", Bigint())
         .RequiredColumn("line_total_den", Bigint());
 }
+LIGHTWEIGHT_SQL_MIGRATION(20261120000006, "Create inventory receipts, their lots and number series") {
+    plan.CreateTableIfNotExists("inventory_receipts")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("order_id", Bigint())
+        .RequiredColumn("number", Varchar(32))
+        .RequiredColumn("currency", Integer())
+        .RequiredColumn("value_num", Bigint())
+        .RequiredColumn("value_den", Bigint())
+        .RequiredColumn("company_value_num", Bigint())
+        .RequiredColumn("company_value_den", Bigint())
+        .Column("entry_id", Bigint())
+        .RequiredColumn("received_at", Bigint())
+        .RequiredColumn("received_by", Varchar(64));
+    // A number is issued once per company: the index refuses a second receipt with one number.
+    plan.CreateUniqueIndex("idx_inventory_receipts_company_number", "inventory_receipts", {"company_id", "number"});
+    plan.CreateTableIfNotExists("inventory_receipt_lots")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("receipt_id", Bigint())
+        .RequiredColumn("lot_id", Bigint())
+        .RequiredColumn("order_line_id", Bigint());
+    plan.CreateTableIfNotExists("inventory_receipt_numbers")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("fiscal_year", Bigint())
+        .RequiredColumn("next", Bigint());
+    plan.CreateUniqueIndex("idx_inventory_receipt_numbers_year", "inventory_receipt_numbers",
+                           {"company_id", "fiscal_year"});
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

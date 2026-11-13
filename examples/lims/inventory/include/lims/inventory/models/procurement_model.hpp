@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <core/async/Task.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 
 #include "lims/inventory/dto/order_dto.hpp"
+#include "lims/inventory/dto/receipt_dto.hpp"
 #include "lims/inventory/dto/requisition_dto.hpp"
 
 /// @file
@@ -139,6 +141,45 @@ public:
     /// @return Its orders by id; none for a company the caller cannot see.
     /// @throws ValidationError if no company is named.
     ListPurchaseOrdersResult execute(const ListPurchaseOrders& action);
+
+    /// @brief Takes delivery against an open order: each line becomes a new lot at a location of the order's site, and
+    ///        the receipt's value is posted to the ledger against goods received not invoiced.
+    ///
+    /// A line's quantity may be in any unit of the item's dimension and is converted to the stock unit; one order line
+    /// may arrive as several lots, never more than was ordered in all. The receipt is valued at the order's prices in
+    /// the supplier's currency, each line rounded half-up once, and posted at the ledger's rate on the receipt's date
+    /// through the installed ledger port. In the port's dispatched mode the ledger records its entry first, under the
+    /// key `inventory.receipt:<order>:<ordinal>`, and inventory then writes the lots, the order and the receipt's
+    /// number in one commit; a receipt that failed in between is received again as first sent and converges on the
+    /// recorded entry. In its shared-transaction mode both halves commit once. Every refusal that does not depend on a
+    /// concurrent writer is raised before the ledger is called.
+    /// @param action The order, location, date and lines.
+    /// @return The receipt, numbered `GR-<fiscal year>-<six digits>`.
+    /// @throws ValidationError if the request is malformed, a line is not one of the order's, a quantity is not
+    ///         positive or is in a unit of another dimension, the location is not at the order's site, more than was
+    ///         ordered would be received, no ledger is wired, or the ledger has no rate on the receipt's date.
+    /// @throws OutOfRange if a quantity, a value or a lot's cost does not fit.
+    /// @throws NotFound if the order is not visible to the caller, the location does not exist, or the company has no
+    ///         inventory settings.
+    /// @throws IllegalTransition if the order has nothing left to receive.
+    /// @throws Forbidden if the caller is not a stock keeper at the order's company.
+    /// @throws Conflict if a lot number is taken, an order line was received meanwhile, the database was busy, or a
+    ///         receipt that was posted before is received again with other lines.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    ::core::async::Task<ReceiptView> execute(ReceiveGoods action);
+
+    /// @brief Reads a goods receipt, when the caller can see its company.
+    /// @param action The receipt.
+    /// @return The receipt.
+    /// @throws ValidationError if no receipt is named.
+    /// @throws NotFound if there is no such receipt, or it is of a company the caller cannot see.
+    ReceiptView execute(const GetReceipt& action);
+
+    /// @brief Lists a company's goods receipts, when the caller can see the company.
+    /// @param action The company.
+    /// @return Its receipts by id; none for a company the caller cannot see.
+    /// @throws ValidationError if no company is named.
+    ListReceiptsResult execute(const ListReceipts& action);
 };
 
 }  // namespace lims
@@ -172,4 +213,11 @@ BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::GetPurchaseOrder, "GetPurch
                        ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListPurchaseOrders, "ListPurchaseOrders",
                        ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ReceiveGoods, "ReceiveGoods")
+BRIDGE_REGISTER_EFFECTS(lims::ReceiveGoods, ::morph::effects::changes<lims::ReceiptView>,
+                        ::morph::effects::changes<lims::LotStockView>,
+                        ::morph::effects::changes<lims::StockMovementView>,
+                        ::morph::effects::changes<lims::PurchaseOrderView>)
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::GetReceipt, "GetReceipt", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListReceipts, "ListReceipts", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

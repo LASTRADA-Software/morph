@@ -61,6 +61,17 @@ Scope Authorization<CreatePurchaseOrder>::scopeOf(CreatePurchaseOrder const& act
     return Scope{CompanyId{row.has_value() ? row->companyId.Value() : 0}};
 }
 
+Scope Authorization<ReceiveGoods>::scopeOf(ReceiveGoods const& action) {
+    if (!action.order.hasValue()) {
+        return Scope{CompanyId{}};
+    }
+    Lightweight::DataMapper mapper;
+    auto const rows = mapper.Query<db::PurchaseOrderRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::PurchaseOrderRecord::id>, "=", *action.order)
+                          .All();
+    return Scope{CompanyId{rows.empty() ? 0 : rows.front().companyId.Value()}};
+}
+
 void Authorization<ApproveRequisition>::checkState(ApproveRequisition const& action) {
     Lightweight::DataMapper mapper;
     auto const row = inventory::findRequisition(mapper, *action.requisitionId);

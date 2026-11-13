@@ -12,6 +12,7 @@
 #include "lims/inventory/core/units.hpp"
 #include "lims/inventory/db/inventory_entity.hpp"
 #include "lims/inventory/dto/order_dto.hpp"
+#include "lims/inventory/dto/receipt_dto.hpp"
 #include "lims/inventory/dto/requisition_dto.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
 
@@ -101,6 +102,32 @@ template <typename Set, typename Guard>
 /// @param lotNumber The supplier's lot number.
 /// @return `true` when one does.
 [[nodiscard]] bool lotNumberTaken(std::int64_t item, std::string const& lotNumber);
+
+/// @brief Creates a lot of @p item at @p location holding nothing yet, through the caller's transaction.
+///
+/// The unique index on (item, lot number) refuses a second lot of the number; any other failure finds no such lot and
+/// surfaces as it is.
+/// @param mapper The caller's mapper, inside its transaction.
+/// @param action The action's name, for the refusal.
+/// @param item The item's row.
+/// @param location The location's row.
+/// @param lotNumber The supplier's lot number.
+/// @param expiresAt When the lot expires.
+/// @param unitCost The cost per stock unit, in the company's currency.
+/// @return The lot's row, with its id.
+/// @throws Conflict if a lot of the item carries the number already.
+[[nodiscard]] db::LotRecord createLot(Lightweight::DataMapper& mapper, char const* action, db::ItemRecord const& item,
+                                      db::LocationRecord const& location, std::string const& lotNumber,
+                                      ::morph::time::Timestamp const& expiresAt,
+                                      ::morph::math::Rational const& unitCost);
+
+/// @brief The view of receipt @p receipt, with the lots it created.
+/// @param mapper The mapper to read through.
+/// @param receipt The receipt.
+/// @return The view.
+/// @throws NotFound if there is no such receipt or its company does not exist.
+/// @throws ValidationError if a column holds a value outside its enumeration.
+[[nodiscard]] ReceiptView receiptView(Lightweight::DataMapper& mapper, std::int64_t receipt);
 
 /// @brief The row of lot @p lot.
 /// @param mapper The mapper to read through.

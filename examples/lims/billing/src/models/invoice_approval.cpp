@@ -10,7 +10,6 @@
 
 #include "lims/billing/authorization/billing_authorization.hpp"
 #include "lims/billing/core/fault_hook.hpp"
-#include "lims/billing/core/ledger_port.hpp"
 #include "lims/billing/core/refusal_codes.hpp"
 #include "lims/billing/db/billing_entity.hpp"
 #include "lims/billing/db/billing_store.hpp"
@@ -19,6 +18,7 @@
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
 #include "lims/org/models/org_model.hpp"
+#include "lims/posting/ledger_port.hpp"
 
 namespace lims {
 

@@ -30,14 +30,6 @@ using ::morph::math::Denominator;
 using ::morph::math::Numerator;
 using ::morph::math::Rational;
 
-/// @brief Whether the caller can see @p company.
-/// @param company The company.
-/// @return Whether a role of theirs reaches it.
-[[nodiscard]] bool visible(CompanyId company) {
-    auto const companies = OrgModel::visibleCompanies(currentPrincipal());
-    return std::ranges::find(companies, company) != companies.end();
-}
-
 /// @brief The supplier of @p company called @p name.
 /// @param mapper The mapper to read through.
 /// @param company The company.
@@ -158,7 +150,7 @@ ListSuppliersResult ProcurementModel::execute(const ListSuppliers& action) {
         throw ValidationError{"ListSuppliers: a company is required"};
     }
     ListSuppliersResult result;
-    if (!visible(action.company)) {
+    if (!OrgModel::callerSees(action.company)) {
         return result;
     }
     Lightweight::DataMapper mapper;
@@ -184,7 +176,7 @@ PurchaseOrderView ProcurementModel::execute(const CreatePurchaseOrder& action) {
     // The reads run on a mapper of their own: the transaction below opens with its first write.
     Lightweight::DataMapper reader;
     auto const supplier = inventory::findSupplier(reader, *action.supplier);
-    if (!supplier.has_value() || !visible(CompanyId{supplier->companyId.Value()})) {
+    if (!supplier.has_value() || !OrgModel::callerSees(CompanyId{supplier->companyId.Value()})) {
         throw NotFound{"CreatePurchaseOrder: supplier " + std::to_string(*action.supplier) + " does not exist"};
     }
     if (supplier->companyId.Value() != requisitionRow.companyId.Value()) {
@@ -280,7 +272,7 @@ PurchaseOrderView ProcurementModel::execute(const GetPurchaseOrder& action) {
     auto const rows = mapper.Query<db::PurchaseOrderRecord>()
                           .Where(::Lightweight::FieldNameOf<&db::PurchaseOrderRecord::id>, "=", *action.orderId)
                           .All();
-    if (rows.empty() || !visible(CompanyId{rows.front().companyId.Value()})) {
+    if (rows.empty() || !OrgModel::callerSees(CompanyId{rows.front().companyId.Value()})) {
         throw NotFound{"GetPurchaseOrder: order " + std::to_string(*action.orderId) + " does not exist"};
     }
     return inventory::orderView(mapper, *action.orderId);
@@ -293,7 +285,7 @@ ListPurchaseOrdersResult ProcurementModel::execute(const ListPurchaseOrders& act
         throw ValidationError{"ListPurchaseOrders: a company is required"};
     }
     ListPurchaseOrdersResult result;
-    if (!visible(action.company)) {
+    if (!OrgModel::callerSees(action.company)) {
         return result;
     }
     Lightweight::DataMapper mapper;

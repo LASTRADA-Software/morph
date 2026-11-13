@@ -48,14 +48,6 @@ constexpr int kMaxMovementKind = static_cast<int>(MovementKind::Shortfall);
     return static_cast<MovementKind>(kind);
 }
 
-/// @brief Whether the caller can see @p company.
-/// @param company The company.
-/// @return Whether a role of theirs reaches it.
-[[nodiscard]] bool visible(CompanyId company) {
-    auto const companies = OrgModel::visibleCompanies(currentPrincipal());
-    return std::ranges::find(companies, company) != companies.end();
-}
-
 /// @brief Throws `NotFound` unless @p company exists.
 /// @param where The action, for the message.
 /// @param company The company.
@@ -238,7 +230,7 @@ InventorySettingsView StockModel::execute(const GetInventorySettings& action) {
         throw ValidationError{"GetInventorySettings: a company is required"};
     }
     std::optional<db::InventorySettingsRecord> row;
-    if (visible(action.company)) {
+    if (OrgModel::callerSees(action.company)) {
         Lightweight::DataMapper mapper;
         row = settingsRow(mapper, action.company);
     }
@@ -296,7 +288,7 @@ ListItemsResult StockModel::execute(const ListItems& action) {
         throw ValidationError{"ListItems: a company is required"};
     }
     ListItemsResult result;
-    if (!visible(action.company)) {
+    if (!OrgModel::callerSees(action.company)) {
         return result;
     }
     Lightweight::DataMapper mapper;
@@ -363,7 +355,7 @@ ListLocationsResult StockModel::execute(const ListLocations& action) {
         throw ValidationError{"ListLocations: a company is required"};
     }
     ListLocationsResult result;
-    if (!visible(action.company)) {
+    if (!OrgModel::callerSees(action.company)) {
         return result;
     }
     Lightweight::DataMapper mapper;
@@ -415,26 +407,8 @@ LotStockView StockModel::execute(const RecordOpeningLot& action) {
     std::string const principal = ::morph::session::current()->principal;
     Lightweight::DataMapper mapper;
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    db::LotRecord lot;
-    lot.itemId = static_cast<std::int64_t>(item->id.Value());
-    lot.locationId = static_cast<std::int64_t>(location->id.Value());
-    lot.companyId = item->companyId.Value();
-    lot.siteId = location->siteId.Value();
-    lot.lotNumber = Lightweight::SqlAnsiString<32>{action.lotNumber};
-    lot.expiresAt = millisOf(action.expiresAt);
-    lot.onHandNum = 0;
-    lot.onHandDen = 1;
-    lot.unitCostNum = (*action.unitCost).numerator;
-    lot.unitCostDen = (*action.unitCost).denominator;
-    lot.reservationVersion = 0;
-    // The unique index on (item, lot number) refuses a second lot of the number; any other failure finds no such lot
-    // and surfaces.
-    guardedInsert([&] { mapper.Create(lot); },
-                  [&] { return inventory::lotNumberTaken(*action.item, action.lotNumber); },
-                  [&] {
-                      return Conflict{"RecordOpeningLot: lot " + action.lotNumber + " of " +
-                                      std::string{item->code.Value().ToStringView()} + " exists already"};
-                  });
+    auto const lot = inventory::createLot(mapper, "RecordOpeningLot", *item, *location, action.lotNumber,
+                                          action.expiresAt, *action.unitCost);
     static_cast<void>(inventory::moveLot(mapper, lot, MovementKind::Opening, quantity, "opening", principal));
     sqlTxn.Commit();
     return inventory::lotView(mapper, inventory::lotRecord(mapper, static_cast<std::int64_t>(lot.id.Value())));
@@ -447,7 +421,7 @@ StockOnHandResult StockModel::execute(const StockOnHand& action) {
         throw ValidationError{"StockOnHand: a company is required"};
     }
     StockOnHandResult result;
-    if (!visible(action.company)) {
+    if (!OrgModel::callerSees(action.company)) {
         return result;
     }
     Lightweight::DataMapper mapper;
@@ -476,7 +450,7 @@ StockOnHandResult StockModel::execute(const StockOnHand& action) {
     Lightweight::DataMapper mapper;
     auto const item = inventory::findItem(mapper, *action.item);
     std::vector<StockMovementView> rows;
-    if (item.has_value() && visible(CompanyId{item->companyId.Value()})) {
+    if (item.has_value() && OrgModel::callerSees(CompanyId{item->companyId.Value()})) {
         auto const unit = inventory::stockUnitOf(*item);
         for (auto const& row : mapper.Query<db::MovementRecord>()
                                    .Where(::Lightweight::FieldNameOf<&db::MovementRecord::itemId>, "=", *action.item)
