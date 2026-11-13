@@ -119,7 +119,9 @@ TEST_CASE("reservation: a bench that goes away releases its reservation", "[lims
 }
 
 // Two benches at once give one reservation and one refusal naming its holder, never a raw SQL error.
-// Mutation: make bumpVersion report success without writing (both benches reserve the same 40 mL in some round).
+// This case does not detect a bumpVersion that writes nothing (it passed under that mutation, in 30 assertions):
+// its benches exclude each other through the busy database as well. The next case, which keeps both benches alive and
+// the lot's version moving, is the detector.
 TEST_CASE("reservation: two benches racing for the last lot give one reservation and one named refusal",
           "[lims][inventory][reservation]") {
     DbFixture fixture;
@@ -160,7 +162,8 @@ TEST_CASE("reservation: two benches racing for the last lot give one reservation
     }
 }
 
-// Mutation: as above (both benches hold the lot in some round, and the run does not finish).
+// Mutation: make bumpVersion report success without writing (the lot's version never moves, and the CHECKs on one
+// reservation and one named refusal per round fail).
 TEST_CASE("reservation: while the winner's bench lives, the loser is refused naming it",
           "[lims][inventory][reservation]") {
     DbFixture fixture;
@@ -394,6 +397,69 @@ TEST_CASE("reservation: a bench that lost the lot between its read and its write
     CHECK(holderOf(102) == "bob");
 }
 
+// Mutation: end the retry at the first lot another bench holds (alice is refused naming bob although the late lot
+// covers her).
+TEST_CASE("reservation: a bench that lost a lot to a live winner is given the next lot that covers it",
+          "[lims][inventory][reservation]") {
+    DbFixture fixture;
+    static_cast<void>(lims::test::consumptionSetUp());
+    lims::test::grant("alice", lims::LimsRole::Analyst, lims::Scope{lims::test::seededSite()});
+    lims::test::grant("bob", lims::LimsRole::Analyst, lims::Scope{lims::test::seededSite()});
+    ScopedClockOverride const nine{at(2026, 11, 10, 9)};
+    FaultHookGuard const guard;
+    lims::ReservationModel aliceBench;
+    lims::ReservationModel bobBench;
+    bool fired = false;
+    lims::setInventoryFaultHook([&](std::string_view point, Lightweight::SqlConnection&) {
+        if (point != "reservation.beforeVersion" || fired) {
+            return;
+        }
+        fired = true;
+        ScopedPrincipal const bob{"bob"};
+        static_cast<void>(bobBench.execute(reserve(102)));
+    });
+    ScopedPrincipal const alice{"alice"};
+    auto const held = aliceBench.execute(reserve(101));
+    CHECK(fired);
+    REQUIRE(held.lots.size() == 1);
+    CHECK(held.lots.front().lotNumber == "L-LATE");
+    CHECK(holderOf(102) == "bob");
+    CHECK(stockByLot().at("L-EARLY").second == milli(25));
+    CHECK(stockByLot().at("L-LATE").second == milli(25));
+}
+
+// Mutation: leave the sample test out of the write transaction (alice, whose lot no one touched, takes bob's sample
+// as well).
+TEST_CASE("reservation: a sample another bench took between the read and the write is refused in the write",
+          "[lims][inventory][reservation]") {
+    DbFixture fixture;
+    static_cast<void>(lims::test::consumptionSetUp());
+    lims::test::grant("alice", lims::LimsRole::Analyst, lims::Scope{lims::test::seededSite()});
+    lims::test::grant("bob", lims::LimsRole::Analyst, lims::Scope{lims::test::seededSite()});
+    ScopedClockOverride const nine{at(2026, 11, 10, 9)};
+    FaultHookGuard const guard;
+    lims::ReservationModel aliceBench;
+    lims::ReservationModel bobBench;
+    bool fired = false;
+    lims::setInventoryFaultHook([&](std::string_view point, Lightweight::SqlConnection&) {
+        if (point != "reservation.beforeVersion" || fired) {
+            return;
+        }
+        fired = true;
+        // Two analyses need 50 mL, which only the late lot holds, so alice's lot is not the one that moves.
+        auto two = reserve(101);
+        two.analyses = {lims::AnalysisId{1}, lims::AnalysisId{2}};
+        ScopedPrincipal const bob{"bob"};
+        static_cast<void>(bobBench.execute(two));
+    });
+    ScopedPrincipal const alice{"alice"};
+    CHECK_THROWS_WITH(aliceBench.execute(reserve(101)),
+                      Catch::Matchers::ContainsSubstring("sample 101 is reserved by 'bob'"));
+    CHECK(fired);
+    CHECK(holderOf(101) == "bob");
+    CHECK(stockByLot().at("L-EARLY").second == milli(0));
+}
+
 // Mutation: leave the busy test out of the failure arm (a busy database surfaces as its raw error).
 TEST_CASE("reservation: a busy database is a Conflict, and any other failure surfaces as itself",
           "[lims][inventory][reservation]") {
@@ -475,6 +541,7 @@ TEST_CASE("reservation: a sample's reservation is read by those who see its comp
     CHECK(view.expiresAt == morph::time::Timestamp{at(2026, 11, 10, 10)});
 }
 
+// Mutation: make ReleaseReservation delete nothing (the lot is still held after bob's release).
 TEST_CASE("reservation: the actions across the backend matrix", "[lims][inventory][reservation][matrix]") {
     auto const mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
@@ -506,8 +573,17 @@ TEST_CASE("reservation: the actions across the backend matrix", "[lims][inventor
     }
     auto const reserved = lims::test::dispatchAs<lims::ReservationModel>("bob", reserve(102), mode);
     CHECK(reserved.holder == "bob");
-    auto const released = lims::test::dispatchAs<lims::ReservationModel>("bob", lims::ReleaseReservation{}, mode);
-    CHECK(released.holder.empty());
+    // The release ran on the instance that reserved; the lot is read back free through a separate read.
+    {
+        BackendRig rig{mode, 1, lims::test::limsAuthorizer(kSecret)};
+        rig.bridge(0).setDefaultSession(as("bob"));
+        auto handler = rig.client<lims::ReservationModel>(0);
+        CHECK(morph::ladder::testkit::awaitQt(handler.execute(reserve(102))).holder == "bob");
+        CHECK(holderOf(102) == "bob");
+        CHECK(morph::ladder::testkit::awaitQt(handler.execute(lims::ReleaseReservation{})).holder.empty());
+        CHECK(holderOf(102).empty());
+        CHECK(stockByLot().at("L-EARLY").second == milli(0));
+    }
 }
 
 // A capture takes its own sample's reservation first, and what it takes beyond that never comes out of another

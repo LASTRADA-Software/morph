@@ -12,7 +12,6 @@
 #include <morph/core/logger.hpp>
 #include <optional>
 #include <random>
-#include <set>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -36,7 +35,7 @@ using ::morph::math::Denominator;
 using ::morph::math::Numerator;
 using ::morph::math::Rational;
 
-/// @brief How many times a bench plans again after losing a lot to a winner that has since let go.
+/// @brief How many times a bench plans and writes before it gives up on a lot another bench keeps winning.
 constexpr int kAttempts = 3;
 
 /// @brief How long a reservation lives after the last one.
@@ -63,6 +62,13 @@ constexpr std::int64_t kReservationMillis = static_cast<std::int64_t>(60) * 60 *
         reader.Query<db::LotRecord>().Where(::Lightweight::FieldNameOf<&db::LotRecord::id>, "=", lot).All();
     return rows.empty() || rows.front().reservationVersion.Value() != versionRead;
 }
+
+/// @brief Thrown by planning when the reservations that left no lot free were gone by the time the refusal was
+///        worded: planning again may find one.
+struct Vanished {
+    /// @brief The refusal to give if the attempts run out.
+    std::string words;
+};
 
 /// @brief What one item needs and the lot chosen to hold it.
 struct PlannedLine {
@@ -177,8 +183,6 @@ struct PlannedLine {
 struct Attempt {
     /// @brief The reservation was written.
     bool committed = false;
-    /// @brief It was refused because another bench holds the lot; asking again would be refused the same.
-    bool held = false;
     /// @brief The refusal's words, when it was not written.
     std::string words;
 };
@@ -187,20 +191,18 @@ struct Attempt {
 /// @param lot The lot's row as read.
 /// @param itemCode The item's code.
 /// @param token The losing bench's token; its own rows are not who took the lot.
-/// @return The refusal naming who holds the lot now; when nobody does (the winner has already let go), a refusal
-///         that is not `held`, since planning again may find the lot free.
+/// @return The refusal naming who holds the lot now, or saying it changed when nobody does. It is only used when the
+///         attempts run out: planning again decides whether another lot, or this one, still covers the need.
 [[nodiscard]] Attempt lostLot(db::LotRecord const& lot, std::string const& itemCode, std::string const& token) {
     Lightweight::DataMapper reader;
     std::string const number{lot.lotNumber.Value().ToStringView()};
     auto const holders = holdersOn(reader, {lot}, token);
     if (holders.empty()) {
         return Attempt{.committed = false,
-                       .held = false,
                        .words = "ReserveForSample: lot " + number + " of " + itemCode + " changed meanwhile"};
     }
     return Attempt{
         .committed = false,
-        .held = true,
         .words = "ReserveForSample: lot " + number + " of " + itemCode + " is reserved by " + joined(holders)};
 }
 
@@ -226,6 +228,7 @@ struct Attempt {
 /// @param token The reserving bench's token.
 /// @return The planned lines, by item.
 /// @throws Conflict if another bench holds the sample, or no lot covers an item.
+/// @throws Vanished if a lot was short only for as long as another bench's reservation lasted.
 /// @throws OutOfRange if a quantity does not fit.
 [[nodiscard]] std::vector<PlannedLine> planReservation(std::int64_t company, std::int64_t siteId, std::int64_t sample,
                                                        std::vector<AnalysisId> const& analyses,
@@ -262,6 +265,15 @@ struct Attempt {
             if (!chosen.has_value()) {
                 auto const holders = holdersOn(reader, lots, token);
                 if (holders.empty()) {
+                    // Stock that covers the need but was short of it a moment ago means the holders let go between
+                    // the two reads.
+                    bool const covered = std::ranges::any_of(lots, [&](db::LotRecord const& lot) {
+                        return !(Rational{Numerator{lot.onHandNum.Value()}, Denominator{lot.onHandDen.Value()},
+                                          DecimalPlaces{6}} < need);
+                    });
+                    if (covered) {
+                        throw Vanished{"ReserveForSample: the lots of " + code + " changed meanwhile"};
+                    }
                     throw Conflict{"ReserveForSample: not enough " + code + " at site " + std::to_string(siteId)};
                 }
                 auto const taken = *std::ranges::find_if(
@@ -305,22 +317,16 @@ struct Attempt {
             if (!outcome.words.empty()) {
                 return outcome;
             }
-            // The transaction holds the write lock from its first write, so these reads see what is committed.
-            std::set<std::uint64_t> doomed;
+            // The bench's earlier rows go with one delete, which is the transaction's first write when the plan is
+            // empty; the reads after it see what is committed, since the write lock is held.
+            mapper.Query<db::ReservationRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::ReservationRecord::token>, "=", token)
+                .Delete();
             std::int64_t const now = nowMillis();
-            for (auto const& row : mapper.Query<db::ReservationRecord>()
-                                       .Where(::Lightweight::FieldNameOf<&db::ReservationRecord::token>, "=", token)
-                                       .All()) {
-                doomed.insert(row.id.Value());
-                mapper.Delete(row);
-            }
             for (auto const& row :
                  mapper.Query<db::ReservationRecord>()
                      .Where(::Lightweight::FieldNameOf<&db::ReservationRecord::sampleId>, "=", sample)
                      .All()) {
-                if (doomed.contains(row.id.Value())) {
-                    continue;
-                }
                 if (row.expiresAt.Value() > now) {
                     throw Conflict{"ReserveForSample: sample " + std::to_string(sample) + " is reserved by '" +
                                    std::string{row.holder.Value().ToStringView()} + "'"};
@@ -352,11 +358,10 @@ struct Attempt {
             if (!isBusy(error) && moved == plan.end()) {
                 throw;
             }
-            outcome = moved != plan.end()
-                          ? lostLot(moved->lot, moved->itemCode, token)
-                          : Attempt{.committed = false,
-                                    .held = false,
-                                    .words = "ReserveForSample: another bench was reserving meanwhile"};
+            outcome =
+                moved != plan.end()
+                    ? lostLot(moved->lot, moved->itemCode, token)
+                    : Attempt{.committed = false, .words = "ReserveForSample: another bench was reserving meanwhile"};
         }
     }
     return outcome;
@@ -398,12 +403,16 @@ ReservationView ReservationModel::execute(const ReserveForSample& action) {
     std::string const principal = currentPrincipal();
     std::int64_t const sample = *action.sample;
     // Each attempt reads on a mapper of its own, outside the write transaction, which opens with its first write: the
-    // write is conditional on what was read. A bench that lost a lot to a winner that has already let go plans again,
-    // since the lot may be free now; one that lost it to a holder that is still there is refused.
+    // write is conditional on what was read. A bench that lost a lot plans again, whoever took it: another lot, or
+    // this one, may still cover the need, and planning raises the named refusal when nothing does.
     Attempt outcome;
-    for (int attempt = 0; attempt < kAttempts && !outcome.committed && !outcome.held; ++attempt) {
-        auto const plan = planReservation(*site->companyId, *action.site, sample, action.analyses, _token);
-        outcome = writeReservation(plan, *site->companyId, *action.site, sample, principal, _token);
+    for (int attempt = 0; attempt < kAttempts && !outcome.committed; ++attempt) {
+        try {
+            auto const plan = planReservation(*site->companyId, *action.site, sample, action.analyses, _token);
+            outcome = writeReservation(plan, *site->companyId, *action.site, sample, principal, _token);
+        } catch (Vanished const& vanished) {
+            outcome = Attempt{.committed = false, .words = vanished.words};
+        }
     }
     if (!outcome.committed) {
         throw Conflict{outcome.words};

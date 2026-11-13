@@ -1629,8 +1629,9 @@ instance's token and an expiry an hour after the last reservation; a lapsed row 
 timer. A bench that reserves again replaces its own earlier rows, and its own hold on a lot does not count against it.
 Contention for a lot is ordered by its `reservation_version`, the first write of each reservation's transaction, a
 conditional update on the version and the stock on hand that were read: two benches racing for the last lot give one
-reservation and a `Conflict` naming the holder. A bench that loses a lot to a winner that has already let go plans
-again (up to three attempts), since the lot may be free; one that loses it to a holder still there is refused at once.
+reservation and a `Conflict` naming the holder. A bench that loses a lot, to whoever, plans again (up to three
+attempts): another lot, or the same one, may still cover its need, and planning refuses with the named `Conflict` only
+when none does. The refusal naming the holder of the lost lot is what a bench gets when the attempts run out.
 A capture consumes its sample's reservation first, shrinking the row by what it took and deleting it when nothing is
 left, and then the first-expiring order, each lot's take capped at what no other sample has reserved.
 
@@ -1645,15 +1646,29 @@ deletes only the rows of the instance that sends it.
 over a real `RemoteServer`: closing the holder's connection frees the reservation, and the second bench takes the lot
 without waiting for the hour. The race was measured over ten rounds of two threads with both benches alive: one
 reservation and one named refusal each round, and no other failure. The hook is again the instance's destructor, with
-again its costs (decision 37): database work on whatever thread drops the last reference (not re-measured here), a
+again its costs (decision 37): database work on whatever thread drops the last reference (inferred, as in decision 37, from
+`closeConnection`'s documentation; not measured for either lease), a
 failure that can only be logged, and nothing released by a crash. And again the lapse is not told: a bench watching
 `Inventory_Reservation` and `Inventory_Lot` hears nothing of a lapse on disconnect over a one-second window, measured on
 the same connection; a release, which is an action, is heard.
 
-The second lease copied the first's mechanism. By a hand count, about 43 lines: the token generator (8), the
-destructor's release (18), the moved-on check adapted to the lot's version (13) and the expiry rule (4); `isBusy` is
-org's and was called, not copied. None of them is about stock. That is the same hand-rolled guarantee in a second
-module: a lease tied to a connection, released on close, and not told to watchers as a change.
+The second lease copied the first's mechanism. By a hand count, 42 lines: the token generator (8: lines 43-50 of
+`inventory/src/models/reservation_model.cpp`), the destructor's release (17: 374-390), the moved-on check adapted to the
+lot's version (13: 52-64) and the expiry rule (4: the constant at 41-42 of the same file, the filters at lines 119 and
+129 of `inventory/src/db/inventory_store.cpp`); `isBusy` is org's and was called, not copied. None of them is about
+stock. That is the same hand-rolled guarantee in a second module: a lease tied to a connection, released on close, and
+not told to watchers as a change.
+
+The verdict stands: the condition was a release through an existing hook without a timer of the model's own, and that
+was measured. What follows from it is that two modules now hand-roll a lease, and both lapses reach no watcher: a
+screen watching `Inventory_Lot` keeps showing a `reserved` quantity that has lapsed, and nothing tells it to refresh.
+The lapse at the hour is as untold as the lapse on disconnect: it is a rule applied when rows are read and runs no
+action, so nothing declares an effect for it (inferred from reading the code; the measurement above covers only the
+disconnect).
+
+Task 8 must specify the seam: a lease that morph holds for a model, whose lapse, by disconnect or by expiry, is
+announced to watchers as the model's declared effect. It would replace the token, the destructor's release, the
+moved-on check and the expiry rule, and give the lapse a place to be told from. Nothing is built for the seam here.
 
 ### 48. A stock change in one company reaches another company's watching stock keeper (hypothesis 7, second instance)
 
