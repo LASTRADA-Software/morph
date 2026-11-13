@@ -26,7 +26,9 @@ namespace lims::app {
 ///
 /// The ignition-test actions are open because an ignition test belongs to no site: there is no scope to judge a role
 /// in. The invoice editor's edits and its release are open because the editing instance's own live lease is what
-/// permits them, and only `LeaseInvoice`, which declares a role, grants one. `SetDisplayName` is open because its
+/// permits them, and only `LeaseInvoice`, which declares a role, grants one. A bench's `ReleaseReservation` is open
+/// for the same reason: it deletes only the rows of the reserving instance itself, and only `ReserveForSample`, which
+/// declares a role, creates them. `SetDisplayName` is open because its
 /// rule, the person or a supervisor of a company they hold a role in, relates two principals, which a role and a
 /// scope cannot state; the org model checks it.
 ///
@@ -34,8 +36,8 @@ namespace lims::app {
 /// `declaredRequirements()` or here; the declared-authorization suite fails for an action of a listed model that is
 /// neither guarded, open, nor a declared read, and for an id here that is also declared.
 /// @return The action ids.
-[[nodiscard]] inline std::array<std::string_view, 18> const& openMutatingActions() {
-    static constexpr std::array<std::string_view, 18> open{
+[[nodiscard]] inline std::array<std::string_view, 19> const& openMutatingActions() {
+    static constexpr std::array<std::string_view, 19> open{
         "DefineAnalysis",
         "ReviseAnalysis",
         "RegisterClient",
@@ -53,6 +55,7 @@ namespace lims::app {
         "RemoveInvoiceLine",
         "SetInvoiceReference",
         "ReleaseInvoice",
+        "ReleaseReservation",
         "SetDisplayName",
     };
     return open;
@@ -60,8 +63,8 @@ namespace lims::app {
 
 /// @brief Every action a module declares a role, or some role, for.
 /// @return The table.
-[[nodiscard]] inline std::array<RoleRequirement, 53> const& declaredRequirements() {
-    static constexpr std::array<RoleRequirement, 53> requirements{
+[[nodiscard]] inline std::array<RoleRequirement, 54> const& declaredRequirements() {
+    static constexpr std::array<RoleRequirement, 54> requirements{
         requirementOf<VerifyResult>(),
         requirementOf<CreateCompany>(),
         requirementOf<CreateSite>(),
@@ -115,6 +118,7 @@ namespace lims::app {
         requirementOf<ReceiveGoods>(),
         requirementOf<SetRecipe>(),
         requirementOf<RecordConsumption>(),
+        requirementOf<ReserveForSample>(),
     };
     return requirements;
 }

@@ -176,4 +176,20 @@ LIGHTWEIGHT_SQL_MIGRATION(20261120000007, "Create inventory recipes and consumed
     plan.AlterTable("inventory_movements").AddNotRequiredColumn("event_id", Varchar(128));
     plan.CreateIndex("idx_inventory_movements_event", "inventory_movements", {"event_id"});
 }
+LIGHTWEIGHT_SQL_MIGRATION(20261120000008, "Create inventory reservations") {
+    plan.CreateTableIfNotExists("inventory_reservations")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("sample_id", Bigint())
+        .RequiredColumn("company_id", Bigint())
+        .RequiredColumn("site_id", Bigint())
+        .RequiredColumn("lot_id", Bigint())
+        .RequiredColumn("item_id", Bigint())
+        .RequiredColumn("quantity_num", Bigint())
+        .RequiredColumn("quantity_den", Bigint())
+        .RequiredColumn("holder", Varchar(64))
+        .RequiredColumn("token", Varchar(32))
+        .RequiredColumn("expires_at", Bigint());
+    plan.CreateIndex("idx_inventory_reservations_lot", "inventory_reservations", {"lot_id"});
+    plan.CreateIndex("idx_inventory_reservations_sample", "inventory_reservations", {"sample_id"});
+}
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-use-internal-linkage,misc-use-anonymous-namespace,cppcoreguidelines-avoid-non-const-global-variables)

@@ -1238,7 +1238,7 @@ lease on the draft (a submitter's own lease is no obstacle); no other `InvoiceMo
 and the submission's write are two steps, so a lease taken between them is not refused; nothing is lost by it, because
 submission writes conditionally on the gross it read (a line removed in between is a `Conflict`, not a stale approval
 amount) and the editor's later edits fail their draft check. A lease outlives submission and the holder's role until
-it lapses. Lot reservation in Part C is the second instance.
+it lapses. Decision 47 is the second instance.
 
 ### 38. Posting an invoice: two commits in sequence keep each module's action; one transaction gives the ledger's up (hypothesis 1, first instance)
 
@@ -1619,6 +1619,41 @@ Task 8 must specify both halves of the seam, not the second alone:
 
 That a consumer of another outbox (bookmarks, a CRM) would need both unchanged is inferred from the shape of the two
 copies; it was not measured. Nothing is built for the seam here.
+
+### 47. A sample's lots are reserved by the bench that will use them, and the reservation lapses with the bench's instance (hypothesis 3, second instance)
+
+`ReservationModel` is one private instance per bench. `ReserveForSample` reserves, for one sample, what each recipe line
+of its analyses will consume: per item, the first-expiring lot at the sample's site whose available stock (on hand less
+every other sample's live reservation) covers the item's need, summed over the analyses. The rows carry the holder, the
+instance's token and an expiry an hour after the last reservation; a lapsed row counts for nothing, so the hour needs no
+timer. A bench that reserves again replaces its own earlier rows, and its own hold on a lot does not count against it.
+Contention for a lot is ordered by its `reservation_version`, the first write of each reservation's transaction, a
+conditional update on the version and the stock on hand that were read: two benches racing for the last lot give one
+reservation and a `Conflict` naming the holder. A bench that loses a lot to a winner that has already let go plans
+again (up to three attempts), since the lot may be free; one that loses it to a holder still there is refused at once.
+A capture consumes its sample's reservation first, shrinking the row by what it took and deleting it when nothing is
+left, and then the first-expiring order, each lot's take capped at what no other sample has reserved.
+
+Inventory cannot check that a reserved sample exists or is at the site the payload names: no module reads another's
+tables, and lab tells inventory of a sample only when a result is captured. A reservation for a sample that does not
+exist holds stock until it lapses; the caller's analyst role at the named site is what authorizes it. Reservation is a
+bench action of its own rather than a side effect of assigning analyses: the assignment is lab's, inventory cannot see
+it, and lab may not call inventory, so the bench reserves when it assigns. `ReleaseReservation` declares no role: it
+deletes only the rows of the instance that sends it.
+
+**Hypothesis 3 is refuted for its second instance, through the same hook.** Measured in `tests/test_reservation.cpp`
+over a real `RemoteServer`: closing the holder's connection frees the reservation, and the second bench takes the lot
+without waiting for the hour. The race was measured over ten rounds of two threads with both benches alive: one
+reservation and one named refusal each round, and no other failure. The hook is again the instance's destructor, with
+again its costs (decision 37): database work on whatever thread drops the last reference (not re-measured here), a
+failure that can only be logged, and nothing released by a crash. And again the lapse is not told: a bench watching
+`Inventory_Reservation` and `Inventory_Lot` hears nothing of a lapse on disconnect over a one-second window, measured on
+the same connection; a release, which is an action, is heard.
+
+The second lease copied the first's mechanism. By a hand count, about 43 lines: the token generator (8), the
+destructor's release (18), the moved-on check adapted to the lot's version (13) and the expiry rule (4); `isBusy` is
+org's and was called, not copied. None of them is about stock. That is the same hand-rolled guarantee in a second
+module: a lease tied to a connection, released on close, and not told to watchers as a change.
 
 ### 48. A stock change in one company reaches another company's watching stock keeper (hypothesis 7, second instance)
 

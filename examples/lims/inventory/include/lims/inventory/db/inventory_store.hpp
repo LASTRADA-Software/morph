@@ -7,6 +7,7 @@
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "lims/inventory/core/fault_hook.hpp"
 #include "lims/inventory/core/units.hpp"
@@ -14,6 +15,7 @@
 #include "lims/inventory/dto/order_dto.hpp"
 #include "lims/inventory/dto/receipt_dto.hpp"
 #include "lims/inventory/dto/requisition_dto.hpp"
+#include "lims/inventory/dto/reservation_dto.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
 
 /// @file
@@ -78,6 +80,48 @@ template <typename Set, typename Guard>
 /// @return The view.
 /// @throws ValidationError if the row stores a kind outside `MovementKind`.
 [[nodiscard]] StockMovementView movementView(db::MovementRecord const& row, StockUnit unit);
+
+/// @brief The live reservations on lot @p lot: those whose expiry has not passed.
+/// @param mapper The mapper to read through.
+/// @param lot The lot.
+/// @return The rows, oldest first.
+[[nodiscard]] std::vector<db::ReservationRecord> liveReservationsOn(Lightweight::DataMapper& mapper, std::int64_t lot);
+
+/// @brief The live reservations of sample @p sample.
+/// @param mapper The mapper to read through.
+/// @param sample The sample.
+/// @return The rows, oldest first.
+[[nodiscard]] std::vector<db::ReservationRecord> liveReservationsOfSample(Lightweight::DataMapper& mapper,
+                                                                          std::int64_t sample);
+
+/// @brief The quantity of lot @p lot held by live reservations of samples other than @p exceptSample.
+/// @param mapper The mapper to read through.
+/// @param lot The lot.
+/// @param exceptSample A sample whose reservations do not count; 0 for none.
+/// @return The quantity held, in the item's unit.
+/// @throws OutOfRange if the sum does not fit.
+[[nodiscard]] ::morph::math::Rational reservedOn(Lightweight::DataMapper& mapper, std::int64_t lot,
+                                                 std::int64_t exceptSample);
+
+/// @brief What of lot @p lot is free to hold or take for @p exceptSample: its stock on hand less every live
+///        reservation of another sample.
+/// @param mapper The mapper to read through.
+/// @param lot The lot's row.
+/// @param exceptSample The sample the stock is for; its own reservations do not count against it. 0 for none.
+/// @return The available quantity, in the item's unit.
+/// @throws OutOfRange if a sum does not fit.
+[[nodiscard]] ::morph::math::Rational availableOf(Lightweight::DataMapper& mapper, db::LotRecord const& lot,
+                                                  std::int64_t exceptSample);
+
+/// @brief The view of the reservation @p rows hold for sample @p sample.
+/// @param mapper The mapper to read through.
+/// @param sample The sample.
+/// @param rows Its live reservation rows; none gives a view with no holder.
+/// @return The view.
+/// @throws NotFound if a row's lot or item does not exist.
+/// @throws ValidationError if an item stores a unit outside its enumeration.
+[[nodiscard]] ReservationView reservationView(Lightweight::DataMapper& mapper, std::int64_t sample,
+                                              std::vector<db::ReservationRecord> const& rows);
 
 /// @brief The view of a lot, with its live reserved quantity.
 /// @param mapper The mapper to read through.
