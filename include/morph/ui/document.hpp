@@ -10,6 +10,7 @@
 #include <format>
 #include <functional>
 #include <initializer_list>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -24,6 +25,7 @@
 
 #include "control_shape.hpp"
 #include "expression.hpp"
+#include "page_layout.hpp"
 #include "shell_parts.hpp"
 #include "value.hpp"
 
@@ -1114,6 +1116,21 @@ inline constexpr std::array<KeySpec, 5> kActionBarKeys = {{{"children", Shape::N
 /// @brief The keys of `dropZone`.
 inline constexpr std::array<KeySpec, 4> kDropZoneKeys = {
     {{"accept", Shape::Expr}, {"multiple", Shape::Expr}, {"children", Shape::Nodes}, {"onDrop", Shape::Commands}}};
+/// @brief The keys of `page`: its sheet's size and margins as literal micrometres.
+inline constexpr std::array<KeySpec, 4> kPageKeys = {{{"width", Shape::Expr, {}, kRequired},
+                                                      {"height", Shape::Expr, {}, kRequired},
+                                                      {"margins", Shape::Expr},
+                                                      {"children", Shape::Nodes}}};
+/// @brief The keys of `pageRegion`: its anchor and place as literal micrometres.
+inline constexpr std::array<KeySpec, 6> kPageRegionKeys = {{{"anchor", Shape::Text, {}, kRequired},
+                                                            {"x", Shape::Expr},
+                                                            {"y", Shape::Expr},
+                                                            {"width", Shape::Expr},
+                                                            {"height", Shape::Expr},
+                                                            {"children", Shape::Nodes}}};
+/// @brief The keys of `localeScope`.
+inline constexpr std::array<KeySpec, 2> kLocaleScopeKeys = {
+    {{"locale", Shape::Expr, {}, kRequired}, {"children", Shape::Nodes}}};
 /// @brief The keys of `customize`.
 inline constexpr std::array<KeySpec, 1> kCustomizeKeys = {{{"point", Shape::Name, {}, kRequired}}};
 /// @brief The keys of `boundary`.
@@ -1157,7 +1174,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 58> kKinds = {{
+inline constexpr std::array<KindSpec, 61> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -1192,6 +1209,9 @@ inline constexpr std::array<KindSpec, 58> kKinds = {{
     {"collapsible", kCollapsibleKeys},
     {"dropZone", kDropZoneKeys},
     {"actionBar", kActionBarKeys},
+    {"page", kPageKeys},
+    {"pageRegion", kPageRegionKeys},
+    {"localeScope", kLocaleScopeKeys},
     {"customize", kCustomizeKeys},
     {"boundary", kBoundaryKeys},
     {"form", kFormKeys, kOpenValues, kFormValues},
@@ -1218,6 +1238,90 @@ inline constexpr std::array<KindSpec, 58> kKinds = {{
     {"line", kLineKeys, kPart},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
+
+/// @brief A literal length of a page node: an integer count of micrometres.
+/// @param expr The key's expression.
+/// @param key  The key, for the refusal.
+/// @return The length.
+[[nodiscard]] inline Mm pageLengthOf(ExprPtr const& expr, std::string_view key) {
+    std::int64_t const* const count = expr->kind == ExprKind::Literal ? expr->literal.asInt() : nullptr;
+    if (count == nullptr || *count < 0 || *count > std::numeric_limits<std::int32_t>::max()) {
+        refuse(expr->path, "`" + std::string{key} + "` is a literal integer count of micrometres, 0 or more");
+    }
+    return Mm::fromMicrometres(static_cast<std::int32_t>(*count));
+}
+
+/// @brief A page node's geometry, from its literal keys; the loader has checked nothing about it yet.
+/// @param node A `page` node.
+/// @return The geometry.
+/// @throws DocumentRefused when a key is not a literal length, or the geometry is not valid.
+[[nodiscard]] inline PageGeometry pageGeometryOf(DocNode const& node) {
+    PageGeometry geometry;
+    geometry.width = pageLengthOf(node.prop("width"), "width");
+    geometry.height = pageLengthOf(node.prop("height"), "height");
+    if (ExprPtr const margins = node.prop("margins")) {
+        if (margins->kind == ExprKind::Literal && margins->literal.asRecord() != nullptr) {
+            ValueRecord const& record = *margins->literal.asRecord();
+            for (auto const& [side, amount] : record) {
+                std::int64_t const* const count = amount.asInt();
+                Mm* const target = side == "top"      ? &geometry.margins.top
+                                   : side == "right"  ? &geometry.margins.right
+                                   : side == "bottom" ? &geometry.margins.bottom
+                                   : side == "left"   ? &geometry.margins.left
+                                                      : nullptr;
+                if (target == nullptr || count == nullptr || *count < 0 ||
+                    *count > std::numeric_limits<std::int32_t>::max()) {
+                    refuse(margins->path,
+                           "`margins` is a literal count of micrometres, or a record of `top`, `right`, "
+                           "`bottom` and `left` counts");
+                }
+                *target = Mm::fromMicrometres(static_cast<std::int32_t>(*count));
+            }
+        } else {
+            geometry.margins = PageMargins{pageLengthOf(margins, "margins")};
+        }
+    }
+    if (std::optional<std::string> const problem = geometry.problem()) {
+        refuse(node.path, *problem);
+    }
+    return geometry;
+}
+
+/// @brief A page region's geometry, from its literal keys.
+/// @param node A `pageRegion` node.
+/// @param page The sheet it is on.
+/// @return The geometry.
+/// @throws DocumentRefused when a key is not a literal length, the anchor is unknown, or the region is not valid on
+///         the sheet.
+[[nodiscard]] inline RegionGeometry regionGeometryOf(DocNode const& node, PageGeometry const& page) {
+    RegionGeometry geometry;
+    std::string_view const anchor = node.name("anchor");
+    if (anchor == "top") {
+        geometry.anchor = PageAnchor::Top;
+    } else if (anchor == "bottom") {
+        geometry.anchor = PageAnchor::Bottom;
+    } else if (anchor == "offset") {
+        geometry.anchor = PageAnchor::Offset;
+    } else {
+        refuse(pointerAppend(node.path, "anchor"), "`anchor` is `top`, `bottom` or `offset`");
+    }
+    if (ExprPtr const x = node.prop("x")) {
+        geometry.x = pageLengthOf(x, "x");
+    }
+    if (ExprPtr const y = node.prop("y")) {
+        geometry.y = pageLengthOf(y, "y");
+    }
+    if (ExprPtr const width = node.prop("width")) {
+        geometry.width = pageLengthOf(width, "width");
+    }
+    if (ExprPtr const height = node.prop("height")) {
+        geometry.height = pageLengthOf(height, "height");
+    }
+    if (std::optional<std::string> const problem = geometry.problem(page)) {
+        refuse(node.path, *problem);
+    }
+    return geometry;
+}
 
 /// @brief Looks up a node kind or a part kind.
 /// @param kind The kind.
@@ -3450,6 +3554,9 @@ private:
     }
 
     void checkNode(DocNode const& node, CheckContext const& context) {
+        if (node.kind == "pageRegion") {
+            refuse(node.path, "a page region belongs in a page");
+        }
         if (!node.name("alignSelf").empty()) {
             refuse(pointerAppend(node.path, "alignSelf"), std::string{kAlignSelfPlaces});
         }
@@ -3507,6 +3614,9 @@ private:
         bool const bleeds = parent.kind == "column" || parent.kind == "panel" || parent.kind == "tab";
         for (auto const& [key, nodes] : parent.children) {
             for (DocNodePtr const& child : nodes) {
+                if (child->kind == "pageRegion" && parent.kind != "page") {
+                    refuse(child->path, "a page region belongs in a page");
+                }
                 if (!child->name("alignSelf").empty() && (!places || key != "children")) {
                     refuse(pointerAppend(child->path, "alignSelf"), std::string{kAlignSelfPlaces});
                 }
@@ -3719,6 +3829,10 @@ private:
             checkTabsInset(node);
         } else if (node.kind == "chart") {
             checkChart(node);
+        } else if (node.kind == "page") {
+            checkPage(node);
+        } else if (node.kind == "localeScope") {
+            checkLocaleScope(node);
         } else if (node.kind == "customize" && !_doc->customize.contains(node.name("point"))) {
             refuse(pointerAppend(node.path, "point"),
                    "`" + std::string{node.name("point")} + "` is not a customization point of this document");
@@ -3741,6 +3855,54 @@ private:
             checkTablePaging(node);
             checkTableGroup(node);
             checkRowsTableKeys(node);
+        }
+    }
+
+    // Whether a node gives the common key @p key.
+    static bool gives(DocNode const& node, std::string_view key) {
+        return node.props.contains(key) || node.names.contains(key) || node.flags.contains(key) ||
+               node.parts.contains(key) || (key == "keys" && !node.keys.empty()) || (key == "id" && !node.id.empty());
+    }
+
+    // The common keys a page node does not take, each refused where it is written.
+    static void refuseKeys(DocNode const& node, std::span<std::string_view const> keys, std::string_view why) {
+        for (std::string_view const key : keys) {
+            if (gives(node, key)) {
+                refuse(pointerAppend(node.path, key), "`" + std::string{key} + "` " + std::string{why});
+            }
+        }
+    }
+
+    // A page holds regions and nothing else, each valid on the sheet; the sheet sizes itself.
+    static void checkPage(DocNode const& node) {
+        static constexpr std::array<std::string_view, 9> kRefused = {
+            "sizing", "minWidth", "maxWidth", "minHeight", "maxHeight", "bleed", "drag", "drop", "autofocus"};
+        refuseKeys(node, kRefused, "is refused on a page: the sheet is sized by its geometry");
+        if (node.name("alignSelf") == "stretch") {
+            refuse(pointerAppend(node.path, "alignSelf"), "a page is never stretched; `alignSelf` places the sheet");
+        }
+        PageGeometry const page = pageGeometryOf(node);
+        for (DocNodePtr const& child : node.nodes("children")) {
+            if (child->kind != "pageRegion") {
+                refuse(child->path, "a page holds page regions and nothing else");
+            }
+            static constexpr std::array<std::string_view, 11> kRegionRefused = {
+                "sizing", "minWidth", "maxWidth", "minHeight", "maxHeight", "alignSelf",
+                "bleed",  "span",     "drag",     "drop",      "autofocus"};
+            refuseKeys(*child, kRegionRefused, "is refused on a page region: its geometry names its size");
+            static_cast<void>(regionGeometryOf(*child, page));
+        }
+    }
+
+    // A scope is not a widget, so it takes none of the keys every widget takes.
+    static void checkLocaleScope(DocNode const& node) {
+        for (KeySpec const& key : kCommonKeys) {
+            if (gives(node, key.key)) {
+                refuse(pointerAppend(node.path, key.key),
+                       "`" + std::string{key.key} +
+                           "` is refused on a locale scope: it is not a widget; wrap it in a "
+                           "node that has one");
+            }
         }
     }
 

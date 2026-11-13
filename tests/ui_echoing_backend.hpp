@@ -195,6 +195,16 @@ public:
         created();
         return _recording.createDropZone(parent);
     }
+    std::unique_ptr<::morph::ui::PageWidget> createPage(::morph::ui::ContainerWidget* parent,
+                                                        ::morph::ui::PageGeometry const& geometry) override {
+        created();
+        return _recording.createPage(parent, geometry);
+    }
+    std::unique_ptr<::morph::ui::PageRegionWidget> createPageRegion(
+        ::morph::ui::ContainerWidget* parent, ::morph::ui::RegionGeometry const& geometry) override {
+        created();
+        return _recording.createPageRegion(parent, geometry);
+    }
     std::unique_ptr<::morph::ui::DrawerWidget> createDrawer(::morph::ui::ContainerWidget* parent,
                                                             ::morph::ui::Side side) override {
         created();

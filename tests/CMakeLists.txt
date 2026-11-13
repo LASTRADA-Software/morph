@@ -234,6 +234,7 @@ add_executable(morph_tests
     test_ui_interpreter_forms.cpp
     test_ui_bound_decimals.cpp
     test_ui_interpreter_commands.cpp
+    test_ui_document_page.cpp
     test_ui_interpreter_table.cpp
     test_ui_interpreter_chart.cpp
     test_ui_chart_scale.cpp
@@ -320,6 +321,10 @@ target_compile_definitions(morph_tests PRIVATE
     MORPH_UI_MESSAGES_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/messages.json"
     MORPH_UI_EXPRESSIONS_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/expressions.json"
     MORPH_UI_DOCUMENTS_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/documents.json")
+
+# The shipped surfaces of the Qt Quick theme, which the contrast check reads.
+target_compile_definitions(morph_tests PRIVATE
+    MORPH_PAPER_THEME_QML="${CMAKE_SOURCE_DIR}/src/qt_quick/qml/Theme.qml")
 
 # The authoring goldens: builder output checked against JSON files.
 target_compile_definitions(morph_tests PRIVATE MORPH_UI_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/ui/golden")

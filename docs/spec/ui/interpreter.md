@@ -583,6 +583,17 @@ position.
   milliseconds.
 - **Overflow.** A range the checked arithmetic cannot hold is reported once, and the chart draws its summary alone.
 
+### Document pages and locale scopes
+
+`page` and `pageRegion` lower to `ui::Page` and `ui::PageRegion`. `localeScope` lowers to a holder column whose children
+mount in a child `RtScope` carrying a formatting context: the session's with the scope's tag, its row of the locale
+table and the date patterns the application declared, else the row's, as a reactive value of the session's facts and the
+`locale` expression evaluated in the enclosing scope. `RtScope::formatting()` walks to the innermost scope with a context
+and answers the session's otherwise; `ScopeEnv::formatting()` and every node-level conversion use it, while entry (the
+drafts and places of inputs, a date input's pattern, `parseDecimal` and every parse) stays on the session's facts. A tag
+the locale table does not list is reported once per tag through the screen's `report` at the `locale` path, the once-set
+held by the `Session`. See [`document_page.md`](document_page.md#the-locale-scope).
+
 ## Development tools
 
 In development mode (`SessionOptions::developmentTools` is `On`), a screen also records what the development inspector reads

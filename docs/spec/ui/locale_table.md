@@ -92,8 +92,9 @@ placeholder or an input stays ungrouped, `2026` and not `2,026`, in every locale
 `en` and in `de`, and `Year {$year :number}` reads `Year 2,026` and `Year 2.026`. An integer that is meant to be read as
 a quantity is shown with `number`; one that is an identifier needs nothing.
 
-`localeScope` (a scope inside a screen that writes in another locale) reads the same table; its own spec states
-whether a scope's locale pattern wins over the application's inside the scope.
+`localeScope` (a scope inside a screen that writes in another locale) reads the same table, and the application's
+declared date pattern wins inside the scope as it does in the session; [`document_page.md`](document_page.md#the-locale-scope)
+has the rest.
 
 ## Both frontends
 

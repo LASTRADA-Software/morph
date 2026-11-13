@@ -184,6 +184,15 @@ std::unique_ptr<ui::DropZoneWidget> Backend::createDropZone(ui::ContainerWidget*
     return make<detail::DropZoneImpl>(_impl->context, parent);
 }
 
+std::unique_ptr<ui::PageWidget> Backend::createPage(ui::ContainerWidget* parent, ui::PageGeometry const& geometry) {
+    return make<detail::PageImpl>(_impl->context, parent, geometry);
+}
+
+std::unique_ptr<ui::PageRegionWidget> Backend::createPageRegion(ui::ContainerWidget* parent,
+                                                                ui::RegionGeometry const& geometry) {
+    return make<detail::PageRegionImpl>(_impl->context, parent, geometry);
+}
+
 void Backend::fit() { detail::fit(_impl->context); }
 
 std::string Backend::widthClass() const { return ui::widthClassOf(_impl->context.screen->viewportArea().width); }

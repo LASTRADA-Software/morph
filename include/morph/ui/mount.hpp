@@ -2198,6 +2198,81 @@ private:
         return widget;
     }
 
+    // The refusal text of a page node, naming its test id the way every layout refusal does.
+    [[nodiscard]] static std::logic_error pageRefusal(Common const& common, std::string const& what) {
+        return std::logic_error{"morph::ui::mount: " + what +
+                                (common.testId.empty() ? std::string{} : " (node `" + common.testId + "`)")};
+    }
+
+    // A page sizes itself: it takes `alignSelf` (not `Stretch`) and no other layout hint. A region is sized by its
+    // geometry and takes none.
+    static void checkPageLayout(Common const& common, bool isPage) {
+        LayoutHints hints = common.layout;
+        if (isPage) {
+            if (hints.alignSelf && *hints.alignSelf == Align::Stretch) {
+                throw pageRefusal(common, "a page is never stretched; `alignSelf` places the sheet");
+            }
+            hints.alignSelf.reset();
+        }
+        if (hints != LayoutHints{}) {
+            throw pageRefusal(common, isPage ? "a page is sized by its sheet; its layout hints are refused"
+                                             : "a page region is sized by its geometry; its layout hints are refused");
+        }
+    }
+
+    // The geometry of the page whose regions are being mounted, restored when they are done.
+    class PageGuard {
+    public:
+        PageGuard(Mounter& self, PageGeometry const* page) : _self{&self}, _saved{std::exchange(self._page, page)} {}
+        PageGuard(PageGuard const&) = delete;
+        PageGuard& operator=(PageGuard const&) = delete;
+        PageGuard(PageGuard&&) = delete;
+        PageGuard& operator=(PageGuard&&) = delete;
+        ~PageGuard() { _self->_page = _saved; }
+
+    private:
+        Mounter* _self;
+        PageGeometry const* _saved;
+    };
+
+    Widget& mountKind(reactive::Scope& scope, Page const& spec, ContainerWidget* parent) {
+        checkPageLayout(spec.common, true);
+        if (std::optional<std::string> const problem = spec.geometry.problem()) {
+            throw pageRefusal(spec.common, *problem);
+        }
+        for (Node const& child : spec.children) {
+            if (child && !std::holds_alternative<PageRegion>(child->kind)) {
+                throw pageRefusal(spec.common, "a page holds page regions and nothing else");
+            }
+        }
+        PageWidget& widget = scope.adopt(_backend->createPage(parent, spec.geometry));
+        applyCommon(scope, widget, spec.common);
+        if (spec.common.a11y.role.empty()) {
+            widget.setAccessibleRole("document");
+        }
+        if (!spec.common.surface.isBound() && spec.common.surface.constant().empty()) {
+            widget.setSurface("paper");
+        }
+        PageGuard const guard{*this, &spec.geometry};
+        mountChildren(scope, spec.children, widget);
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, PageRegion const& spec, ContainerWidget* parent) {
+        auto* const page = dynamic_cast<PageWidget*>(parent);
+        if (page == nullptr || _page == nullptr) {
+            throw pageRefusal(spec.common, "a page region belongs in a page");
+        }
+        checkPageLayout(spec.common, false);
+        if (std::optional<std::string> const problem = spec.geometry.problem(*_page)) {
+            throw pageRefusal(spec.common, *problem);
+        }
+        PageRegionWidget& widget = scope.adopt(_backend->createPageRegion(page, spec.geometry));
+        applyCommon(scope, widget, spec.common);
+        mountChildren(scope, spec.children, widget);
+        return widget;
+    }
+
     // One prop of a loaded component, bound to the setter its kind crosses by.
     void bindCustomProp(reactive::Scope& scope, CustomWidget& widget, CustomProp const& prop) {
         std::string const& name = prop.name;
@@ -2326,6 +2401,8 @@ private:
     ContainerWidget* _overlay = nullptr;
     // The action bar whose children are being mounted, while they are.
     StackWidget* _actionBar = nullptr;
+    // The sheet whose regions are being mounted, while they are.
+    PageGeometry const* _page = nullptr;
     // The first autofocus widget of the mount pass in progress, and how deeply passes are nested.
     Widget* _autofocus = nullptr;
     std::size_t _passDepth = 0;

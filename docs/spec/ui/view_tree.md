@@ -92,11 +92,12 @@ which maps it (the theme's `space.<step>` on Qt Quick, rows and columns on the t
 The node kinds are the palette of the UI document design (§9): its base kinds (text, button, text
 input, checkbox, select, menu, column, row, grid, spacer, panel, scroll, switch, tabs, dialog, busy,
 forEach, table, date-time input, slider and file picker) and its further kinds (banner, badge,
-progress, steps, key-value, empty state, drawer, splitter, collapsible, drop zone, chart), with `custom`,
+progress, steps, key-value, empty state, drawer, splitter, collapsible, drop zone, chart, page, page region), with `custom`,
 which this mount shows as its fallback. Every other node carries the common properties, inputs and text
-carry the field state, and menu items nest. `boundary` and `customize` are not view-tree kinds: a
-boundary decides what to show from the state of the queries its children read, and a customization
-point's editor from the application's customization store, so the interpreter that owns those
+carry the field state, and menu items nest. `boundary`, `customize` and `localeScope` are not view-tree kinds: a
+boundary decides what to show from the state of the queries its children read, a customization
+point's editor from the application's customization store, and a locale scope formats its children in another
+locale ([`document_page.md`](document_page.md#the-locale-scope)), so the interpreter that owns those
 lowers them to the kinds below.
 
 | Node | Builder | Props and callbacks |
@@ -133,6 +134,8 @@ lowers them to the kinds below.
 | `Collapsible` | `collapsible` | `title`, `open`, `onToggle` (the state the user asked for), `header` (shown beside the title, usable while closed), `child` (mounted once, hidden while closed) |
 | `DropZone` | `dropZone` | `accept` (extensions such as `".csv"`, without regard to case; empty takes every file), `multiple` (both set once), `onDrop` (the paths of a drop it took; a drop with a refused file, or several files when not `multiple`, is refused whole), `child` |
 | `Chart` | `chart` | `data` (`ChartData`, below): points, joined or as bars, against a numeric axis with horizontal reference lines. It takes no focus and calls no handler |
+| `Page` | `page` | `geometry` (`PageGeometry{width, height, margins}`, millimetres, set once), `children` (`PageRegion` nodes only; the mount refuses any other). A sheet of fixed physical size, drawn on the `paper` surface and displayed scaled down to the width its container offers, never up; its `layout` hints are refused, its `alignSelf` places it. [`document_page.md`](document_page.md) |
+| `PageRegion` | `pageRegion` | `geometry` (`RegionGeometry{anchor, x, y, width, height}`, millimetres, set once; `anchor` a `PageAnchor` of `Top`, `Bottom` or `Offset`), `children` (laid out as a vertical stack whose width is definite and whose height is when given). A rectangle of a page, anchored to its margin box or placed at an offset from the sheet's edges; regions draw in node order. Only inside a `Page`; its `layout` hints are refused. [`document_page.md`](document_page.md) |
 | `Custom` | `custom` | `name`, `fallback` (never null: `custom` throws `std::invalid_argument`), `props` (`CustomProp`: a name and a `Prop` of text, `bool` or `double`), `minVersion`, `onEvent(event, payload)`. `Mounted` asks `IViewBackend::createCustom` for the component and mounts the fallback only when it returns null; `Custom` has no `Common` of its own |
 
 Every node but `Custom` also carries `Common`:

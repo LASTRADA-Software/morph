@@ -317,6 +317,14 @@ read in the pattern and then as ISO 8601 (`yyyy-MM-dd`, `yyyy-MM-dd HH:mm`, `yyy
 a full instant), so a pasted ISO date still works; text read with `xxx` takes its instant from the offset it names,
 so `24-Oct-2026 09:41 +02:00` is 07:41 UTC whatever the display zone.
 
+- **Under a locale scope.** Inside a `localeScope` ([`document_page.md`](document_page.md#the-locale-scope)) the context
+  an expression reads is the session's with the scope's locale, its row of the locale table (separators, sign, currency
+  placement) and the date patterns the application declared, else that row's; `t` resolves in the scope's locale. The
+  environment's `formatting()` answers it, so `number`, `decimal`, `quantity`, `money`, `date`, `dateTime`,
+  `dateRange`, `format` and a message's `:number` follow the scope with no change to the function. `parseDecimal` is
+  entry and always reads the session's facts, as does every parse of typed text. `{"env": "locale"}` stays the
+  session's. The units, the display zone and the `DateFormatter` are the session's.
+
 ## Messages
 
 `t(key, fallback, args)` asks the `TranslationProvider` for `(key, locale)`; the catalogue's

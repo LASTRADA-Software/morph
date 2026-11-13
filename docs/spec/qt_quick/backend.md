@@ -615,6 +615,16 @@ software scene graph:
 - **qmllint** over every `MorphUi` component, through the module's lint target, failing on any warning
   (`tests/qt_quick/run_qmllint.cmake`).
 
+## Document page
+
+A page is an `Item` of its displayed size holding an inner `Item` of the sheet's pixel size, 96 device-independent
+pixels to 25.4 mm on both axes whatever the screen's DPI, with `scale` set from `ui::layoutPage` and
+`transformOrigin: Item.TopLeft`; regions are children of the inner item in node order, positioned from the layout's
+rectangles. The page asks its layout for `Layout.fillWidth: true`, `Layout.minimumWidth: 0`, `Layout.maximumWidth` the sheet's
+width and `implicitHeight` the displayed height. It draws on the `paper` surface; its role is `QAccessible::Document`, and a
+region is exposed to assistive technology only when named. A region clips its content, and a clipped one draws a fade
+with `…` over its last line. See [`ui/document_page.md`](../ui/document_page.md).
+
 ## Design decisions
 
 | Decision | Why |

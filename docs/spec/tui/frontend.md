@@ -279,6 +279,14 @@ with a probe that acts as a user does, through `core::tui` events dispatched to 
 It reads back what the widgets show. Run with a probe that drops every input or misreads every text, the suite fails
 the cases that check them, so its passes say something about the terminal backend.
 
+## Document page
+
+A page is 10 columns and 6 rows to 25.4 mm (`ui::toCells` rounds edges): A4 is 83 × 70 cells, drawn inside a one-cell
+frame, so the footprint is the sheet plus two columns and rows, at most the container's width. It does not scale. A
+viewport narrower than the sheet pans horizontally: the page takes the focus itself while nothing inside can and handles
+Left, Right, Home and End, and otherwise follows the focused widget horizontally. A region clips its content and draws `…`
+at the end of the last row of a clipped rectangle. See [`ui/document_page.md`](../ui/document_page.md).
+
 ## Design decisions
 
 - **Retained widgets over core::tui components.** Each widget owns its view, and the containers lay their children

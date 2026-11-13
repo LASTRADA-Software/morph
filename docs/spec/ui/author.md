@@ -260,6 +260,11 @@ expression of one),
 - **`custom(component, {.props = {{"name", e}}, .on = {{"event", commands}}})`** names a declared
   component; props and events are keyed by name, since a component's props are declared as data.
 
+`page(regions, PageOptions{width, height, margins})`, `pageRegion(children, RegionOptions{anchor, x, y, width, height})` and
+`localeScope(children, locale)` write a fixed-size sheet, a region of it and a subtree formatted in another locale
+([`document_page.md`](document_page.md)); the options hold only millimetre geometry, and the common properties are the
+node modifiers. `checkAccessibility` requires an `a11y.name` on a `page`.
+
 ## Registration
 
 `Screen` is an id and a builder function from `Scope&` to the view; `screen<"id">(fn)` and
@@ -318,7 +323,7 @@ load-time validation:
 | `button` | A `label` or an `a11y.name`; an `icon` never names it |
 | `dialog`, `drawer` | A `title` or an `a11y.name` |
 | `group` | A `label` or an `a11y.name` |
-| `table` (including one declared from an action), `custom` | An `a11y.name` |
+| `table` (including one declared from an action), `custom`, `page` | An `a11y.name` |
 
 - A label, title or name written as the constant `""` or `null` does not count; any other
   expression does, since its value is not known until the client evaluates it.

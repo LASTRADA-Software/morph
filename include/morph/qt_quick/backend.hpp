@@ -150,6 +150,12 @@ public:
                                                                      ui::Axis axis) override;
     /// @copydoc ui::IViewBackend::createCollapsible
     [[nodiscard]] std::unique_ptr<ui::CollapsibleWidget> createCollapsible(ui::ContainerWidget* parent) override;
+    /// @copydoc ui::IViewBackend::createPage
+    [[nodiscard]] std::unique_ptr<ui::PageWidget> createPage(ui::ContainerWidget* parent,
+                                                             ui::PageGeometry const& geometry) override;
+    /// @copydoc ui::IViewBackend::createPageRegion
+    [[nodiscard]] std::unique_ptr<ui::PageRegionWidget> createPageRegion(ui::ContainerWidget* parent,
+                                                                         ui::RegionGeometry const& geometry) override;
     /// @copydoc ui::IViewBackend::createDropZone
     [[nodiscard]] std::unique_ptr<ui::DropZoneWidget> createDropZone(ui::ContainerWidget* parent) override;
 

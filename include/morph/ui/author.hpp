@@ -4110,6 +4110,100 @@ struct ActionBarOptions {
     return node.done();
 }
 
+/// @brief Options of `page`: the sheet's size and margins.
+struct PageOptions {
+    /// @brief The sheet's width, in millimetres.
+    Mm width{};
+    /// @brief The sheet's height, in millimetres.
+    Mm height{};
+    /// @brief The distances from the sheet's edges to the margin box that `Top` and `Bottom` regions follow.
+    PageMargins margins{};
+};
+
+/// @brief A `page` node: a sheet of fixed physical size, drawn on the `paper` surface and displayed scaled down to the
+///        width its container gives it, never up. It is named by `.a11y(…)`, which the accessibility rules require.
+/// @param regions The regions, in the order they are drawn and read; each is a `pageRegion`.
+/// @param options The sheet.
+/// @return The node.
+/// @throws std::invalid_argument when the sheet's size or margins are not valid (`PageGeometry::problem`).
+[[nodiscard]] inline Node page(Nodes const& regions, PageOptions const& options) {
+    PageGeometry const geometry{.width = options.width, .height = options.height, .margins = options.margins};
+    if (std::optional<std::string> const problem = geometry.problem()) {
+        throw std::invalid_argument{"morph::ui::author::page: " + *problem};
+    }
+    detail::NodeWriter node{"page"};
+    node.raw("width", Json(static_cast<std::int64_t>(options.width.micrometres())))
+        .raw("height", Json(static_cast<std::int64_t>(options.height.micrometres())));
+    PageMargins const& margins = options.margins;
+    if (margins == PageMargins{margins.top}) {
+        if (margins.top != Mm{}) {
+            node.raw("margins", Json(static_cast<std::int64_t>(margins.top.micrometres())));
+        }
+    } else {
+        Json record = Json::object_t{};
+        detail::put(record, "top", static_cast<std::int64_t>(margins.top.micrometres()));
+        detail::put(record, "right", static_cast<std::int64_t>(margins.right.micrometres()));
+        detail::put(record, "bottom", static_cast<std::int64_t>(margins.bottom.micrometres()));
+        detail::put(record, "left", static_cast<std::int64_t>(margins.left.micrometres()));
+        Json lit = Json::object_t{};
+        detail::put(lit, "lit", std::move(record));
+        node.raw("margins", std::move(lit));
+    }
+    return node.put("children", regions).done();
+}
+
+/// @brief Options of `pageRegion`: where on the sheet it lies.
+struct RegionOptions {
+    /// @brief `Top` and `Bottom` pin it to the margin box; `Offset` places its corner at `(x, y)` from the sheet's
+    /// edge.
+    PageAnchor anchor = PageAnchor::Top;
+    /// @brief The distance from the sheet's left edge; only `Offset` takes one.
+    Mm x{};
+    /// @brief The distance from the sheet's top edge; only `Offset` takes one.
+    Mm y{};
+    /// @brief The width; absent is the margin box's (`Top`, `Bottom`) or the rest of it (`Offset`).
+    std::optional<Mm> width;
+    /// @brief The height; absent is the content's. A given height clips the content, and a clipped region is marked.
+    std::optional<Mm> height;
+};
+
+/// @brief A `pageRegion` node: a rectangle of a sheet that holds its children as a column.
+/// @param children The content, top to bottom.
+/// @param options  Where it lies.
+/// @return The node.
+[[nodiscard]] inline Node pageRegion(Nodes const& children, RegionOptions const& options) {
+    detail::NodeWriter node{"pageRegion"};
+    node.text("anchor", options.anchor == PageAnchor::Top      ? "top"
+                        : options.anchor == PageAnchor::Bottom ? "bottom"
+                                                               : "offset");
+    auto const length = [&node](char const* key, Mm value) {
+        node.raw(key, Json(static_cast<std::int64_t>(value.micrometres())));
+    };
+    if (options.x != Mm{}) {
+        length("x", options.x);
+    }
+    if (options.y != Mm{}) {
+        length("y", options.y);
+    }
+    if (options.width) {
+        length("width", *options.width);
+    }
+    if (options.height) {
+        length("height", *options.height);
+    }
+    return node.put("children", children).done();
+}
+
+/// @brief A `localeScope` node: every `money`, `date`, `number`, `t` and other formatting inside it is written in the
+///        scope's locale, and the session's locale is untouched. A scope is not a widget: it takes no common
+///        properties, and the interpreter lowers it to a holder column.
+/// @param children The content.
+/// @param locale   The BCP 47 tag, such as a query's field; `null` or empty keeps the session's locale.
+/// @return The node.
+[[nodiscard]] inline Node localeScope(Nodes const& children, AnyHandle const& locale) {
+    return detail::NodeWriter{"localeScope"}.put("locale", locale).put("children", children).done();
+}
+
 /// @brief A `grid` node.
 /// @param children The children.
 /// @param options  The gap, columns or tracks, and alignment; a `justify` is written, and the loader refuses it.
@@ -5818,7 +5912,7 @@ namespace detail {
         }
         return "accessibility: a `group` has a `label` or an `a11y.name`";
     }
-    if ((kind == "table" || kind == "custom") && !hasA11yName(node)) {
+    if ((kind == "table" || kind == "custom" || kind == "page") && !hasA11yName(node)) {
         return "accessibility: a `" + node.kind + "` has an `a11y.name`";
     }
     return {};

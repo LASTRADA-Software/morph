@@ -25,6 +25,7 @@
 #include "button_style.hpp"
 #include "control_shape.hpp"
 #include "input_emphasis.hpp"
+#include "page_layout.hpp"
 #include "text_align.hpp"
 
 /// @file
@@ -1677,6 +1678,29 @@ struct DropZone {
     Common common{};
 };
 
+/// @brief A region of a page: a rectangle of the sheet that holds its children as a vertical stack. Only a `Page`
+///        holds one. Its `layout` hints are refused: the geometry names its size.
+struct PageRegion {
+    /// @brief Where on the sheet the region lies, in millimetres; set once.
+    RegionGeometry geometry{};
+    /// @brief The content, top to bottom; a null child is skipped.
+    std::vector<Node> children;
+    /// @brief Visibility, enablement, accessibility, test identity and chords.
+    Common common{};
+};
+
+/// @brief A sheet of fixed physical size, drawn on the `paper` surface and displayed scaled down, never up, to the
+///        width its container gives it. Its children are `PageRegion` nodes and nothing else. Its `layout` hints are
+///        refused except `alignSelf`: the sheet's size is its own.
+struct Page {
+    /// @brief The sheet's size and margins, in millimetres; set once.
+    PageGeometry geometry{};
+    /// @brief The regions, in the order they are drawn and read; each is a `PageRegion` node.
+    std::vector<Node> children;
+    /// @brief Visibility, enablement, accessibility, test identity and chords.
+    Common common{};
+};
+
 /// @brief One prop a loaded custom component is given.
 struct CustomProp {
     /// @brief The prop's name, as the component declares it.
@@ -1708,7 +1732,8 @@ struct NodeData {
     /// @brief The node.
     std::variant<Text, Button, TextInput, Checkbox, Select, Menu, Column, Row, Grid, Spacer, Panel, Scroll, Switch,
                  Tabs, Dialog, Busy, ForEach, Table, DateTimeInput, Slider, FilePicker, Banner, Badge, Progress, Steps,
-                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar, Chart>
+                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar, Chart, Page,
+                 PageRegion>
         kind;
 };
 
@@ -1879,6 +1904,16 @@ template <typename Kind>
 /// @param spec The node.
 /// @return The node.
 [[nodiscard]] inline Node dropZone(DropZone spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A page node.
+/// @param spec The page.
+/// @return The node.
+[[nodiscard]] inline Node page(Page spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A page region node.
+/// @param spec The region.
+/// @return The node.
+[[nodiscard]] inline Node pageRegion(PageRegion spec) { return detail::makeNode(std::move(spec)); }
 
 /// @brief A component loaded by name, mounted by `Mounted` as its fallback.
 /// @param spec The node.

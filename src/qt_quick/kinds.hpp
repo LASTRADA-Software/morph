@@ -534,6 +534,56 @@ public:
     void toggleByUser() const;
 };
 
+class PageRegionImpl;
+
+/// A sheet: the item displays it scaled, and this widget computes the scale and every region's rectangle with
+/// `ui::layoutPage`, from the width the item reports and the content height each region reports.
+class PageImpl final : public ContainerItemWidget<ui::PageWidget> {
+public:
+    PageImpl(Context& context, ui::ContainerWidget* parent, ui::PageGeometry const& geometry);
+    ~PageImpl() override;
+    PageImpl(PageImpl const&) = delete;
+    PageImpl& operator=(PageImpl const&) = delete;
+    PageImpl(PageImpl&&) = delete;
+    PageImpl& operator=(PageImpl&&) = delete;
+
+    /// Adds a region to the layout, in creation order.
+    void join(PageRegionImpl& region);
+    /// Forgets a region that is going.
+    void leave(PageRegionImpl& region) noexcept;
+    /// Lays the sheet out and writes the scale and the rectangles into the items.
+    void relayout();
+
+private:
+    ui::PageGeometry _geometry;
+    std::optional<ui::Mm> _available;
+    std::vector<PageRegionImpl*> _regions;
+};
+
+class PageRegionImpl final : public ContainerItemWidget<ui::PageRegionWidget> {
+public:
+    PageRegionImpl(Context& context, ui::ContainerWidget* parent, ui::RegionGeometry const& geometry);
+    ~PageRegionImpl() override;
+    PageRegionImpl(PageRegionImpl const&) = delete;
+    PageRegionImpl& operator=(PageRegionImpl const&) = delete;
+    PageRegionImpl(PageRegionImpl&&) = delete;
+    PageRegionImpl& operator=(PageRegionImpl&&) = delete;
+
+    /// The region's place.
+    [[nodiscard]] ui::RegionGeometry const& geometry() const noexcept { return _geometry; }
+    /// The height the content asks for.
+    [[nodiscard]] ui::Mm contentHeight() const noexcept { return _contentHeight; }
+    /// Writes the region's rectangle and overflow into the item.
+    void show(ui::RegionLayout const& layout) const;
+    /// The page lets go of the region first when it is destroyed first.
+    void orphan() noexcept { _page = nullptr; }
+
+private:
+    PageImpl* _page;
+    ui::RegionGeometry _geometry;
+    ui::Mm _contentHeight{};
+};
+
 class DropZoneImpl final : public ContainerItemWidget<ui::DropZoneWidget> {
 public:
     DropZoneImpl(Context& context, ui::ContainerWidget* parent);
