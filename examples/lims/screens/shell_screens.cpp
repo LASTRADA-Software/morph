@@ -19,7 +19,9 @@ ui::Screen aboutScreen() {
                                      "lims keeps a laboratory's samples, results, invoices, ledger and stock in "
                                      "one place.")})
                  .testId("aboutSummary"),
-             ui::text({.text = "Version " + std::string{kApplicationVersion}, .role = std::string{"muted"}})
+             ui::text({.text = ui::t("lims.shell.about.version", "Version {$version}",
+                                     {{"version", ui::AnyHandle{std::string{kApplicationVersion}}}}),
+                       .role = std::string{"muted"}})
                  .testId("aboutVersion")},
             {.title = ui::t("lims.shell.about.heading", "lims"), .padding = 2});
     });

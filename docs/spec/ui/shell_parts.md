@@ -68,7 +68,7 @@ what goes in the request is in the declaration. A request with neither is `{}`.
 | `PrincipalMenu` | `model`, `action`, `contextField`, `localeField`, `nameField`, `detailField`, `subtitleField`, `rolesField`, `locales`, `formats` | a reply with the person's name (`nameField`), optionally a detail line for the menu (`detailField`) and a line under the name in the trigger (`subtitleField`), and `rolesField`, a list of roles |
 
 `BrandMark` has `title` (the product's name), `icon` and `version`. `title` and `version` are each a catalogue key or
-text. `icon` names an icon of the theme's set and is optional: without it the mark's square holds the title's first
+text. `icon` names an icon of the theme's set and is optional: without it the round mark holds the title's first
 letter. `version` is optional: the application's own string, drawn in the sidebar's foot (below).
 
 `HelpEntry` names what the help button opens, and exactly one of the two is given. `screen` is a screen id, opened as a
@@ -181,7 +181,8 @@ Whether a name is real is the server's check at load; whether it is visible is t
 A string field of a reply is drawn as it is, unless it is a typed value: a label, detail, title or role field may carry a
 money, number, date or quantity value, which the client writes in the session's locale exactly as a table cell does
 (`textOf(value, session.formatting())`), and a message reference (`{"t": key, "args": {…}}`), which resolves through the
-catalogue with its arguments formatted the same way. Every part's body reads `{"env": "locale"}` where it names a
+catalogue with its arguments formatted the same way (the pattern names an argument `{$name}`, as in a screen's
+message). Every part's body reads `{"env": "locale"}` where it names a
 `localeField`; so a part reads again when the session's locale changes and the server may localise its own strings, and
 a typed value is re-written on a locale change with no new request. A count above `kCountCap` (99) is drawn `99+`, so
 a badge never needs a digit group.
@@ -402,7 +403,7 @@ is not declared either; the brand is a mark and a name.
 | The foot when compact | A heading at the end of the navigation menu | The compact frame has no sidebar |
 | The brand and the bar | The page head stays external without a bar part | A brand changes only the sidebar |
 
-**Why the added rows.** The mark needs no image file: without an icon the title's first letter fills the square, and
+**Why the added rows.** The mark needs no image file: without an icon the title's first letter fills the mark, and
 with one it is a name in the theme's set. A help action's mutation declares only the model and the action, because a
 record of literals needs no expression. The avatar stays one accessible node, named by the label and the detail, since
 a decoration that was a widget tree would be a second node to a screen reader. The terminal's trigger always ends in a

@@ -275,10 +275,15 @@ ListMyScopesResult OrgModel::execute(const ListMyScopes& action) {
         for (SiteView const& site : sites) {
             visibleSites += site.companyId == company.id ? 1U : 0U;
         }
-        // The company's base currency, then how many of its sites the caller can see: "EUR · 2 sites".
-        std::string detail{currencyName(company.baseCurrency)};
+        // The company's base currency, then how many of its sites the caller can see: "EUR · 2 sites". The words are
+        // catalogue keys, so the client writes them in the session's language.
+        ScopeDetail detail{.t = "lims.shell.scope.currency",
+                           .fallback = "{$currency}",
+                           .args = {.currency = std::string{currencyName(company.baseCurrency)}, .count = {}}};
         if (visibleSites > 0) {
-            detail += " · " + std::to_string(visibleSites) + (visibleSites == 1 ? " site" : " sites");
+            detail.t = visibleSites == 1 ? "lims.shell.scope.site" : "lims.shell.scope.sites";
+            detail.fallback = visibleSites == 1 ? "{$currency} · {$count} site" : "{$currency} · {$count} sites";
+            detail.args.count = std::to_string(visibleSites);
         }
         result.scopes.push_back(ScopeOption{
             .company = company.id,

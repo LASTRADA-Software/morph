@@ -435,7 +435,7 @@ private:
                 if (auto const args = record->find("args"); args != record->end()) {
                     if (ValueRecord const* const named = args->second.asRecord()) {
                         for (auto const& [name, argument] : *named) {
-                            std::string const token = "{" + name + "}";
+                            std::string const token = "{$" + name + "}";
                             for (std::size_t at = pattern.find(token); at != std::string::npos;
                                  at = pattern.find(token, at)) {
                                 std::string const shown = detail::textOf(argument, format);

@@ -1592,9 +1592,10 @@ A scope is a company, which departs from the mockup's switcher: it offers a comp
 GmbH · Köln", with "All sites" beside each). The context is one JSON string or integer, and every list a screen reads
 is keyed by company, so the option's value is the company's id and a screen passes `env("context")` into a
 `CompanyId` member as it is; a value that named a company and a site would need a structured context, which
-`env("context")` is not. The sites the caller can see in the company are the option's second line, and a person who
-holds a role at one site of a company sees that company with that site named. Where a screen needs a site, it asks
-for it itself. `kit::pageHead` reads the context today: the eyebrow names the module and the chosen company. No list
+`env("context")` is not. The option's second line is the company's base currency and how many of its sites the caller
+can see (`EUR · 2 sites`, worded from the catalogue in the session's language), and a person who holds a role at one
+site of a company sees that company with that one site counted. Where a screen needs a site, it asks for it itself.
+`kit::pageHead` reads the context today: the eyebrow names the module and the chosen company. No list
 passes it into a query yet.
 
 A count is a `Count`: `OpenWork<Source>` carries one, which a client reads as a whole, non-negative number whether it
@@ -1620,9 +1621,10 @@ The grabs of the org screens beside `Shell.dc.html` (expanded and compact, `scri
 ways. Domain: the scope is a company, as above; the person's second line is empty, because a role is an enum name here
 and the mockup's "Lab director" is a title no model holds. Pending: the global search, the approvals inbox, the
 module groups with their counts and icons, and the page head appear as the module screens land, since the real
-bundle declares them only then. Framework: the switcher's trigger has no chevron, the frame has no product mark, no
-help button, no person avatar and no connection and version footer. Screen: the switcher's second line lists sites
-where the mockup shows the chosen site and the currency.
+bundle declares them only then. Framework: the chevron, the product mark, the help button, the person's avatar and the
+connection and version footer are drawn; the help button is a wide `?` where the mockup has a square icon button, the
+mark is round, the person's menu has no title line, and the product's "ERP" tag is not drawn. Screen: the switcher's
+second line shows the currency and the number of sites, where the mockup shows the chosen site and the currency.
 
 ### 58. The journal and the trial balance load every row they page or total (hypothesis 10, first instance)
 

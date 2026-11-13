@@ -136,12 +136,16 @@ TEST_CASE("shell: the scopes are the companies the caller can see, with the site
         REQUIRE(scopes.size() == 2);
         CHECK(scopes.at(0).company == lims::test::seededCompany());
         CHECK(scopes.at(0).label == "Main laboratory");
-        CHECK(scopes.at(0).detail == "EUR · 1 site");
+        CHECK(scopes.at(0).detail.t == "lims.shell.scope.site");
+        CHECK(scopes.at(0).detail.args.currency == "EUR");
+        CHECK(scopes.at(0).detail.args.count == "1");
         CHECK(scopes.at(0).currency == lims::CurrencyCode::EUR);
         CHECK(scopes.at(0).decimals == countOf(2));
         CHECK(scopes.at(1).company == second.company);
         CHECK(scopes.at(1).label == "Osaka branch");
-        CHECK(scopes.at(1).detail == "JPY · 1 site");
+        CHECK(scopes.at(1).detail.t == "lims.shell.scope.site");
+        CHECK(scopes.at(1).detail.args.currency == "JPY");
+        CHECK(scopes.at(1).detail.args.count == "1");
         CHECK(scopes.at(1).currency == lims::CurrencyCode::JPY);
         CHECK(scopes.at(1).decimals == countOf(0));
     }

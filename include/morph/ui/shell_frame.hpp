@@ -599,7 +599,8 @@ private:
             add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
             add(MenuEntry{.label = _parts.labels.signOut, .description = _principalName}, NavTarget::Kind::SignOut, 0);
         }
-        // The sidebar's foot is not on screen, so its text ends the menu as a heading.
+        // The sidebar's foot is not on screen, so its text ends the menu as a heading. A separator target, because a
+        // heading is inert on choose just as a separator is.
         if (std::string const foot = footText(); !foot.empty()) {
             add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
             MenuEntry heading;
@@ -890,7 +891,8 @@ private:
         _root->setKeys({"Ctrl+K"}, [this](std::string const&) { focusSearch(); });
     }
 
-    // The brand's square. A badge takes its icon once, so a mark with another icon is made again, at the row's start.
+    // The brand's round mark. A badge takes its icon once, so a mark with another icon is made again, at the row's
+    // start.
     void makeBrandMark(std::string const& icon) {
         _brandMark = _backend.createBadge(_brand.get());
         _brand->moveChild(*_brandMark, 0);
@@ -912,7 +914,7 @@ private:
             if (brand.icon != _brandIcon) {
                 makeBrandMark(brand.icon);
             }
-            // Without an icon the square holds the title's first letter.
+            // Without an icon the mark holds the title's first letter.
             _brandMark->setText(brand.icon.empty() && !brand.title.empty() ? detail::firstLetter(brand.title)
                                                                            : std::string{});
             _brandTitle->setText(brand.title);

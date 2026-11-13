@@ -356,7 +356,7 @@ std::vector<std::string> searchHeadings(ScreenHarness& harness) {
 /// @param login The person's login.
 /// @param expectHits Whether the search should find a hit for "a"; otherwise it waits for the empty row.
 /// @return What it reported and drew.
-Shown signedIn(std::string const& login, bool expectHits) {
+Shown signedIn(std::string const& login, bool expectHits, bool german = false) {
     morph::client::LocalApp app{.name = "lims-shell", .bundle = &modulesBundle, .setUp = {}};
     app.setUp = [](morph::client::LocalSetup const& setup) { lims::screens::prepareLocal(setup.user); };
     app.serverAuthorizer = [] {
@@ -386,6 +386,27 @@ Shown signedIn(std::string const& login, bool expectHits) {
     shown.switcherDrawn = harness.waitFor([&] { return drawn(harness, "Menu", "shell_context"); });
     shown.personDrawn = harness.waitFor(
         [&] { return drawn(harness, "Menu", "shell_principal_menu") && !faceOf("shell_principal_menu").empty(); });
+    if (german) {
+        // The language entry sits among the menu's rows after the roles; find it by its label, not its place.
+        auto const menu = harness.backend().find("Menu", "testId", "shell_principal_menu");
+        REQUIRE(menu.has_value());
+        std::string const items = entriesOf("shell_principal_menu");
+        std::size_t index = 0;
+        std::size_t at = 1;
+        for (; at < items.size(); ++index) {
+            std::size_t end = at;
+            while (end < items.size() && items.at(end) != ',' && items.at(end) != ']') {
+                end += items.at(end) == '\\' ? 2 : 1;
+            }
+            if (items.compare(at, 6, "German") == 0) {
+                break;
+            }
+            at = end + 1;
+        }
+        REQUIRE(at < items.size());
+        harness.backend().chooseMenuEntry(*menu, {index});
+        static_cast<void>(harness.waitFor([&] { return entriesOf("shell_context").contains("Standort"); }));
+    }
     shown.scope = faceOf("shell_context");
     shown.scopes = entriesOf("shell_context");
     shown.person = faceOf("shell_principal_menu");
@@ -525,6 +546,20 @@ TEST_CASE("lims shell: the scenario's analyst and accountant are drawn their sco
     CHECK_FALSE(manpreet.personEntries.contains("Accountant"));
     CHECK(manpreet.searchHeadings == std::vector<std::string>{"Accounts"});
     CHECK(manpreet.modules == std::vector<std::string>{"lab", "billing", "ledger", "inventory"});
+}
+
+// The switcher's detail line is worded from the catalogue in the session's language: a person who chooses German reads
+// the German word for a site. Mutations: the model sends the English words as plain text (the line stays "EUR · 2
+// sites"); the German catalogue lacks the keys (the line is the English fallback).
+TEST_CASE("lims shell: a German session reads the switcher's second line in German", "[lims-screens][shell][auth]") {
+    morph::ladder::testkit::DbFixture fixture;
+    seedPeople();
+
+    auto const julia = signedIn("julia", true, true);
+    CHECK(julia.afterSignIn.empty());
+    CHECK(julia.scopes ==
+          "[Rheinlab Analytik GmbH;checked=true;description=EUR · 2 Standorte,"
+          "Rheinlab Japan K.K.;checked=false;description=JPY · 1 Standort]");
 }
 
 // A person who holds no role is refused the billing and ledger models, so the catalog does not list those modules to

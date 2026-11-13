@@ -3082,7 +3082,7 @@ public:
         auto reply = ::morph::wire::decode(
             _server.handleInline(::morph::wire::encode(::morph::wire::makeInstances(typeId)), _cid));
         if (reply.kind != "ok") {
-            throw std::runtime_error("instances failed: " + reply.message);
+            std::rethrow_exception(::morph::wire::controlFailure("instances", reply.message));
         }
         std::vector<std::string> keys;
         // Not covered by this file's own test suite: `_server` here is always

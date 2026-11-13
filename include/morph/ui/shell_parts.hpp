@@ -143,7 +143,7 @@ struct PrincipalMenu {
 struct BrandMark {
     /// @brief The product's name: a catalogue key or text.
     std::string title;
-    /// @brief The name of an icon in the theme's icon set, drawn in the mark's square; empty draws the title's first
+    /// @brief The name of an icon in the theme's icon set, drawn in the round mark; empty draws the title's first
     ///        letter there.
     std::string icon;
     /// @brief The version string drawn beside the connection state in the sidebar's foot: a catalogue key or text;

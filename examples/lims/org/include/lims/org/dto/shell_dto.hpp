@@ -24,6 +24,25 @@
 
 namespace lims {
 
+/// @brief The arguments of a scope's detail line.
+struct ScopeDetailArgs {
+    /// @brief The company's base currency code.
+    std::string currency;
+    /// @brief How many of the company's sites the person can see, as text.
+    std::string count;
+};
+
+/// @brief A scope's detail line as a message reference, which the client resolves through the catalogue in the
+///        session's language: `{"t": key, "fallback": pattern, "args": {...}}`.
+struct ScopeDetail {
+    /// @brief The catalogue key of the pattern.
+    std::string t;
+    /// @brief The English pattern shown when the catalogue has none.
+    std::string fallback;
+    /// @brief The values the pattern's `{name}` tokens stand for.
+    ScopeDetailArgs args;
+};
+
 /// @brief One scope the person can work in: a company they can see.
 ///
 /// The scope's value, the company's id, is what the shell hands every screen as its context. A scope is a company and
@@ -35,8 +54,8 @@ struct ScopeOption {
     /// @brief The company's name.
     std::string label;
     /// @brief The company's base currency code and, when the person can see any, the number of its sites that they can
-    ///        see: `EUR · 2 sites`.
-    std::string detail;
+    ///        see, worded in the session's language: `EUR · 2 sites`.
+    ScopeDetail detail;
     /// @brief The company's base currency.
     CurrencyCode currency = CurrencyCode::EUR;
     /// @brief The decimals of that currency.
