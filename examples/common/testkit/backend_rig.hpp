@@ -3,7 +3,7 @@
 
 #include <QCoreApplication>
 #include <QEventLoop>
-#include <QTimer>
+#include <QMetaObject>
 #include <QUrl>
 #include <chrono>
 #include <functional>
@@ -32,7 +32,7 @@ namespace morph::ladder::testkit {
 namespace detail {
 
 /// @brief Wraps a `MainThreadExecutor` so every `post()` also schedules a
-///        same-loop-iteration `runFor()` via a zero-delay `QTimer`.
+///        same-loop-iteration `runFor()` via a queued invocation.
 ///
 /// `pump.hpp`'s `pumpUntil`/`awaitQt` only pump the Qt event loop
 /// (`QCoreApplication::processEvents()`) — they never call
@@ -56,8 +56,8 @@ public:
     /// @brief Enqueues @p task and schedules a drain on the Qt event loop.
     ///
     /// The drain lambda holds a `weak_ptr` to `_liveness` and touches nothing
-    /// else until it locks — never a bare `this`. A zero-delay
-    /// `QTimer::singleShot` is a *posted Qt event*, and nothing cancels it
+    /// else until it locks — never a bare `this`. A
+    /// queued invocation is a *posted Qt event*, and nothing cancels it
     /// when this executor dies: a `BackendRig` in `Mode::LocalSingleThread`
     /// is routinely destroyed with one still in flight (the last completion
     /// callback of a test case posts, the test body returns, the rig
@@ -84,12 +84,19 @@ public:
             ::core::async::ExecutorScope const scope{*self};
             task();
         });
-        QTimer::singleShot(0, [this, weakLiveness = std::weak_ptr<const void>{_liveness}] {
-            if (weakLiveness.expired()) {
-                return;  // This executor is gone; `this` is dangling.
-            }
-            _inner.runFor(kDrainBudget);
-        });
+        // The application object is the context: `post` may be called from a thread that runs no Qt event loop
+        // (an internal client's pool thread settling a dispatched call), and a context-free single-shot would
+        // queue its drain to that thread, where it never runs. With the application object the drain lands
+        // on the main thread's loop, the one the test pumps.
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [this, weakLiveness = std::weak_ptr<const void>{_liveness}] {
+                if (weakLiveness.expired()) {
+                    return;  // This executor is gone; `this` is dangling.
+                }
+                _inner.runFor(kDrainBudget);
+            },
+            Qt::QueuedConnection);
     }
 
 private:
