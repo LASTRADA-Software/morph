@@ -7,7 +7,6 @@
 
 #include "lims/org/dto/shell_dto.hpp"
 #include "lims/org/models/org_model.hpp"
-#include "shell_models.hpp"
 
 namespace lims::screens::kit {
 

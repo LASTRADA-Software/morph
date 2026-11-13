@@ -317,7 +317,8 @@ TEST_CASE("shell: inventory counts the requisitions waiting for the caller and f
         ScopedPrincipal const anna{"anna"};
         morph::ladder::ScopedClockOverride const clock{lims::test::at(2026, 11, 11)};
         lims::ProcurementModel procurement;
-        CHECK(procurement.execute(lims::CountPendingRequisitions{.company = lims::test::seededCompany()}).count == countOf(1));
+        CHECK(procurement.execute(lims::CountPendingRequisitions{.company = lims::test::seededCompany()}).count ==
+              countOf(1));
         CHECK(procurement.execute(lims::CountPendingRequisitions{.company = second.company}).count == countOf(0));
         CHECK_THROWS_AS(procurement.execute(lims::CountPendingRequisitions{}), lims::ValidationError);
     }

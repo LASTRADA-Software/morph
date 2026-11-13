@@ -4,6 +4,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/ui/author.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
@@ -239,3 +240,12 @@ BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::SetValueLimit, "SetValueLimit")
 BRIDGE_REGISTER_EFFECTS(lims::SetValueLimit, ::morph::effects::changes<lims::ValueLimitView>)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListValueLimits, "ListValueLimits", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
+
+/// @brief The organisation keeps no state between actions.
+///        A shell part reads it through one shared instance, which a screen document may name only for a model that
+///        keeps no state; the fact is declared here so that no translation unit sees the model without it.
+template <>
+struct morph::ui::author::ModelFacts<lims::OrgModel> {
+    /// @brief A shared instance is equivalent to a private one.
+    static constexpr bool stateless = true;
+};

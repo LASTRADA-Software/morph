@@ -4,6 +4,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/ui/author.hpp>
 
 #include "lims/inventory/dto/order_dto.hpp"
 #include "lims/inventory/dto/requisition_dto.hpp"
@@ -181,3 +182,12 @@ BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::GetPurchaseOrder, "GetPurch
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListPurchaseOrders, "ListPurchaseOrders",
                        ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
+
+/// @brief Procurement keeps no state between actions.
+///        A shell part reads it through one shared instance, which a screen document may name only for a model that
+///        keeps no state; the fact is declared here so that no translation unit sees the model without it.
+template <>
+struct morph::ui::author::ModelFacts<lims::ProcurementModel> {
+    /// @brief A shared instance is equivalent to a private one.
+    static constexpr bool stateless = true;
+};

@@ -1586,26 +1586,43 @@ lims declares its shell as data (`ShellParts`, `screens/lims_shell_parts.cpp`): 
 (`CountPendingApprovals`, `CountPendingRequisitions`), and the signed-in person's name and roles
 (`GetSignedInUser`). One action type belongs to one model, so the counts are four actions composed by the
 declaration, not one action in four modules. morph's shell draws each part on both frontends and hands the chosen
-scope to every screen as `env("context")`; every lims list and every new record reads it. Nothing in morph knows a
-company, a module's work or a record kind.
+scope to every screen as `env("context")`. Nothing in morph knows a company, a module's work or a record kind.
 
-A scope is a company. The context is one JSON string or integer, and every list a screen reads is keyed by company, so
-the option's value is the company's id and a screen passes `env("context")` into a `CompanyId` member as it is; the
-sites the caller can see in the company are the option's second line. A person who holds a role at one site of a
-company sees that company, with that site named. A count answers a plain integer (`OpenWork::count`), because the
-shell reads it as a JSON number and a `Count` is written as a quantity. `OpenWork<Source>` and `SearchHits<Source>`
-are defined once in org and instantiated per module with the record the answer is derived from, so a count is its
-own keyless, derived record: a sample's change refreshes the lab's count and no other module's.
+A scope is a company, which departs from the mockup's switcher: it offers a company and a site ("Rheinlab Analytik
+GmbH · Köln", with "All sites" beside each). The context is one JSON string or integer, and every list a screen reads
+is keyed by company, so the option's value is the company's id and a screen passes `env("context")` into a
+`CompanyId` member as it is; a value that named a company and a site would need a structured context, which
+`env("context")` is not. The sites the caller can see in the company are the option's second line, and a person who
+holds a role at one site of a company sees that company with that site named. Where a screen needs a site, it asks
+for it itself. `kit::pageHead` reads the context today: the eyebrow names the module and the chosen company. No list
+passes it into a query yet.
+
+A count is a `Count`: `OpenWork<Source>` carries one, which a client reads as a whole, non-negative number whether it
+arrives as a plain integer or as the bare exact value `{num, den, dp}` that a `Count` is written as. `OpenWork<Source>`
+and `SearchHits<Source>` are defined once in org and instantiated per module with the record the answer is derived
+from, so a count is its own keyless, derived record: a sample's change refreshes the lab's count and no other
+module's.
 
 A count and a search answer about the companies the caller can see and nothing about the others: a company the caller
 cannot see counts zero and finds nothing, the same as a company with no work. A search matches the start of a
 reference, number, code or lot number (and of a client's or account's name), ignoring case, answers at most eight
 hits and the exact total. A hit names the screen that opens the record and its params; those screens are
-`lims.lab.sample`, `lims.billing.invoice`, `lims.ledger.accounts` and `lims.inventory.stock`.
+`lims.lab.sample`, `lims.billing.invoice`, `lims.ledger.accounts` and `lims.inventory.stock`, and nothing checks a
+hit's screen yet, because the server cannot read a screen named inside a reply.
 
 The bundle declares a module's count and search only when the module lists a screen, and the inbox only when
-`lims.approvals` is registered: the catalog the client checks the declaration against names the modules and screens
-it lists, and a part whose module has no screen has no group to badge and nothing for a hit to open.
+`lims.approvals` is registered. The registry refuses a part whose module no registered screen has, or whose inbox
+screen is not registered, when the parts are set, so a part cannot be declared ahead of its screens. A person the
+catalog hides a module from (a person with no role has no billing or ledger screens) is drawn the shell without that
+module's count, search source or inbox, and the client reports nothing.
+
+The grabs of the org screens beside `Shell.dc.html` (expanded and compact, `scripts/shoot_lims.sh`) differ in these
+ways. Domain: the scope is a company, as above; the person's second line is empty, because a role is an enum name here
+and the mockup's "Lab director" is a title no model holds. Pending: the global search, the approvals inbox, the
+module groups with their counts and icons, and the page head appear as the module screens land, since the real
+bundle declares them only then. Framework: the switcher's trigger has no chevron, the frame has no product mark, no
+help button, no person avatar and no connection and version footer. Screen: the switcher's second line lists sites
+where the mockup shows the chosen site and the currency.
 
 ### 58. The journal and the trial balance load every row they page or total (hypothesis 10, first instance)
 

@@ -12,6 +12,7 @@
 #include <morph/journal/action_log.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/table/query.hpp>
+#include <morph/ui/author.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -689,3 +690,12 @@ BRIDGE_REGISTER_MODEL(lims::SampleDirectoryModel, "SampleDirectoryModel")
 BRIDGE_REGISTER_ACTION(lims::SampleDirectoryModel, lims::CountSamplesToVerify, "CountSamplesToVerify",
                        ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleDirectoryModel, lims::SearchSamples, "SearchSamples", ::morph::model::Loggable::No)
+
+/// @brief The lab's shell reads keep no state.
+///        A shell part reads it through one shared instance, which a screen document may name only for a model that
+///        keeps no state; the fact is declared here so that no translation unit sees the model without it.
+template <>
+struct morph::ui::author::ModelFacts<lims::SampleDirectoryModel> {
+    /// @brief A shared instance is equivalent to a private one.
+    static constexpr bool stateless = true;
+};

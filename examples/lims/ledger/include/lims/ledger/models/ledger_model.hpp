@@ -6,6 +6,7 @@
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/table/query.hpp>
+#include <morph/ui/author.hpp>
 #include <morph/util/datetime.hpp>
 #include <morph/util/rational.hpp>
 #include <optional>
@@ -302,3 +303,12 @@ BRIDGE_REGISTER_EFFECTS(lims::RecordPosting, ::morph::effects::changes<lims::Jou
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::FindPosting, "FindPosting", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::GetRateOn, "GetRateOn", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
+
+/// @brief The ledger keeps no state between actions.
+///        A shell part reads it through one shared instance, which a screen document may name only for a model that
+///        keeps no state; the fact is declared here so that no translation unit sees the model without it.
+template <>
+struct morph::ui::author::ModelFacts<lims::LedgerModel> {
+    /// @brief A shared instance is equivalent to a private one.
+    static constexpr bool stateless = true;
+};

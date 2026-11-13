@@ -47,7 +47,6 @@
 #include "org_screens.hpp"
 #include "scenario/scenario.hpp"
 #include "scenario/scenario_client.hpp"
-#include "shell_models.hpp"
 #include "shell_screens.hpp"
 
 namespace lims::screens {

@@ -8,13 +8,18 @@
 #include <utility>
 
 #include "lims/billing/dto/invoice_dto.hpp"
+#include "lims/billing/models/invoice_model.hpp"
 #include "lims/inventory/dto/requisition_dto.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
+#include "lims/inventory/models/procurement_model.hpp"
+#include "lims/inventory/models/stock_model.hpp"
 #include "lims/lab/dto/sample_dto.hpp"
+#include "lims/lab/models/sample_model.hpp"
 #include "lims/ledger/dto/account_dto.hpp"
+#include "lims/ledger/models/ledger_model.hpp"
 #include "lims/org/dto/role_dto.hpp"
 #include "lims/org/dto/shell_dto.hpp"
-#include "shell_models.hpp"
+#include "lims/org/models/org_model.hpp"
 
 namespace lims::screens {
 
