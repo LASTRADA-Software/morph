@@ -179,15 +179,18 @@ TEST_CASE("page layout: adding or subtracting lengths holds at the largest and s
     CHECK(Mm{210} - Mm{20} == Mm{190});
 }
 
-// Mutation: leave the orphaning out of the page's destructor (the region then releases itself from a page that is
-// gone; run under AddressSanitizer).
+// Mutation: leave the orphaning out of the page's destructor (the region still names the destroyed page).
 TEST_CASE("page region: a region that outlives its page leaves nothing behind", "[ui][page]") {
     ui::testing::RecordingBackend backend;
     auto page = backend.createPage(nullptr, ui::PageGeometry{.width = Mm{210}, .height = Mm{297}});
     auto region = backend.createPageRegion(page.get(), ui::RegionGeometry{});
+    auto* const fake = dynamic_cast<ui::testing::detail::FakePageRegion*>(region.get());
+    REQUIRE(fake != nullptr);
+    CHECK(fake->page() == page.get());
     page.reset();
+    CHECK(fake->page() == nullptr);
+    CHECK_NOTHROW(fake->setContentHeight(Mm{10}));
     region.reset();
-    SUCCEED();
 }
 
 namespace {
@@ -438,6 +441,7 @@ constexpr char const* kStateful = R"({
              "when": { "type": "any", "init": null }, "typed": { "type": "string", "init": "" },
              "rows": { "init": { "lit": [ { "id": 1, "total": "1234.5" }, { "id": 2, "total": "2" } ] } } },
   "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "toEn", "label": "en", "onClick": { "set": "tag", "value": "en" } },
     { "kind": "localeScope", "locale": { "ref": "tag" }, "children": [
       { "kind": "textInput", "id": "amountInput", "testId": "amount", "value": { "ref": "amount" },
         "onChange": [ { "set": "amount", "value": { "fn": "parseDecimal", "args": [ { "ref": "event" } ] } },
@@ -462,7 +466,8 @@ constexpr char const* kStateful = R"({
 }  // namespace
 
 // Mutation: let `elementFor` stop at the scope that carries the locale (every stateful node below dereferences a
-// null element state while it is lowered).
+// null element state while it is lowered); make the scope declare its own elements (the select, the checkbox and the
+// selection reset on the tag change).
 TEST_CASE("locale scope: a stateful node inside a scope mounts and keeps its state", "[ui][page]") {
     Harness h;
     h.session.setLocale("en");
@@ -500,6 +505,17 @@ TEST_CASE("locale scope: a stateful node inside a scope mounts and keeps its sta
     h.backend.edit(h.byTestId("TextInput", "inner"), "x");
     h.settle();
     CHECK(h.text("dlgTyped") == "x");
+    // The tag changes: the scope mounts its children again. What the enclosing scope declares survives (the select,
+    // the checkbox, the table's selection, the dialog's openness), and the number is written in the new locale; what
+    // the dialog's body declared is rebuilt.
+    h.backend.click(h.byTestId("Button", "toEn"));
+    h.settle();
+    CHECK(h.text("shown") == "2.25");
+    CHECK(readJson(*screen, R"({"ref": "unit"})") == R"("kg")");
+    CHECK(readJson(*screen, R"({"ref": "agreed"})") == "true");
+    CHECK(h.text("selected") == "1");
+    CHECK(h.text("dlgAmount") == "2.25");
+    CHECK(h.text("dlgTyped") == "none");
 }
 
 namespace {
@@ -594,6 +610,25 @@ TEST_CASE("locale scope: a custom component's fallback formats in the scope of i
       "view": { "kind": "localeScope", "locale": "de", "children": [
         { "kind": "custom", "name": "Gauge", "props": { "level": { "lit": { "num": 15, "den": 10, "dp": 1 } } } } ] } })");
     CHECK(h.text("fallback") == "1,5");
+}
+
+// Mutation: make a custom node's text prop read the session's facts (the component inside the scope receives 1.5).
+TEST_CASE("locale scope: a custom node's text props are written in the scope's locale", "[ui][page]") {
+    Harness h;
+    h.session.setLocale("en");
+    h.backend.loadsComponents({"Gauge"});
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "component",
+      "components": { "Gauge": { "host": "Gauge", "version": 1, "props": { "level": "string" },
+                                 "fallback": { "kind": "spacer" } } },
+      "view": { "kind": "column", "children": [
+        { "kind": "custom", "name": "Gauge", "props": { "level": { "lit": { "num": 15, "den": 10, "dp": 1 } } } },
+        { "kind": "localeScope", "locale": "de", "children": [
+          { "kind": "custom", "name": "Gauge", "props": { "level": { "lit": { "num": 15, "den": 10, "dp": 1 } } } } ] } ] } })");
+    auto const gauges = h.backend.all("Custom");
+    REQUIRE(gauges.size() == 2);
+    CHECK(h.backend.prop(gauges.at(0), "prop.level") == "1.5");
+    CHECK(h.backend.prop(gauges.at(1), "prop.level") == "1,5");
 }
 
 // Mutation: build the page's slot out of the scope (the page leaves the mount).

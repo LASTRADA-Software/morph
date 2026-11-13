@@ -391,10 +391,25 @@ patterns or catalogue, or of the tag, re-evaluates exactly the properties inside
 Some values are read once, as a node is lowered, and not by a property: a table's column labels, a `once` property
 (`icon`, `mode`, `collapsible`), a literal. A property that is re-evaluated cannot reach them, so **the scope mounts its
 children again whenever its tag changes**: the scope's slot is selected by the tag as a string (`""` for a tag not
-known yet), and a new key lowers the children afresh in the new facts. Element state (a draft, a selection, a dialog's
-openness) lives in the enclosing scope and survives the remount. The one value that does not follow is the session's
-own language changing under a scope with an empty tag: that is a rare event for the session itself, and it moves
-every property but not the once-read values.
+known yet), and a new key lowers the children afresh in the new facts.
+
+What survives a remount is the state of the elements the enclosing scope declares, which are the stateful nodes
+directly in the scope's subtree, up to the first node that opens a scope of its own: an input's draft and edited flag,
+a select's or checkbox's value, a table's selection, sort and paging, a dialog's openness. What is lost is everything
+declared below such a node, and everything the frontend holds:
+
+- the inputs and local `state` of a dialog's or drawer's body, of a list or collection row, of a `boundary` and of a
+  `custom` node's fallback, which are rebuilt at their initial values;
+- a mutation still in flight in one of those scopes, whose owner is gone;
+- keyboard focus, the caret and the text selection, and an input method's composition;
+- the scroll offset of a `scroll` inside the scope, and which collapsible sections are open.
+
+This is acceptable because a tag normally arrives once, at load, before anyone has interacted. A scope whose tag a
+control inside it can change (an editor wrapped in a scope whose locale follows a `select` within it) loses the
+focus on the control the clerk just used, so the tag belongs outside the scope's reach.
+
+The one value that does not follow is the session's own language changing under a scope with an empty tag: that is a
+rare event for the session itself, and it moves every property but not the once-read values.
 
 ### How it is lowered
 

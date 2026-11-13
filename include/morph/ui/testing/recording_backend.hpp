@@ -1842,6 +1842,10 @@ public:
         }
     }
 
+    /// @brief The page the region lays out in.
+    /// @return It, or null once the page has been destroyed.
+    [[nodiscard]] FakePage const* page() const noexcept { return _page; }
+
     /// @brief Forgets the page: it is being destroyed before this region.
     void orphan() noexcept { _page = nullptr; }
 
