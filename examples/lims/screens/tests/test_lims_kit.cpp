@@ -35,6 +35,7 @@
 #include "scenario/org_scenario.hpp"
 #include "scenario/scenario_client.hpp"
 #include "screen_test_support.hpp"
+#include "shell_models.hpp"
 
 namespace {
 

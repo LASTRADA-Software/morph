@@ -44,6 +44,19 @@ public:
     /// @throws ValidationError if no company is named, or a row holds a type outside its enumeration.
     ListAccountsResult execute(const ListAccounts& action);
 
+    /// @brief Counts a company's periods in `Closing`, when the caller can see the company.
+    /// @param action The company.
+    /// @return The count; nothing is counted at a company the caller cannot see.
+    /// @throws ValidationError if no company is named.
+    OpenWork<PeriodView> execute(const CountClosingPeriods& action);
+
+    /// @brief Finds a company's accounts whose code starts with the text, or whose name contains it, ignoring case,
+    ///        when the caller can see the company.
+    /// @param action The text and the company.
+    /// @return At most eight hits, by code, and how many accounts matched.
+    /// @throws ValidationError if no company is named, or a row holds a type outside its enumeration.
+    SearchHits<AccountView> execute(const SearchAccounts& action);
+
     /// @brief Opens the month an instant falls in.
     /// @param action The company and an instant in the month.
     /// @return The period, open.
@@ -261,6 +274,10 @@ BRIDGE_REGISTER_MODEL(lims::LedgerModel, "LedgerModel")
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::CreateAccount, "CreateAccount")
 BRIDGE_REGISTER_EFFECTS(lims::CreateAccount, ::morph::effects::changes<lims::AccountView>)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListAccounts, "ListLedgerAccounts", ::morph::model::Loggable::No)
+// The shell's open-work count and search over the ledger.
+BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::CountClosingPeriods, "CountClosingPeriods",
+                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::SearchAccounts, "SearchAccounts", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::OpenPeriod, "OpenPeriod")
 BRIDGE_REGISTER_EFFECTS(lims::OpenPeriod, ::morph::effects::changes<lims::PeriodView>)
 BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListPeriods, "ListPeriods", ::morph::model::Loggable::No)

@@ -13,6 +13,7 @@
 #include "lims/org/dto/company_dto.hpp"
 #include "lims/org/dto/limit_dto.hpp"
 #include "lims/org/dto/role_dto.hpp"
+#include "lims/org/dto/shell_dto.hpp"
 
 /// @file
 /// `OrgModel`: the companies and sites every other module's records and roles are scoped by.
@@ -108,6 +109,13 @@ public:
     /// @throws ValidationError if a stored row holds a role or scope kind outside its enumeration.
     /// @throws EmptyPrincipalError if no principal is authenticated.
     UserView execute(const GetSignedInUser& action);
+
+    /// @brief The scopes the caller can choose between in the shell: every company they can see, with the sites of it
+    ///        they can see as the detail line, and the company's base currency and its decimals.
+    /// @param action Carries nothing.
+    /// @return The scopes, by company.
+    /// @throws ValidationError if a stored row holds a currency or month outside its enumeration.
+    ListMyScopesResult execute(const ListMyScopes& action);
 
     /// @brief The name to show for @p principal.
     /// @param principal The principal.
@@ -226,6 +234,7 @@ BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListUsers, "ListUsers", ::morph::mo
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::SetDisplayName, "SetDisplayName")
 BRIDGE_REGISTER_EFFECTS(lims::SetDisplayName, ::morph::effects::changes<lims::UserView>)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::GetSignedInUser, "GetSignedInUser", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListMyScopes, "ListMyScopes", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::SetValueLimit, "SetValueLimit")
 BRIDGE_REGISTER_EFFECTS(lims::SetValueLimit, ::morph::effects::changes<lims::ValueLimitView>)
 BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListValueLimits, "ListValueLimits", ::morph::model::Loggable::No)

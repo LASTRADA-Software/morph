@@ -9,6 +9,8 @@
 #include "lims/ledger/core/types.hpp"
 #include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/types.hpp"
+#include "lims/org/dto/role_dto.hpp"
+#include "lims/org/dto/shell_dto.hpp"
 #include "lims/posting/posting.hpp"
 
 /// @file
@@ -129,7 +131,33 @@ struct BeginClosePeriod {
     [[nodiscard]] bool validate() const noexcept { return periodId.hasValue(); }
 };
 
+/// @brief Counts a company's periods that are being closed: the ledger's open work in the shell.
+struct CountClosingPeriods {
+    /// @brief The company.
+    CompanyId company;
+
+    /// @brief Whether a company is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
+};
+
+/// @brief Finds accounts at a company by the start of their code or a word of their name.
+struct SearchAccounts {
+    /// @brief The text typed.
+    std::string query;
+    /// @brief The company.
+    CompanyId company;
+
+    /// @brief Whether a company is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
+};
+
 }  // namespace lims
 
 BRIDGE_REGISTER_RECORD(lims::AccountView, "Ledger_Account")
 BRIDGE_REGISTER_RECORD(lims::PeriodView, "Ledger_Period")
+BRIDGE_REGISTER_RECORD(lims::OpenWork<lims::PeriodView>, "Ledger_OpenPeriodWork", ::morph::record::keyless,
+                       ::morph::record::derivedFrom<lims::PeriodView, lims::RoleAssignmentView>)
+BRIDGE_REGISTER_RECORD(lims::SearchHits<lims::AccountView>, "Ledger_AccountHits", ::morph::record::keyless,
+                       ::morph::record::derivedFrom<lims::AccountView, lims::RoleAssignmentView>)

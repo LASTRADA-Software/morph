@@ -15,6 +15,8 @@
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/references.hpp"
 #include "lims/org/core/types.hpp"
+#include "lims/org/dto/role_dto.hpp"
+#include "lims/org/dto/shell_dto.hpp"
 #include "lims/posting/posting.hpp"
 
 /// @file
@@ -299,6 +301,18 @@ struct ListStockMovements {
     [[nodiscard]] bool validate() const noexcept { return item.hasValue(); }
 };
 
+/// @brief Finds the lots of a company by the start of their item's code or of their lot number.
+struct SearchStock {
+    /// @brief The text typed.
+    std::string query;
+    /// @brief The company.
+    CompanyId company;
+
+    /// @brief Whether a company is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
+};
+
 }  // namespace lims
 
 BRIDGE_REGISTER_RECORD(lims::InventorySettingsView, "Inventory_Settings",
@@ -307,3 +321,5 @@ BRIDGE_REGISTER_RECORD(lims::ItemView, "Inventory_Item")
 BRIDGE_REGISTER_RECORD(lims::LocationView, "Inventory_Location")
 BRIDGE_REGISTER_RECORD(lims::LotStockView, "Inventory_Lot", ::morph::record::key<&lims::LotStockView::lot>)
 BRIDGE_REGISTER_RECORD(lims::StockMovementView, "Inventory_Movement")
+BRIDGE_REGISTER_RECORD(lims::SearchHits<lims::LotStockView>, "Inventory_StockHits", ::morph::record::keyless,
+                       ::morph::record::derivedFrom<lims::LotStockView, lims::RoleAssignmentView>)

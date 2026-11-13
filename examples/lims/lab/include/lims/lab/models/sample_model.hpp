@@ -551,6 +551,26 @@ extern template void SampleModel::onGuardRefused<DeleteSample>(DeleteSample cons
 extern template void SampleModel::onGuardRefused<ResolveConflict>(ResolveConflict const&, std::exception const&);
 extern template void SampleModel::onGuardRefused<VerifyResult>(VerifyResult const&, std::exception const&);
 
+/// @brief The shell's reads over the samples: a count of the work waiting and a search.
+///
+/// A model of its own and with no state, so that the shell can read it through one shared instance: `SampleModel`
+/// keeps a working copy and an attached sample, and no shared instance of it is equivalent to a private one.
+class SampleDirectoryModel {
+public:
+    /// @brief Counts the samples waiting for verification at a company, among those the caller can see.
+    /// @param action The company.
+    /// @return The count; nothing is counted at a company where the caller holds no role.
+    /// @throws ValidationError if no company is named.
+    OpenWork<SampleView> execute(const CountSamplesToVerify& action);
+
+    /// @brief Finds samples at a company whose reference starts with the text, ignoring case, among those the caller
+    ///        can see.
+    /// @param action The text and the company.
+    /// @return At most eight hits, in id order, and how many samples matched.
+    /// @throws ValidationError if no company is named.
+    SearchHits<SampleView> execute(const SearchSamples& action);
+};
+
 }  // namespace lims
 
 // The guard each registered action names must be complete here: the registration instantiates its execution.
@@ -663,3 +683,9 @@ BRIDGE_KEY_FROM(lims::QueuedCapture, &lims::QueuedCapture::sampleId);
 // the `SampleView` it returns -- the result-keyed path, which promotes the
 // instance the action already ran on instead of attaching before dispatch.
 BRIDGE_KEY_FROM_RESULT(lims::RegisterSample, &lims::SampleView::id);
+
+// The shell's open-work count and search over the samples.
+BRIDGE_REGISTER_MODEL(lims::SampleDirectoryModel, "SampleDirectoryModel")
+BRIDGE_REGISTER_ACTION(lims::SampleDirectoryModel, lims::CountSamplesToVerify, "CountSamplesToVerify",
+                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleDirectoryModel, lims::SearchSamples, "SearchSamples", ::morph::model::Loggable::No)

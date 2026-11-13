@@ -336,6 +336,81 @@ bool SampleModel::canTranslateSampleColumn(std::string_view column, ::morph::tab
     return pageSamples(OrgModel::visibleSites(currentPrincipal()), *plan);
 }
 
+namespace {
+
+/// @brief The sites of @p company where the caller holds a role, there or at the company.
+/// @param company The company.
+/// @return The sites, by id.
+[[nodiscard]] std::vector<SiteId> callerSitesAt(CompanyId company) {
+    std::vector<SiteId> sites;
+    for (SiteId const site : OrgModel::visibleSites(currentPrincipal())) {
+        auto const found = OrgModel::findSite(site);
+        if (found.has_value() && found->companyId == company) {
+            sites.push_back(site);
+        }
+    }
+    return sites;
+}
+
+/// @brief The samples the caller can see at @p company that meet one condition on one column.
+/// @param company The company.
+/// @param column The column's id.
+/// @param condition The condition.
+/// @param limit How many rows the page holds; the page's total counts every match.
+/// @return The page.
+/// @throws ValidationError if the database cannot compare the operand.
+[[nodiscard]] ::morph::table::Page<SampleView> samplesWhere(CompanyId company, std::string column,
+                                                            ::morph::table::FilterEntry condition,
+                                                            std::int64_t limit) {
+    ::morph::table::TableQuery query;
+    ::morph::table::ColumnFilter filter;
+    filter.include.push_back(std::move(condition));
+    query.filters.columns.emplace(std::move(column), std::move(filter));
+    query.page.limit = limit;
+    auto const plan =
+        ::morph::table::planQuery(query, sampleColumns(), {}, {}, {}, SampleModel::canTranslateSampleColumn);
+    if (!plan) {
+        throw ValidationError{"samples: " + plan.error().message};
+    }
+    return SampleModel::pageSamples(callerSitesAt(company), *plan);
+}
+
+}  // namespace
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+OpenWork<SampleView> SampleDirectoryModel::execute(const CountSamplesToVerify& action) {
+    if (!action.validate()) {
+        throw ValidationError{"CountSamplesToVerify: a company is required"};
+    }
+    auto const page =
+        samplesWhere(action.company, "state", ::morph::table::FilterEntry{.eq = std::string{"ToBeVerified"}}, 1);
+    return OpenWork<SampleView>{.count = page.total.value_or(0)};
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+SearchHits<SampleView> SampleDirectoryModel::execute(const SearchSamples& action) {
+    if (!action.validate()) {
+        throw ValidationError{"SearchSamples: a company is required"};
+    }
+    if (action.query.empty()) {
+        return hitsOf<SampleView>({});
+    }
+    auto const page =
+        samplesWhere(action.company, "reference", ::morph::table::FilterEntry{.startsWith = action.query},
+                     static_cast<std::int64_t>(kSearchHitLimit));
+    std::vector<SearchHit> found;
+    for (SampleView const& sample : page.rows) {
+        auto const site = OrgModel::findSite(sample.siteId);
+        found.push_back(SearchHit{.title = sample.reference,
+                                  .detail = site.has_value() ? site->name : std::string{},
+                                  .screen = std::string{hit_screens::kSample},
+                                  .params = {{"sampleId", *sample.id}}});
+    }
+    return hitsOf<SampleView>(std::move(found), page.total.value_or(0));
+}
+
 SampleView SampleModel::execute(const ReceiveSample& action) { return transition(action, SampleState::Received); }
 
 SampleView SampleModel::execute(const StartWork& action) { return transition(action, SampleState::InProgress); }

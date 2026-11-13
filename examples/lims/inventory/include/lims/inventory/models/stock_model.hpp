@@ -92,6 +92,13 @@ public:
     /// @throws ValidationError if no company is named, or a row holds a value outside its enumeration.
     StockOnHandResult execute(const StockOnHand& action);
 
+    /// @brief Finds a company's lots whose item's code or lot number starts with the text, ignoring case, when the
+    ///        caller can see the company.
+    /// @param action The text and the company.
+    /// @return At most eight hits, in the order `StockOnHand` lists lots, and how many lots matched.
+    /// @throws ValidationError if no company is named, or a row holds a value outside its enumeration.
+    SearchHits<LotStockView> execute(const SearchStock& action);
+
     /// @brief Lists the movements of an item, through the table engine's query.
     /// @param action The item and the query.
     /// @return The page of movements by id, none of a company the caller cannot see.
@@ -127,5 +134,6 @@ BRIDGE_REGISTER_ACTION(lims::StockModel, lims::RecordOpeningLot, "RecordOpeningL
 BRIDGE_REGISTER_EFFECTS(lims::RecordOpeningLot, ::morph::effects::changes<lims::LotStockView>,
                         ::morph::effects::changes<lims::StockMovementView>)
 BRIDGE_REGISTER_ACTION(lims::StockModel, lims::StockOnHand, "StockOnHand", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::StockModel, lims::SearchStock, "SearchStock", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::StockModel, lims::ListStockMovements, "ListStockMovements", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

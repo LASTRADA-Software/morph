@@ -93,6 +93,12 @@ public:
     /// @return The requisitions by id; none for a caller with no principal.
     ListRequisitionsResult execute(const ListPendingRequisitions& action);
 
+    /// @brief Counts the submitted requisitions at a company that the caller could approve now.
+    /// @param action The company.
+    /// @return The count, by the rule `ListPendingRequisitions` lists by.
+    /// @throws ValidationError if no company is named.
+    OpenWork<RequisitionView> execute(const CountPendingRequisitions& action);
+
     /// @brief Registers a supplier of a company, with the currency its orders are priced in.
     /// @param action The company, name and currency.
     /// @return The supplier.
@@ -161,6 +167,8 @@ BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::GetRequisition, "GetRequisi
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListRequisitions, "ListRequisitions",
                        ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListPendingRequisitions, "ListPendingRequisitions",
+                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::CountPendingRequisitions, "CountPendingRequisitions",
                        ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::CreateSupplier, "CreateSupplier")
 BRIDGE_REGISTER_EFFECTS(lims::CreateSupplier, ::morph::effects::changes<lims::SupplierView>)

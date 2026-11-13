@@ -19,6 +19,7 @@
 #include "billing_test_support.hpp"
 #include "clock.hpp"
 #include "lims/billing/models/invoice_model.hpp"
+#include "shell_models.hpp"
 
 namespace {
 

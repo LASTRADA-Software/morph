@@ -5,6 +5,10 @@
 #include <map>
 #include <string>
 
+#include "lims/org/dto/shell_dto.hpp"
+#include "lims/org/models/org_model.hpp"
+#include "shell_models.hpp"
+
 namespace lims::screens::kit {
 
 namespace {
@@ -24,7 +28,17 @@ namespace {
 }  // namespace
 
 void pageHead(ui::Scope& screen, std::string_view module, ui::AnyHandle const& title) {
-    screen.eyebrow(ui::t("lims.module." + std::string{module}, moduleName(module)));
+    auto const moduleWord = ui::t("lims.module." + std::string{module}, moduleName(module));
+    // The company of the shell's chosen scope, named after the module. Until the scopes are read, or when none is
+    // chosen, the eyebrow is the module alone.
+    auto const org = screen.model<OrgModel>("kitOrg");
+    auto const scopes = screen.query<ListMyScopes>("kitScopes", org).value().at(&ListMyScopesResult::scopes);
+    auto const chosen = ui::filter<ScopeOption>(scopes, "kitScope", [](ui::Handle<ScopeOption> const& scope) {
+        return ui::eq(scope.at(&ScopeOption::company), ui::env("context"));
+    });
+    auto const company = ui::call("first", {chosen}).at("label");
+    screen.eyebrow(
+        ui::cond(ui::engaged(company), ui::concat({moduleWord, ui::AnyHandle{" · "}, company}), moduleWord));
     screen.title(title);
 }
 

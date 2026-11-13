@@ -1577,6 +1577,36 @@ beside it, and a test holds both catalogues to the list. A refusal that withhold
 (`Forbidden` and `NotFound` from the declared authorization) keeps its class code and carries no argument, so the
 words say no more than the message does.
 
+### 53. The shell's switcher, counts, search, inbox and principal menu are declared, and morph draws them
+
+lims declares its shell as data (`ShellParts`, `screens/lims_shell_parts.cpp`): the scopes the caller can see
+(`ListMyScopes`), each module's open work through that module's own count (`CountSamplesToVerify`,
+`CountOpenInvoiceWork`, `CountClosingPeriods`, `CountPendingRequisitions`), a search action per module
+(`SearchSamples`, `SearchInvoices`, `SearchAccounts`, `SearchStock`), the approvals inbox's sources
+(`CountPendingApprovals`, `CountPendingRequisitions`), and the signed-in person's name and roles
+(`GetSignedInUser`). One action type belongs to one model, so the counts are four actions composed by the
+declaration, not one action in four modules. morph's shell draws each part on both frontends and hands the chosen
+scope to every screen as `env("context")`; every lims list and every new record reads it. Nothing in morph knows a
+company, a module's work or a record kind.
+
+A scope is a company. The context is one JSON string or integer, and every list a screen reads is keyed by company, so
+the option's value is the company's id and a screen passes `env("context")` into a `CompanyId` member as it is; the
+sites the caller can see in the company are the option's second line. A person who holds a role at one site of a
+company sees that company, with that site named. A count answers a plain integer (`OpenWork::count`), because the
+shell reads it as a JSON number and a `Count` is written as a quantity. `OpenWork<Source>` and `SearchHits<Source>`
+are defined once in org and instantiated per module with the record the answer is derived from, so a count is its
+own keyless, derived record: a sample's change refreshes the lab's count and no other module's.
+
+A count and a search answer about the companies the caller can see and nothing about the others: a company the caller
+cannot see counts zero and finds nothing, the same as a company with no work. A search matches the start of a
+reference, number, code or lot number (and of a client's or account's name), ignoring case, answers at most eight
+hits and the exact total. A hit names the screen that opens the record and its params; those screens are
+`lims.lab.sample`, `lims.billing.invoice`, `lims.ledger.accounts` and `lims.inventory.stock`.
+
+The bundle declares a module's count and search only when the module lists a screen, and the inbox only when
+`lims.approvals` is registered: the catalog the client checks the declaration against names the modules and screens
+it lists, and a part whose module has no screen has no group to badge and nothing for a hit to open.
+
 ### 58. The journal and the trial balance load every row they page or total (hypothesis 10, first instance)
 
 **Hypothesis 10 is confirmed for the journal and the trial balance.** Measured in `tests/test_ledger_scale.cpp` on the

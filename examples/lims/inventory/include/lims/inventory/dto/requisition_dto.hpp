@@ -11,6 +11,9 @@
 #include "lims/org/authorization/declared_guard.hpp"
 #include "lims/org/core/money.hpp"
 #include "lims/org/core/types.hpp"
+#include "lims/org/dto/limit_dto.hpp"
+#include "lims/org/dto/role_dto.hpp"
+#include "lims/org/dto/shell_dto.hpp"
 
 /// @file
 /// Requisitions: a request to buy, raised at a site, submitted by its requester and approved by a purchase approver
@@ -179,6 +182,21 @@ struct ListRequisitionsResult {
     std::vector<RequisitionView> requisitions;
 };
 
+/// @brief Counts the submitted requisitions at a company that the caller could approve now: inventory's open work in
+///        the shell, and the approvals inbox's inventory source.
+struct CountPendingRequisitions {
+    /// @brief The company.
+    CompanyId company;
+
+    /// @brief Whether a company is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
+};
+
 }  // namespace lims
 
 BRIDGE_REGISTER_RECORD(lims::RequisitionView, "Inventory_Requisition")
+BRIDGE_REGISTER_RECORD(lims::OpenWork<lims::RequisitionView>, "Inventory_OpenRequisitionWork",
+                       ::morph::record::keyless,
+                       ::morph::record::derivedFrom<lims::RequisitionView, lims::SiteView, lims::RoleAssignmentView,
+                                                    lims::ValueLimitView>)

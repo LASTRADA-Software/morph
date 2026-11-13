@@ -252,4 +252,14 @@ ListInvoicesResult InvoiceModel::execute(const ListPendingApprovals& action) {
     return result;
 }
 
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+OpenWork<InvoiceView> InvoiceModel::execute(const CountPendingApprovals& action) {
+    if (!action.validate()) {
+        throw ValidationError{"CountPendingApprovals: a company is required"};
+    }
+    auto const pending = execute(ListPendingApprovals{}).invoices;
+    return OpenWork<InvoiceView>{.count = std::ranges::count(pending, action.company, &InvoiceView::company)};
+}
+
 }  // namespace lims

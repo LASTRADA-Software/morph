@@ -10,6 +10,7 @@
 #include "lims/org/dto/role_dto.hpp"
 #include "lims/org/models/org_model.hpp"
 #include "lims_screens.hpp"
+#include "shell_models.hpp"
 
 namespace lims::screens {
 

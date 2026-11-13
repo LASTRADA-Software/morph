@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <map>
 #include <morph/session/session.hpp>
+#include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
 #include <utility>
@@ -260,6 +261,36 @@ ListCompaniesResult OrgModel::execute(const ListCompanies& action) {
         }
     }
     std::ranges::sort(result.companies, {}, [](CompanyView const& company) { return *company.id; });
+    return result;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+ListMyScopesResult OrgModel::execute(const ListMyScopes& action) {
+    static_cast<void>(action);
+    auto const sites = execute(ListSites{}).sites;
+    ListMyScopesResult result;
+    for (CompanyView const& company : execute(ListCompanies{}).companies) {
+        std::vector<std::string> names;
+        for (SiteView const& site : sites) {
+            if (site.companyId == company.id) {
+                names.push_back(site.name);
+            }
+        }
+        std::ranges::sort(names);
+        std::string detail;
+        for (std::string const& name : names) {
+            detail += (detail.empty() ? "" : ", ") + name;
+        }
+        result.scopes.push_back(ScopeOption{
+            .company = company.id,
+            .label = company.name,
+            .detail = std::move(detail),
+            .currency = company.baseCurrency,
+            .decimals = Count{::morph::math::Rational{static_cast<std::int64_t>(decimalsOf(company.baseCurrency)),
+                                                      ::morph::math::DecimalPlaces{0}}},
+        });
+    }
     return result;
 }
 
