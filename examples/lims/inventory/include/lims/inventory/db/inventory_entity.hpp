@@ -246,4 +246,26 @@ struct ConsumptionEventRecord {
     Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"entry_id"}> entryId;  // 6
 };
 
+/// @brief One lot's quantity held for one sample by one bench, until it lapses.
+///
+/// A row counts for nothing once `expires_at` has passed; nothing has to delete it for the lot to be free.
+struct ReservationRecord {
+    static constexpr std::string_view TableName = "inventory_reservations";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<std::int64_t, Light::SqlRealName{"sample_id"}> sampleId{0};                               // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"company_id"}> companyId{0};                             // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"site_id"}> siteId{0};                                   // 3
+    Light::Field<std::int64_t, Light::SqlRealName{"lot_id"}> lotId{0};                                     // 4
+    Light::Field<std::int64_t, Light::SqlRealName{"item_id"}> itemId{0};                                   // 5
+    /// @brief The quantity held, in the item's unit.
+    Light::Field<std::int64_t, Light::SqlRealName{"quantity_num"}> quantityNum{0};  // 6
+    Light::Field<std::int64_t, Light::SqlRealName{"quantity_den"}> quantityDen{1};  // 7
+    /// @brief The principal who holds it.
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"holder"}> holder;  // 8
+    /// @brief The reserving instance's token: a second instance of one principal is another bench.
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"token"}> token;  // 9
+    /// @brief When it lapses, in epoch milliseconds.
+    Light::Field<std::int64_t, Light::SqlRealName{"expires_at"}> expiresAt{0};  // 10
+};
+
 }  // namespace lims::db

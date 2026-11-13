@@ -154,6 +154,40 @@ using ::morph::math::Rational;
     return consumptionView(mapper, *consumed);
 }
 
+/// @brief @p whole less @p part, checked.
+/// @param whole The quantity.
+/// @param part What is taken from it.
+/// @return The difference at six places.
+/// @throws OutOfRange if it does not fit.
+[[nodiscard]] Rational checkedLeft(Rational const& whole, Rational const& part) {
+    auto const left = ::morph::math::checkedSub(whole, part);
+    if (!left.has_value()) {
+        throw OutOfRange{"RecordConsumption: the quantity left to take does not fit"};
+    }
+    return Rational{Numerator{left->numerator}, Denominator{left->denominator}, DecimalPlaces{6}};
+}
+
+/// @brief Takes @p taken out of @p lot as a consumption movement and adds its cost.
+/// @param mapper The caller's mapper, inside its transaction.
+/// @param action The event.
+/// @param lot The lot as read.
+/// @param taken The quantity, in the item's unit.
+/// @param currency The company's currency, which the lot's cost is in.
+/// @param cost Receives the cost of the stock taken, rounded half-up to @p currency per lot.
+/// @throws Conflict if the lot moved since it was read.
+/// @throws OutOfRange if a quantity or the cost does not fit.
+void takeFrom(Lightweight::DataMapper& mapper, RecordConsumption const& action, db::LotRecord const& lot,
+              Rational const& taken, CurrencyCode currency, ExactSum& cost) {
+    static_cast<void>(inventory::moveLot(mapper, lot, MovementKind::Consumption, -taken, action.eventId,
+                                         currentPrincipal(), action.eventId));
+    Rational const unitCost{Numerator{lot.unitCostNum.Value()}, Denominator{lot.unitCostDen.Value()},
+                            DecimalPlaces{decimalsOf(currency)}};
+    auto const product = ::morph::math::checkedMul(taken, unitCost);
+    if (!product.has_value() || !cost.add(roundToCurrency(*product, currency))) {
+        throw OutOfRange{"RecordConsumption: the cost of the stock taken does not fit"};
+    }
+}
+
 /// @brief What @p recipe takes from the lots of its item at the event's site: first-expiring first, an expired lot
 ///        skipped, the rest a shortfall movement.
 /// @param mapper The caller's mapper, inside its transaction, after the consumed-event row was written.
@@ -171,6 +205,45 @@ void takeRecipeLine(Lightweight::DataMapper& mapper, RecordConsumption const& ac
         throw NotFound{"RecordConsumption: item " + std::to_string(recipe.itemId.Value()) + " does not exist"};
     }
     std::int64_t const capturedAt = millisOf(action.capturedAt);
+    std::string const principal = currentPrincipal();
+    Rational remaining{Numerator{recipe.quantityNum.Value()}, Denominator{recipe.quantityDen.Value()},
+                       DecimalPlaces{6}};
+    // The sample's own reservation first: what a bench set aside for it is what it takes, and the reservation shrinks
+    // by what was taken. The transaction holds the write lock from the consumed-event row, so these reads are current.
+    auto held = inventory::liveReservationsOfSample(mapper, *action.sample);
+    std::erase_if(held,
+                  [&recipe](db::ReservationRecord const& row) { return row.itemId.Value() != recipe.itemId.Value(); });
+    for (auto& reservation : held) {
+        if (remaining.numerator <= 0) {
+            break;
+        }
+        auto const lot = inventory::lotRecord(mapper, reservation.lotId.Value());
+        if (lot.expiresAt.Value() < capturedAt) {
+            continue;
+        }
+        Rational const onHand{Numerator{lot.onHandNum.Value()}, Denominator{lot.onHandDen.Value()}, DecimalPlaces{6}};
+        Rational const reserved{Numerator{reservation.quantityNum.Value()},
+                                Denominator{reservation.quantityDen.Value()}, DecimalPlaces{6}};
+        Rational taken = remaining < reserved ? remaining : reserved;
+        if (onHand < taken) {
+            taken = onHand;
+        }
+        if (taken.numerator <= 0) {
+            continue;
+        }
+        takeFrom(mapper, action, lot, taken, currency, cost);
+        remaining = checkedLeft(remaining, taken);
+        auto const kept = checkedLeft(reserved, taken);
+        if (kept.numerator > 0) {
+            reservation.quantityNum = kept.numerator;
+            reservation.quantityDen = kept.denominator;
+            mapper.Update(reservation);
+        } else {
+            mapper.Delete(reservation);
+        }
+    }
+    // Then the first-expiring order for what is left, read after the reserved lots moved. A lot's take is capped at
+    // what no other sample has reserved.
     auto lots = mapper.Query<db::LotRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::LotRecord::itemId>, "=", recipe.itemId.Value())
                     .Where(::Lightweight::FieldNameOf<&db::LotRecord::siteId>, "=", *action.site)
@@ -181,28 +254,17 @@ void takeRecipeLine(Lightweight::DataMapper& mapper, RecordConsumption const& ac
     });
     std::ranges::sort(lots, {},
                       [](db::LotRecord const& lot) { return std::tuple{lot.expiresAt.Value(), lot.id.Value()}; });
-    std::string const principal = currentPrincipal();
-    Rational remaining{Numerator{recipe.quantityNum.Value()}, Denominator{recipe.quantityDen.Value()},
-                       DecimalPlaces{6}};
     for (auto const& lot : lots) {
         if (remaining.numerator <= 0) {
             break;
         }
-        Rational const onHand{Numerator{lot.onHandNum.Value()}, Denominator{lot.onHandDen.Value()}, DecimalPlaces{6}};
-        Rational const taken = remaining < onHand ? remaining : onHand;
-        static_cast<void>(inventory::moveLot(mapper, lot, MovementKind::Consumption, -taken, action.eventId, principal,
-                                             action.eventId));
-        Rational const unitCost{Numerator{lot.unitCostNum.Value()}, Denominator{lot.unitCostDen.Value()},
-                                DecimalPlaces{decimalsOf(currency)}};
-        auto const product = ::morph::math::checkedMul(taken, unitCost);
-        if (!product.has_value() || !cost.add(roundToCurrency(*product, currency))) {
-            throw OutOfRange{"RecordConsumption: the cost of the stock taken does not fit"};
+        Rational const available = inventory::availableOf(mapper, lot, *action.sample);
+        if (available.numerator <= 0) {
+            continue;
         }
-        auto const left = ::morph::math::checkedSub(remaining, taken);
-        if (!left.has_value()) {
-            throw OutOfRange{"RecordConsumption: the quantity left to take does not fit"};
-        }
-        remaining = *left;
+        Rational const taken = remaining < available ? remaining : available;
+        takeFrom(mapper, action, lot, taken, currency, cost);
+        remaining = checkedLeft(remaining, taken);
     }
     if (remaining.numerator <= 0) {
         return;

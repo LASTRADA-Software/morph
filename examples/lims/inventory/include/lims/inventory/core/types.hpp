@@ -22,6 +22,7 @@ LIMS_DEFINE_STRONG_ID(PurchaseOrderId);
 LIMS_DEFINE_STRONG_ID(OrderLineId);
 LIMS_DEFINE_STRONG_ID(ReceiptId);
 LIMS_DEFINE_STRONG_ID(RecipeId);
+LIMS_DEFINE_STRONG_ID(ReservationId);
 
 /// @brief Why a lot's stock on hand changed.
 enum class MovementKind : std::uint8_t {
@@ -65,6 +66,7 @@ LIMS_DEFINE_STRONG_ID_WIRE(PurchaseOrderId);
 LIMS_DEFINE_STRONG_ID_WIRE(OrderLineId);
 LIMS_DEFINE_STRONG_ID_WIRE(ReceiptId);
 LIMS_DEFINE_STRONG_ID_WIRE(RecipeId);
+LIMS_DEFINE_STRONG_ID_WIRE(ReservationId);
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(ItemId, "lims.itemId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(LocationId, "lims.locationId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(LotId, "lims.lotId");
@@ -76,6 +78,7 @@ LIMS_DEFINE_STRONG_ID_SHAPE_TAG(PurchaseOrderId, "lims.purchaseOrderId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(OrderLineId, "lims.orderLineId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(ReceiptId, "lims.receiptId");
 LIMS_DEFINE_STRONG_ID_SHAPE_TAG(RecipeId, "lims.recipeId");
+LIMS_DEFINE_STRONG_ID_SHAPE_TAG(ReservationId, "lims.reservationId");
 
 /// @brief Reflects `MovementKind` as its enumerator name.
 template <>

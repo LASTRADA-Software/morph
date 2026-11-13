@@ -415,6 +415,20 @@ StockOnHandResult StockModel::execute(const StockOnHand& action) {
 
 // An action handler: the registry calls it on the instance, like every other.
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+ReservationView StockModel::execute(const GetSampleReservation& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetSampleReservation: a sample is required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto rows = inventory::liveReservationsOfSample(mapper, *action.sample);
+    std::erase_if(rows, [](db::ReservationRecord const& row) {
+        return !OrgModel::callerSees(CompanyId{row.companyId.Value()});
+    });
+    return inventory::reservationView(mapper, *action.sample, rows);
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ::morph::table::Page<StockMovementView> StockModel::execute(const ListStockMovements& action) {
     if (!action.validate()) {
         throw ValidationError{"ListStockMovements: an item is required"};

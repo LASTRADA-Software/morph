@@ -412,7 +412,8 @@ TEST_CASE("declared authorization: every lims action is guarded, deliberately op
     auto const& dispatcher = morph::model::detail::defaultDispatcher();
     for (std::string_view const model :
          {"OrgModel", "SampleModel", "AnalysisCatalogModel", "IgnitionModel", "LedgerModel", "LedgerReportModel",
-          "PriceListModel", "InvoiceModel", "InvoiceEditModel", "BillingRunModel", "StockModel", "ProcurementModel"}) {
+          "PriceListModel", "InvoiceModel", "InvoiceEditModel", "BillingRunModel", "StockModel", "ProcurementModel",
+          "ReservationModel"}) {
         for (auto const& actionId : dispatcher.actionsOf(model)) {
             CAPTURE(model, actionId);
             registered.insert(actionId);
@@ -439,10 +440,10 @@ TEST_CASE("declared authorization: every lims action is guarded, deliberately op
     // The model list above is by hand, and the framework cannot enumerate models: a module added later (procurement)
     // would escape the loop. Every id the application declares must therefore be
     // registered under one of the listed models, so an unlisted model that declares a rule fails here.
-    std::set<std::string_view> const listed{"OrgModel",        "SampleModel",  "AnalysisCatalogModel",
-                                            "IgnitionModel",   "LedgerModel",  "LedgerReportModel",
-                                            "PriceListModel",  "InvoiceModel", "InvoiceEditModel",
-                                            "BillingRunModel", "StockModel",   "ProcurementModel"};
+    std::set<std::string_view> const listed{
+        "OrgModel",          "SampleModel",      "AnalysisCatalogModel", "IgnitionModel",    "LedgerModel",
+        "LedgerReportModel", "PriceListModel",   "InvoiceModel",         "InvoiceEditModel", "BillingRunModel",
+        "StockModel",        "ProcurementModel", "ReservationModel"};
     auto const underListedModel = [&](std::string_view actionId) {
         auto const models = dispatcher.modelsOf(actionId);
         return std::ranges::any_of(models, [&](std::string const& model) { return listed.contains(model); });
@@ -494,6 +495,7 @@ TEST_CASE("declared authorization: the edge's table lists every declared role, a
     CHECK(lims::app::requiredRole("ReceiveGoods") == lims::LimsRole::StockKeeper);
     CHECK(lims::app::requiredRole("SetRecipe") == lims::LimsRole::StockKeeper);
     CHECK(lims::app::requiredRole("RecordConsumption") == lims::LimsRole::Service);
+    CHECK(lims::app::requiredRole("ReserveForSample") == lims::LimsRole::Analyst);
     // The raising, filling and submitting of a requisition declare some role at its site, whichever.
     for (std::string_view const actionId : {"CreateRequisition", "AddRequisitionLine", "SubmitRequisition"}) {
         CAPTURE(actionId);

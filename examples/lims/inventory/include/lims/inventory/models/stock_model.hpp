@@ -11,6 +11,7 @@
 
 #include "lims/inventory/dto/consumption_dto.hpp"
 #include "lims/inventory/dto/recipe_dto.hpp"
+#include "lims/inventory/dto/reservation_dto.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
 
 /// @file
@@ -120,6 +121,13 @@ public:
     /// @throws ValidationError if no company is named, or a row holds a unit outside its enumeration.
     ListRecipesResult execute(const ListRecipes& action);
 
+    /// @brief Reads who holds a sample's reservation and which lots it holds.
+    /// @param action The sample.
+    /// @return The reservation; its holder empty when nothing is reserved for the sample, or when the lots held are
+    ///         of a company the caller cannot see.
+    /// @throws ValidationError if no sample is named.
+    ReservationView execute(const GetSampleReservation& action);
+
     /// @brief Takes the recipe of a captured result's analysis out of the lots kept at its site, first-expiring first,
     ///        skipping expired lots, and has the ledger record the cost.
     ///
@@ -185,6 +193,8 @@ BRIDGE_REGISTER_ACTION(lims::StockModel, lims::ListStockMovements, "ListStockMov
 BRIDGE_REGISTER_ACTION(lims::StockModel, lims::SetRecipe, "SetRecipe")
 BRIDGE_REGISTER_EFFECTS(lims::SetRecipe, ::morph::effects::changes<lims::RecipeView>)
 BRIDGE_REGISTER_ACTION(lims::StockModel, lims::ListRecipes, "ListRecipes", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::StockModel, lims::GetSampleReservation, "GetSampleReservation",
+                       ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::StockModel, lims::RecordConsumption, "RecordConsumption")
 BRIDGE_REGISTER_EFFECTS(lims::RecordConsumption, ::morph::effects::changes<lims::ConsumptionView>,
                         ::morph::effects::changes<lims::LotStockView>,

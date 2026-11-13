@@ -13,6 +13,7 @@
 #include "lims/inventory/dto/receipt_dto.hpp"
 #include "lims/inventory/dto/recipe_dto.hpp"
 #include "lims/inventory/dto/requisition_dto.hpp"
+#include "lims/inventory/dto/reservation_dto.hpp"
 #include "lims/inventory/dto/stock_dto.hpp"
 #include "lims/org/authorization/declared.hpp"
 #include "lims/org/models/org_model.hpp"
@@ -24,7 +25,7 @@
 /// value limit, who is not the one who raised or submitted it; a supplier is registered, and an approved requisition
 /// ordered, by a purchaser at the company; goods are received against an order by a stock keeper at the company; a
 /// recipe is set by a stock keeper at the company, and a consumption is recorded by the server's own client holding
-/// the service role at the site's company.
+/// the service role at the site's company; a sample's lots are reserved by an analyst at its site.
 
 namespace lims {
 
@@ -198,8 +199,22 @@ struct Authorization<RecordConsumption> {
     [[nodiscard]] static Scope scopeOf(RecordConsumption const& action) { return Scope{action.site}; }
 };
 
+/// @brief A sample's lots are reserved by an analyst at the site the payload names.
+template <>
+struct Authorization<ReserveForSample> {
+    /// @brief The role.
+    static constexpr LimsRole role = LimsRole::Analyst;
+    /// @brief The scope is spelled out in the payload.
+    static constexpr bool scopeInPayload = true;
+
+    /// @brief The site the payload names.
+    /// @param action The action.
+    /// @return It.
+    [[nodiscard]] static Scope scopeOf(ReserveForSample const& action) { return Scope{action.site}; }
+};
 }  // namespace lims
 
 // The models are included last, after every declaration their registrations need.
 #include "lims/inventory/models/procurement_model.hpp"
+#include "lims/inventory/models/reservation_model.hpp"
 #include "lims/inventory/models/stock_model.hpp"

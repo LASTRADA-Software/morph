@@ -5,11 +5,13 @@
 #include <algorithm>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "lims/inventory/core/fault_hook.hpp"
 #include "lims/org/core/calendar.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/core/model_support.hpp"
+#include "lims/org/core/money.hpp"
 #include "lims/org/models/org_model.hpp"
 
 namespace lims::inventory {
@@ -109,6 +111,77 @@ StockMovementView movementView(db::MovementRecord const& row, StockUnit unit) {
     };
 }
 
+std::vector<db::ReservationRecord> liveReservationsOn(Lightweight::DataMapper& mapper, std::int64_t lot) {
+    auto rows = mapper.Query<db::ReservationRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ReservationRecord::lotId>, "=", lot)
+                    .All();
+    std::int64_t const now = nowMillis();
+    std::erase_if(rows, [now](db::ReservationRecord const& row) { return row.expiresAt.Value() <= now; });
+    std::ranges::sort(rows, {}, [](db::ReservationRecord const& row) { return row.id.Value(); });
+    return rows;
+}
+
+std::vector<db::ReservationRecord> liveReservationsOfSample(Lightweight::DataMapper& mapper, std::int64_t sample) {
+    auto rows = mapper.Query<db::ReservationRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ReservationRecord::sampleId>, "=", sample)
+                    .All();
+    std::int64_t const now = nowMillis();
+    std::erase_if(rows, [now](db::ReservationRecord const& row) { return row.expiresAt.Value() <= now; });
+    std::ranges::sort(rows, {}, [](db::ReservationRecord const& row) { return row.id.Value(); });
+    return rows;
+}
+
+Rational reservedOn(Lightweight::DataMapper& mapper, std::int64_t lot, std::int64_t exceptSample) {
+    ExactSum sum;
+    for (auto const& row : liveReservationsOn(mapper, lot)) {
+        if (exceptSample != 0 && row.sampleId.Value() == exceptSample) {
+            continue;
+        }
+        if (!sum.add(Rational{Numerator{row.quantityNum.Value()}, Denominator{row.quantityDen.Value()},
+                              DecimalPlaces{6}})) {
+            throw OutOfRange{"lot " + std::to_string(lot) + ": the reserved quantity does not fit"};
+        }
+    }
+    auto const total = sum.total();
+    return Rational{Numerator{total.numerator}, Denominator{total.denominator}, DecimalPlaces{6}};
+}
+
+Rational availableOf(Lightweight::DataMapper& mapper, db::LotRecord const& lot, std::int64_t exceptSample) {
+    Rational const onHand{Numerator{lot.onHandNum.Value()}, Denominator{lot.onHandDen.Value()}, DecimalPlaces{6}};
+    auto const free =
+        ::morph::math::checkedSub(onHand, reservedOn(mapper, static_cast<std::int64_t>(lot.id.Value()), exceptSample));
+    if (!free.has_value()) {
+        throw OutOfRange{"lot " + numberOf(lot) + ": the available quantity does not fit"};
+    }
+    return Rational{Numerator{free->numerator}, Denominator{free->denominator}, DecimalPlaces{6}};
+}
+
+ReservationView reservationView(Lightweight::DataMapper& mapper, std::int64_t sample,
+                                std::vector<db::ReservationRecord> const& rows) {
+    ReservationView view{.sample = SampleId{sample}, .holder = {}, .lots = {}, .expiresAt = {}};
+    for (auto const& row : rows) {
+        auto const lot = lotRecord(mapper, row.lotId.Value());
+        auto const item = findItem(mapper, row.itemId.Value());
+        if (!item.has_value()) {
+            throw NotFound{"reservation: item " + std::to_string(row.itemId.Value()) + " does not exist"};
+        }
+        if (view.holder.empty()) {
+            view.holder = textOf(row.holder);
+            view.expiresAt = timestampFromMillis(row.expiresAt.Value());
+        }
+        view.lots.push_back(ReservedLotView{
+            .lot = LotId{row.lotId.Value()},
+            .lotNumber = numberOf(lot),
+            .item = ItemId{row.itemId.Value()},
+            .itemCode = textOf(item->code),
+            .quantity = Measure{Rational{Numerator{row.quantityNum.Value()}, Denominator{row.quantityDen.Value()},
+                                         DecimalPlaces{6}}},
+            .unit = stockUnitOf(*item),
+        });
+    }
+    return view;
+}
+
 LotStockView lotView(Lightweight::DataMapper& mapper, db::LotRecord const& lot) {
     auto const item = findItem(mapper, lot.itemId.Value());
     if (!item.has_value()) {
@@ -118,7 +191,7 @@ LotStockView lotView(Lightweight::DataMapper& mapper, db::LotRecord const& lot) 
     if (!company.has_value()) {
         throw NotFound{"lot " + numberOf(lot) + ": its company does not exist"};
     }
-    // Nothing reserves stock yet, so the reserved quantity is zero.
+    auto const reserved = reservedOn(mapper, static_cast<std::int64_t>(lot.id.Value()), 0);
     return LotStockView{
         .lot = LotId{static_cast<std::int64_t>(lot.id.Value())},
         .item = ItemId{lot.itemId.Value()},
@@ -130,7 +203,7 @@ LotStockView lotView(Lightweight::DataMapper& mapper, db::LotRecord const& lot) 
         .expiresAt = timestampFromMillis(lot.expiresAt.Value()),
         .onHand =
             Measure{Rational{Numerator{lot.onHandNum.Value()}, Denominator{lot.onHandDen.Value()}, DecimalPlaces{6}}},
-        .reserved = Measure{Rational{Numerator{0}, Denominator{1}, DecimalPlaces{6}}},
+        .reserved = Measure{reserved},
         .unit = stockUnitOf(*item),
         .unitCost = Amount{Rational{Numerator{lot.unitCostNum.Value()}, Denominator{lot.unitCostDen.Value()},
                                     DecimalPlaces{decimalsOf(company->baseCurrency)}}},
