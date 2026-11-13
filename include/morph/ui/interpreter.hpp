@@ -1940,10 +1940,17 @@ public:
     std::vector<std::unique_ptr<CheckRuntime>> checks;
     /// @brief For a locale scope's scope, the formatting facts it writes in; `nullptr` for any other scope.
     reactive::Computed<std::shared_ptr<FormatContext const>>* localeFormat = nullptr;
+    /// @brief Whether the scope declares nothing: the elements of its nodes are the enclosing scope's.
+    bool transparent = false;
+    /// @brief For the scope of a component's fallback, whose names are isolated from the use site's: the use site's
+    ///        scope, which still decides the formatting.
+    std::shared_ptr<RtScope> formatSource;
 
     /// @brief The formatting facts of this place: the innermost enclosing locale scope's, else the session's. A
     ///        tracked read.
-    /// @return They.
+    /// @return They. The reference is into the current facts and holds until the facts are next recomputed; a caller
+    ///         keeps it only while it lowers or evaluates, when nothing writes the session's formatting or a scope's
+    ///         tag.
     [[nodiscard]] FormatContext const& formatting() const;
 
     /// @brief The reactive nodes it owns; declared last, so they go first.
@@ -4437,7 +4444,8 @@ inline Value ScopeEnv::client(ExprKind form, std::string_view name) const {
 }
 
 inline FormatContext const& RtScope::formatting() const {
-    for (RtScope const* scope = this; scope != nullptr; scope = scope->parent.get()) {
+    for (RtScope const* scope = this; scope != nullptr;
+         scope = scope->parent != nullptr ? scope->parent.get() : scope->formatSource.get()) {
         if (scope->localeFormat != nullptr) {
             return *scope->localeFormat->get();
         }
@@ -4880,9 +4888,13 @@ namespace detail {
 /// @param node  The node.
 /// @return The element, or `nullptr` for a node that keeps none.
 [[nodiscard]] inline ElementState* elementFor(RtScope const& scope, DocNode const& node) {
-    for (auto const& element : scope.elements) {
-        if (element->node == &node) {
-            return element.get();
+    // A scope that declares nothing (a locale scope and the scope of its mounted content) leaves its children's
+    // elements to the enclosing scope, where `collect` registered them, so the lookup continues there.
+    for (RtScope const* at = &scope; at != nullptr; at = at->transparent ? at->parent.get() : nullptr) {
+        for (auto const& element : at->elements) {
+            if (element->node == &node) {
+                return element.get();
+            }
         }
     }
     return nullptr;
@@ -8616,10 +8628,11 @@ inline Node ScreenCore::lowerPageRegion(DocNode const& node, LowerCtx const& ctx
 }
 
 inline Node ScreenCore::lowerLocaleScope(DocNode const& node, LowerCtx const& ctx) {
-    auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+    auto holder = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+    holder->transparent = true;
     ExprPtr const locale = node.prop("locale");
-    inner->localeFormat = &inner->nodes.computed([this, scope = ctx.scope, bindings = ctx.bindings,
-                                                  locale]() -> std::shared_ptr<FormatContext const> {
+    holder->localeFormat = &holder->nodes.computed([this, scope = ctx.scope, bindings = ctx.bindings,
+                                                    locale]() -> std::shared_ptr<FormatContext const> {
         Value const value = evalIn(*scope, bindings.get(), locale);
         std::string const* const tag = value.asString();
         if (tag == nullptr && !value.isNull()) {
@@ -8633,14 +8646,37 @@ inline Node ScreenCore::lowerLocaleScope(DocNode const& node, LowerCtx const& ct
         }
         return session.scopedFormatting(*tag);
     });
-    LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary, .listGap = 0};
-    std::vector<Node> children;
+    // The children are mounted again whenever the tag changes: a value a node reads once, as it is lowered (a
+    // table's column labels, a `once` property, a literal), is written in the facts at that moment, and only a new
+    // lowering writes it in the new ones. The key is the tag as the scope resolves it; a tag that is not known yet
+    // is the key `""`, apart from every tag.
+    std::vector<DocNode const*> content;
     for (DocNodePtr const& child : node.nodes("children")) {
-        children.push_back(lower(*child, innerCtx));
+        content.push_back(child.get());
     }
-    Column holder = listColumn(std::move(children), 0);
-    holder.holder = true;
-    return ui::column(std::move(holder));
+    LayoutHints const hints = holderHints(content, nullptr, ctx);
+    Switch spec;
+    spec.selector = slotProp<Key>([scope = ctx.scope, bindings = ctx.bindings, locale] {
+        Value const value = evalIn(*scope, bindings.get(), locale);
+        std::string const* const tag = value.asString();
+        return Key{tag == nullptr ? std::string{} : *tag};
+    });
+    spec.fallback = lazy(
+        [this, ctx, holder, content, path = node.path]() -> Node {
+            auto inner = std::make_shared<RtScope>(*this, holder, nullptr, holder->nodes.depth() + 2);
+            inner->transparent = true;
+            LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary, .listGap = 0};
+            std::vector<Node> children;
+            children.reserve(content.size());
+            for (DocNode const* const child : content) {
+                children.push_back(lower(*child, innerCtx));
+            }
+            fillHolder(children, path);
+            return holding(std::move(children), inner, {}, 0);
+        },
+        hints);
+    commonOf(node, ctx, nullptr, spec.common);
+    return ui::switchOf(std::move(spec));
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind of ui/1.
@@ -10453,6 +10489,7 @@ inline Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
                     return Value{std::move(record)};
                 }});
     auto scope = std::make_shared<RtScope>(*this, nullptr, nullptr, ctx.scope->nodes.depth() + 1);
+    scope->formatSource = ctx.scope;
     scope->usePrefix = focusKeyOf(node.path, *ctx.scope) + ">";
     DocNode const& fallback = *component.fallback;
     declare(*scope, nullptr, {&fallback}, {});

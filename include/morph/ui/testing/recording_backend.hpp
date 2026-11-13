@@ -1745,8 +1745,8 @@ public:
         _pages->push_back(this);
     }
 
-    /// @brief Leaves the backend's pages.
-    ~FakePage() override { std::erase(*_pages, this); }
+    /// @brief Leaves the backend's pages and lets the regions that outlive it know.
+    ~FakePage() override;
 
     FakePage(FakePage const&) = delete;
     FakePage& operator=(FakePage const&) = delete;
@@ -1813,8 +1813,12 @@ public:
         _page->adopt(*this);
     }
 
-    /// @brief Leaves the page's layout.
-    ~FakePageRegion() override { _page->release(*this); }
+    /// @brief Leaves the page's layout, if the page still stands.
+    ~FakePageRegion() override {
+        if (_page != nullptr) {
+            _page->release(*this);
+        }
+    }
 
     FakePageRegion(FakePageRegion const&) = delete;
     FakePageRegion& operator=(FakePageRegion const&) = delete;
@@ -1833,8 +1837,13 @@ public:
     /// @param height The height.
     void setContentHeight(Mm height) {
         _contentHeight = height;
-        _page->relayout();
+        if (_page != nullptr) {
+            _page->relayout();
+        }
     }
+
+    /// @brief Forgets the page: it is being destroyed before this region.
+    void orphan() noexcept { _page = nullptr; }
 
     /// @brief Records a changed `rect` or `overflow`.
     /// @param layout The region's resolved place.
@@ -1866,6 +1875,13 @@ private:
     RegionGeometry _geometry;
     Mm _contentHeight{};
 };
+
+inline FakePage::~FakePage() {
+    for (FakePageRegion* const region : _regions) {
+        region->orphan();
+    }
+    std::erase(*_pages, this);
+}
 
 inline void FakePage::relayout() {
     std::vector<RegionSpec> specs;

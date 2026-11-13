@@ -6,7 +6,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <chrono>
 #include <cstdint>
+#include <fstream>
+#include <iterator>
+#include <limits>
 #include <morph/reactive/runtime.hpp>
 #include <morph/testing/step_executor.hpp>
 #include <morph/ui/author.hpp>
@@ -16,6 +20,9 @@
 #include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
+#include <regex>
+#include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -25,6 +32,7 @@
 namespace ui = morph::ui;
 using ui::Mm;
 using ui::testing::Harness;
+using ui::testing::readJson;
 
 namespace {
 
@@ -154,6 +162,32 @@ TEST_CASE("page layout: lengths are exact, and a geometry is refused where it ma
     window.width = Mm{200};
     CHECK(window.problem(a4).has_value());
     CHECK(ui::RegionGeometry{.anchor = ui::PageAnchor::Top, .x = Mm{1}}.problem(a4).has_value());
+    // An offset region with no stated width spans to the margin box's right edge (190 mm here), so it needs room.
+    ui::RegionGeometry open{.anchor = ui::PageAnchor::Offset, .x = Mm{189}, .y = Mm{45}};
+    CHECK_FALSE(open.problem(a4).has_value());
+    open.x = Mm{190};
+    CHECK(open.problem(a4).has_value());
+}
+
+// Mutation: add the micrometre counts in 32 bits (the sum wraps to a negative length).
+TEST_CASE("page layout: adding or subtracting lengths holds at the largest and smallest length", "[ui][page]") {
+    auto const highest = Mm::fromMicrometres(std::numeric_limits<std::int32_t>::max());
+    auto const lowest = Mm::fromMicrometres(std::numeric_limits<std::int32_t>::lowest());
+    auto const one = Mm::fromMicrometres(1);
+    CHECK(highest + one == highest);
+    CHECK(lowest - one == lowest);
+    CHECK(Mm{210} - Mm{20} == Mm{190});
+}
+
+// Mutation: leave the orphaning out of the page's destructor (the region then releases itself from a page that is
+// gone; run under AddressSanitizer).
+TEST_CASE("page region: a region that outlives its page leaves nothing behind", "[ui][page]") {
+    ui::testing::RecordingBackend backend;
+    auto page = backend.createPage(nullptr, ui::PageGeometry{.width = Mm{210}, .height = Mm{297}});
+    auto region = backend.createPageRegion(page.get(), ui::RegionGeometry{});
+    page.reset();
+    region.reset();
+    SUCCEED();
 }
 
 namespace {
@@ -243,7 +277,8 @@ constexpr char const* kScope = R"({
       { "kind": "text", "testId": "day", "text": { "fn": "date", "args": ["2026-10-24T09:00:00Z"] } },
       { "kind": "text", "testId": "parsed", "text": { "fn": "coalesce", "args": [{ "fn": "parseDecimal", "args": ["1.5"] }, "none"] } },
       { "kind": "text", "testId": "env", "text": { "env": "locale" } },
-      { "kind": "keyValue", "testId": "kv", "items": { "lit": [{ "label": "Total", "value": "x" }] } },
+      { "kind": "keyValue", "testId": "kv", "items": { "list": [ { "obj": { "label": "Total", "value": { "ref": "amount" } } } ] } },
+      { "kind": "text", "testId": "plain", "text": { "lit": { "num": 25, "den": 10, "dp": 1 } } },
       { "kind": "localeScope", "locale": "en", "children": [
         { "kind": "text", "testId": "nested",
           "text": { "fn": "money", "args": [{ "lit": { "num": 123450, "den": 100, "dp": 2 } }, "EUR"] } } ] },
@@ -273,6 +308,24 @@ TEST_CASE("locale scope: a bare number a node shows, a message and a key-value i
     auto const screen = h.mount(kScope);
     CHECK(h.text("bare") == "1,5");
     CHECK(h.text("message") == "Hello 1,5");
+}
+
+// Mutation: make keyValueItemOf read the session's facts (the value shows 1.5).
+TEST_CASE("locale scope: a key-value item's value follows the scope", "[ui][page]") {
+    Harness h;
+    h.session.setLocale("en");
+    auto const screen = h.mount(kScope);
+    int const kv = h.byTestId("KeyValue", "kv");
+    INFO(h.backend.prop(kv, "items"));
+    CHECK(h.backend.prop(kv, "items").contains(R"(1\,5)"));
+}
+
+// Mutation: make the literal branch of bindProp read the session's facts (the text shows 2.5).
+TEST_CASE("locale scope: a literal number a node shows follows the scope", "[ui][page]") {
+    Harness h;
+    h.session.setLocale("en");
+    auto const screen = h.mount(kScope);
+    CHECK(h.text("plain") == "2,5");
 }
 
 // Mutation: let the row's pattern win over the application's (the declared case reads 24.10.2026).
@@ -374,11 +427,193 @@ TEST_CASE("locale scope: a change of the session's facts reaches the scope, a ch
     CHECK(h.text("day") == "24-Oct-2026");
 }
 
-TEST_CASE("locale scope: it lowers to a holder column", "[ui][page]") {
+namespace {
+
+// One of each stateful kind inside a scope whose tag is `de`, with the same number bound outside it.
+constexpr char const* kStateful = R"({
+  "vocab": "ui/1", "id": "stateful",
+  "state": { "tag": { "type": "string?", "init": "de" },
+             "amount": { "type": "decimal", "init": { "lit": { "num": 15, "den": 10, "dp": 1 } } },
+             "unit": { "type": "string?", "init": null }, "agreed": { "type": "bool", "init": false },
+             "when": { "type": "any", "init": null }, "typed": { "type": "string", "init": "" },
+             "rows": { "init": { "lit": [ { "id": 1, "total": "1234.5" }, { "id": 2, "total": "2" } ] } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "localeScope", "locale": { "ref": "tag" }, "children": [
+      { "kind": "textInput", "id": "amountInput", "testId": "amount", "value": { "ref": "amount" },
+        "onChange": [ { "set": "amount", "value": { "fn": "parseDecimal", "args": [ { "ref": "event" } ] } },
+                      { "set": "typed", "value": { "ref": "event" } } ] },
+      { "kind": "text", "testId": "shown", "text": { "ref": "amount" } },
+      { "kind": "select", "id": "unitSelect", "testId": "unit", "options": { "lit": [ "g", "kg" ] }, "value": { "ref": "unit" },
+        "onChange": [ { "set": "unit", "value": { "ref": "event" } } ] },
+      { "kind": "checkbox", "id": "agree", "testId": "agree", "label": "agree", "checked": { "ref": "agreed" },
+        "onChange": [ { "set": "agreed", "value": { "ref": "event" } } ] },
+      { "kind": "dateTimeInput", "id": "whenInput", "testId": "when", "mode": "date", "value": { "ref": "when" },
+        "onChange": [ { "set": "when", "value": { "ref": "event" } } ] },
+      { "kind": "text", "testId": "whenShown", "text": { "fn": "coalesce", "args": [ { "ref": "when" }, "unset" ] } },
+      { "kind": "table", "id": "lines", "testId": "lines", "rows": { "ref": "rows" }, "selectionMode": "single",
+        "columns": [ { "id": "total", "label": "Total" } ] },
+      { "kind": "text", "testId": "selected", "text": { "fn": "format", "args": [ "{0}", { "ref": "lines.selectedCount" } ] } },
+      { "kind": "dialog", "id": "dlg", "testId": "dlg", "title": "T", "open": true, "children": [
+        { "kind": "text", "testId": "dlgAmount", "text": { "ref": "amount" } },
+        { "kind": "textInput", "id": "inner", "testId": "inner" },
+        { "kind": "text", "testId": "dlgTyped", "text": { "fn": "coalesce", "args": [ { "ref": "inner.value" }, "none" ] } } ] } ] },
+    { "kind": "text", "testId": "outer", "text": { "ref": "amount" } } ] } })";
+
+}  // namespace
+
+// Mutation: let `elementFor` stop at the scope that carries the locale (every stateful node below dereferences a
+// null element state while it is lowered).
+TEST_CASE("locale scope: a stateful node inside a scope mounts and keeps its state", "[ui][page]") {
+    Harness h;
+    h.session.setLocale("en");
+    auto const screen = h.mount(kStateful);
+    REQUIRE(h.diagnostics.empty());
+    // A number input shows the bound 1.5 as typed in the session's locale, and commits a typed 2.25 as 2.25; what the
+    // scope displays is written in the scope's.
+    int const amount = h.byTestId("TextInput", "amount");
+    CHECK(h.backend.prop(amount, "text") == "1.5");
+    CHECK(h.text("shown") == "1,5");
+    h.backend.edit(amount, "2.25");
+    h.settle();
+    CHECK(h.text("shown") == "2,25");
+    CHECK(h.text("outer") == "2.25");
+    CHECK(h.backend.prop(h.byTestId("TextInput", "amount"), "text") == "2.25");
+    // The other stateful kinds are driven through their state.
+    h.backend.choose(h.byTestId("Select", "unit"), ui::Key{std::string{"kg"}});
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "unit"})") == R"("kg")");
+    h.backend.toggle(h.byTestId("Checkbox", "agree"));
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "agreed"})") == "true");
+    using namespace std::chrono;
+    morph::time::DateTime const instant{year{2026}, month{10}, day{24}, hours{9}, minutes{0}, seconds{0}};
+    h.backend.setDateTime(h.byTestId("DateTimeInput", "when"), morph::time::Timestamp{instant});
+    h.settle();
+    CHECK(readJson(*screen, R"({"ref": "when"})") != "null");
+    // A table keeps its selection and its default cells are written in the scope's locale.
+    int const lines = h.byTestId("Table", "lines");
+    h.backend.selectRows(lines, {ui::Key{std::int64_t{1}}});
+    h.settle();
+    CHECK(h.text("selected") == "1");
+    // A dialog's body reads the scope too, and keeps an input of its own.
+    CHECK(h.text("dlgAmount") == "2,25");
+    h.backend.edit(h.byTestId("TextInput", "inner"), "x");
+    h.settle();
+    CHECK(h.text("dlgTyped") == "x");
+}
+
+namespace {
+
+// A scope whose tag is set after the mount, around a bound number, a translated text and a table with translated
+// column labels.
+constexpr char const* kTagged = R"({
+  "vocab": "ui/1", "id": "tagged",
+  "state": { "tag": { "type": "string?", "init": null },
+             "amount": { "type": "decimal", "init": { "lit": { "num": 15, "den": 10, "dp": 1 } } },
+             "rows": { "init": { "lit": [ { "id": 1, "total": "1234.5" } ] } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "button", "testId": "toDe", "label": "de", "onClick": { "set": "tag", "value": "de" } },
+    { "kind": "button", "testId": "toEn", "label": "en", "onClick": { "set": "tag", "value": "en" } },
+    { "kind": "localeScope", "locale": { "ref": "tag" }, "children": [
+      { "kind": "text", "testId": "bound", "text": { "ref": "amount" } },
+      { "kind": "text", "testId": "plain", "text": { "lit": { "num": 25, "den": 10, "dp": 1 } } },
+      { "kind": "text", "testId": "word", "text": { "t": "word", "fallback": "Word" } },
+      { "kind": "table", "id": "lines", "testId": "lines", "rows": { "ref": "rows" },
+        "columns": [ { "id": "total", "label": { "t": "total", "fallback": "Total" } } ] } ] } ] } })";
+
+void translate(Harness& h) {
+    h.session.setLocale("fr");
+    ui::FormatContext format = h.session.formatting();
+    format.translations = [](std::string_view key, std::string_view locale) -> std::optional<std::string> {
+        if (locale == "de") {
+            return key == "word" ? "Wort" : "Summe";
+        }
+        if (locale == "en") {
+            return key == "word" ? "Word!" : "Sum";
+        }
+        return std::nullopt;
+    };
+    h.session.setFormatting(format);
+}
+
+}  // namespace
+
+// Mutations: compute `localeFormat` without reading the `locale` expression (nothing moves when the tag arrives);
+// leave the selector of the scope's slot constant (the table's labels, read once at lowering, stay as they were).
+TEST_CASE(
+    "locale scope: a tag that arrives or changes after the mount moves everything inside, once-read values "
+    "included",
+    "[ui][page]") {
+    Harness h;
+    translate(h);
+    auto const screen = h.mount(kTagged);
+    REQUIRE(h.diagnostics.empty());
+    // Not known yet: the session's locale.
+    CHECK(h.text("word") == "Word");
+    CHECK(h.text("bound") == "1.5");
+    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Total:content]");
+    h.backend.click(h.byTestId("Button", "toDe"));
+    h.settle();
+    CHECK(h.text("word") == "Wort");
+    CHECK(h.text("bound") == "1,5");
+    CHECK(h.text("plain") == "2,5");
+    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Summe:content]");
+    h.backend.click(h.byTestId("Button", "toEn"));
+    h.settle();
+    CHECK(h.text("word") == "Word!");
+    CHECK(h.text("bound") == "1.5");
+    CHECK(h.text("plain") == "2.5");
+    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Sum:content]");
+}
+
+// The invoice's shape: the customer's locale comes from a query that loads after the mount, and the line table's
+// labels are translated. Mutation: as above.
+TEST_CASE("locale scope: a table's translated labels follow a tag a query delivers", "[ui][page]") {
+    Harness h;
+    translate(h);
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "invoice",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "queries": { "customer": { "model": "sample", "action": "Lims_ListResults", "body": { "obj": { "id": 1 } } } },
+      "view": { "kind": "localeScope", "locale": { "query": "customer" }, "children": [
+        { "kind": "table", "id": "lines", "testId": "lines", "rows": { "lit": [ { "total": "1" } ] },
+          "columns": [ { "id": "total", "label": { "t": "total", "fallback": "Total" } } ] } ] } })");
+    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Total:content]");
+    h.reply(0, "\"de\"");
+    CHECK(h.backend.prop(h.byTestId("Table", "lines"), "columns") == "[Summe:content]");
+}
+
+// Mutation: leave `formatSource` out of the component's scope (the fallback's text shows 1.5).
+TEST_CASE("locale scope: a custom component's fallback formats in the scope of its use site", "[ui][page]") {
+    Harness h;
+    h.session.setLocale("en");
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "component",
+      "components": { "Gauge": { "host": "Gauge", "version": 1, "props": { "level": "number" },
+                                 "fallback": { "kind": "text", "testId": "fallback", "text": { "ref": "props.level" } } } },
+      "view": { "kind": "localeScope", "locale": "de", "children": [
+        { "kind": "custom", "name": "Gauge", "props": { "level": { "lit": { "num": 15, "den": 10, "dp": 1 } } } } ] } })");
+    CHECK(h.text("fallback") == "1,5");
+}
+
+// Mutation: build the page's slot out of the scope (the page leaves the mount).
+TEST_CASE("locale scope: a scope around a page formats the regions in its locale", "[ui][page]") {
+    Harness h;
+    h.session.setLocale("en");
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "around",
+      "view": { "kind": "localeScope", "locale": "de", "children": [
+        { "kind": "page", "width": 210000, "height": 297000, "a11y": { "name": "Sheet" }, "children": [
+          { "kind": "pageRegion", "anchor": "top", "children": [
+            { "kind": "text", "testId": "total", "text": { "fn": "money", "args": [ { "lit": { "num": 123450, "den": 100, "dp": 2 } }, "EUR" ] } } ] } ] } ] } })");
+    CHECK(h.text("total") == "1.234,50 €");
+}
+
+TEST_CASE("locale scope: it lowers to a slot over a holder column", "[ui][page]") {
     Harness h;
     auto const screen = h.mount(kScope);
-    // The outer column, the scope's holder, and the two nested scopes' holders.
-    CHECK(h.backend.all("Column").size() == 4);
+    // One slot for each of the three scopes.
+    CHECK(h.backend.all("Slot").size() == 3);
 }
 
 // Mutation: the author API writes the lengths as millimetres (the document refuses them).
@@ -395,20 +630,52 @@ TEST_CASE("document page: the author API writes a sheet the loader reads back", 
     CHECK_FALSE(view.json().empty());
 }
 
-// Mutation: make the paper's selection fill a dark colour (its text is then unreadable on it).
-TEST_CASE("document page: the paper surface's roles hold their contrast on white", "[ui][page][theme]") {
+namespace {
+
+// The shipped paper surface: the roles `themeContrastProblems` reads, taken from `paperScheme` in Theme.qml itself.
+// A QML colour with eight digits is `#AARRGGBB`.
+ui::ThemeValues shippedPaper() {
+    std::ifstream file{MORPH_PAPER_THEME_QML};
+    REQUIRE(file.is_open());
+    std::string const qml{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+    auto const begin = qml.find("paperScheme: MorphScheme {");
+    REQUIRE(begin != std::string::npos);
+    auto const end = qml.find('}', begin);
+    std::istringstream block{qml.substr(begin, end - begin)};
     ui::ThemeValues paper = ui::themeValues();
-    auto const set = [&paper](char const* path, ui::Rgba color) { paper.colors.insert_or_assign(path, color); };
-    set("color.surface", {255, 255, 255, 255});
-    set("color.text", {0x1c, 0x1e, 0x21, 255});
-    set("color.muted", {0x4d, 0x54, 0x61, 255});
-    set("color.selection", {0xe2, 0xf4, 0xe8, 255});
-    set("color.selectionText", {0x1c, 0x1e, 0x21, 255});
-    set("color.track", {0xd2, 0xd7, 0xde, 255});
-    set("color.hover", {0x1d, 0x1d, 0x1f, 0x14});
-    set("color.controlSurface", {255, 255, 255, 255});
+    std::set<std::string> found;
+    std::string line;
+    while (std::getline(block, line)) {
+        std::smatch match;
+        if (!std::regex_search(line, match, std::regex{R"re(^\s*(\w+): "#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})")re"})) {
+            continue;
+        }
+        std::string const digits = match[2].str();
+        auto const byte = [&digits](std::size_t at) {
+            return static_cast<std::uint8_t>(std::stoul(digits.substr(at, 2), nullptr, 16));
+        };
+        ui::Rgba const color = digits.size() == 8 ? ui::Rgba{byte(2), byte(4), byte(6), byte(0)}
+                                                  : ui::Rgba{byte(0), byte(2), byte(4), 255};
+        paper.colors.insert_or_assign("color." + match[1].str(), color);
+        found.insert(match[1].str());
+    }
+    for (char const* role :
+         {"surface", "text", "muted", "selection", "selectionText", "track", "hover", "controlSurface"}) {
+        INFO(role);
+        REQUIRE(found.contains(role));
+    }
+    return paper;
+}
+
+}  // namespace
+
+// Mutation: change `selection` in Theme.qml's `paperScheme` to a dark colour (its text is then unreadable on it).
+TEST_CASE("document page: the paper surface's roles hold their contrast on white", "[ui][page][theme]") {
+    ui::ThemeValues paper = shippedPaper();
+    CHECK(paper.colors.at("color.surface").hex() == "#ffffff");
     CHECK(ui::themeContrastProblems(paper).empty());
-    set("color.selection", {0x20, 0x20, 0x20, 255});
+    // The check reads what it is given: the same values with a dark selection are refused.
+    paper.colors.insert_or_assign("color.selection", ui::Rgba{0x20, 0x20, 0x20, 255});
     CHECK_FALSE(ui::themeContrastProblems(paper).empty());
 }
 

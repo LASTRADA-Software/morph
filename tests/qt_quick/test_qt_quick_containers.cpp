@@ -3544,6 +3544,28 @@ TEST_CASE("qt_quick page: the sheet is 96 px to 25.4 mm, scaled to the width it 
     CHECK(sheet.width() == Catch::Approx(210 * kPixelsPerMm).margin(1));
 }
 
+// Mutation: size the page by its content only (the sheet keeps its 794 px inside the narrower column and overflows
+// it).
+TEST_CASE("qt_quick page: a page in a column narrower than the sheet is as wide as the column and scaled",
+          "[qt_quick][page]") {
+    Scene scene;
+    ui::PageGeometry const a4{.width = ui::Mm{210}, .height = ui::Mm{297}, .margins = ui::PageMargins{ui::Mm{10}}};
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(30)});
+    auto page = scene.backend().createPage(column.get(), a4);
+    auto region = scene.backend().createPageRegion(page.get(), {.anchor = ui::PageAnchor::Top});
+    auto text = scene.backend().createText(region.get());
+    text->setText("Body");
+    scene.settle();
+    scene.settle();
+    constexpr double kPixelsPerMm = 96.0 / 25.4;
+    QQuickItem const& columnItem = Scene::itemOf(*column);
+    QQuickItem const& sheet = Scene::itemOf(*page);
+    REQUIRE(columnItem.width() < 210 * kPixelsPerMm);
+    CHECK(sheet.width() == Catch::Approx(columnItem.width()).margin(1));
+    CHECK(sheet.height() == Catch::Approx(sheet.width() * 297 / 210).margin(1));
+}
+
 // The vocabulary before pages, measured: what a column of fixed size says about a sheet. A column of stated height
 // with a stretching spacer holds a footer at its bottom, so pinning alone is expressible; units are not millimetres.
 TEST_CASE("qt_quick page: without pages, a fixed column pins a footer but its size is in units, not millimetres",

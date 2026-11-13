@@ -14,7 +14,7 @@ Rendering a page to a file or a printer is not here: a sheet is drawn on the scr
 |---|---|
 | `ui::Mm` | A length in millimetres, held as an exact integer count of micrometres. |
 | `ui::PageMargins` | `{top, right, bottom, left}` in `Mm`. |
-| `ui::Page` / `ui::page(PageGeometry, std::vector<Node> regions)` | The view-tree node of a sheet; `PageGeometry{width, height, margins}`. Its children are `PageRegion` nodes; the mount refuses any other. |
+| `ui::Page` / `ui::page(Page)` | The view-tree node of a sheet; `Page{geometry, children, common}`, with `PageGeometry{width, height, margins}` as its `geometry`. Its children are `PageRegion` nodes; the mount refuses any other. |
 | `ui::PageRegion` / `ui::pageRegion(RegionGeometry, children)` | A region of a sheet; `RegionGeometry{anchor, x, y, width, height}`. |
 | `ui::PageAnchor` | `Top`, `Bottom` or `Offset`. |
 | `ui::layoutPage(geometry, regions, availableWidth)` | The pure function both frontends and the recording backend lay a page out with; answers a `PageLayout`. |
@@ -82,7 +82,7 @@ fits, and above 5000 mm what is meant is not a sheet; the bound is a sanity limi
 
 ## The page
 
-`ui::page(PageGeometry{width, height, margins}, children)` is a sheet `width` × `height` millimetres. `margins` are the
+`ui::page(Page{.geometry = PageGeometry{width, height, margins}, .children = …})` is a sheet `width` × `height` millimetres. `margins` are the
 distances from each edge of the sheet to its **margin box**: the rectangle regions are anchored to. They convert from a
 single `Mm` for every side. The mount refuses (`std::logic_error`, naming the node's test id, as every layout refusal
 does) a page whose margin box is empty (left plus right margin not below the width, top plus bottom not below the
@@ -110,7 +110,7 @@ The sheet draws on a built-in surface, `paper` ([`theme.md`](theme.md#surfaces))
 theme, a dark one included, with every colour role given as a literal, so that none comes from a dark theme and lands
 on white. Reasoning: a sheet is paper; what is printed on it must not turn light-on-light when the application is in a
 dark theme, and a document the person compares with a printout must look the same in every theme. A theme may replace
-`paper` by name, as it may any built-in surface; the built-in one is fixed, and `themeContrastProblems` checks it. The
+`paper` by name, as it may any built-in surface; the built-in one is fixed, and a test runs `themeContrastProblems` on the roles it reads from `paperScheme` in `Theme.qml`. The
 page also draws a hairline border and the card elevation, so its edge reads against the window, and clips its content to
 the sheet. The terminal draws no surface for it, and marks the sheet's edge with a frame
 ([Density per frontend](#density-per-frontend)).
@@ -143,7 +143,9 @@ corner and y downwards.
 - **Why offsets are from the sheet's edges.** The figures standards give (a window 20 mm from the left and 45 mm from
   the top of the sheet) are distances from the sheet's edge. Offsetting from the margin box would make every such
   figure a subtraction the author does by hand, and a changed margin would silently move the window.
-- The mount refuses (`std::logic_error`) a negative `x`, `y`, `width` or `height`, a zero `width` or `height`, and an
+- The mount refuses (`std::logic_error`) a negative `x`, `y`, `width` or `height`, a zero `width` or `height`, an
+  `Offset` region with no stated `width` whose `x` lies at or past the margin box's right edge (it would resolve to
+  a width of 0, which a stated width is refused for), and an
   `Offset` or pinned region whose given rectangle leaves the sheet (`x + width` past the sheet's width, `y + height`
   past its height; a pinned region's rectangle is checked by the same rule once placed). A region whose content turns
   out taller than its stated height is clipped, not refused: the content is data, the rectangle is the author's.
@@ -259,7 +261,7 @@ Reasoning: the terminal's job is to render the screen usably, not to reproduce t
 ## The document form and the author API
 
 The document gains three node kinds. `page` and `pageRegion` lower to `ui::Page` and `ui::PageRegion`; `localeScope`
-lowers to a holder column ([The locale scope](#the-locale-scope)).
+lowers to a slot over a holder column ([The locale scope](#the-locale-scope)).
 
 ```json
 {"kind": "page", "width": 210000, "height": 297000,
@@ -369,7 +371,13 @@ and a number shown as `1.234,50` and parsed as `1.23450` is data loss. So these 
 scope encloses them:
 
 - `parseDecimal`, which `expressions.md` defines as entry, and every parse of typed text;
-- a text input's draft, its number places and its validation messages, and a date input's `pattern`.
+- a text input's draft, its number places and its validation messages, and a date input's `pattern`;
+- a form's overlays and engine options, the `arrange` and `pref` editors' ids, and unit and zone reads
+  (`convertUnit`, a date's UTC offset): a unit and a zone are the reader's.
+
+A `custom` node inside a scope honours it: its text and number props are converted with the scope's facts, and its
+fallback is lowered in a scope of its own, whose names are isolated from the use site's but whose formatting is the
+use site's (`RtScope::formatSource`), so the component's fallback writes in the scope's locale.
 
 `{"env": "locale"}` stays the session's: it answers who is reading, not what language the sheet is in.
 
@@ -380,11 +388,21 @@ scope's, so an inner scope inherits nothing from an outer one but the session's 
 reactive value of the session's formatting facts and the `locale` expression, so a change of the session's declared
 patterns or catalogue, or of the tag, re-evaluates exactly the properties inside the scope that read a formatting.
 
+Some values are read once, as a node is lowered, and not by a property: a table's column labels, a `once` property
+(`icon`, `mode`, `collapsible`), a literal. A property that is re-evaluated cannot reach them, so **the scope mounts its
+children again whenever its tag changes**: the scope's slot is selected by the tag as a string (`""` for a tag not
+known yet), and a new key lowers the children afresh in the new facts. Element state (a draft, a selection, a dialog's
+openness) lives in the enclosing scope and survives the remount. The one value that does not follow is the session's
+own language changing under a scope with an empty tag: that is a rare event for the session itself, and it moves
+every property but not the once-read values.
+
 ### How it is lowered
 
-The scope is not a widget. The interpreter lowers `localeScope` to a holder column (the column it inserts around a list
-of nodes: spacing step 0, `Stretch` alignment, `holder` set, so a child's `bleed` reaches the scope's parent as before)
-and mounts the children in a **child scope** (`RtScope`) that carries the context. A holder column stacks its children
+The scope is not a widget. The interpreter lowers `localeScope` to a slot (a `Switch` whose selector is the tag and
+whose only content is its fallback) over a holder column (the column it inserts around a list of nodes: spacing step 0,
+`Stretch` alignment) and mounts the children in a **child scope** (`RtScope`) that is made at each mount and sits under
+the scope that carries the context. Both are transparent: they declare nothing, and the elements of the children are
+the enclosing scope's, where the document's collection registered them. A holder column stacks its children
 vertically, so a `localeScope` inside a `row` is one cell of the row holding its children in a column, as a `boundary`
 is.
 
@@ -452,7 +470,7 @@ The recording backend has no pixels, so a page is observed as the numbers `layou
   `set Page#1 displayed=105x148.5`, `set PageRegion#2 rect=…` and `set PageRegion#2 overflow=true` on a change.
 - **Golden dump**: `Page#1 a11yName=… a11yRole=document displayed=… margins=… scale=… size=… surface=paper` and, indented,
   `PageRegion#2 anchor=Offset overflow=false rect=20,45,85,45`.
-- **Scope**: there is nothing to observe of a `localeScope` but the text of the widgets inside it and a holder `Column`.
+- **Scope**: there is nothing to observe of a `localeScope` but the text of the widgets inside it and a slot over a holder `Column`.
 
 ## Tests
 
@@ -472,7 +490,10 @@ must fail it; the frontends' suites hold the cases only they can reach.
 | An empty tag | `""` and `null` write the session's, with no report; a number as the tag is reported at the `locale` path | the report on `null` |
 | An unknown tag | `pl` writes `en`'s facts and is reported once for two reads and two scopes | the report on every read |
 | The session changes under a scope | changing the session's declared date pattern re-writes a date in the scope; switching the session's language alone leaves the scope as it was | the scope reading a stale context |
-| Entry in a scope | in a `de` scope under `en`, `parseDecimal("1.5")` is `1.5`; a number input shows a bound 1.5 as `1.5` and commits a typed `2.25` as 2.25 | `parseDecimal` reading the scope's facts |
+| Entry in a scope | in a `de` scope under `en`, `parseDecimal("1.5")` is `1.5`; a number input shows a bound 1.5 as `1.5` and commits a typed `2.25` as 2.25 | `parseDecimal` reading the scope's facts; the draft reading the scope's |
+| Stateful nodes in a scope | a `textInput`, `select`, `checkbox`, `dateTimeInput`, `table` and `dialog` inside a scope mount and keep their state | the element lookup stopping at the scope |
+| A tag that arrives or changes | `null` then `de` then `en` after the mount re-writes a bound number, a literal, a `t`, and a table's translated column labels; the labels follow a tag a query delivers | the tag not read; the slot not keyed by the tag |
+| A `custom` node | the fallback of a component inside a `de` scope writes `1,5` | the fallback's scope not linked to the use site |
 | Overflow | a region of stated height 20 mm with 30 mm of content records `overflow=true` | no flag |
 | Refusals | each case of the document form refused at load with its pointer and at mount with its test id | each check removed |
 | Placement on the frontends | per frontend, a content-sized `Bottom` region's bottom edge lies at the margin and an `Offset` region lies at its pixel or cell position; a page in a column narrower than the sheet is as wide as the column and scaled | a content height of 0 passed to the layout; content-sized page |
@@ -525,7 +546,7 @@ Qt Quick's suite checks the page item at 794 × 1123 px whatever the screen's DP
 | Scope's zone and units | The session's | The zone is the reader's. |
 | Scope and entry | Entry and `parseDecimal` keep the session's facts | What an input shows and a body parses must be what the person types. |
 | Scope's tag `null` or `""` | The session's locale, silently | Loading is not a problem. |
-| Scope's lowering | A holder column and a child `RtScope` | The view tree needs no new kind, and the formatting lookup is the interpreter's. |
+| Scope's lowering | A slot over a holder column, and a child `RtScope` per mount | The view tree needs no new kind, and the formatting lookup is the interpreter's. |
 | Unknown tag | `en`'s facts, reported once per tag through the screen's `report` | The interpreter reaches the screen's report and the session, not the shell. |
 | Node name | `page` | The brief names it; the sheet is its picture. |
 

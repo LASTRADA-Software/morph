@@ -86,23 +86,29 @@ public:
     /// @return The order.
     [[nodiscard]] friend constexpr auto operator<=>(Mm const&, Mm const&) noexcept = default;
 
-    /// @brief The sum of two lengths.
+    /// @brief The sum of two lengths, held at the largest or smallest length instead of overflowing.
     /// @param left  The first.
     /// @param right The second.
     /// @return The sum.
     [[nodiscard]] friend constexpr Mm operator+(Mm left, Mm right) noexcept {
-        return fromMicrometres(left._micrometres + right._micrometres);
+        return saturated(static_cast<std::int64_t>(left._micrometres) + right._micrometres);
     }
 
-    /// @brief The difference of two lengths.
+    /// @brief The difference of two lengths, held at the largest or smallest length instead of overflowing.
     /// @param left  The first.
     /// @param right The second.
     /// @return The difference.
     [[nodiscard]] friend constexpr Mm operator-(Mm left, Mm right) noexcept {
-        return fromMicrometres(left._micrometres - right._micrometres);
+        return saturated(static_cast<std::int64_t>(left._micrometres) - right._micrometres);
     }
 
 private:
+    static constexpr Mm saturated(std::int64_t micrometres) noexcept {
+        constexpr std::int64_t kLowest = std::numeric_limits<std::int32_t>::lowest();
+        constexpr std::int64_t kHighest = std::numeric_limits<std::int32_t>::max();
+        return fromMicrometres(static_cast<std::int32_t>(std::clamp(micrometres, kLowest, kHighest)));
+    }
+
     std::int32_t _micrometres = 0;
 };
 
@@ -229,8 +235,7 @@ struct RegionGeometry {
     /// @brief The distance from the sheet's top edge; only an `Offset` region takes one.
     Mm y{};
     /// @brief The width; absent: the margin box's width for `Top` and `Bottom`, and the distance from `x` to the
-    /// margin
-    ///        box's right edge for `Offset`.
+    ///        margin box's right edge for `Offset`.
     std::optional<Mm> width;
     /// @brief The height; absent: the content's. A given height is the region's extent and clips its content.
     std::optional<Mm> height;
@@ -254,6 +259,9 @@ struct RegionGeometry {
             return "a page region's width and height are above zero";
         }
         Mm const left = anchor == PageAnchor::Offset ? x : page.margins.left;
+        if (anchor == PageAnchor::Offset && !width && x >= page.width - page.margins.right) {
+            return "an offset page region with no width starts at or past the margin box's right edge";
+        }
         if (width && left + *width > page.width) {
             return "a page region leaves the sheet's width";
         }
