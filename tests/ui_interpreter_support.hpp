@@ -10,6 +10,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <morph/core/bridge.hpp>
 #include <morph/core/completion.hpp>
 #include <morph/reactive/runtime.hpp>
 #include <morph/reactive/testing/manual_scheduler.hpp>

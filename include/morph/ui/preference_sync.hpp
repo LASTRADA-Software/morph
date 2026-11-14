@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "../core/bridge.hpp"
 #include "../core/callback_scope.hpp"
 #include "../core/completion.hpp"
 #include "document.hpp"

@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "../core/bridge.hpp"
 #include "../core/executor.hpp"
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"

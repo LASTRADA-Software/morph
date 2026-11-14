@@ -274,6 +274,10 @@ int main() {
     if (morph::ui::routeOfFragment(morph::ui::fragmentOf("orders/42")) != "orders/42") {
         return 1;
     }
+    // A call into the interpreter's compiled half.
+    if (morph::ui::detail::base64Size("AQID") != 3) {
+        return 1;
+    }
     std::printf("morph %d.%d.%d consumed from the install prefix\n", MORPH_VERSION_MAJOR,
                 MORPH_VERSION_MINOR, MORPH_VERSION_PATCH);
     return 0;

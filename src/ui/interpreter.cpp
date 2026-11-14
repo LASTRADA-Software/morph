@@ -52,7 +52,48 @@
 
 namespace morph::ui {
 
+static_assert(kMaxInlineFileBytes == (wire::kMaxEnvelopeBytes - (std::size_t{64} * 1024)) * 3 / 4,
+              "the inline cap must stay tied to the wire envelope");
+
+class BridgeDispatcher::Channel final : public ModelChannel {
+public:
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the type id, then the key, as `bind` takes them.
+    Channel(bridge::Bridge& bridge, exec::IExecutor* cbExec, Evaluator evaluator, std::string const& typeId,
+            bridge::BindSharing sharing, std::string const& instanceKey)
+        : _cbExec{cbExec},
+          _evaluator{std::move(evaluator)},
+          _typeId{typeId},
+          _handler{bridge, cbExec, typeId, sharing, instanceKey} {}
+
+    [[nodiscard]] async::Completion<std::string> execute(std::string const& actionId, std::string const& bodyJson,
+                                                         CallOptions options) override;
+
+    [[nodiscard]] ChannelFacts facts() const override;
+
+private:
+    exec::IExecutor* _cbExec;
+    Evaluator _evaluator;
+    std::string _typeId;
+    bridge::RawHandler _handler;
+};
+
 namespace detail {
+
+ElementState::ElementState(reactive::Runtime& runtime)
+    : draft{runtime},
+      committed{runtime},
+      edited{runtime, false},
+      touched{runtime, false},
+      focused{runtime, false},
+      open{runtime, false},
+      submitted{runtime, false},
+      selection{runtime, Value{ValueList{}}},
+      sort{runtime, Value{ValueList{}}},
+      activeKey{runtime},
+      checksVersion{runtime, 0},
+      inner{runtime, nullptr} {}
+
+ElementState::~ElementState() = default;
 
 [[nodiscard]] Value evalIn(RtScope const& scope, Bindings const* bindings, ExprPtr const& expr) {
     if (!expr) {
@@ -216,12 +257,14 @@ void headCommandLists(Document const& doc, std::vector<Commands const*>& lists) 
 [[nodiscard]] bool statefulKind(std::string_view kind) {
     static constexpr std::array<std::string_view, 12> kStateful = {
         "textInput", "checkbox", "select", "dateTimeInput", "slider",     "filePicker",
-        "dialog",    "drawer",   "table",  "form",          "collection", "wizard"};
+        "dialog",    "drawer",   "table",  "form",          "collection", "wizard",
+    };
     return listed(kStateful, kind);
 }
 
 }  // namespace
 
+// NOLINTNEXTLINE(modernize-use-string-view): callers keep the key as an owned string, in the log and in tests.
 [[nodiscard]] std::string commandKey(CommandKind kind) {
     switch (kind) {
         case CommandKind::Set:
@@ -312,6 +355,7 @@ namespace {
 
 }  // namespace
 
+// NOLINTNEXTLINE(modernize-use-string-view): callers keep the kind as an owned string, in a reply's `kind`.
 [[nodiscard]] std::string defaultErrorKind(std::exception_ptr const& error) {
     try {
         std::rethrow_exception(error);
@@ -385,10 +429,10 @@ namespace {
     return Value{std::move(merged)};
 }
 
-// NOLINTBEGIN(bugprone-easily-swappable-parameters): a list, a key and a row are distinct roles of one type.
-[[nodiscard]] std::expected<Value, PatchMiss> patchRows(Value const& value, std::string_view listMember,
-                                                        Value const& key, Value const& with) {
-    // NOLINTEND(bugprone-easily-swappable-parameters)
+[[nodiscard]] std::expected<Value, PatchMiss> patchRows(
+    Value const& value, std::string_view listMember,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a list, a key and a row are distinct roles of one type.
+    Value const& key, Value const& with) {
     ValueRecord const* const record = listMember.empty() ? nullptr : value.asRecord();
     if (!listMember.empty() && (record == nullptr || !record->contains(listMember))) {
         return std::unexpected(PatchMiss::NoList);
@@ -601,6 +645,7 @@ std::shared_ptr<ModelChannel> BridgeDispatcher::bind(std::string const& typeId, 
                                                      std::string const& instanceKey) {
     return std::make_shared<Channel>(*_bridge, _cbExec, _evaluator, typeId, sharing, instanceKey);
 }
+
 async::Completion<std::string> BridgeDispatcher::Channel::execute(std::string const& actionId,
                                                                   std::string const& bodyJson, CallOptions options) {
     if (options.evaluate) {
@@ -613,9 +658,12 @@ async::Completion<std::string> BridgeDispatcher::Channel::execute(std::string co
     }
     return _handler.execute(actionId, bodyJson);
 }
+
 ChannelFacts BridgeDispatcher::Channel::facts() const {
     return ChannelFacts{.instanceId = _handler.instanceId(), .primary = _handler.primary()};
 }
+// NOLINTBEGIN(performance-unnecessary-value-param,bugprone-easily-swappable-parameters): every default below ignores
+// its arguments, so each keeps the parameter types of the interface it implements.
 bool InterpreterHost::navigate(NavigateRequest const& request, std::function<void(Value)> onResult,
                                std::function<void()> onCancel) {
     static_cast<void>(request);
@@ -623,40 +671,48 @@ bool InterpreterHost::navigate(NavigateRequest const& request, std::function<voi
     static_cast<void>(onCancel);
     return false;
 }
+
 bool InterpreterHost::closeSelf(std::string const& screen, std::optional<Value> result) {
     static_cast<void>(screen);
     static_cast<void>(result);
     return false;
 }
+
 bool InterpreterHost::hostCommand(std::string const& name, Value const& args) {
     static_cast<void>(name);
     static_cast<void>(args);
     return false;
 }
+
 bool InterpreterHost::switchBackend(std::string const& name,
                                     std::function<void(std::expected<void, std::string>)> done) {
     static_cast<void>(name);
     static_cast<void>(done);
     return false;
 }
+
 void InterpreterHost::resetPrefs(std::string const& screen, std::string const& point) {
     static_cast<void>(screen);
     static_cast<void>(point);
 }
+
 bool InterpreterHost::notify(std::string const& text, std::string const& role) {
     static_cast<void>(text);
     static_cast<void>(role);
     return false;
 }
+
 bool InterpreterHost::signIn(Value const& reply) {
     static_cast<void>(reply);
     return false;
 }
+
 bool InterpreterHost::setAppValue(std::string const& name, Value const& value) {
     static_cast<void>(name);
     static_cast<void>(value);
     return false;
 }
+
 bool InterpreterHost::upload(Value const& file, std::function<void(Value)> progress,
                              std::function<void(std::expected<Value, std::string>)> done) {
     static_cast<void>(file);
@@ -664,10 +720,12 @@ bool InterpreterHost::upload(Value const& file, std::function<void(Value)> progr
     static_cast<void>(done);
     return false;
 }
+
 bool InterpreterHost::uploadFor(UploadRequest const& request, std::function<void(Value)> progress,
                                 std::function<void(std::expected<Value, std::string>)> done) {
     return upload(request.file, std::move(progress), std::move(done));
 }
+
 bool InterpreterHost::download(Value const& file, std::string const& option, Value const& name,
                                std::function<void(std::expected<Value, std::string>)> done) {
     static_cast<void>(file);
@@ -676,6 +734,7 @@ bool InterpreterHost::download(Value const& file, std::string const& option, Val
     static_cast<void>(done);
     return false;
 }
+
 bool InterpreterHost::readFile(Value const& file, std::size_t maxBytes,
                                std::function<void(std::expected<InlineFile, std::string>)> done) {
     static_cast<void>(file);
@@ -683,6 +742,7 @@ bool InterpreterHost::readFile(Value const& file, std::size_t maxBytes,
     static_cast<void>(done);
     return false;
 }
+
 bool InterpreterHost::saveFile(InlineFile const& file, std::string const& option,
                                std::function<void(std::expected<Value, std::string>)> done) {
     static_cast<void>(file);
@@ -690,11 +750,14 @@ bool InterpreterHost::saveFile(InlineFile const& file, std::string const& option
     static_cast<void>(done);
     return false;
 }
+
 void InterpreterHost::preferenceChanged(std::string const& screen, std::string const& point, Value const& value) {
     static_cast<void>(screen);
     static_cast<void>(point);
     static_cast<void>(value);
 }
+// NOLINTEND(performance-unnecessary-value-param,bugprone-easily-swappable-parameters)
+
 bool Session::can(std::string_view action) const {
     static constexpr std::string_view kHostPrefix = "host:";
     if (action.starts_with(kHostPrefix)) {
@@ -705,10 +768,12 @@ bool Session::can(std::string_view action) const {
     }
     return _permitted.get().contains(action);
 }
+
 void Session::setFormatLocale(std::string tag) {
     _formatLocale = std::move(tag);
     applyFacts(_format.peek()->locale);
 }
+
 std::shared_ptr<FormatContext const> Session::scopedFormatting(std::string_view tag) const {
     FormatContext next = *_format.get();
     LocaleFacts const& facts = localeFacts(tag);
@@ -719,9 +784,11 @@ std::shared_ptr<FormatContext const> Session::scopedFormatting(std::string_view 
     next.dateTimePattern = _declaredDateTime.empty() ? std::string{facts.dateTimePattern} : _declaredDateTime;
     return std::make_shared<FormatContext const>(std::move(next));
 }
+
 bool Session::firstUnlistedLocale(std::string const& tag) {
     return findLocaleFacts(tag) == nullptr && _unlistedLocales.insert(tag).second;
 }
+
 void Session::setFormatting(FormatContext format) {
     // One batch, so an effect never sees the new `env.locale` beside the old facts, and runs once.
     _runtime->batch([this, &format] {
@@ -729,6 +796,7 @@ void Session::setFormatting(FormatContext format) {
         _format.set(std::make_shared<FormatContext const>(std::move(format)));
     });
 }
+
 void Session::setDatePatterns(std::string date, std::string dateTime) {
     _declaredDate = std::move(date);
     _declaredDateTime = std::move(dateTime);
@@ -737,29 +805,35 @@ void Session::setDatePatterns(std::string date, std::string dateTime) {
     next.dateTimePattern = _declaredDateTime.empty() ? _localeDateTime : _declaredDateTime;
     setFormatting(std::move(next));
 }
+
 void Session::setTranslations(render::TranslationProvider translations) {
     FormatContext next = *_format.peek();
     next.translations = std::move(translations);
     setFormatting(std::move(next));
 }
+
 void Session::setEnvironment(ValueRecord values) {
     values.insert_or_assign("locale", Value{_format.peek()->locale});
     _env.set(std::move(values));
 }
+
 void Session::setEnvironmentValue(std::string const& name, Value value) {
     ValueRecord env = _env.peek();
     env.insert_or_assign(name, std::move(value));
     _env.set(std::move(env));
 }
+
 void Session::setHostCommands(HostCommands commands) {
     _hostCommandRunner = std::move(commands.run);
     _hostCommandNames.set(std::move(commands.available));
 }
+
 std::function<HostCommandResult(std::string const&, Value const&)> const& Session::hostCommandRunner() const noexcept {
     return _hostCommandRunner;
 }
+
 Value Session::client(ExprKind form, std::string_view name) const {
-    ValueRecord const& values = [&]() -> ValueRecord const& {
+    ValueRecord const& values = [&] -> ValueRecord const& {
         if (form == ExprKind::Env) {
             return _env.get();
         }
@@ -768,6 +842,7 @@ Value Session::client(ExprKind form, std::string_view name) const {
     auto const found = values.find(name);
     return found == values.end() ? Value{} : found->second;
 }
+
 void Session::clear() {
     _runtime->batch([this] {
         for (auto const& [key, entry] : _entries) {
@@ -782,14 +857,16 @@ void Session::clear() {
         }
     });
 }
+
 void Session::prefetch(std::shared_ptr<ModelChannel> const& channel, std::string const& token,
                        std::string const& typeId, std::string const& action, Value const& body) {
-    auto entry = acquire(token, typeId, action, false, body);
+    auto const entry = acquire(token, typeId, action, false, body);
     if (!entry->pending.peek() && (!entry->hasValue.peek() || entry->stale)) {
         fetch(entry, channel);
     }
     release(entry);
 }
+
 void Session::asUser(std::function<void()> const& body) {
     ++_userDepth;
     try {
@@ -800,10 +877,12 @@ void Session::asUser(std::function<void()> const& body) {
     }
     --_userDepth;
 }
+
 std::string Session::cacheKey(std::string const& token, std::string const& typeId, std::string const& action,
                               bool evaluate, std::string const& body) {
     return typeId + '\x1f' + token + '\x1f' + (evaluate ? "evaluate:" : "") + action + '\x1f' + body;
 }
+
 std::shared_ptr<detail::CacheEntry> Session::acquire(std::string const& token, std::string const& typeId,
                                                      std::string const& action, bool evaluate, Value const& body) {
     std::string const text = detail::canonicalJson(body);
@@ -832,6 +911,7 @@ std::shared_ptr<detail::CacheEntry> Session::acquire(std::string const& token, s
     found->second->evict.cancel();
     return found->second;
 }
+
 void Session::release(std::shared_ptr<detail::CacheEntry> const& entry) {
     if (--entry->users > 0 || _options.scheduler == nullptr) {
         return;
@@ -846,6 +926,7 @@ void Session::release(std::shared_ptr<detail::CacheEntry> const& entry) {
         }
     });
 }
+
 void Session::fetch(std::shared_ptr<detail::CacheEntry> const& entry, std::shared_ptr<ModelChannel> const& channel) {
     // The watch goes out before the read, on the same connection, so a change committed after the read is
     // seen as an event.
@@ -877,10 +958,12 @@ void Session::fetch(std::shared_ptr<detail::CacheEntry> const& entry, std::share
         settleFailure(*entry, detail::failureText(error), classify(error), detail::refusalValue(error));
     }
 }
+
 void Session::confirm(detail::CacheEntry& entry, Value const& confirmed) {
     entry.confirmed = detail::withoutFields(confirmed, entry.secretFields);
     showLayers(entry);
 }
+
 void Session::showLayers(detail::CacheEntry& entry) {
     Value shown = entry.confirmed;
     for (detail::OptimisticLayer const& layer : entry.layers) {
@@ -891,21 +974,25 @@ void Session::showLayers(detail::CacheEntry& entry) {
     noteWrite();
     entry.value.set(std::move(shown));
 }
+
 std::string Session::classify(std::exception_ptr const& error) const {
     return _options.classify ? _options.classify(error) : detail::defaultErrorKind(error);
 }
+
 std::chrono::milliseconds Session::now() const {
     if (_options.clock) {
         return _options.clock();
     }
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
 }
+
 void Session::markStale(detail::CacheEntry& entry) {
     entry.stale = true;
     if (entry.pending.peek()) {
         entry.refetchAfter = true;
     }
 }
+
 SessionOptions Session::checkedOptions(SessionOptions options) {
     if (options.maxInlineFileBytes == 0 || options.maxInlineFileBytes > kMaxInlineFileBytes) {
         throw std::invalid_argument{"morph::ui::Session: maxInlineFileBytes is " +
@@ -914,6 +1001,7 @@ SessionOptions Session::checkedOptions(SessionOptions options) {
     }
     return options;
 }
+
 void Session::settleReply(detail::CacheEntry& entry, std::string const& reply) {
     auto json = parseJson(reply);
     auto value = json ? valueFromJson(*json) : std::unexpected(json.error());
@@ -936,6 +1024,7 @@ void Session::settleReply(detail::CacheEntry& entry, std::string const& reply) {
         }
     });
 }
+
 void Session::settleFailure(detail::CacheEntry& entry, std::string text, std::string kind, Value refusal) {
     _runtime->batch([&] {
         noteWrite();
@@ -945,6 +1034,7 @@ void Session::settleFailure(detail::CacheEntry& entry, std::string text, std::st
         entry.pending.set(false);
     });
 }
+
 void Session::applyFacts(std::string locale) {
     LocaleFacts const& facts = localeFacts(_formatLocale.empty() ? locale : _formatLocale);
     _localeDate = std::string{facts.datePattern};
@@ -957,6 +1047,7 @@ void Session::applyFacts(std::string locale) {
     next.dateTimePattern = _declaredDateTime.empty() ? _localeDateTime : _declaredDateTime;
     setFormatting(std::move(next));
 }
+
 Screen::~Screen() {
     try {
         if (Commands const* const commands = lifecycleList("onUnmount")) {
@@ -972,12 +1063,14 @@ Screen::~Screen() {
     _headTools.clear();
     _scope.reset();
 }
+
 Widget& Screen::root() const {
     if (!_mounted) {
         throw std::logic_error{"the screen is not mounted"};
     }
     return _mounted->root();
 }
+
 Value Screen::read(Json const& expression) const {
     auto parsed = parseExpression(expression);
     if (!parsed) {
@@ -985,6 +1078,7 @@ Value Screen::read(Json const& expression) const {
     }
     return detail::evalIn(*_scope, nullptr, *parsed);
 }
+
 auto Screen::boundAliases() const -> std::vector<BoundAlias> {
     std::vector<BoundAlias> bound;
     for (auto const& alias : _scope->models) {
@@ -998,30 +1092,38 @@ auto Screen::boundAliases() const -> std::vector<BoundAlias> {
     }
     return bound;
 }
+
 std::vector<HeadBadge> Screen::status() const {
     std::vector<HeadBadge> shown;
     for (detail::BadgeModel const& badge : _headStatus) {
         if (badge.visible.evaluate()) {
             shown.push_back(HeadBadge{
-                .text = badge.text.evaluate(), .tone = badge.tone.evaluate(), .icon = badge.icon.evaluate()});
+                .text = badge.text.evaluate(),
+                .tone = badge.tone.evaluate(),
+                .icon = badge.icon.evaluate(),
+            });
         }
     }
     return shown;
 }
+
 std::vector<HeadAction> Screen::actions() const {
     std::vector<HeadAction> shown;
     for (detail::ActionModel const& action : _headActions) {
         if (action.visible.evaluate()) {
-            shown.push_back(HeadAction{.id = action.id,
-                                       .label = action.label.evaluate(),
-                                       .icon = action.icon.evaluate(),
-                                       .iconOnly = action.iconOnly.evaluate(),
-                                       .emphasis = action.emphasis,
-                                       .enabled = action.enabled.evaluate()});
+            shown.push_back(HeadAction{
+                .id = action.id,
+                .label = action.label.evaluate(),
+                .icon = action.icon.evaluate(),
+                .iconOnly = action.iconOnly.evaluate(),
+                .emphasis = action.emphasis,
+                .enabled = action.enabled.evaluate(),
+            });
         }
     }
     return shown;
 }
+
 bool Screen::runAction(std::string_view actionId) {
     auto const found = std::ranges::find(_headActions, actionId, &detail::ActionModel::id);
     if (found == _headActions.end()) {
@@ -1039,12 +1141,14 @@ bool Screen::runAction(std::string_view actionId) {
     }
     return true;
 }
+
 std::string Screen::menuLabel() const {
     if (!_core->doc().menuLabel) {
         return "More actions";
     }
     return detail::textOf(detail::evalIn(*_scope, nullptr, _core->doc().menuLabel), _scope->formatting());
 }
+
 bool Screen::chooseMenuEntry(std::string_view entryId) {
     FoundEntry const found = runtime().untracked([&] { return findHeadEntry(_headMenu, entryId, FoundEntry{}); });
     if (found.model == nullptr) {
@@ -1061,6 +1165,7 @@ bool Screen::chooseMenuEntry(std::string_view entryId) {
     }
     return true;
 }
+
 std::vector<HeadTool> Screen::tools() const {
     std::vector<HeadTool> shown;
     for (detail::HeadToolModel const& tool : _headTools) {
@@ -1068,18 +1173,21 @@ std::vector<HeadTool> Screen::tools() const {
             continue;
         }
         bool const search = tool.kind == HeadToolKind::Search;
-        shown.push_back(HeadTool{.id = tool.id,
-                                 .kind = tool.kind,
-                                 .label = tool.label.evaluate(),
-                                 .value = search ? tool.value.evaluate() : std::string{},
-                                 .placeholder = search ? tool.placeholder.evaluate() : std::string{},
-                                 .options = search ? std::vector<SelectOption>{} : tool.options.evaluate(),
-                                 .selected = search ? std::nullopt : tool.selected.evaluate(),
-                                 .width = tool.width,
-                                 .enabled = tool.enabled.evaluate()});
+        shown.push_back(HeadTool{
+            .id = tool.id,
+            .kind = tool.kind,
+            .label = tool.label.evaluate(),
+            .value = search ? tool.value.evaluate() : std::string{},
+            .placeholder = search ? tool.placeholder.evaluate() : std::string{},
+            .options = search ? std::vector<SelectOption>{} : tool.options.evaluate(),
+            .selected = search ? std::nullopt : tool.selected.evaluate(),
+            .width = tool.width,
+            .enabled = tool.enabled.evaluate(),
+        });
     }
     return shown;
 }
+
 bool Screen::editTool(std::string_view toolId, Value const& value) {
     detail::HeadToolModel const* const tool = usableTool(toolId);
     if (tool == nullptr) {
@@ -1092,6 +1200,7 @@ bool Screen::editTool(std::string_view toolId, Value const& value) {
     tool->edit(value);
     return true;
 }
+
 bool Screen::submitTool(std::string_view toolId) {
     detail::HeadToolModel const* const tool = usableTool(toolId);
     if (tool == nullptr) {
@@ -1104,15 +1213,18 @@ bool Screen::submitTool(std::string_view toolId) {
     tool->submit(Value{runtime().untracked([&] { return tool->value.evaluate(); })});
     return true;
 }
+
 bool Screen::dirty() const {
     Value const value = detail::evalIn(*_scope, nullptr, _core->doc().dirty);
     bool const* const flag = value.asBool();
     return flag != nullptr && *flag;
 }
+
 bool Screen::requestClose() {
     std::shared_ptr<bool const> const cancelled = beginClose();
     return cancelled == nullptr || !*cancelled;
 }
+
 std::shared_ptr<bool const> Screen::beginClose() {
     Commands const* const commands = lifecycleList("onClose");
     if (commands == nullptr) {
@@ -1120,11 +1232,13 @@ std::shared_ptr<bool const> Screen::beginClose() {
     }
     return runCommandsFlag(*commands);
 }
+
 void Screen::runLifecycle(std::string_view key) {
     if (Commands const* const commands = lifecycleList(key)) {
         runCommands(*commands);
     }
 }
+
 bool Screen::setPreference(std::string const& point, Value value) {
     auto const found = _core->doc().customize.find(point);
     if (found == _core->doc().customize.end() || !fits(found->second, value)) {
@@ -1135,28 +1249,36 @@ bool Screen::setPreference(std::string const& point, Value value) {
     _core->prefs.set(std::move(prefs));
     return true;
 }
+
 std::map<std::string, detail::ScreenCore::KeptState, std::less<>> Screen::ownState() const {
     std::map<std::string, detail::ScreenCore::KeptState, std::less<>> states;
     for (auto const& slot : _scope->states) {
         if (slot->value) {
-            states.insert_or_assign(slot->decl->name, detail::ScreenCore::KeptState{.type = slot->decl->type.name(),
-                                                                                    .value = slot->value->peek()});
+            states.insert_or_assign(slot->decl->name, detail::ScreenCore::KeptState{
+                                                          .type = slot->decl->type.name(),
+                                                          .value = slot->value->peek(),
+                                                      });
         }
     }
     return states;
 }
+
 Commands const* Screen::lifecycleList(std::string_view key) const {
     auto const found = _core->doc().lifecycle.find(key);
     return found == _core->doc().lifecycle.end() ? nullptr : &found->second;
 }
+
 std::shared_ptr<bool const> Screen::runCommandsFlag(Commands const& commands) {
-    detail::CommandCtx const ctx{.scope = _scope,
-                                 .bindings = std::make_shared<detail::Bindings>(),
-                                 .cancelClose = std::make_shared<bool>(false),
-                                 .boundary = nullptr};
+    detail::CommandCtx const ctx{
+        .scope = _scope,
+        .bindings = std::make_shared<detail::Bindings>(),
+        .cancelClose = std::make_shared<bool>(false),
+        .boundary = nullptr,
+    };
     _core->runtime().batch([&] { _core->runList(commands, ctx, {}); });
     return ctx.cancelClose;
 }
+
 bool Screen::fits(CustomizePoint const& point, Value const& value) {
     if (point.kind == "choice") {
         std::string const* const text = value.asString();
@@ -1167,9 +1289,11 @@ bool Screen::fits(CustomizePoint const& point, Value const& value) {
     }
     return true;
 }
+
 bool Screen::listed(std::span<std::string const> options, std::string const& text) {
     return std::ranges::find(options, text) != options.end();
 }
+
 detail::HeadToolModel const* Screen::usableTool(std::string_view toolId) const {
     auto const found = std::ranges::find(_headTools, toolId, &detail::HeadToolModel::id);
     if (found == _headTools.end()) {
@@ -1184,12 +1308,15 @@ detail::HeadToolModel const* Screen::usableTool(std::string_view toolId) const {
     }
     return &*found;
 }
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
 auto Screen::findHeadEntry(std::vector<detail::HeadMenuModel> const& level, std::string_view entryId,
                            FoundEntry const& outer) -> FoundEntry {
     for (detail::HeadMenuModel const& model : level) {
-        FoundEntry const here{.model = &model,
-                              .visible = outer.visible && model.item.visible.evaluate(),
-                              .enabled = outer.enabled && model.item.enabled.evaluate()};
+        FoundEntry const here{
+            .model = &model,
+            .visible = outer.visible && model.item.visible.evaluate(),
+            .enabled = outer.enabled && model.item.enabled.evaluate(),
+        };
         if (!model.id.empty() && model.id == entryId) {
             return here;
         }
@@ -1199,6 +1326,7 @@ auto Screen::findHeadEntry(std::vector<detail::HeadMenuModel> const& level, std:
     }
     return FoundEntry{};
 }
+// NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
 std::vector<HeadMenuEntry> Screen::shownHeadMenu(std::vector<detail::HeadMenuModel> const& level) {
     std::vector<HeadMenuEntry> shown;
     for (detail::HeadMenuModel const& model : level) {
@@ -1212,21 +1340,24 @@ std::vector<HeadMenuEntry> Screen::shownHeadMenu(std::vector<detail::HeadMenuMod
         if (!item.visible.evaluate()) {
             continue;
         }
-        shown.push_back(HeadMenuEntry{.id = model.id,
-                                      .label = item.label.evaluate(),
-                                      .icon = item.icon,
-                                      .keys = item.keys,
-                                      .checked = item.checked.evaluate(),
-                                      .enabled = item.enabled.evaluate(),
-                                      .items = shownHeadMenu(model.items),
-                                      .separator = false,
-                                      .description = item.description.evaluate()});
+        shown.push_back(HeadMenuEntry{
+            .id = model.id,
+            .label = item.label.evaluate(),
+            .icon = item.icon,
+            .keys = item.keys,
+            .checked = item.checked.evaluate(),
+            .enabled = item.enabled.evaluate(),
+            .items = shownHeadMenu(model.items),
+            .separator = false,
+            .description = item.description.evaluate(),
+        });
     }
     if (!shown.empty() && shown.back().separator) {
         shown.pop_back();
     }
     return shown;
 }
+
 AppRoot::~AppRoot() {
     try {
         if (auto const found = _core->doc().lifecycle.find("onUnmount"); found != _core->doc().lifecycle.end()) {
@@ -1240,12 +1371,15 @@ AppRoot::~AppRoot() {
     _core->session.setAppScope(nullptr);
     _scope.reset();
 }
+
 reactive::Computed<std::vector<NavigationBadge>> const& AppRoot::navigationBadges() const {
     return *_navigationBadges;
 }
+
 PrincipalPlacement AppRoot::principalPlacement() const noexcept {
     return _core->doc().principalPlacement == "head" ? PrincipalPlacement::Head : PrincipalPlacement::Sidebar;
 }
+
 Value AppRoot::read(Json const& expression) const {
     auto parsed = parseExpression(expression);
     if (!parsed) {
@@ -1253,6 +1387,7 @@ Value AppRoot::read(Json const& expression) const {
     }
     return detail::evalIn(*_scope, nullptr, *parsed);
 }
+
 auto AppRoot::query(std::string_view name) const -> QueryRead {
     detail::NameRef const* const found = _scope->find(name);
     if (found == nullptr || found->category != detail::NameCategory::Query) {
@@ -1262,12 +1397,15 @@ auto AppRoot::query(std::string_view name) const -> QueryRead {
     Value const error = runtime.error();
     Value const kind = runtime.errorKind();
     std::string const* const kindText = kind.asString();
-    return QueryRead{.value = runtime.value(),
-                     .pending = runtime.pending(),
-                     .failed = !error.isNull(),
-                     .declared = true,
-                     .denied = kindText != nullptr && *kindText == "denied"};
+    return QueryRead{
+        .value = runtime.value(),
+        .pending = runtime.pending(),
+        .failed = !error.isNull(),
+        .declared = true,
+        .denied = kindText != nullptr && *kindText == "denied",
+    };
 }
+
 bool AppRoot::setState(std::string_view name, Value value) {
     detail::NameRef const* const found = _scope->find(name);
     if (found == nullptr || found->category != detail::NameCategory::State) {
@@ -1279,6 +1417,7 @@ bool AppRoot::setState(std::string_view name, Value value) {
     slot.value->set(std::move(value));
     return true;
 }
+
 bool AppRoot::runMutation(std::string_view name, Value body, std::function<void(bool succeeded)> done) {
     detail::NameRef const* const found = _scope->find(name);
     if (found == nullptr || found->category != detail::NameCategory::Mutation) {
@@ -1295,11 +1434,14 @@ bool AppRoot::runMutation(std::string_view name, Value body, std::function<void(
     });
     return true;
 }
+
 void AppRoot::runCommands(Commands const& commands) {
-    detail::CommandCtx const ctx{.scope = _scope,
-                                 .bindings = std::make_shared<detail::Bindings>(),
-                                 .cancelClose = std::make_shared<bool>(false),
-                                 .boundary = nullptr};
+    detail::CommandCtx const ctx{
+        .scope = _scope,
+        .bindings = std::make_shared<detail::Bindings>(),
+        .cancelClose = std::make_shared<bool>(false),
+        .boundary = nullptr,
+    };
     _core->runtime().batch([&] { _core->runList(commands, ctx, {}); });
 }
 
@@ -1403,10 +1545,12 @@ void ScreenCore::runLifecycleOf(std::string_view key) {
     if (found == _doc->lifecycle.end() || !scope) {
         return;
     }
-    CommandCtx const ctx{.scope = scope,
-                         .bindings = std::make_shared<Bindings>(),
-                         .cancelClose = std::make_shared<bool>(false),
-                         .boundary = nullptr};
+    CommandCtx const ctx{
+        .scope = scope,
+        .bindings = std::make_shared<Bindings>(),
+        .cancelClose = std::make_shared<bool>(false),
+        .boundary = nullptr,
+    };
     runList(found->second, ctx, {});
 }
 
@@ -1445,10 +1589,12 @@ void ScreenCore::runEvent(Commands const* commands, LowerCtx const& ctx, Value e
     }
     auto bindings = std::make_shared<Bindings>(*ctx.bindings);
     bindings->push_back(Binding{.name = "event", .read = [event = std::move(event)] { return event; }});
-    CommandCtx const command{.scope = ctx.scope,
-                             .bindings = std::move(bindings),
-                             .cancelClose = std::make_shared<bool>(false),
-                             .boundary = ctx.boundary};
+    CommandCtx const command{
+        .scope = ctx.scope,
+        .bindings = std::move(bindings),
+        .cancelClose = std::make_shared<bool>(false),
+        .boundary = ctx.boundary,
+    };
     session.asUser([&] { runtime().batch([&] { runList(*commands, command, {}); }); });
 }
 
@@ -1784,6 +1930,7 @@ namespace detail {
     }
     return canonicalJson(key);
 }
+
 namespace {
 
 /// @brief The channel an alias is bound to for its current token, binding it when the token changed.
@@ -2019,7 +2166,7 @@ std::shared_ptr<ModelChannel> QueryRuntime::channel() const { return channelOf(*
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): the query's key, its fetch and its refresh triggers.
 void QueryRuntime::start() {
     RtScope& scope = *_scope;
-    auto& key = scope.nodes.computed([this]() -> Target {
+    auto& key = scope.nodes.computed([this] -> Target {
         Target target;
         if (_decl->when) {
             Value const when = evalIn(*_scope, nullptr, _decl->when);
@@ -2045,7 +2192,7 @@ void QueryRuntime::start() {
     _key = &key;
     reactive::Scheduler* const scheduler = scope.core.session.options().scheduler;
     std::weak_ptr<bool> const alive = _alive;
-    scope.nodes.effect([this, &key, scheduler, alive, first = true]() mutable {
+    scope.nodes.effect([this, &key, scheduler, alive, first = true] mutable {
         Target target = key.get();
         _scope->core.runtime().untracked([&] {
             if (first || target.idle || _decl->debounce <= 0 || scheduler == nullptr) {
@@ -2098,7 +2245,7 @@ void QueryRuntime::switchTo(Target const& target) {
         }
         return;
     }
-    auto fresh = session.acquire(target.token, _typeId, _decl->action, _decl->evaluate, target.body);
+    auto const fresh = session.acquire(target.token, _typeId, _decl->action, _decl->evaluate, target.body);
     _carried.set(std::move(shown));
     _entry.set(fresh);
     if (old) {
@@ -2218,7 +2365,7 @@ MutationRuntime::~MutationRuntime() {
 // NOLINTBEGIN(misc-no-recursion): a mutation's commands can run another mutation, and a serial queue sends its next
 // run as the last one settles.
 void MutationRuntime::run(Value body, std::shared_ptr<Bindings const> bindings, RunDone done) {
-    auto run = std::make_shared<Run>();
+    auto const run = std::make_shared<Run>();
     run->body = std::move(body);
     run->bindings = std::move(bindings);
     run->done = std::move(done);
@@ -2326,10 +2473,12 @@ void MutationRuntime::settle(std::shared_ptr<Run> const& run, std::optional<Valu
     bool const applied = _decl->concurrency != Concurrency::Latest || run->id == _latest;
     std::shared_ptr<RtScope> const scope = _scope->shared_from_this();
     auto commandCtx = [&](Bindings extra) {
-        return CommandCtx{.scope = scope,
-                          .bindings = std::make_shared<Bindings>(std::move(extra)),
-                          .cancelClose = std::make_shared<bool>(false),
-                          .boundary = nullptr};
+        return CommandCtx{
+            .scope = scope,
+            .bindings = std::make_shared<Bindings>(std::move(extra)),
+            .cancelClose = std::make_shared<bool>(false),
+            .boundary = nullptr,
+        };
     };
     Value delivered;
     bool succeeded = false;
@@ -2543,7 +2692,7 @@ void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vector<DocN
             ModelAlias* const raw = alias.get();
             switch (raw->mode) {
                 case InstanceMode::Keyed:
-                    raw->token = &scope.nodes.computed([&scope, raw]() -> std::string {
+                    raw->token = &scope.nodes.computed([&scope, raw] -> std::string {
                         std::string const key = instanceKeyText(evalIn(scope, nullptr, raw->decl->key));
                         return key.empty() ? std::string{} : "shared:" + key;
                     });
@@ -2588,7 +2737,7 @@ void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vector<DocN
             scope.names.insert_or_assign(state.name, name);
             scope.states.push_back(std::move(slot));
         }
-        auto aliasOf = [&scope](std::string const& model) -> ModelAlias* {
+        auto const aliasOf = [&scope](std::string const& model) -> ModelAlias* {
             NameRef const* const found = scope.find(model);
             return found != nullptr && found->category == NameCategory::Model ? found->model : nullptr;
         };
@@ -2641,7 +2790,7 @@ void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vector<DocN
     }
     for (WatchDecl const& watch : decl->watches) {
         auto& source = scope.nodes.computed([&scope, expr = watch.on] { return evalIn(scope, nullptr, expr); });
-        scope.nodes.effect([this, &scope, &source, watched = &watch, first = true]() mutable {
+        scope.nodes.effect([this, &scope, &source, watched = &watch, first = true] mutable {
             static_cast<void>(source.get());
             if (first) {
                 first = false;
@@ -2652,10 +2801,12 @@ void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vector<DocN
                 return;
             }
             runtime().untracked([&] {
-                CommandCtx const ctx{.scope = scope.shared_from_this(),
-                                     .bindings = std::make_shared<Bindings>(),
-                                     .cancelClose = std::make_shared<bool>(false),
-                                     .boundary = nullptr};
+                CommandCtx const ctx{
+                    .scope = scope.shared_from_this(),
+                    .bindings = std::make_shared<Bindings>(),
+                    .cancelClose = std::make_shared<bool>(false),
+                    .boundary = nullptr,
+                };
                 if (user) {
                     session.asUser([&] { runList(watched->body, ctx, {}); });
                 } else {
@@ -2665,6 +2816,7 @@ void ScreenCore::declare(RtScope& scope, ScopeDecl const* decl, std::vector<DocN
         });
     }
 }
+
 namespace {
 
 /// @brief What a date input reads from a value: the instant it shows, and whether the value names one at all.
@@ -2689,8 +2841,9 @@ struct DateReading {
         case DateForm::Absent:
             return {};
         case DateForm::Date:
-            return {.instant =
-                        time::DateTime{std::chrono::sys_days{reading.date} - std::chrono::minutes{offsetMinutes}}};
+            return {
+                .instant = time::DateTime{std::chrono::sys_days{reading.date} - std::chrono::minutes{offsetMinutes}},
+            };
         case DateForm::Timestamp:
         case DateForm::InstantText:
             return {.instant = reading.instant};
@@ -2774,7 +2927,7 @@ struct DateReading {
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one rule per source of an error.
 void ScreenCore::wireErrors(ElementState& element) {
     RtScope& scope = *element.scope;
-    element.errors = &scope.nodes.computed([this, &element]() -> Value {
+    element.errors = &scope.nodes.computed([this, &element] -> Value {
         static_cast<void>(element.checksVersion.get());
         DocNode const& field = *element.node;
         RtScope const& owner = *element.scope;
@@ -2902,6 +3055,7 @@ void ScreenCore::wireElement(ElementState& element) {
         element.view = &scope.nodes.computed([this, &element] { return tableView(element, nullptr); });
     }
 }
+
 namespace {
 
 /// @brief A table's sort as its element value reads it: the bound `sort` when the key binds one, else the table's
@@ -3165,6 +3319,7 @@ TableView ScreenCore::tableView(ElementState const& element, Bindings const* bin
     view.last = static_cast<std::size_t>(std::min(total, (view.page + 1) * *perPage));
     return view;
 }
+
 namespace {
 
 /// @brief A table's selection as its element value reads it: the bound `selection` when the key binds one, else
@@ -3188,6 +3343,7 @@ namespace {
     auto value = valueFromJson(*json);
     return value ? *std::move(value) : Value{};
 }
+
 namespace {
 
 /// @brief One field of a form as a record: `value` (the encoded value, `null` while blank or invalid), `draft` (the
@@ -3264,7 +3420,7 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
     DocNode const& node = *element.node;
     RtScope const& scope = *element.scope;
     std::string_view const kind = node.kind;
-    auto flagOf = [&](std::string_view key, bool fallback) -> Value {
+    auto const flagOf = [&](std::string_view key, bool fallback) -> Value {
         ExprPtr const expr = node.prop(key);
         if (!expr) {
             return fallback;
@@ -3273,8 +3429,8 @@ Value ScreenCore::elementValue(ElementState const& element, std::string_view nam
         bool const* const flag = value.asBool();
         return flag != nullptr && *flag;
     };
-    auto errors = [&]() -> Value { return element.errors->get(); };
-    auto count = [](Value const& list) -> Value {
+    auto const errors = [&] -> Value { return element.errors->get(); };
+    auto const count = [](Value const& list) -> Value {
         ValueList const* const items = list.asList();
         return static_cast<std::int64_t>(items == nullptr ? 0 : items->size());
     };
@@ -3422,8 +3578,8 @@ void ScreenCore::runList(Commands const& commands, CommandCtx const& ctx, Done d
     if (recording) {
         logList(commands);
     }
-    auto join = std::make_shared<Join>(Join{.left = commands.size() + 1, .ok = true, .done = std::move(done)});
-    auto finish = [join](bool succeeded) {
+    auto const join = std::make_shared<Join>(Join{.left = commands.size() + 1, .ok = true, .done = std::move(done)});
+    auto const finish = [join](bool succeeded) {
         join->ok = join->ok && succeeded;
         if (--join->left == 0) {
             join->done(join->ok);
@@ -3441,8 +3597,8 @@ void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Done done
         done = [](bool) {};
     }
     RtScope const& scope = *ctx.scope;
-    auto eval = [&](ExprPtr const& expr) { return evalIn(scope, ctx.bindings.get(), expr); };
-    auto finish = [&done](bool succeeded) { done(succeeded); };
+    auto const eval = [&](ExprPtr const& expr) { return evalIn(scope, ctx.bindings.get(), expr); };
+    auto const finish = [&done](bool succeeded) { done(succeeded); };
     switch (command.kind) {
         case CommandKind::Set:
             runSet(command, ctx, done);
@@ -3500,11 +3656,13 @@ void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Done done
             return;
         }
         case CommandKind::Navigate: {
-            NavigateRequest const request{.screen = command.target,
-                                          .route = eval(command.extra),
-                                          .params = eval(command.value),
-                                          .as = command.option,
-                                          .call = false};
+            NavigateRequest const request{
+                .screen = command.target,
+                .route = eval(command.extra),
+                .params = eval(command.value),
+                .as = command.option,
+                .call = false,
+            };
             if (host == nullptr) {
                 finish(unsupported(command, "`navigate`"));
                 return;
@@ -3519,12 +3677,14 @@ void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Done done
             CommandCtx const kept = detached(ctx);
             auto onResult = [this, weak, kept, list = &command.commands](Value const& result) {
                 if (auto const held = weak.lock()) {
-                    auto bindings = std::make_shared<Bindings>(*kept.bindings);
+                    auto const bindings = std::make_shared<Bindings>(*kept.bindings);
                     bindings->push_back(Binding{.name = "event", .read = [result] { return result; }});
-                    CommandCtx const next{.scope = held,
-                                          .bindings = bindings,
-                                          .cancelClose = kept.cancelClose,
-                                          .boundary = kept.boundary};
+                    CommandCtx const next{
+                        .scope = held,
+                        .bindings = bindings,
+                        .cancelClose = kept.cancelClose,
+                        .boundary = kept.boundary,
+                    };
                     runtime().batch([&] { runList(*list, next, {}); });
                 }
             };
@@ -3620,12 +3780,14 @@ void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Done done
         case CommandKind::Seq: {
             // A step that waits for a reply keeps the rest of the sequence in that reply's handler, which the
             // dispatcher may hold past the screen: the sequence holds its scope weakly and stops once it is gone.
-            CommandCtx const inner = detached(CommandCtx{.scope = nullptr,
-                                                         .bindings = std::make_shared<Bindings>(*ctx.bindings),
-                                                         .cancelClose = ctx.cancelClose,
-                                                         .boundary = ctx.boundary});
+            CommandCtx const inner = detached(CommandCtx{
+                .scope = nullptr,
+                .bindings = std::make_shared<Bindings>(*ctx.bindings),
+                .cancelClose = ctx.cancelClose,
+                .boundary = ctx.boundary,
+            });
             std::weak_ptr<RtScope> const weak = ctx.scope;
-            auto step = std::make_shared<std::function<void(std::size_t)>>();
+            auto const step = std::make_shared<std::function<void(std::size_t)>>();
             *step = [this, inner, weak, list = &command.commands, done = std::move(done),
                      weakStep = std::weak_ptr<std::function<void(std::size_t)>>{step}](std::size_t index) {
                 auto const held = weak.lock();
@@ -3648,10 +3810,12 @@ void ScreenCore::runOne(Command const& command, CommandCtx const& ctx, Done done
             return;
         }
         case CommandKind::All: {
-            CommandCtx const inner{.scope = ctx.scope,
-                                   .bindings = std::make_shared<Bindings>(*ctx.bindings),
-                                   .cancelClose = ctx.cancelClose,
-                                   .boundary = ctx.boundary};
+            CommandCtx const inner{
+                .scope = ctx.scope,
+                .bindings = std::make_shared<Bindings>(*ctx.bindings),
+                .cancelClose = ctx.cancelClose,
+                .boundary = ctx.boundary,
+            };
             runList(command.commands, inner, std::move(done));
             return;
         }
@@ -3714,7 +3878,7 @@ void ScreenCore::runMutation(Command const& command, CommandCtx const& ctx, Done
         done(false);
         return;
     }
-    RtScope const& declaring = *[&]() -> RtScope const* {
+    RtScope const& declaring = *[&] -> RtScope const* {
         for (RtScope const* candidate = &scope; candidate != nullptr; candidate = candidate->parent.get()) {
             if (candidate->names.contains(command.target)) {
                 return candidate;
@@ -3722,7 +3886,7 @@ void ScreenCore::runMutation(Command const& command, CommandCtx const& ctx, Done
         }
         return &scope;
     }();
-    auto bodyFor = [&](Bindings const& bindings) {
+    auto const bodyFor = [&](Bindings const& bindings) {
         if (command.value) {
             return evalIn(scope, &bindings, command.value);
         }
@@ -3754,7 +3918,7 @@ void ScreenCore::runMutation(Command const& command, CommandCtx const& ctx, Done
         bool ok = true;
         Done done;
     };
-    auto state = std::make_shared<Each>(Each{.left = items.size(), .ok = true, .done = std::move(done)});
+    auto const state = std::make_shared<Each>(Each{.left = items.size(), .ok = true, .done = std::move(done)});
     std::vector<Value> bodies;
     std::vector<std::shared_ptr<Bindings const>> bound;
     for (Value const& item : items) {
@@ -3777,7 +3941,7 @@ void ScreenCore::runMutation(Command const& command, CommandCtx const& ctx, Done
         return;
     }
     // An exclusive mutation refuses a run while another is in flight, so its elements go one after another.
-    auto step = std::make_shared<std::function<void(std::size_t)>>();
+    auto const step = std::make_shared<std::function<void(std::size_t)>>();
     *step = [&mutation, bodies, bound, state,
              weakStep = std::weak_ptr<std::function<void(std::size_t)>>{step}](std::size_t index) {
         if (index == bodies.size()) {
@@ -3866,7 +4030,7 @@ void ScreenCore::runSet(Command const& command, CommandCtx const& ctx, Done cons
 void ScreenCore::runReset(Command const& command, CommandCtx const& ctx, Done const& done) {
     RtScope const& scope = *ctx.scope;
     NameRef const* const found = scope.find(command.target);
-    auto resetStates = [this](RtScope const& owner) {
+    auto const resetStates = [this](RtScope const& owner) {
         for (auto const& slot : owner.states) {
             if (slot->value) {
                 Value init = runtime().untracked([&] { return evalIn(owner, nullptr, slot->decl->init); });
@@ -3918,6 +4082,7 @@ void ScreenCore::runHostCommand(Command const& command, CommandCtx const& ctx, D
     }
     done(known);
 }
+
 namespace {
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): a download and an upload, each settled.
@@ -3990,7 +4155,7 @@ private:
     if (text.size() % 4 == 1) {
         return std::nullopt;
     }
-    auto digitOf = [](char chr) -> int {
+    auto const digitOf = [](char chr) -> int {
         if (chr >= 'A' && chr <= 'Z') {
             return chr - 'A';
         }
@@ -4150,7 +4315,8 @@ std::optional<InlineFile> ScreenCore::inlineDownload(
         .mediaType = command.mediaType
                          ? textOf(evalIn(*ctx.scope, ctx.bindings.get(), command.mediaType), ctx.scope->formatting())
                          : std::string{},
-        .bytes = *std::move(bytes)};
+        .bytes = *std::move(bytes),
+    };
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per outcome an upload can have.
@@ -4314,6 +4480,7 @@ namespace {
     }
     return textOf(value, format);
 }
+
 namespace {
 
 /// @brief An exact rational as the nearest double, unrounded.
@@ -4372,6 +4539,7 @@ namespace {
     }
     return fallback;
 }
+
 namespace {
 
 /// @brief A text role by name.
@@ -4460,13 +4628,15 @@ constexpr std::string_view kRoleNames =
     if (value.isNull()) {
         return Tone::Neutral;
     }
-    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {{
-        {"neutral", Tone::Neutral},
-        {"info", Tone::Info},
-        {"ok", Tone::Ok},
-        {"warn", Tone::Warn},
-        {"err", Tone::Err},
-    }};
+    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {
+        {
+            {"neutral", Tone::Neutral},
+            {"info", Tone::Info},
+            {"ok", Tone::Ok},
+            {"warn", Tone::Warn},
+            {"err", Tone::Err},
+        },
+    };
     if (std::string const* const text = value.asString()) {
         // A loop, not std::ranges::find: an array's iterator is a pointer on some standard libraries and not on
         // others, so `auto` there reads differently to each.
@@ -4516,14 +4686,17 @@ constexpr std::string_view kRoleNames =
                 *badTone = true;
             }
         }
-        spans.push_back(TextSpan{.text = textOf(*text, format),
-                                 .strong = flag(run.field("strong")),
-                                 .mono = flag(run.field("mono")),
-                                 .tone = tone,
-                                 .action = flag(run.field("action"))});
+        spans.push_back(TextSpan{
+            .text = textOf(*text, format),
+            .strong = flag(run.field("strong")),
+            .mono = flag(run.field("mono")),
+            .tone = tone,
+            .action = flag(run.field("action")),
+        });
     }
     return spans;
 }
+
 namespace {
 
 /// @brief Whether a scope declares any name, so a node in it reads names the screen's own scope lacks.
@@ -4593,6 +4766,7 @@ constexpr std::string_view kSpanToneReason =
     }
     return record->contains("fixed") || record->contains("stretch");
 }
+
 namespace {
 
 /// @brief An alignment by name, as the loader checked it: `start`, `center`, `end`, or stretch for none.
@@ -4865,7 +5039,7 @@ Node ScreenCore::lowerAll(std::span<DocNodePtr const> nodes, LowerCtx const& ctx
 void ScreenCore::fillHolder(std::vector<Node>& children, std::string const& path) {
     for (Node& child : children) {
         if (layoutHintsOf(child).width.kind == Sizing::Kind::Percent) {
-            report(path, std::string{kPercentInHolder});
+            report(path, kPercentInHolder);
             child = withWidth(child, Sizing::stretch(1));
         }
     }
@@ -4985,8 +5159,10 @@ KeyValueItem ScreenCore::keyValueItemOf(Value const& item, std::string const& pa
     FormatContext const& format = scope.formatting();
     Value const* const label = item.field("label");
     Value const* const value = item.field("value");
-    KeyValueItem out{.label = label == nullptr ? std::string{} : textOf(*label, format),
-                     .value = value == nullptr ? std::string{} : textOf(*value, format)};
+    KeyValueItem out{
+        .label = label == nullptr ? std::string{} : textOf(*label, format),
+        .value = value == nullptr ? std::string{} : textOf(*value, format),
+    };
     if (Value const* const spans = item.field("spans")) {
         bool dropped = false;
         bool badTone = false;
@@ -5013,8 +5189,10 @@ KeyValueItem ScreenCore::keyValueItemOf(Value const& item, std::string const& pa
 // description.
 Node ScreenCore::lowerGroup(DocNode const& node, LowerCtx const& ctx, ElementState* element,
                             std::vector<Node> children) {
-    Text legend{.text = bindProp<std::string>(ctx, node.prop("label"), std::string{}, stringOf),
-                .role = TextRole::Label};
+    Text legend{
+        .text = bindProp<std::string>(ctx, node.prop("label"), std::string{}, stringOf),
+        .role = TextRole::Label,
+    };
     legend.field.required = bindProp<bool>(ctx, node.prop("required"), false, boolOf);
     std::vector<Node> column;
     column.reserve(children.size() + 3);
@@ -5028,22 +5206,26 @@ Node ScreenCore::lowerGroup(DocNode const& node, LowerCtx const& ctx, ElementSta
         column.push_back(ui::text(std::move(line)));
     }
     // The shown errors, one line each: a check that targets the group shows its message here.
-    auto shown = [this, element, scope = ctx.scope, bindings = ctx.bindings, errors = node.prop("errors")] {
+    auto const shown = [this, element, scope = ctx.scope, bindings = ctx.bindings, errors = node.prop("errors")] {
         return stringsOf(element != nullptr ? elementValue(*element, "shownErrors")
                                             : evalIn(*scope, bindings.get(), errors));
     };
-    Text messages{.text = slotProp<std::string>([shown] {
-                      std::string joined;
-                      for (std::string const& message : shown()) {
-                          joined += (joined.empty() ? "" : "\n") + message;
-                      }
-                      return joined;
-                  }),
-                  .role = TextRole::Error};
+    Text messages{
+        .text = slotProp<std::string>([shown] {
+            std::string joined;
+            for (std::string const& message : shown()) {
+                joined += (joined.empty() ? "" : "\n") + message;
+            }
+            return joined;
+        }),
+        .role = TextRole::Error,
+    };
     messages.common.visible = slotProp<bool>([shown] { return !shown().empty(); });
     column.push_back(ui::text(std::move(messages)));
-    Column spec{.children = std::move(column),
-                .gap = static_cast<int>(intOf(node.prop("gap") ? once(ctx, node.prop("gap")) : Value{}, 0))};
+    Column spec{
+        .children = std::move(column),
+        .gap = static_cast<int>(intOf(node.prop("gap") ? once(ctx, node.prop("gap")) : Value{}, 0)),
+    };
     commonOf(node, ctx, element, spec.common);
     if (spec.common.a11y.role.empty()) {
         spec.common.a11y.role = "group";
@@ -5091,7 +5273,7 @@ void ScreenCore::layoutOf(DocNode const& node, LowerCtx const& ctx, LayoutHints&
             layout.width = width != nullptr ? sizingOf(*width) : Sizing::content();
             layout.height = height != nullptr ? sizingOf(*height) : Sizing::content();
             if (layout.height.kind == Sizing::Kind::Percent) {
-                report(sizing->path, std::string{kPercentPlaces});
+                report(sizing->path, kPercentPlaces);
                 layout.height = Sizing::content();
             }
         } else {
@@ -5103,14 +5285,18 @@ void ScreenCore::layoutOf(DocNode const& node, LowerCtx const& ctx, LayoutHints&
     }
     layout.bleed = node.flag("bleed");
     // Literal integers, checked at load.
-    for (auto const& [key, bound] :
-         {std::pair{"minWidth", &LayoutHints::minWidth}, std::pair{"maxWidth", &LayoutHints::maxWidth},
-          std::pair{"minHeight", &LayoutHints::minHeight}, std::pair{"maxHeight", &LayoutHints::maxHeight}}) {
+    for (auto const& [key, bound] : {
+             std::pair{"minWidth", &LayoutHints::minWidth},
+             std::pair{"maxWidth", &LayoutHints::maxWidth},
+             std::pair{"minHeight", &LayoutHints::minHeight},
+             std::pair{"maxHeight", &LayoutHints::maxHeight},
+         }) {
         if (ExprPtr const expr = node.prop(key); expr != nullptr && expr->literal.asInt() != nullptr) {
             layout.*bound = static_cast<int>(*expr->literal.asInt());
         }
     }
 }
+
 namespace {
 
 /// @brief Where a declaration is lowered, as a focus key reads it.
@@ -5181,8 +5367,8 @@ void ScreenCore::commonOf(DocNode const& node, LowerCtx const& ctx, ElementState
     }
     for (DocNodePtr const& drag : node.partList("drag")) {
         ExprPtr const payload = drag->prop("payload");
-        common.dragKey = slotProp<std::optional<Key>>(
-            [scope = ctx.scope, bindings = ctx.bindings, payload]() -> std::optional<Key> {
+        common.dragKey =
+            slotProp<std::optional<Key>>([scope = ctx.scope, bindings = ctx.bindings, payload] -> std::optional<Key> {
                 Value const value = evalIn(*scope, bindings.get(), payload);
                 return value.isNull() ? std::nullopt : std::optional<Key>{keyOf(value)};
             });
@@ -5258,7 +5444,7 @@ MenuItem ScreenCore::menuItemOf(DocNode const& part, LowerCtx const& ctx) {
     item.keys = std::string{part.name("keys")};
     if (ExprPtr const checked = part.prop("checked")) {
         item.checked = slotProp<std::optional<bool>>(
-            [scope = ctx.scope, bindings = ctx.bindings, checked]() -> std::optional<bool> {
+            [scope = ctx.scope, bindings = ctx.bindings, checked] -> std::optional<bool> {
                 Value const value = evalIn(*scope, bindings.get(), checked);
                 bool const* const flag = value.asBool();
                 return flag == nullptr ? std::nullopt : std::optional<bool>{*flag};
@@ -5286,10 +5472,12 @@ std::vector<HeadMenuModel> ScreenCore::lowerHeadMenu(std::span<DocNodePtr const>
     std::vector<HeadMenuModel> models;
     models.reserve(parts.size());
     for (DocNodePtr const& part : parts) {
-        models.push_back(HeadMenuModel{.id = part->id,
-                                       .path = part->path,
-                                       .item = menuItemOf(*part, ctx),
-                                       .items = lowerHeadMenu(part->partList("items"), ctx)});
+        models.push_back(HeadMenuModel{
+            .id = part->id,
+            .path = part->path,
+            .item = menuItemOf(*part, ctx),
+            .items = lowerHeadMenu(part->partList("items"), ctx),
+        });
     }
     return models;
 }
@@ -5313,7 +5501,8 @@ std::vector<HeadToolModel> ScreenCore::lowerHeadTools(std::span<DocNodePtr const
             .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
             .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
             .edit = {},
-            .submit = {}};
+            .submit = {},
+        };
         if (ExprPtr const width = part->prop("width")) {
             if (std::int64_t const* const units = width->literal.asInt()) {
                 model.width = static_cast<int>(*units);
@@ -5324,11 +5513,11 @@ std::vector<HeadToolModel> ScreenCore::lowerHeadTools(std::span<DocNodePtr const
                 [scope = ctx.scope, bindings = ctx.bindings, options = part->prop("options")] {
                     return selectOptions(evalIn(*scope, bindings.get(), options), scope->formatting());
                 });
-            model.selected = slotProp<std::optional<Key>>([scope = ctx.scope, bindings = ctx.bindings,
-                                                           selected = part->prop("selected")]() -> std::optional<Key> {
-                Value const value = selected ? evalIn(*scope, bindings.get(), selected) : Value{};
-                return value.isNull() ? std::nullopt : std::optional<Key>{keyOf(value)};
-            });
+            model.selected = slotProp<std::optional<Key>>(
+                [scope = ctx.scope, bindings = ctx.bindings, selected = part->prop("selected")] -> std::optional<Key> {
+                    Value const value = selected ? evalIn(*scope, bindings.get(), selected) : Value{};
+                    return value.isNull() ? std::nullopt : std::optional<Key>{keyOf(value)};
+                });
         }
         Commands const* const edited = part->event(search ? "onChange" : "onChoose");
         model.edit = [this, ctx, edited](Value event) { runEvent(edited, ctx, std::move(event)); };
@@ -5346,15 +5535,17 @@ ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> parts, Low
     ActionModels models;
     models.reserve(parts.size());
     for (DocNodePtr const& part : parts) {
-        ActionModel model{.id = part->id,
-                          .path = part->path,
-                          .label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf),
-                          .icon = bindProp<std::string>(ctx, part->prop("icon"), std::string{}, stringOf),
-                          .iconOnly = bindProp<bool>(ctx, part->prop("iconOnly"), false, boolOf),
-                          .emphasis = ButtonEmphasis::Normal,
-                          .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
-                          .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
-                          .run = {}};
+        ActionModel model{
+            .id = part->id,
+            .path = part->path,
+            .label = bindProp<std::string>(ctx, part->prop("label"), std::string{}, stringOf),
+            .icon = bindProp<std::string>(ctx, part->prop("icon"), std::string{}, stringOf),
+            .iconOnly = bindProp<bool>(ctx, part->prop("iconOnly"), false, boolOf),
+            .emphasis = ButtonEmphasis::Normal,
+            .enabled = bindProp<bool>(ctx, part->prop("enabled"), true, boolOf),
+            .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
+            .run = {},
+        };
         model.emphasis = emphasisNamed(part->name("emphasis")).value_or(ButtonEmphasis::Normal);
         if (Commands const* const commands = part->event("onClick")) {
             model.run = [this, ctx, commands] { runEvent(commands, ctx, Value{}); };
@@ -5367,11 +5558,13 @@ ActionModels ScreenCore::lowerActionParts(std::span<DocNodePtr const> parts, Low
 Node ScreenCore::actionBarOf(ActionModels actions) {
     ActionBar bar;
     for (ActionModel& action : actions) {
-        Button button{.label = action.label,
-                      .emphasis = action.emphasis,
-                      .onClick = std::move(action.run),
-                      .common = {},
-                      .icon = action.icon.evaluate()};
+        Button button{
+            .label = action.label,
+            .emphasis = action.emphasis,
+            .onClick = std::move(action.run),
+            .common = {},  // NOLINT(readability-trailing-comma): the comma ends the designator, not the empty braces.
+            .icon = action.icon.evaluate(),
+        };
         if (action.iconOnly.isBound() || action.iconOnly.constant()) {
             // The label is the button's name and tooltip; the caption is empty while the icon stands alone.
             button.label = Prop<std::string>{[label = action.label, iconOnly = action.iconOnly] {
@@ -5392,10 +5585,12 @@ std::vector<BadgeModel> ScreenCore::lowerBadgeParts(std::span<DocNodePtr const> 
     std::vector<BadgeModel> badges;
     badges.reserve(parts.size());
     for (DocNodePtr const& part : parts) {
-        badges.push_back(BadgeModel{.text = bindProp<std::string>(ctx, part->prop("text"), std::string{}, stringOf),
-                                    .tone = bindProp<Tone>(ctx, part->prop("tone"), Tone::Neutral, toneOf),
-                                    .icon = bindProp<std::string>(ctx, part->prop("icon"), std::string{}, stringOf),
-                                    .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf)});
+        badges.push_back(BadgeModel{
+            .text = bindProp<std::string>(ctx, part->prop("text"), std::string{}, stringOf),
+            .tone = bindProp<Tone>(ctx, part->prop("tone"), Tone::Neutral, toneOf),
+            .icon = bindProp<std::string>(ctx, part->prop("icon"), std::string{}, stringOf),
+            .visible = bindProp<bool>(ctx, part->prop("visible"), true, boolOf),
+        });
     }
     return badges;
 }
@@ -5569,8 +5764,8 @@ std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx const&
     }
     if (kind == "textInput") {
         std::string const commitOn = node.name("commitOn").empty() ? "change" : std::string{node.name("commitOn")};
-        auto commit = [this, ctx, element, commitOn, onChange = node.event("onChange")](std::string const& when,
-                                                                                        std::string const& text) {
+        auto const commit = [this, ctx, element, commitOn, onChange = node.event("onChange")](
+                                std::string const& when, std::string const& text) {
             if (commitOn != when) {
                 return;
             }
@@ -5614,8 +5809,12 @@ std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx const&
         }
         // A multiline input shows no unit and no icon; a computed mode that turns out multiline is reported and
         // its unit and icon left out, so the mount never meets them there. The loader refuses a literal one.
-        for (std::string_view const key : {std::string_view{"unit"}, std::string_view{"icon"},
-                                           std::string_view{"prefix"}, std::string_view{"decimals"}}) {
+        for (std::string_view const key : {
+                 std::string_view{"unit"},
+                 std::string_view{"icon"},
+                 std::string_view{"prefix"},
+                 std::string_view{"decimals"},
+             }) {
             if (ExprPtr const given = node.prop(key); given != nullptr && spec.mode == TextInputMode::Multiline) {
                 report(given->path, "a multiline input shows no " + std::string{key});
             }
@@ -5645,11 +5844,14 @@ std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx const&
         return ui::textInput(std::move(spec));
     }
     if (kind == "checkbox") {
-        Checkbox spec{.label = kit.textProp("label"), .checked = slotProp<bool>([read = kit.read("checked")] {
-                                                          Value const value = read();
-                                                          bool const* const flag = value.asBool();
-                                                          return flag != nullptr && *flag;
-                                                      })};
+        Checkbox spec{
+            .label = kit.textProp("label"),
+            .checked = slotProp<bool>([read = kit.read("checked")] {
+                Value const value = read();
+                bool const* const flag = value.asBool();
+                return flag != nullptr && *flag;
+            }),
+        };
         spec.onToggle = [this, ctx, element, onToggle = node.event("onToggle"),
                          onChange = node.event("onChange")](bool checked) {
             // A toggle is a check box's commit, so it touches the box.
@@ -5671,7 +5873,7 @@ std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx const&
         Select spec;
         spec.options = slotProp<std::vector<SelectOption>>(
             [scope = ctx.scope, element] { return selectOptions(element->rows->get(), scope->formatting()); });
-        spec.selected = slotProp<std::optional<Key>>([read = kit.read("selected")]() -> std::optional<Key> {
+        spec.selected = slotProp<std::optional<Key>>([read = kit.read("selected")] -> std::optional<Key> {
             Value const selected = read();
             return selected.isNull() ? std::nullopt : std::optional<Key>{keyOf(selected)};
         });
@@ -5745,7 +5947,7 @@ std::optional<Node> ScreenCore::lowerWidget(DocNode const& node, LowerCtx const&
         std::string const valuePath = pointerAppend(node.path, "value");
         std::int32_t const offsetMinutes = format.utcOffsetMinutes;
         spec.value = slotProp<std::optional<time::Timestamp>>([this, element, offsetMinutes,
-                                                               valuePath]() -> std::optional<time::Timestamp> {
+                                                               valuePath] -> std::optional<time::Timestamp> {
             DateReading const reading = dateInstantOf(element->draft.get(), offsetMinutes);
             if (!reading.readable) {
                 report(valuePath, "`dateTimeInput` shows a timestamp or an ISO-8601 date or date-time string");
@@ -5854,8 +6056,10 @@ std::optional<Node> ScreenCore::lowerDisplay(DocNode const& node, LowerCtx const
         return ui::banner(std::move(spec));
     }
     if (kind == "badge") {
-        Badge spec{.tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Neutral, toneOf),
-                   .text = kit.textProp("text")};
+        Badge spec{
+            .tone = bindProp<Tone>(ctx, node.prop("tone"), Tone::Neutral, toneOf),
+            .text = kit.textProp("text"),
+        };
         spec.icon = kit.onceText("icon");
         std::string_view const style = node.name("style");
         spec.style = BadgeStyle::Filled;
@@ -5876,7 +6080,7 @@ std::optional<Node> ScreenCore::lowerDisplay(DocNode const& node, LowerCtx const
     if (kind == "progress") {
         Progress spec;
         spec.value = slotProp<std::optional<double>>(
-            [scope = ctx.scope, bindings = ctx.bindings, expr = node.prop("value")]() -> std::optional<double> {
+            [scope = ctx.scope, bindings = ctx.bindings, expr = node.prop("value")] -> std::optional<double> {
                 Value const value = evalIn(*scope, bindings.get(), expr);
                 if (std::int64_t const* const number = value.asInt()) {
                     return static_cast<double>(*number);
@@ -5902,16 +6106,17 @@ std::optional<Node> ScreenCore::lowerDisplay(DocNode const& node, LowerCtx const
                         Value const* const state = item.field("state");
                         Value const* const detail = item.field("detail");
                         std::string const name = state == nullptr ? std::string{} : textOf(*state, {});
-                        steps.push_back(
-                            Step{.label = label == nullptr ? std::string{} : textOf(*label, scope->formatting()),
-                                 .state = stepStateOf(name),
-                                 .detail = detail == nullptr ? std::string{} : textOf(*detail, scope->formatting())});
+                        steps.push_back(Step{
+                            .label = label == nullptr ? std::string{} : textOf(*label, scope->formatting()),
+                            .state = stepStateOf(name),
+                            .detail = detail == nullptr ? std::string{} : textOf(*detail, scope->formatting()),
+                        });
                     }
                 }
                 return steps;
             });
         spec.current = slotProp<std::optional<std::size_t>>(
-            [scope = ctx.scope, bindings = ctx.bindings, expr = node.prop("current")]() -> std::optional<std::size_t> {
+            [scope = ctx.scope, bindings = ctx.bindings, expr = node.prop("current")] -> std::optional<std::size_t> {
                 std::int64_t const index = intOf(evalIn(*scope, bindings.get(), expr), -1);
                 return index < 0 ? std::nullopt : std::optional<std::size_t>{static_cast<std::size_t>(index)};
             });
@@ -5962,25 +6167,29 @@ Node ScreenCore::lowerStack(DocNode const& node, LowerCtx const& ctx, ElementSta
                              gap);
     }
     if (kind == "column") {
-        Column spec{.children = kit.children("children", gap),
-                    .gap = gap,
-                    .align = alignOf(node.name("align")),
-                    .justify = justifyOf(node.name("justify")),
-                    .divided = node.flag("divided"),
-                    .padding = kit.stackPadding()};
+        Column spec{
+            .children = kit.children("children", gap),
+            .gap = gap,
+            .align = alignOf(node.name("align")),
+            .justify = justifyOf(node.name("justify")),
+            .divided = node.flag("divided"),
+            .padding = kit.stackPadding(),
+        };
         if (node.prop("selected")) {
             spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
         }
         commonOf(node, ctx, element, spec.common);
         return ui::column(std::move(spec));
     }
-    Row spec{.children = kit.children("children"),
-             .gap = gap,
-             .align = alignOf(node.name("align")),
-             .justify = justifyOf(node.name("justify")),
-             .wrap = node.flag("wrap"),
-             .divided = node.flag("divided"),
-             .padding = kit.stackPadding()};
+    Row spec{
+        .children = kit.children("children"),
+        .gap = gap,
+        .align = alignOf(node.name("align")),
+        .justify = justifyOf(node.name("justify")),
+        .wrap = node.flag("wrap"),
+        .divided = node.flag("divided"),
+        .padding = kit.stackPadding(),
+    };
     if (node.prop("selected")) {
         spec.selected = bindProp<bool>(ctx, node.prop("selected"), false, boolOf);
     }
@@ -5990,14 +6199,18 @@ Node ScreenCore::lowerStack(DocNode const& node, LowerCtx const& ctx, ElementSta
 
 Node ScreenCore::lowerGrid(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     KindKit const kit{*this, node, ctx, element};
-    Grid spec{.columns = static_cast<int>(kit.onceInt("columns", 1)),
-              .gap = static_cast<int>(kit.onceInt("gap", 0)),
-              .align = alignOf(node.name("align")),
-              .minColumnWidth = static_cast<int>(kit.onceInt("minColumnWidth", 0))};
+    Grid spec{
+        .columns = static_cast<int>(kit.onceInt("columns", 1)),
+        .gap = static_cast<int>(kit.onceInt("gap", 0)),
+        .align = alignOf(node.name("align")),
+        .minColumnWidth = static_cast<int>(kit.onceInt("minColumnWidth", 0)),
+    };
     for (DocNodePtr const& track : node.partList("tracks")) {
         ExprPtr const width = track->prop("width");
-        spec.tracks.push_back(GridTrack{.width = width ? sizingOf(once(ctx, width)) : Sizing::stretch(),
-                                        .align = cellPlaceNamed(track->name("align")).value_or(Align::Start)});
+        spec.tracks.push_back(GridTrack{
+            .width = width ? sizingOf(once(ctx, width)) : Sizing::stretch(),
+            .align = cellPlaceNamed(track->name("align")).value_or(Align::Start),
+        });
     }
     for (DocNodePtr const& cell : node.nodes("children")) {
         ExprPtr const span = cell->prop("span");
@@ -6025,9 +6238,11 @@ Node ScreenCore::lowerPanel(DocNode const& node, LowerCtx const& ctx, ElementSta
 Node ScreenCore::lowerSplitter(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     KindKit const kit{*this, node, ctx, element};
     ExprPtr const orientation = node.prop("orientation");
-    Splitter spec{.children = kit.children("children"),
-                  .orientation = orientation && axisOf(once(ctx, orientation)) == Axis::Vertical ? Axis::Vertical
-                                                                                                 : Axis::Horizontal};
+    Splitter spec{
+        .children = kit.children("children"),
+        .orientation =
+            orientation && axisOf(once(ctx, orientation)) == Axis::Vertical ? Axis::Vertical : Axis::Horizontal,
+    };
     // No `onResize`: a user's drag stays the splitter's own, and the document's sizes are where it starts.
     if (ExprPtr const sizes = node.prop("sizes")) {
         spec.sizes = bindProp<std::vector<int>>(
@@ -6125,11 +6340,11 @@ Node ScreenCore::lowerPageRegion(DocNode const& node, LowerCtx const& ctx, Eleme
 }
 
 Node ScreenCore::lowerLocaleScope(DocNode const& node, LowerCtx const& ctx) {
-    auto holder = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+    auto const holder = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
     holder->transparent = true;
     ExprPtr const locale = node.prop("locale");
     holder->localeFormat = &holder->nodes.computed([this, scope = ctx.scope, bindings = ctx.bindings,
-                                                    locale]() -> std::shared_ptr<FormatContext const> {
+                                                    locale] -> std::shared_ptr<FormatContext const> {
         Value const value = evalIn(*scope, bindings.get(), locale);
         std::string const* const tag = value.asString();
         if (tag == nullptr && !value.isNull()) {
@@ -6159,8 +6374,8 @@ Node ScreenCore::lowerLocaleScope(DocNode const& node, LowerCtx const& ctx) {
         return Key{tag == nullptr ? std::string{} : *tag};
     });
     spec.fallback = lazy(
-        [this, ctx, holder, content, path = node.path]() -> Node {
-            auto inner = std::make_shared<RtScope>(*this, holder, nullptr, holder->nodes.depth() + 2);
+        [this, ctx, holder, content, path = node.path] -> Node {
+            auto const inner = std::make_shared<RtScope>(*this, holder, nullptr, holder->nodes.depth() + 2);
             inner->transparent = true;
             LowerCtx const innerCtx{.scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary, .listGap = 0};
             std::vector<Node> children;
@@ -6237,10 +6452,12 @@ Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementStat
     }
     if (kind == "actionBar") {
         KindKit const bar{*this, node, ctx, element};
-        ActionBar spec{.children = bar.children("children"),
-                       .align = alignOf(node.name("align")),
-                       .justify = justifyOf(node.name("justify")),
-                       .wrap = node.flag("wrap")};
+        ActionBar spec{
+            .children = bar.children("children"),
+            .align = alignOf(node.name("align")),
+            .justify = justifyOf(node.name("justify")),
+            .wrap = node.flag("wrap"),
+        };
         reportActionBarGaps(node, ctx);
         commonOf(node, ctx, element, spec.common);
         return ui::actionBar(std::move(spec));
@@ -6272,6 +6489,7 @@ Node ScreenCore::lowerKind(DocNode const& node, LowerCtx const& ctx, ElementStat
     report(node.path, "`" + node.kind + "` is a node kind this interpreter does not lower");
     return ui::text(Text{.text = std::string{node.kind}, .role = TextRole::Muted});
 }
+
 namespace {
 
 /// @brief A document field overlay's expressions, evaluated once, as the engine's overlay.
@@ -6338,6 +6556,7 @@ struct DetachedLower {
 }  // namespace
 
 // Builds the form's session when its element is declared, so its values can be read before the form is drawn.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one section per kind of form element and its sessions.
 void ScreenCore::wireForm(ElementState& element) {
     DocNode const& node = *element.node;
     RtScope& scope = *element.scope;
@@ -6523,6 +6742,7 @@ Node ScreenCore::lowerForm(DocNode const& node, LowerCtx const& ctx, ElementStat
     }
     return *std::move(json);
 }
+
 namespace {
 
 /// @brief What a form fills of a field component's props: the field's value, errors, read-only and required state,
@@ -6530,7 +6750,7 @@ namespace {
 /// @param prop  The prop's name.
 /// @param state The field.
 /// @return The read, or empty for a prop the form does not fill.
-[[nodiscard]] std::function<Value()> formFilled(std::string const& prop, forms::FieldState* state) {
+[[nodiscard]] std::function<Value()> formFilled(std::string const& prop, forms::FieldState const* state) {
     if (prop == "value") {
         return [state] {
             forms::Encoding const& encoding = state->encoded().get();
@@ -6562,17 +6782,22 @@ namespace {
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a prop's name, then its declared type.
 CustomProp ScreenCore::componentProp(std::string const& prop, std::string const& type, std::function<Value()> read) {
     if (type == "bool") {
-        return CustomProp{.name = prop, .value = slotProp<bool>([this, read = std::move(read)] {
-                                            return boolOf(read(), session.formatting());
-                                        })};
+        return CustomProp{
+            .name = prop,
+            .value = slotProp<bool>([this, read = std::move(read)] { return boolOf(read(), session.formatting()); }),
+        };
     }
     if (type == "number") {
-        return CustomProp{.name = prop,
-                          .value = slotProp<double>([read = std::move(read)] { return componentNumber(read()); })};
+        return CustomProp{
+            .name = prop,
+            .value = slotProp<double>([read = std::move(read)] { return componentNumber(read()); }),
+        };
     }
-    return CustomProp{.name = prop, .value = slotProp<std::string>([this, read = std::move(read), type] {
-                                        return componentText(read(), type, session.formatting());
-                                    })};
+    return CustomProp{
+        .name = prop,
+        .value = slotProp<std::string>(
+            [this, read = std::move(read), type] { return componentText(read(), type, session.formatting()); }),
+    };
 }
 
 void ScreenCore::changeField(forms::FieldState& state, forms::FieldSpec const& spec, std::string const& path,
@@ -6600,21 +6825,24 @@ Node ScreenCore::fieldComponent(forms::FieldView const& view, DocNode const& ove
     // A loaded document's field component is declared, with a `value` prop and a `change` event.
     Component const& component = _doc->components.at(name);
     forms::FieldState* const state = &view.state();
-    Custom spec{.name = name,
-                .fallback = view.defaultControl(),
-                .props = {},
-                .minVersion =
-                    static_cast<int>(std::clamp<std::int64_t>(component.version, 0, std::numeric_limits<int>::max())),
-                .onEvent = {}};
+    Custom spec{
+        .name = name,
+        .fallback = view.defaultControl(),
+        .props = {},
+        .minVersion =
+            static_cast<int>(std::clamp<std::int64_t>(component.version, 0, std::numeric_limits<int>::max())),
+        .onEvent = {},
+    };
     for (auto const& [prop, type] : component.props) {
         if (prop == "value" && type == "json") {
             // The wire JSON itself, so an object's or a collection's every digit reaches the component.
-            spec.props.push_back(CustomProp{.name = prop, .value = slotProp<std::string>([state] {
-                                                              forms::Encoding const& encoding = state->encoded().get();
-                                                              return encoding.has_value() && encoding->has_value()
-                                                                         ? (*encoding)->json
-                                                                         : std::string{"null"};
-                                                          })});
+            spec.props.push_back(CustomProp{
+                .name = prop,
+                .value = slotProp<std::string>([state] {
+                    forms::Encoding const& encoding = state->encoded().get();
+                    return encoding.has_value() && encoding->has_value() ? (*encoding)->json : std::string{"null"};
+                }),
+            });
             continue;
         }
         std::function<Value()> read = formFilled(prop, state);
@@ -6810,8 +7038,8 @@ Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementSt
         node.prop("gap") ? static_cast<int>(intOf(once(ctx, node.prop("gap")), kDialogGap)) : kDialogGap;
     LayoutHints const bodyHints = holderHints(bodyContent, node.scope ? &*node.scope : nullptr, ctx);
     Node body = lazy(
-        [this, ctx, &node, element, bodyGap]() -> Node {
-            auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+        [this, ctx, &node, element, bodyGap] -> Node {
+            auto const inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
             inner->owner = element;
             addPending(1);
             inner->submitted = &element->submitted;
@@ -6834,7 +7062,11 @@ Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementSt
             declare(*inner, node.scope ? &*node.scope : nullptr, content, lists);
             element->inner.set(inner.get());
             LowerCtx const innerCtx{
-                .scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary, .listGap = bodyGap};
+                .scope = inner,
+                .bindings = ctx.bindings,
+                .boundary = ctx.boundary,
+                .listGap = bodyGap,
+            };
             std::vector<Node> children;
             children.reserve(content.size());
             for (DocNode const* const child : content) {
@@ -6847,13 +7079,16 @@ Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementSt
             }
             std::vector<KeyBinding> keys;
             if (Commands const* const commands = node.event("default")) {
-                keys.push_back(KeyBinding{.chord = "Enter", .onPress = [this, innerCtx, commands] {
-                                              runEvent(commands, innerCtx, Value{});
-                                          }});
+                keys.push_back(KeyBinding{
+                    .chord = "Enter",
+                    .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); },
+                });
             }
             if (Commands const* const commands = node.event("cancel")) {
                 keys.push_back(KeyBinding{
-                    .chord = "Esc", .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); }});
+                    .chord = "Esc",
+                    .onPress = [this, innerCtx, commands] { runEvent(commands, innerCtx, Value{}); },
+                });
             }
             fillHolder(children, node.path);
             return holding(std::move(children), inner, std::move(keys), bodyGap);
@@ -6874,21 +7109,24 @@ Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementSt
             .description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf),
             .child = std::move(body),
             .onDismiss = std::move(onDismiss),
-            .side = side && textOf(once(ctx, side), ctx.scope->formatting()) == "start" ? Side::Start : Side::End};
+            .side = side && textOf(once(ctx, side), ctx.scope->formatting()) == "start" ? Side::Start : Side::End,
+        };
         if (ExprPtr const spans = node.prop("descriptionSpans")) {
             spec.descriptionSpans = spansProp(ctx, spans);
         }
         commonOf(node, ctx, element, spec.common);
         return ui::drawer(std::move(spec));
     }
-    Dialog spec{.open = std::move(open),
-                .title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf),
-                .description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf),
-                .child = std::move(body),
-                .onDismiss = std::move(onDismiss),
-                .common = {},
-                .sheet = bindProp<bool>(ctx, node.prop("sheet"), false, boolOf),
-                .dismissLabel = bindProp<std::string>(ctx, node.prop("dismissLabel"), std::string{"Close"}, stringOf)};
+    Dialog spec{
+        .open = std::move(open),
+        .title = bindProp<std::string>(ctx, node.prop("title"), std::string{}, stringOf),
+        .description = bindProp<std::string>(ctx, node.prop("description"), std::string{}, stringOf),
+        .child = std::move(body),
+        .onDismiss = std::move(onDismiss),
+        .common = {},  // NOLINT(readability-trailing-comma): the comma ends the designator, not the empty braces.
+        .sheet = bindProp<bool>(ctx, node.prop("sheet"), false, boolOf),
+        .dismissLabel = bindProp<std::string>(ctx, node.prop("dismissLabel"), std::string{"Close"}, stringOf),
+    };
     if (ExprPtr const spans = node.prop("descriptionSpans")) {
         spec.descriptionSpans = spansProp(ctx, spans);
     }
@@ -6911,15 +7149,20 @@ Node ScreenCore::lowerSwitch(DocNode const& node, LowerCtx const& ctx) {
         spec.cases.push_back(SwitchCase{
             .key = Key{index++},
             .node = lazy(
-                [this, ctx, casePart, caseGap = ctx.listGap]() -> Node {
-                    auto inner = std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
+                [this, ctx, casePart, caseGap = ctx.listGap] -> Node {
+                    auto const inner =
+                        std::make_shared<RtScope>(*this, ctx.scope, nullptr, ctx.scope->nodes.depth() + 2);
                     std::vector<DocNode const*> content;
                     for (DocNodePtr const& child : casePart->nodes("children")) {
                         content.push_back(child.get());
                     }
                     declare(*inner, casePart->scope ? &*casePart->scope : nullptr, content, {});
                     LowerCtx const innerCtx{
-                        .scope = inner, .bindings = ctx.bindings, .boundary = ctx.boundary, .listGap = caseGap};
+                        .scope = inner,
+                        .bindings = ctx.bindings,
+                        .boundary = ctx.boundary,
+                        .listGap = caseGap,
+                    };
                     std::vector<Node> children;
                     children.reserve(content.size());
                     for (DocNode const* const child : content) {
@@ -6928,7 +7171,8 @@ Node ScreenCore::lowerSwitch(DocNode const& node, LowerCtx const& ctx) {
                     fillHolder(children, casePart->path);
                     return holding(std::move(children), inner, {}, caseGap);
                 },
-                caseHints)});
+                caseHints),
+        });
     }
     spec.selector = slotProp<Key>(
         [scope = ctx.scope, bindings = ctx.bindings, selected = node.prop("on"), whens = std::move(whens)] {
@@ -6951,7 +7195,7 @@ Prop<std::size_t> ScreenCore::controlledTabSelection(DocNode const& node, LowerC
                                                      std::shared_ptr<std::vector<std::string>> const& ids) {
     auto const unknownReported = std::make_shared<bool>(false);
     return Prop<std::size_t>{[this, scope = ctx.scope, bindings = ctx.bindings, selected, ids, unknownReported,
-                              path = pointerAppend(node.path, "selected")]() -> std::size_t {
+                              path = pointerAppend(node.path, "selected")] -> std::size_t {
         Value const value = evalIn(*scope, bindings.get(), selected);
         std::string const* const named = value.asString();
         auto const found = named == nullptr ? ids->end() : std::ranges::find(*ids, *named);
@@ -6971,12 +7215,14 @@ Prop<std::size_t> ScreenCore::controlledTabSelection(DocNode const& node, LowerC
 // user's pick itself, as a bound index too, whose page follows the pick: a constant would move only the highlight.
 Node ScreenCore::lowerTabs(DocNode const& node, LowerCtx const& ctx, ElementState* element) {
     Tabs spec;
-    auto ids = std::make_shared<std::vector<std::string>>();
+    auto const ids = std::make_shared<std::vector<std::string>>();
     for (DocNodePtr const& tab : node.partList("tabs")) {
         auto const nodes = tab->nodes("children");
         ids->push_back(tab->id);
-        spec.tabs.push_back(Tab{.label = bindProp<std::string>(ctx, tab->prop("label"), std::string{}, stringOf),
-                                .node = nodes.empty() ? Node{} : lowerAll(nodes, ctx)});
+        spec.tabs.push_back(Tab{
+            .label = bindProp<std::string>(ctx, tab->prop("label"), std::string{}, stringOf),
+            .node = nodes.empty() ? Node{} : lowerAll(nodes, ctx),
+        });
     }
     spec.moreLabel = bindProp<std::string>(ctx, node.prop("moreLabel"), std::string{"More"}, stringOf);
     if (ExprPtr const inset = node.prop("inset")) {
@@ -7037,7 +7283,8 @@ bool ScreenCore::focusTarget(Command const& command, RtScope const& scope, Bindi
         }
         FocusPlace candidatePlace{
             .prefix = place.prefix,
-            .rows = {place.rows.begin(), std::next(place.rows.begin(), static_cast<std::ptrdiff_t>(kept))}};
+            .rows = {place.rows.begin(), std::next(place.rows.begin(), static_cast<std::ptrdiff_t>(kept))},
+        };
         if (row) {
             candidatePlace.rows.push_back(*row);
         }
@@ -7087,7 +7334,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
         }
         auto rowView = [this, ctx, &node, content, keyFn](reactive::Signal<Value> const& row) -> Node {
             std::string key = runtime().untracked([&] { return canonicalJson(valueOfKey(keyFn(row.peek()))); });
-            auto scope = rowScope(node, ctx, row, content, std::move(key));
+            auto const scope = rowScope(node, ctx, row, content, std::move(key));
             LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
             std::vector<Node> children;
             children.reserve(content.size());
@@ -7174,10 +7421,11 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                 Value const* const field = item.field("id");
                 Value const* const label = item.field("label");
                 fields.push_back(field == nullptr ? std::string{} : textOf(*field, format));
-                columns.push_back(
-                    TableColumn{.label = textOf(label != nullptr ? *label : Value{fields.back()}, format),
-                                .align = placeOf(item, "align", Align::Start),
-                                .valign = placeOf(item, "valign", tableValign)});
+                columns.push_back(TableColumn{
+                    .label = textOf(label != nullptr ? *label : Value{fields.back()}, format),
+                    .align = placeOf(item, "align", Align::Start),
+                    .valign = placeOf(item, "valign", tableValign),
+                });
                 cells.push_back(nullptr);
                 roles.push_back(TextRole::Normal);
             }
@@ -7205,23 +7453,25 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             report(part->path + "/shrink",
                    "`shrink` lets a stretch column go narrower than its header; this column's width does not stretch");
         }
-        columns.push_back(TableColumn{.label = label ? textOf(once(ctx, label), format) : std::string{},
-                                      .width = sized,
-                                      .role = columnRole,
-                                      .align = cellPlaceNamed(part->name("align")).value_or(Align::Start),
-                                      .valign = cellPlaceNamed(part->name("valign")).value_or(tableValign),
-                                      .sortable = part->flag("sortable"),
-                                      .wrap = part->flag("wrap", true),
-                                      .shrink = shrink && sized.kind == Sizing::Kind::Stretch});
+        columns.push_back(TableColumn{
+            .label = label ? textOf(once(ctx, label), format) : std::string{},
+            .width = sized,
+            .role = columnRole,
+            .align = cellPlaceNamed(part->name("align")).value_or(Align::Start),
+            .valign = cellPlaceNamed(part->name("valign")).value_or(tableValign),
+            .sortable = part->flag("sortable"),
+            .wrap = part->flag("wrap", true),
+            .shrink = shrink && sized.kind == Sizing::Kind::Stretch,
+        });
         cells.push_back(part.get());
         fields.emplace_back(part->id);
         roles.push_back(columnRole);
     }
-    auto registry = std::make_shared<std::map<std::string, std::weak_ptr<RtScope>, std::less<>>>();
+    auto const registry = std::make_shared<std::map<std::string, std::weak_ptr<RtScope>, std::less<>>>();
     // A value that names no tone is reported once for the table, whichever row and value it was.
-    auto toneReported = std::make_shared<bool>(false);
+    auto const toneReported = std::make_shared<bool>(false);
     // Likewise for a `rowSpans` value that is no list of spans.
-    auto spansReported = std::make_shared<bool>(false);
+    auto const spansReported = std::make_shared<bool>(false);
     auto cellsOf = [this, ctx, &node, cells, fields, roles, registry, keyFn, toneReported,
                     spansReported](reactive::Signal<Value> const& row) {
         if (row.peek().field(kGroupHeadingField) != nullptr) {
@@ -7237,7 +7487,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
             }
         }
         std::string key = runtime().untracked([&] { return canonicalJson(valueOfKey(keyFn(row.peek()))); });
-        auto scope = rowScope(node, ctx, row, content, key);
+        auto const scope = rowScope(node, ctx, row, content, key);
         (*registry)[std::move(key)] = scope;
         LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
         std::vector<Node> out;
@@ -7248,17 +7498,18 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
                 out.push_back(lowerAll(nodes, rowCtx));
                 continue;
             }
-            out.push_back(
-                ui::text(Text{.text = slotProp<std::string>([scope = rowCtx.scope, &row, field = fields.at(index)] {
-                                  Value const* const value = row.get().field(field);
-                                  return value == nullptr ? std::string{} : textOf(*value, scope->formatting());
-                              }),
-                              .role = roles.at(index)}));
+            out.push_back(ui::text(Text{
+                .text = slotProp<std::string>([scope = rowCtx.scope, &row, field = fields.at(index)] {
+                    Value const* const value = row.get().field(field);
+                    return value == nullptr ? std::string{} : textOf(*value, scope->formatting());
+                }),
+                .role = roles.at(index),
+            }));
         }
         if (!out.empty()) {
             // The row's first cell owns the row's scope, which lives as long as the row's node: a cell is placed by
             // its column, so the scope is not held by a wrapping container, which the column would place instead.
-            auto owner = std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(out.front(), scope);
+            auto const owner = std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(out.front(), scope);
             out.front() = Node{owner, owner->first.get()};
         }
         TableRowView rowView{.cells = std::move(out), .tone = std::nullopt};
@@ -7268,7 +7519,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
         }
         if (ExprPtr const toneExpr = node.prop("rowTone")) {
             rowView.tone = slotProp<std::optional<Tone>>(
-                [this, scope, bindings = ctx.bindings, toneExpr, toneReported]() -> std::optional<Tone> {
+                [this, scope, bindings = ctx.bindings, toneExpr, toneReported] -> std::optional<Tone> {
                     return rowToneOf(evalIn(*scope, bindings.get(), toneExpr), toneExpr->path, *toneReported);
                 });
         }
@@ -7305,7 +7556,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
     // The selection the table shows: the bound `selection`, or the table's own. A slot even for a literal list, so
     // a bound selection is fixed until the document writes it, and a user's change the document leaves unwritten
     // snaps back. A bound value that is neither a list nor `null` is reported once.
-    auto selectionReported = std::make_shared<bool>(false);
+    auto const selectionReported = std::make_shared<bool>(false);
     options.selection = slotProp<std::vector<Key>>([this, element, selectionReported, path = node.path] {
         std::vector<Key> keys;
         if (element->bound != nullptr) {
@@ -7364,7 +7615,7 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
         }
         return derivedCount + static_cast<std::size_t>(std::distance(parts.begin(), found));
     };
-    options.sort = slotProp<std::optional<TableSort>>([element, &node, columnIndex]() -> std::optional<TableSort> {
+    options.sort = slotProp<std::optional<TableSort>>([element, &node, columnIndex] -> std::optional<TableSort> {
         std::optional<std::vector<SortKey>> const keys = sortKeysOf(node, tableSort(*element));
         if (!keys || keys->empty()) {
             return std::nullopt;
@@ -7373,8 +7624,10 @@ Node ScreenCore::lowerRows(DocNode const& node, LowerCtx const& ctx, ElementStat
         if (!index) {
             return std::nullopt;
         }
-        return TableSort{.column = *index,
-                         .direction = keys->front().descending ? SortDirection::Descending : SortDirection::Ascending};
+        return TableSort{
+            .column = *index,
+            .direction = keys->front().descending ? SortDirection::Descending : SortDirection::Ascending,
+        };
     });
     // A header click makes its column the single key: descending when it already is the first key ascending,
     // ascending otherwise. The table's own sort takes it when no key binds one, then `onSortChange` runs with
@@ -7450,10 +7703,11 @@ TableRowView ScreenCore::headingRow(DocNode const& node, LowerCtx const& ctx, re
     for (DocNodePtr const& child : heading) {
         content.push_back(child.get());
     }
-    auto scope = rowScope(node, ctx, row, content, std::move(key));
+    auto const scope = rowScope(node, ctx, row, content, std::move(key));
     LowerCtx const rowCtx{.scope = scope, .bindings = ctx.bindings, .boundary = ctx.boundary};
     // The cell owns the heading's scope, for as long as the row's node lives, as a data row's first cell does.
-    auto owner = std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(lowerAll(heading, rowCtx), scope);
+    auto const owner =
+        std::make_shared<std::pair<Node, std::shared_ptr<RtScope>> const>(lowerAll(heading, rowCtx), scope);
     return TableRowView{.cells = {Node{owner, owner->first.get()}}, .tone = std::nullopt, .heading = true};
 }
 
@@ -7491,13 +7745,15 @@ std::optional<math::Rational> ScreenCore::chartMagnitude(Value const& value, std
 }
 
 std::optional<Tone> ScreenCore::chartToneOf(Value const& value, std::string const& path) {
-    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {{
-        {"neutral", Tone::Neutral},
-        {"info", Tone::Info},
-        {"ok", Tone::Ok},
-        {"warn", Tone::Warn},
-        {"err", Tone::Err},
-    }};
+    static constexpr std::array<std::pair<std::string_view, Tone>, 5> kTones = {
+        {
+            {"neutral", Tone::Neutral},
+            {"info", Tone::Info},
+            {"ok", Tone::Ok},
+            {"warn", Tone::Warn},
+            {"err", Tone::Err},
+        },
+    };
     if (value.isNull()) {
         return std::nullopt;
     }
@@ -7579,6 +7835,7 @@ std::vector<detail::ChartRawPoint> ScreenCore::chartPoints(DocNode const& series
     }
     return points;
 }
+
 namespace {
 
 /// @brief A chart's exact value at @p places, as the active locale writes it.
@@ -7665,9 +7922,10 @@ ChartRange ScreenCore::chartFixedRange(DocNode const& node, RtScope const& scope
     return range;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per way a series can be drawn or clipped.
 void ScreenCore::chartSeries(ChartData& data, DocNode const& node, RtScope const& scope, Bindings const* bindings,
                              std::vector<std::vector<detail::ChartRawPoint>>& series, bool positioned,
-                             ChartRange const& range) const {
+                             ChartRange const& range) {
     auto const positionOf = [positioned](detail::ChartRawPoint const& point) {
         return positioned && point.x ? *point.x
                                      : math::Rational{static_cast<std::int64_t>(point.index), math::DecimalPlaces{0}};
@@ -7728,12 +7986,14 @@ void ScreenCore::chartSeries(ChartData& data, DocNode const& node, RtScope const
         }
         drawn.joined = drawn.style == ChartStyle::Line && (!part->flags.contains("joined") || part->flag("joined"));
         for (detail::ChartRawPoint& point : series.at(index)) {
-            ChartPoint out{.x = realOf(positionOf(point)),
-                           .y = std::nullopt,
-                           .clip = ChartClip::None,
-                           .xLabel = std::move(point.xLabel),
-                           .tone = point.tone,
-                           .note = std::move(point.note)};
+            ChartPoint out{
+                .x = realOf(positionOf(point)),
+                .y = std::nullopt,
+                .clip = ChartClip::None,
+                .xLabel = std::move(point.xLabel),
+                .tone = point.tone,
+                .note = std::move(point.note),
+            };
             if (point.y) {
                 auto const [shown, clip] = detail::chartClipped(*point.y, range);
                 out.y = realOf(shown);
@@ -7787,7 +8047,7 @@ ChartData ScreenCore::chartData(DocNode const& node, RtScope const& scope, Bindi
         }
     }
     if (barsHaveValues) {
-        axisValues.push_back(math::Rational{0, math::DecimalPlaces{0}});
+        axisValues.emplace_back(0, math::DecimalPlaces{0});
         padding.low = std::ranges::any_of(values, [](math::Rational const& value) { return value.numerator < 0; });
         padding.high = std::ranges::any_of(values, [](math::Rational const& value) { return value.numerator > 0; });
     }
@@ -7816,11 +8076,12 @@ ChartData ScreenCore::chartData(DocNode const& node, RtScope const& scope, Bindi
         }
     }
     for (detail::ChartRawLine const& line : lines) {
-        data.lines.push_back(
-            ChartLine{.value = realOf(line.value),
-                      .label = line.label.value_or(detail::chartNumberText(line.value, places, format)),
-                      .tone = line.tone,
-                      .style = line.style});
+        data.lines.push_back(ChartLine{
+            .value = realOf(line.value),
+            .label = line.label.value_or(detail::chartNumberText(line.value, places, format)),
+            .tone = line.tone,
+            .style = line.style,
+        });
     }
     if (kinds.numbers && kinds.instants) {
         report(pointerAppend(node.path, "series"),
@@ -7855,15 +8116,17 @@ std::vector<RowSpan> ScreenCore::rowSpansOf(Value const& value, std::vector<std:
     for (Value const& item : items != nullptr ? *items : ValueList{}) {
         Value const* const column = item.field("column");
         Value const* const rows = item.field("rows");
-        std::string const* const id = column != nullptr ? column->asString() : nullptr;
+        std::string const* const columnId = column != nullptr ? column->asString() : nullptr;
         std::int64_t const* const count = rows != nullptr ? rows->asInt() : nullptr;
-        auto const found = id != nullptr ? std::ranges::find(columns, *id) : columns.end();
+        auto const found = columnId != nullptr ? std::ranges::find(columns, *columnId) : columns.end();
         if (found == columns.end() || count == nullptr || *count < 1) {
             bad = true;
             continue;
         }
-        spans.push_back(RowSpan{.column = static_cast<std::size_t>(found - columns.begin()),
-                                .rows = static_cast<std::size_t>(*count)});
+        spans.push_back(RowSpan{
+            .column = static_cast<std::size_t>(found - columns.begin()),
+            .rows = static_cast<std::size_t>(*count),
+        });
     }
     if (bad && !noted) {
         noted = true;
@@ -7924,24 +8187,28 @@ void ScreenCore::ownQueries(DocNode const& node, RtScope const& scope, BoundaryR
 }
 
 Node ScreenCore::lowerBoundary(DocNode const& node, LowerCtx const& ctx) {
-    auto boundary = std::make_shared<BoundaryRuntime>();
+    auto const boundary = std::make_shared<BoundaryRuntime>();
     std::set<std::string, std::less<>> seen;
     for (DocNodePtr const& child : node.nodes("children")) {
         ownQueries(*child, *ctx.scope, *boundary, seen);
     }
-    auto bindings = std::make_shared<Bindings>(*ctx.bindings);
-    bindings->push_back(Binding{.name = "boundary", .read = [boundary] {
-                                    for (QueryRuntime const* const query : boundary->queries) {
-                                        Value const error = query->error();
-                                        if (!error.isNull() && query->value().isNull()) {
-                                            return Value{ValueRecord{{"error", error}}};
-                                        }
-                                    }
-                                    return Value{ValueRecord{{"error", Value{}}}};
-                                }});
+    auto const bindings = std::make_shared<Bindings>(*ctx.bindings);
+    bindings->push_back(Binding{
+        .name = "boundary",
+        .read =
+            [boundary] {
+                for (QueryRuntime const* const query : boundary->queries) {
+                    Value const error = query->error();
+                    if (!error.isNull() && query->value().isNull()) {
+                        return Value{ValueRecord{{"error", error}}};
+                    }
+                }
+                return Value{ValueRecord{{"error", Value{}}}};
+            },
+    });
     LowerCtx const errorCtx{.scope = ctx.scope, .bindings = bindings, .boundary = boundary};
     LowerCtx const childCtx{.scope = ctx.scope, .bindings = ctx.bindings, .boundary = boundary};
-    auto group = [this](std::span<DocNodePtr const> nodes, LowerCtx const& where) -> Node {
+    auto const group = [this](std::span<DocNodePtr const> nodes, LowerCtx const& where) -> Node {
         return nodes.empty() ? ui::spacer() : lowerAll(nodes, where);
     };
     Switch spec;
@@ -7973,27 +8240,32 @@ Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
             props.emplace_back(key, expr);
         }
     }
-    auto bindings = std::make_shared<Bindings>();
-    bindings->push_back(
-        Binding{.name = "props", .read = [scope = ctx.scope, outer = ctx.bindings, props = std::move(props)] {
-                    ValueRecord record;
-                    for (auto const& [key, expr] : props) {
-                        record.insert_or_assign(key, evalIn(*scope, outer.get(), expr));
-                    }
-                    return Value{std::move(record)};
-                }});
-    auto scope = std::make_shared<RtScope>(*this, nullptr, nullptr, ctx.scope->nodes.depth() + 1);
+    auto const bindings = std::make_shared<Bindings>();
+    bindings->push_back(Binding{
+        .name = "props",
+        .read =
+            [scope = ctx.scope, outer = ctx.bindings, props = std::move(props)] {
+                ValueRecord record;
+                for (auto const& [key, expr] : props) {
+                    record.insert_or_assign(key, evalIn(*scope, outer.get(), expr));
+                }
+                return Value{std::move(record)};
+            },
+    });
+    auto const scope = std::make_shared<RtScope>(*this, nullptr, nullptr, ctx.scope->nodes.depth() + 1);
     scope->formatSource = ctx.scope;
     scope->usePrefix = focusKeyOf(node.path, *ctx.scope) + ">";
     DocNode const& fallback = *component.fallback;
     declare(*scope, nullptr, {&fallback}, {});
     Node lowered = lower(fallback, LowerCtx{.scope = scope, .bindings = bindings, .boundary = nullptr});
-    Custom spec{.name = name,
-                .fallback = std::move(lowered),
-                .props = {},
-                .minVersion =
-                    static_cast<int>(std::clamp<std::int64_t>(component.version, 0, std::numeric_limits<int>::max())),
-                .onEvent = {}};
+    Custom spec{
+        .name = name,
+        .fallback = std::move(lowered),
+        .props = {},
+        .minVersion =
+            static_cast<int>(std::clamp<std::int64_t>(component.version, 0, std::numeric_limits<int>::max())),
+        .onEvent = {},
+    };
     // Every declared prop is given, a missing one as its type's empty value: a component lacking one is refused.
     for (auto const& [prop, type] : component.props) {
         ExprPtr expr;
@@ -8006,16 +8278,18 @@ Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
             spec.props.push_back(CustomProp{.name = prop, .value = bindProp<bool>(ctx, expr, false, boolOf)});
         } else if (type == "number") {
             spec.props.push_back(CustomProp{
-                .name = prop, .value = bindProp<double>(ctx, expr, 0.0, [](Value const& value, FormatContext const&) {
-                                  return componentNumber(value);
-                              })});
+                .name = prop,
+                .value = bindProp<double>(
+                    ctx, expr, 0.0, [](Value const& value, FormatContext const&) { return componentNumber(value); }),
+            });
         } else {
-            spec.props.push_back(
-                CustomProp{.name = prop,
-                           .value = bindProp<std::string>(ctx, expr, std::string{},
-                                                          [type](Value const& value, FormatContext const& format) {
-                                                              return componentText(value, type, format);
-                                                          })});
+            spec.props.push_back(CustomProp{
+                .name = prop,
+                .value = bindProp<std::string>(ctx, expr, std::string{},
+                                               [type](Value const& value, FormatContext const& format) {
+                                                   return componentText(value, type, format);
+                                               }),
+            });
         }
     }
     spec.onEvent = [this, ctx, site = &node, declared = &component](std::string const& event,
@@ -8029,6 +8303,7 @@ Node ScreenCore::lowerCustom(DocNode const& node, LowerCtx const& ctx) {
     };
     return ui::custom(std::move(spec));
 }
+
 namespace {
 
 /// @brief One child of an arranged container, as the user's choice places it.
@@ -8156,7 +8431,8 @@ Node ScreenCore::lowerArranged(DocNode const& node, LowerCtx const& ctx, Element
     ForEach spec{
         .model = std::make_shared<TypedForEach<Value> const>(std::move(order), std::move(key), std::move(view)),
         .axis = axis,
-        .gap = gap};
+        .gap = gap,
+    };
     commonOf(node, ctx, element, spec.common);
     return makeNode(std::move(spec));
 }
@@ -8224,12 +8500,19 @@ Node ScreenCore::lowerArrangeEditor(DocNode const& node, LowerCtx const& ctx, st
         moveDown.common.a11y.name = "Move " + childId + " down";
         moveDown.common.testId = "arrange-down-" + childId;
         shown.common.testId = "arrange-shown-" + childId;
-        return ui::row(Row{.children = {ui::checkbox(std::move(shown)), ui::button(std::move(moveUp)),
-                                        ui::button(std::move(moveDown))},
-                           .gap = 1});
+        return ui::row(Row{
+            .children =
+                {
+                    ui::checkbox(std::move(shown)),
+                    ui::button(std::move(moveUp)),
+                    ui::button(std::move(moveDown)),
+                },
+            .gap = 1,
+        });
     };
-    ForEach editor{.model =
-                       std::make_shared<TypedForEach<Value> const>(std::move(rows), std::move(key), std::move(view))};
+    ForEach editor{
+        .model = std::make_shared<TypedForEach<Value> const>(std::move(rows), std::move(key), std::move(view)),
+    };
     commonOf(node, ctx, nullptr, editor.common);
     return makeNode(std::move(editor));
 }
@@ -8238,7 +8521,7 @@ Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx) {
     std::string const point{node.name("point")};
     // A loaded document's customize node names a declared point, and every point has a choice in `prefs`.
     CustomizePoint const& spec = _doc->customize.at(point);
-    auto choose = [this, point](Value value) {
+    auto const choose = [this, point](Value value) {
         session.asUser([&] {
             ValueRecord next = prefs.peek();
             next.insert_or_assign(point, value);
@@ -8259,7 +8542,7 @@ Node ScreenCore::lowerCustomize(DocNode const& node, LowerCtx const& ctx) {
             options.push_back(SelectOption{.key = Key{option}, .label = option});
         }
         select.options = std::move(options);
-        select.selected = slotProp<std::optional<Key>>([this, point]() -> std::optional<Key> {
+        select.selected = slotProp<std::optional<Key>>([this, point] -> std::optional<Key> {
             Value const& chosen = prefs.get().at(point);
             return chosen.isNull() ? std::nullopt : std::optional<Key>{keyOf(chosen)};
         });
@@ -8397,14 +8680,16 @@ BorrowedModel Screen::lend(std::string_view alias) const {
         return {};
     }
     detail::ModelAlias& model = *found->model;
-    return BorrowedModel{.channel = detail::channelOf(model, *_core),
-                         .token = _core->runtime().untracked([&] { return model.token->get(); })};
+    return BorrowedModel{
+        .channel = detail::channelOf(model, *_core),
+        .token = _core->runtime().untracked([&] { return model.token->get(); }),
+    };
 }
 
 std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::shared_ptr<Document const> doc,
                                                                    ValueRecord const& params, IViewBackend& backend,
                                                                    MountOptions const& options) {
-    auto refuse = [&](std::string path, std::string reason) {
+    auto const refuse = [&](std::string path, std::string reason) {
         return std::unexpected(Refusal{.document = doc->id, .path = std::move(path), .reason = std::move(reason)});
     };
     if (!doc->view) {
@@ -8457,7 +8742,10 @@ std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::shared_p
     Node root = runtime.untracked([&] {
         core.declare(scope, &doc->scope, {doc->view.get()}, lists);
         detail::LowerCtx const ctx{
-            .scope = screen->_scope, .bindings = std::make_shared<detail::Bindings const>(), .boundary = nullptr};
+            .scope = screen->_scope,
+            .bindings = std::make_shared<detail::Bindings const>(),
+            .boundary = nullptr,
+        };
         Node lowered = core.lower(*doc->view, ctx);
         screen->_headStatus = core.lowerBadgeParts(doc->status, ctx);
         screen->_headActions = core.lowerActionParts(doc->actions, ctx);
@@ -8467,7 +8755,9 @@ std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::shared_p
             std::vector<KeyBinding> keys;
             for (auto const& [chord, commands] : doc->keys) {
                 keys.push_back(KeyBinding{
-                    .chord = chord, .onPress = [&core, ctx, list = &commands] { core.runEvent(list, ctx, Value{}); }});
+                    .chord = chord,
+                    .onPress = [&core, ctx, list = &commands] { core.runEvent(list, ctx, Value{}); },
+                });
             }
             Column column{.children = {std::move(lowered)}};
             column.common.keys = std::move(keys);
@@ -8475,8 +8765,8 @@ std::expected<std::unique_ptr<Screen>, Refusal> Interpreter::mount(std::shared_p
         }
         return lowered;
     });
-    screen->_mounted.emplace(runtime, backend, std::move(root), options.parent, options.depth + 1);
-    screen->_core->focusElement = [mounted = &*screen->_mounted](std::string_view element) {
+    screen->_mounted = std::make_unique<Mounted>(runtime, backend, std::move(root), options.parent, options.depth + 1);
+    screen->_core->focusElement = [mounted = screen->_mounted.get()](std::string_view element) {
         return mounted->focus(element);
     };
     screen->runLifecycle("onMount");
@@ -8505,12 +8795,16 @@ std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(std::shar
     _session->runtime().untracked([&] {
         core.declare(*root->_scope, &doc->scope, {}, lists);
         detail::LowerCtx const ctx{
-            .scope = root->_scope, .bindings = std::make_shared<detail::Bindings const>(), .boundary = nullptr};
+            .scope = root->_scope,
+            .bindings = std::make_shared<detail::Bindings const>(),
+            .boundary = nullptr,
+        };
         std::vector<detail::BadgeModel> badges = core.lowerBadgeParts(doc->navigation, ctx);
         for (std::size_t index = 0; index < badges.size(); ++index) {
-            root->_navigation.push_back(
-                AppRoot::PlacedBadge{.screen = std::string{doc->navigation.at(index)->name("screen")},
-                                     .badge = std::move(badges.at(index))});
+            root->_navigation.push_back(AppRoot::PlacedBadge{
+                .screen = std::string{doc->navigation.at(index)->name("screen")},
+                .badge = std::move(badges.at(index)),
+            });
         }
     });
     root->_navigationBadges = std::make_unique<reactive::Computed<std::vector<NavigationBadge>>>(
@@ -8518,9 +8812,11 @@ std::expected<std::unique_ptr<AppRoot>, Refusal> Interpreter::mountApp(std::shar
             std::vector<NavigationBadge> shown;
             for (AppRoot::PlacedBadge const& entry : *placed) {
                 if (entry.badge.visible.evaluate()) {
-                    shown.push_back(NavigationBadge{.screen = entry.screen,
-                                                    .text = entry.badge.text.evaluate(),
-                                                    .tone = entry.badge.tone.evaluate()});
+                    shown.push_back(NavigationBadge{
+                        .screen = entry.screen,
+                        .text = entry.badge.text.evaluate(),
+                        .tone = entry.badge.tone.evaluate(),
+                    });
                 }
             }
             return shown;
