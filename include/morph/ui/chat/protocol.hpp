@@ -48,6 +48,8 @@ struct ModelRef {
 struct TurnRequest {
     /// @brief The open screen's id.
     std::string screenId;
+    /// @brief The screen's title as the person sees it, which is how they know the record; empty for none.
+    std::string title;
     /// @brief The screen's identity value, canonically encoded; empty for a screen with no record.
     std::string identity;
     /// @brief The screen's params as JSON text.

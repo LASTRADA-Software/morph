@@ -589,6 +589,10 @@ private:
         [[nodiscard]] static std::string systemText(Shared const& self, TurnRequest const& request) {
             std::string text = self.options.systemPrompt;
             text += "\n\nThe open screen is " + request.screenId + ".";
+            if (!request.title.empty()) {
+                text += " The person sees it titled \"" + request.title +
+                        "\" and knows the record by that name, so call it so, not by a key or an internal number.";
+            }
             if (!request.paramsJson.empty()) {
                 text += " Its params are " + request.paramsJson + ".";
             }

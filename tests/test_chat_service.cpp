@@ -467,6 +467,22 @@ TEST_CASE("a_turn_keeps_its_rounds_and_tool_calls_in_order_with_the_arguments", 
     CHECK(seen.at(2).newRound);
 }
 
+TEST_CASE("the_system_text_names_the_screens_title", "[chat][service]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(chat::Response{.text = "ok", .calls = {}, .opaque = {}});
+    auto request = Rig::turnOn(id, "hi");
+    request.title = "Sample 16/1";
+    static_cast<void>(rig.finished(rig.start(request, cid), cid));
+    rig.fake->script(chat::Response{.text = "ok", .calls = {}, .opaque = {}});
+    static_cast<void>(rig.finished(rig.start(Rig::turnOn(id, "again"), cid), cid));
+    auto const asked = rig.fake->requests();
+    REQUIRE(asked.size() == 2);
+    CHECK(asked.at(0).system.contains(R"(titled "Sample 16/1")"));
+    CHECK_FALSE(asked.at(1).system.contains("titled"));
+}
+
 TEST_CASE("the_provider_is_given_the_screens_tools_and_context", "[chat][service]") {
     Rig rig;
     auto const cid = rig.gui();
