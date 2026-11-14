@@ -14,7 +14,18 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <morph/core/completion.hpp>
 #include <morph/export.hpp>
+#include <morph/reactive/runtime.hpp>
+#include <morph/reactive/scheduler.hpp>
+#include <morph/reactive/scope.hpp>
+#include <morph/reactive/signal.hpp>
+#include <morph/ui/backend.hpp>
+#include <morph/ui/dev_tools.hpp>
+#include <morph/ui/document.hpp>
+#include <morph/ui/expression.hpp>
+#include <morph/ui/value.hpp>
+#include <morph/ui/view.hpp>
 #include <optional>
 #include <ranges>
 #include <set>
@@ -26,32 +37,6 @@
 #include <variant>
 #include <vector>
 
-#include "../core/backend.hpp"
-#include "../core/bridge.hpp"
-#include "../core/completion.hpp"
-#include "../core/wire.hpp"
-#include "../forms/engine/collection.hpp"
-#include "../forms/engine/collection_view.hpp"
-#include "../forms/engine/field_model.hpp"
-#include "../forms/engine/form_session.hpp"
-#include "../forms/engine/form_view.hpp"
-#include "../forms/engine/wizard.hpp"
-#include "../forms/engine/wizard_view.hpp"
-#include "../reactive/runtime.hpp"
-#include "../reactive/scheduler.hpp"
-#include "../reactive/scope.hpp"
-#include "../reactive/signal.hpp"
-#include "../ui/backend.hpp"
-#include "chart_scale.hpp"
-#include "dev_tools.hpp"
-#include "document.hpp"
-#include "expression.hpp"
-#include "locale_table.hpp"
-#include "message.hpp"
-#include "mount.hpp"
-#include "value.hpp"
-#include "view.hpp"
-
 /// @file
 /// @brief The UI document interpreter: `Interpreter::mount` turns a loaded `Document` into reactive state and a view
 ///        tree, mounts it through `Mounted` on any `IViewBackend`, and runs its queries, mutations, relations and
@@ -59,7 +44,41 @@
 ///        scripted fake in a test); what only the application can do goes through an `InterpreterHost`; what
 ///        screens share — the query cache, the principal's permissions, the formatting facts — is a `Session`.
 
+namespace morph {
+
+namespace bridge {
+class Bridge;
+enum class BindSharing : std::uint8_t;
+}  // namespace bridge
+
+namespace wire {
+struct ChangesBody;
+struct EventBody;
+struct InstanceTopic;
+struct WatchBody;
+}  // namespace wire
+
+namespace effects {
+struct RecordChange;
+}  // namespace effects
+
+namespace forms {
+class CollectionSession;
+class FieldState;
+class FieldView;
+class FormSession;
+class WizardSession;
+struct FieldSpec;
+struct FormSessionOptions;
+struct FormViewOptions;
+}  // namespace forms
+
+}  // namespace morph
+
 namespace morph::ui {
+
+class Mounted;
+struct ChartRange;
 
 // ---------------------------------------------------------------------------------------------------------------
 // Dispatch
@@ -156,27 +175,7 @@ public:
                                                      std::string const& instanceKey) override;
 
 private:
-    class Channel final : public ModelChannel {
-    public:
-        // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the type id, then the key, as `bind` takes them.
-        Channel(bridge::Bridge& bridge, exec::IExecutor* cbExec, Evaluator evaluator, std::string const& typeId,
-                bridge::BindSharing sharing, std::string const& instanceKey)
-            : _cbExec{cbExec},
-              _evaluator{std::move(evaluator)},
-              _typeId{typeId},
-              _handler{bridge, cbExec, typeId, sharing, instanceKey} {}
-
-        [[nodiscard]] async::Completion<std::string> execute(std::string const& actionId, std::string const& bodyJson,
-                                                             CallOptions options) override;
-
-        [[nodiscard]] ChannelFacts facts() const override;
-
-    private:
-        exec::IExecutor* _cbExec;
-        Evaluator _evaluator;
-        std::string _typeId;
-        bridge::RawHandler _handler;
-    };
+    class Channel;
 
     bridge::Bridge* _bridge;
     exec::IExecutor* _cbExec;
@@ -228,8 +227,8 @@ struct InlineFile {
 inline constexpr std::size_t kDefaultInlineFileBytes = std::size_t{1024} * 1024;
 
 /// @brief The largest inline cap a session takes: base64 grows bytes by 4/3, and 64 KiB of an envelope are left for
-///        the rest of the body, so the encoded file still fits `wire::kMaxEnvelopeBytes`.
-inline constexpr std::size_t kMaxInlineFileBytes = (wire::kMaxEnvelopeBytes - (std::size_t{64} * 1024)) * 3 / 4;
+///        the rest of the body, so the encoded file still fits `wire::kMaxEnvelopeBytes` (8 MiB).
+inline constexpr std::size_t kMaxInlineFileBytes = ((std::size_t{8} * 1024 * 1024) - (std::size_t{64} * 1024)) * 3 / 4;
 
 /// @brief What the application answers for the commands a document cannot carry out alone (spec 6). Every default
 ///        answers "not supported", which the interpreter reports as a diagnostic.
@@ -428,7 +427,7 @@ enum class PatchMiss : std::uint8_t {
 /// @param key        The row's id.
 /// @param with       The new content, merged over the row.
 /// @return The new value, or why it is unchanged.
-// NOLINTBEGIN(bugprone-easily-swappable-parameters): a list, a key and a row are distinct roles of one type.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a list, a key and a row are distinct roles of one type.
 [[nodiscard]] MORPH_API std::expected<Value, PatchMiss> patchRows(Value const& value, std::string_view listMember,
                                                                   Value const& key, Value const& with);
 
@@ -1141,22 +1140,17 @@ struct TableView {
 };
 
 /// @brief An element's live values (spec 5 §6).
-struct ElementState {
+struct MORPH_API ElementState {
     /// @brief The element's state before any user action.
     /// @param runtime The runtime.
-    explicit ElementState(reactive::Runtime& runtime)
-        : draft{runtime},
-          committed{runtime},
-          edited{runtime, false},
-          touched{runtime, false},
-          focused{runtime, false},
-          open{runtime, false},
-          submitted{runtime, false},
-          selection{runtime, Value{ValueList{}}},
-          sort{runtime, Value{ValueList{}}},
-          activeKey{runtime},
-          checksVersion{runtime, 0},
-          inner{runtime, nullptr} {}
+    explicit ElementState(reactive::Runtime& runtime);
+
+    /// @brief Destroys the element's state, and the sessions it owns.
+    ~ElementState();
+    ElementState(ElementState const&) = delete;
+    ElementState& operator=(ElementState const&) = delete;
+    ElementState(ElementState&&) = delete;
+    ElementState& operator=(ElementState&&) = delete;
 
     /// @brief The node.
     DocNode const* node = nullptr;
@@ -2042,6 +2036,10 @@ public:
     /// @return The value, or nothing for a state that starts from its init.
     [[nodiscard]] std::optional<Value> keptState(RtScope const& scope, StateDecl const& decl) const;
 
+    /// @brief What a form session submits through; the same type as `forms::Submitter`.
+    using FormSubmitter =
+        std::function<async::Completion<std::string>(std::string_view actionType, std::string bodyJson)>;
+
 private:
     void wireElement(ElementState& element);
     void wireErrors(ElementState& element);
@@ -2131,9 +2129,9 @@ private:
     ChartRange chartFixedRange(DocNode const& node, RtScope const& scope, Bindings const* bindings,
                                std::optional<std::string>& unit, ChartRange const& range);
     /// The drawn series: each point at its own `x` when @p positioned, else at its index, clipped to @p range.
-    void chartSeries(ChartData& data, DocNode const& node, RtScope const& scope, Bindings const* bindings,
-                     std::vector<std::vector<detail::ChartRawPoint>>& series, bool positioned,
-                     ChartRange const& range) const;
+    static void chartSeries(ChartData& data, DocNode const& node, RtScope const& scope, Bindings const* bindings,
+                            std::vector<std::vector<detail::ChartRawPoint>>& series, bool positioned,
+                            ChartRange const& range);
     /// A form field's control drawn by the host component its overlay names, with the built-in control as the
     /// fallback.
     Node fieldComponent(forms::FieldView const& view, DocNode const& overlay, LowerCtx const& ctx);
@@ -2151,8 +2149,8 @@ private:
                             CustomizePoint const& spec, std::function<void(Value)> const& choose);
     void wireForm(ElementState& element);
     Node lowerForm(DocNode const& node, LowerCtx const& ctx, ElementState* element);
-    [[nodiscard]] forms::Submitter aliasCalls(ModelAlias* alias);
-    [[nodiscard]] forms::Submitter aliasSubmits(ModelAlias* alias, std::string read = {});
+    [[nodiscard]] FormSubmitter aliasCalls(ModelAlias* alias);
+    [[nodiscard]] FormSubmitter aliasSubmits(ModelAlias* alias, std::string read = {});
     [[nodiscard]] forms::FormSessionOptions engineOptions() const;
     void wireComposite(ElementState& element);
     Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
@@ -2609,7 +2607,7 @@ private:
 
     std::unique_ptr<detail::ScreenCore> _core;
     std::shared_ptr<detail::RtScope> _scope;
-    std::optional<Mounted> _mounted;
+    std::unique_ptr<Mounted> _mounted;
     // The head's parts, bound in the screen scope.
     std::vector<detail::BadgeModel> _headStatus;
     detail::ActionModels _headActions;
@@ -2834,8 +2832,8 @@ namespace detail {
 /// @param payload The payload, as the backend reports it.
 /// @param type    The `value` prop's type.
 /// @return The wire value, or why the payload is not one.
-[[nodiscard]] MORPH_API std::expected<forms::detail::engine::Json, std::string> changeWire(std::string const& payload,
-                                                                                           std::string_view type);
+[[nodiscard]] MORPH_API std::expected<glz::generic_u64, std::string> changeWire(std::string const& payload,
+                                                                                std::string_view type);
 
 }  // namespace detail
 
