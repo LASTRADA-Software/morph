@@ -263,9 +263,10 @@ void claimOrderLines(Lightweight::DataMapper& mapper, ReceiptInput const& input)
                                         PostingResult const& recorded) {
     if (recorded.entryId.hasValue()) {
         Lightweight::DataMapper reader;
-        auto const holders = reader.Query<db::ReceiptRecord>()
-                                 .Where(::Lightweight::FieldNameOf<&db::ReceiptRecord::entryId>, "=", *recorded.entryId)
-                                 .All();
+        auto const holders =
+            reader.Query<db::ReceiptRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::ReceiptRecord::entryId>, "=", *recorded.entryId)
+                .All();
         if (!holders.empty()) {
             return Conflict{"ReceiveGoods: receipt " + std::to_string(ordinal) + " of order " +
                             std::to_string(input.order) + " was taken meanwhile by another receipt; try again"};

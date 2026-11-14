@@ -13,14 +13,11 @@ namespace morph::model {
 /// @brief Whether @p Action declares a guard: a public member alias `guard` naming the guard type.
 ///
 /// Read off the action's own definition, so every translation unit that names the action gives the same answer.
-/// @tparam Action The action type.
 template <typename Action>
 concept DeclaresGuard = requires { typename Action::guard; };
 
 /// @brief Whether @p Model declares `void onGuardRefused(Action const&, std::exception const&)`, which every
 ///        execution site and `executeChecked` call after the action's guard refuses it.
-/// @tparam Model The model type.
-/// @tparam Action The action type.
 template <typename Model, typename Action>
 concept GuardRefusalObserver = requires(Model& model, Action const& action, std::exception const& refusal) {
     { model.onGuardRefused(action, refusal) } -> std::same_as<void>;
@@ -29,17 +26,12 @@ concept GuardRefusalObserver = requires(Model& model, Action const& action, std:
 namespace detail {
 
 /// @brief Whether @p Guard checks @p Action on its payload alone.
-/// @tparam Guard The guard type; complete.
-/// @tparam Action The action type.
 template <typename Guard, typename Action>
 concept GuardChecksAction = requires(Action const& action) {
     { Guard::check(action) } -> std::same_as<void>;
 };
 
 /// @brief Whether @p Guard checks @p Action against an instance of @p Model.
-/// @tparam Guard The guard type; complete.
-/// @tparam Model The model type.
-/// @tparam Action The action type.
 template <typename Guard, typename Model, typename Action>
 concept GuardChecksInModel = requires(Model const& model, Action const& action) {
     { Guard::check(model, action) } -> std::same_as<void>;
@@ -53,7 +45,7 @@ concept GuardChecksInModel = requires(Model const& model, Action const& action) 
 template <typename Model, typename Action>
 void guardAction(Model const& model, Action const& action) {
     if constexpr (DeclaresGuard<Action>) {
-        using Guard = Action::guard;
+        using Guard = typename Action::guard;
         // A hard error, never a false: an execution site compiled without the guard's definition must not compile,
         // and the form checks below are only stable once the type is complete.
         // NOLINTNEXTLINE(bugprone-sizeof-expression): sizeof is the completeness test here, not a size.

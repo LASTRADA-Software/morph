@@ -620,11 +620,13 @@ try_compile(MORPH_ACTION_GUARD_DEFINED_COMPILES
     SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/action_guard_defined.cpp"
     CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
     CXX_STANDARD 23
+    OUTPUT_VARIABLE MORPH_ACTION_GUARD_DEFINED_OUTPUT
 )
 if(NOT MORPH_ACTION_GUARD_DEFINED_COMPILES)
     message(FATAL_ERROR
         "action guard check failed: compile_checks/action_guard_defined.cpp failed to compile although its guard is "
-        "defined with a callable check (the probes above would pass for any broken include).")
+        "defined with a callable check (the probes above would pass for any broken include). Compiler output:\n"
+        "${MORPH_ACTION_GUARD_DEFINED_OUTPUT}")
 endif()
 
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_morph_guard_try_target_type}")
