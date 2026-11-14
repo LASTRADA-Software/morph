@@ -66,6 +66,10 @@ outbound `executeVia` stamps that default onto the `ActionCall`
 (`call.session = _defaultSession`) on the bridge's owner, so callers
 never construct a `Context` per call. **There is no per-call session override**:
 changing the session for one call means calling `setDefaultSession` again.
+The copy is taken when the call is made, not when it is dispatched: a call held
+behind its handler's bind, or behind an attach, runs under the session in force
+at `execute()`, so a sign-out or user switch in between never runs the earlier
+call as the next principal.
 `setDefaultSession({})` clears it back to an empty (unauthenticated) `Context`.
 
 From the `ActionCall` the session travels backend-specifically:
