@@ -406,8 +406,20 @@ jobs:
       # hosted runner's 16 GB, and the runner dies with exit 143 or "lost
       # communication" rather than a compiler error. Every Linux build step
       # below passes the same --parallel for the same reason.
+      #
+      # gcc-release is tighter still: at -O3 the largest UI test files peak at
+      # 4.7-5.7 GB each under GCC, so it runs as many compiles as the
+      # runner's memory holds at 6 GB apiece, never more than one per CPU.
       - name: Build
-        run: cmake --build --preset ${{ matrix.preset }} --parallel "$(nproc)"
+        run: |
+          jobs=$(nproc)
+          if [ "${{ matrix.preset }}" = gcc-release ]; then
+            by_memory=$(awk '/MemTotal/ { print int($2 / (6 * 1024 * 1024)) }' /proc/meminfo)
+            jobs=$(( by_memory < jobs ? by_memory : jobs ))
+            jobs=$(( jobs < 1 ? 1 : jobs ))
+          fi
+          echo "Building with $jobs parallel jobs"
+          cmake --build --preset ${{ matrix.preset }} --parallel "$jobs"
 
       # Release legs run the suite too: these are the only builds with NDEBUG
       # defined, so code on those paths runs nowhere else.
