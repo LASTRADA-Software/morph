@@ -144,6 +144,20 @@ namespace detail::engine {
     return quotient.has_value() && quotient->isInteger();
 }
 
+/// @brief The canonical text of a Decimal node `{num, den, dp}`, at the node's own places.
+/// @param node The node.
+/// @return The text, or `std::nullopt` when `num` or `den` is missing, or `den` is zero.
+[[nodiscard]] inline std::optional<std::string> decimalObjectText(Json const& node) {
+    auto const num = SchemaReader::signedOf(member(node, "num"));
+    auto const den = SchemaReader::signedOf(member(node, "den"));
+    if (!num || !den || *den == 0) {
+        return std::nullopt;
+    }
+    auto const places = SchemaReader::unsignedOf(member(node, "dp")).value_or(0);
+    math::Rational const exact{math::Numerator{*num}, math::Denominator{*den}, math::DecimalPlaces{0}};
+    return decimalText(exact, static_cast<std::uint32_t>(std::min<std::uint64_t>(places, math::kMaxDecimalPlaces)));
+}
+
 /// @brief A canonical decimal in @p locale's spelling, without grouping — what a control is seeded with.
 /// @param canonical Canonical decimal text.
 /// @param locale    The display locale.
@@ -500,7 +514,9 @@ namespace detail::engine {
         case FieldKind::Slider:
             return numberText(value).value_or(std::string{});
         case FieldKind::Number: {
-            auto canonical = numberText(value);
+            // A Number field's own value is a Decimal `{num, den, dp}`, so a loaded value arrives in that shape too,
+            // shown at the places the Decimal itself carries.
+            auto canonical = value.is_object() ? decimalObjectText(value) : numberText(value);
             if (!canonical) {
                 return {};
             }
