@@ -457,6 +457,8 @@ target_sources(morph
         include/morph/core/io_loop.hpp
         include/morph/core/timeout_scheduler.hpp
         include/morph/core/model.hpp
+        include/morph/core/action_guard.hpp
+        include/morph/core/action_refusal.hpp
         include/morph/core/registry.hpp
         include/morph/core/records.hpp
         include/morph/core/effects.hpp
@@ -498,6 +500,8 @@ target_sources(morph
         include/morph/ui/mount.hpp
         include/morph/ui/frontend.hpp
         include/morph/ui/value.hpp
+        include/morph/ui/locale_table.hpp
+        include/morph/ui/page_layout.hpp
         include/morph/ui/message.hpp
         include/morph/ui/expression.hpp
         include/morph/ui/document.hpp
@@ -528,6 +532,10 @@ target_sources(morph
         include/morph/ui/route_history.hpp
         include/morph/ui/service_client.hpp
         include/morph/ui/shell_frame.hpp
+        include/morph/ui/shell_parts.hpp
+        include/morph/ui/shell_parts_binding.hpp
+        include/morph/ui/shell_parts_model.hpp
+        include/morph/ui/shell_parts_view.hpp
         include/morph/ui/explorer.hpp
         include/morph/ui/agent.hpp
         include/morph/ui/chat/client.hpp
@@ -585,6 +593,7 @@ target_sources(morph
         include/morph/table/filter.hpp
         include/morph/table/view_change.hpp
         include/morph/table/engine.hpp
+        include/morph/table/plan_conformance.hpp
         include/morph/table/query.hpp
         include/morph/table/selection.hpp
         include/morph/table/edits.hpp
@@ -632,6 +641,7 @@ target_sources(morph
         include/morph/core/detail/owner_probe.hpp
         include/morph/core/detail/reply_router.hpp
         include/morph/core/detail/subscription_registry.hpp
+        include/morph/core/detail/action_guard_core.hpp
         include/morph/core/detail/result_walker.hpp
         include/morph/core/detail/watch_table.hpp
         include/morph/core/detail/change_coalescer.hpp

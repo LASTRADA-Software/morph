@@ -65,15 +65,24 @@ struct ChartTicks {
     return value.numerator % value.denominator != 0 && value.numerator > 0 ? quotient + 1 : quotient;
 }
 
+/// @brief Which ends of an axis `chartRange` widens; a span of zero is widened at both whatever this says.
+struct ChartPadding {
+    /// @brief Whether the lower end is widened.
+    bool low = true;
+    /// @brief Whether the upper end is widened.
+    bool high = true;
+};
+
 /// @brief The axis that holds every value, widened by 5 % of their span at each end so the outermost value is
 ///        inside the plot rather than on its edge.
 ///
 /// A span of zero is widened by one unit in the last of @p places either side; no values at all give 0 to 1.
 /// @param values The values the axis must hold.
 /// @param places The places a value is shown at, which size the widening of a zero span; at most 18.
+/// @param padding The ends to widen; the default widens both.
 /// @return The range, or empty when the arithmetic overflows.
-[[nodiscard]] inline std::optional<ChartRange> chartRange(std::span<math::Rational const> values,
-                                                          std::uint32_t places) {
+[[nodiscard]] inline std::optional<ChartRange> chartRange(std::span<math::Rational const> values, std::uint32_t places,
+                                                          ChartPadding padding = {}) {
     if (values.empty()) {
         return ChartRange{.low = math::Rational{0, math::DecimalPlaces{0}},
                           .high = math::Rational{1, math::DecimalPlaces{0}}};
@@ -90,8 +99,11 @@ struct ChartTicks {
     if (!pad) {
         return std::nullopt;
     }
-    auto const low = math::checkedSub(lowest, *pad);
-    auto const high = math::checkedAdd(highest, *pad);
+    bool const flat = span->numerator == 0;
+    auto const low = flat || padding.low ? math::checkedSub(lowest, *pad)
+                                         : std::expected<math::Rational, math::RationalError>{lowest};
+    auto const high = flat || padding.high ? math::checkedAdd(highest, *pad)
+                                           : std::expected<math::Rational, math::RationalError>{highest};
     if (!low || !high) {
         return std::nullopt;
     }

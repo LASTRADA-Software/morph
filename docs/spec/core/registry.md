@@ -624,6 +624,7 @@ class ActionDispatcher {
                                                       std::string_view actionId) const;
     std::vector<std::string> modelsOf(std::string_view actionId) const;
     std::vector<std::string> actionsOf(std::string_view modelId) const;
+    bool isGuarded(std::string_view modelId, std::string_view actionId) const;
     static ActionDispatcher& instance();
 };
 ```
@@ -669,6 +670,19 @@ class ActionDispatcher {
   failure — is stamped with `detail::actionPayloadSchema<Action>()` in
   `LogEntry::schema`, and the same value is filed under `(modelId, actionId)`
   for `schemaFor()`.
+- **Action guards.** Both runners — `runHandler` for an ordinary handler and
+  `runTaskHandler` for a `Task` handler — run the action's guard (when the
+  action declares one, `Action::guard`) after the validator and immediately
+  before `Model::execute`, on the model's strand under the execute's session,
+  in a `try` of its own (`detail::runGuardJournaled`): a refusal that is a
+  `std::exception` is journaled as `Outcome::Failed` exactly as a throw from
+  `execute` is, whatever the principal, the model's `onGuardRefused` is called
+  when it declares one, and the refusal propagates as a throw from `execute`
+  would. The guard is skipped for a holder `journal::replay()` has marked as
+  reconstructing, and `evaluate` never runs it. `registerAction` records
+  whether the action declares a guard in its `ActionEntry`, which
+  `isGuarded(modelId, actionId)` answers. See
+  [action_guards.md](action_guards.md).
 - `dispatch` looks up the runner and invokes it; throws `std::runtime_error` for
   unknown pairs, and `std::logic_error` for a Task handler, whose result it
   cannot wait for.

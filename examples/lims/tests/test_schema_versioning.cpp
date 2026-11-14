@@ -22,18 +22,18 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <glaze/glaze.hpp>
+#include <morph/core/action_guard.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
 
-#include "lims/core/errors.hpp"
-#include "lims/models/analysis_catalog_model.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/lab/models/analysis_catalog_model.hpp"
+#include "lims/lab/models/sample_model.hpp"
+#include "lims/org/core/errors.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
 using morph::math::Numerator;
@@ -80,7 +80,8 @@ namespace {
 /// @return The sample, at `InProgress`.
 lims::SampleView sampleAtWork(lims::SampleModel& model) {
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    model.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     model.execute(lims::ReceiveSample{});
     return model.execute(lims::StartWork{});
 }
@@ -126,7 +127,7 @@ lims::SampleView sampleAtWork(lims::SampleModel& model) {
 }  // namespace
 
 TEST_CASE("Revising an analysis does not change the form its old version serves", "[lims][schema][versioning]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
 
@@ -153,7 +154,7 @@ TEST_CASE("Revising an analysis does not change the form its old version serves"
 }
 
 TEST_CASE("Each version's form carries its own precision, in the framework's own key", "[lims][schema][versioning]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
 
@@ -199,7 +200,7 @@ TEST_CASE("Each version's form carries its own precision, in the framework's own
 }
 
 TEST_CASE("A reading outside the served spec range is stored, and flagged", "[lims][schema][versioning]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -250,8 +251,29 @@ TEST_CASE("A reading outside the served spec range is stored, and flagged", "[li
     CHECK(flagged == 1);
 }
 
+// Mutation: flag only a reading above the maximum (a reading below the minimum is stored unflagged).
+TEST_CASE("A reading below the served spec range is stored, and flagged", "[lims][schema][versioning]") {
+    lims::test::LabFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    lims::AnalysisCatalogModel catalog;
+    lims::SampleModel model;
+
+    const auto v1 = catalog.execute(nitrateV1());  // spec 0..50
+    sampleAtWork(model);
+
+    const auto below = model.execute(
+        lims::CaptureConcentration{.analysisVersionId = v1.versionId, .value = lims::Concentration{exact(-1, 1, 1)}});
+    REQUIRE(below.value.hasValue());
+    CHECK((*below.value).numerator == -1);
+    CHECK(below.outOfSpec);
+
+    const auto inside = model.execute(
+        lims::CaptureConcentration{.analysisVersionId = v1.versionId, .value = lims::Concentration{exact(0, 1, 1)}});
+    CHECK_FALSE(inside.outOfSpec);
+}
+
 TEST_CASE("A qualifier makes no numeric claim, so it is never out of specification", "[lims][schema][versioning]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -267,7 +289,7 @@ TEST_CASE("A qualifier makes no numeric claim, so it is never out of specificati
 }
 
 TEST_CASE("Per-version precision is refused, from the same declaration that served it", "[lims][schema][versioning]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -299,7 +321,7 @@ TEST_CASE("Per-version precision is refused, from the same declaration that serv
 
 TEST_CASE("A version with no compiled result-entry action is refused, not guessed at",
           "[lims][schema][versioning][finding]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
 
@@ -313,7 +335,7 @@ TEST_CASE("A version with no compiled result-entry action is refused, not guesse
 }
 
 TEST_CASE("Asking for a schema needs a real version", "[lims][schema][versioning]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
 

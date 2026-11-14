@@ -145,6 +145,27 @@ void GridImpl::setSpan(ui::Widget& child, int span) {
     }
 }
 
+// ── Popover ───────────────────────────────────────────────────────────────
+
+PopoverImpl::PopoverImpl(Context& context, ui::ContainerWidget* parent)
+    : ContainerItemWidget{context, QStringLiteral("MorphPopover"), parent} {}
+
+void PopoverImpl::setOpen(bool open) {
+    if (read("shown").toBool() != open) {
+        call("show", open);
+    }
+}
+
+void PopoverImpl::setWidth(int units) { write("widthUnits", units); }
+
+void PopoverImpl::setOnDismiss(ui::Action onDismiss) {
+    relay().on(QStringLiteral("dismiss"), [onDismiss = std::move(onDismiss)](QVariant const&) {
+        if (onDismiss) {
+            onDismiss();
+        }
+    });
+}
+
 // ── Panel, Scroll, Slot ───────────────────────────────────────────────────
 
 PanelImpl::PanelImpl(Context& context, ui::ContainerWidget* parent)

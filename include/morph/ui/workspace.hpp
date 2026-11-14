@@ -326,6 +326,14 @@ public:
     /// @param done Called once with whether each of them closed; may be empty.
     void closeSaved(std::function<void(bool)> done) { _model->closeSaved(std::move(done)); }
 
+    /// @brief How many open tabs hold unsaved changes.
+    /// @return The count.
+    [[nodiscard]] std::size_t dirtyTabs() const { return _model->dirtyTabs(); }
+
+    /// @brief Closes the tabs that hold unsaved changes without asking: what a change of scope does once the person
+    ///        agreed to discard the work.
+    void closeDirtyTabs() { _model->forceCloseDirtyTabs(); }
+
     /// @brief The active tab's index.
     /// @return It, or `std::nullopt` while no tab is open.
     [[nodiscard]] std::optional<std::size_t> active() const {

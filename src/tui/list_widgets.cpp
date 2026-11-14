@@ -1006,10 +1006,15 @@ void MenuButtonImpl::setOnActivate(std::function<void(std::vector<std::size_t>)>
     _onActivate = std::move(onActivate);
 }
 
-// The label and a `▾`; an icon-only trigger its icon's glyph, else its accessible name, so it is never blank.
+// The label and a `▾`, or a `↕` for a menu that chooses one of several values; an icon-only trigger its icon's glyph,
+// else its accessible name, so it is never blank. An avatar's initials stand in brackets before the label: the
+// terminal has no circle to put them in.
 std::string MenuButtonImpl::triggerText() const {
     if (!_trigger.label.empty()) {
-        return _trigger.label + " ▾";
+        // The second line of a two-line trigger follows the label on the terminal's one row.
+        std::string const avatar = _trigger.avatar.empty() ? std::string{} : "[" + _trigger.avatar + "] ";
+        return avatar + _trigger.label + (_trigger.detail.empty() ? std::string{} : " · " + _trigger.detail) +
+               (_trigger.caret == ui::MenuCaret::UpDown ? " ↕" : " ▾");
     }
     std::string_view const glyph = ui::iconGlyph(_trigger.icon);
     if (!glyph.empty()) {

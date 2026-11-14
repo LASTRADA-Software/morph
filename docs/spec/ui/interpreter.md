@@ -42,7 +42,9 @@ Read this before changing what a mounted document does. What a document may say 
 `staleTime` is measured on, how long an unused entry is kept (five minutes), the `Catalog`
 (`stateless` decides an alias's default instance; an action's `secretFields` are never cached or kept
 in `result`) and the error classifier (the bridge's own failures map to `offline`, `timeout` and
-`backendChanged`; everything else is `error`) and the `watcher`, which sends the cache's `watch` and `unwatch` requests
+`backendChanged`; a server's refusal, the `err` message `unauthorized` of an execute or a refused register or attach,
+to `denied`; an `ActionRefusal` and everything else is `error`) and the `watcher`, which sends the cache's `watch` and
+`unwatch` requests
 (`ui::watcherOver` builds one over a remote source's exchange; empty for a local source), and `maxInlineFileBytes`,
 the most bytes a document moves inline in one file (default `kDefaultInlineFileBytes`, 1 MiB). `Session` construction
 throws `std::invalid_argument` for 0 and for a cap above `kMaxInlineFileBytes`, ⌊(`wire::kMaxEnvelopeBytes` −
@@ -53,9 +55,11 @@ throws `std::invalid_argument` for 0 and for a cap above `kMaxInlineFileBytes`, 
 
 `Interpreter::mountApp(doc)` mounts the app document (id `app`) as an `AppRoot`: its state, lets,
 queries and mutations, declared once for the session, and its `onMount`. Its `formatting` patterns become the
-session's (`Session::setDatePatterns`), so every screen of the bundle writes and reads dates in them; a C++ host may
-set the same `FormatContext` fields directly. A `dateTimeInput` reads the pattern of its mode once, untracked, when
-it is lowered, as it reads the zone: a pattern changed later applies to inputs mounted later. A second root on the same
+session's (`Session::setDatePatterns`) and win over the locale table's patterns in every locale
+([`locale_table.md`](locale_table.md)), so every screen of the bundle writes and reads dates in them; a C++ host sets
+its own patterns through `setDatePatterns` too, since a `setLocale` replaces a pattern set only through
+`setFormatting` with the locale's. A `dateTimeInput` reads the pattern of its mode reactively, so a pattern a `setLocale` installs reaches the inputs
+already mounted; the zone is read once, when the input is lowered. A second root on the same
 session, and a document whose id is not `app`, are refused. While it lives, `Session::appScope()`
 names its scope: `{"ref": "app.name"}` in any screen reads the name there, reactively, so a query of
 the app document runs once however many screens read it, and `{"set": "app.name"}` writes the root's
@@ -118,7 +122,8 @@ A query's key is a `Computed` of what its cache entry is: idle when `when` is no
 unbound or the body is `null`; otherwise `(model type, instance token, action, canonical body)`. The
 canonical body is the body's JSON with record fields in name order.
 
-- **Cache entries** (`Session`) hold the shown value, `hasValue`, the error text and kind, `pending`, a
+- **Cache entries** (`Session`) hold the shown value, `hasValue`, the error text and kind, the action
+  refusal (`null`, or `{code, args}` when the failure was an `ActionRefusal`), `pending`, a
   generation, `fetchedAt`, `stale` and `refetchAfter`. A fetch takes a new generation; a reply of an older one is
   dropped. One entry serves every query with its key, so two screens on one key send one request.
 - **Latest wins.** A key change moves the query to another entry. The previous key's value is shown
@@ -295,7 +300,8 @@ its target does not resolve, and when the host does not support it.
   A switch that commits after its screen is gone touches nothing of it.
 - `set` of `app.name` writes the app root's state (below); with no app root it goes to the host's
   `setAppValue`.
-- `setLocale` replaces the session's locale, so every `t` re-resolves, and tells the host.
+- `setLocale` replaces the session's locale and installs the locale table's number, money and date facts
+  ([`locale_table.md`](locale_table.md)), so every `t` and display function re-resolves, and tells the host.
 - `signIn` clears the cache and hands the host the mutation's reply, secret fields included (it runs
   inside the mutation's `onSuccess`, before they are removed); `signOut` clears the cache.
 - `upload` marks its transfer pending, follows the host's progress, and on success runs its mutation
@@ -403,7 +409,14 @@ keeps its operands' 0 places and still fills 0.29 of a bar.
   `{id, label}`. `onActivate` runs in the activated row's scope. `rowTone` is evaluated in each row's
   scope and gives the row its tone: `"neutral"`, `"info"`, `"ok"`, `"warn"`, `"err"`, or `null` for
   none; another value shows no tone and is reported once for the table (`rowTone is <v>; a tone is
-  neutral, info, ok, warn or err`). The selection the table shows is a slot over the bound `selection`
+  neutral, info, ok, warn or err`). `rowSpans` is evaluated in each row's scope as a slot, like `rowTone`, and gives the
+  row its `TableRowView::spans`: a list of `{column, rows}` records, `column` a column's id (a derived column's too)
+  turned into its index and `rows` an integer from 1. A record that is not of that shape, names an id the table has
+  not, or has a `rows` that is no integer of at least 1 is dropped and reported once for the table (`rowSpans is <v>;
+  a span is {column: a column's id, rows: an integer from 1}`); `null` and `[]` give none. What follows from the rows'
+  order (a span past the last row, over a group heading, onto a covered column) is the mount's to refuse. The
+  pipeline pages before the table sees its rows, so a span reaching past the page's last row is refused and
+  reported. The table's sort is the one `options.sort` carries: while it names a column the table draws no spans. The selection the table shows is a slot over the bound `selection`
   (each item a key), or over the table's own selection when no key binds it; a bound value that is `null`
   selects nothing, and one that is neither a list nor `null` selects nothing and is reported once at the
   table's `selection` path. A user's change sets the table's own selection when no key binds one, then
@@ -560,7 +573,28 @@ position.
   lines alone would leave the values between them without a scale.
 - **Labels.** A line without a `label` is labelled with its value at the places. Every text is formatted through
   the session's `FormatContext`, so a decimal takes the locale's separator.
+- **Bars.** A series whose `style` is `bars` lowers to `ChartStyle::Bars` with `joined` false. `barSlot` is the
+  smallest positive distance between two distinct positions among the kept points of `Bars` series, gaps included,
+  or 1 when there is one such position; it is 0 with no `Bars` series or none with a kept point. The horizontal axis spans every
+  position widened by half `barSlot` at each end before its 5 % padding is added. The value axis includes the
+  baseline, 0, in the values it spans when a `Bars` series has a value, and pads the baseline's side only when a value
+  or a reference line lies beyond 0 on it: with every value and line at or above 0 the axis starts at 0 with no
+  padding below, so the baseline is the plot's bottom edge, and with every one at or below 0 it ends at 0, the top
+  edge; values of both signs keep the padding at both ends. A fixed `yMin` above 0 or `yMax` below 0 leaves the
+  baseline outside the axis, and the frontend clamps it to the nearer end. Dates and instants give `barSlot` in
+  milliseconds.
 - **Overflow.** A range the checked arithmetic cannot hold is reported once, and the chart draws its summary alone.
+
+### Document pages and locale scopes
+
+`page` and `pageRegion` lower to `ui::Page` and `ui::PageRegion`. `localeScope` lowers to a holder column whose children
+mount in a child `RtScope` carrying a formatting context: the session's with the scope's tag, its row of the locale
+table and the date patterns the application declared, else the row's, as a reactive value of the session's facts and the
+`locale` expression evaluated in the enclosing scope. `RtScope::formatting()` walks to the innermost scope with a context
+and answers the session's otherwise; `ScopeEnv::formatting()` and every node-level conversion use it, while entry (the
+drafts and places of inputs, a date input's pattern, `parseDecimal` and every parse) stays on the session's facts. A tag
+the locale table does not list is reported once per tag through the screen's `report` at the `locale` path, the once-set
+held by the `Session`. See [`document_page.md`](document_page.md#the-locale-scope).
 
 ## Development tools
 

@@ -1,0 +1,14 @@
+{
+  "lims.shell.about.heading": "lims",
+  "lims.shell.about.summary": "lims führt Proben, Ergebnisse, Rechnungen, Hauptbuch und Bestand zusammen.",
+  "lims.shell.about.title": "Über lims",
+  "lims.shell.about.version": "Version {$version}",
+  "lims.shell.scope.currency": "{$currency}",
+  "lims.shell.scope.site": "{$currency} · {$count} Standort",
+  "lims.shell.scope.sites": "{$currency} · {$count} Standorte",
+  "lims.shell.search.accounts": "Konten",
+  "lims.shell.search.invoices": "Rechnungen",
+  "lims.shell.search.samples": "Proben",
+  "lims.shell.search.stock": "Lagerbestand",
+  "lims.shell.searchHint": "Proben, Rechnungen, Konten und Lagerbestand durchsuchen"
+}

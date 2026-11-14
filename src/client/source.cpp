@@ -14,6 +14,7 @@
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
 #include <morph/ui/bundle.hpp>
+#include <morph/ui/catalogue.hpp>
 #include <morph/ui/dev_reload.hpp>
 #include <morph/ui/document.hpp>
 #include <morph/ui/file_store.hpp>
@@ -341,6 +342,13 @@ void Source::reload(std::shared_ptr<bool> const& alive,
             }
         });
     });
+}
+
+ui::MessageCatalogues Source::catalogues() const {
+    if (!_loaded) {
+        return {};
+    }
+    return ui::loadCatalogues(_loaded->manifest, _loaded->files);
 }
 
 void Source::poll(std::function<void(std::vector<std::string> changed)> changed) {

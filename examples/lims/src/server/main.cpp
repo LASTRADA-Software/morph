@@ -2,14 +2,18 @@
 //
 // ladder_lims_server: serves lims' screens and models over a Qt WebSocket, behind `LimsAuthorizer`. A client signs in
 // on the public login screen; the token it gets is what every later call carries, and the role-gated actions check
-// the roles `GrantRole` gave its principal.
+// the roles `AssignRole` gave its principal.
 //
 // Environment: LIMS_TOKEN_SECRET (required, non-empty), LIMS_PORT (default 8771), LIMS_DB (default lims.db).
 // LIMS_CHAT_CONFIG names a chat configuration file (docs/spec/ui/chat.md), which turns the screens' chat on; one that
 // does not work stops the server, rather than leave it running with no chat and no word why.
+// The server's own clients act as `system:events` (and, from the billing schedule and the posting wiring,
+// `system:billing-schedule` and `system:posting`); each needs `LimsRole::Service` at every company it serves,
+// assigned by a supervisor like any role.
 
 #include <QCoreApplication>
 #include <QObject>
+#include <QTimer>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
@@ -30,11 +34,18 @@
 #include <string>
 #include <string_view>
 
-#include "lims/auth/lims_authorizer.hpp"
-#include "lims/db/database.hpp"
-#include "lims/models/auth_model.hpp"
-#include "lims/models/ignition_model.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/app/billing_scheduler.hpp"
+#include "lims/app/event_wiring.hpp"
+#include "lims/app/internal_client.hpp"
+#include "lims/app/ledger_wiring.hpp"
+#include "lims/app/lims_authorizer.hpp"
+#include "lims/app/service_principals.hpp"
+#include "lims/lab/db/database.hpp"
+#include "lims/lab/models/ignition_model.hpp"
+#include "lims/lab/models/sample_model.hpp"
+#include "lims/org/models/auth_model.hpp"
+#include "lims/org/models/org_model.hpp"
+#include "lims/posting/ledger_port.hpp"
 
 namespace {
 
@@ -99,7 +110,7 @@ int main(int argc, char** argv) {
             workers,
             std::make_shared<lims::auth::LimsAuthorizer>(
                 secret, morph::session::hmacSha256,
-                [](std::string_view principal) { return lims::SampleModel::rolesOf(principal); }),
+                [](std::string_view principal) { return lims::OrgModel::rolesAnywhere(principal); }),
             config);
         morph::qt::QtWebSocketServer socket{*server, port};
         if (!socket.listen()) {
@@ -107,7 +118,47 @@ int main(int argc, char** argv) {
             return 1;
         }
         std::cout << "lims-server: listening on ws://127.0.0.1:" << socket.port() << '\n' << std::flush;
+        // The server's own clients, and one thread their blocking passes run on: a relay pass waits for billing's
+        // answers, and waiting on the Qt thread would stall every socket this server serves. Declared in the order
+        // that tears down safely: the timer stops first, `background` joins its thread, then the client releases its
+        // bridge before `server` goes.
+        lims::app::InternalClient events{*server, secret, std::string{lims::app::kEventsPrincipal}};
+        lims::app::InternalClient schedule{*server, secret, std::string{lims::app::kSchedulePrincipal}};
+        lims::app::BillingScheduler scheduler{schedule};
+        lims::app::InternalClient posting{*server, secret, std::string{lims::app::kPostingPrincipal}};
+        // The posting mode decision 38 names.
+        lims::app::installLedgerPort(posting, lims::PostingMode::Dispatched);
+        morph::exec::ThreadPoolExecutor background{1};
+        // Lab's events reach billing through this relay; a pass that fails is logged and retried on the next tick,
+        // since the batch stays unmarked.
+        QTimer relayTimer;
+        QObject::connect(&relayTimer, &QTimer::timeout, [&background, &events] {
+            background.post([&events] {
+                try {
+                    static_cast<void>(lims::app::relayLabEvents(events));
+                } catch (std::exception const& error) {
+                    std::cerr << "lims-server: event relay: " << error.what() << '\n';
+                }
+            });
+        });
+        relayTimer.start(1000);
+        // The billing schedule: once now, which resumes a run a restart interrupted, then every ten seconds, one batch
+        // per run per tick.
+        auto const tickSchedule = [&background, &scheduler] {
+            background.post([&scheduler] {
+                try {
+                    static_cast<void>(scheduler.tick());
+                } catch (std::exception const& error) {
+                    std::cerr << "lims-server: billing schedule: " << error.what() << '\n';
+                }
+            });
+        };
+        tickSchedule();
+        QTimer scheduleTimer;
+        QObject::connect(&scheduleTimer, &QTimer::timeout, tickSchedule);
+        scheduleTimer.start(10'000);
         int const code = QCoreApplication::exec();
+        lims::setLedgerPort({});
         lims::auth::setTokenIssuer(nullptr);
         return code;
     } catch (std::exception const& error) {

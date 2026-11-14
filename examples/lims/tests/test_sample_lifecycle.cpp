@@ -10,6 +10,7 @@
 #include <concepts>
 #include <cstdint>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/journal/action_log.hpp>
 #include <stdexcept>
@@ -17,14 +18,13 @@
 #include <utility>
 #include <vector>
 
-#include "lims/core/errors.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/lab/models/sample_model.hpp"
+#include "lims/org/core/errors.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 
 namespace {
 
@@ -40,7 +40,8 @@ constexpr std::array<lims::SampleState, 6> kAllStates{
 /// @return The freshly registered sample.
 lims::SampleView registerSample(lims::SampleModel& model) {
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    return model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-2026-0001"});
+    return model.execute(lims::RegisterSample{
+        .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-2026-0001"});
 }
 
 /// @brief Walks @p model's attached sample up to `ToBeVerified`.
@@ -100,7 +101,7 @@ TEST_CASE("Published and Rejected are terminal", "[lims][sample][lifecycle]") {
 }
 
 TEST_CASE("A registered sample starts at Registered, version 1", "[lims][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -114,7 +115,7 @@ TEST_CASE("A registered sample starts at Registered, version 1", "[lims][sample]
 
 TEST_CASE("The happy path walks registered -> published, bumping the base version each step",
           "[lims][sample][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -144,12 +145,12 @@ TEST_CASE("The happy path walks registered -> published, bumping the base versio
 }
 
 TEST_CASE("An illegal transition is refused and changes nothing", "[lims][sample][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
     registerSample(model);
-    CHECK_THROWS_AS(model.execute(lims::PublishSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::PublishSample{}), lims::IllegalTransition);
 
     // The refusal must be total: no partial write, no version bump. A LIMS
     // that leaves a sample at 'registered' but version 2 has already lost the
@@ -160,7 +161,7 @@ TEST_CASE("An illegal transition is refused and changes nothing", "[lims][sample
 }
 
 TEST_CASE("A published sample refuses every further transition", "[lims][sample][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -168,19 +169,21 @@ TEST_CASE("A published sample refuses every further transition", "[lims][sample]
     walkToVerification(model);
     model.execute(lims::PublishSample{});
 
-    CHECK_THROWS_AS(model.execute(lims::ReceiveSample{}), lims::IllegalTransition);
-    CHECK_THROWS_AS(model.execute(lims::StartWork{}), lims::IllegalTransition);
-    CHECK_THROWS_AS(model.execute(lims::SubmitForVerification{}), lims::IllegalTransition);
-    CHECK_THROWS_AS(model.execute(lims::PublishSample{}), lims::IllegalTransition);
-    CHECK_THROWS_AS(model.execute(lims::RejectSample{.reason = "changed my mind"}), lims::IllegalTransition);
-    CHECK_THROWS_AS(model.execute(lims::ReturnForRework{.reason = "changed my mind"}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::ReceiveSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::StartWork{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::SubmitForVerification{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::PublishSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::RejectSample{.reason = "changed my mind"}),
+                    lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::ReturnForRework{.reason = "changed my mind"}),
+                    lims::IllegalTransition);
 
     CHECK(model.execute(lims::GetSample{}).state == lims::SampleState::Published);
 }
 
 TEST_CASE("A sample can be rejected at registration or at receipt, but not after work started",
           "[lims][sample][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
 
     {
@@ -201,12 +204,13 @@ TEST_CASE("A sample can be rejected at registration or at receipt, but not after
         registerSample(model);
         model.execute(lims::ReceiveSample{});
         model.execute(lims::StartWork{});
-        CHECK_THROWS_AS(model.execute(lims::RejectSample{.reason = "too late"}), lims::IllegalTransition);
+        CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::RejectSample{.reason = "too late"}),
+                        lims::IllegalTransition);
     }
 }
 
 TEST_CASE("Returning a sample for rework needs a stated reason", "[lims][sample][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -221,7 +225,7 @@ TEST_CASE("Returning a sample for rework needs a stated reason", "[lims][sample]
 }
 
 TEST_CASE("A mutating transition with no principal is refused and journals nothing", "[lims][sample][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
@@ -236,7 +240,7 @@ TEST_CASE("A mutating transition with no principal is refused and journals nothi
     anonymous.attachActionLog(log, std::string{});
     anonymous.execute(lims::OpenSample{.sampleId = sampleId});
 
-    CHECK_THROWS_AS(anonymous.execute(lims::ReceiveSample{}), lims::EmptyPrincipalError);
+    CHECK_THROWS_AS(::morph::model::executeChecked(anonymous, lims::ReceiveSample{}), lims::EmptyPrincipalError);
 
     // The one failure class that cannot be attributed is the one that must not
     // be recorded: an audit entry naming nobody is worse than no entry.
@@ -244,7 +248,7 @@ TEST_CASE("A mutating transition with no principal is refused and journals nothi
 }
 
 TEST_CASE("A successful transition is journaled against the sample, naming its author", "[lims][sample][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
@@ -272,7 +276,9 @@ TEST_CASE("A successful transition is journaled against the sample, naming its a
 }
 
 TEST_CASE("A refused transition is journaled as a failure, naming who tried", "[lims][sample][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
+    // An analyst at the site, so the refusal measured is the lifecycle's and not the authorization's.
+    lims::test::grant("mallory", lims::LimsRole::Analyst);
     const ScopedPrincipal mallory{"mallory"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
@@ -280,7 +286,7 @@ TEST_CASE("A refused transition is journaled as a failure, naming who tried", "[
     model.attachActionLog(log, std::string{});
     const auto sample = registerSample(model);
 
-    CHECK_THROWS_AS(model.execute(lims::PublishSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::PublishSample{}), lims::IllegalTransition);
 
     const auto entries = log->entries(std::to_string(*sample.id));
     REQUIRE(entries.size() == 2);
@@ -294,7 +300,7 @@ TEST_CASE("A refused transition is journaled as a failure, naming who tried", "[
 }
 
 TEST_CASE("Two handlers attached to the same sample see each other's transitions", "[lims][sample][shared]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
 
     lims::SampleModel office;
@@ -311,27 +317,29 @@ TEST_CASE("Two handlers attached to the same sample see each other's transitions
 }
 
 TEST_CASE("An unattached handler refuses to read or transition anything", "[lims][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
     CHECK_THROWS_AS(model.execute(lims::GetSample{}), lims::NotFound);
-    CHECK_THROWS_AS(model.execute(lims::ReceiveSample{}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::ReceiveSample{}), lims::NotFound);
 }
 
 TEST_CASE("Opening or registering against something that does not exist is NotFound", "[lims][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
     CHECK_THROWS_AS(model.execute(lims::OpenSample{.sampleId = lims::SampleId{424242}}), lims::NotFound);
-    CHECK_THROWS_AS(model.execute(lims::RegisterSample{.clientId = lims::ClientId{424242}, .reference = "orphan"}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::RegisterSample{.siteId = lims::test::seededSite(),
+                                                                               .clientId = lims::ClientId{424242},
+                                                                               .reference = "orphan"}),
                     lims::NotFound);
     CHECK_THROWS_AS(model.execute(lims::OpenSample{}), lims::ValidationError);
 }
 
 TEST_CASE("Registering a sample or a client requires a principal and well-formed input", "[lims][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
 
     CHECK_THROWS_AS(model.execute(lims::RegisterClient{.name = "Waterworks Ltd"}), lims::EmptyPrincipalError);
@@ -339,13 +347,15 @@ TEST_CASE("Registering a sample or a client requires a principal and well-formed
     const ScopedPrincipal alice{"alice"};
     CHECK_THROWS_AS(model.execute(lims::RegisterClient{}), lims::ValidationError);
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    CHECK_THROWS_AS(model.execute(lims::RegisterSample{.clientId = client.clientId}), lims::ValidationError);
+    CHECK_THROWS_AS(
+        model.execute(lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId}),
+        lims::ValidationError);
 }
 
 // ═════════════════════════════════════════════════════════════════════════
 // SampleModel's primary key
 //
-// No DbFixture below this line: `ActionKeyTraits<A>::key()` is a pure
+// No fixture below this line: `ActionKeyTraits<A>::key()` is a pure
 // function over the action's own fields, and that is the point -- key
 // extraction runs inside `BridgeHandler::execute()` before `SampleModel`'s
 // own `validate()` ever sees the action, so it is the first and only place a
@@ -399,7 +409,7 @@ TEST_CASE("Every keyed SampleModel action encodes exactly the key its hand-writt
 TEST_CASE("An empty sampleId fails key extraction instead of routing to a garbage instance", "[lims][sample][key]") {
     // The failure a hand-written trait is exposed to: its body is
     // `keyToString(*action.sampleId)`, and `SampleId::operator*` is
-    // `return *value;` on a `std::optional` (lims/core/types.hpp) --
+    // `return *value;` on a `std::optional` (lims/lab/core/types.hpp) --
     // undefined behaviour for a disengaged id, which on a plain libc++ hands
     // back whatever the union held and attaches the caller to an arbitrary
     // instance. `morph::model::keyToString` refuses an empty strong id

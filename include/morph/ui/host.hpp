@@ -618,8 +618,8 @@ public:
         return own->remount(_interpreter, std::move(document), *_options.backend);
     }
 
-    /// @brief What a chat turn says about a screen this host mounted: its id, its params and identity, and the aliases
-    ///        of its own scope that hold an instance. `TurnRequest::text` is left for the caller.
+    /// @brief What a chat turn says about a screen this host mounted: its id and title, its params and identity, and
+    ///        the aliases of its own scope that hold an instance. `TurnRequest::text` is left for the caller.
     /// @param handle A handle this host mounted.
     /// @return The context; nothing for a closed or foreign handle.
     [[nodiscard]] static std::optional<chat::TurnRequest> chatContext(ScreenHandle& handle) {
@@ -630,6 +630,7 @@ public:
         }
         chat::TurnRequest context;
         context.screenId = screen->id();
+        context.title = handle.title().peek();
         context.identity = identityKey(handle.identity().peek()).value_or(std::string{});
         context.paramsJson = glz::write_json(valueToJson(Value{own->params()})).value_or(std::string{"{}"});
         for (Screen::BoundAlias const& alias : screen->boundAliases()) {

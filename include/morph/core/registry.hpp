@@ -24,6 +24,7 @@
 
 #include "../forms/field_errors.hpp"
 #include "../forms/forms.hpp"
+#include "detail/action_guard_core.hpp"
 #include "detail/result_walker.hpp"
 #include "model.hpp"
 #include "payload_schema.hpp"
@@ -573,6 +574,48 @@ inline void recordActionFailure(IModelHolder& holder, std::string modelType, std
     });
 }
 
+/// @brief The execution sites' guard step: runs @p Action's guard on @p model, and on a refusal journals it as
+///        `Outcome::Failed` exactly as a throw from `Model::execute` is, tells the model, and rethrows.
+///
+/// Skipped for a holder `journal::replay()` is reconstructing. A refusal that is not a `std::exception` records
+/// nothing and propagates, as from `execute`. A throw from recording or from `onGuardRefused` propagates in place of
+/// the refusal. See `docs/spec/core/action_guards.md`, "What a refusal is".
+/// @tparam Model The model type.
+/// @tparam Action The action type.
+/// @tparam PayloadOf A callable returning the action's JSON payload, called only to record a refusal.
+/// @param holder The holder executing the action.
+/// @param model The holder's model.
+/// @param action The decoded, recomputed, validated action.
+/// @param payloadOf Produces the payload the `Failed` entry records.
+template <typename Model, typename Action, typename PayloadOf>
+void runGuardJournaled(IModelHolder& holder, Model& model, Action const& action, PayloadOf const& payloadOf) {
+    if constexpr (DeclaresGuard<Action>) {
+        if (holder.isReconstructing()) {
+            return;
+        }
+        try {
+            guardAction(std::as_const(model), action);
+        } catch (const std::exception& refusal) {
+            if constexpr (actionLoggable<Action>() == Loggable::Yes) {
+                if (holder.hasActionLog()) {
+                    recordActionFailure(holder, std::string{ModelTraits<Model>::typeId()},
+                                        std::string{ActionTraits<Action>::typeId()}, payloadOf(),
+                                        actionPayloadSchema<Action>(), refusal.what());
+                }
+            }
+            if constexpr (GuardRefusalObserver<Model, Action>) {
+                model.onGuardRefused(action, refusal);
+            }
+            throw;
+        }
+    } else {
+        static_cast<void>(holder);
+        static_cast<void>(model);
+        static_cast<void>(action);
+        static_cast<void>(payloadOf);
+    }
+}
+
 /// @brief Exception thrown when JSON serialisation or deserialisation fails.
 struct ParseError : std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -766,7 +809,9 @@ public:
     /// propagates unchanged after the `Failed` entry is recorded.
     ///
     /// `Outcome::Failed` means the model rejected the action, and nothing else:
-    /// only `Model::execute` can produce it. Serialising the result and
+    /// only `Model::execute`, or the action's guard immediately before it, can produce it -- each in a `try` of its
+    /// own. The guard runs after the validator, and is skipped for a holder `journal::replay()` is reconstructing.
+    /// Serialising the result and
     /// appending the entry both run after the model's mutation has committed,
     /// and both can throw -- `resultToJson` raises `detail::ParseError`, and a
     /// sink that could not reach its backend is required to say so by throwing
@@ -801,6 +846,7 @@ public:
         entry.evaluator = &evaluateAction<Model, Action>;
         entry.coalesce = ActionLogPolicy<Action>::coalesce;
         entry.loggable = detail::actionLoggable<Action>() == Loggable::Yes;
+        entry.guarded = DeclaresGuard<Action>;
         entry.schema = detail::actionPayloadSchema<Action>();
         // Deliberately a thunk, not the description itself: registration runs
         // at static-init time, where `buildActionDescription`'s throw path (an
@@ -893,7 +939,7 @@ private:
     static std::string runHandler(IModelHolder& holder, std::string_view payloadJson) {
         auto action = prepareAction<Model, Action>(payloadJson);
         auto& model = holder.template into<Model>();
-        // Model::execute is the only call inside this try, because it is
+        // The guard ran just above, in its own try. Model::execute is the only call inside this try, because it is
         // the only one whose failure means the action was rejected. A
         // rejected or throwing execution -- a validation failure, a lost
         // connection, a rejected write -- records Outcome::Failed (when a
@@ -910,6 +956,7 @@ private:
 #pragma warning(push)
 #pragma warning(disable : 4702)
 #endif
+        detail::runGuardJournaled(holder, model, action, [&] { return std::string{payloadJson}; });
         auto result = [&] {
             try {
                 return model.execute(action);
@@ -982,7 +1029,9 @@ private:
         ::core::async::Task<R> task;
         try {
             action = std::make_shared<Action>(prepareAction<Model, Action>(payloadJson));
-            task = holder.template into<Model>().execute(*action);
+            auto& model = holder.template into<Model>();
+            detail::runGuardJournaled(holder, model, *action, [&] { return std::string{payloadJson}; });
+            task = model.execute(*action);
         } catch (...) {
             done(std::string{}, std::current_exception());
             return;
@@ -1299,6 +1348,19 @@ public:
         return actions;
     }
 
+    /// @brief Whether the action registered as (@p modelId, @p actionId) declares a guard, which every execution
+    ///        site for the pair then runs.
+    ///
+    /// Says that a check runs, not that it enforces the application's whole rule. For tests and start-up checks.
+    /// @param modelId The model's registered id.
+    /// @param actionId The action's registered id.
+    /// @return `true` for a registered pair whose action declares a guard; `false` otherwise, an unregistered pair
+    ///         included.
+    [[nodiscard]] bool isGuarded(std::string_view modelId, std::string_view actionId) const {
+        auto const iter = _actions.find(detail::PairKeyView{modelId, actionId});
+        return iter != _actions.end() && iter->second.guarded;
+    }
+
     /// @brief Returns the process-level singleton dispatcher.
     static ActionDispatcher& instance() { return defaultDispatcher(); }
 
@@ -1332,6 +1394,8 @@ private:
         bool coalesce = false;
         /// Whether its executions are journaled when a log is attached.
         bool loggable = true;
+        /// @brief Whether the action declares a guard (`DeclaresGuard`).
+        bool guarded = false;
         /// @brief `payloadFingerprint<Action>()` as registered.
         std::string schema;
         /// @brief Thunk yielding the process-lifetime `ActionDescription`.
@@ -1846,9 +1910,9 @@ void actionSourceRegistrationRequired() {}
 /// @param NAME String literal used as the action type-id.
 /// @param ...  Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
-#define BRIDGE_REGISTER_ACTION(...)                                                              \
-    BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3) \
-    (__VA_ARGS__)
+#define BRIDGE_REGISTER_ACTION(...) \
+    BRIDGE_DETAIL_EXPAND(           \
+        BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3)(__VA_ARGS__))
 // clang-format on
 
 /// @brief Registers action type @p A (for model @p M) the same way
@@ -1901,10 +1965,9 @@ void actionSourceRegistrationRequired() {}
 /// @param NAME   String literal used as the action type-id.
 /// @param ...    Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
-#define BRIDGE_REGISTER_ACTION_FOR_CLIENT(...)                                               \
-    BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_FOR_CLIENT_5, \
-                                           BRIDGE_REGISTER_ACTION_FOR_CLIENT_4)              \
-    (__VA_ARGS__)
+#define BRIDGE_REGISTER_ACTION_FOR_CLIENT(...)                                                                    \
+    BRIDGE_DETAIL_EXPAND(BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_FOR_CLIENT_5, \
+                                                                BRIDGE_REGISTER_ACTION_FOR_CLIENT_4)(__VA_ARGS__))
 // clang-format on
 
 /// @cond detail
@@ -2100,12 +2163,16 @@ void actionSourceRegistrationRequired() {}
 /// @param NAME String literal used as the action type-id.
 /// @param ...  Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
-#define BRIDGE_DECLARE_ACTION(...)                                                            \
-    BRIDGE_DECLARE_ACTION_PICK(__VA_ARGS__, BRIDGE_DECLARE_ACTION_4, BRIDGE_DECLARE_ACTION_3) \
-    (__VA_ARGS__)
+#define BRIDGE_DECLARE_ACTION(...) \
+    BRIDGE_DETAIL_EXPAND(          \
+        BRIDGE_DECLARE_ACTION_PICK(__VA_ARGS__, BRIDGE_DECLARE_ACTION_4, BRIDGE_DECLARE_ACTION_3)(__VA_ARGS__))
 // clang-format on
 
 /// @cond detail
+// Forces a second scan of its argument. The traditional MSVC preprocessor hands `__VA_ARGS__` to a
+// nested macro as one argument; wrapping the dispatch makes it re-split the list before choosing.
+#define BRIDGE_DETAIL_EXPAND(x) x
+
 #define BRIDGE_DECLARE_ACTION_PICK(_1, _2, _3, _4, NAME, ...) NAME
 
 #define BRIDGE_DECLARE_ACTION_3(M, A, NAME) BRIDGE_DECLARE_ACTION_4(M, A, NAME, ::morph::model::Loggable::Yes)

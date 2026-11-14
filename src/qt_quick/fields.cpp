@@ -420,8 +420,10 @@ DateTimeImpl::DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::Da
             show(_shown, true);
             return;
         }
-        _shown = text;
-        show(text);
+        // With a pattern the instant is shown in it: `ui::parseDate` also reads ISO, and a pasted ISO date should not
+        // stay ISO beside a field that shows its value in the pattern.
+        _shown = _pattern.empty() ? text : formatDateTime(*parsed, _mode, _offsetMinutes, _pattern);
+        show(_shown);
         if (_onChange) {
             _onChange(morph::time::Timestamp{*parsed});
         }
@@ -430,8 +432,16 @@ DateTimeImpl::DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::Da
 }
 
 void DateTimeImpl::setPattern(std::string_view pattern) {
+    // The text shown names an instant in the old pattern; it is shown again in the new one. Text that names none (a
+    // half-typed edit) is left as it is.
+    std::optional<morph::time::DateTime> const held =
+        _shown.isEmpty() ? std::nullopt : parseDateTime(_shown, _mode, _offsetMinutes, _pattern);
     _pattern = std::string{pattern};
     write("pattern", toQString(pattern));
+    if (held) {
+        _shown = formatDateTime(*held, _mode, _offsetMinutes, _pattern);
+        show(_shown, true);
+    }
 }
 
 void DateTimeImpl::picked(QVariant const& day) {

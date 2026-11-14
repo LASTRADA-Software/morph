@@ -162,7 +162,7 @@ std::string captureForm(std::string_view submit, std::string_view fields) {
 
 }  // namespace
 
-// Mutation: ignore the overlay's `decimals` (the scale stays the schema's 2) or its clamp at 18.
+// Mutation: ignore the overlay's `decimals` (the places and the wire dp stay the schema's 2) or its clamp at 18.
 TEST_CASE("interpreter reports: a field overlay's decimals set the scale of the submitted number",
           "[ui][interpreter][forms]") {
     Harness h;
@@ -171,7 +171,7 @@ TEST_CASE("interpreter reports: a field overlay's decimals set the scale of the 
     h.settle();
     REQUIRE(h.dispatcher.count("Lims_CaptureConcentration") == 1);
     CHECK(h.dispatcher.calls.at(h.dispatcher.last("Lims_CaptureConcentration")).body ==
-          R"({"sampleId":4,"concentration":{"num":12500,"den":1000,"dp":2},"note":"a"})");
+          R"({"sampleId":4,"concentration":{"num":12500,"den":1000,"dp":3},"note":"a"})");
 }
 
 // Mutation: read `blankAs` "empty" as omit (the blank note is dropped from the body), or any text as empty.

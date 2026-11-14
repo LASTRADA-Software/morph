@@ -32,6 +32,7 @@
 #include "../util/datetime.hpp"
 #include "../util/rational.hpp"
 #include "date_pattern.hpp"
+#include "locale_table.hpp"
 #include "message.hpp"
 #include "value.hpp"
 
@@ -75,6 +76,7 @@ enum class ExprKind : std::uint8_t {
     Error,      ///< `{"error": "q"}`: a query's or mutation's error text.
     Result,     ///< `{"result": "m"}`: a mutation's last result.
     ErrorKind,  ///< `{"errorKind": "m"}`: the kind of a query's or mutation's error.
+    Refusal,    ///< `{"refusal": "m"}`: a query's or mutation's action refusal, `null` or `{code, args}`.
     Can,        ///< `{"can": "m"}`: whether the principal may run a mutation or query.
     Pref,       ///< `{"pref": "point.path"}`: the user's choice at a customization point.
     Call,       ///< `{"fn": "name", "args": [...]}`, and `{"t": ...}`.
@@ -142,6 +144,7 @@ enum class FunctionId : std::uint8_t {
     Rsd,
     DateAdd,
     DateRange,
+    RefusalText,
 };
 
 struct Expr;
@@ -212,6 +215,9 @@ inline constexpr KindSet kNumeric = kindBit(TypeKind::Int) | kindBit(TypeKind::D
 /// @brief The ordered kinds.
 inline constexpr KindSet kOrdered = kNumeric | kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String);
 
+/// @brief The sentence `refusalText` shows when the catalogue has neither a refusal's code nor a class of it.
+inline constexpr std::string_view kBuiltInRefusal = "This was refused.";
+
 /// @brief The signature of a library function.
 struct FunctionSpec {
     /// @brief The name a document calls it by.
@@ -228,7 +234,7 @@ struct FunctionSpec {
 
 /// @brief The library, indexed by `FunctionId`.
 // NOLINTBEGIN(modernize-use-designated-initializers): one row per function reads as a table; names on every field would not.
-inline constexpr std::array<FunctionSpec, 49> kFunctions = {{
+inline constexpr std::array<FunctionSpec, 50> kFunctions = {{
     {"and", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"or", 1, 255, {kindBit(TypeKind::Bool), kindBit(TypeKind::Bool), kindBit(TypeKind::Bool)}, TypeKind::Bool},
     {"not", 1, 1, {kindBit(TypeKind::Bool), 0, 0}, TypeKind::Bool},
@@ -271,8 +277,8 @@ inline constexpr std::array<FunctionSpec, 49> kFunctions = {{
     {"quantity", 1, 2, {kindBit(TypeKind::Quantity), kindBit(TypeKind::String), 0}, TypeKind::String},
     {"money",
      2,
-     2,
-     {kindBit(TypeKind::Int) | kindBit(TypeKind::Decimal), kindBit(TypeKind::String), 0},
+     3,
+     {kindBit(TypeKind::Int) | kindBit(TypeKind::Decimal), kindBit(TypeKind::String), kindBit(TypeKind::String)},
      TypeKind::String},
     {"date",
      1,
@@ -284,7 +290,11 @@ inline constexpr std::array<FunctionSpec, 49> kFunctions = {{
      2,
      {kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String), kindBit(TypeKind::String), 0},
      TypeKind::String},
-    {"t", 2, 3, {kindBit(TypeKind::String), kindBit(TypeKind::String), kindBit(TypeKind::Record)}, TypeKind::String},
+    {"t",
+     2,
+     3,
+     {kindBit(TypeKind::String), kindBit(TypeKind::String), kindBit(TypeKind::Record) | kindBit(TypeKind::List)},
+     TypeKind::String},
     {"parseDecimal", 1, 2, {kindBit(TypeKind::String), kindBit(TypeKind::Int), 0}, TypeKind::Decimal},
     {"concatLists",
      1,
@@ -311,6 +321,7 @@ inline constexpr std::array<FunctionSpec, 49> kFunctions = {{
      {kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String),
       kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String), 0},
      TypeKind::String},
+    {"refusalText", 1, 1, {kindBit(TypeKind::Record), 0, 0}, TypeKind::String},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
 
@@ -350,7 +361,8 @@ inline constexpr std::array<FunctionSpec, 49> kFunctions = {{
 inline constexpr std::array<std::string_view, 6> kDateUnits = {"days", "weeks", "months", "years", "hours", "minutes"};
 
 /// @brief The names `{"env": ...}` reads.
-inline constexpr std::array<std::string_view, 5> kEnvNames = {"widthClass", "locale", "platform", "online", "backend"};
+inline constexpr std::array<std::string_view, 6> kEnvNames = {"widthClass", "locale",  "platform",
+                                                              "online",     "backend", "context"};
 
 /// @brief The names `{"session": ...}` reads.
 inline constexpr std::array<std::string_view, 6> kSessionNames = {"principal", "userName", "displayName",
@@ -410,7 +422,7 @@ public:
 
 private:
     // NOLINTBEGIN(modernize-use-designated-initializers): one row per form reads as a table.
-    static constexpr std::array<FormKeys, 23> kForms = {{
+    static constexpr std::array<FormKeys, 24> kForms = {{
         {"lit", ExprKind::Literal, {}},
         {"ref", ExprKind::Ref, {}},
         {"row", ExprKind::Row, {}},
@@ -419,6 +431,7 @@ private:
         {"error", ExprKind::Error, {}},
         {"result", ExprKind::Result, {}},
         {"errorKind", ExprKind::ErrorKind, {}},
+        {"refusal", ExprKind::Refusal, {}},
         {"can", ExprKind::Can, {}},
         {"pref", ExprKind::Pref, {}},
         {"fn", ExprKind::Call, {"args", ""}},
@@ -533,6 +546,7 @@ private:
             case ExprKind::Error:
             case ExprKind::Result:
             case ExprKind::ErrorKind:
+            case ExprKind::Refusal:
             case ExprKind::Can:
                 return controlName(made, primary, primaryPath, chosen->key);
             case ExprKind::Env:
@@ -692,18 +706,36 @@ private:
 
     [[nodiscard]] std::optional<Refusal> translate(Expr& made, Json::object_t const& object, std::string const& path) {
         made.function = FunctionId::Translate;
-        std::string const* const key = text(*member(object, "t"));
+        Json const& keyJson = *member(object, "t");
+        std::string const* const key = text(keyJson);
         Json const* const fallback = member(object, "fallback");
         std::string const* const fallbackText = fallback == nullptr ? nullptr : text(*fallback);
-        if (key == nullptr || key->empty()) {
-            return refuse(pointerAppend(path, "t"), "`t` names a message key as a string").error();
+        std::string const keyPath = pointerAppend(path, "t");
+        Json const* const keyExpression = wrapped(keyJson);
+        if (keyExpression == nullptr && (key == nullptr || key->empty())) {
+            return refuse(keyPath, R"(`t` names a message key as a string, or as {"expr": e} for an expression)")
+                .error();
         }
         if (fallbackText == nullptr) {
             return refuse(pointerAppend(path, "fallback"), "`t` needs its `fallback` text as a string").error();
         }
-        made.args.push_back(literal(*key, pointerAppend(path, "t")));
+        if (keyExpression != nullptr) {
+            auto computed = node(*keyExpression, pointerAppend(keyPath, "expr"));
+            if (!computed) {
+                return std::move(computed.error());
+            }
+            made.args.push_back(std::move(*computed));
+        } else {
+            made.args.push_back(literal(*key, keyPath));
+        }
         made.args.push_back(literal(*fallbackText, pointerAppend(path, "fallback")));
-        if (Json const* const args = member(object, "args")) {
+        if (Json const* const args = member(object, "args"); args != nullptr && wrapped(*args) != nullptr) {
+            auto list = node(*wrapped(*args), pointerAppend(pointerAppend(path, "args"), "expr"));
+            if (!list) {
+                return std::move(list.error());
+            }
+            made.args.push_back(std::move(*list));
+        } else if (args != nullptr) {
             auto record = std::make_shared<Expr>();
             record->kind = ExprKind::Object;
             record->path = pointerAppend(path, "args");
@@ -713,6 +745,16 @@ private:
             made.args.push_back(std::move(record));
         }
         return std::nullopt;
+    }
+
+    /// The expression in `{"expr": e}`, the wrapper `t` takes a computed key or argument list in; null when @p json
+    /// is anything else.
+    [[nodiscard]] static Json const* wrapped(Json const& json) {
+        auto const* const object = std::get_if<Json::object_t>(&json.data);
+        if (object == nullptr || object->size() != 1) {
+            return nullptr;
+        }
+        return member(*object, "expr");
     }
 
     [[nodiscard]] std::optional<Refusal> get(Expr& made, Json::object_t const& object, std::string const& path) {
@@ -945,6 +987,7 @@ public:
             case ExprKind::Error:
             case ExprKind::Result:
             case ExprKind::ErrorKind:
+            case ExprKind::Refusal:
             case ExprKind::Can:
                 return wrap(expr, _resolver->control(expr.kind, expr.name));
             case ExprKind::Pref:
@@ -1250,6 +1293,8 @@ struct FormatContext {
     render::NumericLocale numeric{};
     /// @brief The message catalogue; empty shows every fallback.
     render::TranslationProvider translations;
+    /// @brief How `money` writes a currency. Empty `symbols` (the default) writes every currency by its code.
+    CurrencyFacts currency{};
     /// @brief The units quantities convert through.
     UnitTable units;
     /// @brief The display zone's offset from UTC, in minutes.
@@ -1308,6 +1353,11 @@ public:
     /// @brief The formatting facts.
     /// @return The context the display functions and `t` use.
     [[nodiscard]] virtual FormatContext const& formatting() const = 0;
+
+    /// @brief The facts typed text is read in: the person's own, whatever place the expression is evaluated in. A
+    ///        locale scope changes how values are shown, not how a person types, so `parseDecimal` reads these.
+    /// @return The context `parseDecimal` uses; by default the display facts.
+    [[nodiscard]] virtual FormatContext const& entryFormatting() const { return formatting(); }
 
     /// @brief Reports a runtime error of an expression.
     /// @param path   The JSON Pointer of the expression node that failed.
@@ -1737,6 +1787,7 @@ public:
             case ExprKind::Error:
             case ExprKind::Result:
             case ExprKind::ErrorKind:
+            case ExprKind::Refusal:
             case ExprKind::Can:
                 return _env->control(expr.kind, expr.name);
             case ExprKind::Pref:
@@ -2318,13 +2369,13 @@ private:
             return std::string{*flag ? "true" : "false"};
         }
         if (Quantity const* const quantity = value.asQuantity()) {
-            auto number = formatNumber(value, context.numeric);
+            auto number = formatNumber(value, withoutGrouping(context.numeric));
             if (!number) {
                 return std::nullopt;
             }
             return *number + " " + unitDisplay(quantity->unit, context.units);
         }
-        if (auto number = formatNumber(value, context.numeric)) {
+        if (auto number = formatNumber(value, withoutGrouping(context.numeric))) {
             return number;
         }
         if (time::DateTime const* const instant = value.asTimestamp()) {
@@ -2410,18 +2461,35 @@ private:
         return out;
     }
 
-    Value translate(Expr const& expr, std::vector<Value> const& args) {
-        FormatContext const& context = _env->formatting();
-        std::string const& key = *args.at(0).asString();
-        std::string const& fallback = *args.at(1).asString();
-        ValueRecord const empty;
-        ValueRecord const* named = &empty;
-        if (args.size() > 2) {
-            named = args.at(2).asRecord();
-            if (named == nullptr) {
-                return mismatch(expr, "the arguments of `t` are a record");
+    /// The named arguments a list of `{name, value}` records gives a message, each value as text. An element that is
+    /// not such a record is reported and left out.
+    ValueRecord namedArguments(Expr const& expr, ValueList const& list) {
+        ValueRecord named;
+        for (Value const& item : list) {
+            ValueRecord const* const entry = item.asRecord();
+            auto const text = [entry](char const* field) -> std::string const* {
+                if (entry == nullptr) {
+                    return nullptr;
+                }
+                auto const found = entry->find(field);
+                return found == entry->end() ? nullptr : found->second.asString();
+            };
+            std::string const* const argName = text("name");
+            std::string const* const argValue = text("value");
+            if (argName == nullptr || argValue == nullptr) {
+                _env->report(expr.path, "an argument of the message is a record of a string `name` and `value`");
+                continue;
             }
+            named.insert_or_assign(*argName, Value{*argValue});
         }
+        return named;
+    }
+
+    /// Formats the catalogue's message for @p key in the active locale with @p named, else @p fallback.
+    /// @param reportMissing Whether a key the catalogue lacks is a problem (a key known only at run time).
+    std::string catalogued(Expr const& expr, std::string const& key, std::string const& fallback,
+                           ValueRecord const& named, bool reportMissing) {
+        FormatContext const& context = _env->formatting();
         std::optional<MessagePattern> message;
         if (context.translations) {
             if (auto const pattern = context.translations(key, context.locale)) {
@@ -2434,6 +2502,9 @@ private:
                 }
             }
         }
+        if (!message && reportMissing) {
+            _env->report(expr.path, "the catalogue has no message for the key `" + key + "`");
+        }
         if (!message) {
             auto parsed = parseMessage(fallback);
             if (!parsed) {
@@ -2443,11 +2514,69 @@ private:
             message = std::move(*parsed);
         }
         FormattedMessage formatted =
-            formatMessage(*message, *named, MessageLocale{.locale = context.locale, .numeric = context.numeric});
+            formatMessage(*message, named, MessageLocale{.locale = context.locale, .numeric = context.numeric});
         for (std::string const& error : formatted.errors) {
             _env->report(expr.path, error);
         }
         return std::move(formatted.text);
+    }
+
+    Value translate(Expr const& expr, std::vector<Value> const& args) {
+        std::string const& key = *args.at(0).asString();
+        std::string const& fallback = *args.at(1).asString();
+        ValueRecord const empty;
+        ValueRecord listed;
+        ValueRecord const* named = &empty;
+        if (args.size() > 2) {
+            if (ValueList const* const list = args.at(2).asList()) {
+                listed = namedArguments(expr, *list);
+                named = &listed;
+            } else {
+                named = args.at(2).asRecord();
+            }
+            if (named == nullptr) {
+                return mismatch(expr, "the arguments of `t` are a record, or a list of `{name, value}` records");
+            }
+        }
+        bool const computedKey = expr.args.front()->kind != ExprKind::Literal;
+        return catalogued(expr, key, fallback, *named, computedKey);
+    }
+
+    /// `refusalText`: the sentence for an action refusal `{code, args}`.
+    Value refusalText(Expr const& expr, Value const& refusal) {
+        ValueRecord const* const record = refusal.asRecord();
+        auto const field = [record](char const* name) -> Value const* {
+            if (record == nullptr) {
+                return nullptr;
+            }
+            auto const found = record->find(name);
+            return found == record->end() ? nullptr : &found->second;
+        };
+        Value const* const code = field("code");
+        Value const* const list = field("args");
+        if (code == nullptr || code->asString() == nullptr) {
+            return mismatch(expr, "`refusalText` takes a refusal, a record with a string `code`");
+        }
+        ValueRecord named;
+        if (list != nullptr && list->asList() != nullptr) {
+            named = namedArguments(expr, *list->asList());
+        }
+        FormatContext const& context = _env->formatting();
+        std::string const& codeText = *code->asString();
+        bool const hasCode = context.translations && context.translations(codeText, context.locale).has_value();
+        if (hasCode) {
+            return catalogued(expr, codeText, std::string{kBuiltInRefusal}, named, false);
+        }
+        _env->report(expr.path, "the catalogue has no message for the refusal code `" + codeText + "`");
+        // Each dotted prefix of the code, longest first, with `.generic` after it.
+        for (std::string prefix = codeText; prefix.rfind('.') != std::string::npos;) {
+            prefix.erase(prefix.rfind('.'));
+            std::string const classKey = prefix + ".generic";
+            if (context.translations && context.translations(classKey, context.locale)) {
+                return catalogued(expr, classKey, std::string{kBuiltInRefusal}, named, false);
+            }
+        }
+        return std::string{kBuiltInRefusal};
     }
 
     Value listFunction(Expr const& expr, ValueList const& items) {
@@ -2806,7 +2935,16 @@ private:
                 if (!text) {
                     return mismatch(expr, "the result overflows");
                 }
-                return render::formatCanonicalNumber(*text, context.numeric) + " " + *currency;
+                MoneyForm form = MoneyForm::Symbol;
+                if (args.size() > 2) {
+                    std::string const* const named = args.at(2).asString();
+                    if (named == nullptr || (*named != "symbol" && *named != "code")) {
+                        return mismatch(expr, "`money`'s form is \"symbol\" or \"code\"");
+                    }
+                    form = *named == "code" ? MoneyForm::Code : MoneyForm::Symbol;
+                }
+                return placeCurrency(render::formatCanonicalNumber(*text, context.numeric), *currency,
+                                     context.currency, context.numeric, form);
             }
             case FunctionId::Date:
             case FunctionId::DateTime: {
@@ -2851,7 +2989,7 @@ private:
                     return mismatch(expr, "`parseDecimal` takes text and places from 0 to 18");
                 }
                 // Text that does not spell a number is what an entry holds while it is typed: `null`, not an error.
-                if (auto parsed = render::parseDecimal(*text, context.numeric, declared)) {
+                if (auto parsed = render::parseDecimal(*text, _env->entryFormatting().numeric, declared)) {
                     return Decimal{*parsed};
                 }
                 return Value{};
@@ -2888,6 +3026,8 @@ private:
             }
             case FunctionId::Slice:
                 return sliced(expr, args);
+            case FunctionId::RefusalText:
+                return refusalText(expr, args.front());
             case FunctionId::Translate:
                 if (args.at(0).asString() == nullptr || args.at(1).asString() == nullptr) {
                     return mismatch(expr, "`t` takes a key and a fallback string");
@@ -2943,6 +3083,8 @@ public:
     ValueRecord errors;
     /// @brief Error kinds, by query or mutation name.
     ValueRecord errorKinds;
+    /// @brief Action refusals, by query or mutation name.
+    ValueRecord refusals;
     /// @brief The queries and mutations in flight.
     std::set<std::string, std::less<>> pendingNames;
     /// @brief What the principal may run.
@@ -2989,6 +3131,9 @@ public:
         }
         if (form == ExprKind::ErrorKind) {
             return lookup(errorKinds, name, {});
+        }
+        if (form == ExprKind::Refusal) {
+            return lookup(refusals, name, {});
         }
         return lookup(form == ExprKind::Result ? results : queries, name, {});
     }

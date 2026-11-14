@@ -23,14 +23,15 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <glaze/glaze.hpp>
+#include <morph/core/action_guard.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
 #include <vector>
 
-#include "lims/core/errors.hpp"
-#include "lims/models/analysis_catalog_model.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/lab/models/analysis_catalog_model.hpp"
+#include "lims/lab/models/sample_model.hpp"
+#include "lims/org/core/errors.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 
@@ -466,7 +467,7 @@ TEST_CASE("An unrecognised rule kind fails closed, and defers rather than blocks
 // ── Clear-on-hide, decided ─────────────────────────────────────────────────
 
 TEST_CASE("A hidden field's draft value still travels, and the server acts on it", "[lims][forms][parity][d8]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -474,7 +475,8 @@ TEST_CASE("A hidden field's draft value still travels, and the server acts on it
     const auto nitrate =
         catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    model.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     model.execute(lims::ReceiveSample{});
     model.execute(lims::StartWork{});
 
@@ -498,7 +500,7 @@ TEST_CASE("A hidden field's draft value still travels, and the server acts on it
 }
 
 TEST_CASE("A declared dilution is applied exactly", "[lims][forms][dilution]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -506,7 +508,8 @@ TEST_CASE("A declared dilution is applied exactly", "[lims][forms][dilution]") {
     const auto nitrate =
         catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    model.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     model.execute(lims::ReceiveSample{});
     model.execute(lims::StartWork{});
 

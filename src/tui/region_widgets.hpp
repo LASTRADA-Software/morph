@@ -119,6 +119,64 @@ private:
     std::function<void(std::vector<std::string>)> _onDrop;
 };
 
+/// A page region: its children stacked vertically in the rectangle its page gives it. The rectangle clips them; a
+/// region whose content does not fit draws `…` at the end of the last row of its rectangle.
+class PageRegionImpl final : public TuiContainer<ui::PageRegionWidget> {
+public:
+    PageRegionImpl(Context& context, ui::RegionGeometry const& geometry) : TuiContainer{context}, _geometry{geometry} {
+        adopt(makeView(*this));
+    }
+    /// The region's place on its sheet.
+    [[nodiscard]] ui::RegionGeometry const& geometry() const noexcept { return _geometry; }
+    /// The rows the content asks for.
+    [[nodiscard]] int contentRows() const;
+    /// Whether the page found the content not to fit; the page tells it before it paints.
+    void setOverflow(bool overflow) noexcept { _overflow = overflow; }
+    [[nodiscard]] bool overflow() const noexcept { return _overflow; }
+    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
+    void paint(::core::tui::Canvas& canvas) override;
+
+private:
+    ui::RegionGeometry _geometry;
+    bool _overflow = false;
+};
+
+/// A page: a sheet at the typewriter pitch (`ui::CellPitch{10, 6}`: 10 columns and 6 rows to 25.4 mm), drawn inside a
+/// one-cell frame, its regions at `ui::toCells` of their rectangles. It does not scale. A viewport narrower than the
+/// frame shows the sheet's left part and pans horizontally: it takes the focus itself while nothing inside can,
+/// and Left, Right, Home and End move the view; while a widget inside takes the focus the view follows it.
+class PageImpl final : public TuiContainer<ui::PageWidget> {
+public:
+    PageImpl(Context& context, ui::PageGeometry const& geometry) : TuiContainer{context}, _geometry{geometry} {
+        adopt(makeView(*this));
+    }
+    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
+    [[nodiscard]] bool wantsFocus() const override;
+    void paint(::core::tui::Canvas& canvas) override;
+    [[nodiscard]] ::core::tui::EventResult key(::core::tui::KeyEvent const& key) override;
+    /// The columns the view is moved right by.
+    [[nodiscard]] int pan() const noexcept { return _pan; }
+
+private:
+    /// Each region's cells and whether its content overflows, in the sheet's own cells (the sheet's top-left corner is
+    /// (0, 0)).
+    struct Placed {
+        ::core::tui::Rect area;
+        bool overflow = false;
+    };
+    [[nodiscard]] std::vector<Placed> place() const;
+    [[nodiscard]] int frameWidth() const;
+    void followFocus(::core::tui::Size viewport);
+
+    ui::PageGeometry _geometry;
+    int _pan = 0;
+    int _viewport = 0;  ///< The width drawn, as of the last frame.
+    ::core::tui::Component const* _followed = nullptr;
+    ::core::tui::Rect _followedArea{};
+};
+
 /// The paths in text a terminal pasted for files dropped onto it: separated by whitespace, each possibly quoted with
 /// `'` or `"`, or with spaces escaped by `\`, or written as a `file://` URI whose `%XX` escapes are decoded.
 [[nodiscard]] std::vector<std::string> parsePastedPaths(std::string_view text);

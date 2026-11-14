@@ -90,13 +90,16 @@ MorphField {
             objectName: "indicator"
             x: combo.width - width - Theme.inputPaddingX
             y: (combo.height - height) / 2
-            readonly property string chevron: combo.popup.visible ? "nav.collapse" : "nav.expand"
-            readonly property string themedSource: Theme.iconSource(chevron)
-            source: themedSource !== "" ? themedSource : ""
+            // The select's own icon names first, so a set can draw it apart from a section's chevron; the section
+            // chevron's names when the set lacks them.
+            readonly property string ownSource: Theme.iconSource(combo.popup.visible ? "select.close" : "select.open")
+            readonly property string themedSource: ownSource !== ""
+                    ? ownSource : Theme.iconSource(combo.popup.visible ? "nav.collapse" : "nav.expand")
+            source: themedSource
 
             Text {
                 textFormat: Text.PlainText
-                // The chevron the theme draws as a path when it names neither nav icon.
+                // The chevron the theme draws as a path when it names none of these icons.
                 anchors.centerIn: parent
                 visible: parent.themedSource === ""
                 text: combo.popup.visible ? "▴" : "▾"

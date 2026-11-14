@@ -58,6 +58,12 @@ struct FormSessionOptions {
     render::TranslationProvider translations;
     /// @brief The display zone for date-times, in minutes east of UTC.
     int displayOffsetMinutes = 0;
+    /// @brief The pattern a date field shows and reads (`ui::checkDatePattern`), such as `dd.MM.yyyy`; empty keeps
+    /// ISO.
+    ///        Only the input follows it: the draft text, and so the stored value, stays ISO.
+    std::string datePattern;
+    /// @brief The pattern a date-time field shows and reads, such as `dd.MM.yyyy HH:mm`; empty keeps ISO.
+    std::string dateTimePattern;
     /// @brief An extra readiness gate over the assembled body; empty means none. `Form<A>` puts
     ///        the action's own `validate()` here.
     std::function<bool(std::string_view bodyJson)> accepts;
@@ -202,6 +208,7 @@ public:
           _parent{parent},
           _text{core.runtime(), std::string{}},
           _unit{core.runtime(), spec.entryUnit},
+          _places{core.runtime(), std::optional<std::uint32_t>{}},
           _engaged{core.runtime(), false},
           _rows{core.runtime(), std::vector<std::shared_ptr<RowState>>{}},
           _encoded{core.runtime(), [this] { return computeEncoding(); }},
@@ -284,6 +291,12 @@ public:
     /// @brief A Decimal's or Quantity's entry unit, an index into `spec().units`.
     /// @return The unit signal.
     [[nodiscard]] reactive::Signal<std::size_t>& unit() noexcept { return _unit; }
+
+    /// @brief The field's places as a record gives them after the form was built, with the meaning of
+    ///        `x-decimalPlaces`: the canonical unit's entry places and the wire `dp`. Another unit of a Quantity keeps
+    ///        its own. Unset keeps the schema's. A change checks the draft again and leaves its text as typed.
+    /// @return The places signal.
+    [[nodiscard]] reactive::Signal<std::optional<std::uint32_t>>& places() noexcept { return _places; }
 
     /// @brief Whether a blank-capable field was filled once (an `x-blankAs: empty` text, or a
     ///        collection that had rows).
@@ -376,8 +389,11 @@ public:
         if (index >= _spec->units.size() || index == current || current >= _spec->units.size()) {
             return;
         }
-        auto converted =
-            convertDraft(_text.peek(), _spec->units.at(current), _spec->units.at(index), _core->values().locale);
+        UnitOption target = _spec->units.at(index);
+        if (index == 0 && _places.peek().has_value()) {
+            target.decimals = std::min(*_places.peek(), math::kMaxDecimalPlaces);
+        }
+        auto converted = convertDraft(_text.peek(), _spec->units.at(current), target, _core->values().locale);
         _core->runtime().batch([&] {
             _unit.set(index);
             if (!detail::engine::trim(_text.peek()).empty()) {
@@ -488,7 +504,7 @@ public:
             _engaged.set(present && value->is_array());
             return;
         }
-        std::string draft = present ? decodeScalar(*_spec, *value, _core->values()) : std::string{};
+        std::string draft = present ? decodeScalar(*_spec, *value, _core->values(), _places.peek()) : std::string{};
         std::size_t const unit = _spec->entryUnit;
         if (unit != 0 && unit < _spec->units.size() && !draft.empty()) {
             // The wire value is in the canonical unit; the draft is shown in the entry unit.
@@ -695,7 +711,7 @@ private:
             }
             return WireValue{.json = json + "]", .value = ui::Value{}};
         }
-        return encodeScalar(*_spec, _text.get(), _unit.get(), _core->values());
+        return encodeScalar(*_spec, _text.get(), _unit.get(), _core->values(), _places.get());
     }
 
     // Declaration order is destruction order reversed: the signals precede the computeds that
@@ -711,6 +727,7 @@ private:
     std::uint64_t _nextRowKey = 1;
     reactive::Signal<std::string> _text;
     reactive::Signal<std::size_t> _unit;
+    reactive::Signal<std::optional<std::uint32_t>> _places;
     reactive::Signal<bool> _engaged;
     reactive::Signal<std::vector<std::shared_ptr<RowState>>> _rows;
     std::vector<std::unique_ptr<FieldState>> _members;

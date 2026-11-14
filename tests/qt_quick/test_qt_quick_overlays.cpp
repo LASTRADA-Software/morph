@@ -1074,3 +1074,170 @@ TEMPLATE_TEST_CASE("qt_quick overlays: the shadow is elevation.dialog, and the c
         CHECK(shadow->property("color").value<QColor>() == QColor{0x10, 0x20, 0x30, 0x40});
     }
 }
+
+// A popover is a panel that belongs to its container: it floats, so opening it changes nothing of the container's
+// layout, and it takes no focus, so the field it serves keeps it.
+TEST_CASE(
+    "qt_quick popover: floats under its container, takes no room and no focus, and holds its content out of reach "
+    "while closed",
+    "[qt_quick]") {
+    Scene scene;
+    auto box = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto field = scene.backend().createTextInput(box.get(), ui::TextInputMode::SingleLine);
+    auto popover = scene.backend().createPopover(box.get());
+    popover->setWidth(30);
+    auto inside = scene.backend().createButton(popover.get());
+    inside->setLabel("hit");
+    scene.settle();
+    QQuickItem& boxItem = Scene::itemOf(*box);
+    qreal const closedHeight = boxItem.height();
+    CHECK_FALSE(Scene::itemOf(*inside).isVisible());
+
+    field->focus();
+    popover->setOpen(true);
+    scene.settle();
+    CHECK(Scene::itemOf(*inside).isVisible());
+    CHECK(boxItem.height() == closedHeight);
+    // Under the container's box, not inside it.
+    QPointF const hit = Scene::itemOf(*inside).mapToItem(&boxItem, QPointF{0, 0});
+    CHECK(hit.y() >= boxItem.height());
+    CHECK(Scene::controlOf(*field).hasActiveFocus());
+
+    popover->setOpen(false);
+    scene.settle();
+    CHECK_FALSE(Scene::itemOf(*inside).isVisible());
+}
+
+// A popover reports a dismissal the user caused, a press outside it and its container, and none for a close the
+// document asked for: the document already knows about its own close. It takes no keys, so Escape in the field it
+// serves is the field's to handle and leaves the popover to its owner.
+TEST_CASE(
+    "qt_quick popover: a press outside dismisses it, a close the document asked for does not, and the field "
+    "keeps focus throughout",
+    "[qt_quick]") {
+    Scene scene;
+    auto root = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto box = scene.backend().createStack(root.get(), ui::Axis::Vertical);
+    auto field = scene.backend().createTextInput(box.get(), ui::TextInputMode::SingleLine);
+    auto popover = scene.backend().createPopover(box.get());
+    popover->setWidth(30);
+    auto inside = scene.backend().createButton(popover.get());
+    inside->setLabel("hit");
+    int dismissals = 0;
+    popover->setOnDismiss([&dismissals] { ++dismissals; });
+    scene.settle();
+
+    // A close the document asked for is no dismissal.
+    field->focus();
+    popover->setOpen(true);
+    scene.settle();
+    popover->setOpen(false);
+    scene.settle();
+    CHECK(dismissals == 0);
+
+    // A press outside both the panel and its container (the window's far corner) closes it and reports it.
+    popover->setOpen(true);
+    scene.settle();
+    CHECK(Scene::itemOf(*inside).isVisible());
+    QTest::mouseClick(&scene.window(), Qt::LeftButton, {},
+                      QPoint{scene.window().width() - 2, scene.window().height() - 2});
+    scene.settle();
+    CHECK(dismissals == 1);
+    CHECK_FALSE(Scene::itemOf(*inside).isVisible());
+
+    // A press on the panel's own content, or on the field it serves, leaves it open.
+    popover->setOpen(true);
+    scene.settle();
+    scene.click(Scene::itemOf(*field));
+    CHECK(dismissals == 1);
+    CHECK(Scene::itemOf(*inside).isVisible());
+    CHECK(Scene::controlOf(*field).hasActiveFocus());
+
+    // Escape goes to the focused field, not to the panel: the panel stays open and the field keeps the focus.
+    scene.key(Qt::Key_Escape);
+    CHECK(dismissals == 1);
+    CHECK(Scene::itemOf(*inside).isVisible());
+    CHECK(Scene::controlOf(*field).hasActiveFocus());
+}
+
+// A trigger with a detail draws it as a second line.
+TEST_CASE("qt_quick menu: a trigger with a detail names both lines", "[qt_quick]") {
+    Scene scene;
+    auto menu = scene.backend().createMenu(nullptr, ui::MenuStyle::Button);
+    menu->setTrigger(
+        ui::MenuTrigger{.label = "Rheinlab", .icon = {}, .emphasis = ui::ButtonEmphasis::Normal, .detail = "Koeln"});
+    scene.settle();
+    CHECK(Scene::itemOf(*menu).property("triggerDetail").toString() == "Koeln");
+    CHECK(Scene::itemOf(*menu).property("triggerText").toString() == "Rheinlab\nKoeln");
+}
+
+namespace {
+
+/// The item named @p name inside @p root, or null.
+QQuickItem* namedItem(QQuickItem const& root, char const* name) {
+    for (QQuickItem* const item : root.findChildren<QQuickItem*>()) {
+        if (item->objectName() == QLatin1String{name}) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: MorphMenu passes no avatar or caret to the trigger's content (neither item is visible), or MorphCaret
+// draws the up-and-down chevron one chevron tall.
+TEST_CASE("qt_quick menu: a trigger draws its avatar before the label and its chevron after it", "[qt_quick]") {
+    Scene scene;
+    auto menu = scene.backend().createMenu(nullptr, ui::MenuStyle::Button);
+    menu->setTrigger(ui::MenuTrigger{.label = "Anna Meyer", .icon = {}, .emphasis = ui::ButtonEmphasis::Ghost});
+    scene.settle();
+    QQuickItem& item = Scene::itemOf(*menu);
+    qreal const plainWidth = item.implicitWidth();
+    REQUIRE(namedItem(item, "contentAvatar") != nullptr);
+    REQUIRE(namedItem(item, "contentCaret") != nullptr);
+    CHECK_FALSE(namedItem(item, "contentAvatar")->isVisible());
+    CHECK_FALSE(namedItem(item, "contentCaret")->isVisible());
+
+    menu->setTrigger(ui::MenuTrigger{.label = "Anna Meyer",
+                                     .icon = {},
+                                     .emphasis = ui::ButtonEmphasis::Ghost,
+                                     .detail = "Lab director",
+                                     .avatar = "AM",
+                                     .caret = ui::MenuCaret::Down});
+    scene.settle();
+    QQuickItem const* const avatar = namedItem(item, "contentAvatar");
+    QQuickItem const* const caret = namedItem(item, "contentCaret");
+    QQuickItem const* const label = namedItem(item, "contentLabel");
+    REQUIRE(avatar != nullptr);
+    REQUIRE(caret != nullptr);
+    REQUIRE(label != nullptr);
+    CHECK(avatar->isVisible());
+    CHECK(caret->isVisible());
+    CHECK(item.property("triggerAvatar").toString() == "AM");
+    CHECK(item.property("triggerCaret").toInt() == 1);
+    // A circle, level with the label's lines, before the label; the chevron after the label, inside the trigger.
+    CHECK(avatar->width() == avatar->height());
+    CHECK(avatar->width() > 0);
+    CHECK(avatar->x() + avatar->width() <= label->x());
+    CHECK(caret->x() >= label->x() + label->width());
+    CHECK(caret->x() + caret->width() <= item.width() + 0.5);
+    CHECK(item.implicitWidth() > plainWidth);
+    auto const* const initials = namedItem(*avatar, "contentAvatarText");
+    REQUIRE(initials != nullptr);
+    CHECK(initials->property("text").toString() == "AM");
+    qreal const downHeight = caret->height();
+
+    // The scope switcher's chevron is an up and a down one.
+    menu->setTrigger(ui::MenuTrigger{.label = "Rheinlab",
+                                     .icon = {},
+                                     .emphasis = ui::ButtonEmphasis::Normal,
+                                     .detail = {},
+                                     .avatar = {},
+                                     .caret = ui::MenuCaret::UpDown});
+    scene.settle();
+    CHECK(item.property("triggerCaret").toInt() == 2);
+    CHECK_FALSE(namedItem(item, "contentAvatar")->isVisible());
+    CHECK(namedItem(item, "contentCaret")->isVisible());
+    CHECK(namedItem(item, "contentCaret")->height() > downHeight);
+}

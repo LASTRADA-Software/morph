@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <expected>
 #include <functional>
 #include <glaze/glaze.hpp>
@@ -17,6 +18,7 @@
 #include <vector>
 
 #include "../session/session.hpp"
+#include "action_refusal.hpp"
 #include "change_types.hpp"
 #include "profiler.hpp"
 
@@ -43,6 +45,14 @@ inline constexpr std::size_t kMaxEnvelopeBytes = 8u * 1024u * 1024u;
 /// docs/spec/core/wire.md. A purely additive change (a new optional field on
 /// the envelope or on an action/result struct) does not bump this constant.
 inline constexpr std::uint32_t kProtocolVersion = 1;
+
+/// @brief The code and named arguments of an `ActionRefusal`, as an `err` reply carries them.
+struct RefusalBody {
+    /// @brief The refusal's code.
+    std::string code;
+    /// @brief The refusal's named arguments.
+    std::vector<::morph::model::RefusalArg> args;
+};
 
 /// @brief JSON wire envelope used between any client and `RemoteServer`.
 ///
@@ -166,6 +176,11 @@ struct Envelope {
     /// still-pending `execute` and settle it with an empty result. `0` names no
     /// call. Ignored on every other kind.
     std::uint64_t cancelCallId = 0;
+
+    /// @brief The code and arguments of the `ActionRefusal` an `execute` failed with; absent for any other failure.
+    ///
+    /// Carried on `err` only. Omitted from the JSON when absent, and ignored by a peer that does not know it.
+    std::optional<RefusalBody> refusal;
 };
 
 /// @brief The capability a server's `"hello"` reply lists when it honours
@@ -451,9 +466,9 @@ struct EscapingWriteOpts : glz::opts {
 /// The general form of the rule, for anyone adding a member: **elide payload,
 /// never elide identity.** If a peer has to know the field's value to decide
 /// where the message goes, it is written even at its default.
-inline constexpr std::array<std::string_view, 12> kOmittableEnvelopeKeys{
-    "typeId",     "contextKey", "primary", "shared",  "modelId",         "modelType",
-    "actionType", "body",       "message", "session", "protocolVersion", "cancelCallId"};
+inline constexpr std::array<std::string_view, 13> kOmittableEnvelopeKeys{
+    "typeId", "contextKey", "primary", "shared",          "modelId",      "modelType", "actionType",
+    "body",   "message",    "session", "protocolVersion", "cancelCallId", "refusal"};
 
 /// @brief Whether a session context carries nothing worth sending.
 ///
@@ -484,7 +499,7 @@ inline constexpr std::array<std::string_view, 12> kOmittableEnvelopeKeys{
     // exclude-write reports `unknown_key` for one that is not, which would turn
     // a member rename into a throw from *every* `encode` call at runtime. This
     // makes it a compile error instead.
-    static_assert(glz::reflect<Envelope>::size == 14,
+    static_assert(glz::reflect<Envelope>::size == 15,
                   "Envelope gained or lost a member: decide whether it is omittable when default "
                   "and update kOmittableEnvelopeKeys. A new member left off that list is always "
                   "written, which is merely the old behaviour; one added with a wrong spelling is "
@@ -537,6 +552,9 @@ inline constexpr std::array<std::string_view, 12> kOmittableEnvelopeKeys{
     }
     if (env.cancelCallId == 0) {
         omit("cancelCallId");
+    }
+    if (!env.refusal) {
+        omit("refusal");
     }
     return std::span<const std::string_view>{out.data(), count};
 }
@@ -612,6 +630,31 @@ inline Envelope makeErr(std::string message, uint64_t callId = 0) {
     env.callId = callId;
     env.message = detail::sanitizeControlChars(message);
     return env;
+}
+
+/// @brief Builds an `err` reply for a refused action: the message, and the refusal's code and arguments.
+///
+/// @param refusal The refusal the action threw.
+/// @param callId  The `callId` of the `execute` being answered.
+/// @return The `err` envelope, with `refusal` set.
+inline Envelope makeRefusalErr(::morph::model::ActionRefusal const& refusal, uint64_t callId = 0) {
+    Envelope env = makeErr(refusal.what(), callId);
+    env.refusal = RefusalBody{.code = refusal.code(), .args = refusal.args()};
+    return env;
+}
+
+/// @brief The exception a failed `execute` settles its completion with.
+///
+/// @param env     A decoded `err` reply.
+/// @param ifEmpty The text for a failure that is not a refusal and has an empty message.
+/// @return An `ActionRefusal` carrying `env.refusal` and `env.message` when the reply has a refusal, else a
+///         `std::runtime_error` with the message.
+[[nodiscard]] inline std::exception_ptr executeFailure(Envelope const& env, std::string ifEmpty = {}) {
+    if (env.refusal) {
+        return std::make_exception_ptr(
+            ::morph::model::ActionRefusal{env.refusal->code, env.refusal->args, env.message});
+    }
+    return std::make_exception_ptr(std::runtime_error(env.message.empty() ? ifEmpty : env.message));
 }
 
 /// @brief The envelope kind of a server-initiated event.
@@ -845,6 +888,35 @@ template <class T>
 /// ambiguity inherent to a free-text wire field, not something this
 /// constant can close without breaking the documented contract.
 inline constexpr std::string_view kExecuteTimeoutMessage = "timeout";
+
+/// @brief The `err` message a server replies with when its authoriser refuses a call (`RemoteServer`), or when nobody
+///        is signed in for a call that needs a principal.
+///
+/// A client maps a failure carrying exactly this text to the error kind `denied` (`ui::detail::defaultErrorKind`).
+inline constexpr std::string_view kUnauthorizedMessage = "unauthorized";
+
+/// @brief The failure of a control request (`register`, `attach`, `instances`) that the server's authoriser refused.
+///
+/// Its `what()` reads `"<request> failed: unauthorized"`, as any other control failure's does; the type is what tells
+/// a client the authoriser said no, since the text is no longer exactly `kUnauthorizedMessage`.
+class UnauthorizedError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+/// @brief The exception a failed control request settles with.
+///
+/// @param what    The request: `"register"`, `"attach"`, `"instances"`.
+/// @param message The `err` reply's message.
+/// @return An `UnauthorizedError` when @p message is `kUnauthorizedMessage`, else a `std::runtime_error`; both read
+///         `"<what> failed: <message>"`.
+[[nodiscard]] inline std::exception_ptr controlFailure(std::string_view what, std::string const& message) {
+    std::string const text = std::string{what} + " failed: " + message;
+    if (message == kUnauthorizedMessage) {
+        return std::make_exception_ptr(UnauthorizedError{text});
+    }
+    return std::make_exception_ptr(std::runtime_error{text});
+}
 
 /// @brief Builds a `hello` envelope announcing the sender's protocol version.
 ///

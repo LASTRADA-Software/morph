@@ -124,6 +124,10 @@ std::unique_ptr<ui::DialogWidget> Backend::createDialog(ui::ContainerWidget* par
     return std::make_unique<detail::DialogImpl>(*_context, QStringLiteral("MorphDialog"), parent);
 }
 
+std::unique_ptr<ui::PopoverWidget> Backend::createPopover(ui::ContainerWidget* parent) {
+    return std::make_unique<detail::PopoverImpl>(*_context, parent);
+}
+
 std::unique_ptr<ui::ToastWidget> Backend::createToast(ui::ContainerWidget* parent) {
     return std::make_unique<detail::ToastImpl>(*_context, parent);
 }
@@ -188,6 +192,15 @@ std::unique_ptr<ui::SplitterWidget> Backend::createSplitter(ui::ContainerWidget*
 
 std::unique_ptr<ui::CollapsibleWidget> Backend::createCollapsible(ui::ContainerWidget* parent) {
     return std::make_unique<detail::CollapsibleImpl>(*_context, parent);
+}
+
+std::unique_ptr<ui::PageWidget> Backend::createPage(ui::ContainerWidget* parent, ui::PageGeometry const& geometry) {
+    return std::make_unique<detail::PageImpl>(*_context, parent, geometry);
+}
+
+std::unique_ptr<ui::PageRegionWidget> Backend::createPageRegion(ui::ContainerWidget* parent,
+                                                                ui::RegionGeometry const& geometry) {
+    return std::make_unique<detail::PageRegionImpl>(*_context, parent, geometry);
 }
 
 std::unique_ptr<ui::DropZoneWidget> Backend::createDropZone(ui::ContainerWidget* parent) {

@@ -239,7 +239,7 @@ before the session is built; `FormModel::fromSchema(action, schema, overlays)` a
 - `unit` picks a Quantity's entry unit (`FieldSpec::entryUnit`) among its units, or replaces the unit shown on a
   field without units. A draft starts, and a prefill and a reset return, in the entry unit; the wire value stays in
   the canonical unit.
-- `decimals` sets the entry unit's places (a Number's display decimals); the wire keeps the schema's places.
+- `decimals` is `x-decimalPlaces` given by the screen: the canonical unit's entry places and the wire `dp` (another unit of a Quantity keeps its own); a Number's display decimals.
 - An overlay naming a field the schema does not have, or a unit that is not one of the field's, is a
   `SchemaError`.
 
@@ -253,17 +253,17 @@ before it.
 | Kind | Control |
 |---|---|
 | Text, Multiline | `TextInput` (single-line, multiline) |
-| Integer, Number, Decimal | `TextInput` showing its unit (`unit`), with its entry places (`decimals`: 0 for an Integer, else the entry unit's, the display places or the declared places) |
+| Integer, Number, Decimal | `TextInput` showing its unit (`unit`), with its entry places (`decimals`: 0 for an Integer, else the chosen unit's, the display places or the declared places) |
 | Quantity | `TextInput` showing its unit, as a Decimal's (one unit); with alternatives, a `TextInput` with no unit and a unit `Select` beside it; switching converts the draft exactly |
 | Boolean | `Checkbox` labelled with the field |
 | Enum, Choice | `Select` (dropdown, or radio for `x-widget: radio`) keyed by each option's JSON literal; a Choice adds a `Busy` while its options load |
-| DateTime, EpochDateTime; Date, EpochDate | `DateTimeInput` (date-time in the display zone; date) |
+| DateTime, EpochDateTime; Date, EpochDate | `DateTimeInput` (date-time in the display zone; date); the input shows and reads `FormSessionOptions::datePattern` or `dateTimePattern` while they are set (`ScreenCore::engineOptions` fills them from the session's formatting), and the draft text stays ISO |
 | Slider | `Slider` over `x-min`..`x-max` by `x-step` |
 | Array | `TextInput`, comma-separated |
 | Object | `Panel` of its members' cells |
 | ObjectArray | a `forEach` of row panels, each with Remove, and an Add button |
 
-- **A cell** is the label and the control (which marks a required field, live, and describes itself with the help),
+- **A cell** is the label (a `ui::TextRole::Label` text, so the theme's `field.caption.case` shapes it) and the control (which marks a required field, live, and describes itself with the help),
   visible while the field is. The cell owns the caption, and the control owns the required mark and the unit: the mark is the
   control's alone, so a required field shows it once on every backend, and the control is told the field's label
   with `showLabel` false, so it draws no second caption. Each control carries the view tree's field state: read-only, required, the field's error as its

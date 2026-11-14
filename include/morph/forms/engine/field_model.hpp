@@ -251,8 +251,9 @@ struct FieldOverlay {
     /// @brief The unit a Quantity is entered in: the id of one of its units (its canonical unit or an alternative).
     ///        On a field without units, the unit shown beside it.
     std::optional<std::string> unit;
-    /// @brief The places a Decimal or Quantity is entered with in its entry unit, or a Number's display decimals.
-    ///        The wire value keeps the schema's places.
+    /// @brief The field's places, with the meaning of `x-decimalPlaces`: a Decimal's or Quantity's entry places in its
+    ///        canonical unit (another unit of a Quantity keeps its own) and the wire `dp`; a Number's display
+    ///        decimals.
     std::optional<std::uint32_t> decimals;
     /// @brief Replaces `x-widget`, so the kind is read again (`textarea`, `radio`, `slider`, `epochDays`, …).
     std::optional<std::string> widget;
@@ -974,7 +975,8 @@ private:
         return {};
     }
 
-    /// Applies an overlay's `unit` and `decimals` to the field read from the schema.
+    /// Applies an overlay's `unit` and `decimals` (the canonical unit's places, as `x-decimalPlaces`) to the field
+    /// read from the schema.
     [[nodiscard]] static std::expected<void, SchemaError> applyUnitOverlay(FieldSpec& spec,
                                                                            FieldOverlay const& overlay) {
         if (overlay.unit.has_value()) {
@@ -995,7 +997,8 @@ private:
             if (spec.units.empty()) {
                 spec.displayDecimals = places;
             } else {
-                spec.units.at(spec.entryUnit).decimals = places;
+                spec.units.front().decimals = places;
+                spec.decimalPlaces = places;
             }
         }
         return {};

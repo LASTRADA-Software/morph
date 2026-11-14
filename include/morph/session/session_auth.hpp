@@ -593,7 +593,8 @@ public:
     }
 
     /// @brief Verifies @p ctx's token once, then asks `authenticate` and
-    ///        `authorize` as the default `admit` does.
+    ///        `authorize` as the default `admit` does, with `authorize` given
+    ///        the verified principal in place of the client's claim.
     ///
     /// Both are still called through the vtable, so a subclass that overrides
     /// either keeps its own decision: a carve-out that admits a call without a
@@ -609,10 +610,15 @@ public:
     [[nodiscard]] Admission admit(const Context& ctx,
                                   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                   std::string_view modelType, std::string_view actionType) const override {
-        Verification const once{.owner = this, .ctx = &ctx, .claims = _verifier.verify(ctx.token, _clock())};
+        // `authorize` is given the verified principal, in a copy of the session: the copy is registered with the
+        // verification too, so it is not verified a second time.
+        Context stamped = ctx;
+        Verification const once{
+            .owner = this, .ctx = &ctx, .stamped = &stamped, .claims = _verifier.verify(ctx.token, _clock())};
         ActiveVerification const scope{once};
         auto principal = authenticate(ctx);
-        return Admission{.allowed = authorize(ctx, modelType, actionType), .principal = std::move(principal)};
+        stamped.principal = principal.value_or(std::string{});
+        return Admission{.allowed = authorize(stamped, modelType, actionType), .principal = std::move(principal)};
     }
 
 private:
@@ -620,6 +626,7 @@ private:
     struct Verification {
         const SigningAuthorizer* owner;
         const Context* ctx;
+        const Context* stamped;
         std::expected<SessionToken, AuthError> claims;
     };
 
@@ -648,7 +655,8 @@ private:
     /// @brief @p ctx's claims: the running `admit`'s verification when it is
     ///        this authorizer's of this very session, else a fresh one.
     [[nodiscard]] std::expected<SessionToken, AuthError> verified(const Context& ctx) const {
-        if (const auto* running = active(); running != nullptr && running->owner == this && running->ctx == &ctx) {
+        if (const auto* running = active();
+            running != nullptr && running->owner == this && (running->ctx == &ctx || running->stamped == &ctx)) {
             return running->claims;
         }
         return _verifier.verify(ctx.token, _clock());

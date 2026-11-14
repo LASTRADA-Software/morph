@@ -152,7 +152,14 @@ ui::Screen homeScreen() {
                        ui::wizard<FactWizard>(model).id(ui::element("factWizard")).testId("factWizard")},
                       {.title = "Forms", .padding = 2});
 
-        return ui::column({menus, inputs, layout, overlays, lists, feedback, forms}, {.gap = 3});
+        auto const paper = ui::localeScope(
+            {ui::page({ui::pageRegion({ui::text({.text = "Letterhead"})}, {.anchor = morph::ui::PageAnchor::Top}),
+                       ui::pageRegion({ui::text({.text = "Page 1 of 1"})}, {.anchor = morph::ui::PageAnchor::Bottom})},
+                      {.width = 210, .height = 297, .margins = morph::ui::PageMargins{morph::ui::Mm{20}}})
+                 .a11y("A4 sheet")},
+            "de");
+
+        return ui::column({menus, inputs, layout, overlays, lists, feedback, paper, forms}, {.gap = 3});
     });
 }
 

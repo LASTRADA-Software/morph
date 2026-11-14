@@ -1248,7 +1248,8 @@ TEST_CASE("a refusing server surfaces as an exception on the remote backend", "[
     REQUIRE_THROWS(morph::testing::bindAttach(
         backend, "SHI_CounterModel", [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); }, "1",
         morph::exec::detail::ModelId{0}));
-    REQUIRE_THROWS(backend.listInstances("SHI_CounterModel"));
+    // A refused enumeration is classed as unauthorized, the same as a refused register or attach.
+    REQUIRE_THROWS_AS(backend.listInstances("SHI_CounterModel"), morph::wire::UnauthorizedError);
 }
 
 TEST_CASE("an empty primary on the remote backend degrades to a private instance", "[shared-instances]") {

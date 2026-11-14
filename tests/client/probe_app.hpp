@@ -5,15 +5,22 @@
 #include <expected>
 #include <memory>
 #include <morph/client/source.hpp>
+#include <morph/ui/author.hpp>
+#include <morph/ui/document.hpp>
 #include <morph/ui/service.hpp>
 #include <string>
 #include <string_view>
+#include <vector>
 
 /// @file
 /// A two-screen application the foundation's tests open: `probe.home` shows the answer of a query and navigates to
 /// `probe.other`.
 
 namespace probe {
+
+/// @brief The catalog facts of the search and count actions: what a registry validates a shell declaration against.
+/// @return The facts.
+[[nodiscard]] morph::ui::Catalog searchCatalog();
 
 /// @brief The query's action.
 struct Answer {};
@@ -35,8 +42,66 @@ struct Attach {
     std::string content;
 };
 
-/// @brief The model: one answer, a sign-in and an attachment.
+/// @brief The scope switcher's read.
+struct Scopes {};
+
+/// @brief One scope the person may choose.
+struct ScopeOption {
+    /// @brief The caption.
+    std::string label;
+    /// @brief The value screens read as the context.
+    std::string value;
+};
+
+/// @brief What `Scopes` answers.
+struct ScopeList {
+    /// @brief The options.
+    std::vector<ScopeOption> options;
+};
+
+/// @brief A search.
+struct Search {
+    /// @brief The typed text.
+    std::string q;
+};
+
+/// @brief One hit of `Search`.
+struct SearchHit {
+    /// @brief The screen it opens.
+    std::string screen;
+    /// @brief Its caption.
+    std::string title;
+};
+
+/// @brief What `Search` answers.
+struct SearchHits {
+    /// @brief The hits.
+    std::vector<SearchHit> hits;
+};
+
+/// @brief A module's count.
+struct Count {};
+
+/// @brief What `Count` answers: a plain reply, not a registered record.
+struct CountReply {
+    /// @brief The count.
+    std::int64_t n = 0;
+};
+
+/// @brief The model: one answer, a sign-in, an attachment and the scopes.
 struct ProbeModel {
+    /// @brief The scopes.
+    /// @param action The request.
+    /// @return Two options.
+    [[nodiscard]] ScopeList execute(Scopes const& action) const;
+    /// @brief The search.
+    /// @param action The request.
+    /// @return A hit on each of `probe.width` and `probe.second`.
+    [[nodiscard]] SearchHits execute(Search const& action) const;
+    /// @brief The count.
+    /// @param action The request.
+    /// @return 3.
+    [[nodiscard]] CountReply execute(Count const& action) const;
     /// @brief The answer.
     /// @param action The request.
     /// @return 42.
@@ -72,3 +137,10 @@ inline constexpr std::string_view kOther =
 [[nodiscard]] morph::client::LocalApp app();
 
 }  // namespace probe
+
+/// @brief The probe model keeps no state, so the shell's parts and a screen may share one instance of it.
+template <>
+struct morph::ui::author::ModelFacts<probe::ProbeModel> {
+    /// @brief Equivalent to a private instance.
+    static constexpr bool stateless = true;
+};

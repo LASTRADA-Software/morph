@@ -131,6 +131,17 @@ public:
         call.promise.reject(std::make_exception_ptr(KindedError{std::move(kind), text}));
     }
 
+    /// @brief Answers a call as a transport does a server's `err`: a plain `std::runtime_error` carrying the text,
+    ///        whose kind the session's own classifier decides.
+    /// @param index The call.
+    /// @param text  The `err` message.
+    void failWithMessage(std::size_t index, std::string const& text) {
+        Call& call = calls.at(index);
+        REQUIRE_FALSE(call.answered);
+        call.answered = true;
+        call.promise.reject(std::make_exception_ptr(std::runtime_error{text}));
+    }
+
 private:
     class Channel final : public ModelChannel {
     public:
@@ -365,6 +376,16 @@ inline Catalog corpusCatalog() {
         if (action == "Push_RenameAll" || action == "Lims_DeleteSample") {
             info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "changes", .record = "T_Row"}};
         }
+        // The shell parts' probe: a stateless model whose count reads a keyed row, and an action that changes it.
+        if (action == "Shell_Rows" || action == "Shell_Rename") {
+            info.modelType = "Lims_ClientModel";
+        }
+        if (action == "Shell_Rows") {
+            info.records = {rowsAtTop};
+        }
+        if (action == "Shell_Rename") {
+            info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "changes", .record = "T_Row"}};
+        }
         if (action == "Push_Reset") {
             info.effects = std::vector<ActionEffect>{ActionEffect{.kind = "changesInstance", .record = std::nullopt}};
         }
@@ -388,6 +409,25 @@ inline Catalog corpusCatalog() {
                 "at":{"type":"string","title":"At","x-order":0},
                 "value":{"type":"integer","title":"Value","x-order":1}},"required":["value"]}}},
               "required":["sampleId"]})"};
+        }
+        // A mass in kilograms (3 places) that is also entered in grams (1 place).
+        if (action == "Lims_WeighSample") {
+            return std::string{R"({"type":"object","title":"Weigh","properties":{
+              "mass":{"type":["object","null"],"title":"Mass","x-decimalPlaces":3,
+                "ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"},
+                "x-unitAlternatives":[{"id":"g","display":"g","decimals":1,"num":1,"den":1000}],"x-order":0}},
+              "required":["mass"]})"};
+        }
+        // A date and a date-time, entered in the session's date patterns.
+        if (action == "Lims_ScheduleSample") {
+            return std::string{R"({"type":"object","title":"Schedule","properties":{
+              "day":{"type":["string","null"],"format":"date","title":"Day","x-order":0},
+              "at":{"type":["string","null"],"format":"date-time","title":"At","x-order":1}}})"};
+        }
+        // A plain number shown and entered at 2 places.
+        if (action == "Lims_MeasureTemperature") {
+            return std::string{R"({"type":"object","title":"Measure","properties":{
+              "reading":{"type":"number","title":"Reading","x-displayDecimals":2,"x-order":0}}})"};
         }
         if (action != "Lims_CaptureConcentration") {
             return std::nullopt;
@@ -460,7 +500,7 @@ struct Harness {
                                                     } catch (KindedError const& kinded) {
                                                         return kinded.kind;
                                                     } catch (...) {
-                                                        return "error";
+                                                        return ui::detail::defaultErrorKind(error);
                                                     }
                                                 },
                                                 .developmentTools = tools,
@@ -526,6 +566,14 @@ struct Harness {
     /// @param kind  The error kind.
     void fail(std::size_t index, std::string kind = "error") {
         dispatcher.fail(index, std::move(kind));
+        settle();
+    }
+
+    /// @brief Answers a call with a server's `err` message, as a transport raises it, and lets the owner run.
+    /// @param index The call.
+    /// @param text  The message.
+    void failWithMessage(std::size_t index, std::string const& text) {
+        dispatcher.failWithMessage(index, text);
         settle();
     }
 

@@ -913,6 +913,57 @@ TEST_CASE("qt_quick widgets: an empty date input's calendar opens on today's mon
     CHECK(grid->property("month").toInt() == today.month() - 1);
 }
 
+// Mutation: take the month name from Qt.locale() (a desktop in another language shows its own name).
+TEST_CASE("qt_quick widgets: the date picker's month header is English whatever the system locale", "[qt_quick]") {
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    // Restored on every exit, a failed REQUIRE included.
+    struct DefaultLocale {
+        QLocale previous;
+        DefaultLocale() { QLocale::setDefault(QLocale(QLocale::German, QLocale::Germany)); }
+        ~DefaultLocale() { QLocale::setDefault(previous); }
+        DefaultLocale(DefaultLocale const&) = delete;
+        DefaultLocale& operator=(DefaultLocale const&) = delete;
+        DefaultLocale(DefaultLocale&&) = delete;
+        DefaultLocale& operator=(DefaultLocale&&) = delete;
+    } const german;
+    Scene scene;
+    auto input = scene.backend().createDateTimeInput(nullptr, ui::DateMode::Date, 0);
+    input->setValue(
+        morph::time::Timestamp{DateTime{year{2026}, month{10}, day{15}, hours{0}, minutes{0}, seconds{0}}});
+    scene.settle();
+    QQuickItem const* const button = findNamed(Scene::itemOf(*input), QStringLiteral("datePickerButton"));
+    REQUIRE(button != nullptr);
+    scene.click(*button);
+    QQuickItem const* const header = findNamed(*scene.window().contentItem(), QStringLiteral("datePickerMonth"));
+    REQUIRE(header != nullptr);
+    CHECK(header->property("text").toString() == QStringLiteral("October 2026"));
+    // The week is the C locale's: English weekday names, Monday first.
+    QQuickItem const* const grid = findNamed(*scene.window().contentItem(), QStringLiteral("datePickerGrid"));
+    REQUIRE(grid != nullptr);
+    QLocale const weekLocale = grid->property("locale").toLocale();
+    CHECK(weekLocale.firstDayOfWeek() == Qt::Monday);
+    CHECK(weekLocale.dayName(Qt::Monday) == QStringLiteral("Monday"));
+}
+
+// Mutation: leave the re-show out of DateTimeImpl::setPattern (the field keeps showing the old pattern's text).
+TEST_CASE("qt_quick widgets: a date input shows its value again when the pattern changes", "[qt_quick]") {
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    Scene scene;
+    auto input = scene.backend().createDateTimeInput(nullptr, ui::DateMode::Date, 0);
+    input->setValue(morph::time::Timestamp{DateTime{year{2026}, month{11}, day{9}, hours{0}, minutes{0}, seconds{0}}});
+    scene.settle();
+    auto const shown = [&input] { return detail::baseOf(*input)->shownText(); };
+    CHECK(shown() == "2026-11-09");
+    input->setPattern("dd.MM.yyyy");
+    scene.settle();
+    CHECK(shown() == "09.11.2026");
+    input->setPattern("");
+    scene.settle();
+    CHECK(shown() == "2026-11-09");
+}
+
 TEST_CASE("qt_quick widgets: dates format and parse in a display zone", "[qt_quick]") {
     using morph::time::DateTime;
     using namespace std::chrono;
@@ -2145,6 +2196,45 @@ TEST_CASE("qt_quick widgets: a date input with a pattern shows, reads and picks 
     CHECK(changes.back()->value->toIso8601() == "2026-10-26T10:00:00.000Z");
 }
 
+// Mutation: show the typed ISO text as it is (the field keeps ISO beside a pattern).
+TEST_CASE("qt_quick widgets: a date input with a pattern also reads ISO text and shows it in the pattern",
+          "[qt_quick]") {
+    CHECK(detail::parseDateTime(QStringLiteral("2026-11-13 15:05"), ui::DateMode::DateTime, 0, "dd.MM.yyyy HH:mm")
+              ->toIso8601() == "2026-11-13T15:05:00.000Z");
+    CHECK(detail::parseDateTime(QStringLiteral("13.11.2026 15:05"), ui::DateMode::DateTime, 0, "dd.MM.yyyy HH:mm")
+              ->toIso8601() == "2026-11-13T15:05:00.000Z");
+    CHECK(detail::parseDateTime(QStringLiteral("2026-11-13"), ui::DateMode::Date, 0, "dd.MM.yyyy")->toIso8601() ==
+          "2026-11-13T00:00:00.000Z");
+    CHECK_FALSE(detail::parseDateTime(QStringLiteral("13/11/2026"), ui::DateMode::Date, 0, "dd.MM.yyyy").has_value());
+    CHECK_FALSE(detail::parseDateTime(QStringLiteral("2026-13-45"), ui::DateMode::Date, 0, "dd.MM.yyyy").has_value());
+
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const input = scene.backend().createDateTimeInput(column.get(), ui::DateMode::DateTime, 0);
+    auto const other = scene.backend().createButton(column.get());
+    std::vector<std::optional<morph::time::Timestamp>> changes;
+    input->setOnChange([&changes](std::optional<morph::time::Timestamp> value) { changes.push_back(value); });
+    input->setPattern("dd.MM.yyyy HH:mm");
+    scene.settle();
+    scene.click(Scene::controlOf(*input));
+    scene.enter(QStringLiteral("2026-11-13 15:05"));
+    scene.click(Scene::itemOf(*other));
+    REQUIRE(changes.size() == 1);
+    REQUIRE(changes.back().has_value());
+    CHECK(changes.back()->value->toIso8601() == "2026-11-13T15:05:00.000Z");
+    CHECK(base(*input).shownText() == "13.11.2026 15:05");
+
+    // Text in neither form is refused: no change, and the field shows its value again.
+    scene.click(Scene::controlOf(*input));
+    scene.standardKey(QKeySequence::SelectAll);
+    scene.enter(QStringLiteral("13/11/2026 16:00"));
+    scene.click(Scene::itemOf(*other));
+    CHECK(changes.size() == 1);
+    CHECK(base(*input).shownText() == "13.11.2026 15:05");
+}
+
 namespace {
 
 // The items named @p name below @p root in the visual tree, in the order the model made them, left to right.
@@ -2579,6 +2669,53 @@ TEST_CASE(
     REQUIRE(node != nullptr);
     CHECK(node->text(QAccessible::Name) == QStringLiteral("Record type"));
     QAccessible::setActive(wasActive);
+}
+
+// Mutation: draw `MorphField`'s caption in `Theme.captionFont` again (the input's caption stays mixed case), or the
+// label role in it (the label text does).
+TEST_CASE("qt_quick widgets: a field caption and a label text are small capitals under field.caption.case",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const label = scene.backend().createText(column.get());
+    label->setText("Operator");
+    label->setRole(ui::TextRole::Label);
+    auto const note = scene.backend().createText(column.get());
+    note->setText("A note");
+    note->setRole(ui::TextRole::Caption);
+    auto const input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setCaption("Sampled by", true);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.settle();
+    QObject const* const theme = themeOf(scene);
+    auto const labelFont = [&](ui::TextWidget const& text) {
+        return Scene::controlOf(text).property("font").value<QFont>();
+    };
+    auto const inputCaption = [&]() -> QQuickItem const* {
+        return Scene::itemOf(*input).findChild<QQuickItem*>(QStringLiteral("caption"));
+    };
+    REQUIRE(inputCaption() != nullptr);
+    auto const captionFont = theme->property("captionFont").value<QFont>();
+    CHECK(labelFont(*label) == captionFont);
+    CHECK(inputCaption()->property("font").value<QFont>() == captionFont);
+
+    auto const tokens =
+        ui::parseTokens(R"({"field": {"caption": {"case": {"$type": "keyword", "$value": "uppercase"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    scene.settle();
+    for (QFont const& font : {labelFont(*label), inputCaption()->property("font").value<QFont>()}) {
+        CHECK(font.pixelSize() == static_cast<int>(std::lround(theme->property("smallPixels").toReal())));
+        CHECK(font.weight() == static_cast<QFont::Weight>(theme->property("strongWeight").toInt()));
+        CHECK(font.capitalization() == QFont::AllUppercase);
+        CHECK(font.letterSpacing() > 0.0);
+    }
+    // A note under a control is a caption role, not a field's caption.
+    CHECK(labelFont(*note) == captionFont);
+    CHECK(inputCaption()->property("text").toString() == QStringLiteral("Sampled by"));
 }
 
 namespace {
@@ -3432,4 +3569,66 @@ TEST_CASE(
     }
     REQUIRE(value != nullptr);
     CHECK(value->width() >= segment - 1.0);
+}
+
+// Mutation: leave `detail` out of StepsImpl::setSteps (no detail text), drop it from the accessible name, show it
+// while unlabelled, or let the detail ask for its own width (the cell grows with it).
+TEST_CASE("qt_quick widgets: a step's detail hangs under its label, shows only while labelled and never widens it",
+          "[qt_quick]") {
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const plain = scene.backend().createSteps(column.get());
+    plain->setSteps({{.label = "Received", .state = ui::StepState::Done}});
+    auto const steps = scene.backend().createSteps(column.get());
+    steps->setSteps({{.label = "Received",
+                      .state = ui::StepState::Done,
+                      .detail = "A. Weber, 12 November 2026 at 09:14 in the receiving bay"},
+                     {.label = "Verified", .state = ui::StepState::Active}});
+    steps->setCurrent(1);
+    scene.settle();
+
+    auto const stepCells = [](ui::StepsWidget const& widget) {
+        QList<QQuickItem*> found;
+        // The delegates are visual children of the layout, not QObject children of the widget.
+        for (QQuickItem* const child : Scene::itemOf(widget).childItems()) {
+            for (QQuickItem* const cell : child->childItems()) {
+                if (cell->objectName() == QStringLiteral("step")) {
+                    found.append(cell);
+                }
+            }
+        }
+        return found;
+    };
+    QList<QQuickItem*> const cells = stepCells(*steps);
+    REQUIRE(cells.size() == 2);
+    auto* const detail = cells.at(0)->findChild<QQuickItem*>(QStringLiteral("detail"));
+    auto* const label = cells.at(0)->findChild<QQuickItem*>(QStringLiteral("label"));
+    auto* const circle = cells.at(0)->findChild<QQuickItem*>(QStringLiteral("circle"));
+    REQUIRE((detail != nullptr && label != nullptr && circle != nullptr));
+    CHECK(detail->property("text").toString() ==
+          QStringLiteral("A. Weber, 12 November 2026 at 09:14 in the receiving bay"));
+    CHECK(detail->isVisible());
+    CHECK(detail->y() >= label->y() + label->height());
+    // The detail is cut at the label's width, so the step is no wider than one with no detail.
+    CHECK(detail->width() <= label->width() + 0.5);
+    CHECK(cells.at(0)->width() == stepCells(*plain).at(0)->width());
+    // The circle is centred on the label's line.
+    CHECK(circle->mapToItem(cells.at(0), QPointF{0, circle->height() / 2}).y() ==
+          Catch::Approx(label->mapToItem(cells.at(0), QPointF{0, label->height() / 2}).y()).margin(1.0));
+    auto* const bare = cells.at(1)->findChild<QQuickItem*>(QStringLiteral("detail"));
+    REQUIRE(bare != nullptr);
+    CHECK_FALSE(bare->isVisible());
+
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const named = QAccessible::queryAccessibleInterface(cells.at(0));
+    REQUIRE(named != nullptr);
+    CHECK(named->text(QAccessible::Name) ==
+          QStringLiteral("Received, A. Weber, 12 November 2026 at 09:14 in the receiving bay, done"));
+    steps->setLabelled(false);
+    scene.settle();
+    CHECK_FALSE(detail->isVisible());
+    CHECK(named->text(QAccessible::Name) ==
+          QStringLiteral("Received, A. Weber, 12 November 2026 at 09:14 in the receiving bay, done"));
+    QAccessible::setActive(wasActive);
 }

@@ -6,6 +6,8 @@
 // nobody serves is still `unknown envelope kind`.
 
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <exception>
 #include <latch>
 #include <memory>
 #include <morph/core/executor.hpp>
@@ -16,6 +18,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "test_support.hpp"
 
 namespace {
 
@@ -230,4 +234,104 @@ TEST_CASE("two_param_service_still_compiles_and_serves", "[push][catalog]") {
     Envelope const direct = decode(base.handle(request("echo-pong", 8), TokenAuthorizer{}, facts));
     CHECK(direct.body == "|echo-pong");
     CHECK_FALSE(facts.events);
+}
+
+// ── SimulatedRemoteBackend as an IEnvelopeTransport ──────────────────────────
+
+namespace {
+
+/// Answers `held-*` kinds with the connection it saw and the session it carried; `held-wait` blocks until released,
+/// so its request stays unanswered.
+class HeldService final : public morph::backend::IEnvelopeService {
+public:
+    using IEnvelopeService::handle;
+
+    [[nodiscard]] bool serves(std::string_view kind) const override { return kind.starts_with("held-"); }
+
+    [[nodiscard]] std::string handle(Envelope const& request, morph::session::IAuthorizer const& /*authorizer*/,
+                                     morph::backend::ConnectionFacts& /*facts*/) override {
+        return answer(request);
+    }
+    [[nodiscard]] std::string handle(Envelope const& request,
+                                     morph::session::IAuthorizer const& /*authorizer*/) override {
+        return answer(request);
+    }
+
+    std::latch entered{1};
+    std::latch release{1};
+
+private:
+    std::string answer(Envelope const& request) {
+        if (request.kind == "held-wait") {
+            entered.count_down();
+            release.wait();
+        }
+        if (request.kind == "held-fail") {
+            return encode(morph::wire::makeErr("held refusal", request.callId));
+        }
+        return encode(morph::wire::makeOk(request.callId, request.session.token));
+    }
+};
+
+}  // namespace
+
+TEST_CASE("SimulatedRemoteBackend::request: a request on a scoped backend gets the server's reply",
+          "[remote][service][transport]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    auto service = std::make_shared<HeldService>();
+    morph::backend::ServerConfig config;
+    config.services.push_back(service);
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, config);
+    auto const cid = server->openConnection();
+    morph::backend::SimulatedRemoteBackend backend{*server, cid};
+    morph::backend::IEnvelopeTransport& transport = backend;
+
+    SECTION("an ok reply carries the body and the session as given") {
+        Envelope env = request("held-ping", 0);
+        env.session.token = "tok";
+        std::optional<Envelope> reply;
+        transport.request(std::move(env), owner).then([&](Envelope const& answer) { reply = answer; });
+        REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return reply.has_value(); }));
+        CHECK(reply->kind == "ok");
+        CHECK(reply->body == "tok");
+        CHECK(reply->callId != 0U);
+    }
+    SECTION("an err reply resolves, it is not a rejection") {
+        std::optional<Envelope> reply;
+        bool rejected = false;
+        transport.request(request("held-fail", 0), owner)
+            .then([&](Envelope const& answer) { reply = answer; })
+            .onError([&](std::exception_ptr const&) { rejected = true; });
+        REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return reply.has_value() || rejected; }));
+        REQUIRE(reply.has_value());
+        CHECK(reply->kind == "err");
+        CHECK(reply->message == "held refusal");
+    }
+}
+
+TEST_CASE("SimulatedRemoteBackend::cancelPending rejects a request nobody has answered",
+          "[remote][service][transport]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::MainThreadExecutor owner;
+    auto service = std::make_shared<HeldService>();
+    morph::backend::ServerConfig config;
+    config.services.push_back(service);
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, config);
+    auto const cid = server->openConnection();
+    morph::backend::SimulatedRemoteBackend backend{*server, cid};
+    morph::backend::IEnvelopeTransport& transport = backend;
+
+    bool answered = false;
+    bool rejected = false;
+    transport.request(request("held-wait", 0), owner)
+        .then([&](Envelope const&) { answered = true; })
+        .onError([&](std::exception_ptr const&) { rejected = true; });
+    service->entered.wait();
+
+    backend.cancelPending(std::make_exception_ptr(std::runtime_error{"cancelled"}));
+    REQUIRE(morph::testing::pumpOwnerUntil(owner, [&] { return rejected; }));
+    service->release.count_down();
+    owner.runFor(std::chrono::milliseconds{20});
+    CHECK_FALSE(answered);
 }

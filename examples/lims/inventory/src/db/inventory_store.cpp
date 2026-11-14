@@ -1,0 +1,492 @@
+// SPDX-License-Identifier: Apache-2.0
+#include "lims/inventory/db/inventory_store.hpp"
+
+#include <Lightweight/SqlStatement.hpp>
+#include <algorithm>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "lims/inventory/core/fault_hook.hpp"
+#include "lims/org/core/calendar.hpp"
+#include "lims/org/core/errors.hpp"
+#include "lims/org/core/model_support.hpp"
+#include "lims/org/core/money.hpp"
+#include "lims/org/models/org_model.hpp"
+
+namespace lims::inventory {
+
+namespace {
+
+using ::morph::math::DecimalPlaces;
+using ::morph::math::Denominator;
+using ::morph::math::Numerator;
+using ::morph::math::Rational;
+
+constexpr int kMaxMovementKind = static_cast<int>(MovementKind::Shortfall);
+constexpr int kMaxStockUnit = static_cast<int>(StockUnit::piece);
+constexpr int kMaxRequisitionState = static_cast<int>(RequisitionState::Ordered);
+constexpr int kMaxOrderState = static_cast<int>(OrderState::Received);
+constexpr int kMaxCurrencyCode = static_cast<int>(CurrencyCode::JPY);
+
+/// @brief A column of text, as a string.
+/// @param field The column.
+/// @return Its text.
+[[nodiscard]] std::string textOf(auto const& field) { return std::string{field.Value().ToStringView()}; }
+
+/// @brief The instant a column holds, or an empty timestamp for a column not yet set.
+/// @param millis Epoch milliseconds; 0 until set.
+/// @return The timestamp.
+[[nodiscard]] ::morph::time::Timestamp instant(std::int64_t millis) {
+    return millis > 0 ? timestampFromMillis(millis) : ::morph::time::Timestamp{};
+}
+
+/// @brief The lot number a row stores, as text.
+/// @param lot The row.
+/// @return It.
+[[nodiscard]] std::string numberOf(db::LotRecord const& lot) {
+    return std::string{lot.lotNumber.Value().ToStringView()};
+}
+
+}  // namespace
+
+std::size_t changedRows(Lightweight::DataMapper& mapper, std::string const& sql) {
+    Lightweight::SqlStatement statement{mapper.Connection()};
+    return statement.ExecuteDirect(sql).NumRowsAffected();
+}
+
+Rational moveLot(Lightweight::DataMapper& mapper, db::LotRecord const& lot, MovementKind kind,
+                 Rational const& quantity, std::string const& source, std::string const& principal,
+                 std::optional<std::string> const& eventId) {
+    Rational const before{Numerator{lot.onHandNum.Value()}, Denominator{lot.onHandDen.Value()}, DecimalPlaces{6}};
+    auto const after = ::morph::math::checkedAdd(before, quantity);
+    if (!after.has_value()) {
+        throw OutOfRange{"lot " + numberOf(lot) + ": stock on hand does not fit"};
+    }
+    if (after->numerator < 0) {
+        throw ValidationError{"lot " + numberOf(lot) + " holds less than that"};
+    }
+    auto update = mapper.Connection().Query(db::LotRecord::TableName).Update();
+    update.Set("on_hand_num", after->numerator).Set("on_hand_den", after->denominator);
+    (void)update.Where("id", "=", static_cast<std::int64_t>(lot.id.Value()))
+        .Where("on_hand_num", "=", lot.onHandNum.Value())
+        .Where("on_hand_den", "=", lot.onHandDen.Value());
+    if (changedRows(mapper, update.ToSql()) != 1U) {
+        throw Conflict{"lot " + numberOf(lot) + " changed meanwhile"};
+    }
+    inventoryFaultPoint("lot.afterLotWrite", mapper.Connection());
+    db::MovementRecord movement;
+    movement.companyId = lot.companyId.Value();
+    movement.itemId = lot.itemId.Value();
+    movement.lotId = static_cast<std::int64_t>(lot.id.Value());
+    movement.kind = static_cast<int>(kind);
+    movement.quantityNum = quantity.numerator;
+    movement.quantityDen = quantity.denominator;
+    movement.at = nowMillis();
+    movement.by = Lightweight::SqlAnsiString<64>{principal};
+    movement.source = Lightweight::SqlAnsiString<128>{source};
+    if (eventId.has_value()) {
+        movement.eventId = Lightweight::SqlAnsiString<128>{*eventId};
+    }
+    mapper.Create(movement);
+    return *after;
+}
+
+StockMovementView movementView(db::MovementRecord const& row, StockUnit unit) {
+    int const kind = row.kind.Value();
+    if (kind < 0 || kind > kMaxMovementKind) {
+        throw ValidationError{"movement " + std::to_string(row.id.Value()) + " stores a kind outside its range"};
+    }
+    return StockMovementView{
+        .id = MovementId{static_cast<std::int64_t>(row.id.Value())},
+        .item = ItemId{row.itemId.Value()},
+        .lot = row.lotId.Value().has_value() ? LotId{*row.lotId.Value()} : LotId{},
+        .kind = static_cast<MovementKind>(kind),
+        .quantity = Measure{Rational{Numerator{row.quantityNum.Value()}, Denominator{row.quantityDen.Value()},
+                                     DecimalPlaces{6}}},
+        .unit = unit,
+        .at = timestampFromMillis(row.at.Value()),
+        .by = std::string{row.by.Value().ToStringView()},
+        .source = std::string{row.source.Value().ToStringView()},
+    };
+}
+
+std::vector<db::ReservationRecord> liveReservationsOn(Lightweight::DataMapper& mapper, std::int64_t lot) {
+    auto rows = mapper.Query<db::ReservationRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ReservationRecord::lotId>, "=", lot)
+                    .All();
+    std::int64_t const now = nowMillis();
+    std::erase_if(rows, [now](db::ReservationRecord const& row) { return row.expiresAt.Value() <= now; });
+    std::ranges::sort(rows, {}, [](db::ReservationRecord const& row) { return row.id.Value(); });
+    return rows;
+}
+
+std::vector<db::ReservationRecord> liveReservationsOfSample(Lightweight::DataMapper& mapper, std::int64_t sample) {
+    auto rows = mapper.Query<db::ReservationRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ReservationRecord::sampleId>, "=", sample)
+                    .All();
+    std::int64_t const now = nowMillis();
+    std::erase_if(rows, [now](db::ReservationRecord const& row) { return row.expiresAt.Value() <= now; });
+    std::ranges::sort(rows, {}, [](db::ReservationRecord const& row) { return row.id.Value(); });
+    return rows;
+}
+
+Rational reservedOn(Lightweight::DataMapper& mapper, std::int64_t lot, std::int64_t exceptSample) {
+    ExactSum sum;
+    for (auto const& row : liveReservationsOn(mapper, lot)) {
+        if (exceptSample != 0 && row.sampleId.Value() == exceptSample) {
+            continue;
+        }
+        if (!sum.add(Rational{Numerator{row.quantityNum.Value()}, Denominator{row.quantityDen.Value()},
+                              DecimalPlaces{6}})) {
+            throw OutOfRange{"lot " + std::to_string(lot) + ": the reserved quantity does not fit"};
+        }
+    }
+    auto const total = sum.total();
+    return Rational{Numerator{total.numerator}, Denominator{total.denominator}, DecimalPlaces{6}};
+}
+
+Rational availableOf(Lightweight::DataMapper& mapper, db::LotRecord const& lot, std::int64_t exceptSample) {
+    Rational const onHand{Numerator{lot.onHandNum.Value()}, Denominator{lot.onHandDen.Value()}, DecimalPlaces{6}};
+    auto const free =
+        ::morph::math::checkedSub(onHand, reservedOn(mapper, static_cast<std::int64_t>(lot.id.Value()), exceptSample));
+    if (!free.has_value()) {
+        throw OutOfRange{"lot " + numberOf(lot) + ": the available quantity does not fit"};
+    }
+    return Rational{Numerator{free->numerator}, Denominator{free->denominator}, DecimalPlaces{6}};
+}
+
+ReservationView reservationView(Lightweight::DataMapper& mapper, std::int64_t sample,
+                                std::vector<db::ReservationRecord> const& rows) {
+    ReservationView view{.sample = SampleId{sample}, .holder = {}, .lots = {}, .expiresAt = {}};
+    for (auto const& row : rows) {
+        auto const lot = lotRecord(mapper, row.lotId.Value());
+        auto const item = findItem(mapper, row.itemId.Value());
+        if (!item.has_value()) {
+            throw NotFound{"reservation: item " + std::to_string(row.itemId.Value()) + " does not exist"};
+        }
+        if (view.holder.empty()) {
+            view.holder = textOf(row.holder);
+            view.expiresAt = timestampFromMillis(row.expiresAt.Value());
+        }
+        view.lots.push_back(ReservedLotView{
+            .lot = LotId{row.lotId.Value()},
+            .lotNumber = numberOf(lot),
+            .item = ItemId{row.itemId.Value()},
+            .itemCode = textOf(item->code),
+            .quantity = Measure{Rational{Numerator{row.quantityNum.Value()}, Denominator{row.quantityDen.Value()},
+                                         DecimalPlaces{6}}},
+            .unit = stockUnitOf(*item),
+        });
+    }
+    return view;
+}
+
+LotStockView lotView(Lightweight::DataMapper& mapper, db::LotRecord const& lot) {
+    auto const item = findItem(mapper, lot.itemId.Value());
+    if (!item.has_value()) {
+        throw NotFound{"lot " + numberOf(lot) + ": its item does not exist"};
+    }
+    auto const company = OrgModel::findCompany(CompanyId{lot.companyId.Value()});
+    if (!company.has_value()) {
+        throw NotFound{"lot " + numberOf(lot) + ": its company does not exist"};
+    }
+    auto const reserved = reservedOn(mapper, static_cast<std::int64_t>(lot.id.Value()), 0);
+    return LotStockView{
+        .lot = LotId{static_cast<std::int64_t>(lot.id.Value())},
+        .item = ItemId{lot.itemId.Value()},
+        .itemCode = std::string{item->code.Value().ToStringView()},
+        .lotNumber = numberOf(lot),
+        .location = LocationId{lot.locationId.Value()},
+        .site = SiteId{lot.siteId.Value()},
+        .company = CompanyId{lot.companyId.Value()},
+        .expiresAt = timestampFromMillis(lot.expiresAt.Value()),
+        .onHand =
+            Measure{Rational{Numerator{lot.onHandNum.Value()}, Denominator{lot.onHandDen.Value()}, DecimalPlaces{6}}},
+        .reserved = Measure{reserved},
+        .unit = stockUnitOf(*item),
+        .unitCost = Amount{Rational{Numerator{lot.unitCostNum.Value()}, Denominator{lot.unitCostDen.Value()},
+                                    DecimalPlaces{decimalsOf(company->baseCurrency)}}},
+        .currency = company->baseCurrency,
+    };
+}
+
+std::optional<db::ItemRecord> findItem(Lightweight::DataMapper& mapper, std::int64_t item) {
+    auto rows = mapper.Query<db::ItemRecord>().Where(::Lightweight::FieldNameOf<&db::ItemRecord::id>, "=", item).All();
+    return rows.empty() ? std::nullopt : std::optional{rows.front()};
+}
+
+std::optional<db::LocationRecord> findLocation(Lightweight::DataMapper& mapper, std::int64_t location) {
+    auto rows = mapper.Query<db::LocationRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::LocationRecord::id>, "=", location)
+                    .All();
+    return rows.empty() ? std::nullopt : std::optional{rows.front()};
+}
+
+StockUnit stockUnitOf(db::ItemRecord const& item) {
+    int const unit = item.unit.Value();
+    if (unit < 0 || unit > kMaxStockUnit) {
+        throw ValidationError{"item " + std::to_string(item.id.Value()) + " stores a unit outside its range"};
+    }
+    return static_cast<StockUnit>(unit);
+}
+
+bool lotNumberTaken(std::int64_t item, std::string const& lotNumber) {
+    Lightweight::DataMapper mapper;
+    return !mapper.Query<db::LotRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::LotRecord::itemId>, "=", item)
+                .Where(::Lightweight::FieldNameOf<&db::LotRecord::lotNumber>, "=", lotNumber)
+                .All()
+                .empty();
+}
+
+db::LotRecord createLot(Lightweight::DataMapper& mapper, char const* action, db::ItemRecord const& item,
+                        db::LocationRecord const& location, std::string const& lotNumber,
+                        ::morph::time::Timestamp const& expiresAt, Rational const& unitCost) {
+    db::LotRecord lot;
+    lot.itemId = static_cast<std::int64_t>(item.id.Value());
+    lot.locationId = static_cast<std::int64_t>(location.id.Value());
+    lot.companyId = item.companyId.Value();
+    lot.siteId = location.siteId.Value();
+    lot.lotNumber = Lightweight::SqlAnsiString<32>{lotNumber};
+    lot.expiresAt = millisOf(expiresAt);
+    lot.onHandNum = 0;
+    lot.onHandDen = 1;
+    lot.unitCostNum = unitCost.numerator;
+    lot.unitCostDen = unitCost.denominator;
+    lot.reservationVersion = 0;
+    try {
+        mapper.Create(lot);
+    } catch (Lightweight::SqlException const&) {
+        if (lotNumberTaken(static_cast<std::int64_t>(item.id.Value()), lotNumber)) {
+            throw Conflict{std::string{action} + ": lot " + lotNumber + " of " + textOf(item.code) +
+                           " exists already"};
+        }
+        throw;
+    }
+    return lot;
+}
+
+ReceiptView receiptView(Lightweight::DataMapper& mapper, std::int64_t receipt) {
+    auto const rows = mapper.Query<db::ReceiptRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::ReceiptRecord::id>, "=", receipt)
+                          .All();
+    if (rows.empty()) {
+        throw NotFound{"receipt " + std::to_string(receipt) + " does not exist"};
+    }
+    auto const& row = rows.front();
+    int const currency = row.currency.Value();
+    if (currency < 0 || currency > kMaxCurrencyCode) {
+        throw ValidationError{"receipt " + std::to_string(receipt) + " stores a currency outside its range"};
+    }
+    auto const company = OrgModel::findCompany(CompanyId{row.companyId.Value()});
+    if (!company.has_value()) {
+        throw NotFound{"receipt " + std::to_string(receipt) + ": its company does not exist"};
+    }
+    auto const code = static_cast<CurrencyCode>(currency);
+    ReceiptView view{
+        .id = ReceiptId{receipt},
+        .number = textOf(row.number),
+        .order = PurchaseOrderId{row.orderId.Value()},
+        .company = CompanyId{row.companyId.Value()},
+        .currency = code,
+        .value = Amount{Rational{Numerator{row.valueNum.Value()}, Denominator{row.valueDen.Value()},
+                                 DecimalPlaces{decimalsOf(code)}}},
+        .companyValue =
+            Amount{Rational{Numerator{row.companyValueNum.Value()}, Denominator{row.companyValueDen.Value()},
+                            DecimalPlaces{decimalsOf(company->baseCurrency)}}},
+        .lots = {},
+        .entry = row.entryId.Value().has_value() ? JournalEntryId{*row.entryId.Value()} : JournalEntryId{},
+        .date = instant(row.receivedAt.Value()),
+        .receivedBy = textOf(row.receivedBy),
+    };
+    auto lots = mapper.Query<db::ReceiptLotRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ReceiptLotRecord::receiptId>, "=", receipt)
+                    .All();
+    std::ranges::sort(lots, {}, [](db::ReceiptLotRecord const& lot) { return lot.id.Value(); });
+    for (auto const& lot : lots) {
+        view.lots.push_back(LotId{lot.lotId.Value()});
+    }
+    return view;
+}
+
+db::LotRecord lotRecord(Lightweight::DataMapper& mapper, std::int64_t lot) {
+    auto rows = mapper.Query<db::LotRecord>().Where(::Lightweight::FieldNameOf<&db::LotRecord::id>, "=", lot).All();
+    if (rows.empty()) {
+        throw NotFound{"lot " + std::to_string(lot) + " does not exist"};
+    }
+    return rows.front();
+}
+
+std::optional<db::RequisitionRecord> findRequisition(Lightweight::DataMapper& mapper, std::int64_t requisition) {
+    auto rows = mapper.Query<db::RequisitionRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::RequisitionRecord::id>, "=", requisition)
+                    .All();
+    return rows.empty() ? std::nullopt : std::optional{rows.front()};
+}
+
+db::RequisitionRecord visibleRequisition(RequisitionId requisition, char const* action) {
+    Lightweight::DataMapper reader;
+    auto const row = findRequisition(reader, *requisition);
+    auto const visible = OrgModel::visibleCompanies(currentPrincipal());
+    if (!row.has_value() || std::ranges::find(visible, CompanyId{row->companyId.Value()}) == visible.end()) {
+        throw NotFound{std::string{action} + ": requisition " + std::to_string(*requisition) + " does not exist"};
+    }
+    return *row;
+}
+
+std::optional<db::SupplierRecord> findSupplier(Lightweight::DataMapper& mapper, std::int64_t supplier) {
+    auto rows = mapper.Query<db::SupplierRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::SupplierRecord::id>, "=", supplier)
+                    .All();
+    return rows.empty() ? std::nullopt : std::optional{rows.front()};
+}
+
+std::optional<db::PurchaseOrderRecord> findOrderOf(Lightweight::DataMapper& mapper, std::int64_t requisition) {
+    auto rows = mapper.Query<db::PurchaseOrderRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::PurchaseOrderRecord::requisitionId>, "=", requisition)
+                    .All();
+    return rows.empty() ? std::nullopt : std::optional{rows.front()};
+}
+
+SupplierView supplierView(db::SupplierRecord const& row) {
+    int const currency = row.currency.Value();
+    if (currency < 0 || currency > kMaxCurrencyCode) {
+        throw ValidationError{"supplier " + std::to_string(row.id.Value()) + " stores a currency outside its range"};
+    }
+    return SupplierView{
+        .id = SupplierId{static_cast<std::int64_t>(row.id.Value())},
+        .company = CompanyId{row.companyId.Value()},
+        .name = textOf(row.name),
+        .currency = static_cast<CurrencyCode>(currency),
+    };
+}
+
+PurchaseOrderView orderView(Lightweight::DataMapper& mapper, std::int64_t order) {
+    auto const rows = mapper.Query<db::PurchaseOrderRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::PurchaseOrderRecord::id>, "=", order)
+                          .All();
+    if (rows.empty()) {
+        throw NotFound{"purchase order " + std::to_string(order) + " does not exist"};
+    }
+    auto const& row = rows.front();
+    int const state = row.state.Value();
+    int const currency = row.currency.Value();
+    if (state < 0 || state > kMaxOrderState) {
+        throw ValidationError{"purchase order " + std::to_string(order) + " stores a state outside its range"};
+    }
+    if (currency < 0 || currency > kMaxCurrencyCode) {
+        throw ValidationError{"purchase order " + std::to_string(order) + " stores a currency outside its range"};
+    }
+    auto const supplier = findSupplier(mapper, row.supplierId.Value());
+    if (!supplier.has_value()) {
+        throw NotFound{"purchase order " + std::to_string(order) + ": supplier " +
+                       std::to_string(row.supplierId.Value()) + " does not exist"};
+    }
+    auto const code = static_cast<CurrencyCode>(currency);
+    auto const money = [code](std::int64_t numerator, std::int64_t denominator) {
+        return Amount{Rational{Numerator{numerator}, Denominator{denominator}, DecimalPlaces{decimalsOf(code)}}};
+    };
+    auto const measure = [](std::int64_t numerator, std::int64_t denominator) {
+        return Measure{Rational{Numerator{numerator}, Denominator{denominator}, DecimalPlaces{6}}};
+    };
+    PurchaseOrderView view{
+        .id = PurchaseOrderId{order},
+        .company = CompanyId{row.companyId.Value()},
+        .site = SiteId{row.siteId.Value()},
+        .supplier = SupplierId{row.supplierId.Value()},
+        .supplierName = textOf(supplier->name),
+        .requisition = RequisitionId{row.requisitionId.Value()},
+        .currency = code,
+        .state = static_cast<OrderState>(state),
+        .lines = {},
+        .total = money(row.totalNum.Value(), row.totalDen.Value()),
+        .orderedBy = textOf(row.orderedBy),
+        .orderedAt = instant(row.orderedAt.Value()),
+    };
+    auto lines = mapper.Query<db::OrderLineRecord>()
+                     .Where(::Lightweight::FieldNameOf<&db::OrderLineRecord::orderId>, "=", order)
+                     .All();
+    std::ranges::sort(lines, {}, [](db::OrderLineRecord const& line) { return line.id.Value(); });
+    for (auto const& line : lines) {
+        auto const item = findItem(mapper, line.itemId.Value());
+        if (!item.has_value()) {
+            throw NotFound{"purchase order " + std::to_string(order) + ": item " +
+                           std::to_string(line.itemId.Value()) + " does not exist"};
+        }
+        view.lines.push_back(OrderLineView{
+            .id = OrderLineId{static_cast<std::int64_t>(line.id.Value())},
+            .item = ItemId{line.itemId.Value()},
+            .itemCode = textOf(item->code),
+            .ordered = measure(line.orderedNum.Value(), line.orderedDen.Value()),
+            .received = measure(line.receivedNum.Value(), line.receivedDen.Value()),
+            .unit = stockUnitOf(*item),
+            .unitPrice = money(line.unitPriceNum.Value(), line.unitPriceDen.Value()),
+            .lineTotal = money(line.lineTotalNum.Value(), line.lineTotalDen.Value()),
+        });
+    }
+    return view;
+}
+
+bool requisitionEscalated(db::RequisitionRecord const& requisition) {
+    return requisition.deadlineAt.Value() > 0 && nowMillis() >= requisition.deadlineAt.Value();
+}
+
+RequisitionView requisitionView(Lightweight::DataMapper& mapper, std::int64_t requisition) {
+    auto const row = findRequisition(mapper, requisition);
+    if (!row.has_value()) {
+        throw NotFound{"requisition " + std::to_string(requisition) + " does not exist"};
+    }
+    int const state = row->state.Value();
+    int const currency = row->currency.Value();
+    if (state < 0 || state > kMaxRequisitionState) {
+        throw ValidationError{"requisition " + std::to_string(requisition) + " stores a state outside its range"};
+    }
+    if (currency < 0 || currency > kMaxCurrencyCode) {
+        throw ValidationError{"requisition " + std::to_string(requisition) + " stores a currency outside its range"};
+    }
+    auto const code = static_cast<CurrencyCode>(currency);
+    auto const money = [code](std::int64_t numerator, std::int64_t denominator) {
+        return Amount{Rational{Numerator{numerator}, Denominator{denominator}, DecimalPlaces{decimalsOf(code)}}};
+    };
+    RequisitionView view{
+        .id = RequisitionId{requisition},
+        .company = CompanyId{row->companyId.Value()},
+        .site = SiteId{row->siteId.Value()},
+        .reason = textOf(row->reason),
+        .state = static_cast<RequisitionState>(state),
+        .lines = {},
+        .total = money(row->totalNum.Value(), row->totalDen.Value()),
+        .currency = code,
+        .requestedBy = textOf(row->requestedBy),
+        .submittedBy = textOf(row->submittedBy),
+        .approvedBy = textOf(row->approvedBy),
+        .submittedAt = instant(row->submittedAt.Value()),
+        .approvalDeadline = instant(row->deadlineAt.Value()),
+        .level = requisitionEscalated(*row) ? RequisitionLevel::Company : RequisitionLevel::Site,
+        .order = row->orderId.Value().has_value() ? PurchaseOrderId{*row->orderId.Value()} : PurchaseOrderId{},
+    };
+    auto lines = mapper.Query<db::RequisitionLineRecord>()
+                     .Where(::Lightweight::FieldNameOf<&db::RequisitionLineRecord::requisitionId>, "=", requisition)
+                     .All();
+    std::ranges::sort(lines, {}, [](db::RequisitionLineRecord const& line) { return line.id.Value(); });
+    for (auto const& line : lines) {
+        auto const item = findItem(mapper, line.itemId.Value());
+        if (!item.has_value()) {
+            throw NotFound{"requisition " + std::to_string(requisition) + ": item " +
+                           std::to_string(line.itemId.Value()) + " does not exist"};
+        }
+        view.lines.push_back(RequisitionLineView{
+            .id = RequisitionLineId{static_cast<std::int64_t>(line.id.Value())},
+            .item = ItemId{line.itemId.Value()},
+            .itemCode = textOf(item->code),
+            .quantity = Measure{Rational{Numerator{line.quantityNum.Value()}, Denominator{line.quantityDen.Value()},
+                                         DecimalPlaces{6}}},
+            .unit = stockUnitOf(*item),
+            .estimate = money(line.estimateNum.Value(), line.estimateDen.Value()),
+        });
+    }
+    return view;
+}
+
+}  // namespace lims::inventory

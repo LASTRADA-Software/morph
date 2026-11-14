@@ -137,6 +137,16 @@ Each builder returns a `Command`; `Commands` is a list, built from one command o
 
 `Command{json}` wraps a command no builder spells.
 
+## Width class
+
+`widthClass(scope)` is the width class a screen lays out for: the client's `{"env": "widthClass"}`, and `expanded`
+where no client sets it, declared as a `let` named `widthClass` (so a screen calls it once and reads the handle).
+`byWidth(width, compact, expanded)` is a `switchOn` over that handle with one case, `compact`, and the expanded layout
+as its fallback. A client reports `compact` below 80 units of width; `medium` therefore takes the expanded layout:
+the designs draw two layouts, and a screen that wants a third switches on the handle itself. Both live in the
+library because every screen of a design-led application reads the width the same way; an application that copied
+them would copy the fallback with them.
+
 ## View nodes
 
 Every kind of the kind table has a builder whose options struct holds the kind's own keys:
@@ -145,7 +155,7 @@ Every kind of the kind table has a builder whose options struct holds the kind's
 `dataTable`, `group`, `dateTimeInput`, `slider`, `filePicker`, `banner`, `badge`, `progress`, `steps`,
 `keyValue`, `emptyState`, `chart`, `splitter`, `collapsible`, `dropZone`, `actionBar`, `customize`, `boundary`, `form`,
 `collection`, `wizard` and `custom`. `chart(ChartOptions{summary, series, lines, yMin, yMax, yPlaces, yLabel})`
-takes its series as `ChartSeries{label, points, y, x, xLabel, tone, note, joined}`, where each per-point key is a
+takes its series as `ChartSeries{label, points, y, x, xLabel, tone, note, joined, style}`, `style` a `SeriesStyle{Line, Bars}` (`Line` by default; a `Bars` series is never joined, and the builder writes `joined` only when it is false, which the loader accepts beside `bars`; `SeriesStyle` pairs with the view's `ChartStyle` as `LineStyle` pairs with `ChartLineStyle`), where each per-point key is a
 `PointExpression`, a function from the point's element (`row()`) to an expression, and its lines as
 `ReferenceLine{value, label, tone, style}` with a `LineStyle`. Children come first, as a `Nodes` list (`{a, b}`, or one node),
 options second. `tabs(tabs, TabsOptions{.selected, .onChoose, .moreLabel, .inset, .pageInset, .stripSurface})` takes `Tab{id, label, children}` pages; `inset` (a spacing step, written as a literal), `pageInset` (the same for the pages, which `inset` pads when it is absent; a page pads its own content inside its scroll, so a bleeding child reaches the node's edges) and `stripSurface` (a surface name) let a tabs node be a page's edge-to-edge root, its strip on that surface across the width.
@@ -229,7 +239,7 @@ expression of one),
   (with `event` the new keys), `sort` (a list of `sortKey`s, controlled when given), `onSortChange` (with `event` the
   new sort), `pageSize` and `page`, `group` (a `TableGroup{by, heading}`: a heading row before each run of rows
   sharing `by`, read in a row scope whose row is the run record), `filters` and `highlightKey` (which the loader takes on a `dataTable` only),
-  `rowTone` (each row's tone, which the client draws), `selectColumn` (written only when `true`), `selectAllLabel`,
+  `rowTone` (each row's tone, which the client draws), `rowSpans` (each row's spans, in the row scope: a list of `{column, rows}`), `selectColumn` (written only when `true`), `selectAllLabel`,
   `rowLabel` (each row's name, in the row scope), `onActivate`, `empty` (the nodes shown in
   its place while its rows are an empty list), `valign`), and optionally a row-scope builder that returns the
   columns; `cells({...})` makes columns from cells alone. **`dataTable<A>(model, body, options)`**
@@ -249,6 +259,11 @@ expression of one),
   action carry no document, and the client's catalog must supply one.
 - **`custom(component, {.props = {{"name", e}}, .on = {{"event", commands}}})`** names a declared
   component; props and events are keyed by name, since a component's props are declared as data.
+
+`page(regions, PageOptions{width, height, margins})`, `pageRegion(children, RegionOptions{anchor, x, y, width, height})` and
+`localeScope(children, locale)` write a fixed-size sheet, a region of it and a subtree formatted in another locale
+([`document_page.md`](document_page.md)); the options hold only millimetre geometry, and the common properties are the
+node modifiers. `checkAccessibility` requires an `a11y.name` on a `page`.
 
 ## Registration
 
@@ -308,7 +323,7 @@ load-time validation:
 | `button` | A `label` or an `a11y.name`; an `icon` never names it |
 | `dialog`, `drawer` | A `title` or an `a11y.name` |
 | `group` | A `label` or an `a11y.name` |
-| `table` (including one declared from an action), `custom` | An `a11y.name` |
+| `table` (including one declared from an action), `custom`, `page` | An `a11y.name` |
 
 - A label, title or name written as the constant `""` or `null` does not count; any other
   expression does, since its value is not known until the client evaluates it.

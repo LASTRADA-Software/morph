@@ -150,7 +150,14 @@ QObject* ItemBase::part(char const* name) const {
 void ItemBase::showVisible(bool visible) {
     _visible = visible;
     if (_item != nullptr) {
-        _item->setVisible(visible);
+        _item->setVisible(visible && !_covered);
+    }
+}
+
+void ItemBase::cover(bool covered) {
+    _covered = covered;
+    if (_item != nullptr) {
+        _item->setVisible(_visible && !_covered);
     }
 }
 
@@ -222,17 +229,27 @@ struct RoleName {
 };
 
 // NOLINTBEGIN(modernize-use-designated-initializers): a table of positional pairs, name beside role, reads as one.
-constexpr std::array<RoleName, 20> kRoles = {
-    {{"button", QAccessible::Button},     {"chart", QAccessible::Chart},
-     {"checkbox", QAccessible::CheckBox}, {"dialog", QAccessible::Dialog},
-     {"edit", QAccessible::EditableText}, {"group", QAccessible::Grouping},
-     {"heading", QAccessible::Heading},   {"link", QAccessible::Link},
-     {"list", QAccessible::List},         {"listitem", QAccessible::ListItem},
-     {"menu", QAccessible::PopupMenu},    {"progressbar", QAccessible::ProgressBar},
-     {"radio", QAccessible::RadioButton}, {"region", QAccessible::Section},
-     {"slider", QAccessible::Slider},     {"status", QAccessible::StatusBar},
-     {"tab", QAccessible::PageTab},       {"table", QAccessible::Table},
-     {"text", QAccessible::StaticText},   {"textbox", QAccessible::EditableText}}};
+constexpr std::array<RoleName, 21> kRoles = {{{"button", QAccessible::Button},
+                                              {"chart", QAccessible::Chart},
+                                              {"checkbox", QAccessible::CheckBox},
+                                              {"dialog", QAccessible::Dialog},
+                                              {"document", QAccessible::Document},
+                                              {"edit", QAccessible::EditableText},
+                                              {"group", QAccessible::Grouping},
+                                              {"heading", QAccessible::Heading},
+                                              {"link", QAccessible::Link},
+                                              {"list", QAccessible::List},
+                                              {"listitem", QAccessible::ListItem},
+                                              {"menu", QAccessible::PopupMenu},
+                                              {"progressbar", QAccessible::ProgressBar},
+                                              {"radio", QAccessible::RadioButton},
+                                              {"region", QAccessible::Section},
+                                              {"slider", QAccessible::Slider},
+                                              {"status", QAccessible::StatusBar},
+                                              {"tab", QAccessible::PageTab},
+                                              {"table", QAccessible::Table},
+                                              {"text", QAccessible::StaticText},
+                                              {"textbox", QAccessible::EditableText}}};
 // NOLINTEND(modernize-use-designated-initializers)
 
 }  // namespace

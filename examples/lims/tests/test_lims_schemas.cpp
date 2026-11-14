@@ -10,8 +10,8 @@
 #include <morph/forms/forms.hpp>
 #include <string>
 
-#include "lims/dto/sample_dto.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/lab/dto/sample_dto.hpp"
+#include "lims/lab/models/sample_model.hpp"
 
 namespace {
 

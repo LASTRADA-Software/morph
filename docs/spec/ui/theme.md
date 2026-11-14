@@ -62,7 +62,7 @@ any path. `$root` at the top of a file is refused, since there is no group path 
 | `fontWeight` | 1 to 1000, or a DTCG weight name (`semi-bold`, …) |
 | `shadow` | `{"color", "offsetX", "offsetY", "blur", "spread"}` with a colour and four dimensions, or a non-empty list of them |
 | `strokeStyle` | `solid` or `dashed` where the set reads it (`border.style`), refused at `checkTheme` otherwise; accepted unchecked elsewhere |
-| `keyword` | one of the names the token's spec lists (`shape.iconOnly`, `font.overline.case`, `collapsible.marker`), refused at `checkTheme` otherwise; DTCG has no type for a switch, and `strokeStyle` names stroke dashes only, so this is a `ui-theme/1` type; accepted unchecked elsewhere |
+| `keyword` | one of the names the token's spec lists (`shape.iconOnly`, `font.overline.case`, `field.caption.case`, `collapsible.marker`), refused at `checkTheme` otherwise; DTCG has no type for a switch, and `strokeStyle` names stroke dashes only, so this is a `ui-theme/1` type; accepted unchecked elsewhere |
 | `typography`, `border`, `gradient`, `transition`, `cubicBezier` | accepted unchecked |
 
 A token of another `$type` stays in the parsed set with its type and no value check; `themeValues` ignores a path
@@ -133,7 +133,7 @@ disappear, not to restyle the defaults. The theme is still applied.
 
 ## Surfaces
 
-A surface is a named set of colour roles a node and everything inside it draw with (`Common::surface`). Six are
+A surface is a named set of colour roles a node and everything inside it draw with (`Common::surface`). Seven are
 built in, so an application gets the shell's look with no theme file; a theme index's surface of the same name
 replaces one, and declares any other:
 
@@ -145,6 +145,7 @@ replaces one, and declares any other:
 | `toolbar` | `color.surface`, with a border `#e3e5ea` | the theme's |
 | `bar` | `color.surface`, with no border, radius or shadow; the bars `pinned` writes | the theme's |
 | `toolbarJoined` | the `bar`'s: `color.surface`, no border | the `bar`'s, through its own scheme whose every role is bound to `bar`'s, so a theme that restyles `bar` restyles it too and one that declares `toolbarJoined` replaces these roles alone; the shell draws its top bar on it while the page continues the head's block |
+| `paper` | `#ffffff`, with a `#d2d7de` hairline border and `elevation.card` | text `#1c1e21`, muted `#4d5461`, accent and focus `#17784a`, selection `#e2f4e8`, selection text `#1c1e21`, border and track `#d2d7de`, divider `#e6e9ed`, control fill `#ffffff`, control outline `#c3c9d2`, hover `#1d1d1f14`, the neutral tone `#4d5461` and the four tones `ok` `#17602f`, `warn` `#7a4a00`, `err` `#9b1c1c` and `info` `#1f3fa8` (each tone's fill that colour at 15 %), the table header rule `#dde1e6`; every role a literal, so none comes from a dark theme, because it is the sheet of a document page ([`document_page.md`](document_page.md#the-page)). A theme may replace it by name. `themeContrastProblems` checks it: a test reads the roles from `paperScheme` in `Theme.qml` itself and runs the check on them. The terminal draws no surface for it |
 
 A surface's `border.style` and `list.selection` are read like any token of it. While it is `dashed`, the outline of a button, a badge and an input on the surface is stroked in dashes (a `MorphDashedOutline`) in place of the solid border; the surface's own background has no border to dash, except a card's and a toolbar's, which stay solid. A round button or badge (`shape: round`) draws the surface's background with its own corners, half its height, so no square shows behind it. While a surface's `list.selection` is `fill`, a selected list item on it is marked by the selection colour alone, and its label and content draw in the surface's selection text, which is its text colour while it sets no `color.selectionText`.
 
@@ -207,6 +208,7 @@ built in nor in the theme draws nothing and changes no colour.
 | `border.style` (`solid`): how the outline of a button, a badge and an input is stroked on a surface, `solid` or `dashed`; read per surface, so one surface (an empty plate well) can draw dashed controls while the rest draw solid | stroke style: `solid` or `dashed`, read into `ThemeValues::strokes`; any other value is refused by `checkTheme` as `border.style: only solid and dashed are drawn` |
 | `shape.iconOnly` (`default`): whether a push button or a button-style menu whose caption is an icon alone, and which gives no `shape` of its own, is drawn square (`square`, as `shape: square` on a button). It covers the head's `⋯`, the compact shell's ☰ and a screen's `⋯` menus. Read once for the whole theme, not per surface. The terminal reads no theme token and draws `[ ⋯ ]` either way | keyword: `default` or `square`, read into `ThemeValues::keywords`; any other value is refused by `checkTheme` as `shape.iconOnly: only default and square are drawn` |
 | `font.overline.case` (`none`): how the `overline` text role draws. `none` draws it as `section` (body size, strong, muted); `uppercase` draws it at the small size, strong, muted, in capitals, letter-spaced by `0.05 × Theme.smallPixels`. The text is written as it reads and the frontend draws the capitals, so the accessible name stays as written. The terminal draws it bold and muted, as written, whatever the token | keyword: `none` or `uppercase`; any other value is refused as `font.overline.case: only none and uppercase are drawn` |
+| `field.caption.case` (`none`): how a field's caption draws, a `Label` text (a form cell's caption included), `MorphField`'s own caption and a table's column headers. `none` draws it in `captionFont`; `uppercase` draws it as an uppercase overline is drawn: the small size, strong, in capitals, letter-spaced by `0.05 × Theme.smallPixels`. The text is written as it reads and the frontend draws the capitals, so the accessible name stays as written. The terminal draws it as written, whatever the token | keyword: `none` or `uppercase`; any other value is refused as `field.caption.case: only none and uppercase are drawn` |
 | `collapsible.marker` (`shown`): whether a collapsible section's header and a collapsible panel's header draw their ▸/▾ chevron (`shown`) or not (`none`). With `none` the header keeps everything else: it is still the whole row's toggle, at least a touch target tall, with its role, its name and its expanded state, so the state stays where assistive technology reads it. Read once for the whole theme. The terminal reads no theme token and keeps its `▸ `/`▾ ` heading | keyword: `shown` or `none`; any other value is refused as `collapsible.marker: only shown and none are drawn` |
 | `list.selection` (`accent`): how a selected list item (an item-style button: the navigator's entries, menus drawn as lists, a document's list items) is marked. `accent` draws the selection colour and a 3 px accent bar at the leading edge; `fill` draws the selection colour alone. The item's text is `color.selectionText` under either look. Read per surface, as `border.style` is, so one surface (the sidebar) can fill while the rest keep the bar; a surface that does not set it keeps the theme's, the built-in sidebar and bar included. The terminal marks a selected item by inverting it and reads no theme token | keyword: `accent` or `fill`; any other value is refused as `list.selection: only accent and fill are drawn` |
 | `color.selectionText`: the text of a selected item-style button (its label, icon and the `Normal`-role text of its content), read per surface. No default: where neither the surface nor the theme sets it, a selected item's text is that surface's `color.text`. A table's selected row is not an item-style button and keeps `color.text`. The built-in sidebar takes it only from a declared `sidebar` surface, since its text and selection colours are its own palette. The terminal marks a selected item by inverting it and reads no colour token. A theme that sets it must hold it 4.5:1 on `color.selection` | colour |
@@ -257,6 +259,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 | `monoFontFamilies` | `font.mono` |
 | `iconOnlySquare` (true for `square`) | `shape.iconOnly` |
 | `overlineCaps` (true for `uppercase`) | `font.overline.case` |
+| `fieldCaptionCaps` (true for `uppercase`) | `field.caption.case` |
 | `collapsibleMarker` (true for `shown`) | `collapsible.marker` |
 | `selectionText`, `hasSelectionText` (a role of every scheme; the theme's own is bound by the built-in schemes, a declared surface's is written from its resolved values) | `color.selectionText` |
 | `placeholder`, `hasPlaceholder` (a role of every scheme, with `placeholderText` reading the colour or the muted one; the theme's own is bound by the built-in schemes, a declared surface's is written from its resolved values) | `color.placeholder` |
@@ -272,7 +275,7 @@ The `MorphUi` `Theme` singleton's colour roles and `staleOpacity` are writable p
 marked point read their tone's colour (`muted` for neutral). Each default holds 3:1 against `color.surface` and
 `color.background` (WCAG 1.4.11): 5.19, 4.60, 4.94 and 5.02:1 on white. No four colours stay apart from the four
 tone colours under colour-vision deficiency, so a chart never tells series apart by colour alone: each also has its
-own marker shape, a marked point a cross no series uses, and a clipped point an open triangle. A dark theme sets its
+own marker shape (a `Bars` series its place in the bar group, in the legend's order), a marked point a cross no series uses, and a clipped point an open triangle. A dark theme sets its
 own four, as it sets every colour.
 
 **Touch targets follow the width class.** While the window's width class is `compact`, the backend sets
@@ -297,8 +300,8 @@ the body size. Units keep reading the body font, so no unit moves. A `size: smal
 sizes the components use: a size of 0 derives from the platform font (`Theme.platformMetrics`), the body its size, a
 heading 1.3 times the body, and the others as the closed set lists. Every `MorphUi` text and control draws in
 `Theme.bodyFont` (`strongFont` where it is emphasised and for a `section` text, which is also muted, `headingFont`
-for a heading, `smallFont` and `smallStrongFont` for a table header's label and a `small` text, `captionFont` for a
-field's caption, `displayFont` for a `display` text, `headlineFont` for a `headline` text): the theme's families at the font's size, or the platform font
+for a heading, `smallFont` and `smallStrongFont` for a `small` text, `tableHeaderFont` for a table header's label (`smallStrongFont`, or `fieldCaptionFont` while `field.caption.case` is `uppercase`), `captionFont` for a
+field's caption (`fieldCaptionFont` while `field.caption.case` is `uppercase`), `displayFont` for a `display` text, `headlineFont` for a `headline` text): the theme's families at the font's size, or the platform font
 untouched while the theme names no family and sets no `font.size.body`. Every strong font draws at `Theme.strongWeight`, moved to the nearest weight the family has an upright face of
 (`Theme.textWeightOf`, `monoWeightOf` for the mono families; the CSS font-matching order: a request under 400 looks
 lighter first, one over 500 heavier first, one from 400 to 500 up to 500, then lighter): Qt asked for a weight a family
@@ -340,7 +343,8 @@ file the bundle lacks or one that is not an `icon` file, naming the index and th
 
 - **Framework names.** The built-in components draw `empty` (an empty state without an icon of its own),
   `tone.info`, `tone.ok`, `tone.warn`, `tone.err` (a banner's tone), `nav.expand` and `nav.collapse` (a collapsible's
-  and a panel's chevron, and a select's dropdown indicator), `close` (a dismissible banner's close button) and
+  and a panel's chevron), `select.open` and `select.close` (a closed and an open select's drop-down indicator; a set
+  that lacks them leaves the select drawing `nav.expand` and `nav.collapse`), `close` (a dismissible banner's close button) and
   `date.pick` (a date input's calendar button), `more` (an overflow menu's trigger, `⋯`) and `nav.menu` (the compact
   shell frame's navigation menu, `☰`), from the set when it names them, and as their built-in glyph or nothing
   otherwise, so a bundle without a set keeps the built-in look. `nav.back` and `nav.forward` are framework names
@@ -365,7 +369,7 @@ file the bundle lacks or one that is not an `icon` file, naming the index and th
   While the bundle declares a set, a node icon it does not name is reported once per name through the `Components`
   callback (`icon <name> is not in the theme's icon set`); without a set nothing is reported.
 - **On the terminal.** Icons stay text: a framework name is drawn as its glyph (`iconGlyph`: `tone.ok` ✓, `tone.warn`
-  !, `tone.err` ✗, `tone.info` i, `nav.expand` ▸, `nav.collapse` ▾, `close` ×, `date.pick` ▦, `more` ⋯, `nav.menu`
+  !, `tone.err` ✗, `tone.info` i, `nav.expand` ▸, `nav.collapse` ▾, `select.open` ▾, `select.close` ▴, `close` ×, `date.pick` ▦, `more` ⋯, `nav.menu`
   ☰) before a badge's or a
   button's text, or a single-line or password text input's own text, and any other name is not drawn.
 

@@ -49,7 +49,7 @@ default-constructed values, which `encode` leaves out of the JSON (see
 | `"watch"` / `"unwatch"` | request | Adds topics to (or, with `replace`, sets) / removes them from the connection's watch set. See [The watch, unwatch and changes bodies](#the-watch-unwatch-and-changes-bodies). | `body`, `session` |
 | `"event"`    | server-initiated | An unprompted notification on a connection that negotiated events. Never a reply to anything. See [The `event` kind](#the-event-kind). | `callId` (always `0`), `body` (`{topic, payload}`) |
 | `"ok"`       | reply     | Server success. | `callId`, `body` (serialized result, or — for a `"hello"` reply — the server's `ProtocolRange`), `modelId` (for register-replies) |
-| `"err"`      | reply     | Server failure. | `callId`, `message` |
+| `"err"`      | reply     | Server failure. | `callId`, `message`, `refusal` (optional; see [A refused action's `refusal`](#a-refused-actions-refusal)) |
 
 ### `contextKey` — stable identity
 
@@ -93,6 +93,7 @@ relevant fields. Callers never set `kind` manually.
 | `makeOk(callId = 0, body = {}, modelId = 0)` | `"ok"` | Correlation id, serialized result (stored in the `body` field), optional model id (for register-replies). |
 | `makeErr(message, callId = 0)` | `"err"` | Error message, optional correlation id. |
 | `makeEvent(topic, payloadJson)` | `"event"` | Topic and the payload's JSON text; see [The `event` kind](#the-event-kind). |
+| `makeRefusalErr(refusal, callId = 0)` | `"err"` | The `ActionRefusal`'s `what()` as `message`, and its code and arguments as `refusal`. See [A refused action's `refusal`](#a-refused-actions-refusal). |
 
 For `"execute"` there is no factory — callers construct the `Envelope` directly
 and set `kind = "execute"`, or use the client backends, which build it
@@ -108,7 +109,7 @@ internally.
 glaze reflects the struct's public members, so the JSON object keys are exactly
 the C++ field names (`kind`, `callId`, `typeId`, `contextKey`, `primary`,
 `shared`, `modelId`, `modelType`, `actionType`, `body`, `message`, `session`,
-`protocolVersion`, `cancelCallId`). `decode` starts from a
+`protocolVersion`, `cancelCallId`, `refusal`). `decode` starts from a
 default-constructed `Envelope`, so any key absent from the input JSON keeps its
 default value — omitting fields a given `kind` does not use is expected and does
 not throw. `decode` reads with `error_on_unknown_keys = false`, so an
@@ -121,7 +122,7 @@ turn it into an `"err"` reply rather than propagating it (see
 
 ### Omitted default fields
 
-`Envelope` is a union of all kinds: an `ok` reply uses three of its fourteen
+`Envelope` is a union of all kinds: an `ok` reply uses three of its fifteen
 members and a `deregister` request uses two. glaze writes every member of a
 struct it is handed, so without the omission rule below a minimal `ok` reply
 carrying an 8-byte payload is **255 bytes, 213 of them fields the kind does not
@@ -230,7 +231,7 @@ notice", and a second implementation is the thing that finds the difference.
 
 The failure mode the design has to survive is a member being added or renamed
 without this list following it. Both are compile errors:
-`detail::defaultValuedKeys` `static_assert`s that `Envelope` still has fourteen
+`detail::defaultValuedKeys` `static_assert`s that `Envelope` still has fifteen
 reflected members, and that every name in `detail::kOmittableEnvelopeKeys` is
 one of the reflected keys — a rename would otherwise make glaze report
 `unknown_key` and turn *every* `encode` call into a throw at runtime.
@@ -245,6 +246,27 @@ on the way in. Carrying it as `glz::raw_json` instead *is* a retype, does need a
 version bump, and interacts with the
 [`body` double-parse hazard](#the-body-double-parse-hazard) and the size cap
 that exists to bound it — which is why the two are kept separate.
+
+### A refused action's `refusal`
+
+An `err` reply to an `execute` carries an optional `refusal` member, `{"code": "...", "args": [{"name": "...", "value":
+"..."}]}`, when the action failed with a `morph::model::ActionRefusal`: the code the application gave the refusal and
+its named string arguments. `message` still carries the exception's text, for logs. The member is omitted when the
+failure is any other exception, so those replies are unchanged, and a peer that does not know the member ignores it
+(`decode` reads with `error_on_unknown_keys = false`) and has the message alone. `wire::executeFailure` turns a decoded
+`err` into the exception a pending execute is settled with: an `ActionRefusal` when `refusal` is present, otherwise a
+`std::runtime_error` with the message. A refusal's `code` and arguments are not transcribed as `message` is: they are written by the application, not echoed
+from a request, and the client words them from a catalogue. See [`../ui/refusals.md`](../ui/refusals.md).
+
+### A refusal by the authoriser
+
+A server whose authoriser refuses a call (or that needs a principal nobody has signed in as) replies `err` with the
+message `wire::kUnauthorizedMessage`, exactly `unauthorized`. A refused `execute` settles with a `std::runtime_error`
+of that text; a refused `register`, `attach` or `instances` settles with `wire::UnauthorizedError`, whose text reads
+`"<request> failed: unauthorized"` (`wire::controlFailure` builds it). A client classifies both as the error kind
+`denied` (`ui::detail::defaultErrorKind`), which is the signal that its permitted set is stale and that a shell part
+it asked for is simply not its principal's to have. The classification is of that exact text only: a different
+message that merely starts with it is an ordinary failure, and so is an `ActionRefusal`, whatever its message says.
 
 ### Control bytes in string fields
 
@@ -886,6 +908,9 @@ client.
 | `session` | `::morph::session::Context` | default | `"execute"`, `"cancel"`, `"schemas"`, `"watch"`/`"unwatch"` and the `"ui-*"` kinds — authorization and routing context. |
 | `protocolVersion` | `uint32_t` | `0` | `"hello"` — protocol version the sender speaks. `0` means unspecified/legacy peer; not otherwise inspected. |
 | `cancelCallId` | `uint64_t` | `0` | `"cancel"` — the `callId` of the `execute` to stop. `0` names no call. |
+| `refusal` | `std::optional<RefusalBody>` | absent | `"err"` — the code and arguments of the `ActionRefusal` an `execute` failed with. Omitted when absent. |
+
+`RefusalBody` is `struct { std::string code; std::vector<model::RefusalArg> args; }`, with `RefusalArg` `{ std::string name; std::string value; }` (`core/action_refusal.hpp`).
 
 ### Factory functions
 
@@ -906,6 +931,8 @@ client.
 | `readChangesBody` | `std::expected<ChangesBody, std::string> readChangesBody(std::string_view)` |
 | `makeOk` | `Envelope makeOk(uint64_t callId = 0, std::string body = {}, uint64_t modelId = 0)` |
 | `makeErr` | `Envelope makeErr(std::string message, uint64_t callId = 0)` |
+| `makeRefusalErr` | `Envelope makeRefusalErr(const model::ActionRefusal& refusal, uint64_t callId = 0)` |
+| `executeFailure` | `std::exception_ptr executeFailure(const Envelope& env, std::string ifEmpty = {})` — the exception a failed `execute` settles with: an `ActionRefusal` when `env.refusal` is set, else a `std::runtime_error` |
 
 ### Protocol version negotiation types
 
@@ -924,8 +951,8 @@ client.
 | `encode` | `std::string encode(const Envelope&, const WireCodecOps& ops = defaultWireCodecOps())` | `std::runtime_error` on serialisation failure |
 | `WireCodecOps` | `struct { std::function<glz::error_ctx(const Envelope&, std::string&)> writeEnvelope; }` | — the injectable write step; defaults to the real codec. |
 | `defaultWireCodecOps` | `const WireCodecOps& defaultWireCodecOps()` | — a function-local static, so `encode` allocates no `std::function` per call. |
-| `detail::kOmittableEnvelopeKeys` | `constexpr std::array<std::string_view, 12>` | — the envelope keys `encode` leaves out when the member is at its default (everything but `kind` and `callId`). |
-| `detail::defaultValuedKeys` | `std::span<const std::string_view> defaultValuedKeys(const Envelope&, std::array<std::string_view, 12>&)` | — which of those keys this envelope omits; writes into the caller's array so the per-message path allocates nothing. |
+| `detail::kOmittableEnvelopeKeys` | `constexpr std::array<std::string_view, 13>` | — the envelope keys `encode` leaves out when the member is at its default (everything but `kind` and `callId`). |
+| `detail::defaultValuedKeys` | `std::span<const std::string_view> defaultValuedKeys(const Envelope&, std::array<std::string_view, 13>&)` | — which of those keys this envelope omits; writes into the caller's array so the per-message path allocates nothing. |
 | `detail::isDefaultSession` | `bool isDefaultSession(const ::morph::session::Context&)` | — whether the whole `session` object can be left out. |
 | `decode` | `Envelope decode(std::string_view)` | `std::runtime_error` if the input exceeds `kMaxEnvelopeBytes` or is a syntactically malformed envelope. Unknown/extra keys are **ignored** (`error_on_unknown_keys = false`); duplicate keys do **not** throw (last-wins) — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |
 

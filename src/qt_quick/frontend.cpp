@@ -12,6 +12,7 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QString>
 #include <QVariant>
 #include <QVariantList>
 #include <QtEnvironmentVariables>
@@ -51,6 +52,21 @@ bool usableHere(ui::EnvironmentReader const& env) {
 }
 
 namespace {
+
+/// Whether the process chose a Qt Quick Controls style itself, which the frontend then leaves alone. The `Morph*`
+/// controls customize `background` and `contentItem`, which the native styles refuse, so the frontend uses Basic
+/// unless the environment names a style or a non-native one was set before it ran. `QQuickStyle::name()` is not
+/// empty by default on every platform (a native desktop style can be the answer), so an empty name is not the test.
+bool styleChosen() {
+    if (!qEnvironmentVariable("QT_QUICK_CONTROLS_STYLE").isEmpty()) {
+        return true;
+    }
+    static constexpr std::array<char const*, 3> kNative{"macOS", "iOS", "Windows"};
+    QString const current = QQuickStyle::name();
+    return !current.isEmpty() && std::ranges::none_of(kNative, [&current](char const* native) {
+        return current.compare(QLatin1StringView{native}, Qt::CaseInsensitive) == 0;
+    });
+}
 
 /// What the frontend lends the source and the screens. Quitting before the loop runs is remembered, and the loop
 /// then returns at once.
@@ -136,7 +152,7 @@ int Frontend::run(ui::AppSource& source) {
     if (QCoreApplication::instance() == nullptr) {
         // The style and the graphics API are process-wide and fixed once Qt Quick has loaded: a second run in the
         // same process keeps what the first chose.
-        if (QQuickStyle::name().isEmpty()) {
+        if (!styleChosen()) {
             QQuickStyle::setStyle(QStringLiteral("Basic"));
         }
         application.emplace(*_argc, _argv);

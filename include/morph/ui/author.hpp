@@ -1195,6 +1195,32 @@ enum class DateUnit : std::uint8_t {
     return Handle<std::string>::raw(std::move(json));
 }
 
+/// @brief `tAt(key, fallback, args)`: a translated message whose key is known only at run time.
+/// @param key      An expression evaluating to the catalogue key.
+/// @param fallback The pattern shown when the catalogue has none.
+/// @param args     An expression evaluating to a list of `{name, value}` records, which become the message's named
+///                 arguments; a value is shown as text, or formatted as a number by a `:number` placeholder
+///                 when it is a plain numeric literal.
+/// @return The `{"t": {"expr": key}, ...}` form.
+[[nodiscard]] inline Handle<std::string> tAt(AnyHandle const& key, std::string const& fallback,
+                                             AnyHandle const& args) {
+    Json json = Json::object_t{};
+    detail::put(json, "t", detail::single("expr", key.json()));
+    detail::put(json, "fallback", fallback);
+    detail::put(json, "args", detail::single("expr", args.json()));
+    return Handle<std::string>::raw(std::move(json));
+}
+
+/// @brief `refusalText(refusal)`: the words for an action refusal, from the catalogue in the user's locale.
+///
+/// The catalogue's message for the refusal's code, else the first of the code's class sentences (`a.b.generic`, then
+/// `a.generic` for `a.b.c`), else the interpreter's built-in sentence. The exception's message is never shown.
+/// @param refusal A mutation's or a query's `refusal()`.
+/// @return The `refusalText` call; `null` while @p refusal is.
+[[nodiscard]] inline Handle<std::string> refusalText(AnyHandle const& refusal) {
+    return call<std::string>("refusalText", {refusal});
+}
+
 /// @brief `{"if": [c, a, b]}`: a choice between two values.
 /// @tparam T The value type of the branches.
 /// @param condition The condition.
@@ -1577,6 +1603,10 @@ public:
         return Handle<std::string>::raw(detail::single("errorKind", _name));
     }
 
+    /// @brief The action refusal the last failure was, if it was one.
+    /// @return `{"refusal": name}`: `null`, or `{code, args}`; `refusalText` words it.
+    [[nodiscard]] Handle<Value> refusal() const { return Handle<Value>::raw(detail::single("refusal", _name)); }
+
     /// @brief Whether the signed-in principal may run the query.
     /// @return `{"can": name}`.
     [[nodiscard]] Handle<bool> can() const { return Handle<bool>::raw(detail::single("can", _name)); }
@@ -1624,6 +1654,10 @@ public:
     [[nodiscard]] Handle<std::string> errorKind() const {
         return Handle<std::string>::raw(detail::single("errorKind", _name));
     }
+
+    /// @brief The action refusal the last failure was, if it was one.
+    /// @return `{"refusal": name}`: `null`, or `{code, args}`; `refusalText` words it.
+    [[nodiscard]] Handle<Value> refusal() const { return Handle<Value>::raw(detail::single("refusal", _name)); }
 
     /// @brief Whether the signed-in principal may run the mutation.
     /// @return `{"can": name}`.
@@ -3327,6 +3361,11 @@ namespace detail {
 /// @return The command.
 [[nodiscard]] inline Command setLocale(std::string const& locale) { return detail::command("setLocale", locale); }
 
+/// @brief `setContext`: asks the shell to change the scope its switcher holds.
+/// @param value The option's value, an expression.
+/// @return The command.
+[[nodiscard]] inline Command setContext(AnyHandle const& value) { return detail::command("setContext", value.json()); }
+
 /// @brief The role of a notification.
 enum class Role : std::uint8_t {
     Info,     ///< Information.
@@ -3731,6 +3770,10 @@ struct TextInputOptions {
     /// @brief The unit the input shows, muted, at its trailing edge, and announces after its description, such as
     ///        `°C`; refused on a multiline input.
     AnyHandle unit;
+    /// @brief The fraction digits a number is entered with, 0 or more; it may follow an expression, such as the
+    ///        decimals of the currency a price is in. A text with more fraction digits is invalid. Refused on a
+    ///        multiline input.
+    AnyHandle decimals;
     /// @brief How much it stands out: `Prominent` for the screen's focal field, such as a scanner's; `Normal` writes
     ///        no key. Refused on a multiline input.
     InputEmphasis emphasis = InputEmphasis::Normal;
@@ -3764,6 +3807,7 @@ struct TextInputOptions {
         .put("mode", options.mode)
         .put("icon", options.icon)
         .put("unit", options.unit)
+        .put("decimals", options.decimals)
         .put("prefix", options.prefix);
     if (options.emphasis == InputEmphasis::Prominent) {
         node.text("emphasis", "prominent");
@@ -4066,6 +4110,100 @@ struct ActionBarOptions {
     return node.done();
 }
 
+/// @brief Options of `page`: the sheet's size and margins.
+struct PageOptions {
+    /// @brief The sheet's width, in millimetres.
+    Mm width{};
+    /// @brief The sheet's height, in millimetres.
+    Mm height{};
+    /// @brief The distances from the sheet's edges to the margin box that `Top` and `Bottom` regions follow.
+    PageMargins margins{};
+};
+
+/// @brief A `page` node: a sheet of fixed physical size, drawn on the `paper` surface and displayed scaled down to the
+///        width its container gives it, never up. It is named by `.a11y(…)`, which the accessibility rules require.
+/// @param regions The regions, in the order they are drawn and read; each is a `pageRegion`.
+/// @param options The sheet.
+/// @return The node.
+/// @throws std::invalid_argument when the sheet's size or margins are not valid (`PageGeometry::problem`).
+[[nodiscard]] inline Node page(Nodes const& regions, PageOptions const& options) {
+    PageGeometry const geometry{.width = options.width, .height = options.height, .margins = options.margins};
+    if (std::optional<std::string> const problem = geometry.problem()) {
+        throw std::invalid_argument{"morph::ui::author::page: " + *problem};
+    }
+    detail::NodeWriter node{"page"};
+    node.raw("width", Json(static_cast<std::int64_t>(options.width.micrometres())))
+        .raw("height", Json(static_cast<std::int64_t>(options.height.micrometres())));
+    PageMargins const& margins = options.margins;
+    if (margins == PageMargins{margins.top}) {
+        if (margins.top != Mm{}) {
+            node.raw("margins", Json(static_cast<std::int64_t>(margins.top.micrometres())));
+        }
+    } else {
+        Json record = Json::object_t{};
+        detail::put(record, "top", static_cast<std::int64_t>(margins.top.micrometres()));
+        detail::put(record, "right", static_cast<std::int64_t>(margins.right.micrometres()));
+        detail::put(record, "bottom", static_cast<std::int64_t>(margins.bottom.micrometres()));
+        detail::put(record, "left", static_cast<std::int64_t>(margins.left.micrometres()));
+        Json lit = Json::object_t{};
+        detail::put(lit, "lit", std::move(record));
+        node.raw("margins", std::move(lit));
+    }
+    return node.put("children", regions).done();
+}
+
+/// @brief Options of `pageRegion`: where on the sheet it lies.
+struct RegionOptions {
+    /// @brief `Top` and `Bottom` pin it to the margin box; `Offset` places its corner at `(x, y)` from the sheet's
+    /// edge.
+    PageAnchor anchor = PageAnchor::Top;
+    /// @brief The distance from the sheet's left edge; only `Offset` takes one.
+    Mm x{};
+    /// @brief The distance from the sheet's top edge; only `Offset` takes one.
+    Mm y{};
+    /// @brief The width; absent is the margin box's (`Top`, `Bottom`) or the rest of it (`Offset`).
+    std::optional<Mm> width;
+    /// @brief The height; absent is the content's. A given height clips the content, and a clipped region is marked.
+    std::optional<Mm> height;
+};
+
+/// @brief A `pageRegion` node: a rectangle of a sheet that holds its children as a column.
+/// @param children The content, top to bottom.
+/// @param options  Where it lies.
+/// @return The node.
+[[nodiscard]] inline Node pageRegion(Nodes const& children, RegionOptions const& options) {
+    detail::NodeWriter node{"pageRegion"};
+    node.text("anchor", options.anchor == PageAnchor::Top      ? "top"
+                        : options.anchor == PageAnchor::Bottom ? "bottom"
+                                                               : "offset");
+    auto const length = [&node](char const* key, Mm value) {
+        node.raw(key, Json(static_cast<std::int64_t>(value.micrometres())));
+    };
+    if (options.x != Mm{}) {
+        length("x", options.x);
+    }
+    if (options.y != Mm{}) {
+        length("y", options.y);
+    }
+    if (options.width) {
+        length("width", *options.width);
+    }
+    if (options.height) {
+        length("height", *options.height);
+    }
+    return node.put("children", children).done();
+}
+
+/// @brief A `localeScope` node: every `money`, `date`, `number`, `t` and other formatting inside it is written in the
+///        scope's locale, and the session's locale is untouched. A scope is not a widget: it takes no common
+///        properties, and the interpreter lowers it to a holder column.
+/// @param children The content.
+/// @param locale   The BCP 47 tag, such as a query's field; `null` or empty keeps the session's locale.
+/// @return The node.
+[[nodiscard]] inline Node localeScope(Nodes const& children, AnyHandle const& locale) {
+    return detail::NodeWriter{"localeScope"}.put("locale", locale).put("children", children).done();
+}
+
 /// @brief A `grid` node.
 /// @param children The children.
 /// @param options  The gap, columns or tracks, and alignment; a `justify` is written, and the loader refuses it.
@@ -4289,6 +4427,26 @@ private:
         node.facts(written.facts());
     }
     return node.raw("cases", std::move(parts)).put("default", fallback).done();
+}
+
+/// @brief The width class a screen lays out for: the client's `{"env": "widthClass"}`, and `expanded` where no
+///        client sets it.
+///
+/// A screen draws a compact layout below 80 units and the expanded one otherwise; `medium` takes the expanded one
+/// unless the screen switches on it itself.
+/// @param screen The screen's scope.
+/// @return The width class, a `let` named `widthClass`.
+[[nodiscard]] inline AnyHandle widthClass(Scope& screen) {
+    return screen.let("widthClass", coalesce({env("widthClass"), AnyHandle{"expanded"}}));
+}
+
+/// @brief The compact layout when @p width is `compact`, the expanded one otherwise.
+/// @param width    The width class, as `widthClass` answers it.
+/// @param compact  The compact layout.
+/// @param expanded The expanded layout.
+/// @return The switch.
+[[nodiscard]] inline Node byWidth(AnyHandle const& width, Nodes compact, Nodes const& expanded) {
+    return switchOn(width, {Case{"compact", std::move(compact)}}, expanded);
 }
 
 /// @brief A page of a `tabs` node.
@@ -4607,6 +4765,10 @@ struct TableOptions {
     AnyHandle filters;
     /// @brief A row's tone, read in the row scope.
     AnyHandle rowTone;
+    /// @brief A row's spans, read in the row scope: a list of `{column, rows}` records, `column` a column's id and
+    ///        `rows` an integer from 1 counting the row itself; the cells they name cover the rows below. Absent,
+    ///        none.
+    AnyHandle rowSpans;
     /// @brief The key a linked chart highlights.
     AnyHandle highlightKey;
     /// @brief Commands run when a row is activated, in its row scope.
@@ -4716,6 +4878,7 @@ namespace detail {
         .put("page", options.page)
         .put("filters", options.filters)
         .put("rowTone", options.rowTone)
+        .put("rowSpans", options.rowSpans)
         .put("highlightKey", options.highlightKey)
         .put("onActivate", options.onActivate)
         .put("empty", options.empty)
@@ -5019,10 +5182,10 @@ struct BadgeOptions {
 }
 
 /// @brief A `steps` node.
-/// @param items    The steps, `[{label, state}]`.
+/// @param items    The steps, `[{label, state, detail}]`; `detail` is an optional muted second line.
 /// @param current  The current step.
 /// @param labelled Whether the labels are drawn, a condition; absent draws them. Unlabelled, the steps still carry
-///                 their labels as accessible names.
+///                 their labels, details and states as accessible names.
 /// @return The node.
 [[nodiscard]] inline Node steps(AnyHandle const& items, AnyHandle const& current = {},
                                 AnyHandle const& labelled = {}) {
@@ -5203,6 +5366,12 @@ namespace detail {
 /// @brief An expression read once per point of a chart's series, from the point's element (`{"row": ""}`).
 using PointExpression = std::function<AnyHandle(AnyHandle const& point)>;
 
+/// @brief How a `chart` series is drawn.
+enum class SeriesStyle : std::uint8_t {
+    Line,  ///< Points, joined by a line unless `joined` is false.
+    Bars,  ///< A bar from the baseline to each value, beside the other `Bars` series at each position.
+};
+
 /// @brief One series of a `chart`.
 struct ChartSeries {
     /// @brief The series' name in the legend; required when the chart has two or more series.
@@ -5220,8 +5389,10 @@ struct ChartSeries {
     PointExpression tone;
     /// @brief Text drawn beside the point.
     PointExpression note;
-    /// @brief Whether a line joins the points.
+    /// @brief Whether a line joins the points; a `Bars` series is never joined, whatever this says.
     bool joined = true;
+    /// @brief Whether the series is drawn as a line of points or as bars.
+    SeriesStyle style = SeriesStyle::Line;
 };
 
 /// @brief How a chart's reference line is stroked.
@@ -5289,6 +5460,9 @@ struct ChartOptions {
         each(part, "note", one.note);
         if (!one.joined) {
             detail::put(part, "joined", false);
+        }
+        if (one.style == SeriesStyle::Bars) {
+            detail::put(part, "style", "bars");
         }
         series.push_back(std::move(part));
     }
@@ -5463,7 +5637,8 @@ struct FieldSettings {
     AnyHandle label;
     /// @brief The display unit.
     AnyHandle unit;
-    /// @brief The display places.
+    /// @brief The places the field is entered with; it may follow an expression, and overrides the schema's
+    ///        `x-decimalPlaces` for the field.
     AnyHandle decimals;
     /// @brief The widget.
     AnyHandle widget;
@@ -5737,7 +5912,7 @@ namespace detail {
         }
         return "accessibility: a `group` has a `label` or an `a11y.name`";
     }
-    if ((kind == "table" || kind == "custom") && !hasA11yName(node)) {
+    if ((kind == "table" || kind == "custom" || kind == "page") && !hasA11yName(node)) {
         return "accessibility: a `" + node.kind + "` has an `a11y.name`";
     }
     return {};

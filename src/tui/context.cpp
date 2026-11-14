@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "tui/drag.hpp"
+#include "tui/table_widget.hpp"
+#include "tui/widget.hpp"
 
 namespace morph::tui::detail {
 
@@ -21,6 +23,8 @@ WidgetBase* Context::ownerOf(::core::tui::Component const* view) const {
 void Context::forget(WidgetBase& widget) {
     std::erase(roots, &widget);
     std::erase(popups, &widget);
+    std::erase_if(spanTables,
+                  [&widget](TableImpl const* table) { return static_cast<WidgetBase const*>(table) == &widget; });
     if (pressed == &widget) {
         pressed = nullptr;
     }

@@ -19,9 +19,9 @@
 #include <testkit/screen_harness.hpp>
 #include <vector>
 
-#include "lims/dto/sample_dto.hpp"
-#include "lims/dto/sample_entry_dto.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/lab/dto/sample_dto.hpp"
+#include "lims/lab/dto/sample_entry_dto.hpp"
+#include "lims/lab/models/sample_model.hpp"
 #include "lims_screens.hpp"
 #include "lims_test_support.hpp"
 
@@ -31,7 +31,6 @@ using morph::client::LocalApp;
 using morph::client::LocalSetup;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
-using morph::ladder::testkit::DbFixture;
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
 using morph::math::Numerator;
@@ -118,8 +117,11 @@ Stored storedSample() {
     lims::SampleModel model;
     auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
     model.execute(lims::NewSample{});
-    model.execute(
-        lims::HeaderSection{.clientId = client.clientId, .reference = "WW-3", .receivedOn = 0, .remarks = {}});
+    model.execute(lims::HeaderSection{.clientId = client.clientId,
+                                      .reference = "WW-3",
+                                      .receivedOn = 0,
+                                      .remarks = {},
+                                      .siteId = lims::test::seededSite()});
     model.execute(lims::SamplingSection{
         .spike = mgL(10), .measured1 = mgL(10), .measured2 = mgL(5), .measured3 = {}, .measured4 = mgL(9, 10)});
     model.execute(lims::SelectProject{.projectId = 1});
@@ -139,7 +141,7 @@ std::int64_t registeredClient() {
 // Mutations: treat a refused save as saved (no refusal text); file the sample under no project on activation (the
 // save is refused again).
 TEST_CASE("lims sample screen: a new sample is refused until complete, then saved", "[lims-screens][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     std::int64_t const clientId = registeredClient();
     ScreenHarness harness{
         limsApp(), std::string{lims::screens::kSample}, RigMode::Local, {}, LocalSetup{.db = {}, .user = "tech"}};
@@ -149,6 +151,7 @@ TEST_CASE("lims sample screen: a new sample is refused until complete, then save
 
     editField(harness, {.form = "headerForm", .name = "clientId"}, std::to_string(clientId));
     editField(harness, {.form = "headerForm", .name = "reference"}, "WW-9");
+    editField(harness, {.form = "headerForm", .name = "siteId"}, "1");
     submitForm(harness, "headerForm");
     // A section edits the working copy; the header shows it once the submit is answered.
     REQUIRE(harness.waitForText("client", "Client " + std::to_string(clientId)));
@@ -175,7 +178,7 @@ TEST_CASE("lims sample screen: a new sample is refused until complete, then save
 // Mutation: count every row as outside the limits (the pill reads 4).
 TEST_CASE("lims sample screen: a stored sample opens by id with the model's dilution series",
           "[lims-screens][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     Stored const stored = storedSample();
     ScreenHarness harness{limsApp(), std::string{lims::screens::kSample}, RigMode::Local,
                           ParamMap{{"sampleId", Value{stored.sampleId}}}, LocalSetup{.db = {}, .user = "tech"}};
@@ -190,7 +193,7 @@ TEST_CASE("lims sample screen: a stored sample opens by id with the model's dilu
 
 // Mutation: hide a removed measurement without clearing it (the stored reading keeps the form shown).
 TEST_CASE("lims sample screen: an optional measurement is added, entered and removed", "[lims-screens][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     ScreenHarness harness{
         limsApp(), std::string{lims::screens::kSample}, RigMode::Local, {}, LocalSetup{.db = {}, .user = "tech"}};
     REQUIRE(harness.waitForText("title", "New sample"));
@@ -211,7 +214,7 @@ TEST_CASE("lims sample screen: an optional measurement is added, entered and rem
 
 // Mutation: leave the working copy loaded after a delete (the title keeps the sample's number).
 TEST_CASE("lims sample screen: deleting a registration starts a new sample", "[lims-screens][sample]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     Stored const stored = storedSample();
     ScreenHarness harness{limsApp(), std::string{lims::screens::kSample}, RigMode::Local,
                           ParamMap{{"sampleId", Value{stored.sampleId}}}, LocalSetup{.db = {}, .user = "tech"}};

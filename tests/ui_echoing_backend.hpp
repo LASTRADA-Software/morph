@@ -132,6 +132,10 @@ public:
         created();
         return _recording.createToast(parent);
     }
+    std::unique_ptr<::morph::ui::PopoverWidget> createPopover(::morph::ui::ContainerWidget* parent) override {
+        created();
+        return _recording.createPopover(parent);
+    }
     std::unique_ptr<::morph::ui::BusyWidget> createBusy(::morph::ui::ContainerWidget* parent) override {
         created();
         return _recording.createBusy(parent);
@@ -190,6 +194,16 @@ public:
     std::unique_ptr<::morph::ui::DropZoneWidget> createDropZone(::morph::ui::ContainerWidget* parent) override {
         created();
         return _recording.createDropZone(parent);
+    }
+    std::unique_ptr<::morph::ui::PageWidget> createPage(::morph::ui::ContainerWidget* parent,
+                                                        ::morph::ui::PageGeometry const& geometry) override {
+        created();
+        return _recording.createPage(parent, geometry);
+    }
+    std::unique_ptr<::morph::ui::PageRegionWidget> createPageRegion(
+        ::morph::ui::ContainerWidget* parent, ::morph::ui::RegionGeometry const& geometry) override {
+        created();
+        return _recording.createPageRegion(parent, geometry);
     }
     std::unique_ptr<::morph::ui::DrawerWidget> createDrawer(::morph::ui::ContainerWidget* parent,
                                                             ::morph::ui::Side side) override {

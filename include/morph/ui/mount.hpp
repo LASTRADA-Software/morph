@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <format>
 #include <functional>
 #include <limits>
 #include <map>
@@ -47,10 +48,114 @@ namespace site {
 inline constexpr char const* kCallbackThrew = "morph::ui: an exception escaped a widget callback";
 /// @brief A ForEach or Table snapshot repeated a key; the later row is refused and the first one kept.
 inline constexpr char const* kDuplicateKey = "morph::ui: duplicate ForEach key";
+/// @brief A table row's span names no column, covers no rows, is a heading's, or repeats a column of its row; it is
+///        refused and its cell stays in its own row.
+inline constexpr char const* kRowSpanInvalid = "morph::ui: a table row's span is not a span of the table";
+/// @brief A table row's span runs past the last row or over a heading row; it is refused.
+inline constexpr char const* kRowSpanOverrun =
+    "morph::ui: a table row's span runs past the last row or over a heading";
+/// @brief A table row's span starts in a column an earlier row's span covers; it is refused.
+inline constexpr char const* kRowSpanOverlap = "morph::ui: a table row's span starts in a column another span covers";
+/// @brief A table above its virtualization threshold was given spans; none is drawn.
+inline constexpr char const* kRowSpanVirtualized = "morph::ui: a virtualized table draws no row spans";
 }  // namespace site
+
+/// @brief What a table's span resolve knows of one row: whether it is a heading, the spans it asked for and the ones
+///        its widget was last told.
+struct RowSpanEntry {
+    /// @brief Whether the row is a heading row.
+    bool heading = false;
+    /// @brief The spans the row's binding last gave.
+    std::vector<RowSpan> requested;
+    /// @brief The effective spans the row's widget was last told, by column.
+    std::vector<RowSpan> sent;
+    /// @brief The widget `sent` was told to.
+    Widget const* told = nullptr;
+};
+
+/// @brief The outcome of resolving a table's requested spans against its rows in order.
+struct ResolvedSpans {
+    /// @brief The effective spans of each row, in the order given, each sorted by column.
+    std::vector<std::vector<RowSpan>> effective;
+    /// @brief The refusals, one description per refused span, tagged with the site it is reported under.
+    std::vector<std::pair<char const*, std::string>> refused;
+};
+
+/// @brief One row as the span resolve sees it.
+struct SpanRow {
+    /// @brief A text naming the row in a refusal.
+    std::string name;
+    /// @brief Whether the row is a heading.
+    bool heading = false;
+    /// @brief The spans the row requested.
+    std::vector<RowSpan> requested;
+};
+
+/// @brief Resolves the requested spans of a table's rows, top to bottom, one column at a time.
+///
+/// A span is refused, alone, when it names no column, covers 0 rows, belongs to a heading row, repeats a column of
+/// its row, starts in a column an earlier span covers, or runs past the last row or over a heading row. The earlier
+/// span wins an overlap.
+/// @param rows The rows in order.
+/// @param columns How many columns the table has.
+/// @return The effective spans per row and the refusals.
+[[nodiscard]] inline ResolvedSpans resolveRowSpans(std::vector<SpanRow> const& rows, std::size_t columns) {
+    ResolvedSpans out;
+    out.effective.resize(rows.size());
+    std::vector<std::size_t> coveredUntil(columns, 0);
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        SpanRow const& row = rows.at(index);
+        std::vector<bool> named(columns, false);
+        for (RowSpan const& span : row.requested) {
+            auto const refuse = [&](char const* const site, std::string_view why) {
+                out.refused.emplace_back(
+                    site, row.name + ": column " + std::to_string(span.column) + " " + std::string{why});
+            };
+            if (span.column >= columns || span.rows == 0 || row.heading || named.at(span.column)) {
+                refuse(site::kRowSpanInvalid, "is not a span of this table");
+                continue;
+            }
+            named.at(span.column) = true;
+            if (coveredUntil.at(span.column) > index) {
+                refuse(site::kRowSpanOverlap, "starts under another span");
+                continue;
+            }
+            if (span.rows == 1) {
+                continue;
+            }
+            std::size_t const end = index + span.rows;
+            bool const crossesHeading =
+                end <= rows.size() && std::any_of(rows.begin() + static_cast<std::ptrdiff_t>(index) + 1,
+                                                  rows.begin() + static_cast<std::ptrdiff_t>(end),
+                                                  [](SpanRow const& covered) { return covered.heading; });
+            if (end > rows.size() || crossesHeading) {
+                refuse(site::kRowSpanOverrun, "runs past the last row or over a heading");
+                continue;
+            }
+            out.effective.at(index).push_back(span);
+            coveredUntil.at(span.column) = end;
+        }
+        std::ranges::sort(out.effective.at(index), {}, &RowSpan::column);
+    }
+    return out;
+}
 
 /// @brief Called for each newly mounted row with its widget and key; a Table tells its widget the row's key.
 using RowHook = std::function<void(reactive::Scope&, Node const&, Widget&, Key const&)>;
+
+struct KeyedRow;
+
+/// @brief What a table is told around each pass that changes its rows: before it starts, and after it has brought the
+///        rows into the snapshot's order, with the rows in their container's order.
+struct RowsObserver {
+    /// @brief Called inside the rows Effect, tracked, before each pass: what it reads re-runs the pass, so a change
+    ///        that arrives with a change of rows is seen in the same run, never in an Effect of its own.
+    std::function<void()> track;
+    /// @brief Called before a pass that mounts, moves or removes rows.
+    std::function<void()> begin;
+    /// @brief Called after the pass, with the table's rows: realized rows first, in the container's order.
+    std::function<void(std::vector<KeyedRow> const&)> end;
+};
 
 /// @brief Whether a row's widget is realized, and if not, why -- so the windowing pass of `reconcile` never
 ///        confuses a row that has no widget by design (its view was a null node) with one whose widget is simply
@@ -934,8 +1039,8 @@ private:
     Widget& mountKind(reactive::Scope& scope, TextInput const& spec, ContainerWidget* parent) {
         bool const hasUnit = spec.unit.isBound() || !spec.unit.constant().empty();
         bool const hasPrefix = spec.prefix.isBound() || !spec.prefix.constant().empty();
-        if ((hasUnit || hasPrefix || spec.decimals >= 0 || !spec.icon.empty()) &&
-            spec.mode == TextInputMode::Multiline) {
+        bool const hasDecimals = spec.decimals.isBound() || spec.decimals.constant() >= 0;
+        if ((hasUnit || hasPrefix || hasDecimals || !spec.icon.empty()) && spec.mode == TextInputMode::Multiline) {
             throw std::logic_error{
                 "morph::ui: a multiline text input holds no number, so it takes no unit, prefix, places or icon"};
         }
@@ -957,8 +1062,8 @@ private:
         if (hasPrefix) {
             bind(scope, spec.prefix, [&widget](std::string const& prefix) { widget.setPrefix(prefix); });
         }
-        if (spec.decimals >= 0) {
-            widget.setDecimals(spec.decimals);
+        if (hasDecimals) {
+            bind(scope, spec.decimals, [&widget](int decimals) { widget.setDecimals(decimals); });
         }
         if (!spec.icon.empty()) {
             widget.setIcon(spec.icon);
@@ -1039,9 +1144,9 @@ private:
     }
 
     Widget& mountKind(reactive::Scope& scope, Row const& spec, ContainerWidget* parent) {
-        if ((spec.tone || spec.label || spec.heading) && dynamic_cast<TableWidget*>(parent) == nullptr) {
+        if ((spec.tone || spec.label || spec.heading || spec.spans) && dynamic_cast<TableWidget*>(parent) == nullptr) {
             throw std::logic_error{
-                "morph::ui: a row's tone, label and heading are a table row's; this row is not in a table"};
+                "morph::ui: a row's tone, label, heading and spans are a table row's; this row is not in a table"};
         }
         if (spec.selected && dynamic_cast<TableWidget*>(parent) != nullptr) {
             throw std::logic_error{"morph::ui: a table row's selection is the table's; this row gives its own"};
@@ -1416,6 +1521,88 @@ private:
         return widget;
     }
 
+    // What a table remembers to resolve its rows' spans: each row's request, the rows in order, and the table's
+    // conditions. The resolve runs after a reconcile has brought the rows into order and when one row's spans or the
+    // sort change on their own; a row's binding that fires inside a reconcile only stores its request.
+    struct SpanTable {
+        struct Placed {
+            Key key;
+            Widget* widget = nullptr;
+        };
+        std::unordered_map<Key, RowSpanEntry> rows;
+        std::vector<Placed> order;
+        std::size_t columns = 0;
+        std::size_t threshold = 0;
+        std::size_t reconciling = 0;
+        bool sorted = false;
+        bool anyAsked = false;
+        std::set<std::string> lastRefused;
+    };
+
+    // The resolve of a table's spans: what the widget is told, by the difference from what it last was, and the
+    // refusals, reported when their set changes.
+    void resolveSpans(TableWidget& widget, SpanTable& table) {
+        if (table.reconciling != 0 || !table.anyAsked) {
+            return;
+        }
+        std::vector<SpanRow> rows;
+        rows.reserve(table.order.size());
+        for (SpanTable::Placed const& placed : table.order) {
+            auto const found = table.rows.find(placed.key);
+            SpanRow row{.name =
+                            "row " + std::visit([](auto const& key) { return std::format("{}", key); }, placed.key)};
+            if (found != table.rows.end()) {
+                row.heading = found->second.heading;
+                row.requested = found->second.requested;
+            }
+            rows.push_back(std::move(row));
+        }
+        bool const virtualized = table.order.size() >= table.threshold;
+        ResolvedSpans resolved;
+        if (table.sorted) {
+            resolved.effective.resize(rows.size());
+        } else if (virtualized) {
+            resolved.effective.resize(rows.size());
+            if (std::ranges::any_of(rows, [](SpanRow const& row) {
+                    return std::ranges::any_of(row.requested, [](RowSpan const& span) { return span.rows >= 2; });
+                })) {
+                resolved.refused.emplace_back(site::kRowSpanVirtualized, "the table is virtualized");
+            }
+        } else {
+            resolved = resolveRowSpans(rows, table.columns);
+        }
+        std::set<std::string> refused;
+        for (auto const& [reason, text] : resolved.refused) {
+            refused.insert(std::string{reason} + " | " + text);
+        }
+        if (refused != table.lastRefused) {
+            std::set<char const*> sites;
+            for (auto const& [reason, text] : resolved.refused) {
+                sites.insert(reason);
+            }
+            for (char const* const reason : sites) {
+                _rt->core()->report(reason);
+            }
+            table.lastRefused = std::move(refused);
+        }
+        for (std::size_t index = 0; index < table.order.size(); ++index) {
+            SpanTable::Placed const& placed = table.order.at(index);
+            auto const found = table.rows.find(placed.key);
+            if (placed.widget == nullptr || found == table.rows.end()) {
+                continue;
+            }
+            RowSpanEntry& entry = found->second;
+            if (entry.told != placed.widget) {
+                entry.told = placed.widget;
+                entry.sent.clear();
+            }
+            if (resolved.effective.at(index) != entry.sent) {
+                entry.sent = resolved.effective.at(index);
+                widget.setRowSpans(*placed.widget, entry.sent);
+            }
+        }
+    }
+
     // Rows first, then the selection. The widget marks a selected key whenever its row arrives, so the order only
     // shapes the log: the first setSelection comes after the rows and already marks them.
     Widget& mountKind(reactive::Scope& scope, Table const& spec, ContainerWidget* parent) {
@@ -1430,18 +1617,38 @@ private:
             bind(scope, spec.selectAllLabel, [&widget](std::string const& label) { widget.setSelectAllLabel(label); });
         }
         widget.setOnActivate(event(spec.onActivate));
-        if (std::ranges::any_of(spec.columns, &TableColumn::sortable)) {
-            bind(scope, spec.sort, [&widget](std::optional<TableSort> const& sort) { widget.setSort(sort); });
+        bool const sortable = std::ranges::any_of(spec.columns, &TableColumn::sortable);
+        reactive::Computed<std::optional<TableSort>>* sortValue = nullptr;
+        if (sortable) {
+            sortValue =
+                bind(scope, spec.sort, [&widget](std::optional<TableSort> const& sort) { widget.setSort(sort); });
             widget.setOnSort(event(spec.onSort));
         }
+        auto& spans = scope.make<SpanTable>();
+        spans.columns = spec.columns.size();
+        spans.threshold = spec.virtualize.threshold;
+        // The sort counts where it is wired: a table with no sortable column shows no sort. It is read inside the
+        // rows Effect, not in an Effect of its own, so that two Effects cannot resolve the spans in either order,
+        // one of them against the wrong rows. A sort bound to a server query can still clear before the rows reorder.
+        spans.sorted = sortable && sortValue == nullptr && spec.sort.constant().has_value();
         mountRows(
             scope, spec.rows, widget,
-            [this, &widget](reactive::Scope& rowScope, Node const& node, Widget& rowWidget, Key const& key) {
+            [this, &widget, &spans](reactive::Scope& rowScope, Node const& node, Widget& rowWidget, Key const& key) {
                 widget.setRowKey(rowWidget, key);
                 // A row's tone binds in the row's scope, after its key and whether it is a heading.
                 Row const* const view = node ? std::get_if<Row>(&node->kind) : nullptr;
                 if (view != nullptr && view->heading) {
                     widget.setRowHeading(rowWidget);
+                }
+                if (view != nullptr && (view->heading || view->spans)) {
+                    spans.rows[key].heading = view->heading;
+                    if (view->spans) {
+                        bind(rowScope, *view->spans, [this, &widget, &spans, key](std::vector<RowSpan> const& asked) {
+                            spans.rows[key].requested = asked;
+                            spans.anyAsked = spans.anyAsked || !asked.empty();
+                            resolveSpans(widget, spans);
+                        });
+                    }
                 }
                 if (view != nullptr && view->tone) {
                     bind(rowScope, *view->tone, [&widget, &rowWidget](std::optional<Tone> const& tone) {
@@ -1453,7 +1660,32 @@ private:
                          [&widget, &rowWidget](std::string const& label) { widget.setRowLabel(rowWidget, label); });
                 }
             },
-            &spec.virtualize);
+            &spec.virtualize,
+            RowsObserver{
+                .track =
+                    [&spans, sortValue] {
+                        if (sortValue != nullptr) {
+                            spans.sorted = sortValue->get().has_value();
+                        }
+                    },
+                .begin = [&spans] { ++spans.reconciling; },
+                .end =
+                    [this, &widget, &spans](std::vector<KeyedRow> const& rows) {
+                        --spans.reconciling;
+                        spans.order.clear();
+                        for (KeyedRow const& row : rows) {
+                            spans.order.push_back(
+                                {.key = row.key,
+                                 .widget = row.widgetState == RowWidgetState::Realized ? row.widget : nullptr});
+                        }
+                        std::unordered_set<Key> present;
+                        for (KeyedRow const& row : rows) {
+                            present.insert(row.key);
+                        }
+                        std::erase_if(spans.rows,
+                                      [&present](auto const& entry) { return !present.contains(entry.first); });
+                        resolveSpans(widget, spans);
+                    }});
         widget.setOnSelectionChange(inputEvent(
             spec.onSelectionChange, controlled(scope, spec.selection, [&widget](std::vector<Key> const& keys) {
                 widget.setSelection(keys);
@@ -1468,7 +1700,8 @@ private:
     // virtualize, and only its mountKind gives it a TableWidget -- kept as a defensive check, not a real case),
     // virtualization is silently not wired, same as if it were null.
     void mountRows(reactive::Scope& scope, std::shared_ptr<ForEachModel const> const& model,
-                   ContainerWidget& container, RowHook onRow, Virtualization const* virtualize) {
+                   ContainerWidget& container, RowHook onRow, Virtualization const* virtualize,
+                   RowsObserver observer = {}) {
         if (!model) {
             return;
         }
@@ -1495,27 +1728,53 @@ private:
         table->setOnVisibleRangeChanged([this, &range](std::size_t first, std::size_t count) {
             runCallback(*_rt, [&] { range.set({.first = first, .count = count}); });
         });
+        // The observer sees every pass that changes the rows, the windowing one included, and its end runs also when
+        // the pass throws, so a failed row never leaves the table counting a pass that is over.
+        auto const around = [observer, &rows](auto&& pass) {
+            if (observer.begin) {
+                observer.begin();
+            }
+            try {
+                pass();
+            } catch (...) {
+                if (observer.end) {
+                    observer.end(rows.list);
+                }
+                throw;
+            }
+            if (observer.end) {
+                observer.end(rows.list);
+            }
+        };
         scope.effect([this, &session, &rows, &container, &range, threshold = virtualize->threshold,
-                      overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay] {
-            std::vector<Key> const keys = session.pull();  // tracked: the rows are this Effect's only source
-            VisibleRange const window = range.peek();      // untracked: a scroll alone must not re-run this Effect
-            underOverlay(overlay, [&] {
-                _rt->untracked([&] {
-                    if (keys.size() < threshold) {
-                        reconcile(depth, session, rows.list, container, keys, onRow);
-                        return;
-                    }
-                    std::pair<VisibleRange, std::size_t> const windowAndOverscan{window, overscan};
-                    reconcile(depth, session, rows.list, container, keys, onRow, &windowAndOverscan);
-                    // Only above threshold: a backend's own selection-filtering logic may need to know a key
-                    // still exists even without a realized row for it right now (backend.hpp's setExistingKeys).
-                    // Below threshold every key already has a realized row, so this would add nothing.
-                    table->setExistingKeys(keys);
+                      overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay,
+                      around, track = observer.track] {
+            // tracked: the rows are one source, and the sort that `track` reads is the other
+            std::vector<Key> const keys = session.pull();
+            if (track) {
+                track();
+            }
+            VisibleRange const window = range.peek();  // untracked: a scroll alone must not re-run this Effect
+            around([&] {
+                underOverlay(overlay, [&] {
+                    _rt->untracked([&] {
+                        if (keys.size() < threshold) {
+                            reconcile(depth, session, rows.list, container, keys, onRow);
+                            return;
+                        }
+                        std::pair<VisibleRange, std::size_t> const windowAndOverscan{window, overscan};
+                        reconcile(depth, session, rows.list, container, keys, onRow, &windowAndOverscan);
+                        // Only above threshold: a backend's own selection-filtering logic may need to know a key
+                        // still exists even without a realized row for it right now (backend.hpp's setExistingKeys).
+                        // Below threshold every key already has a realized row, so this would add nothing.
+                        table->setExistingKeys(keys);
+                    });
                 });
             });
         });
         scope.effect([this, &rows, &container, &range, threshold = virtualize->threshold,
-                      overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay] {
+                      overscan = virtualize->overscan, depth = scope.depth() + 1, onRow, table, overlay = _overlay,
+                      around] {
             VisibleRange const window = range.get();  // tracked: this Effect's own trigger
             // Below threshold, every row is already realized (reconcile's own unconditional path, §4.4), and
             // setRealizedWindow is not called at all -- not even once with "everything realized" -- so a table
@@ -1524,7 +1783,9 @@ private:
             if (rows.list.size() < threshold) {
                 return;
             }
-            underOverlay(overlay, [&] { applyWindow(depth, rows.list, container, window, overscan, onRow); });
+            around([&] {
+                underOverlay(overlay, [&] { applyWindow(depth, rows.list, container, window, overscan, onRow); });
+            });
             auto const [first, count] = realizedExtent(rows.list);
             table->setRealizedWindow(first, count, rows.list.size());
         });
@@ -1937,6 +2198,81 @@ private:
         return widget;
     }
 
+    // The refusal text of a page node, naming its test id the way every layout refusal does.
+    [[nodiscard]] static std::logic_error pageRefusal(Common const& common, std::string const& what) {
+        return std::logic_error{"morph::ui::mount: " + what +
+                                (common.testId.empty() ? std::string{} : " (node `" + common.testId + "`)")};
+    }
+
+    // A page sizes itself: it takes `alignSelf` (not `Stretch`) and no other layout hint. A region is sized by its
+    // geometry and takes none.
+    static void checkPageLayout(Common const& common, bool isPage) {
+        LayoutHints hints = common.layout;
+        if (isPage) {
+            if (hints.alignSelf && *hints.alignSelf == Align::Stretch) {
+                throw pageRefusal(common, "a page is never stretched; `alignSelf` places the sheet");
+            }
+            hints.alignSelf.reset();
+        }
+        if (hints != LayoutHints{}) {
+            throw pageRefusal(common, isPage ? "a page is sized by its sheet; its layout hints are refused"
+                                             : "a page region is sized by its geometry; its layout hints are refused");
+        }
+    }
+
+    // The geometry of the page whose regions are being mounted, restored when they are done.
+    class PageGuard {
+    public:
+        PageGuard(Mounter& self, PageGeometry const* page) : _self{&self}, _saved{std::exchange(self._page, page)} {}
+        PageGuard(PageGuard const&) = delete;
+        PageGuard& operator=(PageGuard const&) = delete;
+        PageGuard(PageGuard&&) = delete;
+        PageGuard& operator=(PageGuard&&) = delete;
+        ~PageGuard() { _self->_page = _saved; }
+
+    private:
+        Mounter* _self;
+        PageGeometry const* _saved;
+    };
+
+    Widget& mountKind(reactive::Scope& scope, Page const& spec, ContainerWidget* parent) {
+        checkPageLayout(spec.common, true);
+        if (std::optional<std::string> const problem = spec.geometry.problem()) {
+            throw pageRefusal(spec.common, *problem);
+        }
+        for (Node const& child : spec.children) {
+            if (child && !std::holds_alternative<PageRegion>(child->kind)) {
+                throw pageRefusal(spec.common, "a page holds page regions and nothing else");
+            }
+        }
+        PageWidget& widget = scope.adopt(_backend->createPage(parent, spec.geometry));
+        applyCommon(scope, widget, spec.common);
+        if (spec.common.a11y.role.empty()) {
+            widget.setAccessibleRole("document");
+        }
+        if (!spec.common.surface.isBound() && spec.common.surface.constant().empty()) {
+            widget.setSurface("paper");
+        }
+        PageGuard const guard{*this, &spec.geometry};
+        mountChildren(scope, spec.children, widget);
+        return widget;
+    }
+
+    Widget& mountKind(reactive::Scope& scope, PageRegion const& spec, ContainerWidget* parent) {
+        auto* const page = dynamic_cast<PageWidget*>(parent);
+        if (page == nullptr || _page == nullptr) {
+            throw pageRefusal(spec.common, "a page region belongs in a page");
+        }
+        checkPageLayout(spec.common, false);
+        if (std::optional<std::string> const problem = spec.geometry.problem(*_page)) {
+            throw pageRefusal(spec.common, *problem);
+        }
+        PageRegionWidget& widget = scope.adopt(_backend->createPageRegion(page, spec.geometry));
+        applyCommon(scope, widget, spec.common);
+        mountChildren(scope, spec.children, widget);
+        return widget;
+    }
+
     // One prop of a loaded component, bound to the setter its kind crosses by.
     void bindCustomProp(reactive::Scope& scope, CustomWidget& widget, CustomProp const& prop) {
         std::string const& name = prop.name;
@@ -2025,8 +2361,8 @@ private:
         applyCommon(scope, widget, spec.common);
         applyField(scope, widget, spec.field);
         // Before the value, which is then shown in it; an input with no pattern is told none.
-        if (!spec.pattern.empty()) {
-            widget.setPattern(spec.pattern);
+        if (spec.pattern.isBound() || !spec.pattern.constant().empty()) {
+            bind(scope, spec.pattern, [&widget](std::string const& pattern) { widget.setPattern(pattern); });
         }
         widget.setOnChange(inputEvent(
             spec.onChange,
@@ -2065,6 +2401,8 @@ private:
     ContainerWidget* _overlay = nullptr;
     // The action bar whose children are being mounted, while they are.
     StackWidget* _actionBar = nullptr;
+    // The sheet whose regions are being mounted, while they are.
+    PageGeometry const* _page = nullptr;
     // The first autofocus widget of the mount pass in progress, and how deeply passes are nested.
     Widget* _autofocus = nullptr;
     std::size_t _passDepth = 0;

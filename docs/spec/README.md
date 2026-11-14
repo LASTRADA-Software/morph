@@ -116,7 +116,10 @@ before writing a durability test
 
 **Identity**
 [`session/session.md`](session/session.md) ·
-[`security.md`](security.md)
+[`security.md`](security.md) ·
+[`core/action_guards.md`](core/action_guards.md) — the per-action check the
+framework runs on the decoded action, on every dispatch path, before
+`Model::execute`
 
 **Schema-driven UI**
 [`forms/forms.md`](forms/forms.md) ·
@@ -131,7 +134,9 @@ form definitions that are data ·
 rules, exact values and reactive session, headless ·
 [`table/engine.md`](table/engine.md) — sorting, filtering and view
 mapping for a table, on and off the owner thread, and `table::apply` for a
-server
+server ·
+[`table/database_pages.md`](table/database_pages.md) — paging a table that
+lives in a database: `planQuery`, `Page::totalKind` and the conformance helper
 
 **Reactive state and control**
 [`reactive/signals.md`](reactive/signals.md) ·
@@ -158,6 +163,10 @@ providers and limits ·
 (`host/1`): checked arguments, the trust gate, `can` and the handshake ·
 [`ui/catalogue.md`](ui/catalogue.md) — a bundle's message catalogues, the provider `t` resolves through, locale
 switching and search in every locale ·
+[`ui/locale_table.md`](ui/locale_table.md) — the table of number, money and date facts per locale, how `Session::setLocale`
+installs them, and the forms `money` writes ·
+[`ui/refusals.md`](ui/refusals.md) — a refused action's code and arguments on the wire, `refusal()` on a mutation or query,
+and `refusalText`: the sentence in the user's locale from the catalogue, by a key known at run time ·
 [`ui/theme.md`](ui/theme.md) — theme tokens: DTCG 2025.10 files, aliases and layering, the checks at registration,
 the closed `ui-theme/1` set and its defaults, and applying it on Qt Quick ·
 [`ui/host.md`](ui/host.md) — the host contract: `ScreenHost`, `ScreenHandle`, the close protocol, call and return,
@@ -165,6 +174,10 @@ and `DocumentScreenHost` mounting screens as roots or into a host's container ·
 [`ui/workspace.md`](ui/workspace.md) — the workspace shell: tabs over screens, focus by identity, singleton and
 placeholder tabs, closing tab by tab until a veto, and the most-recently-used walk ·
 [`ui/shell_frame.md`](ui/shell_frame.md) — the frame screens are shown in: sidebar with the navigator, top bar, page ·
+[`ui/shell_parts.md`](ui/shell_parts.md) — the shell's declared parts: a scope switcher, module counts, one search,
+an inbox button and the principal's menu, each a model action an application names, and the `context` every screen reads ·
+[`ui/document_page.md`](ui/document_page.md) — a fixed-size document page laid out in millimetres and scaled to the width,
+its regions pinned to the margins or placed at an offset, and `localeScope`: a subtree formatted in another locale ·
 [`ui/explorer.md`](ui/explorer.md) — the app explorer: an application's screens, models and actions, with a live form
 for each action ·
 [`ui/inspector.md`](ui/inspector.md) — the development inspector: a mounted screen's nodes, queries, mutations and

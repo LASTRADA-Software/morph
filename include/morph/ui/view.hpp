@@ -25,6 +25,7 @@
 #include "button_style.hpp"
 #include "control_shape.hpp"
 #include "input_emphasis.hpp"
+#include "page_layout.hpp"
 #include "text_align.hpp"
 
 /// @file
@@ -332,6 +333,12 @@ enum class ChartClip : std::uint8_t {
     Above,  ///< Above its upper end; drawn at that end, pointing up.
 };
 
+/// @brief How a chart's series is drawn.
+enum class ChartStyle : std::uint8_t {
+    Line,  ///< Points, joined by a line when the series is `joined`.
+    Bars,  ///< A bar from the baseline to each value, side by side with the other `Bars` series at each position.
+};
+
 /// @brief How many rows of a `Table` the user can select.
 enum class SelectionMode : std::uint8_t {
     None,      ///< Rows can be activated, not selected.
@@ -625,8 +632,9 @@ struct TextInput {
     ///        a single-line or password input shows one: the mount refuses a multiline input with an icon. Set once.
     std::string icon;
     /// @brief The fraction digits a number is entered with, for a backend or a kit to read; -1 when the input does
-    ///        not hold a number. Set once; the mount refuses places on a multiline input.
-    int decimals = -1;
+    ///        not hold a number. It follows its binding: the mount tells the widget again on each change. The mount
+    ///        refuses places on a multiline input.
+    Prop<int> decimals = -1;
     /// @brief The field's label: its visible caption while `showLabel`; a form's cell draws it otherwise, beside
     ///        the input. Empty: none.
     Prop<std::string> label;
@@ -817,6 +825,20 @@ struct Column {
     bool holder = false;
 };
 
+/// @brief A table cell that covers rows below its own: the cell of @ref column in the row that gives it, extended
+///        down over @ref rows rows counting that row.
+struct RowSpan {
+    /// @brief The column's index in the table's columns; the select column is not one.
+    std::size_t column = 0;
+    /// @brief How many rows the cell covers, the row that gives it included; 1 covers nothing.
+    std::size_t rows = 1;
+
+    /// @brief Whether two spans name the same column and count.
+    /// @param other The other span.
+    /// @return True when equal.
+    [[nodiscard]] bool operator==(RowSpan const& other) const noexcept = default;
+};
+
 /// @brief Children laid out left to right.
 struct Row {
     /// @brief The children, in order; a null child is skipped.
@@ -834,6 +856,9 @@ struct Row {
     /// @brief Whether a table row is a heading: one cell spanning every column, never selected or activated. Only
     ///        `table`'s row view sets it; the mount refuses it on a row outside a table.
     bool heading = false;
+    /// @brief A table row's spans, bound in the row's scope: disengaged when none was given. Only `table`'s row view
+    ///        sets it; the mount refuses it on a row outside a table.
+    std::optional<Prop<std::vector<RowSpan>>> spans;
     /// @brief Where the children sit across the row (vertically); set once.
     Align align = Align::Stretch;
     /// @brief Where the spare width goes while no shown child stretches; set once.
@@ -1273,8 +1298,8 @@ struct DateTimeInput {
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
     /// @brief The pattern the value is shown and read in (`checkDatePattern`), ISO being always read too; empty
-    ///        means ISO. Set once.
-    std::string pattern;
+    ///        means ISO.
+    Prop<std::string> pattern;
 };
 
 /// @brief An integer chosen on a range.
@@ -1383,9 +1408,13 @@ struct Step {
     std::string label;
     /// @brief Where it stands.
     StepState state = StepState::Pending;
+    /// @brief A muted second line, who and when; empty draws none. Qt Quick draws it under the label, cut at the
+    ///        label's width; the terminal draws it after the label in brackets, and drops it from a row too narrow
+    ///        for both.
+    std::string detail;
 
     /// @brief Memberwise equality.
-    /// @return Whether label and state match.
+    /// @return Whether label, state and detail match.
     bool operator==(Step const&) const = default;
 };
 
@@ -1395,8 +1424,9 @@ struct Steps {
     Prop<std::vector<Step>> items;
     /// @brief The step to highlight, by position; `nullopt` or a position past the last highlights none.
     Prop<std::optional<std::size_t>> current;
-    /// @brief Whether the indicator draws the steps' labels; unlabelled, it draws only the marks and connectors, and
-    ///        each step keeps its label as its accessible name.
+    /// @brief Whether the indicator draws the steps' labels; unlabelled, it draws only the marks and connectors
+    ///        and no detail. Labelled or not, a step's accessible name is its label, its detail when nonempty and its
+    ///        state when it has one, joined by `, `.
     Prop<bool> labelled = true;
     /// @brief Visibility, enablement, layout, drag-and-drop.
     Common common{};
@@ -1444,8 +1474,11 @@ struct ChartPoint {
 struct ChartSeries {
     /// @brief The series' name in the legend; empty for a chart's one series.
     std::string label;
-    /// @brief Whether a line joins the points.
+    /// @brief Whether a line joins the points; a `Bars` series is never joined and a frontend reads this for `Line`
+    ///        only.
     bool joined = true;
+    /// @brief Whether the series is drawn as a line of points or as bars.
+    ChartStyle style = ChartStyle::Line;
     /// @brief The points, in order.
     std::vector<ChartPoint> points;
 
@@ -1496,6 +1529,9 @@ struct ChartData {
     double yMin = 0.0;
     /// @brief The upper end of the value axis, padding included.
     double yMax = 0.0;
+    /// @brief The width, in horizontal-axis units, of the room one position gives its bars; 0 when no series is
+    ///        `Bars`.
+    double barSlot = 0.0;
     /// @brief The value axis's unit or name, drawn above its labels; empty for none.
     std::string yLabel;
     /// @brief The value axis's ticks; empty when three or more reference lines label the axis.
@@ -1512,7 +1548,7 @@ struct ChartData {
     bool operator==(ChartData const&) const = default;
 };
 
-/// @brief Points against a numeric axis, optionally joined, with horizontal reference lines. Takes no focus and
+/// @brief Points, joined or as bars, against a numeric axis, with horizontal reference lines. Takes no focus and
 ///        calls no handler.
 struct Chart {
     /// @brief What the chart draws.
@@ -1642,6 +1678,29 @@ struct DropZone {
     Common common{};
 };
 
+/// @brief A region of a page: a rectangle of the sheet that holds its children as a vertical stack. Only a `Page`
+///        holds one. Its `layout` hints are refused: the geometry names its size.
+struct PageRegion {
+    /// @brief Where on the sheet the region lies, in millimetres; set once.
+    RegionGeometry geometry{};
+    /// @brief The content, top to bottom; a null child is skipped.
+    std::vector<Node> children;
+    /// @brief Visibility, enablement, accessibility, test identity and chords.
+    Common common{};
+};
+
+/// @brief A sheet of fixed physical size, drawn on the `paper` surface and displayed scaled down, never up, to the
+///        width its container gives it. Its children are `PageRegion` nodes and nothing else. Its `layout` hints are
+///        refused except `alignSelf`: the sheet's size is its own.
+struct Page {
+    /// @brief The sheet's size and margins, in millimetres; set once.
+    PageGeometry geometry{};
+    /// @brief The regions, in the order they are drawn and read; each is a `PageRegion` node.
+    std::vector<Node> children;
+    /// @brief Visibility, enablement, accessibility, test identity and chords.
+    Common common{};
+};
+
 /// @brief One prop a loaded custom component is given.
 struct CustomProp {
     /// @brief The prop's name, as the component declares it.
@@ -1673,7 +1732,8 @@ struct NodeData {
     /// @brief The node.
     std::variant<Text, Button, TextInput, Checkbox, Select, Menu, Column, Row, Grid, Spacer, Panel, Scroll, Switch,
                  Tabs, Dialog, Busy, ForEach, Table, DateTimeInput, Slider, FilePicker, Banner, Badge, Progress, Steps,
-                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar, Chart>
+                 KeyValue, EmptyState, Drawer, Splitter, Collapsible, DropZone, Custom, ActionBar, Chart, Page,
+                 PageRegion>
         kind;
 };
 
@@ -1845,6 +1905,16 @@ template <typename Kind>
 /// @return The node.
 [[nodiscard]] inline Node dropZone(DropZone spec) { return detail::makeNode(std::move(spec)); }
 
+/// @brief A page node.
+/// @param spec The page.
+/// @return The node.
+[[nodiscard]] inline Node page(Page spec) { return detail::makeNode(std::move(spec)); }
+
+/// @brief A page region node.
+/// @param spec The region.
+/// @return The node.
+[[nodiscard]] inline Node pageRegion(PageRegion spec) { return detail::makeNode(std::move(spec)); }
+
 /// @brief A component loaded by name, mounted by `Mounted` as its fallback.
 /// @param spec The node.
 /// @return The node.
@@ -1974,6 +2044,10 @@ struct TableRowView {
     std::optional<Prop<std::string>> label = std::nullopt;
     /// @brief Whether the row is a heading: exactly one cell, spanning every column, never selected or activated.
     bool heading = false;
+    /// @brief The cells of this row that cover the rows below, bound in the row's own scope; disengaged for none.
+    ///        The mount resolves them against the table's rows, refuses and reports a bad span, and tells the widget
+    ///        only the effective ones.
+    std::optional<Prop<std::vector<RowSpan>>> spans;
 };
 
 /// @brief A table of keyed rows: one `Row` of cells per row, under the column headers.
@@ -2038,7 +2112,8 @@ template <typename RowT>
             return row(Row{.children = std::move(made.cells),
                            .tone = std::move(made.tone),
                            .label = std::move(made.label),
-                           .heading = made.heading});
+                           .heading = made.heading,
+                           .spans = std::move(made.spans)});
         };
     Table spec{
         .rows =

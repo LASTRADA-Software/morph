@@ -20,6 +20,7 @@
 #include <morph/core/logger.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/session/session.hpp>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -50,6 +51,9 @@ struct BbpValue {
 struct BbpMade {
     std::int64_t id = 0;
 };
+struct BbpWho {
+    int unused = 0;
+};
 
 struct BbpModel {
     int loaded = 0;
@@ -59,12 +63,18 @@ struct BbpModel {
         return {.value = loaded};
     }
     BbpMade execute(const BbpMake& /*act*/) { return {.id = 4242}; }
+    // The principal of the session the call runs under.
+    static std::string execute(const BbpWho& /*act*/) {
+        auto const* ctx = morph::session::current();
+        return ctx == nullptr ? std::string{"<none>"} : ctx->principal;
+    }
     [[nodiscard]] BbpValue execute(const BbpPlain& act) const { return {.value = act.value + loaded}; }
 };
 
 BRIDGE_REGISTER_MODEL(BbpModel, "BBP_Model")
 BRIDGE_REGISTER_ACTION(BbpModel, BbpLoad, "BBP_Load")
 BRIDGE_REGISTER_ACTION(BbpModel, BbpMake, "BBP_Make")
+BRIDGE_REGISTER_ACTION(BbpModel, BbpWho, "BBP_Who")
 BRIDGE_REGISTER_ACTION(BbpModel, BbpPlain, "BBP_Plain")
 BRIDGE_MODEL_KEY(BbpModel, BbpLoad, &BbpLoad::id);
 BRIDGE_KEY_FROM_RESULT(BbpMake, &BbpMade::id);
@@ -813,4 +823,61 @@ TEST_CASE("Bridge::hasSubscribers follows the handler's subscription", "[bridge]
         handler.subscribe<BbpValue>([](BbpValue) {});
         CHECK(rig.bridge->hasSubscribers());
     }
+}
+
+// ── The session a held call runs under ───────────────────────────────────────
+
+namespace {
+
+morph::session::Context principalOf(const char* who) {
+    morph::session::Context ctx;
+    ctx.principal = who;
+    return ctx;
+}
+
+}  // namespace
+
+TEST_CASE("Bridge: a call held behind a bind runs under the session in force when it was made",
+          "[bridge][bind][session]") {
+    Rig rig;
+    rig.bridge->setDefaultSession(principalOf("alice"));
+    BridgeHandler<BbpModel> handler{*rig.bridge, &rig.owner};
+    REQUIRE_FALSE(handler.isBound());
+
+    std::string seen;
+    handler.execute(BbpWho{}).then([&](const std::string& who) { seen = who; });
+    rig.bridge->setDefaultSession(principalOf("bob"));
+    rig.gate->resolveBind();
+
+    REQUIRE(pumpOwnerUntil(rig.owner, [&] { return !seen.empty(); }));
+    CHECK(seen == "alice");
+}
+
+TEST_CASE("Bridge: a raw call held behind a bind runs under the session in force when it was made",
+          "[bridge][bind][session]") {
+    Rig rig;
+    rig.bridge->setDefaultSession(principalOf("alice"));
+    morph::bridge::RawHandler handler{*rig.bridge, &rig.owner, "BBP_Model"};
+
+    std::string seen;
+    handler.execute("BBP_Who", "{}").then([&](const std::string& who) { seen = who; });
+    rig.bridge->setDefaultSession(principalOf("bob"));
+    rig.gate->resolveBind();
+
+    REQUIRE(pumpOwnerUntil(rig.owner, [&] { return !seen.empty(); }));
+    CHECK(seen == R"("alice")");
+}
+
+TEST_CASE("Bridge: a call made after the session changed runs under the new session", "[bridge][bind][session]") {
+    Rig rig;
+    rig.bridge->setDefaultSession(principalOf("alice"));
+    BridgeHandler<BbpModel> handler{*rig.bridge, &rig.owner};
+    rig.bridge->setDefaultSession(principalOf("bob"));
+
+    std::string seen;
+    handler.execute(BbpWho{}).then([&](const std::string& who) { seen = who; });
+    rig.gate->resolveBind();
+
+    REQUIRE(pumpOwnerUntil(rig.owner, [&] { return !seen.empty(); }));
+    CHECK(seen == "bob");
 }

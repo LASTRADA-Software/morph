@@ -126,6 +126,24 @@ TEST_CASE("tui forms: a form document draws on the terminal and submits what is 
     CHECK(call.body == R"({"sampleId":9007199254740993,"concentration":{"num":1250,"den":100,"dp":2}})");
 }
 
+// A page inside a locale scope draws its region's text in the scope's locale. Mutation: leave the page out of the
+// scope's holder (nothing is drawn).
+TEST_CASE("tui forms: a page inside a locale scope draws, its money in the scope's locale", "[tui][forms][page]") {
+    TuiClient client;
+    auto screen = client.interpreter.mount(ui::testing::loadOrFail(R"({
+      "vocab": "ui/1", "id": "around",
+      "view": { "kind": "localeScope", "locale": "de", "children": [
+        { "kind": "page", "width": 210000, "height": 297000, "a11y": { "name": "Sheet" }, "children": [
+          { "kind": "pageRegion", "anchor": "top", "children": [
+            { "kind": "text", "text": { "fn": "money", "args": [ { "lit": { "num": 123450, "den": 100, "dp": 2 } }, "EUR" ] } } ] } ] } ] } })",
+                                                                   ui::testing::corpusCatalog()),
+                                           {}, client.backend);
+    REQUIRE(screen.has_value());
+    client.settle();
+    INFO(client.drawn());
+    CHECK(client.shows("1.234,50"));
+}
+
 TEST_CASE("tui forms: a collection document lists rows; Enter on a row opens its editor", "[tui][forms]") {
     TuiClient client;
     client.dispatcher.autoReply.emplace("Lims_ListSamples", R"({"rows":[{"id":9007199254740993,"name":"Water"}]})");

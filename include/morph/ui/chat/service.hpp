@@ -137,7 +137,7 @@ public:
     [[nodiscard]] std::string handle(wire::Envelope const& request, session::IAuthorizer const& authorizer,
                                      backend::ConnectionFacts& facts) override {
         if (!authorizer.authorize(request.session, "ui", "chat")) {
-            return err(request, "unauthorized");
+            return err(request, std::string{wire::kUnauthorizedMessage});
         }
         if (request.kind == kTurnKind) {
             return Shared::startTurn(_shared, request, facts.cid);
@@ -419,7 +419,17 @@ private:
         }
 
         // A hint to the turn's connection. Lost events are expected, so nothing depends on this arriving.
+        struct EventExtras {
+            std::string arguments;
+            bool ok = false;
+            bool newRound = false;
+        };
+
         static void announce(Shared& self, Turn& turn, std::string_view kind, std::string text) {
+            announce(self, turn, kind, std::move(text), EventExtras{.arguments = {}, .ok = false, .newRound = false});
+        }
+
+        static void announce(Shared& self, Turn& turn, std::string_view kind, std::string text, EventExtras extras) {
             std::shared_ptr<backend::RemoteServer> server;
             std::uint64_t seq = 0;
             {
@@ -430,11 +440,14 @@ private:
             if (server == nullptr) {
                 return;
             }
-            server->post(turn.cid,
-                         wire::encode(wire::makeEvent(kChatTopic, writeMessage(TurnEvent{.turnId = turn.id,
-                                                                                         .seq = seq,
-                                                                                         .kind = std::string{kind},
-                                                                                         .text = std::move(text)}))));
+            server->post(turn.cid, wire::encode(wire::makeEvent(
+                                       kChatTopic, writeMessage(TurnEvent{.turnId = turn.id,
+                                                                          .seq = seq,
+                                                                          .kind = std::string{kind},
+                                                                          .text = std::move(text),
+                                                                          .arguments = std::move(extras.arguments),
+                                                                          .ok = extras.ok,
+                                                                          .newRound = extras.newRound}))));
         }
 
         // Sends an envelope as the turn's client, unscoped, and continues on the worker.
@@ -552,9 +565,34 @@ private:
             callProvider(self, turn);
         }
 
+        // Adds a piece of the model's text to the turn, which the caller's lock guards. A round's first piece opens a
+        // new text part, and a blank line separates it from the rounds before, so one round's end and the next one's
+        // start do not run together. Returns whether the piece opens a round that follows tool calls.
+        static bool addText(Turn& turn, std::string const& piece) {
+            TurnState& state = turn.state;
+            bool const opens = !turn.roundStreamed;
+            turn.roundStreamed = true;
+            if (!opens) {
+                state.parts.back().text += piece;
+                state.text += piece;
+                return false;
+            }
+            bool const afterTools = !state.parts.empty() && state.parts.back().kind == "tool";
+            if (!state.text.empty()) {
+                state.text += "\n\n";
+            }
+            state.parts.push_back(TurnPart{.kind = "text", .text = piece, .step = {}});
+            state.text += piece;
+            return afterTools;
+        }
+
         [[nodiscard]] static std::string systemText(Shared const& self, TurnRequest const& request) {
             std::string text = self.options.systemPrompt;
             text += "\n\nThe open screen is " + request.screenId + ".";
+            if (!request.title.empty()) {
+                text += " The person sees it titled \"" + request.title +
+                        "\" and knows the record by that name, so call it so, not by a key or an internal number.";
+            }
             if (!request.paramsJson.empty()) {
                 text += " Its params are " + request.paramsJson + ".";
             }
@@ -576,15 +614,18 @@ private:
             }
             ProviderSink sink;
             sink.text = [self, turn](std::string const& piece) {
+                if (piece.empty()) {
+                    return;
+                }
+                bool newRound = false;
                 {
                     std::scoped_lock const lock{self->mutex};
                     if (turn->state.status != TurnStatus::Running) {
                         return;
                     }
-                    turn->state.text += piece;
-                    turn->roundStreamed = true;
+                    newRound = addText(*turn, piece);
                 }
-                announce(*self, *turn, "text", piece);
+                announce(*self, *turn, "text", piece, EventExtras{.arguments = {}, .ok = false, .newRound = newRound});
             };
             sink.done = [self, turn](std::expected<Response, std::string> outcome) {
                 auto held = std::make_shared<std::expected<Response, std::string>>(std::move(outcome));
@@ -615,16 +656,18 @@ private:
                 finish(self, turn, TurnStatus::Failed, outcome.error());
                 return;
             }
-            bool streamed = false;
+            bool announceText = false;
+            bool newRound = false;
             {
                 std::scoped_lock const lock{self->mutex};
-                streamed = turn->roundStreamed;
-                if (!streamed) {
-                    turn->state.text += outcome->text;
+                if (!turn->roundStreamed && !outcome->text.empty()) {
+                    newRound = addText(*turn, outcome->text);
+                    announceText = true;
                 }
             }
-            if (!streamed && !outcome->text.empty()) {
-                announce(*self, *turn, "text", outcome->text);
+            if (announceText) {
+                announce(*self, *turn, "text", outcome->text,
+                         EventExtras{.arguments = {}, .ok = false, .newRound = newRound});
             }
             turn->messages.push_back(Message{.role = "assistant",
                                              .text = outcome->text,
@@ -724,13 +767,20 @@ private:
                            bool succeeded, std::string const& text) {
             {
                 std::scoped_lock const lock{self->mutex};
-                turn->state.steps.push_back(
-                    ToolStep{.name = call.name, .ok = succeeded, .message = bounded(text, kStepMessageBytes)});
+                ToolStep step{.name = call.name,
+                              .ok = succeeded,
+                              .message = bounded(text, kStepMessageBytes),
+                              .arguments = bounded(call.argumentsJson, kStepMessageBytes)};
+                turn->state.parts.push_back(TurnPart{.kind = "tool", .text = {}, .step = step});
+                turn->state.steps.push_back(std::move(step));
             }
             turn->results.push_back(ToolResult{.callId = call.id,
                                                .text = bounded(text, self->options.limits.maxToolResultBytes),
                                                .isError = !succeeded});
-            announce(*self, *turn, "tool", call.name);
+            announce(
+                *self, *turn, "tool", call.name,
+                EventExtras{
+                    .arguments = bounded(call.argumentsJson, kStepMessageBytes), .ok = succeeded, .newRound = false});
             nextTool(self, turn);
         }
     };

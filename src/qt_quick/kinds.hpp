@@ -494,6 +494,19 @@ public:
 
 using DrawerImpl = OverlayImpl<ui::DrawerWidget>;
 
+/// A popover: a non-modal panel under its container that floats over the content and takes no room.
+class PopoverImpl final : public ContainerItemWidget<ui::PopoverWidget> {
+public:
+    PopoverImpl(Context& context, ui::ContainerWidget* parent);
+    void setOpen(bool open) override;
+    void setWidth(int units) override;
+    void setOnDismiss(ui::Action onDismiss) override;
+
+protected:
+    /// Drawn as the theme's card whatever surface encloses it.
+    [[nodiscard]] QObject* scheme() const override { return context().themeObject("cardScheme"); }
+};
+
 class SplitterImpl final : public ContainerItemWidget<ui::SplitterWidget> {
 public:
     SplitterImpl(Context& context, ui::ContainerWidget* parent, ui::Axis axis);
@@ -519,6 +532,56 @@ public:
     void setOnToggle(std::function<void(bool)> onToggle) override;
     /// Opens or closes it with its own control, as the user would.
     void toggleByUser() const;
+};
+
+class PageRegionImpl;
+
+/// A sheet: the item displays it scaled, and this widget computes the scale and every region's rectangle with
+/// `ui::layoutPage`, from the width the item reports and the content height each region reports.
+class PageImpl final : public ContainerItemWidget<ui::PageWidget> {
+public:
+    PageImpl(Context& context, ui::ContainerWidget* parent, ui::PageGeometry const& geometry);
+    ~PageImpl() override;
+    PageImpl(PageImpl const&) = delete;
+    PageImpl& operator=(PageImpl const&) = delete;
+    PageImpl(PageImpl&&) = delete;
+    PageImpl& operator=(PageImpl&&) = delete;
+
+    /// Adds a region to the layout, in creation order.
+    void join(PageRegionImpl& region);
+    /// Forgets a region that is going.
+    void leave(PageRegionImpl& region) noexcept;
+    /// Lays the sheet out and writes the scale and the rectangles into the items.
+    void relayout();
+
+private:
+    ui::PageGeometry _geometry;
+    std::optional<ui::Mm> _available;
+    std::vector<PageRegionImpl*> _regions;
+};
+
+class PageRegionImpl final : public ContainerItemWidget<ui::PageRegionWidget> {
+public:
+    PageRegionImpl(Context& context, ui::ContainerWidget* parent, ui::RegionGeometry const& geometry);
+    ~PageRegionImpl() override;
+    PageRegionImpl(PageRegionImpl const&) = delete;
+    PageRegionImpl& operator=(PageRegionImpl const&) = delete;
+    PageRegionImpl(PageRegionImpl&&) = delete;
+    PageRegionImpl& operator=(PageRegionImpl&&) = delete;
+
+    /// The region's place.
+    [[nodiscard]] ui::RegionGeometry const& geometry() const noexcept { return _geometry; }
+    /// The height the content asks for.
+    [[nodiscard]] ui::Mm contentHeight() const noexcept { return _contentHeight; }
+    /// Writes the region's rectangle and overflow into the item.
+    void show(ui::RegionLayout const& layout) const;
+    /// The page lets go of the region first when it is destroyed first.
+    void orphan() noexcept { _page = nullptr; }
+
+private:
+    PageImpl* _page;
+    ui::RegionGeometry _geometry;
+    ui::Mm _contentHeight{};
 };
 
 class DropZoneImpl final : public ContainerItemWidget<ui::DropZoneWidget> {
@@ -553,6 +616,8 @@ public:
     void setSelectAllLabel(std::string_view label) override;
     void setRowLabel(ui::Widget& row, std::string_view label) override;
     void setRowHeading(ui::Widget& row) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) override;
     void setSelection(std::vector<ui::Key> const& keys) override;
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
@@ -587,6 +652,10 @@ protected:
 
 private:
     void mark() const;
+    /// Works out which cells span and which are covered from the rows as they stand (without @p leaving), clipping a
+    /// span that runs past the last row or onto a heading, hides the covered cells and tells each row its spans and
+    /// the columns above cover.
+    void planSpans(ItemBase const* leaving);
     /// Writes `alternate` on every row but @p leaving: true at each odd position.
     void stripe(ItemBase const* leaving) const noexcept;
     [[nodiscard]] std::vector<ui::Key> existingSelection() const;
@@ -609,6 +678,10 @@ private:
     // The same keys, in row order, for a range or Ctrl+A over rows that are not realized.
     std::vector<ui::Key> _existingOrder;
     std::function<void(std::size_t, std::size_t)> _onVisibleRangeChanged;
+    /// Each row's effective spans, as last told.
+    std::unordered_map<ItemBase const*, std::vector<ui::RowSpan>> _spans;
+    /// Whether any row has been told it spans or is covered, so a table that never spans does no work.
+    bool _planned = false;
 };
 
 /// A row of a table: the horizontal stack the mount makes for it, placing its cells by column.

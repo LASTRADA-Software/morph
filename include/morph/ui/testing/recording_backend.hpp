@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -117,6 +118,9 @@ template <typename Special>
         }
         if (!entry.description.empty()) {
             formatted += ";description=" + text(entry.description);
+        }
+        if (entry.heading) {
+            formatted += ";heading";
         }
         if (!entry.items.empty()) {
             formatted += formatMenu(entry.items);
@@ -275,6 +279,13 @@ template <typename T, typename F>
 /// @param style The style.
 /// @return The enumerator's name.
 [[nodiscard]] inline std::string enumName(ButtonStyle style) { return style == ButtonStyle::Item ? "Item" : "Push"; }
+
+/// @brief A menu trigger's marker name.
+/// @param caret The marker.
+/// @return The enumerator's name.
+[[nodiscard]] inline std::string enumName(MenuCaret caret) {
+    return caret == MenuCaret::Down ? "Down" : caret == MenuCaret::UpDown ? "UpDown" : "None";
+}
 
 /// @brief A table's sort as the dump shows it: the column's index and the direction, or `none`.
 /// @param sort The sort.
@@ -1236,7 +1247,8 @@ public:
         set("items", formatMenu(entries));
     }
 
-    /// @brief Records properties `label`, `icon` (when given) and `emphasis` (when not `Normal`) of the trigger.
+    /// @brief Records properties `label`, `icon` (when given), `emphasis` (when not `Normal`), `detail` (when given),
+    ///        `avatar` and `caret` of the trigger.
     /// @param trigger The trigger.
     void setTrigger(MenuTrigger const& trigger) override {
         set("label", formatText(trigger.label));
@@ -1246,6 +1258,12 @@ public:
         if (trigger.emphasis != ButtonEmphasis::Normal) {
             set("emphasis", enumName(trigger.emphasis));
         }
+        if (!trigger.detail.empty()) {
+            set("detail", formatText(trigger.detail));
+        }
+        // Set whatever they are, so a trigger that loses its avatar or marker records that it has.
+        set("avatar", formatText(trigger.avatar));
+        set("caret", enumName(trigger.caret));
     }
     void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) override {
         callbacks().path = std::move(onActivate);
@@ -1507,13 +1525,20 @@ public:
     void setLabel(std::string_view label) override { set("label", formatText(label)); }
 };
 
-/// @brief A fake `StepsWidget`: properties `steps` (`[label:State,…]`), `current` (a position, or `none`), `labelled`.
+/// @brief A fake `StepsWidget`: properties `steps` (`[label:State,…]`, a nonempty detail following as
+/// `;detail=<text>`), `current` (a position, or `none`), `labelled`.
 class FakeSteps final : public FakeLeaf<StepsWidget> {
 public:
     using FakeLeaf<StepsWidget>::FakeLeaf;
     void setSteps(std::vector<Step> const& steps) override {
-        set("steps",
-            formatList(steps, [](Step const& step) { return formatItem(step.label) + ":" + enumName(step.state); }));
+        // `;` is escaped too, so a label or a detail cannot forge the detail attribute.
+        auto const text = [](std::string_view value) {
+            return escape(value, [](char character) { return std::string_view{"=,[];"}.contains(character); });
+        };
+        set("steps", formatList(steps, [&text](Step const& step) {
+                std::string const formatted = text(step.label) + ":" + enumName(step.state);
+                return step.detail.empty() ? formatted : formatted + ";detail=" + text(step.detail);
+            }));
     }
     void setCurrent(std::optional<std::size_t> index) override {
         set("current", index.has_value() ? std::to_string(*index) : std::string{"none"});
@@ -1565,8 +1590,8 @@ public:
     return text;
 }
 
-/// @brief A chart's series: `[entry,…]`, each entry `label;joined;[point|…]` and each point
-///        `xLabel@x,y;tone;note`, the tone empty for an unmarked point.
+/// @brief A chart's series: `[entry,…]`, each entry `label;joined;[point|…]`, followed by `;bars` for a `Bars` series,
+///        and each point `xLabel@x,y;tone;note`, the tone empty for an unmarked point.
 /// @param series The series.
 /// @return The text.
 [[nodiscard]] inline std::string formatChartSeries(std::vector<ChartSeries> const& series) {
@@ -1582,21 +1607,22 @@ public:
                     ";" + (point.tone.has_value() ? chartToneName(*point.tone) : std::string{}) + ";" +
                     formatChartText(point.note);
         }
-        text += "]";
+        text += std::string{"]"} + (one.style == ChartStyle::Bars ? ";bars" : "");
     }
     return text + "]";
 }
 
 /// @brief A fake `ChartWidget`: properties `yRange` and `xRange` (`[lo,hi]`), `yLabel`, `yTicks`
-///        (`[text@value,…]`), `lines` (`[label@value;tone;style,…]`), `series` (as `formatChartSeries` gives it) and
-///        `summary`, each set only when it changed. Numbers are written shortest-round-trip, so a log is the same on
-///        every platform.
+///        (`[text@value,…]`), `barSlot` (a number), `lines` (`[label@value;tone;style,…]`), `series` (as
+///        `formatChartSeries` gives it) and `summary`, each set only when it changed. Numbers are written
+///        shortest-round-trip, so a log is the same on every platform.
 class FakeChart final : public FakeLeaf<ChartWidget> {
 public:
     using FakeLeaf<ChartWidget>::FakeLeaf;
     void setData(ChartData const& data) override {
         update("yRange", std::format("[{},{}]", data.yMin, data.yMax));
         update("xRange", std::format("[{},{}]", data.xMin, data.xMax));
+        update("barSlot", std::format("{}", data.barSlot));
         update("yLabel", formatText(data.yLabel));
         update("yTicks", formatList(data.yTicks, [](ChartTick const& tick) {
                    return formatChartText(tick.text) + "@" + std::format("{}", tick.value);
@@ -1668,6 +1694,15 @@ public:
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
 };
 
+/// @brief A fake `PopoverWidget`: properties `open` and `width`.
+class FakePopover final : public FakeContainer<PopoverWidget> {
+public:
+    using FakeContainer<PopoverWidget>::FakeContainer;
+    void setOpen(bool open) override { set("open", formatBool(open)); }
+    void setWidth(int units) override { set("width", std::to_string(units)); }
+    void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
+};
+
 /// @brief A fake `SplitterWidget`: properties `axis`, `sizes` (`[n,…]`).
 class FakeSplitter final : public FakeContainer<SplitterWidget> {
 public:
@@ -1699,6 +1734,183 @@ public:
     void setOpen(bool open) override { set("open", formatBool(open)); }
     void setOnToggle(std::function<void(bool)> onToggle) override { callbacks().toggle = std::move(onToggle); }
 };
+
+class FakePageRegion;
+
+/// @brief A fake `PageWidget`: properties `size`, `margins`, `scale` and `displayed`. The derived ones follow the
+///        width the backend offers pages (`RecordingBackend::setPageAvailableWidth`) and are logged when they change.
+class FakePage final : public FakeContainer<PageWidget> {
+public:
+    /// @brief Records a page.
+    /// @param store     Where it records itself.
+    /// @param parent    The container it is appended to, or null.
+    /// @param geometry  The sheet.
+    /// @param available The width the backend offers pages.
+    /// @param pages     The pages of the backend, which this one joins.
+    FakePage(std::shared_ptr<RecordStore> store, Widget const* parent, PageGeometry const& geometry,
+             std::optional<Mm> available, std::shared_ptr<std::vector<FakePage*>> pages)
+        : FakeContainer<PageWidget>(std::move(store), "Page", parent, initialProps(geometry, available)),
+          _geometry{geometry},
+          _available{available},
+          _pages{std::move(pages)} {
+        _pages->push_back(this);
+    }
+
+    /// @brief Leaves the backend's pages and lets the regions that outlive it know.
+    ~FakePage() override;
+
+    FakePage(FakePage const&) = delete;
+    FakePage& operator=(FakePage const&) = delete;
+    FakePage(FakePage&&) = delete;
+    FakePage& operator=(FakePage&&) = delete;
+
+    /// @brief The sheet.
+    /// @return Its geometry.
+    [[nodiscard]] PageGeometry const& geometry() const noexcept { return _geometry; }
+
+    /// @brief Changes the width the page is offered and records what follows from it.
+    /// @param available The width; absent is unlimited.
+    void offer(std::optional<Mm> available) {
+        _available = available;
+        relayout();
+    }
+
+    /// @brief Adds a region to the layout, in creation order.
+    /// @param region The region.
+    void adopt(FakePageRegion& region) { _regions.push_back(&region); }
+
+    /// @brief Forgets a region.
+    /// @param region The region.
+    void release(FakePageRegion& region) { std::erase(_regions, &region); }
+
+    /// @brief Lays the page out and records each derived property that changed.
+    void relayout();
+
+private:
+    [[nodiscard]] static PropList initialProps(PageGeometry const& geometry, std::optional<Mm> available) {
+        PageLayout const layout = layoutPage(geometry, {}, available);
+        PageMargins const& m = geometry.margins;
+        return {{"size", geometry.width.text() + "x" + geometry.height.text()},
+                {"margins", m.top.text() + "," + m.right.text() + "," + m.bottom.text() + "," + m.left.text()},
+                {"scale", formatFraction(layout.scale)},
+                {"displayed", layout.displayedWidth.text() + "x" + layout.displayedHeight.text()}};
+    }
+
+    void setIfChanged(std::string_view name, std::string value) {
+        if (store().at(id()).props[std::string{name}] != value) {
+            set(name, std::move(value));
+        }
+    }
+
+    PageGeometry _geometry;
+    std::optional<Mm> _available;
+    std::vector<FakePageRegion*> _regions;
+    std::shared_ptr<std::vector<FakePage*>> _pages;
+};
+
+/// @brief A fake `PageRegionWidget`: properties `anchor`, `rect` and `overflow`; the last two follow the page's
+///        layout and the content height the test gives.
+class FakePageRegion final : public FakeContainer<PageRegionWidget> {
+public:
+    /// @brief Records a region.
+    /// @param store    Where it records itself.
+    /// @param parent   Its page.
+    /// @param geometry Its place.
+    /// @throws std::logic_error when @p parent is not a page of this backend.
+    FakePageRegion(std::shared_ptr<RecordStore> store, ContainerWidget* parent, RegionGeometry const& geometry)
+        : FakeContainer<PageRegionWidget>(std::move(store), "PageRegion", parent, initialProps(parent, geometry)),
+          _page{dynamic_cast<FakePage*>(parent)},
+          _geometry{geometry} {
+        _page->adopt(*this);
+    }
+
+    /// @brief Leaves the page's layout, if the page still stands.
+    ~FakePageRegion() override {
+        if (_page != nullptr) {
+            _page->release(*this);
+        }
+    }
+
+    FakePageRegion(FakePageRegion const&) = delete;
+    FakePageRegion& operator=(FakePageRegion const&) = delete;
+    FakePageRegion(FakePageRegion&&) = delete;
+    FakePageRegion& operator=(FakePageRegion&&) = delete;
+
+    /// @brief The region's place.
+    /// @return Its geometry.
+    [[nodiscard]] RegionGeometry const& geometry() const noexcept { return _geometry; }
+
+    /// @brief The content's height.
+    /// @return It; `0` until `setContentHeight`.
+    [[nodiscard]] Mm contentHeight() const noexcept { return _contentHeight; }
+
+    /// @brief Gives the content's height and relays the page out.
+    /// @param height The height.
+    void setContentHeight(Mm height) {
+        _contentHeight = height;
+        if (_page != nullptr) {
+            _page->relayout();
+        }
+    }
+
+    /// @brief The page the region lays out in.
+    /// @return It, or null once the page has been destroyed.
+    [[nodiscard]] FakePage const* page() const noexcept { return _page; }
+
+    /// @brief Forgets the page: it is being destroyed before this region.
+    void orphan() noexcept { _page = nullptr; }
+
+    /// @brief Records a changed `rect` or `overflow`.
+    /// @param layout The region's resolved place.
+    void show(RegionLayout const& layout) {
+        std::string const rect = layout.rect.text();
+        std::string const overflow = formatBool(layout.overflow);
+        if (store().at(id()).props["rect"] != rect) {
+            set("rect", rect);
+        }
+        if (store().at(id()).props["overflow"] != overflow) {
+            set("overflow", overflow);
+        }
+    }
+
+private:
+    [[nodiscard]] static PropList initialProps(ContainerWidget* parent, RegionGeometry const& geometry) {
+        auto const* const page = dynamic_cast<FakePage const*>(parent);
+        if (page == nullptr) {
+            throw std::logic_error{"RecordingBackend: a page region's parent is a page"};
+        }
+        RegionSpec const spec{.geometry = geometry, .contentHeight = {}};
+        RegionLayout const layout = layoutPage(page->geometry(), std::span{&spec, 1}, std::nullopt).regions.front();
+        return {{"anchor", anchorName(geometry.anchor)},
+                {"rect", layout.rect.text()},
+                {"overflow", formatBool(layout.overflow)}};
+    }
+
+    FakePage* _page;
+    RegionGeometry _geometry;
+    Mm _contentHeight{};
+};
+
+inline FakePage::~FakePage() {
+    for (FakePageRegion* const region : _regions) {
+        region->orphan();
+    }
+    std::erase(*_pages, this);
+}
+
+inline void FakePage::relayout() {
+    std::vector<RegionSpec> specs;
+    specs.reserve(_regions.size());
+    for (FakePageRegion const* region : _regions) {
+        specs.push_back({region->geometry(), region->contentHeight()});
+    }
+    PageLayout const layout = layoutPage(_geometry, specs, _available);
+    setIfChanged("scale", formatFraction(layout.scale));
+    setIfChanged("displayed", layout.displayedWidth.text() + "x" + layout.displayedHeight.text());
+    for (std::size_t i = 0; i < _regions.size(); ++i) {
+        _regions[i]->show(layout.regions[i]);
+    }
+}
 
 /// @brief A fake `DropZoneWidget`: properties `accept` (`[.ext,…]`), `multiple`.
 class FakeDropZone final : public FakeContainer<DropZoneWidget> {
@@ -1876,6 +2088,22 @@ public:
     [[nodiscard]] bool headingKey(Key const& key) const {
         std::optional<int> const row = rowOf(key);
         return row.has_value() && _headings.contains(*row);
+    }
+
+    /// @brief Records the row's property `rowSpans`: `column:rows` pairs joined by commas, `none` for an empty list.
+    /// @param row   One of this table's rows.
+    /// @param spans The row's effective spans.
+    /// @throws std::logic_error when @p row is not this table's child.
+    void setRowSpans(Widget& row, std::vector<RowSpan> const& spans) override {
+        int const rowId = store().idOf(row);
+        if (store().at(rowId).parent != id()) {
+            throw std::logic_error{"RecordingBackend: setRowSpans of a widget that is not this table's row"};
+        }
+        std::string text;
+        for (RowSpan const& span : spans) {
+            text += (text.empty() ? "" : ",") + std::to_string(span.column) + ":" + std::to_string(span.rows);
+        }
+        store().set(rowId, "rowSpans", text.empty() ? std::string{"none"} : text);
     }
 
     /// @brief Records the row's property `tone` (`none` for no tone).
@@ -2155,6 +2383,9 @@ public:
     [[nodiscard]] std::unique_ptr<ToastWidget> createToast(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeToast>(_store, "Toast", parent);
     }
+    [[nodiscard]] std::unique_ptr<PopoverWidget> createPopover(ContainerWidget* parent) override {
+        return std::make_unique<detail::FakePopover>(_store, "Popover", parent);
+    }
     [[nodiscard]] std::unique_ptr<BusyWidget> createBusy(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeBusy>(_store, "Busy", parent);
     }
@@ -2207,6 +2438,40 @@ public:
     [[nodiscard]] std::unique_ptr<CollapsibleWidget> createCollapsible(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeCollapsible>(_store, "Collapsible", parent);
     }
+    /// @brief A fake page, offered the width `setPageAvailableWidth` gave.
+    /// @param parent   The container to append to, or null for a root.
+    /// @param geometry The sheet.
+    /// @return The widget.
+    [[nodiscard]] std::unique_ptr<PageWidget> createPage(ContainerWidget* parent,
+                                                         PageGeometry const& geometry) override {
+        return std::make_unique<detail::FakePage>(_store, parent, geometry, _pageWidth, _pages);
+    }
+
+    /// @brief A fake page region.
+    /// @param parent   Its page.
+    /// @param geometry Its place.
+    /// @return The widget.
+    [[nodiscard]] std::unique_ptr<PageRegionWidget> createPageRegion(ContainerWidget* parent,
+                                                                     RegionGeometry const& geometry) override {
+        return std::make_unique<detail::FakePageRegion>(_store, parent, geometry);
+    }
+
+    /// @brief Sets the width every page is offered, as a container of that width would, and relays the pages out.
+    /// @param width The width; absent is unlimited, the default.
+    void setPageAvailableWidth(std::optional<Mm> width) {
+        _pageWidth = width;
+        for (detail::FakePage* page : std::vector(*_pages)) {
+            page->offer(width);
+        }
+    }
+
+    /// @brief Gives a page region's content height, which a region of no stated height takes as its own.
+    /// @param regionId The region.
+    /// @param height   The content's height.
+    void setRegionContentHeight(int regionId, Mm height) {
+        dynamic_cast<detail::FakePageRegion&>(*_store->at(regionId).widget).setContentHeight(height);
+    }
+
     [[nodiscard]] std::unique_ptr<DropZoneWidget> createDropZone(ContainerWidget* parent) override {
         return std::make_unique<detail::FakeDropZone>(_store, "DropZone", parent);
     }
@@ -2615,7 +2880,8 @@ public:
     /// @throws std::logic_error when the widget is none of those, is a banner that is not dismissible, or is a badge
     ///         that is not removable.
     void dismiss(int widgetId) {
-        detail::Record const& record = expectKind(widgetId, "dismiss", {"Dialog", "Drawer", "Banner", "Badge"});
+        detail::Record const& record =
+            expectKind(widgetId, "dismiss", {"Dialog", "Drawer", "Banner", "Badge", "Popover"});
         if (record.kind == "Banner" && !flagIs(record, "dismissible", true)) {
             throw std::logic_error{"RecordingBackend: dismiss of Banner#" + std::to_string(widgetId) +
                                    ", which is not dismissible"};
@@ -2971,7 +3237,8 @@ private:
 
     // A dialog or drawer shows nothing until it is opened.
     [[nodiscard]] static bool isClosedDialog(detail::Record const& record) {
-        return (record.kind == "Dialog" || record.kind == "Drawer") && !flagIs(record, "open", true);
+        return (record.kind == "Dialog" || record.kind == "Drawer" || record.kind == "Popover") &&
+               !flagIs(record, "open", true);
     }
 
     // A closed collapsible section hides its content, the child on the way in, unless that child is its header.
@@ -2998,6 +3265,8 @@ private:
     }
 
     std::shared_ptr<detail::RecordStore> _store = std::make_shared<detail::RecordStore>();
+    std::optional<Mm> _pageWidth;
+    std::shared_ptr<std::vector<detail::FakePage*>> _pages = std::make_shared<std::vector<detail::FakePage*>>();
     std::unordered_set<std::string> _components;
     std::string _widthClass = "expanded";
     std::function<void(std::string const&)> _onWidthClass;

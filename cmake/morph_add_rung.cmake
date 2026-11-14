@@ -15,6 +15,21 @@
 #   src/server/*.cpp                                -> ladder_<rung>_server   EXE    (standalone server; skipped under Emscripten)
 #   tests/*.cpp                                     -> ladder_<rung>_tests    EXE    (Catch2; skipped under Emscripten)
 #
+# A rung built from modules passes MODULES <m>... (and SHARED_MODULES, USES, APP_MODULE). Then each module is its own
+# library, ladder_<rung>_<m>, built from <m>/src/**/*.cpp with <m>/include as its include directory (an INTERFACE
+# library when it has no sources), and ladder_<rung>_lib is an INTERFACE target that links every module.
+# Link rules, which make including another module's header a compile error:
+#   - a shared module links the shared modules named before it in SHARED_MODULES, and nothing else of the rung;
+#   - APP_MODULE links every other module;
+#   - every other module links the shared modules USES names for it (USES <module>:<shared>[,<shared>...]), or, when
+#     the rung gives no USES, every shared module. Once USES is given it must name every such module, so a module
+#     added later cannot fall back to linking everything unseen.
+# A module with sources is a STATIC library and is linked WHOLE_ARCHIVE, which keeps the schema translation units'
+# static registration; a module without sources (an INTERFACE library) has no archive and is linked plain, as is the
+# INTERFACE ladder_<rung>_lib. _morph_rung_has_archive is the one test that picks between the two, so every link
+# of one library to a given module uses the same link feature.
+# src/server/, screens/ and tests/ stay at the rung's root and link ladder_<rung>_lib, as for any other rung.
+#
 # Every ctest case discovered from ladder_<rung>_tests is registered under the
 # name "<rung>.<TEST_CASE name>" and gets the single label "ladder-<rung>",
 # both applied by catch_discover_tests itself (TEST_PREFIX and PROPERTIES on
@@ -62,12 +77,73 @@
 # catch them.
 function(morph_add_rung)
     set(options "")
-    set(oneValueArgs NAME)
-    set(multiValueArgs "")
+    set(oneValueArgs NAME APP_MODULE)
+    set(multiValueArgs MODULES SHARED_MODULES USES)
     cmake_parse_arguments(RUNG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if(NOT RUNG_NAME)
         message(FATAL_ERROR "morph_add_rung() requires NAME <rung>")
+    endif()
+    if(RUNG_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): unknown arguments: ${RUNG_UNPARSED_ARGUMENTS}")
+    endif()
+    if(RUNG_MODULES)
+        if(NOT RUNG_APP_MODULE OR NOT RUNG_APP_MODULE IN_LIST RUNG_MODULES)
+            message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): MODULES needs APP_MODULE naming one of them")
+        endif()
+        if(RUNG_APP_MODULE IN_LIST RUNG_SHARED_MODULES)
+            message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): the app module ${RUNG_APP_MODULE} cannot be shared")
+        endif()
+        foreach(_shared IN LISTS RUNG_SHARED_MODULES)
+            if(NOT _shared IN_LIST RUNG_MODULES)
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): shared module ${_shared} is not in MODULES")
+            endif()
+        endforeach()
+        foreach(_use IN LISTS RUNG_USES)
+            if(NOT _use MATCHES "^([A-Za-z0-9_]+):([A-Za-z0-9_,]+)$")
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES entry '${_use}' is not "
+                                    "<module>:<shared>[,<shared>...]")
+            endif()
+            set(_user "${CMAKE_MATCH_1}")
+            string(REPLACE "," ";" _used "${CMAKE_MATCH_2}")
+            if(NOT _user IN_LIST RUNG_MODULES OR _user IN_LIST RUNG_SHARED_MODULES OR _user STREQUAL RUNG_APP_MODULE)
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES names ${_user}, which is not a feature "
+                                    "module of MODULES")
+            endif()
+            if(DEFINED _uses_${_user})
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES names ${_user} twice")
+            endif()
+            foreach(_shared IN LISTS _used)
+                if(NOT _shared IN_LIST RUNG_SHARED_MODULES)
+                    message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): ${_user} uses ${_shared}, which is not in "
+                                        "SHARED_MODULES")
+                endif()
+            endforeach()
+            set(_uses_${_user} ${_used})
+        endforeach()
+        if(RUNG_USES)
+            foreach(_module IN LISTS RUNG_MODULES)
+                if(NOT _module IN_LIST RUNG_SHARED_MODULES AND NOT _module STREQUAL RUNG_APP_MODULE
+                   AND NOT DEFINED _uses_${_module})
+                    message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): USES is given but names nothing for "
+                                        "${_module}")
+                endif()
+            endforeach()
+        endif()
+        foreach(_module IN LISTS RUNG_MODULES)
+            if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${_module}/include")
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): module ${_module} has no ${_module}/include")
+            endif()
+        endforeach()
+        # A rung-level include/ or model source would join no module and be built by nothing.
+        foreach(_stray IN ITEMS include src/models src/db src/app)
+            if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${_stray}")
+                message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): a rung built from MODULES has no ${_stray}/; "
+                                    "move it into a module")
+            endif()
+        endforeach()
+    elseif(RUNG_SHARED_MODULES OR RUNG_APP_MODULE OR RUNG_USES)
+        message(FATAL_ERROR "morph_add_rung(NAME ${RUNG_NAME}): SHARED_MODULES, USES and APP_MODULE need MODULES")
     endif()
     # A rung builds nothing in a browser: its models need the SQLite ORM, and its screens reach a browser through the
     # generic client, which examples/client builds.
@@ -104,7 +180,38 @@ function(morph_add_rung)
     # examples/common/CMakeLists.txt returns early, before its
     # CPMAddPackage(Lightweight) call, whenever EMSCRIPTEN is
     # set.
-    if(NOT EMSCRIPTEN)
+    if(RUNG_MODULES)
+        foreach(_module IN LISTS RUNG_MODULES)
+            if(_module STREQUAL RUNG_APP_MODULE)
+                set(_deps ${RUNG_MODULES})
+                list(REMOVE_ITEM _deps ${_module})
+            elseif(_module IN_LIST RUNG_SHARED_MODULES)
+                set(_deps "")
+                foreach(_shared IN LISTS RUNG_SHARED_MODULES)
+                    if(_shared STREQUAL _module)
+                        break()
+                    endif()
+                    list(APPEND _deps ${_shared})
+                endforeach()
+            elseif(RUNG_USES)
+                set(_deps ${_uses_${_module}})
+            else()
+                set(_deps ${RUNG_SHARED_MODULES})
+            endif()
+            _morph_rung_module_library("${_rung}" "${_dir}" "${_module}" "${_deps}")
+        endforeach()
+        add_library(ladder_${_rung}_lib INTERFACE)
+        add_library(morph::ladder_${_rung}_lib ALIAS ladder_${_rung}_lib)
+        foreach(_module IN LISTS RUNG_MODULES)
+            _morph_rung_has_archive(_has_archive ladder_${_rung}_${_module})
+            if(_has_archive)
+                target_link_libraries(ladder_${_rung}_lib INTERFACE
+                    "$<LINK_LIBRARY:WHOLE_ARCHIVE,ladder_${_rung}_${_module}>")
+            else()
+                target_link_libraries(ladder_${_rung}_lib INTERFACE ladder_${_rung}_${_module})
+            endif()
+        endforeach()
+    elseif(NOT EMSCRIPTEN)
         file(GLOB_RECURSE _lib_sources CONFIGURE_DEPENDS
             "${_dir}/src/models/*.cpp" "${_dir}/src/db/*.cpp" "${_dir}/src/app/*.cpp")
         # The rung's public headers are listed as target sources purely so
@@ -207,6 +314,8 @@ function(morph_add_rung)
     # ── ladder_<rung>_tests: Catch2 model + presenter tests ──────────────
     if(NOT EMSCRIPTEN)
         file(GLOB_RECURSE _test_sources CONFIGURE_DEPENDS "${_dir}/tests/*.cpp")
+        # tests/compile_checks/ holds sources a rung's own compile checks build on purpose, never its suite.
+        list(FILTER _test_sources EXCLUDE REGEX "/tests/compile_checks/")
         if(_test_sources)
             # examples/common/testkit/testkit_main.cpp is compiled into every
             # rung's test binary rather than linked from morph_ladder_testkit:
@@ -245,8 +354,9 @@ function(morph_add_rung)
                 # exactly where IMPLEMENTATION.md rule 4 puts it, instead of
                 # making every rung's test suite name a dummy symbol to force
                 # the link.
+                _morph_rung_lib_link_spec(_lib_link ${_rung})
                 target_link_libraries(ladder_${_rung}_tests PRIVATE
-                    "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph::ladder_${_rung}_lib>")
+                    "${_lib_link}")
                 # The SYSTEM-include demotion, for this reason:
                 # Lightweight's target_include_directories() call is plain
                 # PUBLIC, not SYSTEM, so apply_warnings() below (-Werror
@@ -334,13 +444,13 @@ function(morph_add_rung)
                 # under-selects without saying so.
                 PROPERTIES LABELS ladder-${_rung} TIMEOUT 120 RESOURCE_LOCK morph_ladder_test_db
             )
-            # `journey` still needs a post-pass: it applies to some cases and
-            # not others, which catch_discover_tests' uniform PROPERTIES cannot
-            # express. It therefore inherits the flattening limitation
-            # described above — a journey case whose name contained a `;` would
-            # keep its rung label but never gain `journey`. Rather than let
-            # that go quiet, it is rejected at configure time by the guard
-            # below.
+            # `journey` and `stress` still need a post-pass: each applies to
+            # some cases and not others, which catch_discover_tests' uniform
+            # PROPERTIES cannot express. They therefore inherit the
+            # flattening limitation described above — a case whose name
+            # contained a `;` would keep its rung label but never gain
+            # `journey` or `stress`. Rather than let that go quiet, it is
+            # rejected at configure time by the guard below.
             #
             # set_tests_properties *appends* to LABELS rather than replacing
             # them -- the same append that let two same-named ctest entries
@@ -352,12 +462,13 @@ function(morph_add_rung)
             # CTest has.
             foreach(_journey_src IN LISTS _test_sources)
                 file(STRINGS "${_journey_src}" _bad_journey_names
-                     REGEX "TEST_CASE\\(\"Journey: [^\"]*;")
+                     REGEX "TEST_CASE\\(\"(Journey|Stress): [^\"]*;")
                 if(_bad_journey_names)
                     message(FATAL_ERROR
-                        "morph_add_rung(${_rung}): a \"Journey: \" TEST_CASE name contains a "
-                        "semicolon. CMake cannot round-trip that through Catch2's discovered "
-                        "test list, so the case would silently never gain its `journey` label. "
+                        "morph_add_rung(${_rung}): a \"Journey: \" or \"Stress: \" TEST_CASE name "
+                        "contains a semicolon. CMake cannot round-trip that through Catch2's "
+                        "discovered test list, so the case would silently never gain its "
+                        "`journey` or `stress` label. "
                         "Rename it.\n  File: ${_journey_src}\n  Name: ${_bad_journey_names}")
                 endif()
             endforeach()
@@ -367,9 +478,20 @@ function(morph_add_rung)
     # End-to-end user journeys carry an extra `journey` label so they can be
     # selected (ctest -L journey) or excluded the way `stress` is. Keyed off
     # the test name's own \"Journey: \" prefix rather than a separate source
-    # list, so adding a journey needs no CMake edit.
+    # list, so adding a journey needs no CMake edit. A long-running case named
+    # \"Stress: ...\" gets `stress` the same way, which CI's ladder legs
+    # (ctest -L ladder -LE stress) and its coverage leg leave out. A stress
+    # case is long by design, so it gets a 600 s limit instead of the
+    # rung's 120 s; one whose name sizes its table as 10^6 or 10^7 rows
+    # gets 1800 s, because writing and reading that many rows through a
+    # database takes most of 600 s on its own.
     if(_ladder_test MATCHES \"Journey: \")
         set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder-${_rung};journey\")
+    elseif(_ladder_test MATCHES \"Stress: \")
+        set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder-${_rung};stress\" TIMEOUT 600)
+        if(_ladder_test MATCHES \"10.[67] \")
+            set_tests_properties(\"\${_ladder_test}\" PROPERTIES TIMEOUT 1800)
+        endif()
     endif()
 endforeach()
 "
@@ -378,6 +500,58 @@ endforeach()
                 "${CMAKE_CURRENT_BINARY_DIR}/ladder_${_rung}_tests_journey_label.cmake")
         endif()
     endif()
+endfunction()
+
+# ── _morph_rung_has_archive: does a rung library have an archive to link whole? ──
+# True for a STATIC library; an INTERFACE library has no archive and a link feature cannot apply to it.
+function(_morph_rung_has_archive _out _target)
+    get_target_property(_type ${_target} TYPE)
+    if(_type STREQUAL "STATIC_LIBRARY")
+        set(${_out} TRUE PARENT_SCOPE)
+    else()
+        set(${_out} FALSE PARENT_SCOPE)
+    endif()
+endfunction()
+
+# ── ladder_<rung>_<module>: one module of a rung built from MODULES ──────────
+# Built from <module>/src/**/*.cpp with <module>/include as its only own include directory, and linked whole-archive
+# to @p _deps, the modules the link rules in morph_add_rung's header allow it. A module with no sources is an
+# INTERFACE library: its headers and its links, nothing to compile.
+function(_morph_rung_module_library _rung _dir _module _deps)
+    set(_target ladder_${_rung}_${_module})
+    set(_root "${_dir}/${_module}")
+    file(GLOB_RECURSE _sources CONFIGURE_DEPENDS "${_root}/src/*.cpp")
+    # Listed so AUTOMOC sees a Q_OBJECT declared in include/ apart from its .cpp, as for ladder_<rung>_lib.
+    file(GLOB_RECURSE _headers CONFIGURE_DEPENDS "${_root}/include/*.hpp")
+    if(_sources)
+        add_library(${_target} STATIC ${_sources} ${_headers})
+        set(_scope PUBLIC)
+        set_target_properties(${_target} PROPERTIES AUTOMOC ON)
+        apply_bigobj(${_target})
+        # Lightweight's headers are not -Werror clean, so no apply_warnings(), as for ladder_<rung>_lib.
+        if(AF_COVERAGE)
+            apply_coverage(${_target})
+        endif()
+        if(DEFINED AF_SANITIZER)
+            apply_sanitizers(${_target} ${AF_SANITIZER})
+        endif()
+    else()
+        add_library(${_target} INTERFACE)
+        set(_scope INTERFACE)
+    endif()
+    add_library(morph::${_target} ALIAS ${_target})
+    target_include_directories(${_target} ${_scope} "${_root}/include" "${PROJECT_SOURCE_DIR}/examples/common")
+    target_link_libraries(${_target} ${_scope} morph::morph Lightweight::Lightweight Qt6::Core)
+    target_compile_features(${_target} ${_scope} cxx_std_23)
+    foreach(_dep IN LISTS _deps)
+        # An INTERFACE module has no archive to whole-link; linking it plain still carries its own links on.
+        _morph_rung_has_archive(_has_archive ladder_${_rung}_${_dep})
+        if(_has_archive)
+            target_link_libraries(${_target} ${_scope} "$<LINK_LIBRARY:WHOLE_ARCHIVE,ladder_${_rung}_${_dep}>")
+        else()
+            target_link_libraries(${_target} ${_scope} ladder_${_rung}_${_dep})
+        endif()
+    endforeach()
 endfunction()
 
 # ── ladder_<rung>_screen_tests: screens/tests/*.cpp on the screen harness ────
@@ -402,8 +576,9 @@ function(_morph_rung_screen_tests _rung _dir)
     if(TARGET ladder_${_rung}_lib)
         # As for ladder_<rung>_tests: the schema TU registers its migrations
         # from a static initializer that nothing else references.
+        _morph_rung_lib_link_spec(_lib_link ${_rung})
         target_link_libraries(ladder_${_rung}_screen_tests PRIVATE
-            "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph::ladder_${_rung}_lib>")
+            "${_lib_link}")
         # Lightweight's headers do not meet this project's warnings: system headers here, as for the rung's tests.
         get_target_property(_lightweight_includes Lightweight::Lightweight INTERFACE_INCLUDE_DIRECTORIES)
         if(_lightweight_includes)
@@ -446,8 +621,9 @@ function(_morph_rung_render_smoke _rung _dir)
         morph::ladder_${_rung}_screens morph::client morph::qt_quick morph::ladder_testkit morph_test_main)
     target_include_directories(ladder_${_rung}_render_smoke PRIVATE "${_dir}/tests")
     if(TARGET ladder_${_rung}_lib)
+        _morph_rung_lib_link_spec(_lib_link ${_rung})
         target_link_libraries(ladder_${_rung}_render_smoke PRIVATE
-            "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph::ladder_${_rung}_lib>")
+            "${_lib_link}")
         get_target_property(_lightweight_includes Lightweight::Lightweight INTERFACE_INCLUDE_DIRECTORIES)
         if(_lightweight_includes)
             target_include_directories(ladder_${_rung}_render_smoke SYSTEM PRIVATE ${_lightweight_includes})
@@ -474,4 +650,17 @@ function(_morph_rung_render_smoke _rung _dir)
         TEST_PREFIX "${_rung}.render."
         PROPERTIES TIMEOUT 120 LABELS "ladder-${_rung}" ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
             RESOURCE_LOCK morph_ladder_test_db)
+endfunction()
+
+# ── _morph_rung_lib_link_spec: how a consumer links ladder_<rung>_lib ────────
+# Whole-archive for the single static library of a rung without modules. A rung built from modules has an INTERFACE
+# ladder_<rung>_lib, to which a link feature cannot apply: it is linked plain, and its own links whole-archive the
+# modules' static libraries.
+function(_morph_rung_lib_link_spec _out _rung)
+    _morph_rung_has_archive(_has_archive ladder_${_rung}_lib)
+    if(NOT _has_archive)
+        set(${_out} "morph::ladder_${_rung}_lib" PARENT_SCOPE)
+    else()
+        set(${_out} "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph::ladder_${_rung}_lib>" PARENT_SCOPE)
+    endif()
 endfunction()

@@ -7,6 +7,7 @@
 #include <QAccessibleInterface>
 #include <QColor>
 #include <QFont>
+#include <QFontMetricsF>
 #include <QList>
 #include <QObject>
 #include <QPointF>
@@ -1212,6 +1213,67 @@ TEST_CASE("qt_quick table: an overline cell keeps its capitals and letter spacin
 
 namespace {
 
+/// The descendant item of @p item whose objectName is @p name, or null.
+QQuickItem* descendantNamed(QQuickItem const& item, QString const& name) {
+    QList<QQuickItem const*> pending{&item};
+    while (!pending.isEmpty()) {
+        QQuickItem const* const node = pending.takeLast();
+        for (QQuickItem* const child : node->childItems()) {
+            if (child->objectName() == name) {
+                return child;
+            }
+            pending.append(child);
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: draw the header in `Theme.smallStrongFont` whatever the token (no capitals), or size the columns from it
+// (the column is narrower than its capitals).
+TEST_CASE("qt_quick table: a column header follows field.caption.case and its column fits the capitals",
+          "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Sample"}, {.label = "Mixing plant and sampling point"}});
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(*table);
+    auto const headerOf = [&](char const* name) {
+        auto* const header = descendantNamed(tableItem, QString::fromLatin1(name));
+        REQUIRE(header != nullptr);
+        return header;
+    };
+    auto const plain = headerOf("header0")->property("font").value<QFont>();
+    CHECK(plain.capitalization() == QFont::MixedCase);
+    qreal const plainWidth = tableItem.property("widths").toList().at(1).toReal();
+
+    ui::ThemeValues values = ui::themeValues();
+    values.keywords.insert_or_assign("field.caption.case", "uppercase");
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    scene.settle();
+    for (char const* const name : {"header0", "header1"}) {
+        QFont const font = headerOf(name)->property("font").value<QFont>();
+        CHECK(font.capitalization() == QFont::AllUppercase);
+        CHECK(font.letterSpacing() > 0.0);
+    }
+    QFont const font = headerOf("header1")->property("font").value<QFont>();
+    qreal const capitals = QFontMetricsF{font}.horizontalAdvance(QStringLiteral("MIXING PLANT AND SAMPLING POINT"));
+    CHECK(tableItem.property("widths").toList().at(1).toReal() >= capitals + columnPadding(scene));
+    CHECK(tableItem.property("widths").toList().at(1).toReal() > plainWidth);
+    // The header's text and accessible name stay as written.
+    CHECK(headerOf("header1")->property("text").toString() == QStringLiteral("Mixing plant and sampling point"));
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const node = QAccessible::queryAccessibleInterface(headerOf("header1"));
+    REQUIRE(node != nullptr);
+    CHECK(node->text(QAccessible::Name) == QStringLiteral("Mixing plant and sampling point"));
+    QAccessible::setActive(wasActive);
+}
+
+namespace {
+
 // The warnings of the `morph.layout` category, collected while a `TableWatch` lives.
 QStringList& tableWarnings() {
     static QStringList warnings;
@@ -1695,4 +1757,108 @@ TEST_CASE("qt_quick table: a virtualized table's stretch column caches only grow
     REQUIRE(tableItem.property("realizedFirst").toInt() > 0);
     CHECK(tableItem.property("columnCache").toList().at(0).toReal() == wide);
     CHECK(tableItem.property("leastCache").toList().at(0).toReal() == wideLeast);
+}
+
+namespace {
+
+// The y of an item's top edge and bottom edge in the table's coordinates.
+std::pair<qreal, qreal> verticalExtent(QQuickItem const& item, QQuickItem const& table) {
+    QPointF const top = item.mapToItem(&table, QPointF{0, 0});
+    return {top.y(), top.y() + item.height()};
+}
+
+}  // namespace
+
+// Mutation: leave `setRowSpans` empty (the cell stays one row tall and the covered cells show), or skip the `covered`
+// flag (the covered cells stay visible), or place the cell by the row's height (it ends with its row).
+TEST_CASE("qt_quick table: a spanning cell reaches the foot of the rows it covers, and the covered cells are hidden",
+          "[qt_quick][span]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{1}, ui::Key{2}, ui::Key{3}}, ui::SelectionMode::Single);
+    // The first column stretches its cells down the rows they cover, so a spanning cell fills its block.
+    table.table->setColumns(
+        {{.label = "Name", .width = ui::Sizing::fixed(12), .valign = ui::Align::Stretch}, {.label = "Mass"}});
+    scene.settle();
+    QQuickItem& tableItem = Scene::itemOf(*table.table);
+    QQuickItem const& first = Scene::itemOf(*table.cells.at(0));
+    qreal const oneRow = first.height();
+    table.table->setRowSpans(*table.rows.at(0), {{.column = 0, .rows = 3}});
+    scene.settle();
+    auto const [top, bottom] = verticalExtent(first, tableItem);
+    QQuickItem const& last = Scene::itemOf(*table.cells.at(5));
+    CHECK(first.height() > 2.5 * oneRow);
+    // The cell, which a row of its own height would end before, reaches the third row's foot.
+    CHECK(bottom >= verticalExtent(last, tableItem).second - 1.0);
+    CHECK(top <= verticalExtent(Scene::itemOf(*table.cells.at(1)), tableItem).first + 1.0);
+    // The covered rows' cells in that column are hidden, the other columns' are not.
+    CHECK_FALSE(Scene::itemOf(*table.cells.at(2)).isVisible());
+    CHECK_FALSE(Scene::itemOf(*table.cells.at(4)).isVisible());
+    CHECK(Scene::itemOf(*table.cells.at(3)).isVisible());
+    // Clearing the span returns everything.
+    table.table->setRowSpans(*table.rows.at(0), {});
+    scene.settle();
+    CHECK(Scene::itemOf(*table.cells.at(2)).isVisible());
+    CHECK(first.height() < 1.5 * oneRow);
+}
+
+// Mutation: let `cover` write `true` on uncovering (the cell the document hid shows again).
+TEST_CASE("qt_quick table: uncovering a cell the document hid leaves it hidden", "[qt_quick][span]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{1}, ui::Key{2}}, ui::SelectionMode::Single);
+    table.cells.at(2)->setVisible(false);
+    table.table->setRowSpans(*table.rows.at(0), {{.column = 0, .rows = 2}});
+    scene.settle();
+    CHECK_FALSE(Scene::itemOf(*table.cells.at(2)).isVisible());
+    table.table->setRowSpans(*table.rows.at(0), {});
+    scene.settle();
+    CHECK_FALSE(Scene::itemOf(*table.cells.at(2)).isVisible());
+}
+
+// Mutation: leave the backdrop's tap handler out (the click lands on the covered row), or let the row's own handler
+// take a tap in a spanning column (the row is toggled twice).
+TEST_CASE(
+    "qt_quick table: a click on the part of a spanning cell over a covered row selects the row that gives the span",
+    "[qt_quick][span]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{1}, ui::Key{2}, ui::Key{3}}, ui::SelectionMode::Multiple);
+    std::vector<std::vector<ui::Key>> reported;
+    table.table->setOnSelectionChange([&reported](std::vector<ui::Key> keys, ui::SelectionChange /*change*/) {
+        reported.push_back(std::move(keys));
+    });
+    table.table->setRowSpans(*table.rows.at(0), {{.column = 0, .rows = 3}});
+    scene.settle();
+    // The cell's centre lies over the second row.
+    scene.click(Scene::itemOf(*table.cells.at(0)), Qt::ControlModifier);
+    REQUIRE(reported.size() == 1);
+    CHECK(reported.back() == std::vector<ui::Key>{ui::Key{1}});
+    // A click on the covered row's other column is that row's own.
+    scene.click(Scene::itemOf(*table.cells.at(3)), Qt::ControlModifier);
+    REQUIRE(reported.size() == 2);
+    CHECK(reported.back() == std::vector<ui::Key>{ui::Key{1}, ui::Key{2}});
+}
+
+// Mutation: leave the backdrop's HoverHandler out (the origin row is not hovered over the part of its cell below its
+// bounds), or let it not block (the covered row is hovered as well).
+TEST_CASE("qt_quick table: hovering the part of a spanning cell over a covered row hovers the row that gives the span",
+          "[qt_quick][span]") {
+    Scene scene;
+    Rows table = makeTable(scene, {ui::Key{1}, ui::Key{2}, ui::Key{3}}, ui::SelectionMode::Single);
+    table.table->setRowSpans(*table.rows.at(0), {{.column = 0, .rows = 3}});
+    scene.settle();
+    QQuickItem& origin = Scene::itemOf(*table.rows.at(0));
+    QQuickItem& covered = Scene::itemOf(*table.rows.at(1));
+    // Away from the table's rows, nothing is hovered.
+    QTest::mouseMove(&scene.window(), QPoint{1, 1});
+    scene.settle();
+    CHECK_FALSE(origin.property("hovered").toBool());
+    // The cell's centre lies over the second row, below the origin row's own bounds.
+    QTest::mouseMove(&scene.window(), Scene::centreOf(Scene::itemOf(*table.cells.at(0))));
+    scene.settle();
+    CHECK(origin.property("hovered").toBool());
+    CHECK_FALSE(covered.property("hovered").toBool());
+    // Beside the span, the covered row is the hovered one.
+    QTest::mouseMove(&scene.window(), Scene::centreOf(Scene::itemOf(*table.cells.at(3))));
+    scene.settle();
+    CHECK_FALSE(origin.property("hovered").toBool());
+    CHECK(covered.property("hovered").toBool());
 }

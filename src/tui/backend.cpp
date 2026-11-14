@@ -111,6 +111,10 @@ std::unique_ptr<ui::DialogWidget> Backend::createDialog(ui::ContainerWidget* par
     return make<detail::DialogImpl>(_impl->context, parent);
 }
 
+std::unique_ptr<ui::PopoverWidget> Backend::createPopover(ui::ContainerWidget* parent) {
+    return make<detail::PopoverImpl>(_impl->context, parent);
+}
+
 std::unique_ptr<ui::ToastWidget> Backend::createToast(ui::ContainerWidget* parent) {
     return make<detail::ToastImpl>(_impl->context, parent);
 }
@@ -178,6 +182,15 @@ std::unique_ptr<ui::CollapsibleWidget> Backend::createCollapsible(ui::ContainerW
 
 std::unique_ptr<ui::DropZoneWidget> Backend::createDropZone(ui::ContainerWidget* parent) {
     return make<detail::DropZoneImpl>(_impl->context, parent);
+}
+
+std::unique_ptr<ui::PageWidget> Backend::createPage(ui::ContainerWidget* parent, ui::PageGeometry const& geometry) {
+    return make<detail::PageImpl>(_impl->context, parent, geometry);
+}
+
+std::unique_ptr<ui::PageRegionWidget> Backend::createPageRegion(ui::ContainerWidget* parent,
+                                                                ui::RegionGeometry const& geometry) {
+    return make<detail::PageRegionImpl>(_impl->context, parent, geometry);
 }
 
 void Backend::fit() { detail::fit(_impl->context); }

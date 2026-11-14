@@ -5,7 +5,7 @@
 // `morph/core/payload_schema.hpp`).
 //
 // All eight of this rung's strong ids are generated with their own
-// `glz::meta` (`LIMS_DEFINE_STRONG_ID_WIRE`, `lims/core/types.hpp`) -- on the
+// `glz::meta` (`LIMS_DEFINE_STRONG_ID_WIRE`, `lims/lab/core/types.hpp`) -- on the
 // wire each *is* its nullable underlying integer, which is what makes
 // `BRIDGE_REGISTER_ACTION` on a DTO carrying one compile at all. The cost,
 // stated in `morph/core/payload_shape_tag.hpp` and in
@@ -15,7 +15,7 @@
 // the bare opaque `x`, indistinguishable from every other such type.
 //
 // This rung is where that matters most, because its journal *is* the product:
-// `SelfJournal` (`lims/core/self_journal.hpp`) stamps every entry so the
+// `SelfJournal` (`lims/lab/core/self_journal.hpp`) stamps every entry so the
 // regulatory trail can be replayed, and `GetAuditTrail` renders it back to a
 // human. Every id is `std::optional<std::int64_t>` on the wire, so a retype
 // between two of them -- `AnalysisId` for the `AnalysisVersionId` a reading
@@ -38,18 +38,17 @@
 #include <string>
 #include <vector>
 
-#include "lims/core/types.hpp"
-#include "lims/dto/offline_dto.hpp"
-#include "lims/dto/result_dto.hpp"
-#include "lims/dto/sample_dto.hpp"
-#include "lims/dto/verification_dto.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/lab/core/types.hpp"
+#include "lims/lab/dto/offline_dto.hpp"
+#include "lims/lab/dto/result_dto.hpp"
+#include "lims/lab/dto/sample_dto.hpp"
+#include "lims/lab/dto/verification_dto.hpp"
+#include "lims/lab/models/sample_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 using morph::model::payloadFingerprint;
 using morph::model::payloadShapeString;
 
@@ -95,6 +94,7 @@ struct VerifyResultIdRetyped {
 ///        idea: the lifecycle's entry point names the owning client, in a
 ///        rung where nearly every other action's id names a sample.
 struct RegisterSampleClientIdRetyped {
+    lims::SiteId siteId;
     lims::SampleId clientId;
     std::string reference;
 };
@@ -116,12 +116,15 @@ TEST_CASE("Every lims strong id renders a distinct payload shape", "[lims][journ
     INFO("WorksheetId       -> " << payloadShapeString<lims::WorksheetId>());
     INFO("VerificationId    -> " << payloadShapeString<lims::VerificationId>());
     INFO("ConflictId        -> " << payloadShapeString<lims::ConflictId>());
+    INFO("CompanyId         -> " << payloadShapeString<lims::CompanyId>());
+    INFO("SiteId            -> " << payloadShapeString<lims::SiteId>());
 
     const std::vector<std::string> shapes{
         payloadShapeString<lims::ClientId>(),       payloadShapeString<lims::SampleId>(),
         payloadShapeString<lims::AnalysisId>(),     payloadShapeString<lims::AnalysisVersionId>(),
         payloadShapeString<lims::ResultId>(),       payloadShapeString<lims::WorksheetId>(),
         payloadShapeString<lims::VerificationId>(), payloadShapeString<lims::ConflictId>(),
+        payloadShapeString<lims::CompanyId>(),      payloadShapeString<lims::SiteId>(),
     };
 
     // None of them may still be the bare opaque tag, and no two may collide.
@@ -158,14 +161,15 @@ TEST_CASE("replay() refuses a RegisterSample entry stamped by a build whose clie
           "[lims][journal][payload_shape]") {
     // A real recorded entry, not a hand-built one: this also pins that
     // SelfJournal stamps the fingerprint this build computes.
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
     lims::SampleModel model;
     model.attachActionLog(log, std::string{});
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    const auto sample = model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-2026-0001"});
+    const auto sample = model.execute(lims::RegisterSample{
+        .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-2026-0001"});
     REQUIRE(sample.id.hasValue());
 
     auto entries = log->entries(std::to_string(*sample.id));

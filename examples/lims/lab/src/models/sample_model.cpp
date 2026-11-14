@@ -1,0 +1,1147 @@
+// SPDX-License-Identifier: Apache-2.0
+#include "lims/lab/models/sample_model.hpp"
+
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlTransaction.hpp>
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <morph/forms/instance_constraints.hpp>
+#include <morph/session/session.hpp>
+#include <morph/table/query.hpp>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+#include "lims/lab/authorization/lab_authorization.hpp"
+#include "lims/lab/db/lims_entity.hpp"
+#include "lims/lab/dto/analysis_dto.hpp"
+#include "lims/lab/events/lab_outbox_store.hpp"
+#include "lims/org/core/errors.hpp"
+#include "lims/org/core/model_support.hpp"
+#include "lims/org/core/plan_sql.hpp"
+#include "lims/org/models/org_model.hpp"
+
+namespace lims {
+
+namespace {
+
+/// @brief Maps a row to its wire view.
+/// @param row The sample row.
+/// @return The view a client sees.
+[[nodiscard]] SampleView toView(const db::SampleRecord& row) {
+    return SampleView{
+        .id = SampleId{static_cast<std::int64_t>(row.id.Value())},
+        .siteId = SiteId::fromOptional(row.siteId.Value()),
+        .clientId = ClientId{static_cast<std::int64_t>(row.client.Value())},
+        .reference = std::string{row.reference.Value().ToStringView()},
+        .state = static_cast<SampleState>(row.state.Value()),
+        .version = SampleVersion{static_cast<std::int64_t>(row.version.Value())},
+        .registeredAt = timestampFromMillis(row.registeredAt.Value()),
+    };
+}
+
+/// @brief Maps a result row to its wire view.
+/// @param row The result row.
+/// @return The view a client sees.
+[[nodiscard]] ResultView toResultView(const db::ResultRecord& row) {
+    const auto num = row.valueNum.Value();
+    const auto den = row.valueDen.Value();
+    Concentration value;
+    if (num.has_value() && den.has_value()) {
+        value = Concentration{
+            ::morph::math::Rational{::morph::math::Numerator{*num}, ::morph::math::Denominator{*den},
+                                    ::morph::math::DecimalPlaces{static_cast<std::uint32_t>(row.valueDp.Value())}}};
+    }
+    return ResultView{
+        .id = ResultId{static_cast<std::int64_t>(row.id.Value())},
+        .sampleId = SampleId{static_cast<std::int64_t>(row.sample.Value())},
+        .analysisVersionId = AnalysisVersionId{static_cast<std::int64_t>(row.analysisVersion.Value())},
+        .qualifier = static_cast<ResultQualifier>(row.qualifier.Value()),
+        .value = value,
+        .outOfSpec = row.outOfSpec.Value() != 0,
+        .capturedBy = std::string{row.capturedBy.Value().ToStringView()},
+        .capturedAt = timestampFromMillis(row.capturedAt.Value()),
+    };
+}
+
+/// @brief Maps a conflict row to its wire view.
+/// @param row The conflict row.
+/// @return The view a resolver sees.
+[[nodiscard]] ConflictView toConflictView(const db::OfflineConflictRecord& row) {
+    return ConflictView{
+        .id = ConflictId{static_cast<std::int64_t>(row.id.Value())},
+        .sampleId = SampleId{static_cast<std::int64_t>(row.sample.Value())},
+        .baseVersion = SampleVersion{static_cast<std::int64_t>(row.baseVersion.Value())},
+        .serverVersion = SampleVersion{static_cast<std::int64_t>(row.serverVersion.Value())},
+        .reason = static_cast<ConflictReason>(row.reason.Value()),
+        .status = static_cast<ConflictStatus>(row.status.Value()),
+        .payload = std::string{row.payload.Value().ToStringView()},
+        .detectedBy = std::string{row.detectedBy.Value().ToStringView()},
+        .detectedAt = timestampFromMillis(row.detectedAt.Value()),
+        .resolvedBy = std::string{row.resolvedBy.Value().ToStringView()},
+        .resolutionNote = std::string{row.resolutionNote.Value().ToStringView()},
+    };
+}
+
+/// @brief Loads one sample row by id.
+/// @param mapper The open data mapper.
+/// @param sampleId The row's primary key.
+/// @return The row.
+/// @throws NotFound if no such row exists.
+[[nodiscard]] db::SampleRecord loadSample(Lightweight::DataMapper& mapper, std::int64_t sampleId) {
+    auto rows =
+        mapper.Query<db::SampleRecord>().Where(::Lightweight::FieldNameOf<&db::SampleRecord::id>, "=", sampleId).All();
+    if (rows.empty()) {
+        throw NotFound{"sample " + std::to_string(sampleId) + " does not exist"};
+    }
+    return rows.front();
+}
+
+/// @brief Whether @p actionType is one of the lifecycle transitions, whose
+///        recorded result is a `SampleView`.
+/// @param actionType The recorded action id.
+/// @return `true` for an action whose result carries a sample state.
+[[nodiscard]] bool isLifecycleAction(std::string_view actionType) {
+    return actionType == "RegisterSample" || actionType == "ReceiveSample" || actionType == "StartWork" ||
+           actionType == "SubmitForVerification" || actionType == "ReturnForRework" || actionType == "PublishSample" ||
+           actionType == "RejectSample";
+}
+
+/// @brief Reconstructs one audit step from one journal entry.
+///
+/// The whole of "reconstructible from the journal alone", and the reason it is
+/// a `switch`-like chain over a *closed* set of action ids rather than a
+/// generic decode: an entry this build does not recognise, or whose result
+/// does not decode, becomes an `Unreadable` step. It is never skipped.
+///
+/// Skipping is the tempting implementation and the wrong one. An audit trail
+/// that quietly omits what it could not read looks complete, so nobody
+/// discovers the omission — which is exactly how the rung README's
+/// "journal payload evolution" strain point turns "reconstructible from the
+/// journal alone" into a false claim. An admitted gap can at least be
+/// investigated.
+/// @param entry The recorded entry.
+/// @return The reconstructed step.
+[[nodiscard]] AuditStep auditStepFor(const ::morph::journal::LogEntry& entry) {
+    AuditStep step{
+        .at = timestampFromMillis(entry.timestampMs),
+        .principal = entry.principal,
+        .action = entry.actionType,
+        .kind = AuditStepKind::Unreadable,
+        .outcome =
+            entry.outcome == ::morph::journal::Outcome::Succeeded ? AuditOutcome::Succeeded : AuditOutcome::Refused,
+        .state = SampleState::Registered,
+        .version = SampleVersion{},
+        .detail = entry.error,
+    };
+
+    // A refused attempt is fully reconstructible from the entry itself: the
+    // action, the author, the instant, and why it was refused. There is no
+    // result to decode, so the kind is settled here.
+    if (step.outcome == AuditOutcome::Refused) {
+        step.kind =
+            isLifecycleAction(entry.actionType) ? AuditStepKind::LifecycleTransition : AuditStepKind::Unreadable;
+        if (step.kind == AuditStepKind::Unreadable && !entry.actionType.empty()) {
+            // A recognised non-lifecycle action that was refused is still a
+            // readable step, just not a lifecycle one.
+            if (entry.actionType == "CaptureConcentration") {
+                step.kind = AuditStepKind::ResultCaptured;
+            } else if (entry.actionType == "VerifyResult") {
+                step.kind = AuditStepKind::ResultVerified;
+            } else if (entry.actionType == "QueuedCapture") {
+                step.kind = AuditStepKind::OfflineReplay;
+            } else if (entry.actionType == "ResolveConflict") {
+                step.kind = AuditStepKind::ConflictResolved;
+            }
+        }
+        return step;
+    }
+
+    try {
+        if (isLifecycleAction(entry.actionType)) {
+            const auto view = ::morph::model::ActionTraits<ReceiveSample>::resultFromJson(entry.result);
+            step.kind = AuditStepKind::LifecycleTransition;
+            step.state = view.state;
+            step.version = view.version;
+        } else if (entry.actionType == "CaptureConcentration") {
+            static_cast<void>(::morph::model::ActionTraits<CaptureConcentration>::resultFromJson(entry.result));
+            step.kind = AuditStepKind::ResultCaptured;
+        } else if (entry.actionType == "VerifyResult") {
+            const auto view = ::morph::model::ActionTraits<VerifyResult>::resultFromJson(entry.result);
+            step.kind = AuditStepKind::ResultVerified;
+            step.detail = view.capturedBy;
+        } else if (entry.actionType == "QueuedCapture") {
+            const auto replay = ::morph::model::ActionTraits<QueuedCapture>::resultFromJson(entry.result);
+            step.kind = AuditStepKind::OfflineReplay;
+            step.version = replay.serverVersion;
+            step.detail =
+                replay.outcome == ReplayOutcome::Conflicted ? std::string{"conflicted"} : std::string{"applied"};
+        } else if (entry.actionType == "ResolveConflict") {
+            static_cast<void>(::morph::model::ActionTraits<ResolveConflict>::resultFromJson(entry.result));
+            step.kind = AuditStepKind::ConflictResolved;
+        } else {
+            step.detail = "unrecognised action id '" + entry.actionType + "'";
+        }
+    } catch (const std::exception& error) {
+        step.kind = AuditStepKind::Unreadable;
+        step.detail = std::string{"result payload did not decode: "} + error.what();
+    }
+    return step;
+}
+
+}  // namespace
+
+RegisterClientResult SampleModel::execute(const RegisterClient& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"RegisterClient: a name is required"};
+    }
+
+    Lightweight::DataMapper mapper;
+    db::ClientRecord row;
+    row.name = Lightweight::SqlAnsiString<128>{action.name};
+    mapper.Create(row);
+
+    RegisterClientResult result{.clientId = ClientId{static_cast<std::int64_t>(row.id.Value())}};
+    _journal.recordSuccess<SampleModel>(action, result, nowMillis());
+    return result;
+}
+
+SampleView SampleModel::execute(const RegisterSample& action) {
+    requirePrincipal();
+    if (!action.validate()) {
+        throw ValidationError{"RegisterSample: a site, a client and a reference are required"};
+    }
+    if (!OrgModel::findSite(action.siteId)) {
+        throw NotFound{"RegisterSample: no such site"};
+    }
+
+    Lightweight::DataMapper mapper;
+    auto clients = mapper.Query<db::ClientRecord>()
+                       .Where(::Lightweight::FieldNameOf<&db::ClientRecord::id>, "=", *action.clientId)
+                       .All();
+    if (clients.empty()) {
+        throw NotFound{"RegisterSample: no such client"};
+    }
+
+    db::SampleRecord row;
+    row.client = clients.front();
+    row.reference = Lightweight::SqlAnsiString<64>{action.reference};
+    row.siteId = std::optional<std::int64_t>{*action.siteId};
+    row.state = static_cast<int>(SampleState::Registered);
+    row.version = 1;
+    row.registeredAt = nowMillis();
+    mapper.Create(row);
+
+    // Attach to what we just created, and re-stamp the journal's identity:
+    // entries written before this point could not name a sample that did not
+    // exist yet.
+    _sampleId = static_cast<std::int64_t>(row.id.Value());
+    _journal.rekey(std::to_string(*_sampleId));
+
+    auto view = toView(row);
+    _journal.recordSuccess<SampleModel>(action, view, nowMillis());
+    return view;
+}
+
+SampleView SampleModel::execute(const OpenSample& action) {
+    if (!action.validate()) {
+        throw ValidationError{"OpenSample: a sampleId is required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto row = loadSample(mapper, *action.sampleId);
+    _sampleId = *action.sampleId;
+    _journal.rekey(std::to_string(*_sampleId));
+    return toView(row);
+}
+
+SampleView SampleModel::execute(const GetSample& action) {
+    static_cast<void>(action);
+    return loadAttached();
+}
+
+namespace {
+
+/// @brief The sample list's columns as the table engine reflects them from `SampleView`.
+/// @return One column per member, in member order.
+[[nodiscard]] std::vector<::morph::table::ColumnInfo> const& sampleColumns() {
+    static auto const columns = [] {
+        ::morph::table::RowsSource<SampleView> const source{
+            std::make_shared<std::vector<SampleView> const>(),
+            [](SampleView const& sample) { return ::morph::table::RowId{*sample.id}; }};
+        auto const reflected = source.columns();
+        return std::vector<::morph::table::ColumnInfo>(reflected.begin(), reflected.end());
+    }();
+    return columns;
+}
+
+/// @brief How the database reads each sample column. The state is the enumerator's name, as the table engine holds it.
+/// @return The columns by id.
+[[nodiscard]] plansql::Columns const& sampleSqlColumns() {
+    static plansql::Columns const columns{
+        {"id", plansql::integer("id")},
+        {"siteId", plansql::integer("site_id")},
+        {"clientId", plansql::integer("client_id")},
+        {"reference", plansql::storedText("reference")},
+        {"state", plansql::text(plansql::enumName<SampleState>("state", static_cast<int>(SampleState::Rejected) + 1))},
+        {"version", plansql::integer("version")},
+        {"registeredAt", plansql::dateTime(plansql::wholeSeconds("registered_at"))},
+    };
+    return columns;
+}
+
+}  // namespace
+
+bool SampleModel::canTranslateSampleColumn(std::string_view column, ::morph::table::PlanUse /*use*/) {
+    return plansql::translatable(sampleSqlColumns(), column);
+}
+
+::morph::table::Page<SampleView> SampleModel::pageSamples(std::vector<SiteId> const& sites,
+                                                          ::morph::table::QueryPlan const& plan) {
+    auto const translation = plansql::translate(plan, sampleSqlColumns(), "id");
+    if (!translation) {
+        throw ValidationError{"ListSamples: " + translation.error().message};
+    }
+    std::string scope;
+    for (SiteId const site : sites) {
+        if (site.hasValue()) {
+            scope += (scope.empty() ? "site_id IN (" : ", ") + std::to_string(*site);
+        }
+    }
+    scope = scope.empty() ? "0" : scope + ")";
+    Lightweight::DataMapper mapper;
+    // One read transaction for the count and the page, so the total agrees with the rows. It is rolled back, never
+    // committed, and no write happens inside it.
+    Lightweight::SqlTransaction const reading{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto const fetched = plansql::fetch(mapper, db::SampleRecord::TableName, "id", scope, *translation, plan);
+    ::morph::table::Page<SampleView> page;
+    page.offset = plan.offset;
+    page.total = fetched.total;
+    page.totalKind = ::morph::table::TotalKind::Exact;
+    for (std::int64_t const id : fetched.ids) {
+        page.rows.push_back(toView(loadSample(mapper, id)));
+    }
+    return page;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+::morph::table::Page<SampleView> SampleModel::execute(const ListSamples& action) {
+    auto const plan = ::morph::table::planQuery(action.query, sampleColumns(), {}, {}, {}, canTranslateSampleColumn);
+    if (!plan) {
+        throw ValidationError{"ListSamples: " + plan.error().message};
+    }
+    return pageSamples(OrgModel::visibleSites(currentPrincipal()), *plan);
+}
+
+namespace {
+
+/// @brief The sites of @p company where the caller holds a role, there or at the company.
+/// @param company The company.
+/// @return The sites, by id.
+[[nodiscard]] std::vector<SiteId> callerSitesAt(CompanyId company) {
+    std::vector<SiteId> sites;
+    for (SiteId const site : OrgModel::visibleSites(currentPrincipal())) {
+        auto const found = OrgModel::findSite(site);
+        if (found.has_value() && found->companyId == company) {
+            sites.push_back(site);
+        }
+    }
+    return sites;
+}
+
+/// @brief The samples the caller can see at @p company that meet one condition on one column.
+/// @param company The company.
+/// @param column The column's id.
+/// @param condition The condition.
+/// @param limit How many rows the page holds; the page's total counts every match.
+/// @return The page.
+/// @throws ValidationError if the database cannot compare the operand.
+[[nodiscard]] ::morph::table::Page<SampleView> samplesWhere(CompanyId company, std::string column,
+                                                            ::morph::table::FilterEntry condition,
+                                                            std::int64_t limit) {
+    ::morph::table::TableQuery query;
+    ::morph::table::ColumnFilter filter;
+    filter.include.push_back(std::move(condition));
+    query.filters.columns.emplace(std::move(column), std::move(filter));
+    query.page.limit = limit;
+    auto const plan =
+        ::morph::table::planQuery(query, sampleColumns(), {}, {}, {}, SampleModel::canTranslateSampleColumn);
+    if (!plan) {
+        throw ValidationError{"samples: " + plan.error().message};
+    }
+    return SampleModel::pageSamples(callerSitesAt(company), *plan);
+}
+
+}  // namespace
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+OpenWork<SampleView> SampleDirectoryModel::execute(const CountSamplesToVerify& action) {
+    if (!action.validate()) {
+        throw ValidationError{"CountSamplesToVerify: a company is required"};
+    }
+    auto const page =
+        samplesWhere(action.company, "state", ::morph::table::FilterEntry{.eq = std::string{"ToBeVerified"}}, 1);
+    return openWork<SampleView>(page.total.value_or(0));
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+SearchHits<SampleView> SampleDirectoryModel::execute(const SearchSamples& action) {
+    if (!action.validate()) {
+        throw ValidationError{"SearchSamples: a company is required"};
+    }
+    if (action.query.empty()) {
+        return hitsOf<SampleView>({});
+    }
+    auto const page =
+        samplesWhere(action.company, "reference", ::morph::table::FilterEntry{.startsWith = action.query},
+                     static_cast<std::int64_t>(kSearchHitLimit));
+    std::vector<SearchHit> found;
+    for (SampleView const& sample : page.rows) {
+        auto const site = OrgModel::findSite(sample.siteId);
+        found.push_back(SearchHit{.title = sample.reference,
+                                  .detail = site.has_value() ? site->name : std::string{},
+                                  .screen = std::string{hit_screens::kSample},
+                                  .params = {{"sampleId", *sample.id}}});
+    }
+    return hitsOf<SampleView>(std::move(found), page.total.value_or(0));
+}
+
+SampleView SampleModel::execute(const ReceiveSample& action) { return transition(action, SampleState::Received); }
+
+SampleView SampleModel::execute(const StartWork& action) { return transition(action, SampleState::InProgress); }
+
+SampleView SampleModel::execute(const SubmitForVerification& action) {
+    return transition(action, SampleState::ToBeVerified);
+}
+
+SampleView SampleModel::execute(const ReturnForRework& action) { return transition(action, SampleState::InProgress); }
+
+SampleView SampleModel::execute(const PublishSample& action) { return transition(action, SampleState::Published); }
+
+SampleView SampleModel::execute(const RejectSample& action) { return transition(action, SampleState::Rejected); }
+
+Scope SampleModel::attachedSiteScope() const {
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
+    return siteScopeOfSample(SampleId{*_sampleId});
+}
+
+std::vector<Scope> SampleModel::entryScopes() const {
+    std::vector<Scope> scopes;
+    if (!_draft.has_value()) {
+        return scopes;
+    }
+    if (_draft->header.siteId.hasValue()) {
+        scopes.emplace_back(_draft->header.siteId);
+    }
+    if (_sampleId.has_value()) {
+        scopes.push_back(siteScopeOfSample(SampleId{*_sampleId}));
+    }
+    return scopes;
+}
+
+Scope SampleModel::storedSiteScope() const {
+    if (!_sampleId.has_value()) {
+        throw NotFound{"DeleteSample: the working copy was never saved"};
+    }
+    return siteScopeOfSample(SampleId{*_sampleId});
+}
+
+template <typename Action>
+    requires RefusalRecordedInTrail<Action>
+void SampleModel::onGuardRefused(Action const& action, std::exception const& refusal) {
+    if (dynamic_cast<EmptyPrincipalError const*>(&refusal) != nullptr ||
+        dynamic_cast<LimsError const*>(&refusal) == nullptr) {
+        return;
+    }
+    if constexpr (std::is_same_v<Action, CaptureConcentration> || std::is_same_v<Action, SaveSample> ||
+                  std::is_same_v<Action, DeleteSample>) {
+        // A handler attached to no sample has no trail to record into.
+        if (!_sampleId.has_value()) {
+            return;
+        }
+    }
+    if constexpr (std::is_same_v<Action, VerifyResult>) {
+        // A verification belongs to the sample of the result, whatever this handler is attached to.
+        if (action.resultId.hasValue()) {
+            Lightweight::DataMapper mapper;
+            auto const results = mapper.Query<db::ResultRecord>()
+                                     .Where(::Lightweight::FieldNameOf<&db::ResultRecord::id>, "=", *action.resultId)
+                                     .All();
+            if (!results.empty()) {
+                _journal.rekey(std::to_string(results.front().sample.Value()));
+            }
+        }
+    }
+    _journal.recordFailure<SampleModel>(action, refusal.what(), nowMillis());
+}
+
+SampleView SampleModel::loadAttached() const {
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
+    Lightweight::DataMapper mapper;
+    return toView(loadSample(mapper, *_sampleId));
+}
+
+SampleView SampleModel::writeState(SampleState target) const {
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto row = loadSample(mapper, *_sampleId);
+    row.state = static_cast<int>(target);
+    // The base version is what an offline update targets (README §7), so it
+    // moves with the state and inside the same transaction: a reader must
+    // never see the new state at the old version.
+    row.version = row.version.Value() + 1;
+    mapper.Update(row);
+    // The events go in the publication's own transaction: a published sample whose results were never announced, or
+    // an announcement of a publication that rolled back, would each bill wrongly.
+    if (target == SampleState::Published) {
+        writeAnalysisPublished(mapper, row, currentPrincipal());
+    }
+    sqlTxn.Commit();
+    return toView(row);
+}
+
+template <typename Action>
+SampleView SampleModel::transition(const Action& action, SampleState target) {
+    // Outside the try, deliberately: an attempt with no authenticated
+    // principal must produce **no** journal entry at all. An audit entry
+    // naming nobody is exactly what this rung's README calls disqualifying,
+    // so the one failure class that cannot be attributed is also the one
+    // failure class that is not recorded.
+    requirePrincipal();
+    try {
+        if (!action.validate()) {
+            throw ValidationError{std::string{::morph::model::ActionTraits<Action>::typeId()} +
+                                  ": the action is not well-formed"};
+        }
+        const auto before = loadAttached();
+        if (!isLegalTransition(before.state, target)) {
+            throw IllegalTransition{std::string{"a "} + std::string{stateName(before.state)} +
+                                    " sample cannot become " + std::string{stateName(target)}};
+        }
+        if constexpr (std::is_same_v<Action, PublishSample>) {
+            // A four-eyes control nothing depends on is theatre. Publishing is
+            // the point at which the lab tells the client a number is true, so
+            // it is the point that has to insist every number in the report
+            // has been through a second pair of eyes.
+            requireEveryResultVerified();
+        }
+        auto after = writeState(target);
+        _journal.recordSuccess<SampleModel>(action, after, nowMillis());
+        return after;
+    } catch (const LimsError& error) {
+        // The rejected attempt is itself audit-worthy: "who tried to publish
+        // an unverified sample" is precisely the question a 21 CFR Part
+        // 11-style trail exists to answer, and an entry that is never written
+        // cannot answer it.
+        _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
+        throw;
+    }
+}
+
+ListResultQualifiersResult SampleModel::execute(const ListResultQualifiers& action) {
+    static_cast<void>(action);
+    // Served, not hardcoded in a client: the renderer discovers these through
+    // the `x-optionsAction` the `QualifierChoice` field's own type declares.
+    return ListResultQualifiersResult{.qualifiers = {
+                                          {.id = std::string{kQualifierNotMeasured}, .name = "Not measured"},
+                                          {.id = std::string{kQualifierBelowLod}, .name = "< LOD"},
+                                          {.id = std::string{kQualifierAboveUdl}, .name = "> UDL"},
+                                      }};
+}
+
+namespace {
+
+/// @brief Records @p opKey as decided, so a redelivery is skipped.
+///
+/// A free function rather than a member: it touches no state of its own, and
+/// keeping `Lightweight::DataMapper` out of `sample_model.hpp` keeps the header
+/// ORM-free. The rung's screens include it, and a client build may have no ORM
+/// at all, so a single mapper-typed declaration there would break the client's
+/// link. Every other rung's model header is ORM-free for the same reason.
+void markDecided(Lightweight::DataMapper& mapper, const std::string& opKey) {
+    db::ReplayedOpRecord row;
+    row.opKey = Lightweight::SqlAnsiString<128>{opKey};
+    row.decidedAt = nowMillis();
+    mapper.Create(row);
+}
+
+/// @brief Refuses a preparation `reportedReading` cannot multiply by.
+///
+/// The conditional field, made load-bearing (README §5). `validate()` has
+/// already established that a `diluted` preparation carries a factor -- the
+/// client learns the same rule from `x-rules` in the served schema and the
+/// server re-runs the compiled one -- so what is left is the one check a
+/// cross-field rule cannot express: a factor must be a positive number.
+/// @param capture The capture.
+/// @throws ValidationError for a diluted aliquot without a positive factor, or an unknown preparation code.
+void checkPreparation(const CaptureConcentration& capture) {
+    if (capture.dilution.hasValue() && *capture.dilution == std::string{kDilutionDiluted}) {
+        if (!capture.dilutionFactor.hasValue() || (*capture.dilutionFactor).numerator <= 0) {
+            throw ValidationError{"CaptureConcentration: a diluted aliquot needs a positive dilution factor"};
+        }
+    } else if (capture.dilution.hasValue() && *capture.dilution != std::string{kDilutionNeat}) {
+        // Fail-closed on an unknown preparation code, for the same reason the
+        // qualifier codes are: guessing turns "this client speaks a dialect we
+        // do not know" into a silently undiluted reading.
+        throw ValidationError{"CaptureConcentration: unknown dilution mode '" + *capture.dilution + "'"};
+    }
+}
+
+}  // namespace
+
+ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentration& capture, const std::string& author,
+                                     const OperationKey& opKey) {
+    if (!capture.validate()) {
+        // `exactlyOneOf` failing is the interesting half: it is what makes
+        // "a number *and* a below-LOD flag" unrepresentable rather than
+        // merely discouraged.
+        throw ValidationError{"CaptureConcentration: name a version and exactly one of value / qualifier"};
+    }
+
+    Lightweight::DataMapper mapper;
+    const auto sample = toView(loadSample(mapper, *sampleId));
+    if (sample.state != SampleState::InProgress) {
+        throw IllegalTransition{
+            std::string{"results can only be captured while a sample is in-progress; this one is "} +
+            std::string{stateName(sample.state)}};
+    }
+
+    auto versions =
+        mapper.Query<db::AnalysisVersionRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::AnalysisVersionRecord::id>, "=", *capture.analysisVersionId)
+            .All();
+    if (versions.empty()) {
+        throw NotFound{"CaptureConcentration: no such analysis version"};
+    }
+    const auto& version = versions.front();
+
+    // The action's unit is a *compile-time* template parameter, so the only
+    // way a concentration action can be wrong about its unit is if the
+    // definition it names is not a concentration. Checked rather than
+    // assumed: storing an amps reading in the mg/L column would be
+    // undetectable afterwards.
+    const auto canonicalUnit = std::string{version.canonicalUnit.Value().ToStringView()};
+    if (canonicalUnit != std::string{Concentration::unitMeta().id}) {
+        throw ValidationError{"CaptureConcentration: analysis version " + std::to_string(*capture.analysisVersionId) +
+                              " is denominated in " + canonicalUnit + ", not " +
+                              std::string{Concentration::unitMeta().id}};
+    }
+
+    checkPreparation(capture);
+
+    auto qualifier = ResultQualifier::Measured;
+    std::optional<::morph::math::Rational> stored;
+    bool outOfSpec = false;
+    // Exact, and the same derivation the action's computed `reportedValue`
+    // previews, before that field's display rounding. With the preparation
+    // checked above, it is empty only for a non-reading.
+    if (const auto reported = reportedReading(capture)) {
+        const auto& reading = *reported;
+
+        // One declaration, both jobs. This is the same
+        // `versionConstraints(...)` the catalogue built to decorate the served
+        // form's `x-decimalPlaces` / `x-minimum` / `x-maximum`, so the numbers
+        // the operator's renderer honoured are literally the numbers checked
+        // here — the two can no longer drift apart, which is what having a
+        // second app-private precision key beside the framework's could not
+        // promise.
+        //
+        // `checkValue`, not `checkAction`: the value governed by the version
+        // is the *reported* concentration, which is the submitted reading
+        // times the dilution factor and therefore not a member of the action
+        // at all.
+        const auto constraints =
+            versionConstraints(kResultValueField, version.decimalPlaces.Value(),
+                               makeBound(version.specLowNum.Value(), version.specLowDen.Value()),
+                               makeBound(version.specHighNum.Value(), version.specHighDen.Value()));
+        for (const auto& violation : constraints.checkValue(kResultValueField, reading)) {
+            switch (violation.kind) {
+                case ::morph::forms::ConstraintViolationKind::PrecisionExceeded:
+                    // Refused, never rounded. A reading submitted finer than
+                    // the method supports is a claim about the instrument, so
+                    // rounding it would record a measurement the analyst never
+                    // made -- and storing it unrounded would put a number in
+                    // the database that no display of it ever shows.
+                    throw ValidationError{
+                        "CaptureConcentration: the reading carries more precision than analysis version " +
+                        std::to_string(*capture.analysisVersionId) + " declares"};
+                case ::morph::forms::ConstraintViolationKind::BelowMinimum:
+                case ::morph::forms::ConstraintViolationKind::AboveMaximum:
+                    // Flagged, never refused: an out-of-specification result
+                    // is the finding a laboratory exists to report (SENAITE's
+                    // own model). Refusing it would destroy the observation;
+                    // accepting it silently -- which is what happened while no
+                    // framework vocabulary could name this bound -- loses it
+                    // just as completely.
+                    outOfSpec = true;
+                    break;
+                default:
+                    break;
+            }
+        }
+        stored = reading;
+    } else {
+        const auto decoded = qualifierFromCode(*capture.qualifier);
+        if (!decoded.has_value()) {
+            // Fail-closed: an unknown code must not resolve to "we did not
+            // look", which is a claim nobody made.
+            throw ValidationError{"CaptureConcentration: unknown qualifier code '" + *capture.qualifier + "'"};
+        }
+        qualifier = *decoded;
+    }
+
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+
+    // Re-capturing one analysis version replaces its previous answer; the
+    // journal, not a second row, is where the superseded value lives.
+    for (auto& existing :
+         mapper.Query<db::ResultRecord>()
+             .Where(::Lightweight::FieldNameOf<&db::ResultRecord::sample>, "=", *sampleId)
+             .Where(::Lightweight::FieldNameOf<&db::ResultRecord::analysisVersion>, "=", *capture.analysisVersionId)
+             .All()) {
+        mapper.Delete(existing);
+    }
+
+    db::ResultRecord row;
+    row.sample = static_cast<std::uint64_t>(*sampleId);
+    row.analysisVersion = static_cast<std::uint64_t>(*capture.analysisVersionId);
+    row.qualifier = static_cast<int>(qualifier);
+    row.valueNum = stored ? std::optional{stored->numerator} : std::nullopt;
+    row.valueDen = stored ? std::optional{stored->denominator} : std::nullopt;
+    row.valueDp = stored ? static_cast<int>(stored->decimalPlaces.value) : 0;
+    row.outOfSpec = outOfSpec ? 1 : 0;
+    row.capturedBy = Lightweight::SqlAnsiString<64>{author};
+    row.capturedAt = nowMillis();
+    mapper.Create(row);
+
+    // A new result changes what the sample says, so it moves the base version
+    // an offline update targets — same reason a transition does.
+    auto sampleRow = loadSample(mapper, *sampleId);
+    sampleRow.version = sampleRow.version.Value() + 1;
+    mapper.Update(sampleRow);
+    writeResultCaptured(mapper, sampleRow, row, static_cast<std::int64_t>(version.analysis.Value()), author);
+
+    if (!(*opKey).empty()) {
+        // Inside this transaction, on this connection, and nowhere else: a
+        // capture that commits without its op-key beside it is a reading this
+        // server can no longer recognise as its own, and the redelivery it
+        // invites is then decided on stale-base grounds instead of skipped.
+        // Exactly-once is a claim about the *pair*, not about either write.
+        // The caller cannot make that claim from outside -- `SqlTransaction`
+        // has no nesting: its destructor issues a plain `SQLEndTran` and turns
+        // autocommit back on, so a second one over the same connection ends
+        // this one rather than nesting inside it.
+        markDecided(mapper, *opKey);
+    }
+
+    sqlTxn.Commit();
+    return toResultView(row);
+}
+
+ListDilutionModesResult SampleModel::execute(const ListDilutionModes& action) {
+    static_cast<void>(action);
+    return ListDilutionModesResult{.modes = {
+                                       {.id = std::string{kDilutionNeat}, .name = "Neat"},
+                                       {.id = std::string{kDilutionDiluted}, .name = "Diluted"},
+                                   }};
+}
+
+ResultView SampleModel::execute(const CaptureConcentration& action) {
+    requirePrincipal();
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
+    try {
+        static_cast<void>(loadAttached());
+        auto view = applyCapture(SampleId{*_sampleId}, action, ::morph::session::current()->principal);
+        _journal.recordSuccess<SampleModel>(action, view, nowMillis());
+        return view;
+    } catch (const LimsError& error) {
+        _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
+        throw;
+    }
+}
+
+ListResultsResult SampleModel::execute(const ListResults& action) {
+    static_cast<void>(action);
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
+    Lightweight::DataMapper mapper;
+    auto rows = mapper.Query<db::ResultRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ResultRecord::sample>, "=", *_sampleId)
+                    .All();
+    ListResultsResult result;
+    result.results.reserve(rows.size());
+    for (const auto& row : rows) {
+        result.results.push_back(toResultView(row));
+    }
+    return result;
+}
+
+bool SampleModel::alreadyDecided(const std::string& opKey) {
+    if (opKey.empty()) {
+        return false;
+    }
+    Lightweight::DataMapper mapper;
+    return !mapper.Query<db::ReplayedOpRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::ReplayedOpRecord::opKey>, "=", opKey)
+                .All()
+                .empty();
+}
+
+ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
+    requirePrincipal();
+    try {
+        if (!action.validate()) {
+            throw ValidationError{
+                "QueuedCapture: a sample, an author, an operation key and a usable capture are required"};
+        }
+        const auto& principal = ::morph::session::current()->principal;
+        if (action.capturedBy != principal) {
+            // A queued reading is replayed *as* the operator who took it, and
+            // nobody else. Without this, any client able to reach the server
+            // could file a lab result under a colleague's name -- which is the
+            // one thing a 21 CFR Part 11-style trail exists to prevent.
+            throw Forbidden{"QueuedCapture: replay must run as the capturing operator ('" + action.capturedBy +
+                            "'), not '" + principal + "'"};
+        }
+
+        // At-most-once, enforced here because the queue is documented not to
+        // enforce it -- and because the shipped queues disagree about whether
+        // they do anyway. Asked before the role: a redelivery of an operation that was already decided answers
+        // Skipped even from an operator whose role has been revoked since.
+        if (alreadyDecided(*action.operationKey)) {
+            return ReplayCaptureResult{.outcome = ReplayOutcome::Skipped, .sampleId = action.sampleId};
+        }
+
+        // A new operation needs the operator to hold some role at the sample's site now, at replay time, not when
+        // the reading was taken: no role anywhere is Forbidden, and so are a missing sample and the wrong site, which
+        // the operator must not be able to tell apart.
+        requireRoleSomewhere<QueuedCapture>();
+        Lightweight::DataMapper mapper;
+        std::optional<SampleView> found;
+        try {
+            found = toView(loadSample(mapper, *action.sampleId));
+        } catch (const NotFound&) {
+            // A missing sample resolves to no scope, which holds no role: refused as the guard refuses its own.
+            ::lims::detail::judge(action, std::optional<Scope>{Scope{}});
+            throw;
+        }
+        const auto& sample = *found;
+        requireAuthorized(action);
+        const auto serverVersion = SampleVersion{*sample.version};
+
+        // The two ways a queued update can be out of date, in the order that
+        // makes the flagged reason the *most specific* true one: a sample that
+        // has moved on in the lifecycle has also moved on in version, and
+        // "somebody published this while you were away" is a more actionable
+        // thing to tell a human than "your base was stale".
+        std::optional<ConflictReason> reason;
+        if (sample.state != SampleState::InProgress) {
+            reason = ConflictReason::LifecycleClosed;
+        } else if (*action.baseVersion != *serverVersion) {
+            reason = ConflictReason::StaleBase;
+        }
+
+        if (reason.has_value()) {
+            Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+            db::OfflineConflictRecord row;
+            row.sample = static_cast<std::uint64_t>(*action.sampleId);
+            row.baseVersion = static_cast<std::int32_t>(*action.baseVersion);
+            row.serverVersion = static_cast<std::int32_t>(*serverVersion);
+            row.reason = static_cast<int>(*reason);
+            row.status = static_cast<int>(ConflictStatus::Open);
+            // Verbatim, not re-encoded from the decoded struct: re-encoding
+            // would normalise away anything this build no longer understands,
+            // which is exactly the journal-payload-evolution failure the rung
+            // README warns about.
+            row.payload =
+                Lightweight::SqlDynamicAnsiString<4096>{::morph::model::ActionTraits<QueuedCapture>::toJson(action)};
+            row.detectedBy = Lightweight::SqlAnsiString<64>{principal};
+            row.detectedAt = nowMillis();
+            row.resolvedBy = Lightweight::SqlAnsiString<64>{std::string{}};
+            row.resolvedAt = 0;
+            row.resolutionNote = Lightweight::SqlAnsiString<255>{std::string{}};
+            mapper.Create(row);
+            // Flagging is terminal for the queued item: the conflict row owns
+            // it now, so a redelivery must not raise a second flag about the
+            // same edit.
+            markDecided(mapper, *action.operationKey);
+            sqlTxn.Commit();
+
+            ReplayCaptureResult flagged{
+                .outcome = ReplayOutcome::Conflicted,
+                .sampleId = action.sampleId,
+                .baseVersion = action.baseVersion,
+                .serverVersion = serverVersion,
+                .conflictId = ConflictId{static_cast<std::int64_t>(row.id.Value())},
+                .reason = *reason,
+            };
+            _journal.recordSuccess<SampleModel>(action, flagged, nowMillis());
+            return flagged;
+        }
+
+        static_cast<void>(applyCapture(action.sampleId, action.capture, action.capturedBy, action.operationKey));
+
+        ReplayCaptureResult applied{
+            .outcome = ReplayOutcome::Applied,
+            .sampleId = action.sampleId,
+            .baseVersion = action.baseVersion,
+            .serverVersion = SampleVersion{*serverVersion + 1},
+        };
+        _journal.recordSuccess<SampleModel>(action, applied, nowMillis());
+        return applied;
+    } catch (const LimsError& error) {
+        _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
+        throw;
+    }
+}
+
+ListConflictsResult SampleModel::execute(const ListConflicts& action) {
+    static_cast<void>(action);
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
+    Lightweight::DataMapper mapper;
+    auto rows = mapper.Query<db::OfflineConflictRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::OfflineConflictRecord::sample>, "=", *_sampleId)
+                    .All();
+    ListConflictsResult result;
+    result.conflicts.reserve(rows.size());
+    for (const auto& row : rows) {
+        result.conflicts.push_back(toConflictView(row));
+    }
+    return result;
+}
+
+ConflictView SampleModel::execute(const ResolveConflict& action) {
+    requirePrincipal();
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"ResolveConflict: a conflict and a stated reason are required"};
+        }
+        Lightweight::DataMapper mapper;
+        auto rows = mapper.Query<db::OfflineConflictRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::OfflineConflictRecord::id>, "=", *action.conflictId)
+                        .All();
+        if (rows.empty()) {
+            throw NotFound{"ResolveConflict: no such conflict"};
+        }
+        auto row = rows.front();
+        // Same reason as `execute(VerifyResult)`: a resolution belongs to the
+        // conflict's sample, whatever this handler is attached to.
+        _journal.rekey(std::to_string(row.sample.Value()));
+        if (static_cast<ConflictStatus>(row.status.Value()) != ConflictStatus::Open) {
+            throw Conflict{"ResolveConflict: conflict " + std::to_string(*action.conflictId) +
+                           " has already been resolved"};
+        }
+
+        if (action.resolution == ConflictResolution::ApplyAnyway) {
+            // Rebase: apply the queued capture against whatever the sample
+            // holds *now*. The reading's author stays the field operator who
+            // took it; the resolver is recorded separately, just below. Any
+            // rejection (the sample has since been published, say) propagates
+            // and leaves the conflict open rather than half-resolved.
+            const auto queued =
+                ::morph::model::ActionTraits<QueuedCapture>::fromJson(std::string{row.payload.Value().ToStringView()});
+            static_cast<void>(applyCapture(SampleId{static_cast<std::int64_t>(row.sample.Value())}, queued.capture,
+                                           queued.capturedBy));
+        }
+
+        row.status =
+            static_cast<int>(action.resolution == ConflictResolution::ApplyAnyway ? ConflictStatus::Applied
+                                                                                  : ConflictStatus::Discarded);
+        row.resolvedBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
+        row.resolvedAt = nowMillis();
+        row.resolutionNote = Lightweight::SqlAnsiString<255>{action.note};
+        mapper.Update(row);
+
+        auto view = toConflictView(row);
+        _journal.recordSuccess<SampleModel>(action, view, nowMillis());
+        return view;
+    } catch (const LimsError& error) {
+        _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
+        throw;
+    }
+}
+
+void SampleModel::requireEveryResultVerified() const {
+    Lightweight::DataMapper mapper;
+    for (const auto& result : mapper.Query<db::ResultRecord>()
+                                  .Where(::Lightweight::FieldNameOf<&db::ResultRecord::sample>, "=", *_sampleId)
+                                  .All()) {
+        if (mapper.Query<db::VerificationRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::VerificationRecord::result>, "=", result.id.Value())
+                .All()
+                .empty()) {
+            throw IllegalTransition{"result " + std::to_string(result.id.Value()) +
+                                    " has not been verified; a sample cannot be published with unverified results"};
+        }
+    }
+}
+
+VerificationView SampleModel::execute(const VerifyResult& action) {
+    requirePrincipal();
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"VerifyResult: a resultId is required"};
+        }
+        Lightweight::DataMapper mapper;
+        auto results = mapper.Query<db::ResultRecord>()
+                           .Where(::Lightweight::FieldNameOf<&db::ResultRecord::id>, "=", *action.resultId)
+                           .All();
+        if (results.empty()) {
+            throw NotFound{"VerifyResult: no such result"};
+        }
+        const auto& result = results.front();
+        const auto capturedBy = std::string{result.capturedBy.Value().ToStringView()};
+        const auto& principal = ::morph::session::current()->principal;
+
+        // Both halves of four eyes, the verifier role at the sample's site and not being the analyst who captured the
+        // reading, were judged by the action's guard before this ran.
+        const auto sampleId = static_cast<std::int64_t>(result.sample.Value());
+        // Journal this verification against the *sample* it belongs to, not
+        // against whatever this handler happened to be attached to. A
+        // verifier's handler is typically attached to nothing (it acts on a
+        // result id), so without this the entry lands under an empty entity
+        // key and the sample's own audit trail silently omits the second pair
+        // of eyes -- which is the one thing a four-eyes record exists to show.
+        _journal.rekey(std::to_string(sampleId));
+        const auto sample = toView(loadSample(mapper, sampleId));
+        if (sample.state != SampleState::ToBeVerified) {
+            throw IllegalTransition{
+                std::string{"results are verified while a sample is to-be-verified; this one is "} +
+                std::string{stateName(sample.state)}};
+        }
+
+        if (!mapper.Query<db::VerificationRecord>()
+                 .Where(::Lightweight::FieldNameOf<&db::VerificationRecord::result>, "=", *action.resultId)
+                 .All()
+                 .empty()) {
+            throw Conflict{"VerifyResult: result " + std::to_string(*action.resultId) + " is already verified"};
+        }
+
+        db::VerificationRecord row;
+        row.result = static_cast<std::uint64_t>(*action.resultId);
+        row.verifiedBy = Lightweight::SqlAnsiString<64>{principal};
+        row.verifiedAt = nowMillis();
+        mapper.Create(row);
+
+        VerificationView view{
+            .id = VerificationId{static_cast<std::int64_t>(row.id.Value())},
+            .resultId = action.resultId,
+            .sampleId = SampleId{sampleId},
+            .capturedBy = capturedBy,
+            .verifiedBy = principal,
+            .verifiedAt = timestampFromMillis(row.verifiedAt.Value()),
+        };
+        _journal.recordSuccess<SampleModel>(action, view, nowMillis());
+        return view;
+    } catch (const LimsError& error) {
+        _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
+        throw;
+    }
+}
+
+ListVerificationsResult SampleModel::execute(const ListVerifications& action) {
+    static_cast<void>(action);
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
+    Lightweight::DataMapper mapper;
+    ListVerificationsResult result;
+    for (const auto& resultRow : mapper.Query<db::ResultRecord>()
+                                     .Where(::Lightweight::FieldNameOf<&db::ResultRecord::sample>, "=", *_sampleId)
+                                     .All()) {
+        for (const auto& row :
+             mapper.Query<db::VerificationRecord>()
+                 .Where(::Lightweight::FieldNameOf<&db::VerificationRecord::result>, "=", resultRow.id.Value())
+                 .All()) {
+            result.verifications.push_back(VerificationView{
+                .id = VerificationId{static_cast<std::int64_t>(row.id.Value())},
+                .resultId = ResultId{static_cast<std::int64_t>(resultRow.id.Value())},
+                .sampleId = SampleId{*_sampleId},
+                .capturedBy = std::string{resultRow.capturedBy.Value().ToStringView()},
+                .verifiedBy = std::string{row.verifiedBy.Value().ToStringView()},
+                .verifiedAt = timestampFromMillis(row.verifiedAt.Value()),
+            });
+        }
+    }
+    return result;
+}
+
+AuditTrailResult SampleModel::execute(const GetAuditTrail& action) {
+    static_cast<void>(action);
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
+
+    // Deliberately no DataMapper in this method. "Reconstructible from the
+    // journal alone" is only a claim worth making if the reconstruction
+    // genuinely cannot consult the store, and the way to guarantee that is not
+    // to open it. `test_verification_audit.cpp` deletes every row the sample
+    // has and reconstructs the trail anyway.
+    AuditTrailResult trail;
+    for (const auto& entry : _journal.entries()) {
+        trail.steps.push_back(auditStepFor(entry));
+        const auto& step = trail.steps.back();
+        if (step.kind == AuditStepKind::LifecycleTransition && step.outcome == AuditOutcome::Succeeded) {
+            trail.states.push_back(step.state);
+        }
+    }
+    return trail;
+}
+
+void SampleModel::attachOfflineQueue(std::shared_ptr<::morph::offline::IOfflineQueue> queue) {
+    _queue = std::move(queue);
+}
+
+void SampleModel::onBackendChanged() {
+    if (!_queue) {
+        return;
+    }
+    for (const auto& item : _queue->drain()) {
+        try {
+            static_cast<void>(execute(::morph::model::ActionTraits<QueuedCapture>::fromJson(item.payload)));
+        } catch (const std::exception& error) {
+            // Unresolvable by definition: the payload does not decode, or it
+            // names a sample this server has never heard of, or it claims an
+            // author the replaying session is not. None of those get better by
+            // waiting, and leaving the item queued would block every later
+            // item behind it forever -- so it is journaled and dropped.
+            _journal.recordRejectedPayload<SampleModel>("QueuedCapture", item.payload, error.what(), nowMillis());
+        }
+        // Every drained item is markDone()d whatever the outcome: this path
+        // has no retry budget (docs/spec/offline/offline.md).
+        _queue->markDone(item.id);
+    }
+}
+
+void SampleModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
+    _journal.attach(std::move(log), std::move(entityKey));
+}
+
+// The guard's refusals reach the model through these; the template is defined here, out of the header.
+template void SampleModel::onGuardRefused<ReceiveSample>(ReceiveSample const&, std::exception const&);
+template void SampleModel::onGuardRefused<StartWork>(StartWork const&, std::exception const&);
+template void SampleModel::onGuardRefused<SubmitForVerification>(SubmitForVerification const&, std::exception const&);
+template void SampleModel::onGuardRefused<ReturnForRework>(ReturnForRework const&, std::exception const&);
+template void SampleModel::onGuardRefused<PublishSample>(PublishSample const&, std::exception const&);
+template void SampleModel::onGuardRefused<RejectSample>(RejectSample const&, std::exception const&);
+template void SampleModel::onGuardRefused<CaptureConcentration>(CaptureConcentration const&, std::exception const&);
+template void SampleModel::onGuardRefused<SaveSample>(SaveSample const&, std::exception const&);
+template void SampleModel::onGuardRefused<DeleteSample>(DeleteSample const&, std::exception const&);
+template void SampleModel::onGuardRefused<ResolveConflict>(ResolveConflict const&, std::exception const&);
+template void SampleModel::onGuardRefused<VerifyResult>(VerifyResult const&, std::exception const&);
+
+}  // namespace lims
