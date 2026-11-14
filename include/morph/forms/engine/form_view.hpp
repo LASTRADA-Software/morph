@@ -254,6 +254,8 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     };
     auto const dateInput = [&](bool date) {
         int const offset = date ? 0 : session.options().displayOffsetMinutes;
+        // The input shows and reads the session's pattern; the draft text below stays ISO.
+        std::string const pattern = date ? session.options().datePattern : session.options().dateTimePattern;
         return ui::dateTimeInput(ui::DateTimeInput{
             .value = [field, date, offset] { return draftInstant(trim(field->text().get()), date, offset); },
             .onChange =
@@ -266,6 +268,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             .showLabel = false,
             .field = fieldState(field),
             .common = controlCommon(field),
+            .pattern = pattern,
         });
     };
     if (spec.kind == FieldKind::Multiline) {

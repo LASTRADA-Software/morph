@@ -552,6 +552,27 @@ TEST_CASE("formView: a control an override draws keeps its help as a muted text 
     CHECK(mounted.backend.prop(*help, "role") == "Muted");
 }
 
+// Mutation: leave `.pattern` out of the form's date input (the property stays empty, and ISO shows).
+TEST_CASE("formView: a date field's input carries the session's date pattern, and the stored value stays ISO",
+          "[forms-engine][view]") {
+    Mounted const iso{kKinds};
+    CHECK(iso.backend.prop(iso.widget("DateTimeInput", "field_when"), "pattern").empty());
+    CHECK(iso.backend.prop(iso.widget("DateTimeInput", "field_day"), "pattern").empty());
+
+    morph::forms::FormSessionOptions options;
+    options.datePattern = "dd.MM.yyyy";
+    options.dateTimePattern = "dd.MM.yyyy HH:mm";
+    Mounted mounted{kKinds, {}, std::move(options)};
+    CHECK(mounted.backend.prop(mounted.widget("DateTimeInput", "field_when"), "pattern") == "dd.MM.yyyy HH:mm");
+    CHECK(mounted.backend.prop(mounted.widget("DateTimeInput", "field_day"), "pattern") == "dd.MM.yyyy");
+    CHECK(mounted.backend.prop(mounted.widget("DateTimeInput", "field_since"), "pattern") == "dd.MM.yyyy");
+
+    auto const instant = morph::forms::detail::engine::draftInstant("2024-01-01T10:00", false, 0);
+    REQUIRE(instant.has_value());
+    mounted.backend.setDateTime(mounted.widget("DateTimeInput", "field_when"), instant);
+    CHECK(mounted.form->field("when").text().peek() == "2024-01-01T10:00:00");
+}
+
 TEST_CASE("formView: a check box, a date-time input and a slider write their draft back to the field",
           "[forms-engine][view]") {
     Mounted mounted{kKinds};
