@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 /// @file
@@ -14,6 +17,17 @@
 /// Specified in `docs/spec/ui/shell_frame.md` (Declared parts).
 
 namespace morph::ui {
+
+/// @brief How long a dropped transport is shown as reconnecting before the client says it is offline: a retry that
+///        takes longer than this is no longer a blip.
+inline constexpr std::chrono::seconds kOfflineAfter{10};
+
+/// @brief The state of the client's connection to its server.
+enum class ConnectionState : std::uint8_t {
+    Connected,     ///< The transport is up.
+    Reconnecting,  ///< The transport dropped and is being retried.
+    Offline,       ///< The transport has been down for longer than a reconnect is expected to take.
+};
 
 /// @brief One option of the scope switcher.
 struct ShellOptionView {
@@ -140,6 +154,8 @@ struct ShellPrincipalView {
     std::string name;
     /// @brief The line under the name in the trigger.
     std::string subtitle;
+    /// @brief The initials drawn in the trigger's circle; empty for none.
+    std::string initials;
     /// @brief The menu's detail line.
     std::string detail;
     /// @brief The roles.
@@ -156,6 +172,32 @@ struct ShellPrincipalView {
     /// @brief Memberwise equality.
     /// @return Whether every member matches.
     bool operator==(ShellPrincipalView const&) const = default;
+};
+
+/// @brief The product mark and version.
+struct ShellBrandView {
+    /// @brief Whether the part is declared.
+    bool shown = false;
+    /// @brief The product's name.
+    std::string title;
+    /// @brief The icon's name in the theme's set; empty draws the title's first letter.
+    std::string icon;
+    /// @brief The version drawn in the foot; empty for none.
+    std::string version;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ShellBrandView const&) const = default;
+};
+
+/// @brief The help button.
+struct ShellHelpView {
+    /// @brief Whether the part is declared.
+    bool shown = false;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(ShellHelpView const&) const = default;
 };
 
 /// @brief The texts the frame draws that are not data.
@@ -188,6 +230,14 @@ struct ShellLabels {
     std::string close = "Close";
     /// @brief The sign-out entry's caption.
     std::string signOut = "Sign out";
+    /// @brief The help button's accessible name.
+    std::string help = "Help";
+    /// @brief The footer's text for a connected client.
+    std::string connected = "Connected";
+    /// @brief The footer's text for a client whose transport is being retried.
+    std::string reconnecting = "Reconnecting…";
+    /// @brief The footer's text for a client that has been unreachable for some time.
+    std::string offline = "Offline";
 
     /// @brief Memberwise equality.
     /// @return Whether every member matches.
@@ -204,6 +254,12 @@ struct ShellPartsView {
     ShellInboxView inbox;
     /// @brief The person's menu.
     ShellPrincipalView principal;
+    /// @brief The product mark and version.
+    ShellBrandView brand;
+    /// @brief The help button.
+    ShellHelpView help;
+    /// @brief The client's connection state, drawn in the sidebar's foot; empty draws no state.
+    std::optional<ConnectionState> connection;
     /// @brief The texts.
     ShellLabels labels;
 
@@ -228,6 +284,61 @@ struct ShellPartsHandlers {
     std::function<void(std::size_t)> onLocale;
     /// @brief A format was chosen, by its place.
     std::function<void(std::size_t)> onFormat;
+    /// @brief The help button was pressed.
+    std::function<void()> onHelp;
 };
+
+namespace detail {
+
+/// @brief The first letter of a word: its first code point, upper-cased where it is ASCII.
+/// @param word A non-empty word, UTF-8.
+/// @return The letter.
+[[nodiscard]] inline std::string firstLetter(std::string_view word) {
+    // The whole first code point: a lead byte says how many bytes follow it.
+    auto const lead = static_cast<unsigned char>(word.front());
+    std::size_t const length = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1;
+    std::string letter{word.substr(0, length)};
+    if (letter.size() == 1 && letter.front() >= 'a' && letter.front() <= 'z') {
+        letter.front() = static_cast<char>(letter.front() - 'a' + 'A');
+    }
+    return letter;
+}
+
+}  // namespace detail
+
+/// @brief The initials of a person's name: the first letter of its first and of its last word, upper-cased where the
+///        letter is ASCII. A word that ends in a full stop (a title such as `Dr.` or an abbreviation) is not a name
+///        and is skipped, unless every word is one. A one-word name has one initial.
+/// @param name The name, UTF-8.
+/// @return The initials; empty for a blank name.
+[[nodiscard]] inline std::string shellInitials(std::string_view name) {
+    std::vector<std::string_view> words;
+    for (std::size_t at = 0; at < name.size();) {
+        while (at < name.size() && (name[at] == ' ' || name[at] == '\t')) {
+            ++at;
+        }
+        std::size_t const start = at;
+        while (at < name.size() && name[at] != ' ' && name[at] != '\t') {
+            ++at;
+        }
+        if (at > start) {
+            words.push_back(name.substr(start, at - start));
+        }
+    }
+    std::vector<std::string_view> names;
+    for (std::string_view const word : words) {
+        if (!word.ends_with('.')) {
+            names.push_back(word);
+        }
+    }
+    if (names.empty()) {
+        names = words;
+    }
+    if (names.empty()) {
+        return {};
+    }
+    return names.size() == 1 ? detail::firstLetter(names.front())
+                             : detail::firstLetter(names.front()) + detail::firstLetter(names.back());
+}
 
 }  // namespace morph::ui

@@ -2,6 +2,7 @@
 
 #include "lims_screens.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -42,6 +43,7 @@
 #include "lims/org/dto/company_dto.hpp"
 #include "lims/org/models/auth_model.hpp"
 #include "lims/org/models/org_model.hpp"
+#include "lims_shell_parts.hpp"
 #include "org_screens.hpp"
 #include "scenario/scenario.hpp"
 #include "scenario/scenario_client.hpp"
@@ -594,6 +596,22 @@ void addLegacyScreens(ui::ScreenRegistry& screens, std::vector<ListedScreen>& li
     return found == names.end() ? module : found->second;
 }
 
+/// @brief What the shell can draw its parts against: the modules that list a screen, and whether the inbox's screen is
+///        registered.
+/// @param listed The screens the bundle registers.
+/// @return The availability.
+[[nodiscard]] ShellAvailability availableToShell(std::vector<ListedScreen> const& listed) {
+    ShellAvailability available;
+    for (ListedScreen const& screen : listed) {
+        if (!screen.module.empty() && std::ranges::find(available.modules, screen.module) == available.modules.end()) {
+            available.modules.push_back(screen.module);
+        }
+        available.approvals = available.approvals || screen.id == kApprovals;
+        available.about = available.about || screen.id == kAbout;
+    }
+    return available;
+}
+
 }  // namespace
 
 std::vector<std::string> allScreenIds() {
@@ -670,8 +688,9 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
             return std::unexpected(screen.registered.error());
         }
     }
-    morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = std::string{kApplicationId}, .version = "1.0"},
-                                 screens.catalog()};
+    morph::ui::UiRegistry served{
+        morph::ui::ApplicationInfo{.id = std::string{kApplicationId}, .version = std::string{kApplicationVersion}},
+        screens.catalog()};
     for (ListedScreen const& screen : listed) {
         morph::ui::CatalogEntry entry;
         entry.id = screen.id;
@@ -690,6 +709,9 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
     }
     if (auto added = addCatalogues(served); !added) {
         return std::unexpected(std::move(added.error()));
+    }
+    if (auto set = served.setShellParts(shellParts(availableToShell(listed)), shellReads()); !set) {
+        return std::unexpected(std::move(set.error()));
     }
     return served.build();
 }

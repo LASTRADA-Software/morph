@@ -10,6 +10,8 @@
 # build/linux-everything/examples/client/morph_lims_client; pass `-` to take the default when naming screens. The
 # script refuses a client older than any source under examples/lims or include/morph, since a grab from a stale client
 # looks right and is not.
+# LIMS_GRAB_WIDTH (default 1215) is the width in pixels of the expanded grab and of the mockup.
+# LIMS_GRAB_CLICK names the widgets (test ids, comma-separated) the client clicks before each grab.
 # SCREEN is a lims screen id; none names every screen of examples/lims/screens/grabs/*.tsv. Each row of those files is
 # tab-separated: screen id, mockup file (without `.dc.html`), the scenario person who signs in, then the heights of the
 # expanded grab, the compact grab and the mockup. Each shot runs in a fresh scratch directory with LIMS_SCENARIO=1. The
@@ -45,6 +47,11 @@ fi
 mkdir -p "$out_dir"
 out_dir=$(cd "$out_dir" && pwd)
 mockups=$repo_root/examples/lims/design/mockups
+# The expanded grab and the mockup are this many pixels wide; a mockup wider than the default is cut off by it.
+width_px=${LIMS_GRAB_WIDTH:-1215}
+# Widgets, by test id and comma-separated, that are clicked before each grab, so a menu is open in it.
+click_args=()
+[[ -n ${LIMS_GRAB_CLICK:-} ]] && click_args=(--grab-click "$LIMS_GRAB_CLICK")
 
 # Rows are the grabs files' lines, in file order.
 rows=()
@@ -78,14 +85,14 @@ for row in "${rows[@]}"; do
     selected=$((selected + 1))
     for width in expanded compact; do
         if [[ $width == expanded ]]; then
-            size=1215x$expanded
+            size=${width_px}x$expanded
         else
             size=390x$compact
         fi
         scratch=$(mktemp -d)
         if ! (cd "$scratch" && LIMS_SCENARIO=1 QT_QPA_PLATFORM=offscreen "$client" --ui=qt --app lims \
             --user "$person" --screen "$screen" --db "$scratch/app.db" --grab-size "$size" \
-            --grab "$out_dir/$screen-$width.png"); then
+            --grab "$out_dir/$screen-$width.png" "${click_args[@]}"); then
             rm -rf "$scratch"
             echo "$0: the client failed on $screen at the $width width" >&2
             exit 1
@@ -96,7 +103,7 @@ for row in "${rows[@]}"; do
     # A profile of its own: a Firefox that is already running owns the default one and refuses a second instance.
     profile=$(mktemp -d)
     rm -f "$out_dir/$mockup.png"
-    firefox --headless --no-remote --profile "$profile" --window-size="1215,$mockup_height" \
+    firefox --headless --no-remote --profile "$profile" --window-size="$width_px,$mockup_height" \
         --screenshot "$out_dir/$mockup.png" "file://$mockups/$mockup.dc.html" >/dev/null 2>&1 || true
     rm -rf "$profile"
     if [[ ! -s $out_dir/$mockup.png ]]; then

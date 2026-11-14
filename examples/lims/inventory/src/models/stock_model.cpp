@@ -429,6 +429,27 @@ ReservationView StockModel::execute(const GetSampleReservation& action) {
 
 // An action handler: the registry calls it on the instance, like every other.
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+SearchHits<LotStockView> StockModel::execute(const SearchStock& action) {
+    if (!action.validate()) {
+        throw ValidationError{"SearchStock: a company is required"};
+    }
+    if (action.query.empty()) {
+        return hitsOf<LotStockView>({});
+    }
+    std::vector<SearchHit> found;
+    for (LotStockView const& lot : execute(StockOnHand{.company = action.company, .item = {}}).lots) {
+        if (startsWithFolded(lot.itemCode, action.query) || startsWithFolded(lot.lotNumber, action.query)) {
+            found.push_back(SearchHit{.title = lot.itemCode,
+                                      .detail = lot.lotNumber,
+                                      .screen = std::string{hit_screens::kStock},
+                                      .params = {{"itemId", *lot.item}}});
+        }
+    }
+    return hitsOf<LotStockView>(std::move(found));
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 ::morph::table::Page<StockMovementView> StockModel::execute(const ListStockMovements& action) {
     if (!action.validate()) {
         throw ValidationError{"ListStockMovements: an item is required"};

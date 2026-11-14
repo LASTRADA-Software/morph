@@ -24,6 +24,7 @@
 #include <morph/ui/chat/protocol.hpp>
 #include <morph/ui/service.hpp>
 #include <morph/ui/shell_parts.hpp>
+#include <morph/ui/shell_parts_view.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <optional>
 #include <string>
@@ -348,7 +349,10 @@ public:
     std::shared_ptr<std::function<void()>> disconnectHook;
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
-    DroppingSource() = default;
+    /// @param bundle Builds the application's bundle; by default the env screen's.
+    explicit DroppingSource(
+        std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> bundle = &envBundle)
+        : _bundle{std::move(bundle)} {}
     ~DroppingSource() override { close(); }
     DroppingSource(DroppingSource const&) = delete;
     DroppingSource& operator=(DroppingSource const&) = delete;
@@ -360,7 +364,7 @@ public:
 
 protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& /*context*/) override {
-        auto served = envBundle();
+        auto served = _bundle();
         REQUIRE(served.has_value());
         _service = std::make_shared<ui::UiService>(std::move(*served), morph::model::detail::defaultDispatcher());
         _workers = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
@@ -380,6 +384,7 @@ protected:
     }
 
 private:
+    std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> _bundle;
     std::shared_ptr<ui::UiService> _service;
     std::unique_ptr<morph::exec::ThreadPoolExecutor> _workers;
 };
@@ -515,6 +520,69 @@ TEST_CASE("Client shell: env online follows the transport's drop and reconnect",
         CHECK_FALSE(source.online());
         (*source.connectHook)();
         REQUIRE(pumpUntil(context.owner(), [&backend] { return shown(backend, "online") == "on"; }));
+    }
+    source.close();
+}
+
+namespace {
+
+/// The env screen as one a signed-in person opens, with a product mark that carries a version.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> brandedBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::CatalogEntry entry;
+    entry.id = "probe.env";
+    entry.title = "Env";
+    if (auto added = served.addScreen(std::move(entry), std::string{kEnvScreen}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    ui::ShellParts parts;
+    parts.brand = ui::BrandMark{.title = "Probe", .icon = {}, .version = "v1"};
+    if (auto set = served.setShellParts(std::move(parts)); !set) {
+        return std::unexpected(std::move(set.error()));
+    }
+    return served.build();
+}
+
+}  // namespace
+
+// Mutation: drop the shell's showConnection call from the online listener (the foot stays "Connected"), never arm
+// the offline timer (it stays "Reconnecting…"), or leave the timer armed across a reconnect (it turns "Offline"
+// while the transport is up).
+TEST_CASE("Client shell: the foot follows the transport, reconnecting at once and offline after a while",
+          "[client][shell][parts]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    DroppingSource source{&brandedBundle};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.env"});
+        auto const state = [&backend] { return propOf(backend, "Text", "shell_connection", "text"); };
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Connected"; }));
+        CHECK(propOf(backend, "Text", "shell_version", "text") == "v1");
+
+        (*source.disconnectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Reconnecting…"; }));
+        context.clock().advance(ui::kOfflineAfter - std::chrono::seconds{1});
+        static_cast<void>(pumpUntil(context.owner(), [] { return false; }, std::chrono::milliseconds{50}));
+        CHECK(state() == "Reconnecting…");
+        context.clock().advance(std::chrono::seconds{1});
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Offline"; }));
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Connected"; }));
+
+        // A drop that heals within the grace never says offline.
+        (*source.disconnectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Reconnecting…"; }));
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Connected"; }));
+        context.clock().advance(ui::kOfflineAfter * 2);
+        static_cast<void>(pumpUntil(context.owner(), [] { return false; }, std::chrono::milliseconds{50}));
+        CHECK(state() == "Connected");
     }
     source.close();
 }
@@ -1068,8 +1136,7 @@ constexpr std::string_view kSecondScreen = R"({
   "vocab": "ui/1", "id": "probe.second",
   "view": { "kind": "text", "testId": "second", "text": "Second" } })";
 
-/// Two screens of one module, with a search over both, a count of the module, and an inbox naming a screen the
-/// catalog does not list.
+/// Two screens of one module, with a search over both, a count of the module, and an inbox opening one of them.
 std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> searchBundle() {
     ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}, probe::searchCatalog()};
     for (auto const& [id, text] : {std::pair{"probe.width", kWidthScreen}, std::pair{"probe.second", kSecondScreen}}) {
@@ -1097,7 +1164,7 @@ std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> searchBundle
                                      .resultsField = "hits",
                                      .contextField = {},
                                      .localeField = {}}};
-    parts.inbox = ui::InboxEntry{.screen = "probe.missing",
+    parts.inbox = ui::InboxEntry{.screen = "probe.second",
                                  .sources = {ui::ModuleCount{.module = "probe",
                                                              .model = "Probe_Model",
                                                              .action = "Probe_Count",
@@ -1148,12 +1215,10 @@ TEST_CASE("Client shell: Shift Enter opens every hit and the first one is the ac
         // the second's. The first hit's tab is the one left active.
         CAPTURE(tabCaptions(backend));
         CHECK(backend.prop(bars.front(), "selected") == "1");
-        // The catalog's facts are reported by the client.
         auto const once = [&problems](std::string_view needle) {
             return std::ranges::count_if(problems,
                                          [needle](std::string const& text) { return text.contains(needle); });
         };
-        CHECK(once("names the screen probe.missing, which the catalog does not list") == 1);
         // The module count and the inbox source read the same action.
         CHECK(once("the reply of Probe_Count is not a registered record") == 2);
     }

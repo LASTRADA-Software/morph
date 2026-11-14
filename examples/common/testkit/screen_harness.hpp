@@ -151,6 +151,10 @@ public:
                 .onProblem = [this](std::string const& problem) { _problems.push_back(problem); },
                 .onMounted = [this](std::string const& mounted) { _mounted.push_back(mounted); },
                 .downloads = _downloads});
+        // A shell with a scope switcher mounts its first screen once the switcher has answered.
+        if (_mounted.empty()) {
+            static_cast<void>(pumpUntil(_context.owner(), [this] { return !_mounted.empty(); }));
+        }
         if (_mounted.empty()) {
             throw std::runtime_error{"ScreenHarness: no screen mounted" +
                                      (_problems.empty() ? std::string{} : ": " + _problems.front())};

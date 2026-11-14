@@ -754,7 +754,7 @@ private:
             return;
         }
         if (reply.kind != "ok") {
-            pending.reject(std::make_exception_ptr(std::runtime_error(pending.what + " failed: " + reply.message)));
+            pending.reject(::morph::wire::controlFailure(pending.what, reply.message));
             return;
         }
         if (pending.state) {

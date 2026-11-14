@@ -6,6 +6,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/ui/author.hpp>
 
 #include "lims/billing/dto/invoice_dto.hpp"
 #include "lims/billing/dto/lease_dto.hpp"
@@ -124,6 +125,25 @@ public:
     /// @return The invoices by id.
     ListInvoicesResult execute(const ListPendingApprovals& action);
 
+    /// @brief Counts the invoices at a company that are drafts or submitted, among those the caller can see.
+    /// @param action The company.
+    /// @return The count; nothing is counted at a company the caller cannot see.
+    /// @throws ValidationError if no company is named.
+    OpenWork<InvoiceView> execute(const CountOpenInvoiceWork& action);
+
+    /// @brief Counts the submitted invoices at a company that the caller could approve now.
+    /// @param action The company.
+    /// @return The count, by the rule `ListPendingApprovals` lists by.
+    /// @throws ValidationError if no company is named.
+    OpenWork<InvoiceView> execute(const CountPendingApprovals& action);
+
+    /// @brief Finds invoices at a company whose number or client's name starts with the text, ignoring case, among
+    ///        those the caller can see.
+    /// @param action The text and the company.
+    /// @return At most eight hits, in id order, and how many invoices matched.
+    /// @throws ValidationError if no company is named.
+    SearchHits<InvoiceView> execute(const SearchInvoices& action);
+
     /// @brief Reads one invoice.
     /// @param action The invoice.
     /// @return It, with its lines.
@@ -181,7 +201,22 @@ BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::PostInvoice, "PostInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::PostInvoice, ::morph::effects::updates<lims::InvoiceView>)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListPendingApprovals, "ListPendingApprovals",
                        ::morph::model::Loggable::No)
+// The shell's open-work counts and search over the invoices.
+BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::CountOpenInvoiceWork, "CountOpenInvoiceWork",
+                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::CountPendingApprovals, "CountPendingApprovals",
+                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::SearchInvoices, "SearchInvoices", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::GetInvoice, "GetInvoice", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::GetInvoiceLease, "GetInvoiceLease", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListInvoices, "ListInvoices", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
+
+/// @brief Invoices keep no state between actions.
+///        A shell part reads it through one shared instance, which a screen document may name only for a model that
+///        keeps no state; the fact is declared here so that no translation unit sees the model without it.
+template <>
+struct morph::ui::author::ModelFacts<lims::InvoiceModel> {
+    /// @brief A shared instance is equivalent to a private one.
+    static constexpr bool stateless = true;
+};

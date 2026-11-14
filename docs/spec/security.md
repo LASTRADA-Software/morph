@@ -307,7 +307,9 @@ judge a token:
 - `authorize(ctx, modelType, actionType)` returns `true` only for a token with a
   valid signature and unexpired claims — and, if a `Policy` is supplied, one the
   policy admits. An invalid/absent/expired token → `false` → the server replies
-  `err "unauthorized"`.
+  `err "unauthorized"` (`wire::kUnauthorizedMessage`). Clients classify exactly that text, and a failed `register` or
+  `attach` that carries it as `wire::UnauthorizedError`, as the error kind `denied`; see
+  [the wire spec](core/wire.md#a-refusal-by-the-authoriser).
 - `authenticate(ctx)` returns the verified `principal`.
 - `admit(ctx, modelType, actionType)` answers both from **one** verification.
   It verifies the token, then calls `authenticate` and `authorize` through the

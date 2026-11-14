@@ -37,7 +37,7 @@ namespace morph::ui {
         std::string_view en;
         std::string_view de;
     };
-    static constexpr std::array<Entry, 24> kRows = {{
+    static constexpr std::array<Entry, 27> kRows = {{
         {"morph.shell.context", "Scope", "Bereich"},
         {"morph.shell.search", "Search", "Suche"},
         {"morph.shell.searchResults", "Search results", "Suchergebnisse"},
@@ -63,6 +63,9 @@ namespace morph::ui {
         {"morph.shell.signOut", "Sign out", "Abmelden"},
         {"morph.shell.help", "Help", "Hilfe"},
         {"morph.shell.loading", "Loading…", "Lädt…"},
+        {"morph.shell.connected", "Connected", "Verbunden"},
+        {"morph.shell.reconnecting", "Reconnecting…", "Verbindung wird wiederhergestellt…"},
+        {"morph.shell.offline", "Offline", "Offline"},
     }};
     bool const german = locale.starts_with("de");
     auto const found = std::ranges::find_if(kRows, [key](Entry const& row) { return row.key == key; });
@@ -102,7 +105,11 @@ namespace morph::ui {
                        .formats = shellText("morph.shell.formats", format),
                        .countFailed = shellText("morph.shell.countFailed", format),
                        .close = shellText("morph.shell.close", format),
-                       .signOut = shellText("morph.shell.signOut", format)};
+                       .signOut = shellText("morph.shell.signOut", format),
+                       .help = shellText("morph.shell.help", format),
+                       .connected = shellText("morph.shell.connected", format),
+                       .reconnecting = shellText("morph.shell.reconnecting", format),
+                       .offline = shellText("morph.shell.offline", format)};
 }
 
 /// @brief What the model asks of its client.
@@ -111,9 +118,11 @@ struct ShellModelOptions {
     std::function<std::string(std::string_view module)> moduleLabel;
     /// @brief The title of a screen in the catalog, for the inbox button.
     std::function<std::string(std::string_view screen)> screenTitle;
-    /// @brief Whether the catalog lists a screen. Empty: every screen is taken to be listed.
+    /// @brief Whether the catalog lists a screen. A part that names one the catalog does not list is left out, not
+    ///        reported: the authoriser hides it from this person. Empty: every screen is taken to be listed.
     std::function<bool(std::string_view screen)> screenListed;
-    /// @brief Whether the catalog lists a module. Empty: every module is taken to be listed.
+    /// @brief Whether the catalog lists a module. A part that names one the catalog does not list is left out, not
+    ///        reported: the authoriser hides it from this person. Empty: every module is taken to be listed.
     std::function<bool(std::string_view module)> moduleListed;
     /// @brief Whether the catalog says an action's reply holds a registered record, which is what makes a read of it
     ///        refresh when the record changes. Empty: every action is taken to.
@@ -150,7 +159,8 @@ public:
           _chosen{session.runtime(), Value{}},
           _answered{session.runtime(), !parts.context.has_value()},
           _searchText{session.runtime(), std::string{}},
-          _optionList{session.runtime(), std::vector<Option>{}} {
+          _optionList{session.runtime(), std::vector<Option>{}},
+          _connection{session.runtime(), std::nullopt} {
         _session->setContextHandler([this](Value const& value) { return requestContext(value); });
         checkDeclaration();
         if (_parts->context) {
@@ -186,8 +196,15 @@ public:
         out.search = searchView(format);
         out.inbox = inboxView(format);
         out.principal = principalView(format);
+        out.brand = brandView(format);
+        out.help = helpView();
+        out.connection = _connection.get();
         return out;
     }
+
+    /// @brief Sets the connection state the footer draws.
+    /// @param state The client's connection.
+    void setConnection(ConnectionState state) { _connection.set(state); }
 
     /// @brief One module's count. A tracked read.
     struct ModuleState {
@@ -200,13 +217,14 @@ public:
     };
 
     /// @brief Every declared module's count. A tracked read.
-    /// @return The counts, in declaration order, a denied one left out.
+    /// @return The counts, in declaration order; a denied one, and one of a module the catalog does not list, left
+    /// out.
     [[nodiscard]] std::vector<ModuleState> moduleCounts() const {
         std::vector<ModuleState> out;
         for (std::size_t index = 0; index < _parts->modules.size(); ++index) {
             ModuleCount const& declared = _parts->modules.at(index);
             AppRoot::QueryRead const read = _root->query(shell_names::count(index));
-            if (read.denied) {
+            if (read.denied || moduleHidden(declared.module)) {
                 continue;
             }
             ModuleState state{.module = declared.module, .count = std::nullopt, .failed = read.failed};
@@ -307,6 +325,28 @@ public:
     /// @return It; empty with no inbox.
     [[nodiscard]] std::string inboxScreen() const { return _parts->inbox ? _parts->inbox->screen : std::string{}; }
 
+    /// @brief The screen the help button opens.
+    /// @return It with its params; empty when the button runs an action, or none is declared.
+    [[nodiscard]] std::optional<Target> helpScreen() const {
+        if (!_parts->help || _parts->help->screen.empty()) {
+            return std::nullopt;
+        }
+        return Target{.screen = _parts->help->screen, .params = helpParams()};
+    }
+
+    /// @brief Runs the action the help button names. A failure is reported once, as any part's.
+    /// @return Whether an action was run: one is declared.
+    bool runHelp() {
+        if (!_parts->help || _parts->help->action.empty()) {
+            return false;
+        }
+        return _root->runMutation(shell_names::kHelp, Value{helpParams()}, [this](bool succeeded) {
+            if (!succeeded) {
+                problem("shell help: the action " + _parts->help->action + " failed");
+            }
+        });
+    }
+
     /// @brief Chooses a language from the person's menu.
     /// @param index The place in the menu's list.
     void chooseLocale(std::size_t index) {
@@ -336,19 +376,19 @@ private:
         bool operator==(Option const&) const = default;
     };
 
-    // What the catalog can say about the declaration, reported once at the start: a screen or module it does not list,
-    // and a count whose reply is not a registered record (it is then read on mount and on a context change only).
+    // A module or screen the catalog does not list is hidden from this person by the authoriser, so the part that
+    // names it is left out without a word. An unknown name is the server's refusal at load, not the client's report.
+    [[nodiscard]] bool moduleHidden(std::string const& module) const {
+        return !module.empty() && _options.moduleListed && !_options.moduleListed(module);
+    }
+
+    [[nodiscard]] bool screenHidden(std::string const& screen) const {
+        return _options.screenListed && !_options.screenListed(screen);
+    }
+
+    // What the catalog can say about the declaration, reported once at the start: a count whose reply is not a
+    // registered record (it is then read on mount and on a context change only).
     void checkDeclaration() const {
-        auto const screen = [this](std::string const& id, std::string const& part) {
-            if (_options.screenListed && !_options.screenListed(id)) {
-                problem("shell " + part + " names the screen " + id + ", which the catalog does not list");
-            }
-        };
-        auto const module = [this](std::string const& id, std::string const& part) {
-            if (_options.moduleListed && !_options.moduleListed(id)) {
-                problem("shell " + part + " names the module " + id + ", which the catalog does not list");
-            }
-        };
         auto const record = [this](ModuleCount const& count, std::string const& part) {
             if (_options.replyIsRecord && !_options.replyIsRecord(count.action)) {
                 problem("shell " + part + ": the reply of " + count.action +
@@ -356,13 +396,11 @@ private:
             }
         };
         for (std::size_t index = 0; index < _parts->modules.size(); ++index) {
-            record(_parts->modules.at(index), "count " + shell_names::count(index));
+            if (!moduleHidden(_parts->modules.at(index).module)) {
+                record(_parts->modules.at(index), "count " + shell_names::count(index));
+            }
         }
-        for (SearchSource const& source : _parts->search) {
-            module(source.module, "search");
-        }
-        if (_parts->inbox) {
-            screen(_parts->inbox->screen, "inbox");
+        if (_parts->inbox && !screenHidden(_parts->inbox->screen)) {
             for (std::size_t index = 0; index < _parts->inbox->sources.size(); ++index) {
                 record(_parts->inbox->sources.at(index), "inbox " + shell_names::inbox(index));
             }
@@ -397,7 +435,7 @@ private:
                 if (auto const args = record->find("args"); args != record->end()) {
                     if (ValueRecord const* const named = args->second.asRecord()) {
                         for (auto const& [name, argument] : *named) {
-                            std::string const token = "{" + name + "}";
+                            std::string const token = "{$" + name + "}";
                             for (std::size_t at = pattern.find(token); at != std::string::npos;
                                  at = pattern.find(token, at)) {
                                 std::string const shown = detail::textOf(argument, format);
@@ -431,11 +469,26 @@ private:
         return found == nullptr ? std::string{} : describe(*found, format);
     }
 
+    // A count is a JSON integer, or the wire form of a `morph::units::Quantity`, whose magnitude is a whole number: a
+    // `Quantity` is written as its exact value (`num`, `den`, `dp`), which a client reads as a decimal, and with a
+    // `unit` as a quantity. The unit is the application's and is not read. Anything else, and a negative number, is
+    // not a count.
     [[nodiscard]] std::optional<long long> countOf(Value const& reply, std::string const& field,
                                                    std::string const& query) const {
         Value const* const found = reply.field(field);
-        std::int64_t const* const number = found == nullptr ? nullptr : found->asInt();
-        if (number == nullptr || *number < 0) {
+        std::optional<std::int64_t> number;
+        if (found != nullptr) {
+            if (std::int64_t const* const plain = found->asInt()) {
+                number = *plain;
+            } else if (Decimal const* const exact = found->asDecimal();
+                       exact != nullptr && exact->value.denominator == 1) {
+                number = exact->value.numerator;
+            } else if (Quantity const* const quantity = found->asQuantity();
+                       quantity != nullptr && quantity->value.denominator == 1) {
+                number = quantity->value.numerator;
+            }
+        }
+        if (!number || *number < 0) {
             if (!reply.isNull()) {
                 problem("shell count " + query + ": the reply has no non-negative integer `" + field + "`");
             }
@@ -542,7 +595,7 @@ private:
         SearchSource const& declared = _parts->search.at(source);
         AppRoot::QueryRead const read = _root->query(shell_names::search(source));
         // The hits of a source the view does not draw are not the person's to open.
-        if (read.denied || read.failed) {
+        if (read.denied || read.failed || moduleHidden(declared.module)) {
             return out;
         }
         Value const* const list = read.value.field(declared.resultsField);
@@ -577,7 +630,7 @@ private:
         for (std::size_t source = 0; source < _parts->search.size(); ++source) {
             SearchSource const& declared = _parts->search.at(source);
             AppRoot::QueryRead const read = _root->query(shell_names::search(source));
-            if (read.denied) {
+            if (read.denied || moduleHidden(declared.module)) {
                 continue;
             }
             ShellSourceView shown;
@@ -618,7 +671,7 @@ private:
 
     [[nodiscard]] ShellInboxView inboxView(FormatContext const& format) const {
         ShellInboxView out;
-        if (!_parts->inbox) {
+        if (!_parts->inbox || screenHidden(_parts->inbox->screen)) {
             return out;
         }
         static_cast<void>(format);
@@ -662,6 +715,34 @@ private:
         return _options.catalogueLocales();
     }
 
+    [[nodiscard]] ShellBrandView brandView(FormatContext const& format) const {
+        ShellBrandView out;
+        if (!_parts->brand) {
+            return out;
+        }
+        out.shown = true;
+        out.title = translate(_parts->brand->title, format);
+        out.icon = _parts->brand->icon;
+        out.version = translate(_parts->brand->version, format);
+        return out;
+    }
+
+    // The button is left out where the catalog does not list its screen to this person.
+    [[nodiscard]] ShellHelpView helpView() const {
+        ShellHelpView out;
+        out.shown = _parts->help && (_parts->help->screen.empty() || !screenHidden(_parts->help->screen));
+        return out;
+    }
+
+    // The declared params as the document values their literals are, which is what a document's own literals become.
+    [[nodiscard]] ValueRecord helpParams() const {
+        auto const text = glz::write_json(_parts->help->params);
+        auto const json = text ? parseJson(*text) : std::unexpected(std::string{"unwritable"});
+        auto const value = json ? valueFromJson(*json) : std::unexpected(json.error());
+        ValueRecord const* const record = value ? value->asRecord() : nullptr;
+        return record == nullptr ? ValueRecord{} : *record;
+    }
+
     [[nodiscard]] ShellPrincipalView principalView(FormatContext const& format) const {
         ShellPrincipalView out;
         if (!_parts->principal) {
@@ -679,6 +760,7 @@ private:
             problem("shell principal: the reply has no `" + declared.nameField + "`");
         }
         out.name = memberText(read.value, declared.nameField, format);
+        out.initials = shellInitials(out.name);
         out.subtitle = memberText(read.value, declared.subtitleField, format);
         out.detail = memberText(read.value, declared.detailField, format);
         if (Value const* const roles = declared.rolesField.empty() ? nullptr : read.value.field(declared.rolesField)) {
@@ -727,6 +809,7 @@ private:
     reactive::Signal<bool> _answered;
     reactive::Signal<std::string> _searchText;
     reactive::Signal<std::vector<Option>> _optionList;
+    reactive::Signal<std::optional<ConnectionState>> _connection;
     mutable std::set<std::string> _reported;
     std::shared_ptr<bool> _alive = std::make_shared<bool>(true);
     std::unique_ptr<reactive::Effect> _follow;

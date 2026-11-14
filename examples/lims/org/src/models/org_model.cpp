@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <map>
 #include <morph/session/session.hpp>
+#include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
 #include <utility>
@@ -260,6 +261,39 @@ ListCompaniesResult OrgModel::execute(const ListCompanies& action) {
         }
     }
     std::ranges::sort(result.companies, {}, [](CompanyView const& company) { return *company.id; });
+    return result;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+ListMyScopesResult OrgModel::execute(const ListMyScopes& action) {
+    static_cast<void>(action);
+    auto const sites = execute(ListSites{}).sites;
+    ListMyScopesResult result;
+    for (CompanyView const& company : execute(ListCompanies{}).companies) {
+        std::size_t visibleSites = 0;
+        for (SiteView const& site : sites) {
+            visibleSites += site.companyId == company.id ? 1U : 0U;
+        }
+        // The company's base currency, then how many of its sites the caller can see: "EUR · 2 sites". The words are
+        // catalogue keys, so the client writes them in the session's language.
+        ScopeDetail detail{.t = "lims.shell.scope.currency",
+                           .fallback = "{$currency}",
+                           .args = {.currency = std::string{currencyName(company.baseCurrency)}, .count = {}}};
+        if (visibleSites > 0) {
+            detail.t = visibleSites == 1 ? "lims.shell.scope.site" : "lims.shell.scope.sites";
+            detail.fallback = visibleSites == 1 ? "{$currency} · {$count} site" : "{$currency} · {$count} sites";
+            detail.args.count = std::to_string(visibleSites);
+        }
+        result.scopes.push_back(ScopeOption{
+            .company = company.id,
+            .label = company.name,
+            .detail = std::move(detail),
+            .currency = company.baseCurrency,
+            .decimals = Count{::morph::math::Rational{static_cast<std::int64_t>(decimalsOf(company.baseCurrency)),
+                                                      ::morph::math::DecimalPlaces{0}}},
+        });
+    }
     return result;
 }
 

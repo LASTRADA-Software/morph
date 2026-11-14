@@ -5,6 +5,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/ui/author.hpp>
 
 #include "lims/inventory/dto/order_dto.hpp"
 #include "lims/inventory/dto/receipt_dto.hpp"
@@ -94,6 +95,12 @@ public:
     /// @param action Carries nothing.
     /// @return The requisitions by id; none for a caller with no principal.
     ListRequisitionsResult execute(const ListPendingRequisitions& action);
+
+    /// @brief Counts the submitted requisitions at a company that the caller could approve now.
+    /// @param action The company.
+    /// @return The count, by the rule `ListPendingRequisitions` lists by.
+    /// @throws ValidationError if no company is named.
+    OpenWork<RequisitionView> execute(const CountPendingRequisitions& action);
 
     /// @brief Registers a supplier of a company, with the currency its orders are priced in.
     /// @param action The company, name and currency.
@@ -203,6 +210,8 @@ BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListRequisitions, "ListRequ
                        ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListPendingRequisitions, "ListPendingRequisitions",
                        ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::CountPendingRequisitions, "CountPendingRequisitions",
+                       ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::CreateSupplier, "CreateSupplier")
 BRIDGE_REGISTER_EFFECTS(lims::CreateSupplier, ::morph::effects::changes<lims::SupplierView>)
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListSuppliers, "ListSuppliers", ::morph::model::Loggable::No)
@@ -221,3 +230,12 @@ BRIDGE_REGISTER_EFFECTS(lims::ReceiveGoods, ::morph::effects::changes<lims::Rece
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::GetReceipt, "GetReceipt", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListReceipts, "ListReceipts", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
+
+/// @brief Procurement keeps no state between actions.
+///        A shell part reads it through one shared instance, which a screen document may name only for a model that
+///        keeps no state; the fact is declared here so that no translation unit sees the model without it.
+template <>
+struct morph::ui::author::ModelFacts<lims::ProcurementModel> {
+    /// @brief A shared instance is equivalent to a private one.
+    static constexpr bool stateless = true;
+};

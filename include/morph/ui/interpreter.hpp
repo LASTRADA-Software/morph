@@ -496,7 +496,7 @@ namespace detail {
     }
 }
 
-/// @brief The default error kinds: the bridge's own failures, and `error` for the rest.
+/// @brief The default error kinds: the bridge's own failures, a server's refusal (`denied`), and `error` for the rest.
 /// @param error The failure.
 /// @return The kind.
 [[nodiscard]] inline std::string defaultErrorKind(std::exception_ptr const& error) {
@@ -510,6 +510,15 @@ namespace detail {
         return "timeout";
     } catch (backend::BackendChangedError const&) {
         return "backendChanged";
+    } catch (model::ActionRefusal const&) {
+        // An action's own refusal is an answer about its data, whatever its message says, never the authoriser's.
+        return "error";
+    } catch (wire::UnauthorizedError const&) {
+        // A refused control request (register, attach): its text carries the request's name before the refusal.
+        return "denied";
+    } catch (std::runtime_error const& refused) {
+        // The authoriser says no to an execute with this one text; no exception type tells it from another failure.
+        return std::string_view{refused.what()} == wire::kUnauthorizedMessage ? "denied" : "error";
     } catch (...) {
         return "error";
     }
@@ -3878,6 +3887,28 @@ public:
         slot.scope->core.initState(*slot.scope, slot);
         _core->session.noteWrite();
         slot.value->set(std::move(value));
+        return true;
+    }
+
+    /// @brief Runs a mutation of the app document, as a `run` command does.
+    /// @param name The mutation.
+    /// @param body The body it is run with.
+    /// @param done Called once the run settles, with whether it succeeded; empty for none.
+    /// @return Whether the document declares the mutation.
+    bool runMutation(std::string_view name, Value body, std::function<void(bool succeeded)> done = {}) {
+        detail::NameRef const* const found = _scope->find(name);
+        if (found == nullptr || found->category != detail::NameCategory::Mutation) {
+            return false;
+        }
+        detail::MutationRuntime& mutation = *found->mutation;
+        _core->runtime().batch([&] {
+            mutation.run(std::move(body), std::make_shared<detail::Bindings>(),
+                         [done = std::move(done)](bool succeeded, Value const& /*reply*/) {
+                             if (done) {
+                                 done(succeeded);
+                             }
+                         });
+        });
         return true;
     }
 

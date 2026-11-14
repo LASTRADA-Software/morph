@@ -7,6 +7,7 @@
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/table/query.hpp>
+#include <morph/ui/author.hpp>
 #include <optional>
 
 #include "lims/inventory/dto/consumption_dto.hpp"
@@ -96,6 +97,13 @@ public:
     /// see.
     /// @throws ValidationError if no company is named, or a row holds a value outside its enumeration.
     StockOnHandResult execute(const StockOnHand& action);
+
+    /// @brief Finds a company's lots whose item's code or lot number starts with the text, ignoring case, when the
+    ///        caller can see the company.
+    /// @param action The text and the company.
+    /// @return At most eight hits, in the order `StockOnHand` lists lots, and how many lots matched.
+    /// @throws ValidationError if no company is named, or a row holds a value outside its enumeration.
+    SearchHits<LotStockView> execute(const SearchStock& action);
 
     /// @brief Lists the movements of an item, through the table engine's query.
     /// @param action The item and the query.
@@ -189,6 +197,7 @@ BRIDGE_REGISTER_ACTION(lims::StockModel, lims::RecordOpeningLot, "RecordOpeningL
 BRIDGE_REGISTER_EFFECTS(lims::RecordOpeningLot, ::morph::effects::changes<lims::LotStockView>,
                         ::morph::effects::changes<lims::StockMovementView>)
 BRIDGE_REGISTER_ACTION(lims::StockModel, lims::StockOnHand, "StockOnHand", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::StockModel, lims::SearchStock, "SearchStock", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::StockModel, lims::ListStockMovements, "ListStockMovements", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::StockModel, lims::SetRecipe, "SetRecipe")
 BRIDGE_REGISTER_EFFECTS(lims::SetRecipe, ::morph::effects::changes<lims::RecipeView>)
@@ -200,3 +209,12 @@ BRIDGE_REGISTER_EFFECTS(lims::RecordConsumption, ::morph::effects::changes<lims:
                         ::morph::effects::changes<lims::LotStockView>,
                         ::morph::effects::changes<lims::StockMovementView>)
 // NOLINTEND(misc-const-correctness)
+
+/// @brief Stock keeps no state between actions.
+///        A shell part reads it through one shared instance, which a screen document may name only for a model that
+///        keeps no state; the fact is declared here so that no translation unit sees the model without it.
+template <>
+struct morph::ui::author::ModelFacts<lims::StockModel> {
+    /// @brief A shared instance is equivalent to a private one.
+    static constexpr bool stateless = true;
+};

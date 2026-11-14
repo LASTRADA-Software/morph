@@ -8,6 +8,7 @@
 // otherwise. `--dev`, or `MORPH_UI_DEV=1`, turns development mode on (spec 6 §21): the screens reload when the
 // server's documents change, and Ctrl+Shift+I opens the inspector on Qt Quick.
 
+#include <algorithm>
 #include <charconv>
 #include <chrono>
 #include <cstddef>
@@ -36,6 +37,8 @@
 #include <QCoreApplication>
 #include <QEvent>
 #include <QImage>
+#include <QMouseEvent>
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QString>
 #include <QTimer>
@@ -63,6 +66,8 @@ struct Grab {
     std::string path;
     int width = 1280;
     int height = 900;
+    /// Test ids of the widgets to click, in order, before the image is taken: a menu that is open in the grab.
+    std::vector<std::string> clicks;
 #if MORPH_CLIENT_HAS_QT_QUICK
     QQuickWindow* window = nullptr;
 #endif
@@ -135,6 +140,72 @@ bool takeGrabSize(std::vector<std::string>& args, Grab& grab) {
     return true;
 }
 
+/// Takes `--grab-click ID[,ID...]` (or `--grab-click=ID[,ID...]`) out of @p args into @p grab.
+/// @return Whether the option, when given, has a value.
+bool takeGrabClicks(std::vector<std::string>& args, Grab& grab) {
+    for (std::size_t index = 1; index < args.size();) {
+        std::string_view const arg = args.at(index);
+        if (arg == "--") {
+            break;
+        }
+        std::string ids;
+        if (arg == "--grab-click" && index + 1 < args.size()) {
+            ids = args.at(index + 1);
+            args.erase(args.begin() + static_cast<std::ptrdiff_t>(index),
+                       args.begin() + static_cast<std::ptrdiff_t>(index) + 2);
+        } else if (arg.starts_with("--grab-click=")) {
+            ids = std::string{arg.substr(13)};
+            args.erase(args.begin() + static_cast<std::ptrdiff_t>(index));
+        } else if (arg == "--grab-click") {
+            return false;
+        } else {
+            ++index;
+            continue;
+        }
+        for (std::size_t from = 0; from <= ids.size();) {
+            std::size_t const comma = std::min(ids.find(',', from), ids.size());
+            if (comma > from) {
+                grab.clicks.push_back(ids.substr(from, comma - from));
+            }
+            from = comma + 1;
+        }
+    }
+    return true;
+}
+
+#if MORPH_CLIENT_HAS_QT_QUICK
+/// @param item The item to search from.
+/// @param name The object name, which is a widget's test id.
+/// @return The first item at or under @p item with that name, or null.
+QQuickItem* findItem(QQuickItem* item, QString const& name) {
+    if (item->objectName() == name) {
+        return item;
+    }
+    for (QQuickItem* const child : item->childItems()) {
+        if (QQuickItem* const found = findItem(child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+/// Clicks the middle of the widget with the test id @p id in the grab's window.
+/// @return Whether such a widget was found.
+bool clickItem(Grab const& grab, std::string const& id) {
+    QQuickItem* const item = findItem(grab.window->contentItem(), QString::fromStdString(id));
+    if (item == nullptr) {
+        std::cerr << "client: --grab-click: no widget " << id << '\n';
+        return false;
+    }
+    QPointF const at = item->mapToScene(QPointF{item->width() / 2, item->height() / 2});
+    QMouseEvent press{QEvent::MouseButtonPress, at, at, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier};
+    QCoreApplication::sendEvent(grab.window, &press);
+    QMouseEvent release{QEvent::MouseButtonRelease, at, at, Qt::LeftButton, Qt::NoButton, Qt::NoModifier};
+    QCoreApplication::sendEvent(grab.window, &release);
+    return true;
+}
+#endif
+
 /// Saves the window's image to the grab's file; reports why not, and answers whether it did.
 bool saveGrab(Grab const& grab) {
 #if MORPH_CLIENT_HAS_QT_QUICK
@@ -179,6 +250,24 @@ void afterLayout(Grab const& grab, std::function<void()> then) {
     then();
 }
 
+/// Clicks the grab's widgets from @p next on, each given the time to lay out what it opened, then saves the image and
+/// quits with 0 when nothing went wrong.
+void clickThenSave(ui::AppContext& context, std::shared_ptr<int> problems, std::shared_ptr<Grab> shot,
+                   std::size_t next) {
+#if MORPH_CLIENT_HAS_QT_QUICK
+    if (next < shot->clicks.size() && shot->window != nullptr) {
+        if (!clickItem(*shot, shot->clicks.at(next))) {
+            context.quit(1);
+            return;
+        }
+        afterLayout(*shot, [&context, problems, shot, next] { clickThenSave(context, problems, shot, next + 1); });
+        return;
+    }
+#endif
+    bool const saved = saveGrab(*shot);
+    context.quit(*problems == 0 && saved ? 0 : 1);
+}
+
 /// The first mount's handler for `--exit-after-mount` and `--grab`: once the first screen mounted, quits with 0 when
 /// nothing went wrong, after saving the window's image when @p shot names a file.
 std::function<void(std::string const&)> quitOnceMounted(ui::AppContext& context, std::shared_ptr<int> problems,
@@ -195,10 +284,7 @@ std::function<void(std::string const&)> quitOnceMounted(ui::AppContext& context,
                 context.quit(*problems == 0 ? 0 : 1);
                 return;
             }
-            afterLayout(*shot, [&context, problems, shot] {
-                bool const saved = saveGrab(*shot);
-                context.quit(*problems == 0 && saved ? 0 : 1);
-            });
+            afterLayout(*shot, [&context, problems, shot] { clickThenSave(context, problems, shot, 0); });
         });
     };
 }
@@ -255,6 +341,10 @@ int run(int argc, char** argv) {
         grab->path = std::move(*path);
     } else {
         std::cerr << "client: --grab needs the file to write\n";
+        return 2;
+    }
+    if (!takeGrabClicks(args, *grab)) {
+        std::cerr << "client: --grab-click takes the test ids of the widgets to click, such as shell_nav_menu\n";
         return 2;
     }
     if (!takeGrabSize(args, *grab)) {

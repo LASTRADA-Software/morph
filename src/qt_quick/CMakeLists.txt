@@ -90,6 +90,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphPageRegion.qml
         qml/MorphCheckIndicator.qml
         qml/MorphChevron.qml
+        qml/MorphCaret.qml
     OUTPUT_TARGETS morph_qt_quick_qml_output_targets
 )
 set(MORPH_QT_QUICK_QML_OUTPUT_TARGETS ${morph_qt_quick_qml_output_targets} PARENT_SCOPE)

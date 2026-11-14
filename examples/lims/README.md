@@ -1519,8 +1519,8 @@ once. Ordering judges the purchaser's rule again before that write, as approving
 `tests/test_purchase_orders.cpp`: a unit price of 850.50 for a yen supplier is refused by the model (`fitsCurrency`),
 and the served form of `CreatePurchaseOrder` still advertises `x-decimalPlaces: 2`, for its nested price, because the
 declared precision is the type's. The currency is known only from the supplier's row, as an invoice's is from its
-client's (decision 33), and a stock quantity's unit from its item's (decision 42). Three places in two modules now carry an amount beside a
-field naming its unit and check the pair by hand.
+client's (decision 33), and a stock quantity's unit from its item's (decision 42). Three places in two modules now
+carry an amount beside a field naming its unit and check the pair by hand.
 
 ### 45. A goods receipt posts its value as an invoice does, and meets the same choice (hypothesis 1, second instance)
 
@@ -1724,6 +1724,55 @@ sentence, and never the message, which stays what lims logs and its tests read. 
 beside it, and a test holds both catalogues to the list. A refusal that withholds a scope or a record's existence
 (`Forbidden` and `NotFound` from the declared authorization) keeps its class code and carries no argument, so the
 words say no more than the message does.
+
+### 53. The shell's switcher, counts, search, inbox and principal menu are declared, and morph draws them
+
+lims declares its shell as data (`ShellParts`, `screens/lims_shell_parts.cpp`): the scopes the caller can see
+(`ListMyScopes`), each module's open work through that module's own count (`CountSamplesToVerify`,
+`CountOpenInvoiceWork`, `CountClosingPeriods`, `CountPendingRequisitions`), a search action per module
+(`SearchSamples`, `SearchInvoices`, `SearchAccounts`, `SearchStock`), the approvals inbox's sources
+(`CountPendingApprovals`, `CountPendingRequisitions`), and the signed-in person's name and roles
+(`GetSignedInUser`). One action type belongs to one model, so the counts are four actions composed by the
+declaration, not one action in four modules. morph's shell draws each part on both frontends and hands the chosen
+scope to every screen as `env("context")`. Nothing in morph knows a company, a module's work or a record kind.
+
+A scope is a company, which departs from the mockup's switcher: it offers a company and a site ("Rheinlab Analytik
+GmbH · Köln", with "All sites" beside each). The context is one JSON string or integer, and every list a screen reads
+is keyed by company, so the option's value is the company's id and a screen passes `env("context")` into a
+`CompanyId` member as it is; a value that named a company and a site would need a structured context, which
+`env("context")` is not. The option's second line is the company's base currency and how many of its sites the caller
+can see (`EUR · 2 sites`, worded from the catalogue in the session's language), and a person who holds a role at one
+site of a company sees that company with that one site counted. Where a screen needs a site, it asks for it itself.
+`kit::pageHead` reads the context today: the eyebrow names the module and the chosen company. No list
+passes it into a query yet.
+
+A count is a `Count`: `OpenWork<Source>` carries one, which a client reads as a whole, non-negative number whether it
+arrives as a plain integer or as the bare exact value `{num, den, dp}` that a `Count` is written as. `OpenWork<Source>`
+and `SearchHits<Source>` are defined once in org and instantiated per module with the record the answer is derived
+from, so a count is its own keyless, derived record: a sample's change refreshes the lab's count and no other
+module's.
+
+A count and a search answer about the companies the caller can see and nothing about the others: a company the caller
+cannot see counts zero and finds nothing, the same as a company with no work. A search matches the start of a
+reference, number, code or lot number (and of a client's or account's name), ignoring case, answers at most eight
+hits and the exact total. A hit names the screen that opens the record and its params; those screens are
+`lims.lab.sample`, `lims.billing.invoice`, `lims.ledger.accounts` and `lims.inventory.stock`, and nothing checks a
+hit's screen yet, because the server cannot read a screen named inside a reply.
+
+The bundle declares a module's count and search only when the module lists a screen, and the inbox only when
+`lims.approvals` is registered. The registry refuses a part whose module no registered screen has, or whose inbox
+screen is not registered, when the parts are set, so a part cannot be declared ahead of its screens. A person the
+catalog hides a module from (a person with no role has no billing or ledger screens) is drawn the shell without that
+module's count, search source or inbox, and the client reports nothing.
+
+The grabs of the org screens beside `Shell.dc.html` (expanded and compact, `scripts/shoot_lims.sh`) differ in these
+ways. Domain: the scope is a company, as above; the person's second line is empty, because a role is an enum name here
+and the mockup's "Lab director" is a title no model holds. Pending: the global search, the approvals inbox, the
+module groups with their counts and icons, and the page head appear as the module screens land, since the real
+bundle declares them only then. Framework: the chevron, the product mark, the help button, the person's avatar and the
+connection and version footer are drawn; the help button is a wide `?` where the mockup has a square icon button, the
+mark is round, the person's menu has no title line, and the product's "ERP" tag is not drawn. Screen: the switcher's
+second line shows the currency and the number of sites, where the mockup shows the chosen site and the currency.
 
 ### 58. The journal and the trial balance load every row they page or total (hypothesis 10, first instance)
 

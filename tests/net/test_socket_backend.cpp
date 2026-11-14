@@ -2128,10 +2128,14 @@ TEST_CASE("SocketBackend: a bind rejected by the server surfaces the server's ow
     REQUIRE(backend.waitForConnected());
 
     std::string error;
+    bool unauthorizedType = false;
     std::atomic<bool> done{false};
     backend.bindModel(privateBind("SbEchoModel"), callerExec).onErrorDetached([&](const std::exception_ptr& exc) {
         try {
             std::rethrow_exception(exc);
+        } catch (const morph::wire::UnauthorizedError& err) {
+            unauthorizedType = true;
+            error = err.what();
         } catch (const std::exception& err) {
             error = err.what();
         }
@@ -2140,6 +2144,8 @@ TEST_CASE("SocketBackend: a bind rejected by the server surfaces the server's ow
     REQUIRE(drainUntil(callerExec, done));
     // Same "<verb> failed: <server message>" wording the blocking verbs use.
     CHECK_THAT(error, Catch::Matchers::ContainsSubstring("register failed: unauthorized"));
+    // The type, not the text, is what a client classifies as the authoriser's refusal.
+    CHECK(unauthorizedType);
 }
 
 TEST_CASE("SocketBackend: a reconnect handler can re-bind through the structural surface without waiting",

@@ -258,6 +258,16 @@ failure is any other exception, so those replies are unchanged, and a peer that 
 `std::runtime_error` with the message. A refusal's `code` and arguments are not transcribed as `message` is: they are written by the application, not echoed
 from a request, and the client words them from a catalogue. See [`../ui/refusals.md`](../ui/refusals.md).
 
+### A refusal by the authoriser
+
+A server whose authoriser refuses a call (or that needs a principal nobody has signed in as) replies `err` with the
+message `wire::kUnauthorizedMessage`, exactly `unauthorized`. A refused `execute` settles with a `std::runtime_error`
+of that text; a refused `register`, `attach` or `instances` settles with `wire::UnauthorizedError`, whose text reads
+`"<request> failed: unauthorized"` (`wire::controlFailure` builds it). A client classifies both as the error kind
+`denied` (`ui::detail::defaultErrorKind`), which is the signal that its permitted set is stale and that a shell part
+it asked for is simply not its principal's to have. The classification is of that exact text only: a different
+message that merely starts with it is an ordinary failure, and so is an `ActionRefusal`, whatever its message says.
+
 ### Control bytes in string fields
 
 `encode` writes with `detail::EscapingWriteOpts`, a `glz::opts` refinement that

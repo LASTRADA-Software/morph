@@ -7,10 +7,13 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <morph/offline/replay_ledger.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "lims/billing/authorization/billing_authorization.hpp"
 #include "lims/billing/db/billing_entity.hpp"
@@ -282,6 +285,66 @@ ListInvoicesResult InvoiceModel::execute(const ListInvoices& action) {
     }
     std::ranges::sort(result.invoices, {}, [](InvoiceView const& invoice) { return *invoice.id; });
     return result;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+OpenWork<InvoiceView> InvoiceModel::execute(const CountOpenInvoiceWork& action) {
+    if (!action.validate()) {
+        throw ValidationError{"CountOpenInvoiceWork: a company is required"};
+    }
+    if (!isVisible(action.company)) {
+        return openWork<InvoiceView>(0);
+    }
+    std::int64_t open = 0;
+    Lightweight::DataMapper mapper;
+    for (InvoiceState const state : {InvoiceState::Draft, InvoiceState::Submitted}) {
+        open += static_cast<std::int64_t>(
+            mapper.Query<db::InvoiceRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::companyId>, "=", *action.company)
+                .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::state>, "=", static_cast<int>(state))
+                .All()
+                .size());
+    }
+    return openWork<InvoiceView>(open);
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+SearchHits<InvoiceView> InvoiceModel::execute(const SearchInvoices& action) {
+    if (!action.validate()) {
+        throw ValidationError{"SearchInvoices: a company is required"};
+    }
+    if (action.query.empty() || !isVisible(action.company)) {
+        return hitsOf<InvoiceView>({});
+    }
+    Lightweight::DataMapper mapper;
+    std::map<std::int64_t, std::string> clients;
+    for (auto const& client :
+         mapper.Query<db::BillingClientRecord>()
+             .Where(::Lightweight::FieldNameOf<&db::BillingClientRecord::companyId>, "=", *action.company)
+             .All()) {
+        clients.emplace(client.clientId.Value(), std::string{client.name.Value().ToStringView()});
+    }
+    auto rows = mapper.Query<db::InvoiceRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::companyId>, "=", *action.company)
+                    .All();
+    std::ranges::sort(rows, {}, [](db::InvoiceRecord const& row) { return row.id.Value(); });
+    std::vector<SearchHit> found;
+    for (auto const& row : rows) {
+        std::string const number{row.number.Value().ToStringView()};
+        auto const client = clients.find(row.clientId.Value());
+        std::string const clientName = client == clients.end() ? std::string{} : client->second;
+        if (!startsWithFolded(number, action.query) && !startsWithFolded(clientName, action.query)) {
+            continue;
+        }
+        // A draft has no number yet, and is known by its client.
+        found.push_back(SearchHit{.title = number.empty() ? clientName : number,
+                                  .detail = number.empty() ? std::string{} : clientName,
+                                  .screen = std::string{hit_screens::kInvoice},
+                                  .params = {{"invoiceId", static_cast<std::int64_t>(row.id.Value())}}});
+    }
+    return hitsOf<InvoiceView>(std::move(found));
 }
 
 }  // namespace lims

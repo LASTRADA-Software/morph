@@ -1714,7 +1714,8 @@ private:
         ShellParts parts;
         auto const text = glz::write_json(*declared);
         if (!text || glz::read_json(parts, *text)) {
-            refuse("/shell", "`shell` is the shell's parts: context, modules, search, inbox, principal, searchHint");
+            refuse("/shell",
+                   "`shell` holds the parts: context, modules, search, inbox, principal, brand, help, searchHint");
         }
         checkShellParts(parts);
         auto const checkNames = [](auto const& declarations) {
@@ -1741,6 +1742,7 @@ private:
         append(doc.scope.models, extra.models);
         append(doc.scope.state, extra.state);
         append(doc.scope.queries, extra.queries);
+        append(doc.scope.mutations, extra.mutations);
         doc.shell = std::move(parts);
     }
 
@@ -1800,6 +1802,20 @@ private:
             required(menu.nameField, "/shell/principal/nameField");
             distinct(menu.locales, "/shell/principal/locales", [](std::string const& tag) { return tag; });
             distinct(menu.formats, "/shell/principal/formats", [](std::string const& tag) { return tag; });
+        }
+        if (parts.brand) {
+            required(parts.brand->title, "/shell/brand/title");
+        }
+        if (parts.help) {
+            HelpEntry const& help = *parts.help;
+            if (help.screen.empty() == help.action.empty()) {
+                refuse("/shell/help", "the help button opens a screen or runs an action: name one of the two");
+            }
+            if (!help.action.empty()) {
+                required(help.model, "/shell/help/model");
+            } else if (!help.model.empty()) {
+                refuse("/shell/help/model", "a model belongs to an action; the help button opens a screen");
+            }
         }
     }
 

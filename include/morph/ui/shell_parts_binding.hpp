@@ -89,6 +89,15 @@ public:
             }
         };
         handlers.onFormat = [model](std::size_t index) { model->chooseFormat(index); };
+        handlers.onHelp = [this, model] {
+            if (auto const target = model->helpScreen()) {
+                if (_options.open) {
+                    _options.open(*target);
+                }
+            } else {
+                static_cast<void>(model->runHelp());
+            }
+        };
         _frame->setPartsHandlers(std::move(handlers));
         if (!_parts.modules.empty()) {
             _frame->navigator().setModuleGroups(true);
@@ -139,6 +148,10 @@ public:
     /// @return It.
     [[nodiscard]] ShellPartsModel& model() noexcept { return *_model; }
 
+    /// @brief Tells the frame the client's connection state, which its foot draws.
+    /// @param state The state.
+    void setConnection(ConnectionState state) { _model->setConnection(state); }
+
     /// @brief Whether the switcher has answered, failed, or none is declared. A tracked read.
     /// @return Whether the start screen may mount.
     [[nodiscard]] bool contextReady() const { return _model->contextReady(); }
@@ -168,10 +181,12 @@ private:
             if (state.count && *state.count > 0) {
                 badge = NavigatorBadge{.text = shellCountText(*state.count), .tone = Tone::Neutral};
             }
+            // The model leaves out every module the catalog does not list, so a module the navigator then does not
+            // list means the two disagree about the catalog: reported, once per module.
             if (!navigator.setModuleBadge(state.module, badge, state.failed) && _options.model.onProblem &&
                 _unlisted.insert(state.module).second) {
                 _options.model.onProblem("the shell's module count names " + state.module +
-                                         ", which the navigator does not list");
+                                         ", which the catalog lists and the navigator does not");
             }
         }
         for (ModuleCount const& declared : _parts.modules) {

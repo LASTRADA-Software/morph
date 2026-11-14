@@ -487,7 +487,12 @@ backend with a floating layer (Qt Quick) it floats over the content and takes no
 backend without one (the terminal) it is the rows under the parent, in flow. The recording backend records `open`,
 `width` and its children. `MenuEntry::heading` is a label in a menu that is not a command: drawn as muted text, exposed
 as static text and never chosen; `MenuTrigger::detail` is a button menu's second line under its label, which the
-terminal joins to the label with a dot.
+terminal joins to the label with a dot. `MenuTrigger::avatar` is a person's initials, drawn in a filled circle before
+the label (the terminal draws them in brackets, `[AM] Anna`); `MenuTrigger::caret` is the marker after the text: `Down`
+for a menu that opens, `UpDown` for one that chooses a value, such as a scope. The terminal's trigger always ends in a
+marker, since it has no frame to say it opens, so there `None` and `Down` both draw `▾` and `UpDown` draws `↕`. The
+recording backend records `avatar` and `caret` on every `setTrigger`. Qt Quick draws the circle and the chevron from
+shapes of its own, in the trigger's text colour, so no icon file is needed.
 
 ## RecordingBackend
 

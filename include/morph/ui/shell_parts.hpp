@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 /// @file
@@ -138,6 +139,44 @@ struct PrincipalMenu {
     bool operator==(PrincipalMenu const&) const = default;
 };
 
+/// @brief The application's product mark, at the top of the sidebar, and its version in the sidebar's foot.
+struct BrandMark {
+    /// @brief The product's name: a catalogue key or text.
+    std::string title;
+    /// @brief The name of an icon in the theme's icon set, drawn in the round mark; empty draws the title's first
+    ///        letter there.
+    std::string icon;
+    /// @brief The version string drawn beside the connection state in the sidebar's foot: a catalogue key or text;
+    ///        empty draws none.
+    std::string version;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(BrandMark const&) const = default;
+};
+
+/// @brief A parameter of the help entry: a string, a number or a flag.
+using HelpValue = std::variant<std::string, double, bool>;
+
+/// @brief The help button: what it opens, which is a screen or an action of a model.
+///
+/// Exactly one of `screen` and `action` is given. The screen opens as a tab, with `params` as its params; the action
+/// runs with `params` as its request, and an action must be a stateless model's, as every part's read is.
+struct HelpEntry {
+    /// @brief The screen the button opens; empty when the button runs an action.
+    std::string screen;
+    /// @brief The model's registered type id, for an action.
+    std::string model;
+    /// @brief The action's registered id; empty when the button opens a screen.
+    std::string action;
+    /// @brief The screen's params, or the action's request members, by name.
+    std::map<std::string, HelpValue> params;
+
+    /// @brief Memberwise equality.
+    /// @return Whether every member matches.
+    bool operator==(HelpEntry const&) const = default;
+};
+
 /// @brief The parts of a shell an application declares.
 struct ShellParts {
     /// @brief The scope switcher.
@@ -152,6 +191,10 @@ struct ShellParts {
     std::optional<PrincipalMenu> principal;
     /// @brief The search field's placeholder: a catalogue key or text.
     std::string searchHint;
+    /// @brief The product mark and version.
+    std::optional<BrandMark> brand;
+    /// @brief The help button.
+    std::optional<HelpEntry> help;
 
     /// @brief Memberwise equality.
     /// @return Whether every member matches.
@@ -160,7 +203,7 @@ struct ShellParts {
     /// @brief Whether any part is declared.
     /// @return `false` for a default `ShellParts`.
     [[nodiscard]] bool any() const noexcept {
-        return context || !modules.empty() || !search.empty() || inbox || principal;
+        return context || !modules.empty() || !search.empty() || inbox || principal || brand || help;
     }
 };
 
@@ -172,6 +215,8 @@ inline constexpr std::string_view kSearchText = "shellSearchText";
 inline constexpr std::string_view kContext = "shellContext";
 /// @brief The principal's query.
 inline constexpr std::string_view kPrincipal = "shellPrincipal";
+/// @brief The mutation the help button runs, when it names an action.
+inline constexpr std::string_view kHelp = "shellHelp";
 
 /// @brief The query of the module count at @p index of `ShellParts::modules`.
 /// @param index The place.
@@ -191,7 +236,7 @@ inline constexpr std::string_view kPrincipal = "shellPrincipal";
 /// @param name A name declared in the app document's scope.
 /// @return True when the lowering of the parts would declare it.
 [[nodiscard]] inline bool reserved(std::string_view name) {
-    if (name == kSearchText || name == kContext || name == kPrincipal) {
+    if (name == kSearchText || name == kContext || name == kPrincipal || name == kHelp) {
         return true;
     }
     for (std::string_view const prefix : {"shellModel", "shellCount", "shellSearch", "shellInbox"}) {
@@ -304,9 +349,16 @@ namespace detail {
         PrincipalMenu const& menu = *parts.principal;
         read(std::string{shell_names::kPrincipal}, menu.model, menu.action, menu.contextField, menu.localeField);
     }
+    // The button runs the action with its params as the request, so the mutation declares only where it goes.
+    std::string mutations;
+    if (parts.help && !parts.help->action.empty()) {
+        mutations = ",\"mutations\":{" + detail::jsonString(shell_names::kHelp) +
+                    ":{\"model\":" + detail::jsonString(alias(parts.help->model)) +
+                    ",\"action\":" + detail::jsonString(parts.help->action) + "}}";
+    }
     std::string const state =
         parts.search.empty() ? std::string{} : "\"" + std::string{shell_names::kSearchText} + "\":{\"init\":\"\"}";
-    return "{\"models\":{" + models + "},\"state\":{" + state + "},\"queries\":{" + queries + "}}";
+    return "{\"models\":{" + models + "},\"state\":{" + state + "},\"queries\":{" + queries + "}" + mutations + "}";
 }
 
 }  // namespace morph::ui

@@ -12,6 +12,8 @@
 
 #include "lims/lab/core/types.hpp"
 #include "lims/org/authorization/declared_guard.hpp"
+#include "lims/org/core/types.hpp"
+#include "lims/org/dto/shell_dto.hpp"
 
 /// @file
 /// Sample registration and the lifecycle state machine (README build order
@@ -251,6 +253,28 @@ struct RejectSample {
     static constexpr bool explicitSubmit = true;
 };
 
+/// @brief Counts the samples waiting for verification at a company: the lab's open work in the shell.
+struct CountSamplesToVerify {
+    /// @brief The company.
+    CompanyId company;
+
+    /// @brief Whether a company is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
+};
+
+/// @brief Finds samples at a company by the start of their reference.
+struct SearchSamples {
+    /// @brief The text typed.
+    std::string query;
+    /// @brief The company.
+    CompanyId company;
+
+    /// @brief Whether a company is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
+};
+
 }  // namespace lims
 
 /// @brief Reflects `SampleState` as its stable name rather than an integer.
@@ -267,3 +291,7 @@ struct glz::meta<lims::SampleState> {
 };
 
 BRIDGE_REGISTER_RECORD(lims::SampleView, "Lims_Sample")
+BRIDGE_REGISTER_RECORD(lims::OpenWork<lims::SampleView>, "Lims_OpenSampleWork", ::morph::record::keyless,
+                       ::morph::record::derivedFrom<lims::SampleView, lims::SiteView, lims::RoleAssignmentView>)
+BRIDGE_REGISTER_RECORD(lims::SearchHits<lims::SampleView>, "Lims_SampleHits", ::morph::record::keyless,
+                       ::morph::record::derivedFrom<lims::SampleView, lims::SiteView, lims::RoleAssignmentView>)

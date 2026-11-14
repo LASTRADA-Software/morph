@@ -98,6 +98,16 @@ QQuickItem const* textItemOf(char const* testId, QString const& text) {
     return *found;
 }
 
+// The item named @p name inside @p root, or null.
+QQuickItem const* namedItem(QQuickItem const& root, char const* name) {
+    for (QQuickItem* const item : root.findChildren<QQuickItem*>()) {
+        if (item->objectName() == QLatin1String{name}) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
 }  // namespace
 
 TEST_CASE(
@@ -3607,4 +3617,66 @@ TEST_CASE("qt_quick page: a region whose content does not fit shows its overflow
     auto const* const mark = item.findChild<QQuickItem*>(QStringLiteral("overflowMark"));
     REQUIRE(mark != nullptr);
     CHECK(mark->isVisible());
+}
+
+// Mutation: the frame never calls the trigger's avatar or caret (neither item is visible), leaves the brand above
+// the switcher out, or puts the foot above the navigator.
+TEST_CASE("qt_quick containers: the shell draws its brand, help button, avatar, chevron and foot", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    frame.showSignedIn(true);
+    morph::ui::ShellPartsView view;
+    view.brand = morph::ui::ShellBrandView{.shown = true, .title = "Lims", .icon = {}, .version = "v4.2"};
+    view.context = morph::ui::ShellContextView{
+        .shown = true,
+        .options = {morph::ui::ShellOptionView{.label = "Koeln", .detail = "EUR", .group = {}}},
+        .chosen = 0,
+        .enabled = true};
+    view.help = morph::ui::ShellHelpView{.shown = true};
+    view.search = morph::ui::ShellSearchView{.shown = true, .hint = "Search", .sources = {}};
+    view.principal = morph::ui::ShellPrincipalView{
+        .shown = true, .name = "Anna Meyer", .subtitle = "Lab director", .initials = "AM", .detail = {}};
+    view.connection = morph::ui::ConnectionState::Offline;
+    frame.setParts(view);
+    scene.settle();
+    auto const widgetItem = [](char const* testId) -> QQuickItem const& {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        REQUIRE(widget->item() != nullptr);
+        return *widget->item();
+    };
+    QQuickItem const& title = *textItemOf("shell_brand_title", QStringLiteral("Lims"));
+    QQuickItem const& mark = *textItemOf("shell_brand_mark", QStringLiteral("L"));
+    CHECK(title.isVisible());
+    CHECK(mark.isVisible());
+    QQuickItem const& context = widgetItem("shell_context");
+    QQuickItem const& brand = widgetItem("shell_brand");
+    CHECK(brand.mapToScene(QPointF{0, 0}).y() < context.mapToScene(QPointF{0, 0}).y());
+    // The product mark stands in the application's name's place.
+    CHECK_FALSE(widgetItem("shell_application").isVisible());
+
+    QQuickItem const& help = widgetItem("shell_help");
+    CHECK(help.isVisible());
+    CHECK(textItemOf("shell_help", QStringLiteral("?"))->isVisible());
+
+    QQuickItem const* const avatar = namedItem(widgetItem("shell_principal_menu"), "contentAvatar");
+    REQUIRE(avatar != nullptr);
+    CHECK(avatar->isVisible());
+    CHECK(namedItem(*avatar, "contentAvatarText")->property("text").toString() == "AM");
+    CHECK(namedItem(widgetItem("shell_principal_menu"), "contentCaret")->isVisible());
+    QQuickItem const* const switcherCaret = namedItem(context, "contentCaret");
+    REQUIRE(switcherCaret != nullptr);
+    CHECK(switcherCaret->isVisible());
+    CHECK(context.property("triggerCaret").toInt() == 2);
+
+    QQuickItem const& state = *textItemOf("shell_connection", QStringLiteral("Offline"));
+    QQuickItem const& version = *textItemOf("shell_version", QStringLiteral("v4.2"));
+    QQuickItem const& sidebar = widgetItem("shell_sidebar");
+    CHECK(state.isVisible());
+    CHECK(version.isVisible());
+    // The foot is at the sidebar's bottom, with the version at the far end of its line.
+    CHECK(state.mapToScene(QPointF{0, 0}).y() > sidebar.height() / 2);
+    CHECK(version.mapToScene(QPointF{0, 0}).x() > state.mapToScene(QPointF{0, 0}).x());
 }

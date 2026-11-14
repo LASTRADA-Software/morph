@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "lims/ledger/authorization/ledger_authorization.hpp"
 #include "lims/ledger/db/ledger_entity.hpp"
@@ -168,6 +170,46 @@ ListPeriodsResult LedgerModel::execute(const ListPeriods& action) {
     }
     std::ranges::sort(result.periods, {}, [](PeriodView const& period) { return period.start; });
     return result;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+OpenWork<PeriodView> LedgerModel::execute(const CountClosingPeriods& action) {
+    if (!action.validate()) {
+        throw ValidationError{"CountClosingPeriods: a company is required"};
+    }
+    if (!visible(action.company)) {
+        return openWork<PeriodView>(0);
+    }
+    Lightweight::DataMapper mapper;
+    auto const closing = static_cast<std::int64_t>(
+        mapper.Query<db::PeriodRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::PeriodRecord::companyId>, "=", *action.company)
+            .Where(::Lightweight::FieldNameOf<&db::PeriodRecord::state>, "=", static_cast<int>(PeriodState::Closing))
+            .All()
+            .size());
+    return openWork<PeriodView>(closing);
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+SearchHits<AccountView> LedgerModel::execute(const SearchAccounts& action) {
+    if (!action.validate()) {
+        throw ValidationError{"SearchAccounts: a company is required"};
+    }
+    if (action.query.empty()) {
+        return hitsOf<AccountView>({});
+    }
+    std::vector<SearchHit> found;
+    for (AccountView const& account : execute(ListAccounts{.company = action.company}).accounts) {
+        if (startsWithFolded(account.code, action.query) || containsFolded(account.name, action.query)) {
+            found.push_back(SearchHit{.title = account.code,
+                                      .detail = account.name,
+                                      .screen = std::string{hit_screens::kAccount},
+                                      .params = {{"accountId", *account.id}}});
+        }
+    }
+    return hitsOf<AccountView>(std::move(found));
 }
 
 // An action handler: the registry calls it on the instance, like every other.

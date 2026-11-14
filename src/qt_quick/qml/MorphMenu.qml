@@ -20,6 +20,10 @@ MorphWidget {
     property string triggerIcon: ""
     // A second line under the label, muted-looking by position; the accessible name is the label, then the detail.
     property string triggerDetail: ""
+    // Initials drawn in a circle before the label, and the marker after it: 0 none, 1 a chevron pointing down, 2 an
+    // up and a down chevron.
+    property string triggerAvatar: ""
+    property int triggerCaret: 0
     property int triggerEmphasis: 0
     // What the trigger shows as text: its label; for an icon-only trigger nothing when the theme draws the icon, the
     // glyph of the framework's icon of that name (`Theme.iconGlyphs`), and otherwise its accessible name, so it is
@@ -134,6 +138,8 @@ MorphWidget {
         contentItem: MorphPlainContent {
             control: trigger
             color: trigger.palette.buttonText
+            avatar: root.triggerAvatar
+            caret: root.triggerCaret
         }
         background: MorphButtonBackground {
             scheme: root.scheme

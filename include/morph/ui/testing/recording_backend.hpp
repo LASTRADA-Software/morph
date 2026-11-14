@@ -280,6 +280,13 @@ template <typename T, typename F>
 /// @return The enumerator's name.
 [[nodiscard]] inline std::string enumName(ButtonStyle style) { return style == ButtonStyle::Item ? "Item" : "Push"; }
 
+/// @brief A menu trigger's marker name.
+/// @param caret The marker.
+/// @return The enumerator's name.
+[[nodiscard]] inline std::string enumName(MenuCaret caret) {
+    return caret == MenuCaret::Down ? "Down" : caret == MenuCaret::UpDown ? "UpDown" : "None";
+}
+
 /// @brief A table's sort as the dump shows it: the column's index and the direction, or `none`.
 /// @param sort The sort.
 /// @return `<index>:Ascending`, `<index>:Descending` or `none`.
@@ -1240,7 +1247,8 @@ public:
         set("items", formatMenu(entries));
     }
 
-    /// @brief Records properties `label`, `icon` (when given) and `emphasis` (when not `Normal`) of the trigger.
+    /// @brief Records properties `label`, `icon` (when given), `emphasis` (when not `Normal`), `detail` (when given),
+    ///        `avatar` and `caret` of the trigger.
     /// @param trigger The trigger.
     void setTrigger(MenuTrigger const& trigger) override {
         set("label", formatText(trigger.label));
@@ -1253,6 +1261,9 @@ public:
         if (!trigger.detail.empty()) {
             set("detail", formatText(trigger.detail));
         }
+        // Set whatever they are, so a trigger that loses its avatar or marker records that it has.
+        set("avatar", formatText(trigger.avatar));
+        set("caret", enumName(trigger.caret));
     }
     void setOnActivate(std::function<void(std::vector<std::size_t>)> onActivate) override {
         callbacks().path = std::move(onActivate);

@@ -282,4 +282,14 @@ ListRequisitionsResult ProcurementModel::execute(const ListPendingRequisitions& 
     return result;
 }
 
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+OpenWork<RequisitionView> ProcurementModel::execute(const CountPendingRequisitions& action) {
+    if (!action.validate()) {
+        throw ValidationError{"CountPendingRequisitions: a company is required"};
+    }
+    auto const pending = execute(ListPendingRequisitions{}).requisitions;
+    return openWork<RequisitionView>(std::ranges::count(pending, action.company, &RequisitionView::company));
+}
+
 }  // namespace lims
