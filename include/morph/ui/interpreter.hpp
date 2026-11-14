@@ -9212,7 +9212,7 @@ inline forms::Submitter ScreenCore::aliasSubmits(ModelAlias* alias, std::string 
     };
 }
 
-// The session's locale, translations and display zone, as every form the engine builds here reads them.
+// The session's locale, translations, display zone and date patterns, as every form the engine builds here reads them.
 inline forms::FormSessionOptions ScreenCore::engineOptions() const {
     FormatContext const& format = session.formatting();
     forms::FormSessionOptions options{};
@@ -9220,6 +9220,8 @@ inline forms::FormSessionOptions ScreenCore::engineOptions() const {
     options.bcp47 = format.locale;
     options.translations = format.translations;
     options.displayOffsetMinutes = format.utcOffsetMinutes;
+    options.datePattern = format.datePattern;
+    options.dateTimePattern = format.dateTimePattern;
     return options;
 }
 

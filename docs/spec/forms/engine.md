@@ -257,7 +257,7 @@ before it.
 | Quantity | `TextInput` showing its unit, as a Decimal's (one unit); with alternatives, a `TextInput` with no unit and a unit `Select` beside it; switching converts the draft exactly |
 | Boolean | `Checkbox` labelled with the field |
 | Enum, Choice | `Select` (dropdown, or radio for `x-widget: radio`) keyed by each option's JSON literal; a Choice adds a `Busy` while its options load |
-| DateTime, EpochDateTime; Date, EpochDate | `DateTimeInput` (date-time in the display zone; date) |
+| DateTime, EpochDateTime; Date, EpochDate | `DateTimeInput` (date-time in the display zone; date); the input shows and reads `FormSessionOptions::datePattern` or `dateTimePattern` while they are set (`ScreenCore::engineOptions` fills them from the session's formatting), and the draft text stays ISO |
 | Slider | `Slider` over `x-min`..`x-max` by `x-step` |
 | Array | `TextInput`, comma-separated |
 | Object | `Panel` of its members' cells |

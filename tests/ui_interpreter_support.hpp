@@ -418,6 +418,12 @@ inline Catalog corpusCatalog() {
                 "x-unitAlternatives":[{"id":"g","display":"g","decimals":1,"num":1,"den":1000}],"x-order":0}},
               "required":["mass"]})"};
         }
+        // A date and a date-time, entered in the session's date patterns.
+        if (action == "Lims_ScheduleSample") {
+            return std::string{R"({"type":"object","title":"Schedule","properties":{
+              "day":{"type":["string","null"],"format":"date","title":"Day","x-order":0},
+              "at":{"type":["string","null"],"format":"date-time","title":"At","x-order":1}}})"};
+        }
         // A plain number shown and entered at 2 places.
         if (action == "Lims_MeasureTemperature") {
             return std::string{R"({"type":"object","title":"Measure","properties":{

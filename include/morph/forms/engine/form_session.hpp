@@ -58,6 +58,12 @@ struct FormSessionOptions {
     render::TranslationProvider translations;
     /// @brief The display zone for date-times, in minutes east of UTC.
     int displayOffsetMinutes = 0;
+    /// @brief The pattern a date field shows and reads (`ui::checkDatePattern`), such as `dd.MM.yyyy`; empty keeps
+    /// ISO.
+    ///        Only the input follows it: the draft text, and so the stored value, stays ISO.
+    std::string datePattern;
+    /// @brief The pattern a date-time field shows and reads, such as `dd.MM.yyyy HH:mm`; empty keeps ISO.
+    std::string dateTimePattern;
     /// @brief An extra readiness gate over the assembled body; empty means none. `Form<A>` puts
     ///        the action's own `validate()` here.
     std::function<bool(std::string_view bodyJson)> accepts;

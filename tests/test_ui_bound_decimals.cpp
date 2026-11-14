@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// A text input's and a form field's decimals follow a bound value, over the recording backend.
+// A text input's and a form field's decimals follow a bound value, and a form's date fields carry the session's date
+// patterns, over the recording backend.
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -318,4 +319,21 @@ TEST_CASE("bound decimals: a whole Decimal prefill loads into a plain Number fie
     h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":1,"reading":{"num":1000,"den":1,"dp":0}})");
     h.settle();
     CHECK(h.backend.prop(input, "text") == "1000.00");
+}
+
+// Mutation: leave the patterns out of `ScreenCore::engineOptions` (the form's date inputs show ISO).
+TEST_CASE("a form's date fields carry the session's date patterns", "[ui][form-dates]") {
+    constexpr std::string_view kSchedule = R"({
+      "vocab": "ui/1", "id": "schedule",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "form", "id": "sched", "model": "sample", "action": "Lims_ScheduleSample",
+                "submit": "explicit" }
+    })";
+    Harness h;
+    h.session.setDatePatterns("dd.MM.yyyy", "dd.MM.yyyy HH:mm");
+    auto const screen = h.mount(kSchedule);
+    INFO((h.diagnostics.empty() ? std::string{} : h.diagnostics.front().message()));
+    CHECK(h.diagnostics.empty());
+    CHECK(h.backend.prop(h.byTestId("DateTimeInput", "field_day"), "pattern") == "dd.MM.yyyy");
+    CHECK(h.backend.prop(h.byTestId("DateTimeInput", "field_at"), "pattern") == "dd.MM.yyyy HH:mm");
 }
