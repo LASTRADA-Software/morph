@@ -504,6 +504,8 @@ TEST_CASE("formView: an inline layout puts the label beside the control; a stack
     std::vector<int> const line = backend.children(cell);
     REQUIRE(line.size() == 2);
     CHECK(line.at(0) == inlined.widget("Text", "label_name"));
+    // A caption is in the `label` role, so the theme's `field.caption.case` shapes it.
+    CHECK(backend.prop(line.at(0), "role") == "Label");
     CHECK(backend.prop(line.at(0), "layout") == "fixed(16)/content");
     CHECK(backend.prop(line.at(1), "layout") == "stretch(1)/content");
     CHECK(backend.children(line.at(1)) == std::vector<int>{inlined.widget("TextInput", "field_name")});
@@ -524,6 +526,7 @@ TEST_CASE("formView: an inline layout puts the label beside the control; a stack
     std::vector<int> const column = stacked.backend.children(stacked.widget("Column", "cell_name"));
     REQUIRE(column.size() == 2);
     CHECK(column.at(0) == stacked.widget("Text", "label_name"));
+    CHECK(stacked.backend.prop(column.at(0), "role") == "Label");
     CHECK(column.at(1) == stacked.widget("TextInput", "field_name"));
     CHECK_FALSE(stacked.has("Row", "cell_name"));
 }

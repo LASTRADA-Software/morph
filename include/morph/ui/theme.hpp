@@ -990,9 +990,10 @@ struct KeywordSpec {
 };
 
 /// @brief The keyword tokens of the set.
-inline constexpr std::array<KeywordSpec, 4> kKeywords = {{
+inline constexpr std::array<KeywordSpec, 5> kKeywords = {{
     {.path = "shape.iconOnly", .names = {"default", "square"}},
     {.path = "font.overline.case", .names = {"none", "uppercase"}},
+    {.path = "field.caption.case", .names = {"none", "uppercase"}},
     {.path = "collapsible.marker", .names = {"shown", "none"}},
     {.path = "list.selection", .names = {"accent", "fill"}},
 }};
@@ -1197,7 +1198,7 @@ struct ThemeTokenSpec {
 /// @brief The closed `ui-theme/1` token set, with the `MorphUi` defaults: the colour roles, the opacity and the
 ///        spacing scale (`space.0` to `space.5`, one per spacing step) the built-in components read, and the semantic
 ///        sets (`ok`, `warn`, `err`, `info` with `bg`, `border` and `dot`).
-inline constexpr std::array<ThemeTokenSpec, 87> kThemeTokens = {{
+inline constexpr std::array<ThemeTokenSpec, 88> kThemeTokens = {{
     {.path = "color.surface", .kind = ThemeTokenKind::Color, .color = "#ffffff", .number = 0.0},
     {.path = "color.text", .kind = ThemeTokenKind::Color, .color = "#1d1d1f", .number = 0.0},
     {.path = "color.muted", .kind = ThemeTokenKind::Color, .color = "#6e6e73", .number = 0.0},
@@ -1355,6 +1356,16 @@ inline constexpr std::array<ThemeTokenSpec, 87> kThemeTokens = {{
      .stroke = "",
      .keyword = "default"},
     {.path = "font.overline.case",
+     .kind = ThemeTokenKind::Keyword,
+     .color = "",
+     .number = 0.0,
+     .shadow = {},
+     .family = "",
+     .stroke = "",
+     .keyword = "none"},
+    // How a field's caption draws: as written in the caption font (`none`), or in small letter-spaced capitals like
+    // an uppercase overline (`uppercase`).
+    {.path = "field.caption.case",
      .kind = ThemeTokenKind::Keyword,
      .color = "",
      .number = 0.0,

@@ -91,6 +91,16 @@ QtObject {
     }) : strongFont
     // A field's caption above its control.
     readonly property font captionFont: fontOf(captionPixels, Font.Normal)
+    // A field's caption: `captionFont`, or under `fieldCaptionCaps` the uppercase overline's face (small, strong,
+    // capitals, letter-spaced by 0.05 times the small size), built whole for the reason `overlineFont` is.
+    readonly property font fieldCaptionFont: fieldCaptionCaps ? Qt.font({
+        family: families[0],
+        families: families,
+        pixelSize: Math.round(smallPixels),
+        weight: strongWeight,
+        capitalization: Font.AllUppercase,
+        letterSpacing: 0.05 * smallPixels
+    }) : captionFont
     // A figure that stands out, such as a KPI's number: the display size, strong.
     readonly property font displayFont: fontOf(displayPixels, strongWeight)
     // A record's identity, such as a head's title where the screen asks for it: the headline size, strong.
@@ -260,6 +270,8 @@ QtObject {
     readonly property real tabInsetX: tabPaddingX > 0 ? tabPaddingX : spaceOf(3)
     // Whether the `overline` text role is drawn in small capitals: `font.overline.case`.
     property bool overlineCaps: false
+    // Whether a field's caption is drawn in small capitals: `field.caption.case`.
+    property bool fieldCaptionCaps: false
     readonly property real bodyPixels: bodySize > 0 ? bodySize : platformMetrics.font.pixelSize > 0
                                                                    ? platformMetrics.font.pixelSize
                                                                    : platformMetrics.height * 0.75

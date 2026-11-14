@@ -263,7 +263,7 @@ before it.
 | Object | `Panel` of its members' cells |
 | ObjectArray | a `forEach` of row panels, each with Remove, and an Add button |
 
-- **A cell** is the label and the control (which marks a required field, live, and describes itself with the help),
+- **A cell** is the label (a `ui::TextRole::Label` text, so the theme's `field.caption.case` shapes it) and the control (which marks a required field, live, and describes itself with the help),
   visible while the field is. The cell owns the caption, and the control owns the required mark and the unit: the mark is the
   control's alone, so a required field shows it once on every backend, and the control is told the field's label
   with `showLabel` false, so it draws no second caption. Each control carries the view tree's field state: read-only, required, the field's error as its
