@@ -220,7 +220,10 @@ the server takes `authenticate`'s answer from [`admit`](#the-admit-hook--both-an
 together with `authorize`'s. On every other envelope it authenticates, `register`
 included, it calls `authenticate` first and stamps the result before any other
 hook runs, so `authorize`, `authorizeRegister` and `authorizeInstance` see the
-verified principal there. Either way:
+verified principal there. On `execute` the same holds: `authorize` is called
+with the session as the client sent it except that `principal` is the verified
+identity (empty when `authenticate` returned `nullopt`), so a decision keyed on
+`ctx.principal` is keyed on the same value on every envelope kind. Either way:
 
 - If it returns a value, the server **overwrites `Context::principal`** with that
   verified value before building the `ScopedContext` around dispatch. From then
@@ -266,7 +269,7 @@ struct Admission {
 
 `RemoteServer` calls `admit` once per `execute`, in place of separate
 `authenticate` and `authorize` calls. The default calls `authenticate` and then
-`authorize`, so an authorizer that overrides only those two behaves as it would
+`authorize` with a `ctx` whose `principal` is the one `authenticate` returned, so an authorizer that overrides only those two behaves as it would
 if they were called directly. `SigningAuthorizer` overrides it to verify the
 token **once** and answer both from that verification: a token that expires
 between two verifications cannot be judged valid by one and expired by the

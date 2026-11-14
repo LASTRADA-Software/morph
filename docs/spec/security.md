@@ -316,7 +316,9 @@ judge a token:
   vtable, as the default does, so a subclass that overrides either keeps its
   own decision — a carve-out that needs no token, or a rule stricter than the
   token's. While `admit` runs, `SigningAuthorizer`'s own `authenticate` and
-  `authorize` answer from that verification instead of verifying again. `RemoteServer` (`dispatchExecute`) calls it once per `execute`, on
+  `authorize` answer from that verification instead of verifying again. `authorize` is called with a `ctx` whose
+  `principal` is the verified one (empty when the token does not verify), so a role or tenant check reading
+  `ctx.principal` sees the same value on `execute` as on every other envelope. `RemoteServer` (`dispatchExecute`) calls it once per `execute`, on
   entry, before any admission check, and once the call is allowed
   **overwrites** `env.session.principal` with the verified value before
   building the `ScopedContext`. So a model reading
