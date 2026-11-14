@@ -69,8 +69,8 @@ including a patch.
 
 ## Semantic versioning applies to source compatibility, not ABI
 
-morph's core is **header-only**, and its optional compiled parts (the Qt
-integration, the frontends, the generic client) are static libraries
+morph's core is a static library over headers that carry its templates, and its optional
+compiled parts (the Qt integration, the frontends, the generic client) are static libraries
 ([ARCHITECTURE.md](../ARCHITECTURE.md)): there is no shared-object ABI to
 preserve, and none is promised — every consumer recompiles against the
 headers on every release. What semantic versioning

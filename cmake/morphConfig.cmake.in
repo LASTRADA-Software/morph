@@ -4,7 +4,7 @@
 # configure_package_config_file(); see the "Install & export" section of the
 # root CMakeLists.txt.
 #
-# morph is header-only, but it is *not* dependency-free: morph::morph carries
+# morph::morph is a compiled static library and is *not* dependency-free: it carries
 # glaze::glaze (and Threads) in its interface, and morphTargets.cmake names
 # those imported targets literally. Resolving them here rather than leaving it
 # to the consumer is not a convenience -- an exported target file that names a

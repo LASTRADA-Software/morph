@@ -142,7 +142,7 @@ that turns it, under that thread's own name.
 
 ## One definition everywhere
 
-morph is header-only, so these macros change the bodies of inline functions.
+These macros change the bodies of inline functions, and most of morph is templates and inline functions in headers.
 A program in which one translation unit is compiled with
 `MORPH_TRACY_ENABLED` and another without it holds two definitions of the same
 inline function — an ODR violation the linker resolves by keeping one,

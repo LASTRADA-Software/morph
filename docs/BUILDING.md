@@ -12,8 +12,9 @@
 - **[core-cpp](https://github.com/contour-terminal/core-cpp) 0.7**, fetched
   through CPM. morph's timers run on its event loop, coroutines build on its
   `Task<T>`, and `morph::net` takes its base64 and wakeup primitive from it.
-  morph itself is header-only, but `core::base`, `core::net` and
-  `core::platform` are static libraries, so a project that links
+  `morph::morph` is a static library (templates and the macro-sensitive core
+  headers stay in headers), and `core::base`, `core::net` and
+  `core::platform` are static libraries too, so a project that links
   `morph::morph` builds them too.
 - **Optional:** Qt 6 (WebSocket transport, Qt Quick frontend), libunicode
   (terminal frontend, fetched if not installed), SQLite3 (durable offline
@@ -122,12 +123,14 @@ next to morph's.
 target. `MORPH_INSTALL` defaults to `PROJECT_IS_TOP_LEVEL`, so a vendored morph
 adds nothing to your project's install.
 
-### A bare include path (not recommended)
+### A bare include path (not supported)
 
-`-I<repo>/include` compiles, since morph is header-only, but then nothing
-supplies what the interface target would: Glaze at the pinned version, core-cpp
-and its static libraries, a C++23 standard library, the thread library, and each
-optional subsystem's own dependencies. Prefer `find_package`.
+`-I<repo>/include` is not enough: morph::morph is a compiled static library, and
+a bare include path neither links it nor supplies what the target carries: the
+generated `morph/export.hpp`, Glaze at the pinned version, core-cpp and its
+static libraries, a C++23 standard library, the thread library, and each
+optional subsystem's own dependencies. Link `morph::morph`, through
+`find_package` or `add_subdirectory`.
 
 ## API reference
 
