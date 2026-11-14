@@ -1419,19 +1419,19 @@ public:
         ::morph::async::Completion<R> typed{sink, cbExec};
         armDeadline(sink);
         if (!binding->bindInFlight) {
-            dispatchNow<Model, Action>(*binding, sink, std::move(action), cbExec, /*held=*/false);
+            dispatchNow<Model, Action>(*binding, sink, std::move(action), cbExec, /*held=*/false, _defaultSession);
             return typed;
         }
         std::weak_ptr<detail::HandlerBinding> const weak{binding};
-        binding->waiting.push_back([this, weak, sink, cbExec, held = std::make_shared<Action>(std::move(action))](
-                                       const std::exception_ptr& failure) {
+        binding->waiting.push_back([this, weak, sink, cbExec, held = std::make_shared<Action>(std::move(action)),
+                                    session = _defaultSession](const std::exception_ptr& failure) {
             auto strong = weak.lock();
             if (failure || !strong) {
                 sink->settleException(failure ? failure
                                               : std::make_exception_ptr(::morph::backend::HandlerDestroyedError{}));
                 return;
             }
-            dispatchNow<Model, Action>(*strong, sink, std::move(*held), cbExec, /*held=*/true);
+            dispatchNow<Model, Action>(*strong, sink, std::move(*held), cbExec, /*held=*/true, session);
         });
         return typed;
     }
@@ -1467,9 +1467,10 @@ public:
         ::morph::async::Completion<R> typed{sink, cbExec};
         armDeadline(sink);
         auto held = std::make_shared<Action>(std::move(action));
-        dispatchAttached(binding, sink, std::move(key), [this, sink, cbExec, held](detail::HandlerBinding& bound) {
-            dispatchNow<Model, Action>(bound, sink, std::move(*held), cbExec, /*held=*/true);
-        });
+        dispatchAttached(binding, sink, std::move(key),
+                         [this, sink, cbExec, held, session = _defaultSession](detail::HandlerBinding& bound) {
+                             dispatchNow<Model, Action>(bound, sink, std::move(*held), cbExec, /*held=*/true, session);
+                         });
         return typed;
     }
 
@@ -1498,29 +1499,31 @@ public:
         ::morph::async::Completion<R> typed{sink, cbExec};
         armDeadline(sink);
         auto held = std::make_shared<Action>(std::move(action));
-        whenIdle(*binding, [this, weak, sink, cbExec, held](const std::exception_ptr& failure) {
-            auto strong = weak.lock();
-            if (rejectIfGone(sink, strong, failure)) {
-                return;
-            }
-            if (strong->currentId.load() != 0U) {
-                dispatchNow<Model, Action>(*strong, sink, std::move(*held), cbExec, /*held=*/true);
-                return;
-            }
-            runSuperseded(startBind(strong,
-                                    ::morph::backend::detail::BindRequest{.typeId = strong->typeId,
-                                                                          .factory = strong->modelFactory,
-                                                                          .contextKey = strong->contextKey,
-                                                                          .primary = {},
-                                                                          .current = {}},
-                                    std::nullopt, [this, weak, sink, cbExec, held](const std::exception_ptr& settled) {
-                                        auto bound = weak.lock();
-                                        if (rejectIfGone(sink, bound, settled)) {
-                                            return;
-                                        }
-                                        dispatchNow<Model, Action>(*bound, sink, std::move(*held), cbExec, true);
-                                    }));
-        });
+        whenIdle(*binding,
+                 [this, weak, sink, cbExec, held, session = _defaultSession](const std::exception_ptr& failure) {
+                     auto strong = weak.lock();
+                     if (rejectIfGone(sink, strong, failure)) {
+                         return;
+                     }
+                     if (strong->currentId.load() != 0U) {
+                         dispatchNow<Model, Action>(*strong, sink, std::move(*held), cbExec, /*held=*/true, session);
+                         return;
+                     }
+                     runSuperseded(startBind(
+                         strong,
+                         ::morph::backend::detail::BindRequest{.typeId = strong->typeId,
+                                                               .factory = strong->modelFactory,
+                                                               .contextKey = strong->contextKey,
+                                                               .primary = {},
+                                                               .current = {}},
+                         std::nullopt, [this, weak, sink, cbExec, held, session](const std::exception_ptr& settled) {
+                             auto bound = weak.lock();
+                             if (rejectIfGone(sink, bound, settled)) {
+                                 return;
+                             }
+                             dispatchNow<Model, Action>(*bound, sink, std::move(*held), cbExec, true, session);
+                         }));
+                 });
         return typed;
     }
 
@@ -1683,18 +1686,19 @@ public:
         armDeadline(sink);
         auto makeCall = rawCallMaker(*binding, std::move(actionId), std::move(bodyJson), sink);
         if (!binding->bindInFlight) {
-            dispatchWith(*binding, sink, makeCall, cbExec, /*held=*/false);
+            dispatchWith(*binding, sink, makeCall, cbExec, /*held=*/false, _defaultSession);
             return typed;
         }
         std::weak_ptr<detail::HandlerBinding> const weak{binding};
-        binding->waiting.emplace_back([this, weak, sink, cbExec, makeCall](const std::exception_ptr& failure) {
+        binding->waiting.emplace_back([this, weak, sink, cbExec, makeCall,
+                                       session = _defaultSession](const std::exception_ptr& failure) {
             auto strong = weak.lock();
             if (failure || !strong) {
                 sink->settleException(failure ? failure
                                               : std::make_exception_ptr(::morph::backend::HandlerDestroyedError{}));
                 return;
             }
-            dispatchWith(*strong, sink, makeCall, cbExec, /*held=*/true);
+            dispatchWith(*strong, sink, makeCall, cbExec, /*held=*/true, session);
         });
         return typed;
     }
@@ -1763,8 +1767,8 @@ public:
         armDeadline(sink);
         auto makeCall = rawCallMaker(*binding, std::move(actionId), std::move(bodyJson), sink);
         dispatchAttached(binding, sink, std::move(instanceKey),
-                         [this, sink, cbExec, makeCall](detail::HandlerBinding& bound) {
-                             dispatchWith(bound, sink, makeCall, cbExec, /*held=*/true);
+                         [this, sink, cbExec, makeCall, session = _defaultSession](detail::HandlerBinding& bound) {
+                             dispatchWith(bound, sink, makeCall, cbExec, /*held=*/true, session);
                          });
         return typed;
     }
@@ -2260,14 +2264,16 @@ private:
     /// @param held    Whether the call waited for a bind: its caller has
     ///                returned, so a throw from the backend rejects the call
     ///                instead of propagating.
+    /// @param session The default session in force when the call was made,
+    ///                not when it is dispatched.
     template <typename Model, typename Action>
     void dispatchNow(
         detail::HandlerBinding& binding,
         const std::shared_ptr<detail::BridgeSink<typename ::morph::model::ActionTraits<Action>::Result>>& sink,
-        Action action, ::morph::exec::IExecutor* cbExec, bool held) {
+        Action action, ::morph::exec::IExecutor* cbExec, bool held, const ::morph::session::Context& session) {
         dispatchWith(
             binding, sink, [&] { return makeActionCall<Model, Action>(std::move(action), sink->stopSource); }, cbExec,
-            held);
+            held, session);
     }
 
     /// @brief `dispatchNow`'s body, for any way of building the call.
@@ -2281,13 +2287,17 @@ private:
     /// @param held     Whether the call waited for a bind: its caller has
     ///                 returned, so a throw from the backend rejects the call
     ///                 instead of propagating.
+    /// @param session  The default session in force when the call was made;
+    ///                 it is stamped on the call, so a switch of the default
+    ///                 while the call waits does not change who it runs as.
     template <typename R, typename MakeCall>
     void dispatchWith(detail::HandlerBinding& binding, const std::shared_ptr<detail::BridgeSink<R>>& sink,
-                      MakeCall&& makeCall, ::morph::exec::IExecutor* cbExec, bool held) {
+                      MakeCall&& makeCall, ::morph::exec::IExecutor* cbExec, bool held,
+                      const ::morph::session::Context& session) {
         // Its own zone, not part of `executeVia`'s: a call that waited for a
         // bind is dispatched later, from the bind's settle.
         MORPH_ZONE("Bridge::dispatchNow");
-        MORPH_ZONE_TEXT(_defaultSession.requestId);
+        MORPH_ZONE_TEXT(session.requestId);
         note("Bridge::dispatch");
         auto const raw = binding.currentId.load();
         if (raw == 0U) {
@@ -2300,7 +2310,7 @@ private:
         }
         sink->target(::morph::exec::detail::ModelId{raw});
         auto call = std::forward<MakeCall>(makeCall)();
-        call.session = _defaultSession;
+        call.session = session;
         try {
             _backend->executeInto(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec, sink);
         } catch (...) {

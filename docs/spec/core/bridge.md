@@ -358,7 +358,9 @@ continuation and every held call with `HandlerDestroyedError`; deregisters
 and removes the binding from tracking.
 
 **`setDefaultSession(session)`** / **`defaultSession()`** installs a default
-`morph::session::Context` that is attached to every `executeVia()` call.
+`morph::session::Context` that is attached to every `executeVia()` call. The
+copy is taken when the call is made: a call held behind a bind or an attach keeps
+the session in force at `execute()`, whatever the default is when it is dispatched.
 `setDefaultSession` also pushes the new session to the active backend via
 `IBackend::setSession`, so every control envelope
 (`register`/`registerShared`/`attach`/`assign`/`deregister`) the backend
