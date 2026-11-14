@@ -195,10 +195,11 @@ struct IAuthorizer {
     /// `authenticate` and `authorize`, so both decisions come from one look at
     /// the session. The default calls `authenticate` and then `authorize`,
     /// which keeps an authorizer that overrides only those two exactly as it
-    /// was. A verifying authorizer overrides it to verify the token once and
-    /// take both answers from that verification: a token that expires between
-    /// two verifications cannot be judged valid by one and expired by the
-    /// other.
+    /// was, except that `authorize` is given a copy of @p ctx whose `principal`
+    /// is the one `authenticate` returned (empty for `nullopt`), so a decision
+    /// keyed on `ctx.principal` never reads the client's claim. A verifying authorizer overrides it to verify the
+    /// token once and take both answers from that verification: a token that expires between two verifications cannot
+    /// be judged valid by one and expired by the other.
     /// @param ctx        Per-call session attached by the client.
     /// @param modelType  String id of the target model type.
     /// @param actionType String id of the action being invoked.
@@ -207,7 +208,13 @@ struct IAuthorizer {
                                           // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                           std::string_view modelType, std::string_view actionType) const {
         auto principal = authenticate(ctx);
-        return Admission{.allowed = authorize(ctx, modelType, actionType), .principal = std::move(principal)};
+        if (principal.value_or(std::string{}) == ctx.principal) {
+            return Admission{.allowed = authorize(ctx, modelType, actionType), .principal = std::move(principal)};
+        }
+        // `authorize` reads the principal the server is about to make authoritative, never the client's claim.
+        Context verified = ctx;
+        verified.principal = principal.value_or(std::string{});
+        return Admission{.allowed = authorize(verified, modelType, actionType), .principal = std::move(principal)};
     }
 
     /// @brief Optional per-**instance** authorization hook — the multi-tenant gate.
