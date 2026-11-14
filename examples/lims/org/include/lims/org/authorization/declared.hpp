@@ -103,24 +103,20 @@ template <typename Action>
 struct Authorization;
 
 /// @brief Whether @p Action declares a specific role.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresRole = requires {
     { Authorization<Action>::role } -> std::convertible_to<LimsRole>;
 };
 
 /// @brief Whether @p Action declares that some role, whichever, is enough.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresAnyRole = requires { requires Authorization<Action>::anyRole; };
 
 /// @brief Whether @p Action declares a rule.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresRule = DeclaresRole<Action> || DeclaresAnyRole<Action>;
 
 /// @brief Whether @p Action's rule leaves the scope to the model, which passes it to `requireAuthorizedIn`.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresModelScope = DeclaresRule<Action> && requires { requires Authorization<Action>::scopeFromModel; };
 
@@ -138,7 +134,6 @@ template <typename Action>
 }
 
 /// @brief Whether @p Action's rule names the scope its payload holds.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresScope = DeclaresRule<Action> && requires(Action const& action) {
     { Authorization<Action>::scopeOf(action) } -> std::convertible_to<Scope>;
@@ -146,20 +141,17 @@ concept DeclaresScope = DeclaresRule<Action> && requires(Action const& action) {
 
 /// @brief Whether @p Action's rule declares that the scope it names is one the payload spells out, which a refusal may
 ///        therefore repeat.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresScopeInPayload = DeclaresRule<Action> && requires { requires Authorization<Action>::scopeInPayload; };
 
 /// @brief Whether @p Action's rule declares a state check that runs once the principal holds the role where the
 ///        action's subject is visible to them and before anything about the subject is read for the verdict: the
 ///        value, the creator and the other facts of a subject the principal has no standing over stay unread.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresStateCheck = DeclaresRole<Action> && DeclaresScope<Action> &&
                              requires(Action const& action) { Authorization<Action>::checkState(action); };
 
 /// @brief Whether @p Action's rule declares a value limit. A limit is judged in a scope, so it needs one.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresValueLimit =
     DeclaresScope<Action> && requires(Action const& action, std::string_view principal, Scope const& scope) {
@@ -170,7 +162,6 @@ concept DeclaresValueLimit =
     };
 
 /// @brief Whether @p Action is the second half of a declared separation-of-duties pair.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresSeparation = DeclaresRule<Action> && requires(Action const& action) {
     { Authorization<Action>::separatedFrom } -> std::convertible_to<std::string_view>;
@@ -179,7 +170,6 @@ concept DeclaresSeparation = DeclaresRule<Action> && requires(Action const& acti
 };
 
 /// @brief Whether @p Action refuses a caller who is its own subject.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresNotOnSelf = DeclaresRule<Action> && requires(Action const& action) {
     requires Authorization<Action>::notOnSelf;
@@ -275,7 +265,6 @@ struct SeparatedFrom {
 
 /// @brief Whether @p Action declares several separation-of-duties pairs: `separations`, and `firstPerformersOf`
 ///        answering who performed each pair's first half on the same subject, in the same order.
-/// @tparam Action The action type.
 template <typename Action>
 concept DeclaresSeparations = DeclaresRule<Action> && requires(Action const& action) {
     { Authorization<Action>::separations.size() } -> std::convertible_to<std::size_t>;
@@ -448,7 +437,6 @@ void requireAuthorizedIn(Action const& action, Scope const& scope) {
 
 /// @brief Whether @p Action's rule is waived while an exemption the declaration names holds: the first role
 ///        assignment on a lab with no supervisor.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresBootstrap = DeclaresRule<Action> && requires {
     { Authorization<Action>::bootstrapOpen() } -> std::convertible_to<bool>;
@@ -456,7 +444,6 @@ concept DeclaresBootstrap = DeclaresRule<Action> && requires {
 
 /// @brief Whether @p Action's rule is checked by its handler, because the handler answers something else first, and
 ///        so the action declares no guard.
-/// @tparam Action The action.
 template <typename Action>
 concept DeclaresCheckedInHandler =
     DeclaresRule<Action> && requires { requires Authorization<Action>::checkedInHandler; };

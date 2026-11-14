@@ -34,7 +34,6 @@ namespace lims {
 
 /// @brief Whether a refusal of @p Action by its guard is recorded in the sample's own audit trail: the actions
 ///        whose handler records its own refusals there.
-/// @tparam Action The action.
 template <typename Action>
 concept RefusalRecordedInTrail =
     std::same_as<Action, ReceiveSample> || std::same_as<Action, StartWork> ||

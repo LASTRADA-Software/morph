@@ -75,7 +75,7 @@ TEST_CASE("plate, expanded: the samples to place beside the 12-column plate, A3 
     // The legend's chips are round mono outline badges.
     CHECK(screen.find("Row", "legend").has_value());
     std::size_t chips = 0;
-    for (int const badge : screen.backend().all("Badge")) {
+    for (int const badge : screen.screenWidgets("Badge")) {
         if (screen.backend().hasProp(badge, "shape")) {
             CHECK(screen.backend().prop(badge, "shape") == "round");
             CHECK(screen.backend().prop(badge, "mono") == "true");

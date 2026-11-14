@@ -114,7 +114,7 @@ TEST_CASE("review: approve and sign opens the e-signature over the review, and i
     CHECK(screen.prop("Button", "overlay_action_sign", "enabled") == "true");
     screen.edit("password", "meyer-2026");
     screen.click("overlay_action_sign");
-    CHECK(screen.waitFor([&screen] { return screen.backend().all("Dialog").size() == 1; }));
+    CHECK(screen.waitFor([&screen] { return screen.screenWidgets("Dialog").size() == 1; }));
     CHECK(screen.waitFor([&screen] { return screen.shows("Banner", "signed"); }));
     CHECK(screen.prop("Banner", "signed", "text") == "WS-2026-0412 signed: approved.");
     screen.requireNoProblems();

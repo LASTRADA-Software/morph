@@ -15,6 +15,7 @@
 #include <string_view>
 #include <testkit/screen_harness.hpp>
 #include <utility>
+#include <vector>
 
 #include "lims_gallery/lims_gallery.hpp"
 
@@ -60,6 +61,20 @@ public:
             return std::nullopt;
         }
         return backend().prop(*found, name);
+    }
+
+    /// @brief The widgets of @p kind the screen made: every one but the shell frame's own, whose test ids start with
+    ///        `shell_`.
+    /// @param kind The widget kind.
+    /// @return Their handles.
+    [[nodiscard]] std::vector<int> screenWidgets(std::string_view kind) {
+        std::vector<int> widgets;
+        for (int const widget : backend().all(kind)) {
+            if (!backend().prop(widget, "testId").starts_with("shell_")) {
+                widgets.push_back(widget);
+            }
+        }
+        return widgets;
     }
 
     /// @brief Whether the widget of @p kind with @p testId is a row of actions: the theme's action gap (8 px) apart.
