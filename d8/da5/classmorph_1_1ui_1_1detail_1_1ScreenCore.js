@@ -36,6 +36,7 @@ var classmorph_1_1ui_1_1detail_1_1ScreenCore =
     [ "depth", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#aa458956c90533eaa0692dc85606a7933", null ],
     [ "diagnostics", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a954f9e97b670f79c28b637ae3ce6ab9b", null ],
     [ "reported", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a7e57710b1acc6f0ff163f2e8ea6ade94", null ],
+    [ "pageBeingLowered", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ab8b4ac1e1d043930a30edfffaa5290d6", null ],
     [ "prefs", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a495fe8944364d305c1d2b9bf4caeeb4a", null ],
     [ "prefDefaults", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a3f5c473f0727a869fe9688e9b925b241", null ],
     [ "submitted", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#a1f4d8660d28caaad7e27e9281e744b7f", null ],

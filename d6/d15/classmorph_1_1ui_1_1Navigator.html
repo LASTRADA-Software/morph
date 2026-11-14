@@ -160,6 +160,24 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a10e07a0ec8d68e3dcc6dfd400975c2c3"><td class="mdescLeft">&#160;</td><td class="mdescRight">The navigator as the entries of a menu: the pins first, then a separator, then each group as a submenu labelled by its heading (the entries of a group with no heading at the top level instead). An entry's label is its title with its count after it ("Review · 4"), the current screen's entry is checked, and an unavailable one is disabled.  <br /></td></tr>
 <tr class="memitem:ab6b02149881971f8242e6047047a61f7" id="r_ab6b02149881971f8242e6047047a61f7"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ab6b02149881971f8242e6047047a61f7">choose</a> (std::vector&lt; std::size_t &gt; const &amp;path)</td></tr>
 <tr class="memdesc:ab6b02149881971f8242e6047047a61f7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens the entry at <code class="param">path</code> of <span class="tt"><a class="el" href="#a10e07a0ec8d68e3dcc6dfd400975c2c3" title="The navigator as the entries of a menu: the pins first, then a separator, then each group as a submen...">menuEntries()</a></span>, as choosing it in the navigator does.  <br /></td></tr>
+<tr class="memitem:a9e2f7d541d6796702128d76fd30fa2e7" id="r_a9e2f7d541d6796702128d76fd30fa2e7"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9e2f7d541d6796702128d76fd30fa2e7">setModuleGroups</a> (bool grouped)</td></tr>
+<tr class="memdesc:a9e2f7d541d6796702128d76fd30fa2e7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Collapses the navigator to one row per module: the row holds the module's label, a chevron and, while the module is closed, its count; only the open module lists its entries, under the headings of its later groups (the first group's heading is the module's label). A module with one entry is that entry's row. A search text shows the matching entries of every module and hides the module rows.  <br /></td></tr>
+<tr class="memitem:a5a2d1f376b92db771fb5384f8aa232c2" id="r_a5a2d1f376b92db771fb5384f8aa232c2"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a5a2d1f376b92db771fb5384f8aa232c2">moduleGroups</a> () const noexcept</td></tr>
+<tr class="memdesc:a5a2d1f376b92db771fb5384f8aa232c2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether modules are collapsed.  <br /></td></tr>
+<tr class="memitem:a3cf6674f5209944f3b7a674ae2b51e42" id="r_a3cf6674f5209944f3b7a674ae2b51e42"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a3cf6674f5209944f3b7a674ae2b51e42">setOpenModule</a> (std::string_view module)</td></tr>
+<tr class="memdesc:a3cf6674f5209944f3b7a674ae2b51e42"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens a module's entries and closes the one open before.  <br /></td></tr>
+<tr class="memitem:a3a396f560b48bec7ce04c125404e1966" id="r_a3a396f560b48bec7ce04c125404e1966"><td class="memItemLeft">std::string const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a3a396f560b48bec7ce04c125404e1966">openModule</a> () const noexcept</td></tr>
+<tr class="memdesc:a3a396f560b48bec7ce04c125404e1966"><td class="mdescLeft">&#160;</td><td class="mdescRight">The module whose entries are listed.  <br /></td></tr>
+<tr class="memitem:a79dbcbdc7a9aba0a8ef4cac7cbdbd068" id="r_a79dbcbdc7a9aba0a8ef4cac7cbdbd068"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a79dbcbdc7a9aba0a8ef4cac7cbdbd068">setModuleTexts</a> (std::string closed, std::string open, std::string countFailed)</td></tr>
+<tr class="memdesc:a79dbcbdc7a9aba0a8ef4cac7cbdbd068"><td class="mdescLeft">&#160;</td><td class="mdescRight">The words a module row's accessible name carries after its label and count.  <br /></td></tr>
+<tr class="memitem:a0608b099f7779d38ed329f68fec13a46" id="r_a0608b099f7779d38ed329f68fec13a46"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a0608b099f7779d38ed329f68fec13a46">setModuleBadge</a> (std::string_view module, std::optional&lt; <a class="el" href="../../d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html">NavigatorBadge</a> &gt; const &amp;badge, bool failed=false)</td></tr>
+<tr class="memdesc:a0608b099f7779d38ed329f68fec13a46"><td class="mdescLeft">&#160;</td><td class="mdescRight">Puts a count on a module's row while the module is closed, or takes it away.  <br /></td></tr>
+<tr class="memitem:adff364a15672dfba2e11997821d30975" id="r_adff364a15672dfba2e11997821d30975"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html">NavigatorBadge</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#adff364a15672dfba2e11997821d30975">moduleBadgeOf</a> (std::string_view module) const</td></tr>
+<tr class="memdesc:adff364a15672dfba2e11997821d30975"><td class="mdescLeft">&#160;</td><td class="mdescRight">The count on a module's row.  <br /></td></tr>
+<tr class="memitem:af08f2572335efeaf895e037b2dab91ea" id="r_af08f2572335efeaf895e037b2dab91ea"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af08f2572335efeaf895e037b2dab91ea">setSearchShown</a> (bool shown)</td></tr>
+<tr class="memdesc:af08f2572335efeaf895e037b2dab91ea"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows or hides the navigator's own search field, which a shell with a global search replaces.  <br /></td></tr>
+<tr class="memitem:aa6308f2f9b59f18c44d0a9ba57a57558" id="r_aa6308f2f9b59f18c44d0a9ba57a57558"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa6308f2f9b59f18c44d0a9ba57a57558">relabel</a> ()</td></tr>
+<tr class="memdesc:aa6308f2f9b59f18c44d0a9ba57a57558"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads every entry's titles and every heading again, as after a change of locale: the entry buttons, their accessible names, the pins, the headings and the search filter follow. The pins, the current entry, the badges and the search text stay. Calls the handler <span class="tt"><a class="el" href="#a1ab624270185a6d823007de657e9e88d" title="Sets what is called after anything menuEntries() lists changed: a count, the current entry,...">setOnChanged</a></span> set.  <br /></td></tr>
 <tr class="memitem:a1ab624270185a6d823007de657e9e88d" id="r_a1ab624270185a6d823007de657e9e88d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a1ab624270185a6d823007de657e9e88d">setOnChanged</a> (std::function&lt; void()&gt; onChanged)</td></tr>
 <tr class="memdesc:a1ab624270185a6d823007de657e9e88d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what is called after anything <span class="tt"><a class="el" href="#a10e07a0ec8d68e3dcc6dfd400975c2c3" title="The navigator as the entries of a menu: the pins first, then a separator, then each group as a submen...">menuEntries()</a></span> lists changed: a count, the current entry, a pin.  <br /></td></tr>
 </table>
@@ -168,7 +186,7 @@ Public Member Functions</h2></td></tr>
 <p>Entries are grouped by module, then group, in the order each first appears; each group is a column of its own holding its heading and its entries, and the groups are a spacing step apart. Each entry is a row as wide as the navigator holding a list item (<span class="tt"><a class="el" href="../../dd/d96/button__style_8hpp.html#a611665881c188e8252014fdf9c91d2e5a7d74f3b92b19da5e606d737d339a9679" title="An entry of a list: as wide as its line, its label at the start, unframed, and marked while selected.">ButtonStyle::Item</a></span>) whose content is the title and, while <span class="tt"><a class="el" href="#a128fb255224f378a5c13f7c4c18552a4" title="Puts a count at the end of a screen&#39;s entry, or takes it away. The entry stays one button to assistiv...">setBadge</a></span> gives it one, a badge at its end, so the item's selection spans the badge; <span class="tt"><a class="el" href="#a2d2fb15be3c99237e303dce809fa0ee3" title="Marks the entry of the screen that is open, and clears the mark of the one marked before....">setCurrent</a></span> marks the open screen's. An unavailable entry is listed disabled, with its reason as its tooltip. The search shows the entries one of whose titles contains the text, ignoring ASCII case, and the headings of the groups that still show one. <span class="tt"><a class="el" href="#a10e07a0ec8d68e3dcc6dfd400975c2c3" title="The navigator as the entries of a menu: the pins first, then a separator, then each group as a submen...">menuEntries</a></span> and <span class="tt"><a class="el" href="#ab6b02149881971f8242e6047047a61f7" title="Opens the entry at path of menuEntries(), as choosing it in the navigator does.">choose</a></span> give the same list as a menu, for a frame too narrow for the navigator. Neither copyable nor movable; owned by the owner thread of its backend.</p>
 <p>Test ids: <span class="tt">navigator</span>, <span class="tt">navigator_search</span>, <span class="tt">navigator_pins</span>, <span class="tt">nav_row_&lt;screen id&gt;</span>, <span class="tt">nav_&lt;screen id&gt;</span>, <span class="tt">nav_content_&lt;screen id&gt;</span>, <span class="tt">nav_badge_&lt;screen id&gt;</span>, <span class="tt">pin_&lt;screen id&gt;</span>, <span class="tt">navigator_group_&lt;module&gt;/&lt;group&gt;</span> for a heading and <span class="tt">navigator_group_&lt;module&gt;/&lt;group&gt;_section</span> for its column. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a71c9edb7e1f1cef82e3968f3c43f78b9" name="a71c9edb7e1f1cef82e3968f3c43f78b9"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a71c9edb7e1f1cef82e3968f3c43f78b9">&#9670;&#160;</a></span>Navigator()</h2>
@@ -212,7 +230,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -243,7 +261,7 @@ Public Member Functions</h2></td></tr>
 <p>The navigator's root widget, which the host places. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,7 +290,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Moves keyboard focus to the search, as the navigator's shortcut does. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00114">114</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -308,7 +326,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it was pinned: <span class="tt">false</span> for an unknown or already pinned screen, or when the pins are full. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00119">119</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00123">123</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -344,7 +362,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it was pinned. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -374,7 +392,7 @@ Public Member Functions</h2></td></tr>
 <p>The pins, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>Their screen ids. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -409,7 +427,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -439,7 +457,7 @@ Public Member Functions</h2></td></tr>
 <p>The screen whose entry is marked. </p>
 <dl class="section return"><dt>Returns</dt><dd>Its id; empty when none is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00164">164</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00173">173</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -480,7 +498,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the navigator lists the screen: <span class="tt">false</span>, changing nothing, for one it does not list. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00171">171</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -516,7 +534,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">std::nullopt</span> for an entry without one or a screen the navigator does not list. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00196">196</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00205">205</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -546,7 +564,7 @@ Public Member Functions</h2></td></tr>
 <p>The navigator as the entries of a menu: the pins first, then a separator, then each group as a submenu labelled by its heading (the entries of a group with no heading at the top level instead). An entry's label is its title with its count after it ("Review · 4"), the current screen's entry is checked, and an unavailable one is disabled. </p>
 <dl class="section return"><dt>Returns</dt><dd>The entries; <span class="tt"><a class="el" href="#ab6b02149881971f8242e6047047a61f7" title="Opens the entry at path of menuEntries(), as choosing it in the navigator does.">choose</a></span> takes a path into them. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00206">206</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00215">215</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -582,7 +600,331 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it named an available entry, which was opened. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9e2f7d541d6796702128d76fd30fa2e7" name="a9e2f7d541d6796702128d76fd30fa2e7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9e2f7d541d6796702128d76fd30fa2e7">&#9670;&#160;</a></span>setModuleGroups()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Navigator::setModuleGroups </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>grouped</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Collapses the navigator to one row per module: the row holds the module's label, a chevron and, while the module is closed, its count; only the open module lists its entries, under the headings of its later groups (the first group's heading is the module's label). A module with one entry is that entry's row. A search text shows the matching entries of every module and hides the module rows. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">grouped</td><td>Whether to collapse. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5a2d1f376b92db771fb5384f8aa232c2" name="a5a2d1f376b92db771fb5384f8aa232c2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5a2d1f376b92db771fb5384f8aa232c2">&#9670;&#160;</a></span>moduleGroups()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Navigator::moduleGroups </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether modules are collapsed. </p>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> after <span class="tt">setModuleGroups(true)</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3cf6674f5209944f3b7a674ae2b51e42" name="a3cf6674f5209944f3b7a674ae2b51e42"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3cf6674f5209944f3b7a674ae2b51e42">&#9670;&#160;</a></span>setOpenModule()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Navigator::setOpenModule </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>module</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Opens a module's entries and closes the one open before. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">module</td><td>The module. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether the navigator lists the module. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00266">266</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3a396f560b48bec7ce04c125404e1966" name="a3a396f560b48bec7ce04c125404e1966"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3a396f560b48bec7ce04c125404e1966">&#9670;&#160;</a></span>openModule()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string const  &amp; morph::ui::Navigator::openModule </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The module whose entries are listed. </p>
+<dl class="section return"><dt>Returns</dt><dd>It; empty when none is open. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00280">280</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a79dbcbdc7a9aba0a8ef4cac7cbdbd068" name="a79dbcbdc7a9aba0a8ef4cac7cbdbd068"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a79dbcbdc7a9aba0a8ef4cac7cbdbd068">&#9670;&#160;</a></span>setModuleTexts()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Navigator::setModuleTexts </td>
+          <td>(</td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>closed</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>open</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>countFailed</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The words a module row's accessible name carries after its label and count. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">closed</td><td>Said of a closed module. </td></tr>
+    <tr><td class="paramname">open</td><td>Said of the open module. </td></tr>
+    <tr><td class="paramname">countFailed</td><td>Said when the count could not be read. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00286">286</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0608b099f7779d38ed329f68fec13a46" name="a0608b099f7779d38ed329f68fec13a46"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0608b099f7779d38ed329f68fec13a46">&#9670;&#160;</a></span>setModuleBadge()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::Navigator::setModuleBadge </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>module</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::optional&lt; <a class="el" href="../../d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html">NavigatorBadge</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>badge</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>failed</em></span><span class="paramdefsep"> = </span><span class="paramdefval">false</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Puts a count on a module's row while the module is closed, or takes it away. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">module</td><td>The module. </td></tr>
+    <tr><td class="paramname">badge</td><td>The count, or <span class="tt">std::nullopt</span> for none. </td></tr>
+    <tr><td class="paramname">failed</td><td>Whether the count could not be read, which draws an error marker beside the label. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether the navigator lists the module. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00300">300</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adff364a15672dfba2e11997821d30975" name="adff364a15672dfba2e11997821d30975"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adff364a15672dfba2e11997821d30975">&#9670;&#160;</a></span>moduleBadgeOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; <a class="el" href="../../d4/d28/structmorph_1_1ui_1_1NavigatorBadge.html">NavigatorBadge</a> &gt; morph::ui::Navigator::moduleBadgeOf </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>module</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The count on a module's row. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">module</td><td>The module. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>It; empty for none or for a module the navigator does not list. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00324">324</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af08f2572335efeaf895e037b2dab91ea" name="af08f2572335efeaf895e037b2dab91ea"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af08f2572335efeaf895e037b2dab91ea">&#9670;&#160;</a></span>setSearchShown()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Navigator::setSearchShown </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>shown</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows or hides the navigator's own search field, which a shell with a global search replaces. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">shown</td><td>Whether it shows; hiding it clears its text. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa6308f2f9b59f18c44d0a9ba57a57558" name="aa6308f2f9b59f18c44d0a9ba57a57558"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa6308f2f9b59f18c44d0a9ba57a57558">&#9670;&#160;</a></span>relabel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Navigator::relabel </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reads every entry's titles and every heading again, as after a change of locale: the entry buttons, their accessible names, the pins, the headings and the search filter follow. The pins, the current entry, the badges and the search text stay. Calls the handler <span class="tt"><a class="el" href="#a1ab624270185a6d823007de657e9e88d" title="Sets what is called after anything menuEntries() lists changed: a count, the current entry,...">setOnChanged</a></span> set. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -617,7 +959,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>

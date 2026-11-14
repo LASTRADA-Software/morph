@@ -153,6 +153,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d0e/express
 <code>#include &quot;<a class="el" href="../../d7/d4a/datetime_8hpp_source.html">../util/datetime.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d1/de8/rational_8hpp_source.html">../util/rational.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d3/d89/date__pattern_8hpp_source.html">date_pattern.hpp</a>&quot;</code><br />
+<code>#include &quot;locale_table.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d5/d8c/message_8hpp_source.html">message.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">value.hpp</a>&quot;</code><br />
 </div>
@@ -217,22 +218,23 @@ Enumerations</h2></td></tr>
 , <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a8eea62084ca7e541d918e823422bd82e">Result</a>
 , <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a2137512bfce7e11c12072fc10ce4187e">ErrorKind</a>
 , <br />
-&#160;&#160;<a class="el" href="#aea78ed2130ba9860f8c92a691d34f663ad677b410373bc790d9a8ec2e68090839">Can</a>
+&#160;&#160;<a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a923d783c5bfd830e43964b953a65327f">Refusal</a>
+, <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663ad677b410373bc790d9a8ec2e68090839">Can</a>
 , <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a56a2e1cec4756c692a127d5dabf0d11d">Pref</a>
 , <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663ac3755e61202abd74da5885d2e9c9160e">Call</a>
-, <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a786887572f6ef1c20f2d8177cb2f1639">If</a>
 , <br />
-&#160;&#160;<a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a497031794414a552435f90151ac3b54b">Object</a>
+&#160;&#160;<a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a786887572f6ef1c20f2d8177cb2f1639">If</a>
+, <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a497031794414a552435f90151ac3b54b">Object</a>
 , <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a4ee29ca12c7d126654bd0e5275de6135">List</a>
 , <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a46f3ea056caa3126b91f3f70beea068c">Map</a>
-, <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663ad7778d0c64b6ba21494c97f77a66885a">Filter</a>
 , <br />
-&#160;&#160;<a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a6b46ae48421828d9973deec5fa9aa0c3">Sort</a>
+&#160;&#160;<a class="el" href="#aea78ed2130ba9860f8c92a691d34f663ad7778d0c64b6ba21494c97f77a66885a">Filter</a>
+, <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a6b46ae48421828d9973deec5fa9aa0c3">Sort</a>
 , <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a294df7f1250ae104eb34bd7fb01526d2">Runs</a>
 , <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663aaa9f9a8454a370443372f6259447844e">Env</a>
-, <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a71c7ae294b7abd866b3fb295b3b9e4a4">Session</a>
 , <br />
-&#160;&#160;<a class="el" href="#aea78ed2130ba9860f8c92a691d34f663ac2ca16d048ec66e04bca283eab048ec2">Host</a>
+&#160;&#160;<a class="el" href="#aea78ed2130ba9860f8c92a691d34f663a71c7ae294b7abd866b3fb295b3b9e4a4">Session</a>
+, <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663ac2ca16d048ec66e04bca283eab048ec2">Host</a>
 , <a class="el" href="#aea78ed2130ba9860f8c92a691d34f663ac55582518cba2c464f29f5bae1c68def">Get</a>
 <br />
  }</td></tr>
@@ -299,6 +301,7 @@ Enumerations</h2></td></tr>
 , <b>DateAdd</b>
 , <br />
 &#160;&#160;<b>DateRange</b>
+, <b>RefusalText</b>
 <br />
  }</td></tr>
 <tr class="memdesc:acdf25e669057d3af5e395c162caedc32"><td class="mdescLeft">&#160;</td><td class="mdescRight">The functions of the <span class="tt">expr/1</span> library.  <a href="#acdf25e669057d3af5e395c162caedc32">More...</a><br /></td></tr>
@@ -383,12 +386,14 @@ Variables</h2></td></tr>
 <tr class="memdesc:a904a78e57c1d4f5b33790ba34d0addad"><td class="mdescLeft">&#160;</td><td class="mdescRight">The numbers.  <br /></td></tr>
 <tr class="memitem:a36510bc5882d9dbd986570731bef4ea7" id="r_a36510bc5882d9dbd986570731bef4ea7"><td class="memItemLeft">constexpr <a class="el" href="#a607768174eec9fdaf043171aeba4ae8e">KindSet</a>&#160;</td><td class="memItemRight"><a class="el" href="#a36510bc5882d9dbd986570731bef4ea7">morph::ui::detail::kOrdered</a> = <a class="el" href="#a904a78e57c1d4f5b33790ba34d0addad">kNumeric</a> | <a class="el" href="#aee7de3e89ec2578bacebb5772b15c2ab">kindBit</a>(<a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349aa3d5de3eac8bb00ae86fd1a1005f1500">TypeKind::Timestamp</a>) | <a class="el" href="#aee7de3e89ec2578bacebb5772b15c2ab">kindBit</a>(<a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349a27118326006d3829667a400ad23d5d98">TypeKind::String</a>)</td></tr>
 <tr class="memdesc:a36510bc5882d9dbd986570731bef4ea7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The ordered kinds.  <br /></td></tr>
-<tr class="memitem:af7ffa27454ce5a35154e424a787ca4e2" id="r_af7ffa27454ce5a35154e424a787ca4e2"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html">FunctionSpec</a>, 49 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af7ffa27454ce5a35154e424a787ca4e2">morph::ui::detail::kFunctions</a></td></tr>
-<tr class="memdesc:af7ffa27454ce5a35154e424a787ca4e2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The library, indexed by <span class="tt"><a class="el" href="#acdf25e669057d3af5e395c162caedc32" title="The functions of the expr/1 library.">FunctionId</a></span>.  <br /></td></tr>
+<tr class="memitem:a0659e39ea364472b4b958f7135a12766" id="r_a0659e39ea364472b4b958f7135a12766"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a0659e39ea364472b4b958f7135a12766">morph::ui::detail::kBuiltInRefusal</a> = &quot;This was refused.&quot;</td></tr>
+<tr class="memdesc:a0659e39ea364472b4b958f7135a12766"><td class="mdescLeft">&#160;</td><td class="mdescRight">The sentence <span class="tt">refusalText</span> shows when the catalogue has neither a refusal's code nor a class of it.  <br /></td></tr>
+<tr class="memitem:a99fea7d924bd2ef4458df33becbb31de" id="r_a99fea7d924bd2ef4458df33becbb31de"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html">FunctionSpec</a>, 50 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a99fea7d924bd2ef4458df33becbb31de">morph::ui::detail::kFunctions</a></td></tr>
+<tr class="memdesc:a99fea7d924bd2ef4458df33becbb31de"><td class="mdescLeft">&#160;</td><td class="mdescRight">The library, indexed by <span class="tt"><a class="el" href="#acdf25e669057d3af5e395c162caedc32" title="The functions of the expr/1 library.">FunctionId</a></span>.  <br /></td></tr>
 <tr class="memitem:a852a2b54ea631b709059f93c7f9110b1" id="r_a852a2b54ea631b709059f93c7f9110b1"><td class="memItemLeft">constexpr std::array&lt; std::string_view, 6 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a852a2b54ea631b709059f93c7f9110b1">morph::ui::detail::kDateUnits</a> = {&quot;days&quot;, &quot;weeks&quot;, &quot;months&quot;, &quot;years&quot;, &quot;hours&quot;, &quot;minutes&quot;}</td></tr>
 <tr class="memdesc:a852a2b54ea631b709059f93c7f9110b1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The units <span class="tt">dateAdd</span> adds.  <br /></td></tr>
-<tr class="memitem:a6fd684e6821cca9ab7819f016aadb7ef" id="r_a6fd684e6821cca9ab7819f016aadb7ef"><td class="memItemLeft">constexpr std::array&lt; std::string_view, 5 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6fd684e6821cca9ab7819f016aadb7ef">morph::ui::detail::kEnvNames</a> = {&quot;widthClass&quot;, &quot;locale&quot;, &quot;platform&quot;, &quot;online&quot;, &quot;backend&quot;}</td></tr>
-<tr class="memdesc:a6fd684e6821cca9ab7819f016aadb7ef"><td class="mdescLeft">&#160;</td><td class="mdescRight">The names <span class="tt">{"env": ...}</span> reads.  <br /></td></tr>
+<tr class="memitem:ad64d74ef3507f875ba5797d3d4fc9bbb" id="r_ad64d74ef3507f875ba5797d3d4fc9bbb"><td class="memItemLeft">constexpr std::array&lt; std::string_view, 6 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad64d74ef3507f875ba5797d3d4fc9bbb">morph::ui::detail::kEnvNames</a></td></tr>
+<tr class="memdesc:ad64d74ef3507f875ba5797d3d4fc9bbb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The names <span class="tt">{"env": ...}</span> reads.  <br /></td></tr>
 <tr class="memitem:a0d1d95fcf12d2c7123288a5bb5d8ec14" id="r_a0d1d95fcf12d2c7123288a5bb5d8ec14"><td class="memItemLeft">constexpr std::array&lt; std::string_view, 6 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0d1d95fcf12d2c7123288a5bb5d8ec14">morph::ui::detail::kSessionNames</a></td></tr>
 <tr class="memdesc:a0d1d95fcf12d2c7123288a5bb5d8ec14"><td class="mdescLeft">&#160;</td><td class="mdescRight">The names <span class="tt">{"session": ...}</span> reads.  <br /></td></tr>
 <tr class="memitem:a1ff86c55bab12010592e438dbb884c50" id="r_a1ff86c55bab12010592e438dbb884c50"><td class="memItemLeft">constexpr std::array&lt; std::int64_t, 6 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1ff86c55bab12010592e438dbb884c50">morph::ui::detail::kDateSpans</a></td></tr>
@@ -414,7 +419,7 @@ Variables</h2></td></tr>
 
 <p>A shared, immutable expression node. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -432,7 +437,7 @@ Variables</h2></td></tr>
 
 <p>A set of type kinds, as bits. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -450,7 +455,7 @@ Variables</h2></td></tr>
 
 <p>The units a client knows, by id. A unit missing from the table is its own canonical unit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01239">1239</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01282">1282</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -468,7 +473,7 @@ Variables</h2></td></tr>
 
 <p>Formats a date for display: the instant already shifted to the display zone, the style (<span class="tt">short</span>, <span class="tt">medium</span> or <span class="tt">long</span>), and whether to show the time. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01243">1243</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01286">1286</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -486,7 +491,7 @@ Variables</h2></td></tr>
 
 <p>A sample read for <span class="tt">stdev</span> and <span class="tt">rsd</span>: its moments, <span class="tt">null</span> without a report, or the reason to report. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01599">1599</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01649">1649</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -529,6 +534,8 @@ Variables</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="aea78ed2130ba9860f8c92a691d34f663a2137512bfce7e11c12072fc10ce4187e" name="aea78ed2130ba9860f8c92a691d34f663a2137512bfce7e11c12072fc10ce4187e"></a>ErrorKind&#160;</td><td class="fielddoc"><p><span class="tt">{"errorKind": "m"}</span>: the kind of a query's or mutation's error. </p>
 </td></tr>
+<tr><td class="fieldname"><a id="aea78ed2130ba9860f8c92a691d34f663a923d783c5bfd830e43964b953a65327f" name="aea78ed2130ba9860f8c92a691d34f663a923d783c5bfd830e43964b953a65327f"></a>Refusal&#160;</td><td class="fielddoc"><p><span class="tt">{"refusal": "m"}</span>: a query's or mutation's action refusal, <span class="tt">null</span> or <span class="tt">{code, args}</span>. </p>
+</td></tr>
 <tr><td class="fieldname"><a id="aea78ed2130ba9860f8c92a691d34f663ad677b410373bc790d9a8ec2e68090839" name="aea78ed2130ba9860f8c92a691d34f663ad677b410373bc790d9a8ec2e68090839"></a>Can&#160;</td><td class="fielddoc"><p><span class="tt">{"can": "m"}</span>: whether the principal may run a mutation or query. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="aea78ed2130ba9860f8c92a691d34f663a56a2e1cec4756c692a127d5dabf0d11d" name="aea78ed2130ba9860f8c92a691d34f663a56a2e1cec4756c692a127d5dabf0d11d"></a>Pref&#160;</td><td class="fielddoc"><p><span class="tt">{"pref": "point.path"}</span>: the user's choice at a customization point. </p>
@@ -559,7 +566,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -585,7 +592,7 @@ Variables</h2></td></tr>
 
 <p>The functions of the <span class="tt">expr/1</span> library. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00097">97</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -623,7 +630,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01345">1345</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01395">1395</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -660,7 +667,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether <code class="param">text</code> is a well-formed name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -696,7 +703,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>True for <span class="tt">map</span>, <span class="tt">filter</span>, <span class="tt">sort</span> and <span class="tt">runs</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00177">177</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -737,7 +744,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The record. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00186">186</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00189">189</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -773,7 +780,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its bit. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00204">204</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00207">207</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -809,7 +816,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its entry in <span class="tt">kFunctions</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00320">320</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -845,7 +852,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The argument index of its mode, or empty for a function that does not round. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00327">327</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -881,7 +888,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The mode, or empty for any other value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00349">349</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -924,7 +931,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether <code class="param">name</code> is in <code class="param">names</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00364">364</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00376">376</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -960,7 +967,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The segments, or the reason the path is malformed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00371">371</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00383">383</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1001,7 +1008,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The expression, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00799">799</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00841">841</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1031,7 +1038,7 @@ template&lt;std::size_t N&gt; </div>
 <p>The names of the <span class="tt">expr/1</span> library, in <span class="tt">FunctionId</span> order. </p>
 <dl class="section return"><dt>Returns</dt><dd>The names. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00805">805</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00847">847</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1067,7 +1074,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its type; <span class="tt">any</span> for <span class="tt">null</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00899">899</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00941">941</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1114,7 +1121,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">any</span> when the path can read something, or why it cannot. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00912">912</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00954">954</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1155,7 +1162,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The expression's static type (<span class="tt">any</span> where it cannot be known), or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01223">1223</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01266">1266</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1196,7 +1203,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value at the path, or <span class="tt">null</span> when a segment does not exist. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01322">1322</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01372">1372</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1232,7 +1239,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reading. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01370">1370</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01420">1420</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1268,7 +1275,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The number, or <span class="tt">std::nullopt</span> when it is not one. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01428">1428</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01478">1478</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1315,7 +1322,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A quantity with a unit; an <span class="tt">int</span> when integral and every operand was one; a decimal otherwise. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01446">1446</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01496">1496</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1368,7 +1375,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value in <code class="param">target</code>, its places widened by the decimal places of the conversion ratio; <span class="tt">std::nullopt</span> when the units do not convert or the result overflows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01463">1463</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01513">1513</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1409,7 +1416,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its display text, or the id. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01513">1513</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01563">1563</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1445,7 +1452,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>0, 2 or 3. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01521">1521</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01571">1571</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1486,7 +1493,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The moved day: <span class="tt">2026-01-31</span> plus one month is <span class="tt">2026-02-28</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01535">1535</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01585">1585</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1522,7 +1529,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it is in range. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01555">1555</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01605">1605</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1558,7 +1565,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">yyyy-MM-dd</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01562">1562</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01612">1612</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1594,7 +1601,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The common denominator, or empty past <span class="tt">int64</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01585">1585</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01635">1635</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1635,7 +1642,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The moments; empty for a <span class="tt">null</span> element; the reason for a mismatch or an overflow. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01608">1608</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01658">1658</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1688,7 +1695,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The result, or the reason it cannot be computed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01669">1669</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01719">1719</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1729,7 +1736,7 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l02925">2925</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l03065">3065</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1756,7 +1763,7 @@ template&lt;std::size_t N&gt; </div>
 
 <p>The most nodes one expression may have; a document with a larger expression is refused at load. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1782,7 +1789,7 @@ template&lt;std::size_t N&gt; </div>
 
 <p>Every kind. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00212">212</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1808,7 +1815,7 @@ template&lt;std::size_t N&gt; </div>
 
 <p>The numbers. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00214">214</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1834,12 +1841,12 @@ template&lt;std::size_t N&gt; </div>
 
 <p>The ordered kinds. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00213">213</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00216">216</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
-<a id="af7ffa27454ce5a35154e424a787ca4e2" name="af7ffa27454ce5a35154e424a787ca4e2"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af7ffa27454ce5a35154e424a787ca4e2">&#9670;&#160;</a></span>kFunctions</h2>
+<a id="a0659e39ea364472b4b958f7135a12766" name="a0659e39ea364472b4b958f7135a12766"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0659e39ea364472b4b958f7135a12766">&#9670;&#160;</a></span>kBuiltInRefusal</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1848,7 +1855,33 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;FunctionSpec, 49&gt; morph::ui::detail::kFunctions</td>
+          <td class="memname">std::string_view morph::ui::detail::kBuiltInRefusal = &quot;This was refused.&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The sentence <span class="tt">refusalText</span> shows when the catalogue has neither a refusal's code nor a class of it. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a99fea7d924bd2ef4458df33becbb31de" name="a99fea7d924bd2ef4458df33becbb31de"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a99fea7d924bd2ef4458df33becbb31de">&#9670;&#160;</a></span>kFunctions</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::array&lt;FunctionSpec, 50&gt; morph::ui::detail::kFunctions</td>
         </tr>
       </table>
   </td>
@@ -1860,7 +1893,7 @@ template&lt;std::size_t N&gt; </div>
 
 <p>The library, indexed by <span class="tt">FunctionId</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1886,12 +1919,12 @@ template&lt;std::size_t N&gt; </div>
 
 <p>The units <span class="tt">dateAdd</span> adds. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00361">361</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a6fd684e6821cca9ab7819f016aadb7ef" name="a6fd684e6821cca9ab7819f016aadb7ef"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6fd684e6821cca9ab7819f016aadb7ef">&#9670;&#160;</a></span>kEnvNames</h2>
+<a id="ad64d74ef3507f875ba5797d3d4fc9bbb" name="ad64d74ef3507f875ba5797d3d4fc9bbb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad64d74ef3507f875ba5797d3d4fc9bbb">&#9670;&#160;</a></span>kEnvNames</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1900,7 +1933,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::array&lt;std::string_view, 5&gt; morph::ui::detail::kEnvNames = {&quot;widthClass&quot;, &quot;locale&quot;, &quot;platform&quot;, &quot;online&quot;, &quot;backend&quot;}</td>
+          <td class="memname">std::array&lt;std::string_view, 6&gt; morph::ui::detail::kEnvNames</td>
         </tr>
       </table>
   </td>
@@ -1909,10 +1942,12 @@ template&lt;std::size_t N&gt; </div>
   </tr>
 </table>
 </div><div class="memdoc">
-
+<b>Initial value:</b><div class="fragment"><div class="line">= {<span class="stringliteral">&quot;widthClass&quot;</span>, <span class="stringliteral">&quot;locale&quot;</span>,  <span class="stringliteral">&quot;platform&quot;</span>,</div>
+<div class="line">                        <span class="stringliteral">&quot;online&quot;</span>,     <span class="stringliteral">&quot;backend&quot;</span>, <span class="stringliteral">&quot;context&quot;</span>}</div>
+</div><!-- fragment -->
 <p>The names <span class="tt">{"env": ...}</span> reads. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00353">353</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00364">364</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1940,7 +1975,7 @@ template&lt;std::size_t N&gt; </div>
 </div><!-- fragment -->
 <p>The names <span class="tt">{"session": ...}</span> reads. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00356">356</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00368">368</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1969,7 +2004,7 @@ template&lt;std::size_t N&gt; </div>
 <p>The largest amount of each <span class="tt">dateAdd</span> unit that can stay within years 1 to 9999, in <span class="tt">kDateUnits</span> order. </p>
 <p>Compared with the amount before any <span class="tt">std::chrono</span> arithmetic, whose day and month counts are narrower than <span class="tt">int64</span>, so a huge amount is reported rather than narrowed into a date. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01549">1549</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01599">1599</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>

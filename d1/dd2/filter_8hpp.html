@@ -128,6 +128,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/dd2/filter_
 <code>#include &lt;core/async/StopToken.hpp&gt;</code><br />
 <code>#include &lt;cstddef&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
+<code>#include &lt;exception&gt;</code><br />
 <code>#include &lt;expected&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
 <code>#include &lt;<a class="el" href="../../dd/d57/data__source_8hpp_source.html">morph/table/data_source.hpp</a>&gt;</code><br />
@@ -193,6 +194,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:a36d1d16b57905cd75fcd357ddc765d32"><td class="mdescLeft">&#160;</td><td class="mdescRight">Compiles a group: per column, the entries that apply to it.  <br /></td></tr>
 <tr class="memitem:aef7b1ef0fe207b67f2c4d45e44939d94" id="r_aef7b1ef0fe207b67f2c4d45e44939d94"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d8/d8b/classmorph_1_1table_1_1CompiledFilter.html">CompiledFilter</a>, <a class="el" href="../../d2/db3/structmorph_1_1table_1_1TableError.html">TableError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aef7b1ef0fe207b67f2c4d45e44939d94">morph::table::compileFilter</a> (<a class="el" href="../../d0/d2f/structmorph_1_1table_1_1FilterSpec.html">FilterSpec</a> const &amp;spec, std::span&lt; <a class="el" href="../../d3/d45/structmorph_1_1table_1_1ColumnInfo.html">ColumnInfo</a> const &gt; columns, <a class="el" href="../../d8/d47/structmorph_1_1table_1_1Services.html">Services</a> const &amp;services)</td></tr>
 <tr class="memdesc:aef7b1ef0fe207b67f2c4d45e44939d94"><td class="mdescLeft">&#160;</td><td class="mdescRight">Compiles <code class="param">spec</code> against <code class="param">columns</code>.  <br /></td></tr>
+<tr class="memitem:a01a3418e5abe103ab0872f8a39ea0b61" id="r_a01a3418e5abe103ab0872f8a39ea0b61"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d8/d8b/classmorph_1_1table_1_1CompiledFilter.html">CompiledFilter</a>, <a class="el" href="../../d2/db3/structmorph_1_1table_1_1TableError.html">TableError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a01a3418e5abe103ab0872f8a39ea0b61">morph::table::compileFilterGuarded</a> (<a class="el" href="../../d0/d2f/structmorph_1_1table_1_1FilterSpec.html">FilterSpec</a> const &amp;spec, std::span&lt; <a class="el" href="../../d3/d45/structmorph_1_1table_1_1ColumnInfo.html">ColumnInfo</a> const &gt; columns, <a class="el" href="../../d8/d47/structmorph_1_1table_1_1Services.html">Services</a> const &amp;services)</td></tr>
+<tr class="memdesc:a01a3418e5abe103ab0872f8a39ea0b61"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#aef7b1ef0fe207b67f2c4d45e44939d94" title="Compiles spec against columns.">compileFilter</a></span>, with an exception from the collator or the date parser returned as <span class="tt">ServiceFailed</span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Filter specs as data, compiled once and evaluated column at a time. </p>
@@ -235,7 +238,7 @@ Functions</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
 
 </div>
 </div>
@@ -277,7 +280,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The operator and operands, or <span class="tt">InvalidSpec</span> when the entry sets none or several. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00337">337</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
 
 </div>
 </div>
@@ -318,7 +321,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when the operator applies to the kind. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00379">379</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00382">382</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
 
 </div>
 </div>
@@ -377,7 +380,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">false</span> when the text does not parse for the kind. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00411">411</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00414">414</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
 
 </div>
 </div>
@@ -424,7 +427,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The compiled entry, or the error naming the column. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00464">464</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00467">467</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
 
 </div>
 </div>
@@ -465,7 +468,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its index, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00498">498</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00502">502</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
 
 </div>
 </div>
@@ -501,7 +504,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00515">515</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
 
 </div>
 </div>
@@ -554,7 +557,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or the first entry's error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00521">521</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00525">525</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
 
 </div>
 </div>
@@ -607,7 +610,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The compiled filter, or the first error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00540">540</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00544">544</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
 
 </div>
 </div>
@@ -654,7 +657,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The compiled group, or an error when a column is unknown, an entry is malformed, or an entry applies to none of the group's columns. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00563">563</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00567">567</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
 
 </div>
 </div>
@@ -701,7 +704,54 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The compiled filter, or the first error, naming its column. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00614">614</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00618">618</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a01a3418e5abe103ab0872f8a39ea0b61" name="a01a3418e5abe103ab0872f8a39ea0b61"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a01a3418e5abe103ab0872f8a39ea0b61">&#9670;&#160;</a></span>compileFilterGuarded()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; CompiledFilter, TableError &gt; morph::table::compileFilterGuarded </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d0/d2f/structmorph_1_1table_1_1FilterSpec.html">FilterSpec</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>spec</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::span&lt; <a class="el" href="../../d3/d45/structmorph_1_1table_1_1ColumnInfo.html">ColumnInfo</a> const &gt;</td>          <td class="paramname"><span class="paramname"><em>columns</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d8/d47/structmorph_1_1table_1_1Services.html">Services</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>services</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p><span class="tt">compileFilter</span>, with an exception from the collator or the date parser returned as <span class="tt">ServiceFailed</span>. </p>
+<p>The one compile step <span class="tt">apply</span>, <span class="tt">Engine</span> and <span class="tt">planQuery</span> share, so a throwing service is an error value in all three. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">spec</td><td>The filter. </td></tr>
+    <tr><td class="paramname">columns</td><td>The table's columns. </td></tr>
+    <tr><td class="paramname">services</td><td>The collator and date parser; null members mean their defaults. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The compiled filter, or the first error. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dd2/filter_8hpp_source.html#l00650">650</a> of file <a class="el" href="../../d1/dd2/filter_8hpp_source.html">filter.hpp</a>.</p>
 
 </div>
 </div>

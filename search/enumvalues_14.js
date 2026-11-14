@@ -13,6 +13,7 @@ var searchData=
   ['unverified_10',['Unverified',['../d8/dcd/structmorph_1_1ui_1_1ConnectError.html#a047e4d4e99ceb30a5bc29dfa9a0b4174ad5ca088299d5908ca359f17692071761',1,'morph::ui::ConnectError']]],
   ['updated_11',['Updated',['../dd/d57/data__source_8hpp.html#a326be1a73b1043a1076cfd0b907dd4a5aff0a3b7f3daef040faf89a88fdac01b7',1,'morph::table']]],
   ['updates_12',['Updates',['../d0/d83/effects_8hpp.html#a95c1d46008a561c5a4aff6df16f1e063a9ac41b6a577daadd588f0fcde0071e8b',1,'morph::effects']]],
-  ['upload_13',['Upload',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ea91412465ea9169dfd901dd5e7c96dd99',1,'morph::ui']]],
-  ['user_14',['User',['../d1/dc0/author_8hpp.html#a41c4c2be9ab5803e49a0e828cc594bbea8f9bfe9d1345237cb3b2b205864da075',1,'Usermorph::ui::author'],['../dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583a8f9bfe9d1345237cb3b2b205864da075',1,'Usermorph::ui']]]
+  ['updown_13',['UpDown',['../d0/dc2/ui_2backend_8hpp.html#a813ca81d16332cc7126de3e02513f6d2a8833f67c0f8e2339c154ffc91e15eb8c',1,'morph::ui']]],
+  ['upload_14',['Upload',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ea91412465ea9169dfd901dd5e7c96dd99',1,'morph::ui']]],
+  ['user_15',['User',['../d1/dc0/author_8hpp.html#a41c4c2be9ab5803e49a0e828cc594bbea8f9bfe9d1345237cb3b2b205864da075',1,'Usermorph::ui::author'],['../dd/d39/document_8hpp.html#a7bb9726010584b0558edadecf9650583a8f9bfe9d1345237cb3b2b205864da075',1,'Usermorph::ui']]]
 ];

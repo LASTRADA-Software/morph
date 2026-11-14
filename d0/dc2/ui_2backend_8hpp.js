@@ -33,12 +33,20 @@ var ui_2backend_8hpp =
     [ "morph::ui::ChartWidget", "da/d13/classmorph_1_1ui_1_1ChartWidget.html", "da/d13/classmorph_1_1ui_1_1ChartWidget" ],
     [ "morph::ui::EmptyStateWidget", "de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html", "de/d82/classmorph_1_1ui_1_1EmptyStateWidget" ],
     [ "morph::ui::DrawerWidget", "de/d3c/classmorph_1_1ui_1_1DrawerWidget.html", "de/d3c/classmorph_1_1ui_1_1DrawerWidget" ],
+    [ "morph::ui::PopoverWidget", "d6/d93/classmorph_1_1ui_1_1PopoverWidget.html", "d6/d93/classmorph_1_1ui_1_1PopoverWidget" ],
     [ "morph::ui::SplitterWidget", "d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html", "d7/d2a/classmorph_1_1ui_1_1SplitterWidget" ],
     [ "morph::ui::CollapsibleWidget", "d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html", "d7/d62/classmorph_1_1ui_1_1CollapsibleWidget" ],
+    [ "morph::ui::PageWidget", "dd/dfb/classmorph_1_1ui_1_1PageWidget.html", null ],
+    [ "morph::ui::PageRegionWidget", "d2/d3f/classmorph_1_1ui_1_1PageRegionWidget.html", null ],
     [ "morph::ui::DropZoneWidget", "df/df5/classmorph_1_1ui_1_1DropZoneWidget.html", "df/df5/classmorph_1_1ui_1_1DropZoneWidget" ],
     [ "morph::ui::CustomWidget", "d2/dd1/classmorph_1_1ui_1_1CustomWidget.html", "d2/dd1/classmorph_1_1ui_1_1CustomWidget" ],
     [ "morph::ui::CustomRequest", "d2/d54/structmorph_1_1ui_1_1CustomRequest.html", "d2/d54/structmorph_1_1ui_1_1CustomRequest" ],
     [ "morph::ui::IViewBackend", "df/dae/classmorph_1_1ui_1_1IViewBackend.html", "df/dae/classmorph_1_1ui_1_1IViewBackend" ],
+    [ "morph::ui::MenuCaret", "d0/dc2/ui_2backend_8hpp.html#a813ca81d16332cc7126de3e02513f6d2", [
+      [ "None", "d0/dc2/ui_2backend_8hpp.html#a813ca81d16332cc7126de3e02513f6d2a6adf97f83acf6453d4a6a4b1070f3754", null ],
+      [ "Down", "d0/dc2/ui_2backend_8hpp.html#a813ca81d16332cc7126de3e02513f6d2a08a38277b0309070706f6652eeae9a53", null ],
+      [ "UpDown", "d0/dc2/ui_2backend_8hpp.html#a813ca81d16332cc7126de3e02513f6d2a8833f67c0f8e2339c154ffc91e15eb8c", null ]
+    ] ],
     [ "morph::ui::RowClick", "d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2", [
       [ "Only", "d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2a8392461cf759088854e16710b9b75d1a", null ],
       [ "Toggle", "d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2aa8875bbe4272c0bdd786cfaaedf77921", null ],

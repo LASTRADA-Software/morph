@@ -131,7 +131,11 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a2b85609c9ca000f89d8c5674cc4ff768" id="r_a2b85609c9ca000f89d8c5674cc4ff768"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a2b85609c9ca000f89d8c5674cc4ff768">kind</a></td></tr>
 <tr class="memdesc:a2b85609c9ca000f89d8c5674cc4ff768"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">user</span>, <span class="tt">assistant</span>, <span class="tt">tool</span> or <span class="tt">error</span>.  <br /></td></tr>
 <tr class="memitem:af3e307702030b9e89f73eab93ef287c7" id="r_af3e307702030b9e89f73eab93ef287c7"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#af3e307702030b9e89f73eab93ef287c7">text</a></td></tr>
-<tr class="memdesc:af3e307702030b9e89f73eab93ef287c7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Its text.  <br /></td></tr>
+<tr class="memdesc:af3e307702030b9e89f73eab93ef287c7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Its text; a <span class="tt">tool</span> entry's is the tool's name.  <br /></td></tr>
+<tr class="memitem:afaf523a11d331c25e193d5f53f8a289c" id="r_afaf523a11d331c25e193d5f53f8a289c"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#afaf523a11d331c25e193d5f53f8a289c">arguments</a></td></tr>
+<tr class="memdesc:afaf523a11d331c25e193d5f53f8a289c"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">tool</span> entry's arguments as JSON text; empty otherwise.  <br /></td></tr>
+<tr class="memitem:a3496e312b26171d4e376dd19871c2cef" id="r_a3496e312b26171d4e376dd19871c2cef"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a3496e312b26171d4e376dd19871c2cef">ok</a> = false</td></tr>
+<tr class="memdesc:a3496e312b26171d4e376dd19871c2cef"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a <span class="tt">tool</span> entry's action ran.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One line to show. </p>
@@ -168,9 +172,45 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Its text. </p>
+<p>Its text; a <span class="tt">tool</span> entry's is the tool's name. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+
+</div>
+</div>
+<a id="afaf523a11d331c25e193d5f53f8a289c" name="afaf523a11d331c25e193d5f53f8a289c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afaf523a11d331c25e193d5f53f8a289c">&#9670;&#160;</a></span>arguments</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::chat::ChatClient::Entry::arguments</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A <span class="tt">tool</span> entry's arguments as JSON text; empty otherwise. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a3496e312b26171d4e376dd19871c2cef" name="a3496e312b26171d4e376dd19871c2cef"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3496e312b26171d4e376dd19871c2cef">&#9670;&#160;</a></span>ok</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::chat::ChatClient::Entry::ok = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a <span class="tt">tool</span> entry's action ran. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d2/dfe/client_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d2/dfe/client_8hpp_source.html">client.hpp</a>.</p>
 
 </div>
 </div>

@@ -8,10 +8,12 @@ var searchData=
   ['unreadtype_5',['unreadType',['../d9/d8a/structmorph_1_1ui_1_1UnreadThemeToken.html#aa0297cb415bfd737e34168dbd8a99ecf',1,'morph::ui::UnreadThemeToken']]],
   ['upload_6',['upload',['../d3/d58/structmorph_1_1ui_1_1FileRequest.html#a7360426c85088168b3fb02073889bb2d',1,'morph::ui::FileRequest::upload'],['../da/d81/structmorph_1_1ui_1_1FileReply.html#a55c96cd42786917422383926e1dc2784',1,'morph::ui::FileReply::upload']]],
   ['uploadttl_7',['uploadTtl',['../d4/d75/structmorph_1_1ui_1_1MemoryFileStoreOptions.html#a1a85b8cd1c00b44e5a041c12c0b6aa49',1,'morph::ui::MemoryFileStoreOptions']]],
-  ['usable_8',['usable',['../da/d01/structmorph_1_1ui_1_1FrontendOption.html#a85168f31c148fdb1d05ca6df1b2a21e3',1,'morph::ui::FrontendOption']]],
-  ['used_9',['used',['../d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice.html#a2d634a868b486e2fb5260a0ecd2cbdc4',1,'morph::ui::detail::CommandLineChoice']]],
-  ['useprefix_10',['usePrefix',['../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#ae12b01d6b5dcc3185fae64fee56f055c',1,'morph::ui::detail::RtScope']]],
-  ['user_11',['user',['../dd/dc3/structmorph_1_1client_1_1Args.html#a7cf778a40437b661df160b957284071e',1,'morph::client::Args::user'],['../d8/d04/structmorph_1_1client_1_1LocalSetup.html#a3de346080ef16da918f884db25f3c34c',1,'morph::client::LocalSetup::user']]],
-  ['users_12',['users',['../dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#ab6df237aa0453d5d485378ca4bfa049b',1,'morph::ui::detail::CacheEntry']]],
-  ['utcoffsetminutes_13',['utcOffsetMinutes',['../db/d4c/structmorph_1_1ui_1_1FormatContext.html#a80461eca883dc3f4cb8cb808c24e8368',1,'morph::ui::FormatContext']]]
+  ['upper_8',['upper',['../d6/d18/structmorph_1_1table_1_1PlannedCondition.html#ab09af7576c654acb85e2b346c71d117b',1,'morph::table::PlannedCondition']]],
+  ['uppertext_9',['upperText',['../d6/d18/structmorph_1_1table_1_1PlannedCondition.html#acd4a5736616a059c7a4e4d15d6344ae5',1,'morph::table::PlannedCondition']]],
+  ['usable_10',['usable',['../da/d01/structmorph_1_1ui_1_1FrontendOption.html#a85168f31c148fdb1d05ca6df1b2a21e3',1,'morph::ui::FrontendOption']]],
+  ['used_11',['used',['../d5/d05/structmorph_1_1ui_1_1detail_1_1CommandLineChoice.html#a2d634a868b486e2fb5260a0ecd2cbdc4',1,'morph::ui::detail::CommandLineChoice']]],
+  ['useprefix_12',['usePrefix',['../de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#ae12b01d6b5dcc3185fae64fee56f055c',1,'morph::ui::detail::RtScope']]],
+  ['user_13',['user',['../dd/dc3/structmorph_1_1client_1_1Args.html#a7cf778a40437b661df160b957284071e',1,'morph::client::Args::user'],['../d8/d04/structmorph_1_1client_1_1LocalSetup.html#a3de346080ef16da918f884db25f3c34c',1,'morph::client::LocalSetup::user']]],
+  ['users_14',['users',['../dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#ab6df237aa0453d5d485378ca4bfa049b',1,'morph::ui::detail::CacheEntry']]],
+  ['utcoffsetminutes_15',['utcOffsetMinutes',['../db/d4c/structmorph_1_1ui_1_1FormatContext.html#a80461eca883dc3f4cb8cb808c24e8368',1,'morph::ui::FormatContext']]]
 ];

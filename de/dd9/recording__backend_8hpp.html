@@ -135,6 +135,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/dd9/recordi
 <code>#include &lt;memory&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;set&gt;</code><br />
+<code>#include &lt;span&gt;</code><br />
 <code>#include &lt;stdexcept&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
@@ -206,19 +207,25 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeProgress" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeProgress"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../db/d84/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeProgress.html">morph::ui::testing::detail::FakeProgress</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../d9/d83/classmorph_1_1ui_1_1ProgressWidget.html" title="A progress bar.">ProgressWidget</a></span>: properties <span class="tt">value</span> (as <span class="tt"><a class="el" href="#ac415a205622727fcfceb0864895b4a62" title="A fraction as its shortest decimal text, or none.">formatFraction</a></span> gives it), <span class="tt">label</span>.  <a href="../../db/d84/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeProgress.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeSteps" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeSteps"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../db/dd3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSteps.html">morph::ui::testing::detail::FakeSteps</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../d1/d8e/classmorph_1_1ui_1_1StepsWidget.html" title="The steps of a process, each with its state.">StepsWidget</a></span>: properties <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ad2ebc0ff469e3b19c0d64859ef77922b" title="The steps of a process.">steps</a></span> (<span class="tt">[label:State,…]</span>), <span class="tt">current</span> (a position, or <span class="tt">none</span>), <span class="tt">labelled</span>.  <a href="../../db/dd3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSteps.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../d1/d8e/classmorph_1_1ui_1_1StepsWidget.html" title="The steps of a process, each with its state.">StepsWidget</a></span>: properties <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#ad2ebc0ff469e3b19c0d64859ef77922b" title="The steps of a process.">steps</a></span> (<span class="tt">[label:State,…]</span>, a nonempty detail following as <span class="tt">;detail=&lt;<a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a>&gt;</span>), <span class="tt">current</span> (a position, or <span class="tt">none</span>), <span class="tt">labelled</span>.  <a href="../../db/dd3/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSteps.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeChart" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeChart"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../de/d55/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeChart.html">morph::ui::testing::detail::FakeChart</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../da/d13/classmorph_1_1ui_1_1ChartWidget.html" title="Points against a numeric axis, with reference lines. It takes no focus and calls no handler.">ChartWidget</a></span>: properties <span class="tt">yRange</span> and <span class="tt">xRange</span> (<span class="tt">[lo,hi]</span>), <span class="tt">yLabel</span>, <span class="tt">yTicks</span> (<span class="tt">[<a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a>@value,…]</span>), <span class="tt">lines</span> (<span class="tt">[label@value;tone;style,…]</span>), <span class="tt">series</span> (as <span class="tt"><a class="el" href="#a2b063262c5c80dca38e266cdfcaf9f9b" title="A chart&#39;s series: [entry,…], each entry label;joined;[point|…] and each point xLabel@x,...">formatChartSeries</a></span> gives it) and <span class="tt">summary</span>, each set only when it changed. Numbers are written shortest-round-trip, so a log is the same on every platform.  <a href="../../de/d55/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeChart.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../da/d13/classmorph_1_1ui_1_1ChartWidget.html" title="Points against a numeric axis, with reference lines. It takes no focus and calls no handler.">ChartWidget</a></span>: properties <span class="tt">yRange</span> and <span class="tt">xRange</span> (<span class="tt">[lo,hi]</span>), <span class="tt">yLabel</span>, <span class="tt">yTicks</span> (<span class="tt">[<a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a>@value,…]</span>), <span class="tt">barSlot</span> (a number), <span class="tt">lines</span> (<span class="tt">[label@value;tone;style,…]</span>), <span class="tt">series</span> (as <span class="tt"><a class="el" href="#a2b063262c5c80dca38e266cdfcaf9f9b" title="A chart&#39;s series: [entry,…], each entry label;joined;[point|…], followed by ;bars for a Bars series,...">formatChartSeries</a></span> gives it) and <span class="tt">summary</span>, each set only when it changed. Numbers are written shortest-round-trip, so a log is the same on every platform.  <a href="../../de/d55/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeChart.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeKeyValue" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeKeyValue"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../da/d53/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeKeyValue.html">morph::ui::testing::detail::FakeKeyValue</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../dd/df9/classmorph_1_1ui_1_1KeyValueWidget.html" title="Captions beside, or above, their values. A toned value is drawn in the tone&#39;s colour and the strong w...">KeyValueWidget</a></span>: properties <span class="tt">items</span> (<span class="tt">[label:value,…]</span>, a value with spans as its runs in brackets, then <span class="tt">;tone=&lt;<a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a" title="What a message or a mark conveys, mapped to the theme&#39;s colours.">Tone</a>&gt;</span> for a toned one) and <span class="tt">captions</span>.  <a href="../../da/d53/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeKeyValue.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeEmptyState" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeEmptyState"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d5/d33/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeEmptyState.html">morph::ui::testing::detail::FakeEmptyState</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html" title="What a region shows when it has nothing to show.">EmptyStateWidget</a></span>: properties <span class="tt">title</span>, <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888" title="Static or bound text.">text</a></span>, <span class="tt">icon</span>, <span class="tt">actionLabel</span>.  <a href="../../d5/d33/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeEmptyState.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeDrawer" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeDrawer"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d5a/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDrawer.html">morph::ui::testing::detail::FakeDrawer</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html" title="A panel over the content that slides in from the side fixed at creation; it follows a dialog&#39;s rules....">DrawerWidget</a></span>: properties <span class="tt">side</span>, <span class="tt">open</span>, <span class="tt">title</span>, <span class="tt">description</span>; a <span class="tt">Footer</span> child once its footer is asked for.  <a href="../../d7/d5a/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDrawer.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakePopover" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakePopover"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePopover.html">morph::ui::testing::detail::FakePopover</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../d6/d93/classmorph_1_1ui_1_1PopoverWidget.html" title="A non-modal panel that belongs to another widget: the results of a search under its field....">PopoverWidget</a></span>: properties <span class="tt">open</span> and <span class="tt">width</span>.  <a href="../../d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePopover.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeSplitter" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeSplitter"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d5/d19/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSplitter.html">morph::ui::testing::detail::FakeSplitter</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html" title="Panes along the axis fixed at creation, with handles between them that the user drags.">SplitterWidget</a></span>: properties <span class="tt">axis</span>, <span class="tt">sizes</span> (<span class="tt">[n,…]</span>).  <a href="../../d5/d19/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeSplitter.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeCollapsible" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeCollapsible"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d2/d72/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCollapsible.html">morph::ui::testing::detail::FakeCollapsible</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html" title="A titled section the user opens and closes. A new collapsible is open.">CollapsibleWidget</a></span>: properties <span class="tt">title</span>, <span class="tt">header</span> (the header child's id), <span class="tt">open</span>.  <a href="../../d2/d72/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCollapsible.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakePage" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakePage"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d6/de9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePage.html">morph::ui::testing::detail::FakePage</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../dd/dfb/classmorph_1_1ui_1_1PageWidget.html" title="A sheet of fixed physical size (docs/spec/ui/document_page.md). Its children are PageRegionWidgets....">PageWidget</a></span>: properties <span class="tt">size</span>, <span class="tt">margins</span>, <span class="tt">scale</span> and <span class="tt">displayed</span>. The derived ones follow the width the backend offers pages (<span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html#a9f2610c1f2ed3c447c79cca1f2840efe" title="Sets the width every page is offered, as a container of that width would, and relays the pages out.">RecordingBackend::setPageAvailableWidth</a></span>) and are logged when they change.  <a href="../../d6/de9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePage.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakePageRegion" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakePageRegion"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d5/db9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePageRegion.html">morph::ui::testing::detail::FakePageRegion</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../d2/d3f/classmorph_1_1ui_1_1PageRegionWidget.html" title="A rectangle of a page that holds its children as a vertical stack, clipped to the rectangle....">PageRegionWidget</a></span>: properties <span class="tt">anchor</span>, <span class="tt">rect</span> and <span class="tt">overflow</span>; the last two follow the page's layout and the content height the test gives.  <a href="../../d5/db9/classmorph_1_1ui_1_1testing_1_1detail_1_1FakePageRegion.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeDropZone" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeDropZone"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../da/d2f/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDropZone.html">morph::ui::testing::detail::FakeDropZone</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A fake <span class="tt"><a class="el" href="../../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html" title="A region that takes files dropped from the operating system.">DropZoneWidget</a></span>: properties <span class="tt">accept</span> (<span class="tt">[.ext,…]</span>), <span class="tt">multiple</span>.  <a href="../../da/d2f/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDropZone.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeCustom" id="r_morph_3A_3Aui_3A_3Atesting_3A_3Adetail_3A_3AFakeCustom"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d68/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeCustom.html">morph::ui::testing::detail::FakeCustom</a></td></tr>
@@ -267,6 +274,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:a103342b99b9ad4abb6e0fac5fb768a80"><td class="mdescLeft">&#160;</td><td class="mdescRight">A button emphasis's name.  <br /></td></tr>
 <tr class="memitem:aee8c2729397d3a91ba1df88d7b2cb322" id="r_aee8c2729397d3a91ba1df88d7b2cb322"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aee8c2729397d3a91ba1df88d7b2cb322">morph::ui::testing::detail::enumName</a> (<a class="el" href="../../dd/d96/button__style_8hpp.html#a611665881c188e8252014fdf9c91d2e5">ButtonStyle</a> style)</td></tr>
 <tr class="memdesc:aee8c2729397d3a91ba1df88d7b2cb322"><td class="mdescLeft">&#160;</td><td class="mdescRight">A button style's name.  <br /></td></tr>
+<tr class="memitem:abd9484a52ccc0818968a62de57b416c7" id="r_abd9484a52ccc0818968a62de57b416c7"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#abd9484a52ccc0818968a62de57b416c7">morph::ui::testing::detail::enumName</a> (<a class="el" href="../../d0/dc2/ui_2backend_8hpp.html#a813ca81d16332cc7126de3e02513f6d2">MenuCaret</a> caret)</td></tr>
+<tr class="memdesc:abd9484a52ccc0818968a62de57b416c7"><td class="mdescLeft">&#160;</td><td class="mdescRight">A menu trigger's marker name.  <br /></td></tr>
 <tr class="memitem:a69b96a32214f5ea67c605dc859160abb" id="r_a69b96a32214f5ea67c605dc859160abb"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a69b96a32214f5ea67c605dc859160abb">morph::ui::testing::detail::formatSort</a> (std::optional&lt; <a class="el" href="../../d6/dab/structmorph_1_1ui_1_1TableSort.html">TableSort</a> &gt; const &amp;sort)</td></tr>
 <tr class="memdesc:a69b96a32214f5ea67c605dc859160abb"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table's sort as the dump shows it: the column's index and the direction, or <span class="tt">none</span>.  <br /></td></tr>
 <tr class="memitem:a4faa152d8b6224dfaaa5f3f695748e78" id="r_a4faa152d8b6224dfaaa5f3f695748e78"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a4faa152d8b6224dfaaa5f3f695748e78">morph::ui::testing::detail::enumName</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a14948061dae38a78ef544a3b4d9873e5">TextRole</a> role)</td></tr>
@@ -306,7 +315,7 @@ Functions</h2></td></tr>
 <tr class="memitem:ab03ab6aafd186aa317eae78cf0b49b6c" id="r_ab03ab6aafd186aa317eae78cf0b49b6c"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ab03ab6aafd186aa317eae78cf0b49b6c">morph::ui::testing::detail::formatChartValue</a> (<a class="el" href="../../d6/d29/structmorph_1_1ui_1_1ChartPoint.html">ChartPoint</a> const &amp;point)</td></tr>
 <tr class="memdesc:ab03ab6aafd186aa317eae78cf0b49b6c"><td class="mdescLeft">&#160;</td><td class="mdescRight">A chart point's value: the number, <span class="tt">gap</span> for none, and the number followed by <span class="tt">↑</span> or <span class="tt">↓</span> for a point clipped at the axis's upper or lower end.  <br /></td></tr>
 <tr class="memitem:a2b063262c5c80dca38e266cdfcaf9f9b" id="r_a2b063262c5c80dca38e266cdfcaf9f9b"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a2b063262c5c80dca38e266cdfcaf9f9b">morph::ui::testing::detail::formatChartSeries</a> (std::vector&lt; <a class="el" href="../../d9/dfd/structmorph_1_1ui_1_1ChartSeries.html">ChartSeries</a> &gt; const &amp;series)</td></tr>
-<tr class="memdesc:a2b063262c5c80dca38e266cdfcaf9f9b"><td class="mdescLeft">&#160;</td><td class="mdescRight">A chart's series: <span class="tt">[entry,…]</span>, each entry <span class="tt">label;joined;[point|…]</span> and each point <span class="tt">xLabel@x,y;tone;note</span>, the tone empty for an unmarked point.  <br /></td></tr>
+<tr class="memdesc:a2b063262c5c80dca38e266cdfcaf9f9b"><td class="mdescLeft">&#160;</td><td class="mdescRight">A chart's series: <span class="tt">[entry,…]</span>, each entry <span class="tt">label;joined;[point|…]</span>, followed by <span class="tt">;bars</span> for a <span class="tt">Bars</span> series, and each point <span class="tt">xLabel@x,y;tone;note</span>, the tone empty for an unmarked point.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt"><a class="el" href="../../dd/db4/classmorph_1_1ui_1_1testing_1_1RecordingBackend.html" title="A headless IViewBackend: fake widgets that record every operation, a golden dump of the live tree,...">morph::ui::testing::RecordingBackend</a></span>: a headless widget tree with an operation log, a golden dump and user-interaction helpers — the test double and the reference for every real backend. </p>
@@ -328,7 +337,7 @@ Functions</h2></td></tr>
 
 <p>Properties fixed when a widget is created, as name and formatted value. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -365,7 +374,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> or <span class="tt">false</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -414,7 +423,7 @@ template&lt;typename Special&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The escaped text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -450,7 +459,7 @@ template&lt;typename Special&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The escaped text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -486,7 +495,7 @@ template&lt;typename Special&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The escaped text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -522,7 +531,7 @@ template&lt;typename Special&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Their text; <span class="tt">=</span>, <span class="tt">,</span>, <span class="tt">[</span>, <span class="tt">]</span> and <span class="tt">;</span> in a label or attribute are escaped. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -558,7 +567,7 @@ template&lt;typename Special&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its text. A string key is escaped as <span class="tt">formatItem</span> escapes, and a double quote in it is preceded by a backslash. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00132">132</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -594,7 +603,7 @@ template&lt;typename Special&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">formatKey(*key)</span>, or <span class="tt">none</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -630,7 +639,7 @@ template&lt;typename Special&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">content</span>, <span class="tt">fixed(n)</span>, <span class="tt">stretch(n)</span> or <span class="tt">percent(n)</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00156">156</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -666,7 +675,7 @@ template&lt;typename Special&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">stretch</span>, <span class="tt">start</span>, <span class="tt">center</span> or <span class="tt">end</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00170">170</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00174">174</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -702,7 +711,7 @@ template&lt;typename Special&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">start</span>, <span class="tt">center</span>, <span class="tt">end</span> or <span class="tt">between</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00187">187</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -738,7 +747,7 @@ template&lt;typename Special&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">width/height</span>, each as <span class="tt">formatSizing</span> gives it and followed by <span class="tt"> min=&lt;n&gt;</span> and <span class="tt"> max=&lt;n&gt;</span> for the bounds it has, then <span class="tt"> self=&lt;align&gt;</span> when the node places itself, such as <span class="tt">stretch(1) max=44/content self=center</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00205">205</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -774,7 +783,7 @@ template&lt;typename Special&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">none</span> for <span class="tt">nullopt</span>, <span class="tt">empty</span> for an empty <span class="tt">Timestamp</span>, else the ISO-8601 UTC instant. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00225">225</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00229">229</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -824,12 +833,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The list's text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00242">242</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00246">246</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a103342b99b9ad4abb6e0fac5fb768a80" name="a103342b99b9ad4abb6e0fac5fb768a80"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a103342b99b9ad4abb6e0fac5fb768a80">&#9670;&#160;</a></span>enumName() <span class="overload">[1/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a103342b99b9ad4abb6e0fac5fb768a80">&#9670;&#160;</a></span>enumName() <span class="overload">[1/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -860,12 +869,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00262">262</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="aee8c2729397d3a91ba1df88d7b2cb322" name="aee8c2729397d3a91ba1df88d7b2cb322"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aee8c2729397d3a91ba1df88d7b2cb322">&#9670;&#160;</a></span>enumName() <span class="overload">[2/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#aee8c2729397d3a91ba1df88d7b2cb322">&#9670;&#160;</a></span>enumName() <span class="overload">[2/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -896,7 +905,43 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00277">277</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00281">281</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abd9484a52ccc0818968a62de57b416c7" name="abd9484a52ccc0818968a62de57b416c7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abd9484a52ccc0818968a62de57b416c7">&#9670;&#160;</a></span>enumName() <span class="overload">[3/14]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::testing::detail::enumName </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d0/dc2/ui_2backend_8hpp.html#a813ca81d16332cc7126de3e02513f6d2">MenuCaret</a></td>          <td class="paramname"><span class="paramname"><em>caret</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A menu trigger's marker name. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">caret</td><td>The marker. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00286">286</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -932,12 +977,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">&lt;index&gt;:Ascending</span>, <span class="tt">&lt;index&gt;:Descending</span> or <span class="tt">none</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a4faa152d8b6224dfaaa5f3f695748e78" name="a4faa152d8b6224dfaaa5f3f695748e78"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4faa152d8b6224dfaaa5f3f695748e78">&#9670;&#160;</a></span>enumName() <span class="overload">[3/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a4faa152d8b6224dfaaa5f3f695748e78">&#9670;&#160;</a></span>enumName() <span class="overload">[4/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -968,12 +1013,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00292">292</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00303">303</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a481252bdcfd495de2e63dc386677836e" name="a481252bdcfd495de2e63dc386677836e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a481252bdcfd495de2e63dc386677836e">&#9670;&#160;</a></span>enumName() <span class="overload">[4/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a481252bdcfd495de2e63dc386677836e">&#9670;&#160;</a></span>enumName() <span class="overload">[5/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1004,12 +1049,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00328">328</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a34e9f0ad83745442e12d1a59764f9f15" name="a34e9f0ad83745442e12d1a59764f9f15"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a34e9f0ad83745442e12d1a59764f9f15">&#9670;&#160;</a></span>enumName() <span class="overload">[5/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a34e9f0ad83745442e12d1a59764f9f15">&#9670;&#160;</a></span>enumName() <span class="overload">[6/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1040,12 +1085,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00343">343</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00354">354</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="aa42328d84e6cdbff51f40ef90c64ca8a" name="aa42328d84e6cdbff51f40ef90c64ca8a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa42328d84e6cdbff51f40ef90c64ca8a">&#9670;&#160;</a></span>enumName() <span class="overload">[6/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#aa42328d84e6cdbff51f40ef90c64ca8a">&#9670;&#160;</a></span>enumName() <span class="overload">[7/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1076,12 +1121,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00359">359</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00370">370</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a1031392bf693c4576f7eb0f6342c914f" name="a1031392bf693c4576f7eb0f6342c914f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1031392bf693c4576f7eb0f6342c914f">&#9670;&#160;</a></span>enumName() <span class="overload">[7/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a1031392bf693c4576f7eb0f6342c914f">&#9670;&#160;</a></span>enumName() <span class="overload">[8/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1112,7 +1157,7 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00386">386</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1148,7 +1193,7 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Their text; <span class="tt">=</span>, <span class="tt">,</span>, <span class="tt">[</span>, <span class="tt">]</span> and <span class="tt">;</span> in a run are escaped, so a run cannot forge a flag. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00396">396</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00407">407</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1184,12 +1229,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Their text, unescaped. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00426">426</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a3289da7d6f91beb1f38eec4363ba50de" name="a3289da7d6f91beb1f38eec4363ba50de"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a3289da7d6f91beb1f38eec4363ba50de">&#9670;&#160;</a></span>enumName() <span class="overload">[8/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a3289da7d6f91beb1f38eec4363ba50de">&#9670;&#160;</a></span>enumName() <span class="overload">[9/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1220,12 +1265,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00443">443</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00454">454</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a66a66559a0691d255b96736016a4e17b" name="a66a66559a0691d255b96736016a4e17b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a66a66559a0691d255b96736016a4e17b">&#9670;&#160;</a></span>enumName() <span class="overload">[9/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a66a66559a0691d255b96736016a4e17b">&#9670;&#160;</a></span>enumName() <span class="overload">[10/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1256,7 +1301,7 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00457">457</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00468">468</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1292,12 +1337,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text, such as <span class="tt">0.25</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00475">475</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00486">486</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a22b62cc7039dd3f3fdedfa312c2fdb7c" name="a22b62cc7039dd3f3fdedfa312c2fdb7c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a22b62cc7039dd3f3fdedfa312c2fdb7c">&#9670;&#160;</a></span>enumName() <span class="overload">[10/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a22b62cc7039dd3f3fdedfa312c2fdb7c">&#9670;&#160;</a></span>enumName() <span class="overload">[11/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1328,12 +1373,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00485">485</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00496">496</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a93fa1e8999d5b365361122403eee910a" name="a93fa1e8999d5b365361122403eee910a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a93fa1e8999d5b365361122403eee910a">&#9670;&#160;</a></span>enumName() <span class="overload">[11/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a93fa1e8999d5b365361122403eee910a">&#9670;&#160;</a></span>enumName() <span class="overload">[12/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1364,12 +1409,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00499">499</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00510">510</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a6ee12105c92c1c50ca781b3f92638493" name="a6ee12105c92c1c50ca781b3f92638493"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6ee12105c92c1c50ca781b3f92638493">&#9670;&#160;</a></span>enumName() <span class="overload">[12/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a6ee12105c92c1c50ca781b3f92638493">&#9670;&#160;</a></span>enumName() <span class="overload">[13/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1400,12 +1445,12 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00513">513</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00524">524</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
 <a id="a7b63806600d22d178fe57e072bd144c5" name="a7b63806600d22d178fe57e072bd144c5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7b63806600d22d178fe57e072bd144c5">&#9670;&#160;</a></span>enumName() <span class="overload">[13/13]</span></h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a7b63806600d22d178fe57e072bd144c5">&#9670;&#160;</a></span>enumName() <span class="overload">[14/14]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1436,7 +1481,7 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The enumerator's name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00527">527</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l00538">538</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1472,7 +1517,7 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The escaped text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01528">1528</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01553">1553</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1508,7 +1553,7 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">neutral</span>, <span class="tt">info</span>, <span class="tt">ok</span>, <span class="tt">warn</span> or <span class="tt">err</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01535">1535</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01560">1560</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1544,7 +1589,7 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">solid</span>, <span class="tt">dashed</span> or <span class="tt">dotted</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01544">1544</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01569">1569</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1580,7 +1625,7 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01555">1555</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01580">1580</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -1607,7 +1652,7 @@ template&lt;typename T, typename F&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>A chart's series: <span class="tt">[entry,…]</span>, each entry <span class="tt">label;joined;[point|…]</span> and each point <span class="tt">xLabel@x,y;tone;note</span>, the tone empty for an unmarked point. </p>
+<p>A chart's series: <span class="tt">[entry,…]</span>, each entry <span class="tt">label;joined;[point|…]</span>, followed by <span class="tt">;bars</span> for a <span class="tt">Bars</span> series, and each point <span class="tt">xLabel@x,y;tone;note</span>, the tone empty for an unmarked point. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">series</td><td>The series. </td></tr>
@@ -1616,7 +1661,7 @@ template&lt;typename T, typename F&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01572">1572</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01597">1597</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

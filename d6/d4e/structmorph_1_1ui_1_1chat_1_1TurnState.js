@@ -5,5 +5,6 @@ var structmorph_1_1ui_1_1chat_1_1TurnState =
     [ "text", "d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html#ad8ecf77738284676f7b0f2e2e4329922", null ],
     [ "error", "d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html#a31ff1bba12ac5e78044367fe03d07cc5", null ],
     [ "steps", "d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html#a24794d5d078ebbd4dba5e095f9acbd99", null ],
+    [ "parts", "d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html#a10e2fac9bfebb6a88a5d9c5ba82bb16b", null ],
     [ "seq", "d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html#a8dac7799ccf8423670ffabf28d89e143", null ]
 ];

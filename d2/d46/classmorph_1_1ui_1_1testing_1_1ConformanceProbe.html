@@ -155,6 +155,8 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
 <tr class="memdesc:ac82dcf9ce40342ef212c8866de84ba95"><td class="mdescLeft">&#160;</td><td class="mdescRight">A container's child.  <br /></td></tr>
 <tr class="memitem:a5e8271e983eade47e61cad83579f27f0" id="r_a5e8271e983eade47e61cad83579f27f0"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a5e8271e983eade47e61cad83579f27f0">click</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;widget)=0</td></tr>
 <tr class="memdesc:a5e8271e983eade47e61cad83579f27f0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Activates a button as a user would.  <br /></td></tr>
+<tr class="memitem:a0cbec2325704d23dfb0b5ce1562493af" id="r_a0cbec2325704d23dfb0b5ce1562493af"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a0cbec2325704d23dfb0b5ce1562493af">clickAt</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;across, <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;along)</td></tr>
+<tr class="memdesc:a0cbec2325704d23dfb0b5ce1562493af"><td class="mdescLeft">&#160;</td><td class="mdescRight">Clicks at the horizontal middle of one widget and the vertical middle of another, as a user pointing at a place that no single widget marks would: the column of <code class="param">across</code>, the line of <code class="param">along</code>. The default is <span class="tt"><a class="el" href="#a5e8271e983eade47e61cad83579f27f0" title="Activates a button as a user would.">click</a></span> on <code class="param">across</code>, for a backend that reads no geometry.  <br /></td></tr>
 <tr class="memitem:aeac1d773d0c71db56174dddf74fcef3e" id="r_aeac1d773d0c71db56174dddf74fcef3e"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#aeac1d773d0c71db56174dddf74fcef3e">type</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;widget, std::string_view text)=0</td></tr>
 <tr class="memdesc:aeac1d773d0c71db56174dddf74fcef3e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces a text field's text as a user typing would: whatever the field held is cleared first (select all, or delete), so it ends up holding exactly <code class="param">text</code>. <span class="tt">onChange</span> may see intermediate texts.  <br /></td></tr>
 <tr class="memitem:a9ba4fc4917bf531b7f7793199cd94019" id="r_a9ba4fc4917bf531b7f7793199cd94019"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a9ba4fc4917bf531b7f7793199cd94019">drag</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;source, <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;target)=0</td></tr>
@@ -458,6 +460,46 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a id="a0cbec2325704d23dfb0b5ce1562493af" name="a0cbec2325704d23dfb0b5ce1562493af"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0cbec2325704d23dfb0b5ce1562493af">&#9670;&#160;</a></span>clickAt()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::testing::ConformanceProbe::clickAt </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>across</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>along</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Clicks at the horizontal middle of one widget and the vertical middle of another, as a user pointing at a place that no single widget marks would: the column of <code class="param">across</code>, the line of <code class="param">along</code>. The default is <span class="tt"><a class="el" href="#a5e8271e983eade47e61cad83579f27f0" title="Activates a button as a user would.">click</a></span> on <code class="param">across</code>, for a backend that reads no geometry. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">across</td><td>The widget whose horizontal middle is clicked. </td></tr>
+    <tr><td class="paramname">along</td><td>The widget whose vertical middle is clicked. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1014,7 +1056,7 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The description; <span class="tt">nullopt</span> when the probe reads none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00201">201</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1050,7 +1092,7 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its bounds, in the backend's own units; <span class="tt">nullopt</span> when the probe reads no geometry. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00201">201</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>
@@ -1086,7 +1128,7 @@ virtual void&#160;</td><td class="memItemRight"><b>settle</b> ()=0</td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The box; <span class="tt">nullopt</span> when the probe reads none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00210">210</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../d8/d3e/backend__conformance_8hpp_source.html">backend_conformance.hpp</a>.</p>
 
 </div>
 </div>

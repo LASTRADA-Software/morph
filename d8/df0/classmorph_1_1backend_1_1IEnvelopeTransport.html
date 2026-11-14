@@ -131,8 +131,9 @@ Inheritance diagram for morph::backend::IEnvelopeTransport:</div>
  <div class="center">
   <img src="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.png" usemap="#morph_3A_3Abackend_3A_3AIEnvelopeTransport_map" alt=""/>
   <map id="morph_3A_3Abackend_3A_3AIEnvelopeTransport_map" name="morph_3A_3Abackend_3A_3AIEnvelopeTransport_map">
-<area href="../../d5/d98/classmorph_1_1net_1_1SocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over a raw-socket RFC 6455 WebSocket co..." alt="morph::net::SocketBackend" shape="rect" coords="0,56,217,80"/>
-<area href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket." alt="morph::qt::QtWebSocketBackend" shape="rect" coords="227,56,444,80"/>
+<area href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html" title="IBackend adapter that routes all calls through a RemoteServer as wire Envelope messages." alt="morph::backend::SimulatedRemoteBackend" shape="rect" coords="0,56,251,80"/>
+<area href="../../d5/d98/classmorph_1_1net_1_1SocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over a raw-socket RFC 6455 WebSocket co..." alt="morph::net::SocketBackend" shape="rect" coords="261,56,512,80"/>
+<area href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket." alt="morph::qt::QtWebSocketBackend" shape="rect" coords="522,56,773,80"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -151,9 +152,9 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What a wire transport offers beside <span class="tt">IBackend</span>: one request, one reply, matched by <span class="tt">callId</span>. </p>
-<p><span class="tt">SocketBackend</span> and <span class="tt">QtWebSocketBackend</span> implement it. A backend without a wire, such as <span class="tt"><a class="el" href="../../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html" title="In-process backend that executes model actions on a thread pool strand.">LocalBackend</a></span>, has no peer and does not. </p>
+<p><span class="tt">SocketBackend</span>, <span class="tt">QtWebSocketBackend</span> and <span class="tt"><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html" title="IBackend adapter that routes all calls through a RemoteServer as wire Envelope messages.">SimulatedRemoteBackend</a></span> implement it; the last reaches a <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> in the same process, on its own connection scope. A backend with no server to ask, such as <span class="tt"><a class="el" href="../../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html" title="In-process backend that executes model actions on a thread pool strand.">LocalBackend</a></span>, does not implement it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d53/envelope__transport_8hpp_source.html#l00021">21</a> of file <a class="el" href="../../d8/d53/envelope__transport_8hpp_source.html">envelope_transport.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d53/envelope__transport_8hpp_source.html#l00022">22</a> of file <a class="el" href="../../d8/d53/envelope__transport_8hpp_source.html">envelope_transport.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a8673dbca04999ea369b2276f1bbda1d5" name="a8673dbca04999ea369b2276f1bbda1d5"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8673dbca04999ea369b2276f1bbda1d5">&#9670;&#160;</a></span>request()</h2>
@@ -192,7 +193,7 @@ IEnvelopeTransport &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IE
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">Completion</span> resolved with the reply envelope, or rejected with the transport's failure (<span class="tt"><a class="el" href="../../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html" title="Thrown to in-flight Completions when a transport drops mid-call (e.g. a Qt WebSocket disconnect)....">DisconnectedError</a></span> for a dropped or closed connection). </dd></dl>
 
-<p>Implemented in <a class="el" href="../../d5/d98/classmorph_1_1net_1_1SocketBackend.html#aef17a873379873c4eaee0cf8cf0e7ba1">morph::net::SocketBackend</a>, and <a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a0fae273d4dbcd3c6f0a23a410516cf7c">morph::qt::QtWebSocketBackend</a>.</p>
+<p>Implemented in <a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#aea58c1a59ee9e1a5adf77c2a9495ffd1">morph::backend::SimulatedRemoteBackend</a>, <a class="el" href="../../d5/d98/classmorph_1_1net_1_1SocketBackend.html#aef17a873379873c4eaee0cf8cf0e7ba1">morph::net::SocketBackend</a>, and <a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a0fae273d4dbcd3c6f0a23a410516cf7c">morph::qt::QtWebSocketBackend</a>.</p>
 
 </div>
 </div>

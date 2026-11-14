@@ -159,6 +159,8 @@ Environment &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Environme
 <tr class="memdesc:ae599823411423cee43bb957d6fc356ad"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads <span class="tt">env</span>, <span class="tt">session</span> or <span class="tt">host</span>.  <br /></td></tr>
 <tr class="memitem:a187bcb45765db0fa43ea723761993494" id="r_a187bcb45765db0fa43ea723761993494"><td class="memItemLeft">virtual <a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a187bcb45765db0fa43ea723761993494">formatting</a> () const =0</td></tr>
 <tr class="memdesc:a187bcb45765db0fa43ea723761993494"><td class="mdescLeft">&#160;</td><td class="mdescRight">The formatting facts.  <br /></td></tr>
+<tr class="memitem:a866d0195ab1dc8fea50fb53b3dc719b1" id="r_a866d0195ab1dc8fea50fb53b3dc719b1"><td class="memItemLeft">virtual <a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a866d0195ab1dc8fea50fb53b3dc719b1">entryFormatting</a> () const</td></tr>
+<tr class="memdesc:a866d0195ab1dc8fea50fb53b3dc719b1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The facts typed text is read in: the person's own, whatever place the expression is evaluated in. A locale scope changes how values are shown, not how a person types, so <span class="tt">parseDecimal</span> reads these.  <br /></td></tr>
 <tr class="memitem:a24de57cf0ec7937cf2c252c00db44856" id="r_a24de57cf0ec7937cf2c252c00db44856"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a24de57cf0ec7937cf2c252c00db44856">report</a> (std::string_view path, std::string_view reason) const =0</td></tr>
 <tr class="memdesc:a24de57cf0ec7937cf2c252c00db44856"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reports a runtime error of an expression.  <br /></td></tr>
 </table>
@@ -166,7 +168,7 @@ Environment &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Environme
 <div class="textblock"><p>What an evaluated expression reads: the interpreter implements it over its reactive values. </p>
 <p>Every read returns a value; a name the environment does not hold reads as <span class="tt">null</span>. <span class="tt"><a class="el" href="#a24de57cf0ec7937cf2c252c00db44856" title="Reports a runtime error of an expression.">report</a></span> is the client's diagnostic channel: the evaluator reports each runtime error there, with the expression's path. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01270">1270</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01315">1315</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a539fb8a81aa2814ee424c8799f47a53a" name="a539fb8a81aa2814ee424c8799f47a53a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a539fb8a81aa2814ee424c8799f47a53a">&#9670;&#160;</a></span>ref()</h2>
@@ -395,6 +397,38 @@ Environment &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Environme
 <dl class="section return"><dt>Returns</dt><dd>The context the display functions and <span class="tt">t</span> use. </dd></dl>
 
 <p>Implemented in <a class="el" href="../../d9/d47/classmorph_1_1ui_1_1detail_1_1host_1_1ParamsEnv.html#a4adffd3cebb30222e359c5a40c489ea5">morph::ui::detail::host::ParamsEnv</a>, <a class="el" href="../../de/d21/classmorph_1_1ui_1_1detail_1_1ScopeEnv.html#af20d4e4122191c074ea31d1403a36f31">morph::ui::detail::ScopeEnv</a>, and <a class="el" href="../../db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#af952c5a712536ea45e1811500f48d7dd">morph::ui::StaticEnvironment</a>.</p>
+
+</div>
+</div>
+<a id="a866d0195ab1dc8fea50fb53b3dc719b1" name="a866d0195ab1dc8fea50fb53b3dc719b1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a866d0195ab1dc8fea50fb53b3dc719b1">&#9670;&#160;</a></span>entryFormatting()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const  &amp; morph::ui::Environment::entryFormatting </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The facts typed text is read in: the person's own, whatever place the expression is evaluated in. A locale scope changes how values are shown, not how a person types, so <span class="tt">parseDecimal</span> reads these. </p>
+<dl class="section return"><dt>Returns</dt><dd>The context <span class="tt">parseDecimal</span> uses; by default the display facts. </dd></dl>
+
+<p>Reimplemented in <a class="el" href="../../de/d21/classmorph_1_1ui_1_1detail_1_1ScopeEnv.html#a998a98d83a211ef46b2ec0da31a0d647">morph::ui::detail::ScopeEnv</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01360">1360</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>

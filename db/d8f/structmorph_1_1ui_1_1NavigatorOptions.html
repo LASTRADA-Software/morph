@@ -132,6 +132,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a9f6d64c3fa99f29351d6ab05f8679040"><td class="mdescLeft">&#160;</td><td class="mdescRight">The catalog's entries, in the order the navigator lists them within a group.  <br /></td></tr>
 <tr class="memitem:a2a3e478566eb86e46a4a5dcdab73d0ae" id="r_a2a3e478566eb86e46a4a5dcdab73d0ae"><td class="memItemLeft">std::function&lt; std::vector&lt; std::string &gt;(<a class="el" href="../../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html">CatalogEntry</a> const  &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2a3e478566eb86e46a4a5dcdab73d0ae">titles</a></td></tr>
 <tr class="memdesc:a2a3e478566eb86e46a4a5dcdab73d0ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">An entry's titles, each one a search can match: one per locale (spec 6 §19). Empty uses the entry's title, a string or a message reference's <span class="tt">fallback</span>. The first title is the one shown.  <br /></td></tr>
+<tr class="memitem:ad5e1201d2c10117ca204eafd13d8a5e0" id="r_ad5e1201d2c10117ca204eafd13d8a5e0"><td class="memItemLeft">std::function&lt; std::string(std::string_view <a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a>)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad5e1201d2c10117ca204eafd13d8a5e0">label</a></td></tr>
+<tr class="memdesc:ad5e1201d2c10117ca204eafd13d8a5e0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Maps a group heading, or a module's when its entries have no group, to the text shown: a message key becomes its message. Empty shows the text as written.  <br /></td></tr>
 <tr class="memitem:af3b37ac9af77e89c711116c71d4dedef" id="r_af3b37ac9af77e89c711116c71d4dedef"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af3b37ac9af77e89c711116c71d4dedef">pins</a></td></tr>
 <tr class="memdesc:af3b37ac9af77e89c711116c71d4dedef"><td class="mdescLeft">&#160;</td><td class="mdescRight">The person's pins as stored, in order; unknown ids and those past <span class="tt"><a class="el" href="#a213fd2d820553c5ea6723591f54350bd" title="The most pins (app-max-pins).">maxPins</a></span> are dropped.  <br /></td></tr>
 <tr class="memitem:a213fd2d820553c5ea6723591f54350bd" id="r_a213fd2d820553c5ea6723591f54350bd"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a213fd2d820553c5ea6723591f54350bd">maxPins</a> = 12</td></tr>
@@ -184,6 +186,24 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="ad5e1201d2c10117ca204eafd13d8a5e0" name="ad5e1201d2c10117ca204eafd13d8a5e0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad5e1201d2c10117ca204eafd13d8a5e0">&#9670;&#160;</a></span>label</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;std::string(std::string_view <a class="el" href="../../d8/d11/view_8hpp.html#aad8adfeaad75b31095ad25cdff3b0888">text</a>)&gt; morph::ui::NavigatorOptions::label</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Maps a group heading, or a module's when its entries have no group, to the text shown: a message key becomes its message. Empty shows the text as written. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+
+</div>
+</div>
 <a id="af3b37ac9af77e89c711116c71d4dedef" name="af3b37ac9af77e89c711116c71d4dedef"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af3b37ac9af77e89c711116c71d4dedef">&#9670;&#160;</a></span>pins</h2>
 
@@ -198,7 +218,7 @@ Public Attributes</h2></td></tr>
 
 <p>The person's pins as stored, in order; unknown ids and those past <span class="tt"><a class="el" href="#a213fd2d820553c5ea6723591f54350bd" title="The most pins (app-max-pins).">maxPins</a></span> are dropped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -216,7 +236,7 @@ Public Attributes</h2></td></tr>
 
 <p>The most pins (<span class="tt">app-max-pins</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -234,7 +254,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with an available entry's screen id when it, or its pin, is chosen. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -252,7 +272,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with an available entry's screen id when the pointer rests on it or its pin: the time to start the screen's prefetch queries. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>
@@ -270,7 +290,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called with the whole new list each time the pins change, for the application to store. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d0b/navigator_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../da/d0b/navigator_8hpp_source.html">navigator.hpp</a>.</p>
 
 </div>
 </div>

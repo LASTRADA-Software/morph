@@ -5,6 +5,7 @@ var structmorph_1_1ui_1_1ChartData =
     [ "xMax", "dd/dcc/structmorph_1_1ui_1_1ChartData.html#af9b817507b332d91ceb3bfb174620ca4", null ],
     [ "yMin", "dd/dcc/structmorph_1_1ui_1_1ChartData.html#a25776386f3c5e1aadefd4549194d2d83", null ],
     [ "yMax", "dd/dcc/structmorph_1_1ui_1_1ChartData.html#a2a26b7f74c57f59887253fa1875ea6b7", null ],
+    [ "barSlot", "dd/dcc/structmorph_1_1ui_1_1ChartData.html#a1678029565e58abd038c47ed163c97eb", null ],
     [ "yLabel", "dd/dcc/structmorph_1_1ui_1_1ChartData.html#ae183c9a85a5b5e8d7c5e49c67f02f79d", null ],
     [ "yTicks", "dd/dcc/structmorph_1_1ui_1_1ChartData.html#ae2c7dbfce0c35694d5e6b74ed3e51d8e", null ],
     [ "lines", "dd/dcc/structmorph_1_1ui_1_1ChartData.html#a1b9d9f2bf46470e48024248eccdcc277", null ],

@@ -8,6 +8,7 @@ var classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable =
     [ "setRowKey", "d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#a1c09d9ee362715a47f6d8965a368cfb0", null ],
     [ "setRowHeading", "d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#aa63a00d86c8ac23f4498ad065d0e6c20", null ],
     [ "headingKey", "d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#aafb3ee72cfad12f6f80af10a92e7fccd", null ],
+    [ "setRowSpans", "d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#a433f780bd9f42f24c56d89636eeac5e4", null ],
     [ "setRowTone", "d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#a11d5922b80e92b97b59849b1b9361ed2", null ],
     [ "setSelectColumn", "d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#a09ad79f0fb399356d31f812d85348075", null ],
     [ "setSelectAllLabel", "d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#a4aa177c3412d176fa29223663c696933", null ],

@@ -130,6 +130,14 @@ Variables</h2></td></tr>
 <tr class="memdesc:ae3ef51d9e47df3944fd53f9ae7f0f5ee"><td class="mdescLeft">&#160;</td><td class="mdescRight">An exception escaped a widget callback; the mount caught it, so it never reaches the backend.  <br /></td></tr>
 <tr class="memitem:a49a7fa8ad8556852b75927e43519a403" id="r_a49a7fa8ad8556852b75927e43519a403"><td class="memItemLeft">constexpr char const  *&#160;</td><td class="memItemRight"><a class="el" href="#a49a7fa8ad8556852b75927e43519a403">kDuplicateKey</a> = &quot;morph::ui: duplicate <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html">ForEach</a> key&quot;</td></tr>
 <tr class="memdesc:a49a7fa8ad8556852b75927e43519a403"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a> or <a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a> snapshot repeated a key; the later row is refused and the first one kept.  <br /></td></tr>
+<tr class="memitem:a7d367df8e02d6e3592504769196ffe88" id="r_a7d367df8e02d6e3592504769196ffe88"><td class="memItemLeft">constexpr char const  *&#160;</td><td class="memItemRight"><a class="el" href="#a7d367df8e02d6e3592504769196ffe88">kRowSpanInvalid</a> = &quot;morph::ui: a <a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b">table</a> <a class="el" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a>'s span is not a span of the table&quot;</td></tr>
+<tr class="memdesc:a7d367df8e02d6e3592504769196ffe88"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table row's span names no column, covers no rows, is a heading's, or repeats a column of its row; it is refused and its cell stays in its own row.  <br /></td></tr>
+<tr class="memitem:af6dba1d1b6371b56e6544252bd8f2bb5" id="r_af6dba1d1b6371b56e6544252bd8f2bb5"><td class="memItemLeft">constexpr char const  *&#160;</td><td class="memItemRight"><a class="el" href="#af6dba1d1b6371b56e6544252bd8f2bb5">kRowSpanOverrun</a></td></tr>
+<tr class="memdesc:af6dba1d1b6371b56e6544252bd8f2bb5"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table row's span runs past the last row or over a heading row; it is refused.  <br /></td></tr>
+<tr class="memitem:abe3dd73be49738032dd0edbde1543f2b" id="r_abe3dd73be49738032dd0edbde1543f2b"><td class="memItemLeft">constexpr char const  *&#160;</td><td class="memItemRight"><a class="el" href="#abe3dd73be49738032dd0edbde1543f2b">kRowSpanOverlap</a> = &quot;morph::ui: a <a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b">table</a> <a class="el" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a>'s span starts in a <a class="el" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808">column</a> another span covers&quot;</td></tr>
+<tr class="memdesc:abe3dd73be49738032dd0edbde1543f2b"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table row's span starts in a column an earlier row's span covers; it is refused.  <br /></td></tr>
+<tr class="memitem:abb930401bbf27e0a17eddc99c8564593" id="r_abb930401bbf27e0a17eddc99c8564593"><td class="memItemLeft">constexpr char const  *&#160;</td><td class="memItemRight"><a class="el" href="#abb930401bbf27e0a17eddc99c8564593">kRowSpanVirtualized</a> = &quot;morph::ui: a virtualized <a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b">table</a> draws no <a class="el" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a> spans&quot;</td></tr>
+<tr class="memdesc:abb930401bbf27e0a17eddc99c8564593"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table above its virtualization threshold was given spans; none is drawn.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The site names a misuse in this layer is reported under, through the runtime's owner probe. </p>
@@ -156,7 +164,7 @@ Variables</h2></td></tr>
 
 <p>An exception escaped a widget callback; the mount caught it, so it never reaches the backend. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -182,7 +190,113 @@ Variables</h2></td></tr>
 
 <p>A <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a> or <a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a> snapshot repeated a key; the later row is refused and the first one kept. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7d367df8e02d6e3592504769196ffe88" name="a7d367df8e02d6e3592504769196ffe88"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7d367df8e02d6e3592504769196ffe88">&#9670;&#160;</a></span>kRowSpanInvalid</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">char const* morph::ui::detail::site::kRowSpanInvalid = &quot;morph::ui: a <a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b">table</a> <a class="el" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a>'s span is not a span of the table&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A table row's span names no column, covers no rows, is a heading's, or repeats a column of its row; it is refused and its cell stays in its own row. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af6dba1d1b6371b56e6544252bd8f2bb5" name="af6dba1d1b6371b56e6544252bd8f2bb5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af6dba1d1b6371b56e6544252bd8f2bb5">&#9670;&#160;</a></span>kRowSpanOverrun</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">char const* morph::ui::detail::site::kRowSpanOverrun</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+<b>Initial value:</b><div class="fragment"><div class="line">                                        =</div>
+<div class="line"><span class="stringliteral">&quot;morph::ui: a table row&#39;s span runs past the last row or over a heading&quot;</span></div>
+</div><!-- fragment -->
+<p>A table row's span runs past the last row or over a heading row; it is refused. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abe3dd73be49738032dd0edbde1543f2b" name="abe3dd73be49738032dd0edbde1543f2b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abe3dd73be49738032dd0edbde1543f2b">&#9670;&#160;</a></span>kRowSpanOverlap</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">char const* morph::ui::detail::site::kRowSpanOverlap = &quot;morph::ui: a <a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b">table</a> <a class="el" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a>'s span starts in a <a class="el" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808">column</a> another span covers&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A table row's span starts in a column an earlier row's span covers; it is refused. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abb930401bbf27e0a17eddc99c8564593" name="abb930401bbf27e0a17eddc99c8564593"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abb930401bbf27e0a17eddc99c8564593">&#9670;&#160;</a></span>kRowSpanVirtualized</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">char const* morph::ui::detail::site::kRowSpanVirtualized = &quot;morph::ui: a virtualized <a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b">table</a> draws no <a class="el" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a> spans&quot;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A table above its virtualization threshold was given spans; none is drawn. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>

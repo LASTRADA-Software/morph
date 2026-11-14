@@ -24,6 +24,7 @@ var searchData=
   ['commandrecord_21',['CommandRecord',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a92953e2d74617c5ae861005df8136920',1,'morph::ui::detail']]],
   ['commands_22',['Commands',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1ac441ee50c88f6e5e3a7c69fc69dad8b8',1,'morph::ui::detail']]],
   ['condition_23',['Condition',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1a9e2941b3c81256fac10392aaca4ccfde',1,'morph::ui::detail']]],
-  ['content_24',['Content',['../d1/d89/structmorph_1_1ui_1_1Sizing.html#af1925b095bf46a1b60325c973d4031d4af15c1cae7882448b3fb0404682e17e61',1,'morph::ui::Sizing']]],
-  ['custom_25',['Custom',['../dd/d57/data__source_8hpp.html#a68613ff1694dbba96932041fc5dc895ca90589c47f06eb971d548591f23c285af',1,'morph::table']]]
+  ['connected_24',['Connected',['../d1/da3/shell__parts__view_8hpp.html#a080e0e0758b25e537386491ddfbd4602a2ec0d16e4ca169baedb9b2d50ec5c6d7',1,'morph::ui']]],
+  ['content_25',['Content',['../d1/d89/structmorph_1_1ui_1_1Sizing.html#af1925b095bf46a1b60325c973d4031d4af15c1cae7882448b3fb0404682e17e61',1,'morph::ui::Sizing']]],
+  ['custom_26',['Custom',['../dd/d57/data__source_8hpp.html#a68613ff1694dbba96932041fc5dc895ca90589c47f06eb971d548591f23c285af',1,'morph::table']]]
 ];

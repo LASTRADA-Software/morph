@@ -136,14 +136,16 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:afa2a449e9bc916e3e92f74121523b395" id="r_afa2a449e9bc916e3e92f74121523b395"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#afa2a449e9bc916e3e92f74121523b395">label</a></td></tr>
 <tr class="memdesc:afa2a449e9bc916e3e92f74121523b395"><td class="mdescLeft">&#160;</td><td class="mdescRight">The series' name in the legend; empty for a chart's one series.  <br /></td></tr>
 <tr class="memitem:af59e2768a6fa79688d4989e2f8a74afe" id="r_af59e2768a6fa79688d4989e2f8a74afe"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#af59e2768a6fa79688d4989e2f8a74afe">joined</a> = true</td></tr>
-<tr class="memdesc:af59e2768a6fa79688d4989e2f8a74afe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a line joins the points.  <br /></td></tr>
+<tr class="memdesc:af59e2768a6fa79688d4989e2f8a74afe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a line joins the points; a <span class="tt">Bars</span> series is never joined and a frontend reads this for <span class="tt">Line</span> only.  <br /></td></tr>
+<tr class="memitem:abd6530af5173b38a8b1dd6d3e2c24a40" id="r_abd6530af5173b38a8b1dd6d3e2c24a40"><td class="memItemLeft"><a class="el" href="../../d8/d11/view_8hpp.html#a00a2e35be6f5788bcc5e5599c9656a12">ChartStyle</a>&#160;</td><td class="memItemRight"><a class="el" href="#abd6530af5173b38a8b1dd6d3e2c24a40">style</a> = <a class="el" href="../../d8/d11/view_8hpp.html#a00a2e35be6f5788bcc5e5599c9656a12a4803e6b9e63dabf04de980788d6a13c4">ChartStyle::Line</a></td></tr>
+<tr class="memdesc:abd6530af5173b38a8b1dd6d3e2c24a40"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the series is drawn as a line of points or as bars.  <br /></td></tr>
 <tr class="memitem:a3dcb7599c3a4376db7605f20acaaafa1" id="r_a3dcb7599c3a4376db7605f20acaaafa1"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d6/d29/structmorph_1_1ui_1_1ChartPoint.html">ChartPoint</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3dcb7599c3a4376db7605f20acaaafa1">points</a></td></tr>
 <tr class="memdesc:a3dcb7599c3a4376db7605f20acaaafa1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The points, in order.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One series of a chart: its points in order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01444">1444</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01474">1474</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a4a0a8b721d854e97d97e950e9aaaab41" name="a4a0a8b721d854e97d97e950e9aaaab41"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4a0a8b721d854e97d97e950e9aaaab41">&#9670;&#160;</a></span>operator==()</h2>
@@ -188,7 +190,7 @@ Public Attributes</h2></td></tr>
 
 <p>The series' name in the legend; empty for a chart's one series. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01446">1446</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01476">1476</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -204,9 +206,27 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Whether a line joins the points. </p>
+<p>Whether a line joins the points; a <span class="tt">Bars</span> series is never joined and a frontend reads this for <span class="tt">Line</span> only. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01448">1448</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01479">1479</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="abd6530af5173b38a8b1dd6d3e2c24a40" name="abd6530af5173b38a8b1dd6d3e2c24a40"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abd6530af5173b38a8b1dd6d3e2c24a40">&#9670;&#160;</a></span>style</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d11/view_8hpp.html#a00a2e35be6f5788bcc5e5599c9656a12">ChartStyle</a> morph::ui::ChartSeries::style = <a class="el" href="../../d8/d11/view_8hpp.html#a00a2e35be6f5788bcc5e5599c9656a12a4803e6b9e63dabf04de980788d6a13c4">ChartStyle::Line</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the series is drawn as a line of points or as bars. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01481">1481</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -224,7 +244,7 @@ Public Attributes</h2></td></tr>
 
 <p>The points, in order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01450">1450</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01483">1483</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

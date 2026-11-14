@@ -144,6 +144,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a7433d92b70790280753116b05c4c29c6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The row at a view row, when it is held.  <br /></td></tr>
 <tr class="memitem:a3317c2e86b517c6d9bc4b228935e1d9e" id="r_a3317c2e86b517c6d9bc4b228935e1d9e"><td class="memItemLeft">std::optional&lt; std::int64_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3317c2e86b517c6d9bc4b228935e1d9e">total</a> () const noexcept</td></tr>
 <tr class="memdesc:a3317c2e86b517c6d9bc4b228935e1d9e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The view's total rows, when a reply of this query reported it.  <br /></td></tr>
+<tr class="memitem:a2b850d83c653ff1ec9b0666d727b9185" id="r_a2b850d83c653ff1ec9b0666d727b9185"><td class="memItemLeft"><a class="el" href="../../dd/def/query_8hpp.html#af7533bbb6d6d95677aff5b0274ed17ad">TotalKind</a>&#160;</td><td class="memItemRight"><a class="el" href="#a2b850d83c653ff1ec9b0666d727b9185">totalKind</a> () const noexcept</td></tr>
+<tr class="memdesc:a2b850d83c653ff1ec9b0666d727b9185"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <span class="tt"><a class="el" href="#a3317c2e86b517c6d9bc4b228935e1d9e" title="The view&#39;s total rows, when a reply of this query reported it.">total()</a></span> is the count of the view or a lower bound, as the latest reply that carried a total said.  <br /></td></tr>
 <tr class="memitem:aa8d23995e184befcc1b38c0a0921f6df" id="r_aa8d23995e184befcc1b38c0a0921f6df"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d2/db3/structmorph_1_1table_1_1TableError.html">TableError</a> &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#aa8d23995e184befcc1b38c0a0921f6df">error</a> () const noexcept</td></tr>
 <tr class="memdesc:aa8d23995e184befcc1b38c0a0921f6df"><td class="mdescLeft">&#160;</td><td class="mdescRight">The last error, until a reply clears it.  <br /></td></tr>
 <tr class="memitem:a8a7399e262142062cbab37dcaa7254a5" id="r_a8a7399e262142062cbab37dcaa7254a5"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a8a7399e262142062cbab37dcaa7254a5">pagesHeld</a> () const noexcept</td></tr>
@@ -162,7 +164,7 @@ class morph::table::PageWindow&lt; Row &gt;</div><p>The pages a <span class="tt"
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00696">696</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00943">943</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="aa19f130cc70d15e6684898e618e4f46b" name="aa19f130cc70d15e6684898e618e4f46b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa19f130cc70d15e6684898e618e4f46b">&#9670;&#160;</a></span>PageWindow()</h2>
@@ -202,7 +204,7 @@ template&lt;typename Row&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00702">702</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00949">949</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -246,7 +248,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The fetches to send. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00714">714</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00961">961</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -289,7 +291,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">false</span> when the reply was ignored: its fetch belongs to an earlier query, or is not awaited. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00742">742</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00989">989</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -332,7 +334,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">false</span> when the failure was ignored: its fetch belongs to an earlier query. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00776">776</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l01024">1024</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -363,7 +365,7 @@ template&lt;typename Row&gt; </div>
 
 <p>Drops every page, request and error and starts a new query: the sort or filter changed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00787">787</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l01035">1035</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -395,7 +397,7 @@ template&lt;typename Row&gt; </div>
 <p>The current query, which <span class="tt"><a class="el" href="#a2c4a9cd0d131d722a48866340aa9cee5" title="Drops every page, request and error and starts a new query: the sort or filter changed.">reset</a></span> advances. </p>
 <dl class="section return"><dt>Returns</dt><dd>The query's number. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00798">798</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l01047">1047</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -433,7 +435,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The row, or null. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00803">803</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l01052">1052</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -465,7 +467,39 @@ template&lt;typename Row&gt; </div>
 <p>The view's total rows, when a reply of this query reported it. </p>
 <dl class="section return"><dt>Returns</dt><dd>The total. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00817">817</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l01066">1066</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2b850d83c653ff1ec9b0666d727b9185" name="a2b850d83c653ff1ec9b0666d727b9185"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2b850d83c653ff1ec9b0666d727b9185">&#9670;&#160;</a></span>totalKind()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Row&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/def/query_8hpp.html#af7533bbb6d6d95677aff5b0274ed17ad">TotalKind</a> <a class="el" href="../../da/d97/classmorph_1_1table_1_1PageWindow.html">morph::table::PageWindow</a>&lt; Row &gt;::totalKind </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether <span class="tt"><a class="el" href="#a3317c2e86b517c6d9bc4b228935e1d9e" title="The view&#39;s total rows, when a reply of this query reported it.">total()</a></span> is the count of the view or a lower bound, as the latest reply that carried a total said. </p>
+<dl class="section return"><dt>Returns</dt><dd>The kind; <span class="tt">Exact</span> while no total is known. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l01071">1071</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -497,7 +531,7 @@ template&lt;typename Row&gt; </div>
 <p>The last error, until a reply clears it. </p>
 <dl class="section return"><dt>Returns</dt><dd>The error, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00821">821</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l01075">1075</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -529,7 +563,7 @@ template&lt;typename Row&gt; </div>
 <p>Pages held, complete or in part. </p>
 <dl class="section return"><dt>Returns</dt><dd><a class="el" href="../../dc/d0f/structmorph_1_1table_1_1Page.html" title="One page of a list action&#39;s reply.">Page</a> count. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00825">825</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l01079">1079</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -561,7 +595,7 @@ template&lt;typename Row&gt; </div>
 <p>Whether any request is in flight. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> while a page is awaited. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00829">829</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l01083">1083</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>

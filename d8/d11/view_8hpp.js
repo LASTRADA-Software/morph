@@ -22,6 +22,7 @@ var view_8hpp =
     [ "morph::ui::Menu", "de/dce/structmorph_1_1ui_1_1Menu.html", "de/dce/structmorph_1_1ui_1_1Menu" ],
     [ "morph::ui::Padding", "d7/d65/structmorph_1_1ui_1_1Padding.html", "d7/d65/structmorph_1_1ui_1_1Padding" ],
     [ "morph::ui::Column", "d1/d05/structmorph_1_1ui_1_1Column.html", "d1/d05/structmorph_1_1ui_1_1Column" ],
+    [ "morph::ui::RowSpan", "d2/d72/structmorph_1_1ui_1_1RowSpan.html", "d2/d72/structmorph_1_1ui_1_1RowSpan" ],
     [ "morph::ui::Row", "d7/da8/structmorph_1_1ui_1_1Row.html", "d7/da8/structmorph_1_1ui_1_1Row" ],
     [ "morph::ui::GridCell", "df/d66/structmorph_1_1ui_1_1GridCell.html", "df/d66/structmorph_1_1ui_1_1GridCell" ],
     [ "morph::ui::GridTrack", "df/dd6/structmorph_1_1ui_1_1GridTrack.html", "df/dd6/structmorph_1_1ui_1_1GridTrack" ],
@@ -66,6 +67,8 @@ var view_8hpp =
     [ "morph::ui::Splitter", "d7/d07/structmorph_1_1ui_1_1Splitter.html", "d7/d07/structmorph_1_1ui_1_1Splitter" ],
     [ "morph::ui::Collapsible", "d0/db5/structmorph_1_1ui_1_1Collapsible.html", "d0/db5/structmorph_1_1ui_1_1Collapsible" ],
     [ "morph::ui::DropZone", "d0/dcb/structmorph_1_1ui_1_1DropZone.html", "d0/dcb/structmorph_1_1ui_1_1DropZone" ],
+    [ "morph::ui::PageRegion", "df/dd6/structmorph_1_1ui_1_1PageRegion.html", "df/dd6/structmorph_1_1ui_1_1PageRegion" ],
+    [ "morph::ui::Page", "d4/d59/structmorph_1_1ui_1_1Page.html", "d4/d59/structmorph_1_1ui_1_1Page" ],
     [ "morph::ui::CustomProp", "de/dc3/structmorph_1_1ui_1_1CustomProp.html", "de/dc3/structmorph_1_1ui_1_1CustomProp" ],
     [ "morph::ui::Custom", "db/d27/structmorph_1_1ui_1_1Custom.html", "db/d27/structmorph_1_1ui_1_1Custom" ],
     [ "morph::ui::NodeData", "d9/d5b/structmorph_1_1ui_1_1NodeData.html", "d9/d5b/structmorph_1_1ui_1_1NodeData" ],
@@ -144,6 +147,10 @@ var view_8hpp =
       [ "Below", "d8/d11/view_8hpp.html#aaa7b60d10a6bfedc9e6fc4b9111b36c9ae59dd8d25c0b6bb6697eac0617ccd412", null ],
       [ "Above", "d8/d11/view_8hpp.html#aaa7b60d10a6bfedc9e6fc4b9111b36c9a5b469fd01889ec12f1e84c6e66829fc1", null ]
     ] ],
+    [ "morph::ui::ChartStyle", "d8/d11/view_8hpp.html#a00a2e35be6f5788bcc5e5599c9656a12", [
+      [ "Line", "d8/d11/view_8hpp.html#a00a2e35be6f5788bcc5e5599c9656a12a4803e6b9e63dabf04de980788d6a13c4", null ],
+      [ "Bars", "d8/d11/view_8hpp.html#a00a2e35be6f5788bcc5e5599c9656a12a226bea4d132b81f15f1bda87c76c6706", null ]
+    ] ],
     [ "morph::ui::SelectionMode", "d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7", [
       [ "None", "d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7a6adf97f83acf6453d4a6a4b1070f3754", null ],
       [ "Single", "d8/d11/view_8hpp.html#a73cb62db4fd6e0c04890e488668abab7a66ba162102bbf6ae31b522aec561735e", null ],
@@ -197,6 +204,8 @@ var view_8hpp =
     [ "morph::ui::splitter", "d8/d11/view_8hpp.html#ab0f45edb78821c04379a3cf41091f775", null ],
     [ "morph::ui::collapsible", "d8/d11/view_8hpp.html#a0735c59e8fed7c1e25bb578d6ae89abd", null ],
     [ "morph::ui::dropZone", "d8/d11/view_8hpp.html#a695bba553e54a28202c0b765fe10a0da", null ],
+    [ "morph::ui::page", "d8/d11/view_8hpp.html#ab05064de236d0c6922c839b56c701b96", null ],
+    [ "morph::ui::pageRegion", "d8/d11/view_8hpp.html#afee48e483ecd3d6f653b36b00ddc20a1", null ],
     [ "morph::ui::custom", "d8/d11/view_8hpp.html#a38e1fcd2ff70b109ff5556ac786c3df7", null ],
     [ "morph::ui::switchOn", "d8/d11/view_8hpp.html#a7949af8ff7a09a3af427801e57e55e61", null ],
     [ "morph::ui::forEach", "d8/d11/view_8hpp.html#a85c5613ad529665babdb9bf7026d81bc", null ],

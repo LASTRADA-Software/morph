@@ -4,6 +4,7 @@ var dir_b70d1a0a2762c63026d60b28530dbb2e =
     [ "edits.hpp", "dc/d42/edits_8hpp.html", "dc/d42/edits_8hpp" ],
     [ "engine.hpp", "de/d46/engine_8hpp.html", "de/d46/engine_8hpp" ],
     [ "filter.hpp", "d1/dd2/filter_8hpp.html", "d1/dd2/filter_8hpp" ],
+    [ "plan_conformance.hpp", "d8/dd3/plan__conformance_8hpp.html", "d8/dd3/plan__conformance_8hpp" ],
     [ "query.hpp", "dd/def/query_8hpp.html", "dd/def/query_8hpp" ],
     [ "selection.hpp", "df/d8f/selection_8hpp.html", "df/d8f/selection_8hpp" ],
     [ "sort.hpp", "d4/d54/sort_8hpp.html", "d4/d54/sort_8hpp" ],

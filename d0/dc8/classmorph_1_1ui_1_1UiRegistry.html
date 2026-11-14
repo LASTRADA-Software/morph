@@ -136,6 +136,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:aecc0977a771be85a0603bef75053c5f6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lists an entry that has no document: a host screen (<span class="tt">host</span>), or one the application has not built (<span class="tt">available: false</span>).  <br /></td></tr>
 <tr class="memitem:a2128f6b54dd36ef1e0e80b7090359c22" id="r_a2128f6b54dd36ef1e0e80b7090359c22"><td class="memItemLeft">std::expected&lt; void, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2128f6b54dd36ef1e0e80b7090359c22">addFile</a> (<a class="el" href="../../db/d11/structmorph_1_1ui_1_1BundleFile.html">BundleFile</a> file)</td></tr>
 <tr class="memdesc:a2128f6b54dd36ef1e0e80b7090359c22"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a file that is not a screen: the app document (<span class="tt">app</span>, whose id is <span class="tt">app</span>), a theme (<span class="tt">theme</span>), a message catalogue (<span class="tt">messages</span>), a delivered component (<span class="tt">component</span>) or an icon (<span class="tt">icon</span>).  <br /></td></tr>
+<tr class="memitem:a8e9f7d88058e2060184894916c05b640" id="r_a8e9f7d88058e2060184894916c05b640"><td class="memItemLeft">std::expected&lt; void, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8e9f7d88058e2060184894916c05b640">setShellParts</a> (<a class="el" href="../../dd/d92/structmorph_1_1ui_1_1ShellParts.html">ShellParts</a> parts, <a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a> reads={})</td></tr>
+<tr class="memdesc:a8e9f7d88058e2060184894916c05b640"><td class="mdescLeft">&#160;</td><td class="mdescRight">Declares the shell's parts (<span class="tt">docs/spec/ui/shell_parts.md</span>): a scope switcher, module counts, search, an inbox and the person's menu. They are written into the app document's <span class="tt">shell</span> member, so they travel in the file every client already reads; an application that added no app document gets an otherwise empty one, public.  <br /></td></tr>
 <tr class="memitem:adae15f8f4c1545612750c75b1f52ef22" id="r_adae15f8f4c1545612750c75b1f52ef22"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#adae15f8f4c1545612750c75b1f52ef22">requireVocabulary</a> (std::string vocabulary)</td></tr>
 <tr class="memdesc:adae15f8f4c1545612750c75b1f52ef22"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a vocabulary the bundle needs beyond <span class="tt">ui/1</span> and <span class="tt">expr/1</span>, such as <span class="tt">forms/1</span> or <span class="tt">files/1</span>. A client that does not speak it is refused at <span class="tt">ui-hello</span>.  <br /></td></tr>
 <tr class="memitem:a104e81c219e2531a0284d5d107d9c923" id="r_a104e81c219e2531a0284d5d107d9c923"><td class="memItemLeft">std::expected&lt; std::shared_ptr&lt; <a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">ServedBundle</a> const &gt;, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a104e81c219e2531a0284d5d107d9c923">build</a> () const</td></tr>
@@ -145,7 +147,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Collects an application's screens and files and builds the bundle the UI service serves. </p>
 <p>Built once, before the service answers anything; <span class="tt"><a class="el" href="#a104e81c219e2531a0284d5d107d9c923" title="Builds the bundle.">build</a></span> copies everything into an immutable <span class="tt"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html" title="An application&#39;s bundle, built and immutable: what UiService serves.">ServedBundle</a></span>. A screen authored with the C++ builders is added by its emitted text, so an authoring registry feeds this one through <span class="tt"><a class="el" href="#aeffd84aad6901012d278b55fff460242" title="Registers a screen: its catalog entry and its document.">addScreen</a></span> without either depending on the other. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00286">286</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ad9d853d15da0d8f07b0a334895a82571" name="ad9d853d15da0d8f07b0a334895a82571"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad9d853d15da0d8f07b0a334895a82571">&#9670;&#160;</a></span>UiRegistry()</h2>
@@ -183,7 +185,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00292">292</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -225,7 +227,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00304">304</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -261,7 +263,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00323">323</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -297,7 +299,49 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00343">343</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00344">344</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8e9f7d88058e2060184894916c05b640" name="a8e9f7d88058e2060184894916c05b640"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8e9f7d88058e2060184894916c05b640">&#9670;&#160;</a></span>setShellParts()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; void, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt; morph::ui::UiRegistry::setShellParts </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dd/d92/structmorph_1_1ui_1_1ShellParts.html">ShellParts</a></td>          <td class="paramname"><span class="paramname"><em>parts</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a></td>          <td class="paramname"><span class="paramname"><em>reads</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Declares the shell's parts (<span class="tt">docs/spec/ui/shell_parts.md</span>): a scope switcher, module counts, search, an inbox and the person's menu. They are written into the app document's <span class="tt">shell</span> member, so they travel in the file every client already reads; an application that added no app document gets an otherwise empty one, public. </p>
+<p>Refused when the app document with the parts does not load, and when a part names a module, a screen or an action that the registry does not hold at all: this is the check of a misconfiguration, and it is made against every screen registered, whoever may see it, so a screen hidden from some person is still a screen. The screens are therefore added before the parts; a screen added after them cannot make a name they give unknown, so <span class="tt"><a class="el" href="#a104e81c219e2531a0284d5d107d9c923" title="Builds the bundle.">build</a></span> does not check again.</p>
+<p>The actions a part reads are not named by any screen, so the catalog does not know them yet: <code class="param">reads</code> adds their facts, from the same <span class="tt">CatalogFacts</span> a screen's builders gather, to the registry's catalog, so the <span class="tt">ui-catalog</span> reply carries them as it carries a screen's. A later call replaces the facts of an earlier one. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">parts</td><td>The parts. </td></tr>
+    <tr><td class="paramname">reads</td><td>The facts of the models and actions the parts read; their lookups are consulted after the registry's own. Empty: the parts read only what a screen already names. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Nothing, or the refusal. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -332,7 +376,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00359">359</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00397">397</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -362,7 +406,7 @@ Public Member Functions</h2></td></tr>
 <p>Builds the bundle. </p>
 <p>Refused when a screen names a delivered component (<span class="tt">qml</span>) whose hash no <span class="tt">component</span> file has, when the bundle holds more than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#a26b6188a56f040e6d44027d4e379f33b" title="The most files a manifest, and entries a catalog, may list.">kMaxBundleFiles</a></span> files or entries, and when it needs more than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#a3602898655368bce825c85533dbfcfe0" title="The most items of a list or map in a ui-hello (vocabularies, host components, commands,...">kMaxListItems</a></span> vocabularies or a vocabulary name longer than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#afb8fd4d49b556176e90b375abafb4fec" title="The longest name: an id, a kind, a vocabulary, a host name, an application id or version.">kMaxNameBytes</a></span>. A theme file's token that nothing reads is logged at warn and does not refuse the build. </p><dl class="section return"><dt>Returns</dt><dd>The bundle, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00368">368</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

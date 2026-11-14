@@ -177,7 +177,7 @@ ScreenHost &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (ScreenHost
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
 <tr class="memitem:a15c7671bd7a65a4fd3d7ed67c25876e8" id="r_a15c7671bd7a65a4fd3d7ed67c25876e8"><td class="memItemLeft">static std::optional&lt; <a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html">chat::TurnRequest</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a15c7671bd7a65a4fd3d7ed67c25876e8">chatContext</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle)</td></tr>
-<tr class="memdesc:a15c7671bd7a65a4fd3d7ed67c25876e8"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a chat turn says about a screen this host mounted: its id, its params and identity, and the aliases of its own scope that hold an instance. <span class="tt">TurnRequest::text</span> is left for the caller.  <br /></td></tr>
+<tr class="memdesc:a15c7671bd7a65a4fd3d7ed67c25876e8"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a chat turn says about a screen this host mounted: its id and title, its params and identity, and the aliases of its own scope that hold an instance. <span class="tt">TurnRequest::text</span> is left for the caller.  <br /></td></tr>
 <tr class="memitem:a844e396fdd2abf685b93e9ea0b29822b" id="r_a844e396fdd2abf685b93e9ea0b29822b"><td class="memItemLeft">static std::optional&lt; <a class="el" href="../../dd/db3/classmorph_1_1ui_1_1Inspector.html">Inspector</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a844e396fdd2abf685b93e9ea0b29822b">inspector</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> &amp;handle)</td></tr>
 <tr class="memdesc:a844e396fdd2abf685b93e9ea0b29822b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The development inspector over a screen this host mounted (spec 6 §21): what a shell's inspector window reads. It hands out no access to the screen beyond the inspector's own read-only view and its <span class="tt">refetch</span> command.  <br /></td></tr>
 <tr class="memitem:a467d4ac1ec375b631da0a35f89e3da86" id="r_a467d4ac1ec375b631da0a35f89e3da86"><td class="memItemLeft">static <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a467d4ac1ec375b631da0a35f89e3da86">rootOf</a> (<a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> const &amp;handle)</td></tr>
@@ -667,7 +667,7 @@ Protected Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>What a chat turn says about a screen this host mounted: its id, its params and identity, and the aliases of its own scope that hold an instance. <span class="tt">TurnRequest::text</span> is left for the caller. </p>
+<p>What a chat turn says about a screen this host mounted: its id and title, its params and identity, and the aliases of its own scope that hold an instance. <span class="tt">TurnRequest::text</span> is left for the caller. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">handle</td><td>A handle this host mounted. </td></tr>
@@ -712,7 +712,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The inspector, valid until the screen closes or is remounted; nothing for a closed or foreign handle, and nothing for a screen whose session has <span class="tt"><a class="el" href="../../d3/d6d/dev__tools_8hpp.html#a76ec372e6ca8eb0e0cb057048f9e0ffcad15305d7a4e34e02489c74a5ef542f36" title="Nothing is recorded, no inspector is handed out, and the inspector&#39;s shortcut does nothing.">DevelopmentTools::Off</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00651">651</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00652">652</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -741,7 +741,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Cancels every call no mount has adopted: each one's <span class="tt">onCancel</span> runs, oldest first. What a shell does when it closes every screen, so no call outlives the screens it was filed among and a later mount never answers an opener that is gone. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00663">663</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00664">664</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -777,7 +777,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its root widget, or <span class="tt">nullptr</span> for a closed or foreign handle. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00672">672</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00673">673</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -817,7 +817,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00688">688</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00689">689</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>

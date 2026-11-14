@@ -137,7 +137,7 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a76109e5df23d6d3f06a25ba8c6c55054" id="r_a76109e5df23d6d3f06a25ba8c6c55054"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a76109e5df23d6d3f06a25ba8c6c55054">unit</a></td></tr>
 <tr class="memdesc:a76109e5df23d6d3f06a25ba8c6c55054"><td class="mdescLeft">&#160;</td><td class="mdescRight">The unit a Quantity is entered in: the id of one of its units (its canonical unit or an alternative). On a field without units, the unit shown beside it.  <br /></td></tr>
 <tr class="memitem:a6781783ed005c20143a28dab8c6fca42" id="r_a6781783ed005c20143a28dab8c6fca42"><td class="memItemLeft">std::optional&lt; std::uint32_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6781783ed005c20143a28dab8c6fca42">decimals</a></td></tr>
-<tr class="memdesc:a6781783ed005c20143a28dab8c6fca42"><td class="mdescLeft">&#160;</td><td class="mdescRight">The places a Decimal or Quantity is entered with in its entry unit, or a Number's display decimals. The wire value keeps the schema's places.  <br /></td></tr>
+<tr class="memdesc:a6781783ed005c20143a28dab8c6fca42"><td class="mdescLeft">&#160;</td><td class="mdescRight">The field's places, with the meaning of <span class="tt">x-decimalPlaces</span>: a Decimal's or Quantity's entry places in its canonical unit (another unit of a Quantity keeps its own) and the wire <span class="tt">dp</span>; a Number's display decimals.  <br /></td></tr>
 <tr class="memitem:a8da659748446b76f99a8ccb683e6100c" id="r_a8da659748446b76f99a8ccb683e6100c"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8da659748446b76f99a8ccb683e6100c">widget</a></td></tr>
 <tr class="memdesc:a8da659748446b76f99a8ccb683e6100c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Replaces <span class="tt">x-widget</span>, so the kind is read again (<span class="tt">textarea</span>, <span class="tt">radio</span>, <span class="tt">slider</span>, <span class="tt">epochDays</span>, …).  <br /></td></tr>
 <tr class="memitem:a1b9d1823670d7ca023de87b8d7dda6a7" id="r_a1b9d1823670d7ca023de87b8d7dda6a7"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../df/d0b/blank__as_8hpp.html#a08a85983649d14d984e6686cf52fa2a4">BlankAs</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1b9d1823670d7ca023de87b8d7dda6a7">blankAs</a></td></tr>
@@ -232,9 +232,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The places a Decimal or Quantity is entered with in its entry unit, or a Number's display decimals. The wire value keeps the schema's places. </p>
+<p>The field's places, with the meaning of <span class="tt">x-decimalPlaces</span>: a Decimal's or Quantity's entry places in its canonical unit (another unit of a Quantity keeps its own) and the wire <span class="tt">dp</span>; a Number's display decimals. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/dc9/field__model_8hpp_source.html#l00256">256</a> of file <a class="el" href="../../d5/dc9/field__model_8hpp_source.html">field_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/dc9/field__model_8hpp_source.html#l00257">257</a> of file <a class="el" href="../../d5/dc9/field__model_8hpp_source.html">field_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -252,7 +252,7 @@ Public Attributes</h2></td></tr>
 
 <p>Replaces <span class="tt">x-widget</span>, so the kind is read again (<span class="tt">textarea</span>, <span class="tt">radio</span>, <span class="tt">slider</span>, <span class="tt">epochDays</span>, …). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/dc9/field__model_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../d5/dc9/field__model_8hpp_source.html">field_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/dc9/field__model_8hpp_source.html#l00259">259</a> of file <a class="el" href="../../d5/dc9/field__model_8hpp_source.html">field_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -270,7 +270,7 @@ Public Attributes</h2></td></tr>
 
 <p>Replaces <span class="tt">x-blankAs</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/dc9/field__model_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../d5/dc9/field__model_8hpp_source.html">field_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/dc9/field__model_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../d5/dc9/field__model_8hpp_source.html">field_model.hpp</a>.</p>
 
 </div>
 </div>

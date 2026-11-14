@@ -142,6 +142,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One axis of a chart: its ends, exact.  <a href="../../d0/deb/structmorph_1_1ui_1_1ChartRange.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AChartTicks" id="r_morph_3A_3Aui_3A_3AChartTicks"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../da/daa/structmorph_1_1ui_1_1ChartTicks.html">morph::ui::ChartTicks</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The ticks of a value axis: their positions and the places they are shown at.  <a href="../../da/daa/structmorph_1_1ui_1_1ChartTicks.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3AChartPadding" id="r_morph_3A_3Aui_3A_3AChartPadding"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/dd6/structmorph_1_1ui_1_1ChartPadding.html">morph::ui::ChartPadding</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Which ends of an axis <span class="tt"><a class="el" href="#a9586ddd30950a89a671cb0693b3e14c6" title="The axis that holds every value, widened by 5 % of their span at each end so the outermost value is i...">chartRange</a></span> widens; a span of zero is widened at both whatever this says.  <a href="../../db/dd6/structmorph_1_1ui_1_1ChartPadding.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
@@ -151,8 +153,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:a62f5a7a8d337742120e345ceefb3cc26"><td class="mdescLeft">&#160;</td><td class="mdescRight">The greatest integer not above a rational.  <br /></td></tr>
 <tr class="memitem:abf5a5cf9736ac03ce261c337f016c733" id="r_abf5a5cf9736ac03ce261c337f016c733"><td class="memItemLeft">std::int64_t&#160;</td><td class="memItemRight"><a class="el" href="#abf5a5cf9736ac03ce261c337f016c733">morph::ui::chartCeil</a> (<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> const &amp;value)</td></tr>
 <tr class="memdesc:abf5a5cf9736ac03ce261c337f016c733"><td class="mdescLeft">&#160;</td><td class="mdescRight">The least integer not below a rational.  <br /></td></tr>
-<tr class="memitem:a9c7a1208cfeb9a9cf7baafc2b7aef1f0" id="r_a9c7a1208cfeb9a9cf7baafc2b7aef1f0"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d0/deb/structmorph_1_1ui_1_1ChartRange.html">ChartRange</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9c7a1208cfeb9a9cf7baafc2b7aef1f0">morph::ui::chartRange</a> (std::span&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> const &gt; values, std::uint32_t places)</td></tr>
-<tr class="memdesc:a9c7a1208cfeb9a9cf7baafc2b7aef1f0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The axis that holds every value, widened by 5 % of their span at each end so the outermost value is inside the plot rather than on its edge.  <br /></td></tr>
+<tr class="memitem:a9586ddd30950a89a671cb0693b3e14c6" id="r_a9586ddd30950a89a671cb0693b3e14c6"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d0/deb/structmorph_1_1ui_1_1ChartRange.html">ChartRange</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9586ddd30950a89a671cb0693b3e14c6">morph::ui::chartRange</a> (std::span&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> const &gt; values, std::uint32_t places, <a class="el" href="../../db/dd6/structmorph_1_1ui_1_1ChartPadding.html">ChartPadding</a> padding={})</td></tr>
+<tr class="memdesc:a9586ddd30950a89a671cb0693b3e14c6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The axis that holds every value, widened by 5 % of their span at each end so the outermost value is inside the plot rather than on its edge.  <br /></td></tr>
 <tr class="memitem:a86675077583dfc3819a7e20610ccb2fc" id="r_a86675077583dfc3819a7e20610ccb2fc"><td class="memItemLeft">std::optional&lt; std::int64_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a86675077583dfc3819a7e20610ccb2fc">morph::ui::chartTickCount</a> (<a class="el" href="../../d0/deb/structmorph_1_1ui_1_1ChartRange.html">ChartRange</a> const &amp;range, <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> const &amp;step)</td></tr>
 <tr class="memdesc:a86675077583dfc3819a7e20610ccb2fc"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many multiples of <code class="param">step</code> lie in <code class="param">range</code>, ends included.  <br /></td></tr>
 <tr class="memitem:a6ac5c1ce2902ab3fcc9c673df0744ad8" id="r_a6ac5c1ce2902ab3fcc9c673df0744ad8"><td class="memItemLeft">std::optional&lt; std::pair&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a>, int &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6ac5c1ce2902ab3fcc9c673df0744ad8">morph::ui::chartTickStep</a> (<a class="el" href="../../d0/deb/structmorph_1_1ui_1_1ChartRange.html">ChartRange</a> const &amp;range, int power)</td></tr>
@@ -274,8 +276,8 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a id="a9c7a1208cfeb9a9cf7baafc2b7aef1f0" name="a9c7a1208cfeb9a9cf7baafc2b7aef1f0"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a9c7a1208cfeb9a9cf7baafc2b7aef1f0">&#9670;&#160;</a></span>chartRange()</h2>
+<a id="a9586ddd30950a89a671cb0693b3e14c6" name="a9586ddd30950a89a671cb0693b3e14c6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9586ddd30950a89a671cb0693b3e14c6">&#9670;&#160;</a></span>chartRange()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -291,7 +293,12 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::uint32_t</td>          <td class="paramname"><span class="paramname"><em>places</em></span>&#160;)</td>
+          <td class="paramtype">std::uint32_t</td>          <td class="paramname"><span class="paramname"><em>places</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../db/dd6/structmorph_1_1ui_1_1ChartPadding.html">ChartPadding</a></td>          <td class="paramname"><span class="paramname"><em>padding</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -306,12 +313,13 @@ Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">values</td><td>The values the axis must hold. </td></tr>
     <tr><td class="paramname">places</td><td>The places a value is shown at, which size the widening of a zero span; at most 18. </td></tr>
+    <tr><td class="paramname">padding</td><td>The ends to widen; the default widens both. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The range, or empty when the arithmetic overflows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html">chart_scale.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html">chart_scale.hpp</a>.</p>
 
 </div>
 </div>
@@ -352,7 +360,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The count, or empty when the arithmetic overflows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html">chart_scale.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html">chart_scale.hpp</a>.</p>
 
 </div>
 </div>
@@ -393,7 +401,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The step and its exponent, or empty when none down to 10⁻¹⁸ does or the arithmetic overflows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html#l00119">119</a> of file <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html">chart_scale.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html">chart_scale.hpp</a>.</p>
 
 </div>
 </div>
@@ -429,7 +437,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The ticks, or empty when the range is too narrow for a step of 10⁻¹⁸ or the arithmetic overflows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html">chart_scale.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html#l00161">161</a> of file <a class="el" href="../../d2/ddb/chart__scale_8hpp_source.html">chart_scale.hpp</a>.</p>
 
 </div>
 </div>

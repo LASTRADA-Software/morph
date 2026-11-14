@@ -136,11 +136,17 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a8dd7b5677b43293888862c7fb6952ec0"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt"><a class="el" href="#ad14a06b9c5a20ad84a5cc0a4660279e8" title="The text piece, the tool&#39;s name, or the reason.">text</a></span>, <span class="tt">tool</span>, <span class="tt">done</span> or <span class="tt">error</span>.  <br /></td></tr>
 <tr class="memitem:ad14a06b9c5a20ad84a5cc0a4660279e8" id="r_ad14a06b9c5a20ad84a5cc0a4660279e8"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ad14a06b9c5a20ad84a5cc0a4660279e8">text</a></td></tr>
 <tr class="memdesc:ad14a06b9c5a20ad84a5cc0a4660279e8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text piece, the tool's name, or the reason.  <br /></td></tr>
+<tr class="memitem:a25561ff63f553ebd7606ef8b37c80e48" id="r_a25561ff63f553ebd7606ef8b37c80e48"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a25561ff63f553ebd7606ef8b37c80e48">arguments</a></td></tr>
+<tr class="memdesc:a25561ff63f553ebd7606ef8b37c80e48"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">tool</span> event's arguments as JSON text.  <br /></td></tr>
+<tr class="memitem:a81dffea04cb790ae37c3022e8be5a216" id="r_a81dffea04cb790ae37c3022e8be5a216"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a81dffea04cb790ae37c3022e8be5a216">ok</a> = false</td></tr>
+<tr class="memdesc:a81dffea04cb790ae37c3022e8be5a216"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">tool</span> event's outcome: whether the action ran.  <br /></td></tr>
+<tr class="memitem:ad89cd9b4260a59eb0e26d2480561a940" id="r_ad89cd9b4260a59eb0e26d2480561a940"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ad89cd9b4260a59eb0e26d2480561a940">newRound</a> = false</td></tr>
+<tr class="memdesc:ad89cd9b4260a59eb0e26d2480561a940"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a <span class="tt"><a class="el" href="#ad14a06b9c5a20ad84a5cc0a4660279e8" title="The text piece, the tool&#39;s name, or the reason.">text</a></span> event is the first piece of a round that follows tool calls, so it starts a new text.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A hint that a turn moved. Events can be lost, so <span class="tt"><a class="el" href="../../d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html" title="A turn&#39;s state as the server holds it, which outranks any event.">TurnState</a></span> is the record. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a1b1fe3db50097d34c54f18af6fb9f3fb" name="a1b1fe3db50097d34c54f18af6fb9f3fb"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a1b1fe3db50097d34c54f18af6fb9f3fb">&#9670;&#160;</a></span>turnId</h2>
@@ -156,7 +162,7 @@ Public Attributes</h2></td></tr>
 
 <p>The turn's id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -174,7 +180,7 @@ Public Attributes</h2></td></tr>
 
 <p>Increases by one per event of a turn. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +198,7 @@ Public Attributes</h2></td></tr>
 
 <p><span class="tt"><a class="el" href="#ad14a06b9c5a20ad84a5cc0a4660279e8" title="The text piece, the tool&#39;s name, or the reason.">text</a></span>, <span class="tt">tool</span>, <span class="tt">done</span> or <span class="tt">error</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00114">114</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,7 +216,61 @@ Public Attributes</h2></td></tr>
 
 <p>The text piece, the tool's name, or the reason. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00133">133</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a25561ff63f553ebd7606ef8b37c80e48" name="a25561ff63f553ebd7606ef8b37c80e48"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a25561ff63f553ebd7606ef8b37c80e48">&#9670;&#160;</a></span>arguments</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::chat::TurnEvent::arguments</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A <span class="tt">tool</span> event's arguments as JSON text. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a81dffea04cb790ae37c3022e8be5a216" name="a81dffea04cb790ae37c3022e8be5a216"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a81dffea04cb790ae37c3022e8be5a216">&#9670;&#160;</a></span>ok</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::chat::TurnEvent::ok = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A <span class="tt">tool</span> event's outcome: whether the action ran. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad89cd9b4260a59eb0e26d2480561a940" name="ad89cd9b4260a59eb0e26d2480561a940"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad89cd9b4260a59eb0e26d2480561a940">&#9670;&#160;</a></span>newRound</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::chat::TurnEvent::newRound = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a <span class="tt"><a class="el" href="#ad14a06b9c5a20ad84a5cc0a4660279e8" title="The text piece, the tool&#39;s name, or the reason.">text</a></span> event is the first piece of a round that follows tool calls, so it starts a new text. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00139">139</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>

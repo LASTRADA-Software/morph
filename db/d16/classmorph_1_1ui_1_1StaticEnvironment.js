@@ -13,6 +13,7 @@ var classmorph_1_1ui_1_1StaticEnvironment =
     [ "results", "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a8b4355519456333bd3b640f79e1a9441", null ],
     [ "errors", "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a6ab091c63b7ff58c334ee49e443d1d01", null ],
     [ "errorKinds", "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#adfc29f24ad57847ca26b68b4224a2626", null ],
+    [ "refusals", "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a8b0bfb7f8678da11f2e0713dc1c2966f", null ],
     [ "pendingNames", "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a28e6d31e16f4bf5250bcec8e1e770209", null ],
     [ "permitted", "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#ac5111e0c0e71a4a1e67b9cebb792225a", null ],
     [ "prefs", "db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#a67382ea7d14be9bc52e42cd385007897", null ],

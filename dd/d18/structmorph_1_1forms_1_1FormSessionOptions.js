@@ -4,5 +4,7 @@ var structmorph_1_1forms_1_1FormSessionOptions =
     [ "bcp47", "dd/d18/structmorph_1_1forms_1_1FormSessionOptions.html#a5efb6a15a8a2b24167b2ca6487a40e89", null ],
     [ "translations", "dd/d18/structmorph_1_1forms_1_1FormSessionOptions.html#a7d768ad28ddc0f6bb7bc58a5eced4be9", null ],
     [ "displayOffsetMinutes", "dd/d18/structmorph_1_1forms_1_1FormSessionOptions.html#ac12a6e61c2a8136b51dd6d963807ae2c", null ],
+    [ "datePattern", "dd/d18/structmorph_1_1forms_1_1FormSessionOptions.html#ac678be0ee3a4b9d67236891821813a0c", null ],
+    [ "dateTimePattern", "dd/d18/structmorph_1_1forms_1_1FormSessionOptions.html#a7eda2976c3977bebc3b9da00c1874fe4", null ],
     [ "accepts", "dd/d18/structmorph_1_1forms_1_1FormSessionOptions.html#a3513142ed1f657c510c5146a86c34824", null ]
 ];

@@ -9,6 +9,7 @@ var classmorph_1_1forms_1_1FieldState =
     [ "text", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#ab8644c50e9064f0df03c12eff788ca8f", null ],
     [ "draft", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a36d1ca00d22ab0254bfc53e95e967628", null ],
     [ "unit", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#acfd51bd5c033bc6af9d0af75d9480e31", null ],
+    [ "places", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a26de489f4a36aa576a09e3775e2bc8e3", null ],
     [ "engaged", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a70eb56292cac5a61f62454360d622c7f", null ],
     [ "encoded", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#a544a03520f16987ec9395799b23ac4ee", null ],
     [ "error", "d0/d0d/classmorph_1_1forms_1_1FieldState.html#aef04b2b92ac0c9a8c5714ed85460782a", null ],

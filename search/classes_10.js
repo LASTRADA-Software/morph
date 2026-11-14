@@ -17,8 +17,10 @@ var searchData=
   ['queryhandle_14',['QueryHandle',['../d8/d50/classmorph_1_1ui_1_1author_1_1QueryHandle.html',1,'morph::ui::author']]],
   ['querylimits_15',['QueryLimits',['../de/d29/structmorph_1_1table_1_1QueryLimits.html',1,'morph::table']]],
   ['queryoptions_16',['QueryOptions',['../d9/dc5/structmorph_1_1reactive_1_1QueryOptions.html',1,'morph::reactive::QueryOptions'],['../d7/d92/structmorph_1_1ui_1_1author_1_1QueryOptions.html',1,'morph::ui::author::QueryOptions']]],
-  ['queryref_17',['QueryRef',['../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html',1,'morph::ui::author']]],
-  ['queryruntime_18',['QueryRuntime',['../d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html',1,'morph::ui::detail']]],
-  ['queueingdispatcher_19',['QueueingDispatcher',['../de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html',1,'morph::ui']]],
-  ['queueitem_20',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
+  ['queryplan_17',['QueryPlan',['../d2/d26/structmorph_1_1table_1_1QueryPlan.html',1,'morph::table']]],
+  ['queryread_18',['QueryRead',['../d8/d7e/structmorph_1_1ui_1_1AppRoot_1_1QueryRead.html',1,'morph::ui::AppRoot']]],
+  ['queryref_19',['QueryRef',['../de/d5a/classmorph_1_1ui_1_1author_1_1QueryRef.html',1,'morph::ui::author']]],
+  ['queryruntime_20',['QueryRuntime',['../d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html',1,'morph::ui::detail']]],
+  ['queueingdispatcher_21',['QueueingDispatcher',['../de/d20/classmorph_1_1ui_1_1QueueingDispatcher.html',1,'morph::ui']]],
+  ['queueitem_22',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
 ];

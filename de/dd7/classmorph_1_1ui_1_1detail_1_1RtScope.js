@@ -6,6 +6,7 @@ var classmorph_1_1ui_1_1detail_1_1RtScope =
     [ "innermostRow", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a0351edaae1cf6efcf724d3f493f4450b", null ],
     [ "policyScope", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a2df0da2f8d6a766394fe6460cd5b40b6", null ],
     [ "ready", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#ae1da950424c6f0711d42ea99409fe1a2", null ],
+    [ "formatting", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a5e42b36823c6561dfa168f984aef7e8b", null ],
     [ "core", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a27afd48f7c5ebc95060e9bcac804574e", null ],
     [ "parent", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#aef597b0ad4517f5b83fe2c23512339dc", null ],
     [ "row", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a14c53f01c13f6d3477608668852e223c", null ],
@@ -22,5 +23,8 @@ var classmorph_1_1ui_1_1detail_1_1RtScope =
     [ "queries", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a4110d04a232c5652ec0bf661c578e661", null ],
     [ "mutations", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a0fbf036e6af7a4bf52fb4f0841f5a113", null ],
     [ "checks", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#ae0d84fcc96c5593eb40ce457d9381203", null ],
+    [ "localeFormat", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#ab5c26cfa3c7de2b11753827424adb665", null ],
+    [ "transparent", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a96754df934ffd5926f63dd4a38bbcadc", null ],
+    [ "formatSource", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#a41db27084c145bc180bc525cefa948ad", null ],
     [ "nodes", "de/dd7/classmorph_1_1ui_1_1detail_1_1RtScope.html#aba0671b6c9ea4651eaa338c68d9fabe8", null ]
 ];

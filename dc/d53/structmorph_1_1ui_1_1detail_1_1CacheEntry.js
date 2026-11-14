@@ -11,6 +11,7 @@ var structmorph_1_1ui_1_1detail_1_1CacheEntry =
     [ "hasValue", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a279cd6cf379e0e908e9c16698d75b311", null ],
     [ "error", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a99a70c9838baccc92eb39e52c8af2f8f", null ],
     [ "errorKind", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#aa72e43351ffc3fc2a72894e03bfb4b4e", null ],
+    [ "refusal", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#ab16bce680eb8672ba444d958f0d8e2f5", null ],
     [ "pending", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a352eb17af407f6e03a3231011841a6b7", null ],
     [ "confirmed", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#a38ffac5faa7834db62383cdac7de8af4", null ],
     [ "layers", "dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html#abc6b21429dfe4a8fa225865f15a7026d", null ],

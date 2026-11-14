@@ -141,6 +141,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a25776386f3c5e1aadefd4549194d2d83"><td class="mdescLeft">&#160;</td><td class="mdescRight">The lower end of the value axis, padding included.  <br /></td></tr>
 <tr class="memitem:a2a26b7f74c57f59887253fa1875ea6b7" id="r_a2a26b7f74c57f59887253fa1875ea6b7"><td class="memItemLeft">double&#160;</td><td class="memItemRight"><a class="el" href="#a2a26b7f74c57f59887253fa1875ea6b7">yMax</a> = 0.0</td></tr>
 <tr class="memdesc:a2a26b7f74c57f59887253fa1875ea6b7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The upper end of the value axis, padding included.  <br /></td></tr>
+<tr class="memitem:a1678029565e58abd038c47ed163c97eb" id="r_a1678029565e58abd038c47ed163c97eb"><td class="memItemLeft">double&#160;</td><td class="memItemRight"><a class="el" href="#a1678029565e58abd038c47ed163c97eb">barSlot</a> = 0.0</td></tr>
+<tr class="memdesc:a1678029565e58abd038c47ed163c97eb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The width, in horizontal-axis units, of the room one position gives its bars; 0 when no series is <span class="tt">Bars</span>.  <br /></td></tr>
 <tr class="memitem:ae183c9a85a5b5e8d7c5e49c67f02f79d" id="r_ae183c9a85a5b5e8d7c5e49c67f02f79d"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ae183c9a85a5b5e8d7c5e49c67f02f79d">yLabel</a></td></tr>
 <tr class="memdesc:ae183c9a85a5b5e8d7c5e49c67f02f79d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The value axis's unit or name, drawn above its labels; empty for none.  <br /></td></tr>
 <tr class="memitem:ae2c7dbfce0c35694d5e6b74ed3e51d8e" id="r_ae2c7dbfce0c35694d5e6b74ed3e51d8e"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d5/dfb/structmorph_1_1ui_1_1ChartTick.html">ChartTick</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae2c7dbfce0c35694d5e6b74ed3e51d8e">yTicks</a></td></tr>
@@ -156,7 +158,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>Everything a chart draws, computed from exact values by the lowering: positions as doubles, and every text already formatted. </p>
 <p>One value rather than a setter per part: the range depends on every point and line, so the parts change together, and one equality check keeps an unchanged chart from drawing again. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01490">1490</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01523">1523</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a76fcbe15cfbf1ffa0fb0dcdb445534c8" name="a76fcbe15cfbf1ffa0fb0dcdb445534c8"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a76fcbe15cfbf1ffa0fb0dcdb445534c8">&#9670;&#160;</a></span>operator==()</h2>
@@ -201,7 +203,7 @@ Public Attributes</h2></td></tr>
 
 <p>The left end of the horizontal axis, padding included. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01492">1492</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01525">1525</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -219,7 +221,7 @@ Public Attributes</h2></td></tr>
 
 <p>The right end of the horizontal axis, padding included. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01494">1494</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01527">1527</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -237,7 +239,7 @@ Public Attributes</h2></td></tr>
 
 <p>The lower end of the value axis, padding included. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01496">1496</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01529">1529</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -255,7 +257,25 @@ Public Attributes</h2></td></tr>
 
 <p>The upper end of the value axis, padding included. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01498">1498</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01531">1531</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a1678029565e58abd038c47ed163c97eb" name="a1678029565e58abd038c47ed163c97eb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1678029565e58abd038c47ed163c97eb">&#9670;&#160;</a></span>barSlot</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">double morph::ui::ChartData::barSlot = 0.0</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The width, in horizontal-axis units, of the room one position gives its bars; 0 when no series is <span class="tt">Bars</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01534">1534</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +293,7 @@ Public Attributes</h2></td></tr>
 
 <p>The value axis's unit or name, drawn above its labels; empty for none. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01500">1500</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01536">1536</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -291,7 +311,7 @@ Public Attributes</h2></td></tr>
 
 <p>The value axis's ticks; empty when three or more reference lines label the axis. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01502">1502</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01538">1538</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -309,7 +329,7 @@ Public Attributes</h2></td></tr>
 
 <p>The reference lines. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01504">1504</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01540">1540</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -327,7 +347,7 @@ Public Attributes</h2></td></tr>
 
 <p>The series, in drawing order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01506">1506</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01542">1542</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>
@@ -345,7 +365,7 @@ Public Attributes</h2></td></tr>
 
 <p>The text alternative: what a reader must know from the chart. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01508">1508</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01544">1544</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

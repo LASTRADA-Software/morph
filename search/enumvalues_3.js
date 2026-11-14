@@ -21,7 +21,8 @@ var searchData=
   ['divisionbyzero_18',['DivisionByZero',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea34e540e6594987eef203290f0a593bd2',1,'morph::math']]],
   ['done_19',['Done',['../d8/dd1/protocol_8hpp.html#ad91478fea6e18364f199511bbb666ec7af92965e2c8a7afb3c1b9a5c09a263636',1,'Donemorph::ui::chat'],['../d8/d11/view_8hpp.html#af1e741ceb88969a1b66bd60701528da0af92965e2c8a7afb3c1b9a5c09a263636',1,'Donemorph::ui']]],
   ['dotted_20',['Dotted',['../d1/dc0/author_8hpp.html#ace733a5f8b6c827e0edc2d606e017a39a90c09393a4c0970bc9a6703ad527781c',1,'Dottedmorph::ui::author'],['../d8/d11/view_8hpp.html#a02814acd0e2a2848c51eb47102c27aaba90c09393a4c0970bc9a6703ad527781c',1,'Dottedmorph::ui']]],
-  ['download_21',['Download',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ea801ab24683a4a8c433c6eb40c48bcd9d',1,'morph::ui']]],
-  ['drawer_22',['Drawer',['../d1/dc0/author_8hpp.html#a320acba32f9877358d74ee2052b65ef6a9b1ed2cbe56f7a315f0a365d2b97cb59',1,'morph::ui::author']]],
-  ['dropdown_23',['Dropdown',['../d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1a7498c445a737312f3678aa1494e01a38',1,'morph::ui']]]
+  ['down_21',['Down',['../d0/dc2/ui_2backend_8hpp.html#a813ca81d16332cc7126de3e02513f6d2a08a38277b0309070706f6652eeae9a53',1,'morph::ui']]],
+  ['download_22',['Download',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0ea801ab24683a4a8c433c6eb40c48bcd9d',1,'morph::ui']]],
+  ['drawer_23',['Drawer',['../d1/dc0/author_8hpp.html#a320acba32f9877358d74ee2052b65ef6a9b1ed2cbe56f7a315f0a365d2b97cb59',1,'morph::ui::author']]],
+  ['dropdown_24',['Dropdown',['../d8/d11/view_8hpp.html#aafdccb4a0445b437dc40b2b5dfb0bce1a7498c445a737312f3678aa1494e01a38',1,'morph::ui']]]
 ];

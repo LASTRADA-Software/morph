@@ -29,6 +29,7 @@ var expression_8hpp =
       [ "Error", "d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a902b0d55fddef6f8d651fe1035b7d4bd", null ],
       [ "Result", "d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a8eea62084ca7e541d918e823422bd82e", null ],
       [ "ErrorKind", "d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a2137512bfce7e11c12072fc10ce4187e", null ],
+      [ "Refusal", "d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a923d783c5bfd830e43964b953a65327f", null ],
       [ "Can", "d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663ad677b410373bc790d9a8ec2e68090839", null ],
       [ "Pref", "d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663a56a2e1cec4756c692a127d5dabf0d11d", null ],
       [ "Call", "d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663ac3755e61202abd74da5885d2e9c9160e", null ],
@@ -84,9 +85,10 @@ var expression_8hpp =
     [ "morph::ui::detail::kAllKinds", "d8/d0e/expression_8hpp.html#adfd6fb089175637ecf4324dfe2b43509", null ],
     [ "morph::ui::detail::kNumeric", "d8/d0e/expression_8hpp.html#a904a78e57c1d4f5b33790ba34d0addad", null ],
     [ "morph::ui::detail::kOrdered", "d8/d0e/expression_8hpp.html#a36510bc5882d9dbd986570731bef4ea7", null ],
-    [ "morph::ui::detail::kFunctions", "d8/d0e/expression_8hpp.html#af7ffa27454ce5a35154e424a787ca4e2", null ],
+    [ "morph::ui::detail::kBuiltInRefusal", "d8/d0e/expression_8hpp.html#a0659e39ea364472b4b958f7135a12766", null ],
+    [ "morph::ui::detail::kFunctions", "d8/d0e/expression_8hpp.html#a99fea7d924bd2ef4458df33becbb31de", null ],
     [ "morph::ui::detail::kDateUnits", "d8/d0e/expression_8hpp.html#a852a2b54ea631b709059f93c7f9110b1", null ],
-    [ "morph::ui::detail::kEnvNames", "d8/d0e/expression_8hpp.html#a6fd684e6821cca9ab7819f016aadb7ef", null ],
+    [ "morph::ui::detail::kEnvNames", "d8/d0e/expression_8hpp.html#ad64d74ef3507f875ba5797d3d4fc9bbb", null ],
     [ "morph::ui::detail::kSessionNames", "d8/d0e/expression_8hpp.html#a0d1d95fcf12d2c7123288a5bb5d8ec14", null ],
     [ "morph::ui::detail::kDateSpans", "d8/d0e/expression_8hpp.html#a1ff86c55bab12010592e438dbb884c50", null ]
 ];

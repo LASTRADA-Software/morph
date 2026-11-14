@@ -1,6 +1,8 @@
 var dir_dc1b88453201f4f0afd0f2d336e9acaa =
 [
     [ "detail", "dir_6c27b99953c4043724e909925b5929d0.html", "dir_6c27b99953c4043724e909925b5929d0" ],
+    [ "action_guard.hpp", "db/d67/action__guard_8hpp.html", "db/d67/action__guard_8hpp" ],
+    [ "action_refusal.hpp", "d3/da5/action__refusal_8hpp.html", "d3/da5/action__refusal_8hpp" ],
     [ "async.hpp", "d5/d2c/async_8hpp.html", null ],
     [ "backend.hpp", "de/d02/core_2backend_8hpp_source.html", null ],
     [ "bridge.hpp", "d6/d1e/bridge_8hpp_source.html", null ],

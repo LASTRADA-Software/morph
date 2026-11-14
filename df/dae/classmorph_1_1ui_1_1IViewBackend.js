@@ -15,6 +15,7 @@ var classmorph_1_1ui_1_1IViewBackend =
     [ "createTabs", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a68d9c7509883ba521c31319f5f21da2d", null ],
     [ "createDialog", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#ae1f5f47ee1222e4e282b991b98b5c3ab", null ],
     [ "createToast", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a08377c1b28b1da169e43f158ad210cd3", null ],
+    [ "createPopover", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2abd3f6c42479af0ea20c52d365d1fd8", null ],
     [ "createBusy", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#aa00c2863b5fcbe9b0ed205a043ec60a0", null ],
     [ "createTable", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a4472eb65b0ce59376d2bc47c48e76d29", null ],
     [ "createDateTimeInput", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2739229e5dbbaba964f65231da91a47a", null ],
@@ -31,6 +32,8 @@ var classmorph_1_1ui_1_1IViewBackend =
     [ "createSplitter", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2a6d526e4cfa5b49a188efa67830d3f9", null ],
     [ "createCollapsible", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a2cf5fd3cde2b484942a83b0dd6f7379c", null ],
     [ "createDropZone", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#adb0d4528494cfbf9a2b53f49c295d93c", null ],
+    [ "createPage", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a3f1a5c8f0490d5b355407dd9a981e1a1", null ],
+    [ "createPageRegion", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a3a863d33e9484a1377ef94b95e00ebf4", null ],
     [ "createCustom", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a6528c7bb0bdc2531fe0d2349859a11b8", null ],
     [ "widthClass", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a78d8a5bc452f99b64b0e44c27de571b0", null ],
     [ "setOnWidthClass", "df/dae/classmorph_1_1ui_1_1IViewBackend.html#a82ed4d3c4bcc1d720cd6db5a7824e324", null ]

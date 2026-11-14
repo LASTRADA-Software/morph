@@ -9,6 +9,7 @@ var classmorph_1_1ui_1_1testing_1_1ConformanceProbe =
     [ "childCount", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a5a3341c12d4a0a373e542db9dcd8b6a7", null ],
     [ "childAt", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#ac82dcf9ce40342ef212c8866de84ba95", null ],
     [ "click", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a5e8271e983eade47e61cad83579f27f0", null ],
+    [ "clickAt", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a0cbec2325704d23dfb0b5ce1562493af", null ],
     [ "type", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#aeac1d773d0c71db56174dddf74fcef3e", null ],
     [ "drag", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a9ba4fc4917bf531b7f7793199cd94019", null ],
     [ "dismiss", "d2/d46/classmorph_1_1ui_1_1testing_1_1ConformanceProbe.html#a94eb049d3c87d78053e32583e7eeca00", null ],

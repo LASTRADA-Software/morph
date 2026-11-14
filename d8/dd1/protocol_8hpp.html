@@ -144,6 +144,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The reply to a <span class="tt"><a class="el" href="../../d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html" title="One thing a person said, and where they were when they said it.">TurnRequest</a></span>: the turn has been taken and runs on.  <a href="../../df/df9/structmorph_1_1ui_1_1chat_1_1TurnAccepted.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Achat_3A_3AToolStep" id="r_morph_3A_3Aui_3A_3Achat_3A_3AToolStep"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/dcf/structmorph_1_1ui_1_1chat_1_1ToolStep.html">morph::ui::chat::ToolStep</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One tool call a turn made.  <a href="../../d3/dcf/structmorph_1_1ui_1_1chat_1_1ToolStep.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Achat_3A_3ATurnPart" id="r_morph_3A_3Aui_3A_3Achat_3A_3ATurnPart"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d4/d6c/structmorph_1_1ui_1_1chat_1_1TurnPart.html">morph::ui::chat::TurnPart</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One piece of a turn, in the order the turn made it.  <a href="../../d4/d6c/structmorph_1_1ui_1_1chat_1_1TurnPart.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Achat_3A_3ATurnState" id="r_morph_3A_3Aui_3A_3Achat_3A_3ATurnState"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html">morph::ui::chat::TurnState</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A turn's state as the server holds it, which outranks any event.  <a href="../../d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Achat_3A_3AStateRequest" id="r_morph_3A_3Aui_3A_3Achat_3A_3AStateRequest"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d2/d1d/structmorph_1_1ui_1_1chat_1_1StateRequest.html">morph::ui::chat::StateRequest</a></td></tr>
@@ -226,7 +228,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +273,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The JSON text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00124">124</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00147">147</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -307,7 +309,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The request, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -343,7 +345,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reply, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00161">161</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -379,7 +381,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The state, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00168">168</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -415,7 +417,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The request, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00175">175</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -451,7 +453,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The event, or why it was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00160">160</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00183">183</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>

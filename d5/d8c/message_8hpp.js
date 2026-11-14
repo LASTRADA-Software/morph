@@ -38,6 +38,7 @@ var message_8hpp =
     [ "morph::ui::pluralCategory", "d5/d8c/message_8hpp.html#ada15a6679c6d50642d127e7a3efd5392", null ],
     [ "morph::ui::parseMessage", "d5/d8c/message_8hpp.html#ad48926b7b24cb00ef8e747852d864a95", null ],
     [ "morph::ui::detail::parseExactKey", "d5/d8c/message_8hpp.html#a252067d451664fd5803a13544ffccb48", null ],
+    [ "morph::ui::detail::numberOperand", "d5/d8c/message_8hpp.html#a032c1515f746876b32f94ddc07bfeb18", null ],
     [ "morph::ui::detail::matchKey", "d5/d8c/message_8hpp.html#a9e39fbca55f7b21c0c3404c3067a3922", null ],
     [ "morph::ui::detail::formatPattern", "d5/d8c/message_8hpp.html#ac3370546cddc4627e9123327d832e71b", null ],
     [ "morph::ui::formatMessage", "d5/d8c/message_8hpp.html#a4df104175448db66ae3efcec1ad10446", null ],

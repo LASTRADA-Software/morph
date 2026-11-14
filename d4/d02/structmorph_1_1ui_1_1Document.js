@@ -15,6 +15,7 @@ var structmorph_1_1ui_1_1Document =
     [ "headSurface", "d4/d02/structmorph_1_1ui_1_1Document.html#a11adb75f364f6c08311e642e59084f00", null ],
     [ "pageSurface", "d4/d02/structmorph_1_1ui_1_1Document.html#af3a974fca6a9684b5ea932833cee34ed", null ],
     [ "principalPlacement", "d4/d02/structmorph_1_1ui_1_1Document.html#a75f57f576f35e1af3ab0e089aa01c25f", null ],
+    [ "shell", "d4/d02/structmorph_1_1ui_1_1Document.html#a4ea2ce833cc79254dc3ec355b1552915", null ],
     [ "status", "d4/d02/structmorph_1_1ui_1_1Document.html#a9b2e3fc38418a13b29d82aa628f834f5", null ],
     [ "actions", "d4/d02/structmorph_1_1ui_1_1Document.html#ad9046a172aa70ec1c9ad16265f55e3b9", null ],
     [ "menu", "d4/d02/structmorph_1_1ui_1_1Document.html#aab86c0821d171f287884b1361f9cf3e5", null ],

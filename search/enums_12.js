@@ -8,8 +8,9 @@ var searchData=
   ['themetokenkind_5',['ThemeTokenKind',['../d9/df6/ui_2theme_8hpp.html#ae1f780f26df5f3839ead6402c330cf9a',1,'morph::ui']]],
   ['token_6',['Token',['../d3/d89/date__pattern_8hpp.html#a2ef946a43d5a988fd701e98130632c83',1,'morph::ui::detail::dates']]],
   ['tone_7',['Tone',['../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a',1,'morph::ui']]],
-  ['tri_8',['Tri',['../d8/d26/rules_8hpp.html#a47ab229d7c8484a52f99e68d3274a865',1,'morph::forms']]],
-  ['tryitkind_9',['TryItKind',['../d9/da5/explorer_8hpp.html#a6b393f9a7c4fab3681ed905652701c7d',1,'morph::ui']]],
-  ['turnstatus_10',['TurnStatus',['../d8/dd1/protocol_8hpp.html#ad91478fea6e18364f199511bbb666ec7',1,'morph::ui::chat']]],
-  ['typekind_11',['TypeKind',['../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349',1,'morph::ui']]]
+  ['totalkind_8',['TotalKind',['../dd/def/query_8hpp.html#af7533bbb6d6d95677aff5b0274ed17ad',1,'morph::table']]],
+  ['tri_9',['Tri',['../d8/d26/rules_8hpp.html#a47ab229d7c8484a52f99e68d3274a865',1,'morph::forms']]],
+  ['tryitkind_10',['TryItKind',['../d9/da5/explorer_8hpp.html#a6b393f9a7c4fab3681ed905652701c7d',1,'morph::ui']]],
+  ['turnstatus_11',['TurnStatus',['../d8/dd1/protocol_8hpp.html#ad91478fea6e18364f199511bbb666ec7',1,'morph::ui::chat']]],
+  ['typekind_12',['TypeKind',['../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349',1,'morph::ui']]]
 ];

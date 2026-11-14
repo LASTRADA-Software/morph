@@ -138,41 +138,42 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d53/envelop
 <div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment"></span> </div>
 <div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="comment">/// @brief What a wire transport offers beside `IBackend`: one request, one reply, matched by `callId`.</span></div>
 <div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="comment">///</span></div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="comment">/// `SocketBackend` and `QtWebSocketBackend` implement it. A backend without a wire, such as `LocalBackend`, has no</span></div>
-<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="comment">/// peer and does not.</span></div>
-<div class="foldopen" id="foldopen00021" data-start="{" data-end="};">
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno"><a class="line" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">   21</a></span><span class="keyword">class </span>IEnvelopeTransport {</div>
-<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="keyword">public</span>:</div>
-<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span>    IEnvelopeTransport() = <span class="keywordflow">default</span>;</div>
-<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span>    IEnvelopeTransport(IEnvelopeTransport <span class="keyword">const</span>&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span>    IEnvelopeTransport&amp; operator=(IEnvelopeTransport <span class="keyword">const</span>&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span>    IEnvelopeTransport(IEnvelopeTransport&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span>    IEnvelopeTransport&amp; operator=(IEnvelopeTransport&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment"></span> </div>
-<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">    /// @brief Sends one request envelope and settles with its reply.</span></div>
-<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">    /// The envelope travels with the session it carries: the transport assigns its `callId` and stamps nothing else,</span></div>
-<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment">    /// because a protocol that passes its session explicitly (`ui::UiClient::open`) must not have it replaced by the</span></div>
-<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">    /// transport&#39;s default. The reply resolves the `Completion` whether it is `ok` or `err`, since reading an `err`</span></div>
-<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="comment">    /// is the caller&#39;s protocol; only a failure to deliver the request or its reply rejects it. A request made while</span></div>
-<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span><span class="comment">    /// the connection is down is held and sent at the next connect; `cancelPending`, a drop and the transport&#39;s</span></div>
-<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span><span class="comment">    /// destruction reject what is pending or held.</span></div>
-<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span><span class="comment">    /// @param envelope The request. Its `callId` is replaced.</span></div>
-<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span><span class="comment">    /// @param cbExec   Executor the answer is delivered on. Borrowed: it must outlive the returned `Completion`.</span></div>
-<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span><span class="comment">    /// @return A `Completion` resolved with the reply envelope, or rejected with the transport&#39;s failure</span></div>
-<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span><span class="comment">    ///         (`DisconnectedError` for a dropped or closed connection).</span></div>
-<div class="line"><a id="l00041" name="l00041"></a><span class="lineno"><a class="line" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html#a8673dbca04999ea369b2276f1bbda1d5">   41</a></span>    virtual ::morph::async::Completion&lt;::morph::wire::Envelope&gt; <a class="code hl_function" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html#a8673dbca04999ea369b2276f1bbda1d5">request</a>(<a class="code hl_struct" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> envelope,</div>
-<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span>                                                                        <a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; cbExec) = 0;</div>
-<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span> </div>
-<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="keyword">protected</span>:</div>
-<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span>    ~IEnvelopeTransport() = <span class="keywordflow">default</span>;</div>
-<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>};</div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="comment">/// `SocketBackend`, `QtWebSocketBackend` and `SimulatedRemoteBackend` implement it; the last reaches a `RemoteServer`</span></div>
+<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="comment">/// in the same process, on its own connection scope. A backend with no server to ask, such as `LocalBackend`, does</span></div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="comment">/// not implement it.</span></div>
+<div class="foldopen" id="foldopen00022" data-start="{" data-end="};">
+<div class="line"><a id="l00022" name="l00022"></a><span class="lineno"><a class="line" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">   22</a></span><span class="keyword">class </span>IEnvelopeTransport {</div>
+<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="keyword">public</span>:</div>
+<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span>    IEnvelopeTransport() = <span class="keywordflow">default</span>;</div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span>    IEnvelopeTransport(IEnvelopeTransport <span class="keyword">const</span>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span>    IEnvelopeTransport&amp; operator=(IEnvelopeTransport <span class="keyword">const</span>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span>    IEnvelopeTransport(IEnvelopeTransport&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span>    IEnvelopeTransport&amp; operator=(IEnvelopeTransport&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment"></span> </div>
+<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">    /// @brief Sends one request envelope and settles with its reply.</span></div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment">    /// The envelope travels with the session it carries: the transport assigns its `callId` and stamps nothing else,</span></div>
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">    /// because a protocol that passes its session explicitly (`ui::UiClient::open`) must not have it replaced by the</span></div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="comment">    /// transport&#39;s default. The reply resolves the `Completion` whether it is `ok` or `err`, since reading an `err`</span></div>
+<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span><span class="comment">    /// is the caller&#39;s protocol; only a failure to deliver the request or its reply rejects it. A request made while</span></div>
+<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span><span class="comment">    /// the connection is down is held and sent at the next connect; `cancelPending`, a drop and the transport&#39;s</span></div>
+<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span><span class="comment">    /// destruction reject what is pending or held.</span></div>
+<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span><span class="comment">    /// @param envelope The request. Its `callId` is replaced.</span></div>
+<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span><span class="comment">    /// @param cbExec   Executor the answer is delivered on. Borrowed: it must outlive the returned `Completion`.</span></div>
+<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span><span class="comment">    /// @return A `Completion` resolved with the reply envelope, or rejected with the transport&#39;s failure</span></div>
+<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span><span class="comment">    ///         (`DisconnectedError` for a dropped or closed connection).</span></div>
+<div class="line"><a id="l00042" name="l00042"></a><span class="lineno"><a class="line" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html#a8673dbca04999ea369b2276f1bbda1d5">   42</a></span>    virtual ::morph::async::Completion&lt;::morph::wire::Envelope&gt; <a class="code hl_function" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html#a8673dbca04999ea369b2276f1bbda1d5">request</a>(<a class="code hl_struct" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> envelope,</div>
+<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span>                                                                        <a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; cbExec) = 0;</div>
+<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span> </div>
+<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span><span class="keyword">protected</span>:</div>
+<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>    ~IEnvelopeTransport() = <span class="keywordflow">default</span>;</div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span>};</div>
 </div>
-<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span> </div>
-<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span>}  <span class="comment">// namespace morph::backend</span></div>
+<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span> </div>
+<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span>}  <span class="comment">// namespace morph::backend</span></div>
 <div class="ttc" id="aclassmorph_1_1backend_1_1IEnvelopeTransport_html_a8673dbca04999ea369b2276f1bbda1d5"><div class="ttname"><a href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html#a8673dbca04999ea369b2276f1bbda1d5">morph::backend::IEnvelopeTransport::request</a></div><div class="ttdeci">virtual ::morph::async::Completion&lt;::morph::wire::Envelope &gt; request(::morph::wire::Envelope envelope, ::morph::exec::IExecutor &amp;cbExec)=0</div><div class="ttdoc">Sends one request envelope and settles with its reply.</div></div>
 <div class="ttc" id="astructmorph_1_1exec_1_1IExecutor_html"><div class="ttname"><a href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">morph::exec::IExecutor</a></div><div class="ttdoc">Abstract executor interface.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d76/executor_8hpp_source.html#l00070">executor.hpp:70</a></div></div>
-<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">morph::wire::Envelope</a></div><div class="ttdoc">JSON wire envelope used between any client and RemoteServer.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00091">wire.hpp:91</a></div></div>
+<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">morph::wire::Envelope</a></div><div class="ttdoc">JSON wire envelope used between any client and RemoteServer.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00101">wire.hpp:101</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

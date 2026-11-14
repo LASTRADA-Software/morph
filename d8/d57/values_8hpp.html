@@ -164,10 +164,10 @@ Typedefs</h2></td></tr>
 Functions</h2></td></tr>
 <tr class="memitem:a9aa170c1463a238413fc3eb7b6d9b142" id="r_a9aa170c1463a238413fc3eb7b6d9b142"><td class="memItemLeft"><a class="el" href="../../d5/da5/structmorph_1_1forms_1_1FieldError.html">FieldError</a>&#160;</td><td class="memItemRight"><a class="el" href="#a9aa170c1463a238413fc3eb7b6d9b142">morph::forms::fieldError</a> (std::string_view code, <a class="el" href="../../df/d36/structmorph_1_1forms_1_1ValueContext.html">ValueContext</a> const &amp;context)</td></tr>
 <tr class="memdesc:a9aa170c1463a238413fc3eb7b6d9b142"><td class="mdescLeft">&#160;</td><td class="mdescRight">The error for <code class="param">code</code>, its message resolved through <code class="param">context's</code> translations.  <br /></td></tr>
-<tr class="memitem:a2143b20fd10aa27dd984449691d32976" id="r_a2143b20fd10aa27dd984449691d32976"><td class="memItemLeft"><a class="el" href="#ae1388db116ccd8a9d13b1d2c69ce876a">Encoding</a>&#160;</td><td class="memItemRight"><a class="el" href="#a2143b20fd10aa27dd984449691d32976">morph::forms::encodeScalar</a> (<a class="el" href="../../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html">FieldSpec</a> const &amp;spec, std::string_view draft, std::size_t unit, <a class="el" href="../../df/d36/structmorph_1_1forms_1_1ValueContext.html">ValueContext</a> const &amp;context)</td></tr>
-<tr class="memdesc:a2143b20fd10aa27dd984449691d32976"><td class="mdescLeft">&#160;</td><td class="mdescRight">Encodes one scalar field's draft (every kind but <span class="tt">Object</span> and <span class="tt">ObjectArray</span>).  <br /></td></tr>
-<tr class="memitem:ac0acecfe7a20a7651c9580b1e97eaeed" id="r_ac0acecfe7a20a7651c9580b1e97eaeed"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ac0acecfe7a20a7651c9580b1e97eaeed">morph::forms::decodeScalar</a> (<a class="el" href="../../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html">FieldSpec</a> const &amp;spec, detail::engine::Json const &amp;value, <a class="el" href="../../df/d36/structmorph_1_1forms_1_1ValueContext.html">ValueContext</a> const &amp;context)</td></tr>
-<tr class="memdesc:ac0acecfe7a20a7651c9580b1e97eaeed"><td class="mdescLeft">&#160;</td><td class="mdescRight">The draft a control shows for the wire value <code class="param">value</code> — the inverse of <span class="tt"><a class="el" href="#a2143b20fd10aa27dd984449691d32976" title="Encodes one scalar field&#39;s draft (every kind but Object and ObjectArray).">encodeScalar</a></span>, so encoding the result re-encodes <code class="param">value</code> (numbers in the display locale, without grouping; instants in the display zone).  <br /></td></tr>
+<tr class="memitem:a42804c4f022def8b1f7aafdb26b9679c" id="r_a42804c4f022def8b1f7aafdb26b9679c"><td class="memItemLeft"><a class="el" href="#ae1388db116ccd8a9d13b1d2c69ce876a">Encoding</a>&#160;</td><td class="memItemRight"><a class="el" href="#a42804c4f022def8b1f7aafdb26b9679c">morph::forms::encodeScalar</a> (<a class="el" href="../../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html">FieldSpec</a> const &amp;spec, std::string_view draft, std::size_t unit, <a class="el" href="../../df/d36/structmorph_1_1forms_1_1ValueContext.html">ValueContext</a> const &amp;context, std::optional&lt; std::uint32_t &gt; places=std::nullopt)</td></tr>
+<tr class="memdesc:a42804c4f022def8b1f7aafdb26b9679c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Encodes one scalar field's draft (every kind but <span class="tt">Object</span> and <span class="tt">ObjectArray</span>).  <br /></td></tr>
+<tr class="memitem:a6e5d187e0bb25b0df54d64fb11d238a6" id="r_a6e5d187e0bb25b0df54d64fb11d238a6"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a6e5d187e0bb25b0df54d64fb11d238a6">morph::forms::decodeScalar</a> (<a class="el" href="../../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html">FieldSpec</a> const &amp;spec, detail::engine::Json const &amp;value, <a class="el" href="../../df/d36/structmorph_1_1forms_1_1ValueContext.html">ValueContext</a> const &amp;context, std::optional&lt; std::uint32_t &gt; places=std::nullopt)</td></tr>
+<tr class="memdesc:a6e5d187e0bb25b0df54d64fb11d238a6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The draft a control shows for the wire value <code class="param">value</code> — the inverse of <span class="tt"><a class="el" href="#a42804c4f022def8b1f7aafdb26b9679c" title="Encodes one scalar field&#39;s draft (every kind but Object and ObjectArray).">encodeScalar</a></span>, so encoding the result re-encodes <code class="param">value</code> (numbers in the display locale, without grouping; instants in the display zone).  <br /></td></tr>
 <tr class="memitem:aa4291d8e7adc41c3754aa28f1d898a21" id="r_aa4291d8e7adc41c3754aa28f1d898a21"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa4291d8e7adc41c3754aa28f1d898a21">morph::forms::convertDraft</a> (std::string_view draft, <a class="el" href="../../d2/dca/structmorph_1_1forms_1_1UnitOption.html">UnitOption</a> const &amp;from, <a class="el" href="../../d2/dca/structmorph_1_1forms_1_1UnitOption.html">UnitOption</a> const &amp;target, <a class="el" href="../../dc/ddc/structmorph_1_1render_1_1NumericLocale.html">render::NumericLocale</a> const &amp;locale)</td></tr>
 <tr class="memdesc:aa4291d8e7adc41c3754aa28f1d898a21"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts a draft from one unit to another exactly, rounding half away from zero to the target unit's decimals.  <br /></td></tr>
 <tr class="memitem:afab3d5c677a8d4f337630754ee81a913" id="r_afab3d5c677a8d4f337630754ee81a913"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d5/de9/structmorph_1_1forms_1_1ChoiceOption.html">ChoiceOption</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afab3d5c677a8d4f337630754ee81a913">morph::forms::parseOptions</a> (std::string_view reply, <a class="el" href="../../da/d1f/structmorph_1_1forms_1_1ChoiceSpec.html">ChoiceSpec</a> const &amp;spec)</td></tr>
@@ -241,8 +241,8 @@ Functions</h2></td></tr>
 
 </div>
 </div>
-<a id="a2143b20fd10aa27dd984449691d32976" name="a2143b20fd10aa27dd984449691d32976"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2143b20fd10aa27dd984449691d32976">&#9670;&#160;</a></span>encodeScalar()</h2>
+<a id="a42804c4f022def8b1f7aafdb26b9679c" name="a42804c4f022def8b1f7aafdb26b9679c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a42804c4f022def8b1f7aafdb26b9679c">&#9670;&#160;</a></span>encodeScalar()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -268,7 +268,12 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="../../df/d36/structmorph_1_1forms_1_1ValueContext.html">ValueContext</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>context</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../df/d36/structmorph_1_1forms_1_1ValueContext.html">ValueContext</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>context</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::optional&lt; std::uint32_t &gt;</td>          <td class="paramname"><span class="paramname"><em>places</em></span><span class="paramdefsep"> = </span><span class="paramdefval">std::nullopt</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -285,17 +290,18 @@ Functions</h2></td></tr>
     <tr><td class="paramname">draft</td><td>What the user typed, or what a control holds (an option's <span class="tt">valueJson</span>, <span class="tt">true</span>/<span class="tt">false</span>). </td></tr>
     <tr><td class="paramname">unit</td><td>For a Decimal or Quantity, the index into <span class="tt">spec.units</span> the draft is typed in. </td></tr>
     <tr><td class="paramname">context</td><td>The locale, display zone and translations. </td></tr>
+    <tr><td class="paramname">places</td><td>For a Number, Decimal or Quantity, the field's places when a record gives it its own (see <span class="tt">encodeExact</span>). </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The encoding. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d57/values_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../d8/d57/values_8hpp_source.html">values.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d57/values_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../d8/d57/values_8hpp_source.html">values.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ac0acecfe7a20a7651c9580b1e97eaeed" name="ac0acecfe7a20a7651c9580b1e97eaeed"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac0acecfe7a20a7651c9580b1e97eaeed">&#9670;&#160;</a></span>decodeScalar()</h2>
+<a id="a6e5d187e0bb25b0df54d64fb11d238a6" name="a6e5d187e0bb25b0df54d64fb11d238a6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6e5d187e0bb25b0df54d64fb11d238a6">&#9670;&#160;</a></span>decodeScalar()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -316,7 +322,12 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="../../df/d36/structmorph_1_1forms_1_1ValueContext.html">ValueContext</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>context</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../df/d36/structmorph_1_1forms_1_1ValueContext.html">ValueContext</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>context</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::optional&lt; std::uint32_t &gt;</td>          <td class="paramname"><span class="paramname"><em>places</em></span><span class="paramdefsep"> = </span><span class="paramdefval">std::nullopt</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -332,12 +343,13 @@ Functions</h2></td></tr>
     <tr><td class="paramname">spec</td><td>The field. </td></tr>
     <tr><td class="paramname">value</td><td>The wire value (JSON null and a mismatched shape decode to blank). </td></tr>
     <tr><td class="paramname">context</td><td>The locale and display zone. </td></tr>
+    <tr><td class="paramname">places</td><td>For a Number, Decimal or Quantity, the field's places when a record gives it its own (see <span class="tt">encodeExact</span>); the value is shown at them rather than at the schema's, so what is loaded is what is accepted. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The draft text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d57/values_8hpp_source.html#l00439">439</a> of file <a class="el" href="../../d8/d57/values_8hpp_source.html">values.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d57/values_8hpp_source.html#l00471">471</a> of file <a class="el" href="../../d8/d57/values_8hpp_source.html">values.hpp</a>.</p>
 
 </div>
 </div>
@@ -390,7 +402,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The converted draft, or <span class="tt">std::nullopt</span> when the draft is not a number or the conversion leaves the exact range. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d57/values_8hpp_source.html#l00535">535</a> of file <a class="el" href="../../d8/d57/values_8hpp_source.html">values.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d57/values_8hpp_source.html#l00572">572</a> of file <a class="el" href="../../d8/d57/values_8hpp_source.html">values.hpp</a>.</p>
 
 </div>
 </div>
@@ -431,7 +443,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The options; empty for a reply that is not JSON or has no rows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d57/values_8hpp_source.html#l00558">558</a> of file <a class="el" href="../../d8/d57/values_8hpp_source.html">values.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d57/values_8hpp_source.html#l00595">595</a> of file <a class="el" href="../../d8/d57/values_8hpp_source.html">values.hpp</a>.</p>
 
 </div>
 </div>
@@ -467,7 +479,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">x-placeholder</span> when declared; else <span class="tt">0.000…</span> for a Decimal or Quantity (at least one place), <span class="tt">0</span> for an integer, the declared precision for a Number, a hint for an Array, and empty otherwise. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d57/values_8hpp_source.html#l00594">594</a> of file <a class="el" href="../../d8/d57/values_8hpp_source.html">values.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d57/values_8hpp_source.html#l00631">631</a> of file <a class="el" href="../../d8/d57/values_8hpp_source.html">values.hpp</a>.</p>
 
 </div>
 </div>

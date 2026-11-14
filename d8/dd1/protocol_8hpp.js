@@ -4,6 +4,7 @@ var protocol_8hpp =
     [ "morph::ui::chat::TurnRequest", "d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest.html", "d5/d78/structmorph_1_1ui_1_1chat_1_1TurnRequest" ],
     [ "morph::ui::chat::TurnAccepted", "df/df9/structmorph_1_1ui_1_1chat_1_1TurnAccepted.html", "df/df9/structmorph_1_1ui_1_1chat_1_1TurnAccepted" ],
     [ "morph::ui::chat::ToolStep", "d3/dcf/structmorph_1_1ui_1_1chat_1_1ToolStep.html", "d3/dcf/structmorph_1_1ui_1_1chat_1_1ToolStep" ],
+    [ "morph::ui::chat::TurnPart", "d4/d6c/structmorph_1_1ui_1_1chat_1_1TurnPart.html", "d4/d6c/structmorph_1_1ui_1_1chat_1_1TurnPart" ],
     [ "morph::ui::chat::TurnState", "d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState.html", "d6/d4e/structmorph_1_1ui_1_1chat_1_1TurnState" ],
     [ "morph::ui::chat::StateRequest", "d2/d1d/structmorph_1_1ui_1_1chat_1_1StateRequest.html", "d2/d1d/structmorph_1_1ui_1_1chat_1_1StateRequest" ],
     [ "morph::ui::chat::TurnEvent", "d1/d31/structmorph_1_1ui_1_1chat_1_1TurnEvent.html", "d1/d31/structmorph_1_1ui_1_1chat_1_1TurnEvent" ],

@@ -204,10 +204,16 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a region shows when it has nothing to show.  <a href="../../de/d82/classmorph_1_1ui_1_1EmptyStateWidget.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ADrawerWidget" id="r_morph_3A_3Aui_3A_3ADrawerWidget"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html">morph::ui::DrawerWidget</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A panel over the content that slides in from the side fixed at creation; it follows a dialog's rules. A new drawer is closed.  <a href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3APopoverWidget" id="r_morph_3A_3Aui_3A_3APopoverWidget"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d93/classmorph_1_1ui_1_1PopoverWidget.html">morph::ui::PopoverWidget</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A non-modal panel that belongs to another widget: the results of a search under its field. It takes no keyboard focus, dims nothing and traps nothing, so focus stays where it was.  <a href="../../d6/d93/classmorph_1_1ui_1_1PopoverWidget.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ASplitterWidget" id="r_morph_3A_3Aui_3A_3ASplitterWidget"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html">morph::ui::SplitterWidget</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Panes along the axis fixed at creation, with handles between them that the user drags.  <a href="../../d7/d2a/classmorph_1_1ui_1_1SplitterWidget.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACollapsibleWidget" id="r_morph_3A_3Aui_3A_3ACollapsibleWidget"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html">morph::ui::CollapsibleWidget</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A titled section the user opens and closes. A new collapsible is open.  <a href="../../d7/d62/classmorph_1_1ui_1_1CollapsibleWidget.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3APageWidget" id="r_morph_3A_3Aui_3A_3APageWidget"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../dd/dfb/classmorph_1_1ui_1_1PageWidget.html">morph::ui::PageWidget</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A sheet of fixed physical size (docs/spec/ui/document_page.md). Its children are <span class="tt"><a class="el" href="../../d2/d3f/classmorph_1_1ui_1_1PageRegionWidget.html" title="A rectangle of a page that holds its children as a vertical stack, clipped to the rectangle....">PageRegionWidget</a></span>s. The geometry is a factory argument; the page reads the width its container gives it from the container's layout, asks for the sheet's width as its natural width, no least width, and a height that follows the width it is given, and displays the sheet scaled by <span class="tt">min(1, width / sheet width)</span>.  <a href="../../dd/dfb/classmorph_1_1ui_1_1PageWidget.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3APageRegionWidget" id="r_morph_3A_3Aui_3A_3APageRegionWidget"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d2/d3f/classmorph_1_1ui_1_1PageRegionWidget.html">morph::ui::PageRegionWidget</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A rectangle of a page that holds its children as a vertical stack, clipped to the rectangle. The geometry is a factory argument. A region whose content does not fit draws an overflow mark.  <a href="../../d2/d3f/classmorph_1_1ui_1_1PageRegionWidget.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ADropZoneWidget" id="r_morph_3A_3Aui_3A_3ADropZoneWidget"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html">morph::ui::DropZoneWidget</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A region that takes files dropped from the operating system.  <a href="../../df/df5/classmorph_1_1ui_1_1DropZoneWidget.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ACustomWidget" id="r_morph_3A_3Aui_3A_3ACustomWidget"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d2/dd1/classmorph_1_1ui_1_1CustomWidget.html">morph::ui::CustomWidget</a></td></tr>
@@ -219,6 +225,11 @@ Classes</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
 Enumerations</h2></td></tr>
+<tr class="memitem:a813ca81d16332cc7126de3e02513f6d2" id="r_a813ca81d16332cc7126de3e02513f6d2"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a813ca81d16332cc7126de3e02513f6d2">morph::ui::MenuCaret</a> : std::uint8_t { <a class="el" href="#a813ca81d16332cc7126de3e02513f6d2a6adf97f83acf6453d4a6a4b1070f3754">None</a>
+, <a class="el" href="#a813ca81d16332cc7126de3e02513f6d2a08a38277b0309070706f6652eeae9a53">Down</a>
+, <a class="el" href="#a813ca81d16332cc7126de3e02513f6d2a8833f67c0f8e2339c154ffc91e15eb8c">UpDown</a>
+ }</td></tr>
+<tr class="memdesc:a813ca81d16332cc7126de3e02513f6d2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The marker a button-style menu's trigger draws after its text, to say that it opens.  <a href="#a813ca81d16332cc7126de3e02513f6d2">More...</a><br /></td></tr>
 <tr class="memitem:a42ee56ec5cb1813818e8b2acefe407f2" id="r_a42ee56ec5cb1813818e8b2acefe407f2"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a42ee56ec5cb1813818e8b2acefe407f2">morph::ui::RowClick</a> : std::uint8_t { <a class="el" href="#a42ee56ec5cb1813818e8b2acefe407f2a8392461cf759088854e16710b9b75d1a">Only</a>
 , <a class="el" href="#a42ee56ec5cb1813818e8b2acefe407f2aa8875bbe4272c0bdd786cfaaedf77921">Toggle</a>
 , <a class="el" href="#a42ee56ec5cb1813818e8b2acefe407f2a87ba2ecc8b6915e8bd6f5089918229fd">Range</a>
@@ -241,6 +252,40 @@ Variables</h2></td></tr>
 
 <p class="definition">Definition in file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Enumeration Type Documentation</h2>
+<a id="a813ca81d16332cc7126de3e02513f6d2" name="a813ca81d16332cc7126de3e02513f6d2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a813ca81d16332cc7126de3e02513f6d2">&#9670;&#160;</a></span>MenuCaret</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#a813ca81d16332cc7126de3e02513f6d2">morph::ui::MenuCaret</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The marker a button-style menu's trigger draws after its text, to say that it opens. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="a813ca81d16332cc7126de3e02513f6d2a6adf97f83acf6453d4a6a4b1070f3754" name="a813ca81d16332cc7126de3e02513f6d2a6adf97f83acf6453d4a6a4b1070f3754"></a>None&#160;</td><td class="fielddoc"><p>No marker. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a813ca81d16332cc7126de3e02513f6d2a08a38277b0309070706f6652eeae9a53" name="a813ca81d16332cc7126de3e02513f6d2a08a38277b0309070706f6652eeae9a53"></a>Down&#160;</td><td class="fielddoc"><p>A chevron pointing down: a menu of actions or of a person. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a813ca81d16332cc7126de3e02513f6d2a8833f67c0f8e2339c154ffc91e15eb8c" name="a813ca81d16332cc7126de3e02513f6d2a8833f67c0f8e2339c154ffc91e15eb8c"></a>UpDown&#160;</td><td class="fielddoc"><p>An up and a down chevron: a menu that chooses one of several values, such as a scope. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00384">384</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a42ee56ec5cb1813818e8b2acefe407f2" name="a42ee56ec5cb1813818e8b2acefe407f2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a42ee56ec5cb1813818e8b2acefe407f2">&#9670;&#160;</a></span>RowClick</h2>
 
@@ -271,7 +316,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00698">698</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00716">716</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -308,7 +353,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The class: <span class="tt">compact</span>, <span class="tt">medium</span> or <span class="tt">expanded</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01407">1407</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01488">1488</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -335,7 +380,7 @@ Variables</h2></td></tr>
 
 <p>The width, in units, from which a surface is <span class="tt">expanded</span>: the compact bound, 80, plus the shell's sidebar (28), the narrowest window whose page beside that sidebar is not itself compact. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01400">1400</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01481">1481</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

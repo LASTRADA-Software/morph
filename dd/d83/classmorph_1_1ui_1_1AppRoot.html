@@ -126,6 +126,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d83/classmo
 
 <p><code>#include &lt;<a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>&gt;</code></p>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
+Classes</h2></td></tr>
+<tr class="memitem:QueryRead" id="r_QueryRead"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d8/d7e/structmorph_1_1ui_1_1AppRoot_1_1QueryRead.html">QueryRead</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a query of the app document holds now.  <a href="../../d8/d7e/structmorph_1_1ui_1_1AppRoot_1_1QueryRead.html#details">More...</a><br /></td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a0c5351161503b3284272beb4a949d44d" id="r_a0c5351161503b3284272beb4a949d44d"><td class="memItemLeft"><a id="a0c5351161503b3284272beb4a949d44d" name="a0c5351161503b3284272beb4a949d44d"></a>
@@ -144,6 +149,12 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 <tr class="memdesc:ab80cd610eac226fb172ede2cd9cd220b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Where a shell shows who is signed in: the document's <span class="tt"><a class="el" href="#ab80cd610eac226fb172ede2cd9cd220b" title="Where a shell shows who is signed in: the document&#39;s principalPlacement.">principalPlacement</a></span>.  <br /></td></tr>
 <tr class="memitem:aaabff20b045f242eb34be0dc4116bce0" id="r_aaabff20b045f242eb34be0dc4116bce0"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#aaabff20b045f242eb34be0dc4116bce0">read</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;expression) const</td></tr>
 <tr class="memdesc:aaabff20b045f242eb34be0dc4116bce0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates an expression in the app document's scope.  <br /></td></tr>
+<tr class="memitem:a07cd7dc813f6a9298c1936cf0f46a02b" id="r_a07cd7dc813f6a9298c1936cf0f46a02b"><td class="memItemLeft"><a class="el" href="../../d8/d7e/structmorph_1_1ui_1_1AppRoot_1_1QueryRead.html">QueryRead</a>&#160;</td><td class="memItemRight"><a class="el" href="#a07cd7dc813f6a9298c1936cf0f46a02b">query</a> (std::string_view name) const</td></tr>
+<tr class="memdesc:a07cd7dc813f6a9298c1936cf0f46a02b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a query of the app document. A tracked read: an effect that calls it follows the query.  <br /></td></tr>
+<tr class="memitem:ae3b718c3eca8553c0edd40e7dfea4796" id="r_ae3b718c3eca8553c0edd40e7dfea4796"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ae3b718c3eca8553c0edd40e7dfea4796">setState</a> (std::string_view name, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> value)</td></tr>
+<tr class="memdesc:ae3b718c3eca8553c0edd40e7dfea4796"><td class="mdescLeft">&#160;</td><td class="mdescRight">Writes a state of the app document, as a <span class="tt">set</span> of <span class="tt">app.name</span> does.  <br /></td></tr>
+<tr class="memitem:ab50df74ad542e67df4035863d35cfd8b" id="r_ab50df74ad542e67df4035863d35cfd8b"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ab50df74ad542e67df4035863d35cfd8b">runMutation</a> (std::string_view name, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> body, std::function&lt; void(bool succeeded)&gt; done={})</td></tr>
+<tr class="memdesc:ab50df74ad542e67df4035863d35cfd8b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Runs a mutation of the app document, as a <span class="tt">run</span> command does.  <br /></td></tr>
 <tr class="memitem:a6585694d62df0fa6caa2605034af6841" id="r_a6585694d62df0fa6caa2605034af6841"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a6585694d62df0fa6caa2605034af6841">diagnostics</a> () const noexcept</td></tr>
 <tr class="memdesc:a6585694d62df0fa6caa2605034af6841"><td class="mdescLeft">&#160;</td><td class="mdescRight">The diagnostics reported so far.  <br /></td></tr>
 </table>
@@ -151,7 +162,7 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 <div class="textblock"><p>The app document mounted as the root scope every screen of the session shares (spec 6 §5). </p>
 <p>Its state, lets, queries and mutations live once for the session. A screen reads them as <span class="tt">{"ref": "app.name"}</span>, a binding on one updates, and <span class="tt">{"set": "app.name", …}</span> writes the app document's state. A query of the app document runs once however many screens read it. Destroying the root runs its <span class="tt">onUnmount</span>, takes its scope off the session and releases its model instances; a host does that before it clears the session on sign-out. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03632">3632</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03798">3798</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a2dce5dfc7a952c55087cd60b5627f81c" name="a2dce5dfc7a952c55087cd60b5627f81c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2dce5dfc7a952c55087cd60b5627f81c">&#9670;&#160;</a></span>~AppRoot()</h2>
@@ -178,7 +189,7 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 
 <p>Runs <span class="tt">onUnmount</span>, takes the scope off the session, and releases everything. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03640">3640</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03806">3806</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -209,7 +220,7 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 <p>The app document's <span class="tt">navigation</span> badges that are visible now, in order, each with the screen whose navigator entry it goes on, and following the app state they read. </p>
 <dl class="section return"><dt>Returns</dt><dd>They, valid as long as the root; empty when the document declares no <span class="tt">navigation</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03657">3657</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03823">3823</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -239,7 +250,7 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 <p>Where a shell shows who is signed in: the document's <span class="tt"><a class="el" href="#ab80cd610eac226fb172ede2cd9cd220b" title="Where a shell shows who is signed in: the document&#39;s principalPlacement.">principalPlacement</a></span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The place; <span class="tt">Sidebar</span> when the document declares none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03663">3663</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03829">3829</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -275,7 +286,131 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its value; <span class="tt">null</span> for an expression that does not parse. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03670">3670</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03836">3836</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a07cd7dc813f6a9298c1936cf0f46a02b" name="a07cd7dc813f6a9298c1936cf0f46a02b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a07cd7dc813f6a9298c1936cf0f46a02b">&#9670;&#160;</a></span>query()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d8/d7e/structmorph_1_1ui_1_1AppRoot_1_1QueryRead.html">QueryRead</a> morph::ui::AppRoot::query </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Reads a query of the app document. A tracked read: an effect that calls it follows the query. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">name</td><td>The query. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Its state; <span class="tt">declared</span> is false for a name the document does not declare as a query. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03861">3861</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae3b718c3eca8553c0edd40e7dfea4796" name="ae3b718c3eca8553c0edd40e7dfea4796"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae3b718c3eca8553c0edd40e7dfea4796">&#9670;&#160;</a></span>setState()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::AppRoot::setState </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a></td>          <td class="paramname"><span class="paramname"><em>value</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Writes a state of the app document, as a <span class="tt">set</span> of <span class="tt">app.name</span> does. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">name</td><td>The state. </td></tr>
+    <tr><td class="paramname">value</td><td>The value. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether the document declares the state. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03881">3881</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ab50df74ad542e67df4035863d35cfd8b" name="ab50df74ad542e67df4035863d35cfd8b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab50df74ad542e67df4035863d35cfd8b">&#9670;&#160;</a></span>runMutation()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::ui::AppRoot::runMutation </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a></td>          <td class="paramname"><span class="paramname"><em>body</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(bool succeeded)&gt;</td>          <td class="paramname"><span class="paramname"><em>done</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Runs a mutation of the app document, as a <span class="tt">run</span> command does. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">name</td><td>The mutation. </td></tr>
+    <tr><td class="paramname">body</td><td>The body it is run with. </td></tr>
+    <tr><td class="paramname">done</td><td>Called once the run settles, with whether it succeeded; empty for none. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Whether the document declares the mutation. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03898">3898</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -305,7 +440,7 @@ AppRoot &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (AppRoot &amp;
 <p>The diagnostics reported so far. </p>
 <dl class="section return"><dt>Returns</dt><dd>They. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03680">3680</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03917">3917</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

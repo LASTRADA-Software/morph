@@ -7,5 +7,6 @@ var classmorph_1_1ui_1_1detail_1_1ScopeEnv =
     [ "pref", "de/d21/classmorph_1_1ui_1_1detail_1_1ScopeEnv.html#a80685c51ef889518d0d8ba3807e24318", null ],
     [ "client", "de/d21/classmorph_1_1ui_1_1detail_1_1ScopeEnv.html#addfdb1f7c7e81ca9310841c9258f32d8", null ],
     [ "formatting", "de/d21/classmorph_1_1ui_1_1detail_1_1ScopeEnv.html#af20d4e4122191c074ea31d1403a36f31", null ],
+    [ "entryFormatting", "de/d21/classmorph_1_1ui_1_1detail_1_1ScopeEnv.html#a998a98d83a211ef46b2ec0da31a0d647", null ],
     [ "report", "de/d21/classmorph_1_1ui_1_1detail_1_1ScopeEnv.html#a1d6c23b6e705990ace6378fbfe8e7c58", null ]
 ];

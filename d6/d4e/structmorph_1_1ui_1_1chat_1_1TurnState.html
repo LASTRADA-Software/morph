@@ -133,18 +133,20 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a8449479449b127dc9a399df77f4a8a2c" id="r_a8449479449b127dc9a399df77f4a8a2c"><td class="memItemLeft"><a class="el" href="../../d8/dd1/protocol_8hpp.html#ad91478fea6e18364f199511bbb666ec7">TurnStatus</a>&#160;</td><td class="memItemRight"><a class="el" href="#a8449479449b127dc9a399df77f4a8a2c">status</a> = <a class="el" href="../../d8/dd1/protocol_8hpp.html#ad91478fea6e18364f199511bbb666ec7a5bda814c4aedb126839228f1a3d92f09">TurnStatus::Running</a></td></tr>
 <tr class="memdesc:a8449479449b127dc9a399df77f4a8a2c"><td class="mdescLeft">&#160;</td><td class="mdescRight">How far it has got.  <br /></td></tr>
 <tr class="memitem:ad8ecf77738284676f7b0f2e2e4329922" id="r_ad8ecf77738284676f7b0f2e2e4329922"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ad8ecf77738284676f7b0f2e2e4329922">text</a></td></tr>
-<tr class="memdesc:ad8ecf77738284676f7b0f2e2e4329922"><td class="mdescLeft">&#160;</td><td class="mdescRight">The reply so far.  <br /></td></tr>
+<tr class="memdesc:ad8ecf77738284676f7b0f2e2e4329922"><td class="mdescLeft">&#160;</td><td class="mdescRight">The reply so far: the rounds' texts, a blank line between one round and the next.  <br /></td></tr>
 <tr class="memitem:a31ff1bba12ac5e78044367fe03d07cc5" id="r_a31ff1bba12ac5e78044367fe03d07cc5"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a31ff1bba12ac5e78044367fe03d07cc5">error</a></td></tr>
 <tr class="memdesc:a31ff1bba12ac5e78044367fe03d07cc5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Why it failed; empty otherwise.  <br /></td></tr>
 <tr class="memitem:a24794d5d078ebbd4dba5e095f9acbd99" id="r_a24794d5d078ebbd4dba5e095f9acbd99"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d3/dcf/structmorph_1_1ui_1_1chat_1_1ToolStep.html">ToolStep</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a24794d5d078ebbd4dba5e095f9acbd99">steps</a></td></tr>
 <tr class="memdesc:a24794d5d078ebbd4dba5e095f9acbd99"><td class="mdescLeft">&#160;</td><td class="mdescRight">The tool calls it has made, in order.  <br /></td></tr>
+<tr class="memitem:a10e2fac9bfebb6a88a5d9c5ba82bb16b" id="r_a10e2fac9bfebb6a88a5d9c5ba82bb16b"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d4/d6c/structmorph_1_1ui_1_1chat_1_1TurnPart.html">TurnPart</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a10e2fac9bfebb6a88a5d9c5ba82bb16b">parts</a></td></tr>
+<tr class="memdesc:a10e2fac9bfebb6a88a5d9c5ba82bb16b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The rounds' texts and the tool calls, in the order the turn made them. Empty from a server that does not send it, which a client shows as <span class="tt"><a class="el" href="#a24794d5d078ebbd4dba5e095f9acbd99" title="The tool calls it has made, in order.">steps</a></span> and then <span class="tt"><a class="el" href="#ad8ecf77738284676f7b0f2e2e4329922" title="The reply so far: the rounds&#39; texts, a blank line between one round and the next.">text</a></span>.  <br /></td></tr>
 <tr class="memitem:a8dac7799ccf8423670ffabf28d89e143" id="r_a8dac7799ccf8423670ffabf28d89e143"><td class="memItemLeft">std::uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#a8dac7799ccf8423670ffabf28d89e143">seq</a> = 0</td></tr>
 <tr class="memdesc:a8dac7799ccf8423670ffabf28d89e143"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt"><a class="el" href="../../d1/d31/structmorph_1_1ui_1_1chat_1_1TurnEvent.html#a984af3a2c13cfed4390ad7ccf1726fcc" title="Increases by one per event of a turn.">TurnEvent::seq</a></span> this state covers, so a client does not apply an event it already includes.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A turn's state as the server holds it, which outranks any event. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aa9559ce1e79b82f556031eddd98de5fb" name="aa9559ce1e79b82f556031eddd98de5fb"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa9559ce1e79b82f556031eddd98de5fb">&#9670;&#160;</a></span>turnId</h2>
@@ -160,7 +162,7 @@ Public Attributes</h2></td></tr>
 
 <p>The turn's id; <span class="tt">0</span> when the principal has no such turn. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00088">88</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00102">102</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -178,7 +180,7 @@ Public Attributes</h2></td></tr>
 
 <p>How far it has got. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00104">104</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -194,9 +196,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The reply so far. </p>
+<p>The reply so far: the rounds' texts, a blank line between one round and the next. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00106">106</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -214,7 +216,7 @@ Public Attributes</h2></td></tr>
 
 <p>Why it failed; empty otherwise. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +234,25 @@ Public Attributes</h2></td></tr>
 
 <p>The tool calls it has made, in order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a10e2fac9bfebb6a88a5d9c5ba82bb16b" name="a10e2fac9bfebb6a88a5d9c5ba82bb16b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a10e2fac9bfebb6a88a5d9c5ba82bb16b">&#9670;&#160;</a></span>parts</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../d4/d6c/structmorph_1_1ui_1_1chat_1_1TurnPart.html">TurnPart</a>&gt; morph::ui::chat::TurnState::parts</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The rounds' texts and the tool calls, in the order the turn made them. Empty from a server that does not send it, which a client shows as <span class="tt"><a class="el" href="#a24794d5d078ebbd4dba5e095f9acbd99" title="The tool calls it has made, in order.">steps</a></span> and then <span class="tt"><a class="el" href="#ad8ecf77738284676f7b0f2e2e4329922" title="The reply so far: the rounds&#39; texts, a blank line between one round and the next.">text</a></span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,7 +270,7 @@ Public Attributes</h2></td></tr>
 
 <p>The <span class="tt"><a class="el" href="../../d1/d31/structmorph_1_1ui_1_1chat_1_1TurnEvent.html#a984af3a2c13cfed4390ad7ccf1726fcc" title="Increases by one per event of a turn.">TurnEvent::seq</a></span> this state covers, so a client does not apply an event it already includes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dd1/protocol_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../d8/dd1/protocol_8hpp_source.html">protocol.hpp</a>.</p>
 
 </div>
 </div>

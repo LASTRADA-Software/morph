@@ -12,6 +12,8 @@ var catalogue_8hpp =
     [ "morph::ui::detail::catalogue::formatPattern", "d1/d1e/catalogue_8hpp.html#a9fe5a921b9caaf429af30e6cfaa6633b", null ],
     [ "morph::ui::catalogTitle", "d1/d1e/catalogue_8hpp.html#ad6873a757e79bc6d2dddc9f37b1b7106", null ],
     [ "morph::ui::catalogTitles", "d1/d1e/catalogue_8hpp.html#a1c5bcc7ca39bd03c148667f13146849c", null ],
+    [ "morph::ui::catalogTitlesIn", "d1/d1e/catalogue_8hpp.html#a4ae6da6d08fd04fc5582d4a95fec5e80", null ],
+    [ "morph::ui::catalogLabel", "d1/d1e/catalogue_8hpp.html#a04c4856f99bb013b2016f51016b65be3", null ],
     [ "morph::ui::kMaxCatalogueKeys", "d1/d1e/catalogue_8hpp.html#ab1a727e76b76daeefc9edaed4dcf2435", null ],
     [ "morph::ui::kCataloguePrefix", "d1/d1e/catalogue_8hpp.html#ada34d036d87ce49c18d4288db5f8d477", null ],
     [ "morph::ui::kCatalogueSuffix", "d1/d1e/catalogue_8hpp.html#aae88caf51f0666fae068572cb257de0c", null ]

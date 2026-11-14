@@ -134,6 +134,8 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a8543ebe7f842ee3648a1550ef01b50a2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The locale's number formatting. Holds views: the strings it names must outlive the context.  <br /></td></tr>
 <tr class="memitem:a9c93ea5a4e6080bb01c61c2e8e03ebe9" id="r_a9c93ea5a4e6080bb01c61c2e8e03ebe9"><td class="memItemLeft"><a class="el" href="../../d8/d22/render_2i18n_8hpp.html#a6022e390d39cf81cd37bba36b5f65283">render::TranslationProvider</a>&#160;</td><td class="memItemRight"><a class="el" href="#a9c93ea5a4e6080bb01c61c2e8e03ebe9">translations</a></td></tr>
 <tr class="memdesc:a9c93ea5a4e6080bb01c61c2e8e03ebe9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The message catalogue; empty shows every fallback.  <br /></td></tr>
+<tr class="memitem:ad0f7e5ad6641588c00cea488c65033b0" id="r_ad0f7e5ad6641588c00cea488c65033b0"><td class="memItemLeft"><a class="el" href="../../d2/df4/structmorph_1_1ui_1_1CurrencyFacts.html">CurrencyFacts</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad0f7e5ad6641588c00cea488c65033b0">currency</a> {}</td></tr>
+<tr class="memdesc:ad0f7e5ad6641588c00cea488c65033b0"><td class="mdescLeft">&#160;</td><td class="mdescRight">How <span class="tt">money</span> writes a currency. Empty <span class="tt">symbols</span> (the default) writes every currency by its code.  <br /></td></tr>
 <tr class="memitem:ab6146fd1cd896451a944aaa9d23a77d0" id="r_ab6146fd1cd896451a944aaa9d23a77d0"><td class="memItemLeft"><a class="el" href="../../d8/d0e/expression_8hpp.html#a1b716e9b0352b72447f08451f3ecc33c">UnitTable</a>&#160;</td><td class="memItemRight"><a class="el" href="#ab6146fd1cd896451a944aaa9d23a77d0">units</a></td></tr>
 <tr class="memdesc:ab6146fd1cd896451a944aaa9d23a77d0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The units quantities convert through.  <br /></td></tr>
 <tr class="memitem:a80461eca883dc3f4cb8cb808c24e8368" id="r_a80461eca883dc3f4cb8cb808c24e8368"><td class="memItemLeft">std::int32_t&#160;</td><td class="memItemRight"><a class="el" href="#a80461eca883dc3f4cb8cb808c24e8368">utcOffsetMinutes</a> = 0</td></tr>
@@ -148,7 +150,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>What the display functions and <span class="tt">t</span> format with: the client's locale and its formatting facts. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01246">1246</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01289">1289</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="aab5928181e818bec5b40a3ec365e5823" name="aab5928181e818bec5b40a3ec365e5823"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aab5928181e818bec5b40a3ec365e5823">&#9670;&#160;</a></span>locale</h2>
@@ -164,7 +166,7 @@ Public Attributes</h2></td></tr>
 
 <p>The active BCP 47 locale. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01248">1248</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01291">1291</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -182,7 +184,7 @@ Public Attributes</h2></td></tr>
 
 <p>The locale's number formatting. Holds views: the strings it names must outlive the context. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01250">1250</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01293">1293</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -200,7 +202,25 @@ Public Attributes</h2></td></tr>
 
 <p>The message catalogue; empty shows every fallback. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01252">1252</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01295">1295</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad0f7e5ad6641588c00cea488c65033b0" name="ad0f7e5ad6641588c00cea488c65033b0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad0f7e5ad6641588c00cea488c65033b0">&#9670;&#160;</a></span>currency</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d2/df4/structmorph_1_1ui_1_1CurrencyFacts.html">CurrencyFacts</a> morph::ui::FormatContext::currency {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>How <span class="tt">money</span> writes a currency. Empty <span class="tt">symbols</span> (the default) writes every currency by its code. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01297">1297</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -218,7 +238,7 @@ Public Attributes</h2></td></tr>
 
 <p>The units quantities convert through. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01254">1254</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01299">1299</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,7 +256,7 @@ Public Attributes</h2></td></tr>
 
 <p>The display zone's offset from UTC, in minutes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01256">1256</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01301">1301</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +274,7 @@ Public Attributes</h2></td></tr>
 
 <p>The date formatter; empty uses the patterns below, else ISO 8601 (<span class="tt">2026-10-11</span>, <span class="tt">2026-10-11 08:30</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01258">1258</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01303">1303</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,7 +292,7 @@ Public Attributes</h2></td></tr>
 
 <p>The pattern every date is written in, whatever its style (<span class="tt"><a class="el" href="../../d3/d89/date__pattern_8hpp.html#a89c061e04e31b770e72f93ac6e97b730" title="Checks a date pattern: only the tokens yyyy, MM, MMM, dd, HH, mm, ss and xxx and the literals -,...">checkDatePattern</a></span>), such as <span class="tt">dd-MMM-yyyy</span>; empty keeps ISO. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01261">1261</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01306">1306</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -290,7 +310,7 @@ Public Attributes</h2></td></tr>
 
 <p>The pattern every date and time is written in, such as <span class="tt">dd-MMM-yyyy HH:mm</span>; empty keeps ISO. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01263">1263</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01308">1308</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>

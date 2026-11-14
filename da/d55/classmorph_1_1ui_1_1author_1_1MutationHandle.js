@@ -7,6 +7,7 @@ var classmorph_1_1ui_1_1author_1_1MutationHandle =
     [ "pending", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#a3592c0fb88126946324d4e947d21f296", null ],
     [ "error", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#a4ff2f95a2c6e7e342de8c41ee2a65da8", null ],
     [ "errorKind", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#ac1dc1f05bc2bdf3b9b0c052f6d81bf15", null ],
+    [ "refusal", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#a49cdadfaa859a9b17d74e6af4c870f53", null ],
     [ "can", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#a0399780297f7535ea967543c746a4ee2", null ],
     [ "operator MutationRef", "da/d55/classmorph_1_1ui_1_1author_1_1MutationHandle.html#acfc5fe3b880b5e50d05e9c8c6a5aca38", null ]
 ];

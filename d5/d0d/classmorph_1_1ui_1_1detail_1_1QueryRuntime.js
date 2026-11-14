@@ -7,6 +7,7 @@ var classmorph_1_1ui_1_1detail_1_1QueryRuntime =
     [ "pending", "d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#a5a36cdc179a0f4286fcbfbbeeb230a86", null ],
     [ "error", "d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#a81b8d409ceab58272cbbfcda8ba76f03", null ],
     [ "errorKind", "d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#ab9db0ae784c1f0fdf045884dd6205c68", null ],
+    [ "refusal", "d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#a20e050f70b656b5f4c85d92bd6e205ed", null ],
     [ "settled", "d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#a241f07f87d6fab24fd23944c98a8b5f7", null ],
     [ "refetch", "d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#a9483f6ce2e8ac9164bed5bf4409d8b3d", null ],
     [ "refetchCurrent", "d5/d0d/classmorph_1_1ui_1_1detail_1_1QueryRuntime.html#aa6207e8e5cdc3bbb3ae3c25293f449ca", null ],

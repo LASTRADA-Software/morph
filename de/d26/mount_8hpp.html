@@ -127,6 +127,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d26/mount_8
 <code>#include &lt;cstddef&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;exception&gt;</code><br />
+<code>#include &lt;format&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;limits&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
@@ -156,6 +157,14 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d26/mount_8
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3ARowSpanEntry" id="r_morph_3A_3Aui_3A_3Adetail_3A_3ARowSpanEntry"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/d48/structmorph_1_1ui_1_1detail_1_1RowSpanEntry.html">morph::ui::detail::RowSpanEntry</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a table's span resolve knows of one row: whether it is a heading, the spans it asked for and the ones its widget was last told.  <a href="../../db/d48/structmorph_1_1ui_1_1detail_1_1RowSpanEntry.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AResolvedSpans" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AResolvedSpans"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d4/d9d/structmorph_1_1ui_1_1detail_1_1ResolvedSpans.html">morph::ui::detail::ResolvedSpans</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The outcome of resolving a table's requested spans against its rows in order.  <a href="../../d4/d9d/structmorph_1_1ui_1_1detail_1_1ResolvedSpans.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3ASpanRow" id="r_morph_3A_3Aui_3A_3Adetail_3A_3ASpanRow"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d78/structmorph_1_1ui_1_1detail_1_1SpanRow.html">morph::ui::detail::SpanRow</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One row as the span resolve sees it.  <a href="../../d9/d78/structmorph_1_1ui_1_1detail_1_1SpanRow.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3ARowsObserver" id="r_morph_3A_3Aui_3A_3Adetail_3A_3ARowsObserver"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/dc7/structmorph_1_1ui_1_1detail_1_1RowsObserver.html">morph::ui::detail::RowsObserver</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a table is told around each pass that changes its rows: before it starts, and after it has brought the rows into the snapshot's order, with the rows in their container's order.  <a href="../../d3/dc7/structmorph_1_1ui_1_1detail_1_1RowsObserver.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AKeyedRow" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AKeyedRow"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/db0/structmorph_1_1ui_1_1detail_1_1KeyedRow.html">morph::ui::detail::KeyedRow</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One mounted row of a <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a> or <a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a>.  <a href="../../db/db0/structmorph_1_1ui_1_1detail_1_1KeyedRow.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AVisibleRange" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AVisibleRange"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d4/dda/structmorph_1_1ui_1_1detail_1_1VisibleRange.html">morph::ui::detail::VisibleRange</a></td></tr>
@@ -189,6 +198,8 @@ Enumerations</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:a7aafbc0619be29431dfa4c3d990f378c" id="r_a7aafbc0619be29431dfa4c3d990f378c"><td class="memItemLeft"><a class="el" href="../../d4/d9d/structmorph_1_1ui_1_1detail_1_1ResolvedSpans.html">ResolvedSpans</a>&#160;</td><td class="memItemRight"><a class="el" href="#a7aafbc0619be29431dfa4c3d990f378c">morph::ui::detail::resolveRowSpans</a> (std::vector&lt; <a class="el" href="../../d9/d78/structmorph_1_1ui_1_1detail_1_1SpanRow.html">SpanRow</a> &gt; const &amp;rows, std::size_t columns)</td></tr>
+<tr class="memdesc:a7aafbc0619be29431dfa4c3d990f378c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves the requested spans of a table's rows, top to bottom, one column at a time.  <br /></td></tr>
 <tr class="memitem:aaa581e549fa2d44eb7ca64d87607aa9c" id="r_aaa581e549fa2d44eb7ca64d87607aa9c"><td class="memItemLeft">std::vector&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aaa581e549fa2d44eb7ca64d87607aa9c">morph::ui::detail::stableTargets</a> (std::vector&lt; std::size_t &gt; const &amp;sequence)</td></tr>
 <tr class="memdesc:aaa581e549fa2d44eb7ca64d87607aa9c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Which entries of a permutation lie on one longest increasing run.  <br /></td></tr>
 <tr class="memitem:a637462d7ce3fb8129109e790d6a2a1d0" id="r_a637462d7ce3fb8129109e790d6a2a1d0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a637462d7ce3fb8129109e790d6a2a1d0">morph::ui::detail::reorderChildren</a> (<a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;container, std::vector&lt; <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> * &gt; &amp;current, std::vector&lt; <a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> * &gt; const &amp;target)</td></tr>
@@ -200,6 +211,14 @@ Variables</h2></td></tr>
 <tr class="memdesc:ae3ef51d9e47df3944fd53f9ae7f0f5ee"><td class="mdescLeft">&#160;</td><td class="mdescRight">An exception escaped a widget callback; the mount caught it, so it never reaches the backend.  <br /></td></tr>
 <tr class="memitem:a49a7fa8ad8556852b75927e43519a403" id="r_a49a7fa8ad8556852b75927e43519a403"><td class="memItemLeft">constexpr char const  *&#160;</td><td class="memItemRight"><a class="el" href="../../d2/d9d/namespacemorph_1_1ui_1_1detail_1_1site.html#a49a7fa8ad8556852b75927e43519a403">morph::ui::detail::site::kDuplicateKey</a> = &quot;morph::ui: duplicate <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html">ForEach</a> key&quot;</td></tr>
 <tr class="memdesc:a49a7fa8ad8556852b75927e43519a403"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <a class="el" href="../../d2/d58/structmorph_1_1ui_1_1ForEach.html" title="One widget per row of a keyed collection, updated in place when a row with the same key changes.">ForEach</a> or <a class="el" href="../../de/de3/structmorph_1_1ui_1_1Table.html" title="Keyed rows of cells under column headers. Each row&#39;s view is a Row whose children are the cells,...">Table</a> snapshot repeated a key; the later row is refused and the first one kept.  <br /></td></tr>
+<tr class="memitem:a7d367df8e02d6e3592504769196ffe88" id="r_a7d367df8e02d6e3592504769196ffe88"><td class="memItemLeft">constexpr char const  *&#160;</td><td class="memItemRight"><a class="el" href="../../d2/d9d/namespacemorph_1_1ui_1_1detail_1_1site.html#a7d367df8e02d6e3592504769196ffe88">morph::ui::detail::site::kRowSpanInvalid</a> = &quot;morph::ui: a <a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b">table</a> <a class="el" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a>'s span is not a span of the table&quot;</td></tr>
+<tr class="memdesc:a7d367df8e02d6e3592504769196ffe88"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table row's span names no column, covers no rows, is a heading's, or repeats a column of its row; it is refused and its cell stays in its own row.  <br /></td></tr>
+<tr class="memitem:af6dba1d1b6371b56e6544252bd8f2bb5" id="r_af6dba1d1b6371b56e6544252bd8f2bb5"><td class="memItemLeft">constexpr char const  *&#160;</td><td class="memItemRight"><a class="el" href="../../d2/d9d/namespacemorph_1_1ui_1_1detail_1_1site.html#af6dba1d1b6371b56e6544252bd8f2bb5">morph::ui::detail::site::kRowSpanOverrun</a></td></tr>
+<tr class="memdesc:af6dba1d1b6371b56e6544252bd8f2bb5"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table row's span runs past the last row or over a heading row; it is refused.  <br /></td></tr>
+<tr class="memitem:abe3dd73be49738032dd0edbde1543f2b" id="r_abe3dd73be49738032dd0edbde1543f2b"><td class="memItemLeft">constexpr char const  *&#160;</td><td class="memItemRight"><a class="el" href="../../d2/d9d/namespacemorph_1_1ui_1_1detail_1_1site.html#abe3dd73be49738032dd0edbde1543f2b">morph::ui::detail::site::kRowSpanOverlap</a> = &quot;morph::ui: a <a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b">table</a> <a class="el" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a>'s span starts in a <a class="el" href="../../d8/d11/view_8hpp.html#a2e0b69fba76cbc2b3df8ba03895cf808">column</a> another span covers&quot;</td></tr>
+<tr class="memdesc:abe3dd73be49738032dd0edbde1543f2b"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table row's span starts in a column an earlier row's span covers; it is refused.  <br /></td></tr>
+<tr class="memitem:abb930401bbf27e0a17eddc99c8564593" id="r_abb930401bbf27e0a17eddc99c8564593"><td class="memItemLeft">constexpr char const  *&#160;</td><td class="memItemRight"><a class="el" href="../../d2/d9d/namespacemorph_1_1ui_1_1detail_1_1site.html#abb930401bbf27e0a17eddc99c8564593">morph::ui::detail::site::kRowSpanVirtualized</a> = &quot;morph::ui: a virtualized <a class="el" href="../../d8/d11/view_8hpp.html#acf831cc5b89c22045d627630e96bf21b">table</a> draws no <a class="el" href="../../d8/d11/view_8hpp.html#ac8be7e558ce139d1bfaaaeebc458bc9e">row</a> spans&quot;</td></tr>
+<tr class="memdesc:abb930401bbf27e0a17eddc99c8564593"><td class="mdescLeft">&#160;</td><td class="mdescRight">A table above its virtualization threshold was given spans; none is drawn.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt"><a class="el" href="../../d1/d57/classmorph_1_1ui_1_1Mounted.html" title="A view tree mounted on a backend: its widgets, built once, and the bindings that keep them current.">morph::ui::Mounted</a></span>: builds a view tree's widgets through a backend once, and keeps them current through reactive bindings. </p>
@@ -221,7 +240,7 @@ Variables</h2></td></tr>
 
 <p>Called for each newly mounted row with its widget and key; a Table tells its widget the row's key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00144">144</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -256,11 +275,52 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00163">163</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="a7aafbc0619be29431dfa4c3d990f378c" name="a7aafbc0619be29431dfa4c3d990f378c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7aafbc0619be29431dfa4c3d990f378c">&#9670;&#160;</a></span>resolveRowSpans()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">ResolvedSpans morph::ui::detail::resolveRowSpans </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../d9/d78/structmorph_1_1ui_1_1detail_1_1SpanRow.html">SpanRow</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>rows</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::size_t</td>          <td class="paramname"><span class="paramname"><em>columns</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Resolves the requested spans of a table's rows, top to bottom, one column at a time. </p>
+<p>A span is refused, alone, when it names no column, covers 0 rows, belongs to a heading row, repeats a column of its row, starts in a column an earlier span covers, or runs past the last row or over a heading row. The earlier span wins an overlap. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">rows</td><td>The rows in order. </td></tr>
+    <tr><td class="paramname">columns</td><td>How many columns the table has. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The effective spans per row and the refusals. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00102">102</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+
+</div>
+</div>
 <a id="aaa581e549fa2d44eb7ca64d87607aa9c" name="aaa581e549fa2d44eb7ca64d87607aa9c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aaa581e549fa2d44eb7ca64d87607aa9c">&#9670;&#160;</a></span>stableTargets()</h2>
 
@@ -293,7 +353,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Indexed by target position: whether that widget stays. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>
@@ -339,7 +399,7 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00161">161</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d26/mount_8hpp_source.html#l00266">266</a> of file <a class="el" href="../../de/d26/mount_8hpp_source.html">mount.hpp</a>.</p>
 
 </div>
 </div>

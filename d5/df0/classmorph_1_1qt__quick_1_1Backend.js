@@ -20,6 +20,7 @@ var classmorph_1_1qt__quick_1_1Backend =
     [ "createTabs", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ad02e6d024704733313ea8bf136ed526c", null ],
     [ "createDialog", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ab7329e576ff9fa9ef8c576b453f0e53f", null ],
     [ "createToast", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a8ba0912762478e81bf26c407bc3cf18a", null ],
+    [ "createPopover", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ad549aa97a679d4163885808cbd96cd27", null ],
     [ "createBusy", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#aa3ae9cc2dec13254fba4f8a8f2842940", null ],
     [ "createTable", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ae9c1165ae4d8eb745e3249c6dccde6f4", null ],
     [ "createDateTimeInput", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a650329bb17e64202b4d899ccc47ce87e", null ],
@@ -35,5 +36,7 @@ var classmorph_1_1qt__quick_1_1Backend =
     [ "createDrawer", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ad71f9edaadff16c45ee3a4386c72c8a0", null ],
     [ "createSplitter", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a570b4392f83bf3a42d529b60a12178c4", null ],
     [ "createCollapsible", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a619e11c8794252b58886eedcd40a8059", null ],
+    [ "createPage", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a117483265f48411e9852a04c4d4358b3", null ],
+    [ "createPageRegion", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#ab385b6ee7d948b6adeb4cd811f1e4fed", null ],
     [ "createDropZone", "d5/df0/classmorph_1_1qt__quick_1_1Backend.html#a5d8bd32381b7dc912e6980f1db52f50d", null ]
 ];

@@ -6,6 +6,7 @@ var structmorph_1_1ui_1_1Row =
     [ "tone", "d7/da8/structmorph_1_1ui_1_1Row.html#ab25d3f45e9c08b1590e7a3851e0d6209", null ],
     [ "label", "d7/da8/structmorph_1_1ui_1_1Row.html#a5f7c2bb94b9995cb14924c7c1e2769ce", null ],
     [ "heading", "d7/da8/structmorph_1_1ui_1_1Row.html#a6d72e7c0c010d362dd038b27d410632d", null ],
+    [ "spans", "d7/da8/structmorph_1_1ui_1_1Row.html#a6d17a0362b502d8ffa8db60716b56533", null ],
     [ "align", "d7/da8/structmorph_1_1ui_1_1Row.html#adda33ccfe0eeb7010d83bab04a78bd54", null ],
     [ "justify", "d7/da8/structmorph_1_1ui_1_1Row.html#a26605fdac1155e8aa5d6c536b5d9a43c", null ],
     [ "wrap", "d7/da8/structmorph_1_1ui_1_1Row.html#aba4f0c94acda990fa1a19d76fe06d132", null ],

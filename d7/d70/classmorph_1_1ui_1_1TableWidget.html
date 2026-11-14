@@ -159,6 +159,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a0cfe2333c39bf4092e4926467e8de24f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets a row's accessible name, which its select box carries too; called after <span class="tt"><a class="el" href="#ae3017e5306e3fde63ec0366cca4983ff" title="Tells the table which key a row stands for; called once per row, right after it is built....">setRowKey</a></span> for a row given a label, and on every change. A row with none is named by its key.  <br /></td></tr>
 <tr class="memitem:a50e3d6791f14fa0d7002ef5c6d3d72c1" id="r_a50e3d6791f14fa0d7002ef5c6d3d72c1"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a50e3d6791f14fa0d7002ef5c6d3d72c1">setRowHeading</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;row)=0</td></tr>
 <tr class="memdesc:a50e3d6791f14fa0d7002ef5c6d3d72c1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Makes a row a heading; called once, right after <span class="tt"><a class="el" href="#ae3017e5306e3fde63ec0366cca4983ff" title="Tells the table which key a row stands for; called once per row, right after it is built....">setRowKey</a></span>, for a heading row. Its one cell spans every column and the select column. It is never selected (<span class="tt"><a class="el" href="#ae52b435d2acdb2e4d9c18594bf90a8c8" title="Requests the rows with these keys, and marks those it has. Never calls the onSelectionChange handler.">setSelection</a></span> with its key marks nothing), never reported, and never activated: a click on it does nothing, the current row skips it, and Ctrl+A, a range and the select-all box pass over it.  <br /></td></tr>
+<tr class="memitem:a5d08a89b5983c35874c45f89f44fbf8d" id="r_a5d08a89b5983c35874c45f89f44fbf8d"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a5d08a89b5983c35874c45f89f44fbf8d">setRowSpans</a> (<a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;row, std::vector&lt; <a class="el" href="../../d2/d72/structmorph_1_1ui_1_1RowSpan.html">RowSpan</a> &gt; const &amp;spans)=0</td></tr>
+<tr class="memdesc:a5d08a89b5983c35874c45f89f44fbf8d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets which of a row's cells cover the rows below it. Called for a row with spans once the change's rows are placed, and again on every change, a call with an empty list clearing them; never for a row that has never had one. The spans are resolved against the rows (no unknown column, overlap, heading or span past the last row once a change settles), but a backend derives which cells are covered from the rows' current order when it lays out or paints, never here, and clips a span that runs past its last row or onto a heading row. A spanning cell is drawn once over the rows it covers, in its column, with the look of this row; the covered rows' cells in that column are not shown.  <br /></td></tr>
 <tr class="memitem:ae52b435d2acdb2e4d9c18594bf90a8c8" id="r_ae52b435d2acdb2e4d9c18594bf90a8c8"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ae52b435d2acdb2e4d9c18594bf90a8c8">setSelection</a> (std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt; const &amp;keys)=0</td></tr>
 <tr class="memdesc:ae52b435d2acdb2e4d9c18594bf90a8c8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Requests the rows with these keys, and marks those it has. Never calls the <span class="tt">onSelectionChange</span> handler.  <br /></td></tr>
 <tr class="memitem:a77d0965830d028e1480f745d9a39e63b" id="r_a77d0965830d028e1480f745d9a39e63b"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a77d0965830d028e1480f745d9a39e63b">setOnSelectionChange</a> (std::function&lt; void(std::vector&lt; <a class="el" href="../../d8/d11/view_8hpp.html#aced394ae55a9af2d993a520a69c2fde2">Key</a> &gt;, <a class="el" href="../../d8/d11/view_8hpp.html#a79cb82b263e10ec8a972604eb7085106">SelectionChange</a>)&gt; onSelectionChange)=0</td></tr>
@@ -221,7 +223,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 <p>A user's selection replaces the requested keys, and the widget shows it whether or not the application binds the selection. <span class="tt">onSelectionChange</span> then gets exactly the keys of the existing rows now selected, in any mode: a key still waiting for its row is dropped by a user's change, while <span class="tt"><a class="el" href="#ae52b435d2acdb2e4d9c18594bf90a8c8" title="Requests the rows with these keys, and marks those it has. Never calls the onSelectionChange handler.">setSelection</a></span> keeps it waiting. It reports the user's selections only: no setter, and no row arriving or going, calls it.</p>
 <p>Every backend selects with the same inputs. In <span class="tt">Multiple</span> mode a click selects only its row and makes it the anchor, Ctrl+click toggles its row and makes it the anchor, Shift+click selects the rows from the anchor to it in place of the rest; Space toggles the current row, Shift+Up and Shift+Down move the current row and select from the anchor to it, and Ctrl+A selects every row, or clears them all when every row is selected already. In <span class="tt">Single</span> mode each of them selects the one row, and Ctrl+A goes on outwards. The arrows, Home, End, PageUp and PageDown move the current row without selecting, and Enter activates it. A report says which kind of change it was: a click, a Shift-click, a Shift+arrow and every <span class="tt">Single</span> change <span class="tt">Replace</span>; a Ctrl-click, Space and Ctrl+A <span class="tt">Extend</span>. A range runs over the keys in row order, rows the backend has not realized included. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00728">728</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00746">746</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a57e44fc23672c4b59cbd608a0f3f6431" name="a57e44fc23672c4b59cbd608a0f3f6431"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a57e44fc23672c4b59cbd608a0f3f6431">&#9670;&#160;</a></span>setColumns()</h2>
@@ -553,6 +555,46 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 
 </div>
 </div>
+<a id="a5d08a89b5983c35874c45f89f44fbf8d" name="a5d08a89b5983c35874c45f89f44fbf8d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5d08a89b5983c35874c45f89f44fbf8d">&#9670;&#160;</a></span>setRowSpans()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::TableWidget::setRowSpans </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dc/dcb/classmorph_1_1ui_1_1Widget.html">Widget</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>row</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../d2/d72/structmorph_1_1ui_1_1RowSpan.html">RowSpan</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>spans</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets which of a row's cells cover the rows below it. Called for a row with spans once the change's rows are placed, and again on every change, a call with an empty list clearing them; never for a row that has never had one. The spans are resolved against the rows (no unknown column, overlap, heading or span past the last row once a change settles), but a backend derives which cells are covered from the rows' current order when it lays out or paints, never here, and clips a span that runs past its last row or onto a heading row. A spanning cell is drawn once over the rows it covers, in its column, with the look of this row; the covered rows' cells in that column are not shown. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">row</td><td>One of this table's rows. </td></tr>
+    <tr><td class="paramname">spans</td><td>The row's effective spans, by column, each column once. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#a433f780bd9f42f24c56d89636eeac5e4">morph::ui::testing::detail::FakeTable</a>.</p>
+
+</div>
+</div>
 <a id="ae52b435d2acdb2e4d9c18594bf90a8c8" name="ae52b435d2acdb2e4d9c18594bf90a8c8"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae52b435d2acdb2e4d9c18594bf90a8c8">&#9670;&#160;</a></span>setSelection()</h2>
 
@@ -772,7 +814,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 
 <p>Reimplemented in <a class="el" href="../../d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#a25c475717b4eb72e67c7836fcfe0c3fd">morph::ui::testing::detail::FakeTable</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00811">811</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00840">840</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -809,7 +851,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 
 <p>Reimplemented in <a class="el" href="../../d5/d60/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeTable.html#aeef6d47a7be14ed28904eb6a143e446d">morph::ui::testing::detail::FakeTable</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00821">821</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00850">850</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -844,7 +886,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00835">835</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00864">864</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

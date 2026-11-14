@@ -150,6 +150,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a3ef8879ba516cf5a2ce46f483c9c5aa7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The last applied failure's text, or <span class="tt">null</span>. A tracked read.  <br /></td></tr>
 <tr class="memitem:ac334de267588e9f4ea555180f04245bd" id="r_ac334de267588e9f4ea555180f04245bd"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#ac334de267588e9f4ea555180f04245bd">errorKind</a> () const</td></tr>
 <tr class="memdesc:ac334de267588e9f4ea555180f04245bd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The last applied failure's kind, or <span class="tt">null</span>. A tracked read.  <br /></td></tr>
+<tr class="memitem:a14268975d162bc9d447c35b918dcfafd" id="r_a14268975d162bc9d447c35b918dcfafd"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a14268975d162bc9d447c35b918dcfafd">refusal</a> () const</td></tr>
+<tr class="memdesc:a14268975d162bc9d447c35b918dcfafd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The last applied failure's action refusal, or <span class="tt">null</span>. A tracked read.  <br /></td></tr>
 <tr class="memitem:aa76ca3dfa252f2e23bba98d0fdc61c96" id="r_aa76ca3dfa252f2e23bba98d0fdc61c96"><td class="memItemLeft"><a class="el" href="../../d7/d39/structmorph_1_1ui_1_1MutationDecl.html">MutationDecl</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#aa76ca3dfa252f2e23bba98d0fdc61c96">decl</a> () const noexcept</td></tr>
 <tr class="memdesc:aa76ca3dfa252f2e23bba98d0fdc61c96"><td class="mdescLeft">&#160;</td><td class="mdescRight">The declaration.  <br /></td></tr>
 <tr class="memitem:ae15b9cbacae42235c9bb94c8a60a3735" id="r_ae15b9cbacae42235c9bb94c8a60a3735"><td class="memItemLeft">std::string const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ae15b9cbacae42235c9bb94c8a60a3735">typeId</a> () const noexcept</td></tr>
@@ -158,7 +160,7 @@ Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A mutation at run time (spec 5 §5): concurrency, optimistic writes and the reply's effects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02115">2115</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02262">2262</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ae7198ee2e86ac6078cd44bee974cb5ad" name="ae7198ee2e86ac6078cd44bee974cb5ad"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae7198ee2e86ac6078cd44bee974cb5ad">&#9670;&#160;</a></span>MutationRuntime()</h2>
@@ -202,7 +204,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04438">4438</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04698">4698</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -231,7 +233,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Drops the replies still to come. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04449">4449</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04710">4710</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -278,7 +280,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04459">4459</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04720">4720</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -308,7 +310,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether a run is in flight or queued. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02139">2139</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02286">2286</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -338,7 +340,7 @@ Public Member Functions</h2></td></tr>
 <p>The last applied result. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02143">2143</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02290">2290</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -368,7 +370,7 @@ Public Member Functions</h2></td></tr>
 <p>The last applied failure's text, or <span class="tt">null</span>. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02147">2147</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02294">2294</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -398,7 +400,37 @@ Public Member Functions</h2></td></tr>
 <p>The last applied failure's kind, or <span class="tt">null</span>. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02151">2151</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02298">2298</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a14268975d162bc9d447c35b918dcfafd" name="a14268975d162bc9d447c35b918dcfafd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a14268975d162bc9d447c35b918dcfafd">&#9670;&#160;</a></span>refusal()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> morph::ui::detail::MutationRuntime::refusal </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The last applied failure's action refusal, or <span class="tt">null</span>. A tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02302">2302</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -428,7 +460,7 @@ Public Member Functions</h2></td></tr>
 <p>The declaration. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02155">2155</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02306">2306</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -458,7 +490,7 @@ Public Member Functions</h2></td></tr>
 <p>The model type. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02159">2159</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02310">2310</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

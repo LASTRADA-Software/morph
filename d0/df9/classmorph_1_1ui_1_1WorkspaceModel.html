@@ -160,6 +160,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:afc0b8b4d8873ac3c3a5cb920690879fb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every tab, one at a time, stopping at the first veto.  <br /></td></tr>
 <tr class="memitem:abb47a76d1647da1d354456fd02edd771" id="r_abb47a76d1647da1d354456fd02edd771"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#abb47a76d1647da1d354456fd02edd771">closeSaved</a> (std::function&lt; void(bool)&gt; done)</td></tr>
 <tr class="memdesc:abb47a76d1647da1d354456fd02edd771"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every tab without unsaved changes, one at a time, stopping at the first veto.  <br /></td></tr>
+<tr class="memitem:a9b305f040615df68565235364ac937a4" id="r_a9b305f040615df68565235364ac937a4"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#a9b305f040615df68565235364ac937a4">dirtyTabs</a> () const</td></tr>
+<tr class="memdesc:a9b305f040615df68565235364ac937a4"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many tabs hold unsaved changes. Not a tracked read.  <br /></td></tr>
+<tr class="memitem:aa7fac54d7e4daafa3d1d1e623dc643bf" id="r_aa7fac54d7e4daafa3d1d1e623dc643bf"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa7fac54d7e4daafa3d1d1e623dc643bf">forceCloseDirtyTabs</a> ()</td></tr>
+<tr class="memdesc:aa7fac54d7e4daafa3d1d1e623dc643bf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every tab that holds unsaved changes without asking, newest first, and cancels the calls no mount adopted. What a change of scope does once the person agreed to discard the work.  <br /></td></tr>
 <tr class="memitem:a625095270a09e077eb8c535c53ccc93a" id="r_a625095270a09e077eb8c535c53ccc93a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a625095270a09e077eb8c535c53ccc93a">forceCloseAll</a> ()</td></tr>
 <tr class="memdesc:a625095270a09e077eb8c535c53ccc93a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every tab without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. Then cancels every call no mount adopted (<span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a90afa7dd2a8434247066df2a693ad2a8" title="Cancels every call no mount has adopted: each one&#39;s onCancel runs, oldest first. What a shell does wh...">DocumentScreenHost::cancelUnclaimedCalls</a></span>), so none outlives the screens it was filed among.  <br /></td></tr>
 <tr class="memitem:a611fc58d8290dd5aabb83d5c518c0c25" id="r_a611fc58d8290dd5aabb83d5c518c0c25"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a611fc58d8290dd5aabb83d5c518c0c25">flushRecord</a> ()</td></tr>
@@ -642,6 +646,65 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a9b305f040615df68565235364ac937a4" name="a9b305f040615df68565235364ac937a4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9b305f040615df68565235364ac937a4">&#9670;&#160;</a></span>dirtyTabs()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::WorkspaceModel::dirtyTabs </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How many tabs hold unsaved changes. Not a tracked read. </p>
+<dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00306">306</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa7fac54d7e4daafa3d1d1e623dc643bf" name="aa7fac54d7e4daafa3d1d1e623dc643bf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa7fac54d7e4daafa3d1d1e623dc643bf">&#9670;&#160;</a></span>forceCloseDirtyTabs()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::WorkspaceModel::forceCloseDirtyTabs </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Closes every tab that holds unsaved changes without asking, newest first, and cancels the calls no mount adopted. What a change of scope does once the person agreed to discard the work. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00313">313</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a625095270a09e077eb8c535c53ccc93a" name="a625095270a09e077eb8c535c53ccc93a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a625095270a09e077eb8c535c53ccc93a">&#9670;&#160;</a></span>forceCloseAll()</h2>
 
@@ -667,7 +730,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Closes every tab without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. Then cancels every call no mount adopted (<span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a90afa7dd2a8434247066df2a693ad2a8" title="Cancels every call no mount has adopted: each one&#39;s onCancel runs, oldest first. What a shell does wh...">DocumentScreenHost::cancelUnclaimedCalls</a></span>), so none outlives the screens it was filed among. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00307">307</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00325">325</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -696,7 +759,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Writes the record now, cancelling a pending debounced write: what sign-out does before the session is cleared. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00316">316</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -726,7 +789,7 @@ Public Member Functions</h2></td></tr>
 <p>The record as it would be written now: the routes of the open tabs, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>The routes. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00325">325</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00343">343</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -756,7 +819,7 @@ Public Member Functions</h2></td></tr>
 <p>The open tabs, in order, each with its screen, identity, title and unsaved state. A tab's values follow its handle. </p>
 <dl class="section return"><dt>Returns</dt><dd>The tabs, equality-gated: an Effect over it runs once per change. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00357">357</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -786,7 +849,7 @@ Public Member Functions</h2></td></tr>
 <p>The active tab. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">std::nullopt</span> while no tab is open. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00343">343</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00361">361</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -816,7 +879,7 @@ Public Member Functions</h2></td></tr>
 <p>The open tabs' ids, in order, read without tracking: the order <span class="tt"><a class="el" href="#a8d648d2ed75e70f4880f8aa53e3306dc" title="The open tabs, in order, each with its screen, identity, title and unsaved state. A tab&#39;s values foll...">tabs()</a></span> lists them in. </p>
 <dl class="section return"><dt>Returns</dt><dd>The ids. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -852,7 +915,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its handle, valid while the tab is open; null for a tab the model does not hold. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00359">359</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html#l00377">377</a> of file <a class="el" href="../../d0/d27/workspace__model_8hpp_source.html">workspace_model.hpp</a>.</p>
 
 </div>
 </div>

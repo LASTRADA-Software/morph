@@ -41,6 +41,7 @@ var searchData=
   ['nowoverridestate_38',['nowOverrideState',['../d7/d4a/datetime_8hpp.html#a6bbe2fc294eab5234e9625f0f633993a',1,'morph::time::detail']]],
   ['nowrapcolumnkeepscellstooneline_39',['noWrapColumnKeepsCellsToOneLine',['../d8/d3e/backend__conformance_8hpp.html#a60e83945772f78e6efde401b4e499037',1,'morph::ui::testing::detail']]],
   ['numberof_40',['numberOf',['../d5/d8c/message_8hpp.html#a50829ec74af84f684ae23c6e64f51c49',1,'morph::ui::detail::numberOf(Value const &amp;value)'],['../d9/df6/ui_2theme_8hpp.html#aec47f25e43b0bc87bfd37dfcf698dfeb',1,'morph::ui::detail::numberOf(Json const &amp;json)']]],
-  ['numerator_41',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html#af7443e22fd7401a18fc49cbaac1c4ed7',1,'morph::math::Numerator']]],
-  ['numeric_42',['numeric',['../d3/d89/date__pattern_8hpp.html#a96cdf099a01d09afc0dc1d5cd62d337c',1,'morph::ui::detail::dates::numeric()'],['../d8/d0e/expression_8hpp.html#a6f0c8e26df5bfe212235524c7cb65acd',1,'morph::ui::detail::numeric()']]]
+  ['numberoperand_41',['numberOperand',['../d5/d8c/message_8hpp.html#a032c1515f746876b32f94ddc07bfeb18',1,'morph::ui::detail']]],
+  ['numerator_42',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html#af7443e22fd7401a18fc49cbaac1c4ed7',1,'morph::math::Numerator']]],
+  ['numeric_43',['numeric',['../d3/d89/date__pattern_8hpp.html#a96cdf099a01d09afc0dc1d5cd62d337c',1,'morph::ui::detail::dates::numeric()'],['../d8/d0e/expression_8hpp.html#a6f0c8e26df5bfe212235524c7cb65acd',1,'morph::ui::detail::numeric()']]]
 ];

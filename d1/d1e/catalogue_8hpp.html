@@ -170,6 +170,10 @@ Functions</h2></td></tr>
 <tr class="memdesc:ad6873a757e79bc6d2dddc9f37b1b7106"><td class="mdescLeft">&#160;</td><td class="mdescRight">A catalog entry's title in one locale, as a shell's tab or header shows it.  <br /></td></tr>
 <tr class="memitem:a1c5bcc7ca39bd03c148667f13146849c" id="r_a1c5bcc7ca39bd03c148667f13146849c"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1c5bcc7ca39bd03c148667f13146849c">morph::ui::catalogTitles</a> (<a class="el" href="../../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html">CatalogEntry</a> const &amp;entry, <a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">MessageCatalogues</a> const *catalogues)</td></tr>
 <tr class="memdesc:a1c5bcc7ca39bd03c148667f13146849c"><td class="mdescLeft">&#160;</td><td class="mdescRight">A catalog entry's title in every locale the catalogues hold: what a search over screen titles compares against.  <br /></td></tr>
+<tr class="memitem:a4ae6da6d08fd04fc5582d4a95fec5e80" id="r_a4ae6da6d08fd04fc5582d4a95fec5e80"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4ae6da6d08fd04fc5582d4a95fec5e80">morph::ui::catalogTitlesIn</a> (<a class="el" href="../../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html">CatalogEntry</a> const &amp;entry, <a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">MessageCatalogues</a> const *catalogues, std::string_view locale)</td></tr>
+<tr class="memdesc:a4ae6da6d08fd04fc5582d4a95fec5e80"><td class="mdescLeft">&#160;</td><td class="mdescRight">A catalog entry's titles with the one in <code class="param">locale</code> first: what a navigator shows and searches.  <br /></td></tr>
+<tr class="memitem:a04c4856f99bb013b2016f51016b65be3" id="r_a04c4856f99bb013b2016f51016b65be3"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a04c4856f99bb013b2016f51016b65be3">morph::ui::catalogLabel</a> (<a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">MessageCatalogues</a> const &amp;catalogues, std::string_view text, std::string_view locale)</td></tr>
+<tr class="memdesc:a04c4856f99bb013b2016f51016b65be3"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a> that may be a message key, as a heading is: its message when a catalogue holds the key, else itself.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
@@ -561,6 +565,100 @@ Variables</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>The titles; never empty. </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4ae6da6d08fd04fc5582d4a95fec5e80" name="a4ae6da6d08fd04fc5582d4a95fec5e80"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4ae6da6d08fd04fc5582d4a95fec5e80">&#9670;&#160;</a></span>catalogTitlesIn()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; std::string &gt; morph::ui::catalogTitlesIn </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html">CatalogEntry</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>entry</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">MessageCatalogues</a> const *</td>          <td class="paramname"><span class="paramname"><em>catalogues</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>locale</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A catalog entry's titles with the one in <code class="param">locale</code> first: what a navigator shows and searches. </p>
+<p>The title in <code class="param">locale</code> (<span class="tt">catalogTitle</span>), then every other locale's title that differs from it, so a search matches a title in any language and the first one shown is the person's own. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">entry</td><td>The entry. </td></tr>
+    <tr><td class="paramname">catalogues</td><td>The message catalogues, or null for none. </td></tr>
+    <tr><td class="paramname">locale</td><td>The BCP 47 locale to show first. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The titles; never empty. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00385">385</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a04c4856f99bb013b2016f51016b65be3" name="a04c4856f99bb013b2016f51016b65be3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a04c4856f99bb013b2016f51016b65be3">&#9670;&#160;</a></span>catalogLabel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::ui::catalogLabel </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">MessageCatalogues</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>catalogues</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>locale</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Text that may be a message key, as a heading is: its message when a catalogue holds the key, else itself. </p>
+<p>The message comes from the first of: the catalogue for <code class="param">locale</code> (the exact tag, then each shorter one), the <span class="tt">en</span> catalogue, any other catalogue that holds the key. It is formatted with no arguments. A heading has no fallback text, so a locale without a catalogue shows <span class="tt">en</span>'s words rather than the key. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">catalogues</td><td>The message catalogues. </td></tr>
+    <tr><td class="paramname">text</td><td>The text, a message key or plain text. </td></tr>
+    <tr><td class="paramname">locale</td><td>The BCP 47 locale. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The message, or <code class="param">text</code> as written when no catalogue holds it as a key. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>.</p>
 
 </div>
 </div>

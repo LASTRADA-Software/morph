@@ -8,6 +8,7 @@ var classmorph_1_1table_1_1PageWindow =
     [ "query", "da/d97/classmorph_1_1table_1_1PageWindow.html#a7d0cc95159cfabcec442805f9cb18e74", null ],
     [ "row", "da/d97/classmorph_1_1table_1_1PageWindow.html#a7433d92b70790280753116b05c4c29c6", null ],
     [ "total", "da/d97/classmorph_1_1table_1_1PageWindow.html#a3317c2e86b517c6d9bc4b228935e1d9e", null ],
+    [ "totalKind", "da/d97/classmorph_1_1table_1_1PageWindow.html#a2b850d83c653ff1ec9b0666d727b9185", null ],
     [ "error", "da/d97/classmorph_1_1table_1_1PageWindow.html#aa8d23995e184befcc1b38c0a0921f6df", null ],
     [ "pagesHeld", "da/d97/classmorph_1_1table_1_1PageWindow.html#a8a7399e262142062cbab37dcaa7254a5", null ],
     [ "pending", "da/d97/classmorph_1_1table_1_1PageWindow.html#ae33e55f566fc6b495013f3767e804704", null ]

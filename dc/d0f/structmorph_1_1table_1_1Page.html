@@ -131,9 +131,11 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a9fe2a578ac35bd44b26236bb45bfa608" id="r_a9fe2a578ac35bd44b26236bb45bfa608"><td class="memItemLeft">std::vector&lt; Row &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9fe2a578ac35bd44b26236bb45bfa608">rows</a></td></tr>
 <tr class="memdesc:a9fe2a578ac35bd44b26236bb45bfa608"><td class="mdescLeft">&#160;</td><td class="mdescRight">The rows, in view order.  <br /></td></tr>
 <tr class="memitem:a36b7fc18dfb3a24bdaa6be759f2e500d" id="r_a36b7fc18dfb3a24bdaa6be759f2e500d"><td class="memItemLeft">std::optional&lt; std::int64_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a36b7fc18dfb3a24bdaa6be759f2e500d">total</a></td></tr>
-<tr class="memdesc:a36b7fc18dfb3a24bdaa6be759f2e500d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rows in the whole filtered view; absent when the server did not count them or the count is above its cap.  <br /></td></tr>
+<tr class="memdesc:a36b7fc18dfb3a24bdaa6be759f2e500d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rows in the whole filtered view, or a lower bound (see <span class="tt"><a class="el" href="#ad46f69cf703523f6559bce4b8c39c648" title="Whether total is the count or a lower bound; meaningful only when total is present.">totalKind</a></span>); absent when the server did not count them.  <br /></td></tr>
 <tr class="memitem:a2ce721ec2b08c8221540890e079ee591" id="r_a2ce721ec2b08c8221540890e079ee591"><td class="memItemLeft">std::int64_t&#160;</td><td class="memItemRight"><a class="el" href="#a2ce721ec2b08c8221540890e079ee591">offset</a> = 0</td></tr>
 <tr class="memdesc:a2ce721ec2b08c8221540890e079ee591"><td class="mdescLeft">&#160;</td><td class="mdescRight">The view row of <span class="tt"><a class="el" href="#a9fe2a578ac35bd44b26236bb45bfa608" title="The rows, in view order.">rows</a>[0]</span>.  <br /></td></tr>
+<tr class="memitem:ad46f69cf703523f6559bce4b8c39c648" id="r_ad46f69cf703523f6559bce4b8c39c648"><td class="memItemLeft"><a class="el" href="../../dd/def/query_8hpp.html#af7533bbb6d6d95677aff5b0274ed17ad">TotalKind</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad46f69cf703523f6559bce4b8c39c648">totalKind</a> = <a class="el" href="../../dd/def/query_8hpp.html#af7533bbb6d6d95677aff5b0274ed17ada1649aed298f99d587e2eb30c1db5946b">TotalKind::Exact</a></td></tr>
+<tr class="memdesc:ad46f69cf703523f6559bce4b8c39c648"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <span class="tt"><a class="el" href="#a36b7fc18dfb3a24bdaa6be759f2e500d" title="Rows in the whole filtered view, or a lower bound (see totalKind); absent when the server did not cou...">total</a></span> is the count or a lower bound; meaningful only when <span class="tt"><a class="el" href="#a36b7fc18dfb3a24bdaa6be759f2e500d" title="Rows in the whole filtered view, or a lower bound (see totalKind); absent when the server did not cou...">total</a></span> is present.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Row&gt;<br />
@@ -145,7 +147,7 @@ struct morph::table::Page&lt; Row &gt;</div><p>One page of a list action's reply
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a9fe2a578ac35bd44b26236bb45bfa608" name="a9fe2a578ac35bd44b26236bb45bfa608"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a9fe2a578ac35bd44b26236bb45bfa608">&#9670;&#160;</a></span>rows</h2>
@@ -163,7 +165,7 @@ template&lt;typename Row&gt; </div>
 
 <p>The rows, in view order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -181,9 +183,9 @@ template&lt;typename Row&gt; </div>
       </table>
 </div><div class="memdoc">
 
-<p>Rows in the whole filtered view; absent when the server did not count them or the count is above its cap. </p>
+<p>Rows in the whole filtered view, or a lower bound (see <span class="tt"><a class="el" href="#ad46f69cf703523f6559bce4b8c39c648" title="Whether total is the count or a lower bound; meaningful only when total is present.">totalKind</a></span>); absent when the server did not count them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00088">88</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -203,7 +205,27 @@ template&lt;typename Row&gt; </div>
 
 <p>The view row of <span class="tt"><a class="el" href="#a9fe2a578ac35bd44b26236bb45bfa608" title="The rows, in view order.">rows</a>[0]</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad46f69cf703523f6559bce4b8c39c648" name="ad46f69cf703523f6559bce4b8c39c648"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad46f69cf703523f6559bce4b8c39c648">&#9670;&#160;</a></span>totalKind</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Row&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/def/query_8hpp.html#af7533bbb6d6d95677aff5b0274ed17ad">TotalKind</a> <a class="el" href="../../dc/d0f/structmorph_1_1table_1_1Page.html">morph::table::Page</a>&lt; Row &gt;::totalKind = <a class="el" href="../../dd/def/query_8hpp.html#af7533bbb6d6d95677aff5b0274ed17ada1649aed298f99d587e2eb30c1db5946b">TotalKind::Exact</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether <span class="tt"><a class="el" href="#a36b7fc18dfb3a24bdaa6be759f2e500d" title="Rows in the whole filtered view, or a lower bound (see totalKind); absent when the server did not cou...">total</a></span> is the count or a lower bound; meaningful only when <span class="tt"><a class="el" href="#a36b7fc18dfb3a24bdaa6be759f2e500d" title="Rows in the whole filtered view, or a lower bound (see totalKind); absent when the server did not cou...">total</a></span> is present. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>

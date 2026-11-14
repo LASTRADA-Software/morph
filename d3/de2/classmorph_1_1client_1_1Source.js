@@ -12,6 +12,7 @@ var classmorph_1_1client_1_1Source =
     [ "signOut", "d3/de2/classmorph_1_1client_1_1Source.html#ae9bdce10fa607e44b65882ee20b16914", null ],
     [ "documents", "d3/de2/classmorph_1_1client_1_1Source.html#a2c0634ea46a7c1458efdb72578bb81d0", null ],
     [ "bundle", "d3/de2/classmorph_1_1client_1_1Source.html#ac48d8f353dd23c29435731b2460280ed", null ],
+    [ "catalogues", "d3/de2/classmorph_1_1client_1_1Source.html#a7cf36584cd533b47f9cdf1ca415b3179", null ],
     [ "catalogReply", "d3/de2/classmorph_1_1client_1_1Source.html#add2a95e2a800a3c9ae2ee78dc6108497", null ],
     [ "schemasByModel", "d3/de2/classmorph_1_1client_1_1Source.html#aa22e5799d85b1e7bff781e9176a79e0a", null ],
     [ "principal", "d3/de2/classmorph_1_1client_1_1Source.html#aea500124a6afd35d3116258b29b44e8c", null ],

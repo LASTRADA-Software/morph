@@ -12,6 +12,8 @@ var classmorph_1_1ui_1_1WorkspaceModel =
     [ "closeOthers", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#ab4916e8fb5828c094333f003c8926bdb", null ],
     [ "closeAll", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#afc0b8b4d8873ac3c3a5cb920690879fb", null ],
     [ "closeSaved", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#abb47a76d1647da1d354456fd02edd771", null ],
+    [ "dirtyTabs", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a9b305f040615df68565235364ac937a4", null ],
+    [ "forceCloseDirtyTabs", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#aa7fac54d7e4daafa3d1d1e623dc643bf", null ],
     [ "forceCloseAll", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a625095270a09e077eb8c535c53ccc93a", null ],
     [ "flushRecord", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a611fc58d8290dd5aabb83d5c518c0c25", null ],
     [ "record", "d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#ada38cc3cb080ac68e0cf2cdfdb170f42", null ],

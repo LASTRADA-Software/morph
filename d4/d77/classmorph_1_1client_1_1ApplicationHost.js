@@ -8,5 +8,7 @@ var classmorph_1_1client_1_1ApplicationHost =
     [ "readFile", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#af1f1ae388616dd25c5ae157159bb194c", null ],
     [ "saveFile", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a38974752bea20b24ebd3bbedaf6a8b07", null ],
     [ "setNotifySink", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a1a758fe8d26187e8658ed85f66d3e354", null ],
+    [ "setLocaleSink", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#ab99285ade337aaa0ceebb81c119ed4a8", null ],
+    [ "setLocale", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a8863a338b2f610550568dcfa284e1e66", null ],
     [ "notify", "d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a16cc7b5bf142001c02b539c4ebe3d530", null ]
 ];

@@ -136,6 +136,10 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a7d768ad28ddc0f6bb7bc58a5eced4be9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The host's catalog; empty means every label is the schema's literal.  <br /></td></tr>
 <tr class="memitem:ac12a6e61c2a8136b51dd6d963807ae2c" id="r_ac12a6e61c2a8136b51dd6d963807ae2c"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#ac12a6e61c2a8136b51dd6d963807ae2c">displayOffsetMinutes</a> = 0</td></tr>
 <tr class="memdesc:ac12a6e61c2a8136b51dd6d963807ae2c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The display zone for date-times, in minutes east of UTC.  <br /></td></tr>
+<tr class="memitem:ac678be0ee3a4b9d67236891821813a0c" id="r_ac678be0ee3a4b9d67236891821813a0c"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ac678be0ee3a4b9d67236891821813a0c">datePattern</a></td></tr>
+<tr class="memdesc:ac678be0ee3a4b9d67236891821813a0c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The pattern a date field shows and reads (<span class="tt"><a class="el" href="../../d3/d89/date__pattern_8hpp.html#a89c061e04e31b770e72f93ac6e97b730" title="Checks a date pattern: only the tokens yyyy, MM, MMM, dd, HH, mm, ss and xxx and the literals -,...">ui::checkDatePattern</a></span>), such as <span class="tt">dd.MM.yyyy</span>; empty keeps ISO. Only the input follows it: the draft text, and so the stored value, stays ISO.  <br /></td></tr>
+<tr class="memitem:a7eda2976c3977bebc3b9da00c1874fe4" id="r_a7eda2976c3977bebc3b9da00c1874fe4"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a7eda2976c3977bebc3b9da00c1874fe4">dateTimePattern</a></td></tr>
+<tr class="memdesc:a7eda2976c3977bebc3b9da00c1874fe4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The pattern a date-time field shows and reads, such as <span class="tt">dd.MM.yyyy HH:mm</span>; empty keeps ISO.  <br /></td></tr>
 <tr class="memitem:a3513142ed1f657c510c5146a86c34824" id="r_a3513142ed1f657c510c5146a86c34824"><td class="memItemLeft">std::function&lt; bool(std::string_view bodyJson)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3513142ed1f657c510c5146a86c34824">accepts</a></td></tr>
 <tr class="memdesc:a3513142ed1f657c510c5146a86c34824"><td class="mdescLeft">&#160;</td><td class="mdescRight">An extra readiness gate over the assembled body; empty means none. <span class="tt"><a class="el" href="../../da/ded/classmorph_1_1forms_1_1Form.html" title="A form over action A: a FormSession built from schemaJson&lt;A&gt;(), submitting through a BridgeHandler,...">Form</a>&lt;A&gt;</span> puts the action's own <span class="tt">validate()</span> here.  <br /></td></tr>
 </table>
@@ -216,6 +220,42 @@ Public Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="ac678be0ee3a4b9d67236891821813a0c" name="ac678be0ee3a4b9d67236891821813a0c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac678be0ee3a4b9d67236891821813a0c">&#9670;&#160;</a></span>datePattern</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::forms::FormSessionOptions::datePattern</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The pattern a date field shows and reads (<span class="tt"><a class="el" href="../../d3/d89/date__pattern_8hpp.html#a89c061e04e31b770e72f93ac6e97b730" title="Checks a date pattern: only the tokens yyyy, MM, MMM, dd, HH, mm, ss and xxx and the literals -,...">ui::checkDatePattern</a></span>), such as <span class="tt">dd.MM.yyyy</span>; empty keeps ISO. Only the input follows it: the draft text, and so the stored value, stays ISO. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7eda2976c3977bebc3b9da00c1874fe4" name="a7eda2976c3977bebc3b9da00c1874fe4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7eda2976c3977bebc3b9da00c1874fe4">&#9670;&#160;</a></span>dateTimePattern</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::forms::FormSessionOptions::dateTimePattern</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The pattern a date-time field shows and reads, such as <span class="tt">dd.MM.yyyy HH:mm</span>; empty keeps ISO. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a3513142ed1f657c510c5146a86c34824" name="a3513142ed1f657c510c5146a86c34824"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a3513142ed1f657c510c5146a86c34824">&#9670;&#160;</a></span>accepts</h2>
 
@@ -230,7 +270,7 @@ Public Attributes</h2></td></tr>
 
 <p>An extra readiness gate over the assembled body; empty means none. <span class="tt"><a class="el" href="../../da/ded/classmorph_1_1forms_1_1Form.html" title="A form over action A: a FormSession built from schemaJson&lt;A&gt;(), submitting through a BridgeHandler,...">Form</a>&lt;A&gt;</span> puts the action's own <span class="tt">validate()</span> here. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d9b/form__session_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../dd/d9b/form__session_8hpp_source.html">form_session.hpp</a>.</p>
 
 </div>
 </div>

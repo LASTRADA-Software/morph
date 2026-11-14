@@ -175,6 +175,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a2c0634ea46a7c1458efdb72578bb81d0 pub_methods_classmorph_1_1client_1_1Source"><td class="mdescLeft">&#160;</td><td class="mdescRight">The lookup a <span class="tt">DocumentScreenHost</span> takes (<span class="tt">DocumentScreenHostOptions::documents</span>), over the loaded bundle: each screen the source lists, loaded against the current catalog facts the first time it is asked for after a load, so a shell of an application's own mounts with the same source.  <br /></td></tr>
 <tr class="memitem:ac48d8f353dd23c29435731b2460280ed pub_methods_classmorph_1_1client_1_1Source" id="r_ac48d8f353dd23c29435731b2460280ed"><td class="memItemLeft"><a class="el" href="../../dc/dcf/structmorph_1_1ui_1_1Bundle.html">ui::Bundle</a> const *&#160;</td><td class="memItemRight"><a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#ac48d8f353dd23c29435731b2460280ed">bundle</a> () const noexcept</td></tr>
 <tr class="memdesc:ac48d8f353dd23c29435731b2460280ed pub_methods_classmorph_1_1client_1_1Source"><td class="mdescLeft">&#160;</td><td class="mdescRight">The bundle the catalog currently lists.  <br /></td></tr>
+<tr class="memitem:a7cf36584cd533b47f9cdf1ca415b3179 pub_methods_classmorph_1_1client_1_1Source" id="r_a7cf36584cd533b47f9cdf1ca415b3179"><td class="memItemLeft"><a class="el" href="../../da/d9d/classmorph_1_1ui_1_1MessageCatalogues.html">ui::MessageCatalogues</a>&#160;</td><td class="memItemRight"><a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#a7cf36584cd533b47f9cdf1ca415b3179">catalogues</a> () const</td></tr>
+<tr class="memdesc:a7cf36584cd533b47f9cdf1ca415b3179 pub_methods_classmorph_1_1client_1_1Source"><td class="mdescLeft">&#160;</td><td class="mdescRight">The message catalogues of the current bundle, loaded from its verified files.  <br /></td></tr>
 <tr class="memitem:add2a95e2a800a3c9ae2ee78dc6108497 pub_methods_classmorph_1_1client_1_1Source" id="r_add2a95e2a800a3c9ae2ee78dc6108497"><td class="memItemLeft"><a class="el" href="../../de/df1/structmorph_1_1ui_1_1CatalogReply.html">ui::CatalogReply</a> const *&#160;</td><td class="memItemRight"><a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#add2a95e2a800a3c9ae2ee78dc6108497">catalogReply</a> () const noexcept</td></tr>
 <tr class="memdesc:add2a95e2a800a3c9ae2ee78dc6108497 pub_methods_classmorph_1_1client_1_1Source"><td class="mdescLeft">&#160;</td><td class="mdescRight">The catalog for the current principal: its entries, what the principal may run, and the facts.  <br /></td></tr>
 <tr class="memitem:aa22e5799d85b1e7bff781e9176a79e0a pub_methods_classmorph_1_1client_1_1Source" id="r_aa22e5799d85b1e7bff781e9176a79e0a"><td class="memItemLeft"><a class="el" href="../../d9/da5/explorer_8hpp.html#a1a29de123e21fc804c77937bcb84f2d9">ui::SchemasByModel</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#aa22e5799d85b1e7bff781e9176a79e0a">schemasByModel</a> () const noexcept</td></tr>
@@ -228,7 +230,7 @@ Protected Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Runs a linked application in-process (<span class="tt">--app</span>): its models over a <span class="tt">LocalBackend</span>, its bundle answered by a <span class="tt">UiService</span> in the same process, and verified by the same client as a remote one. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00316">316</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a8003247c8b5ab052230f076a64aa036c" name="a8003247c8b5ab052230f076a64aa036c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8003247c8b5ab052230f076a64aa036c">&#9670;&#160;</a></span>LocalSource()</h2>
@@ -289,7 +291,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#a9f0ce0ddf01e5b94ab9b6d73f37992fa">morph::client::Source</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00330">330</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00335">335</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -321,7 +323,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d3/de2/classmorph_1_1client_1_1Source.html#a5ad2a981175d1953d0e1f85981fe6a3b">morph::client::Source</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>

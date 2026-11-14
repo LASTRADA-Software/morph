@@ -20,12 +20,13 @@ var searchData=
   ['unsettled_17',['unsettled',['../d3/d63/classmorph_1_1table_1_1CellEdits.html#a60644110b6e1b16441d231a5c020d6ac',1,'morph::table::CellEdits']]],
   ['unsubscribe_18',['unsubscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aec8bdef725857e4a58d733ce13ea9028',1,'morph::bridge::BridgeHandler::unsubscribe()'],['../db/d7d/classmorph_1_1table_1_1DataSource.html#ad3c901aa7a9854a03fdb48bb51a7babb',1,'morph::table::DataSource::unsubscribe()'],['../d6/d96/classmorph_1_1table_1_1VectorSource.html#a9897a1bc29ebde73ca6d27cc803275cd',1,'morph::table::VectorSource::unsubscribe()'],['../dd/df1/classmorph_1_1table_1_1RowsSource.html#a278bf4cbf626a57c23c3e1a69a336566',1,'morph::table::RowsSource::unsubscribe()']]],
   ['untracked_19',['untracked',['../d5/dc1/classmorph_1_1reactive_1_1Runtime.html#ab885f39c3928d3bf72081f601806f612',1,'morph::reactive::Runtime']]],
-  ['updateguard_20',['UpdateGuard',['../d3/d9f/classmorph_1_1reactive_1_1detail_1_1UpdateGuard.html#aa48999938dfd4b642dabcea8c29f0c95',1,'morph::reactive::detail::UpdateGuard']]],
-  ['updateifnecessary_21',['updateIfNecessary',['../df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html#ac0bd97bb3a86586c4f29775c9d8b1e7b',1,'morph::reactive::detail::Node']]],
-  ['updaterow_22',['updateRow',['../d6/d96/classmorph_1_1table_1_1VectorSource.html#a4d628b23632cb2531c8b7c929cbf04d0',1,'morph::table::VectorSource']]],
-  ['upload_23',['upload',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#ab78043816cfecddb91537d09372ebf48',1,'morph::ui::InterpreterHost::upload()'],['../d5/db2/classmorph_1_1ui_1_1FileTransfer.html#a55331756291c0086e67f3900e464ac2b',1,'morph::ui::FileTransfer::upload()'],['../d1/dc0/author_8hpp.html#a5b46a71d4bcc0c2e5744dfff55d2db11',1,'morph::ui::author::upload()']]],
-  ['uploadfor_24',['uploadFor',['../d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a57372d9c6e014f56e5827427f18cf354',1,'morph::client::ApplicationHost::uploadFor()'],['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6458f0bc280e5bd67aee23c586fda1dc',1,'morph::ui::InterpreterHost::uploadFor()']]],
-  ['usablehere_25',['usableHere',['../de/d54/qt__quick_2frontend_8hpp.html#a682cba56cbf2eb5f27f26a332946933b',1,'morph::qt_quick']]],
-  ['usescomparator_26',['usesComparator',['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#ad8a8f54b95db0e8c34c1b521a52192e1',1,'morph::table::KeyColumn']]],
-  ['utf8length_27',['utf8Length',['../d8/d3a/locale__format_8hpp.html#a83a0b371622c8c036bcf237de42d8599',1,'morph::render::detail']]]
+  ['untranslatable_20',['untranslatable',['../dd/def/query_8hpp.html#aeff1c7316b5bb7859e8d9a5433cf7427',1,'morph::table::detail']]],
+  ['updateguard_21',['UpdateGuard',['../d3/d9f/classmorph_1_1reactive_1_1detail_1_1UpdateGuard.html#aa48999938dfd4b642dabcea8c29f0c95',1,'morph::reactive::detail::UpdateGuard']]],
+  ['updateifnecessary_22',['updateIfNecessary',['../df/d0a/classmorph_1_1reactive_1_1detail_1_1Node.html#ac0bd97bb3a86586c4f29775c9d8b1e7b',1,'morph::reactive::detail::Node']]],
+  ['updaterow_23',['updateRow',['../d6/d96/classmorph_1_1table_1_1VectorSource.html#a4d628b23632cb2531c8b7c929cbf04d0',1,'morph::table::VectorSource']]],
+  ['upload_24',['upload',['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#ab78043816cfecddb91537d09372ebf48',1,'morph::ui::InterpreterHost::upload()'],['../d5/db2/classmorph_1_1ui_1_1FileTransfer.html#a55331756291c0086e67f3900e464ac2b',1,'morph::ui::FileTransfer::upload()'],['../d1/dc0/author_8hpp.html#a5b46a71d4bcc0c2e5744dfff55d2db11',1,'morph::ui::author::upload()']]],
+  ['uploadfor_25',['uploadFor',['../d4/d77/classmorph_1_1client_1_1ApplicationHost.html#a57372d9c6e014f56e5827427f18cf354',1,'morph::client::ApplicationHost::uploadFor()'],['../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6458f0bc280e5bd67aee23c586fda1dc',1,'morph::ui::InterpreterHost::uploadFor()']]],
+  ['usablehere_26',['usableHere',['../de/d54/qt__quick_2frontend_8hpp.html#a682cba56cbf2eb5f27f26a332946933b',1,'morph::qt_quick']]],
+  ['usescomparator_27',['usesComparator',['../d2/d92/structmorph_1_1table_1_1KeyColumn.html#ad8a8f54b95db0e8c34c1b521a52192e1',1,'morph::table::KeyColumn']]],
+  ['utf8length_28',['utf8Length',['../d8/d3a/locale__format_8hpp.html#a83a0b371622c8c036bcf237de42d8599',1,'morph::render::detail']]]
 ];

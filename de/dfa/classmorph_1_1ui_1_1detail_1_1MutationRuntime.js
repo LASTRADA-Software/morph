@@ -7,6 +7,7 @@ var classmorph_1_1ui_1_1detail_1_1MutationRuntime =
     [ "result", "de/dfa/classmorph_1_1ui_1_1detail_1_1MutationRuntime.html#a2886414e4ffd683a6cbf586fdef640e5", null ],
     [ "error", "de/dfa/classmorph_1_1ui_1_1detail_1_1MutationRuntime.html#a3ef8879ba516cf5a2ce46f483c9c5aa7", null ],
     [ "errorKind", "de/dfa/classmorph_1_1ui_1_1detail_1_1MutationRuntime.html#ac334de267588e9f4ea555180f04245bd", null ],
+    [ "refusal", "de/dfa/classmorph_1_1ui_1_1detail_1_1MutationRuntime.html#a14268975d162bc9d447c35b918dcfafd", null ],
     [ "decl", "de/dfa/classmorph_1_1ui_1_1detail_1_1MutationRuntime.html#aa76ca3dfa252f2e23bba98d0fdc61c96", null ],
     [ "typeId", "de/dfa/classmorph_1_1ui_1_1detail_1_1MutationRuntime.html#ae15b9cbacae42235c9bb94c8a60a3735", null ]
 ];

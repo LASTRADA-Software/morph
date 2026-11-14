@@ -1,5 +1,6 @@
 var dir_6c27b99953c4043724e909925b5929d0 =
 [
+    [ "action_guard_core.hpp", "da/df3/action__guard__core_8hpp.html", "da/df3/action__guard__core_8hpp" ],
     [ "change_coalescer.hpp", "da/d09/change__coalescer_8hpp.html", null ],
     [ "completion_awaiter.hpp", "d0/d96/completion__awaiter_8hpp.html", null ],
     [ "instance_directory.hpp", "d1/dbc/instance__directory_8hpp_source.html", null ],

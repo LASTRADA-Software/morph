@@ -23,5 +23,6 @@ var filter_8hpp =
     [ "morph::table::detail::compileEntries", "d1/dd2/filter_8hpp.html#a77bc5555f605535d754a8fec34fb4997", null ],
     [ "morph::table::detail::compileColumnFilter", "d1/dd2/filter_8hpp.html#ab71d259f758ea8b1cb0dcb38ed1f8a31", null ],
     [ "morph::table::detail::compileGroup", "d1/dd2/filter_8hpp.html#a36d1d16b57905cd75fcd357ddc765d32", null ],
-    [ "morph::table::compileFilter", "d1/dd2/filter_8hpp.html#aef7b1ef0fe207b67f2c4d45e44939d94", null ]
+    [ "morph::table::compileFilter", "d1/dd2/filter_8hpp.html#aef7b1ef0fe207b67f2c4d45e44939d94", null ],
+    [ "morph::table::compileFilterGuarded", "d1/dd2/filter_8hpp.html#a01a3418e5abe103ab0872f8a39ea0b61", null ]
 ];

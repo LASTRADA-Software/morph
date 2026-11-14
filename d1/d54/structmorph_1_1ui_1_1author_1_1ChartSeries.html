@@ -143,12 +143,14 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:aac9c0078321bff884ea796a521ff6ee5" id="r_aac9c0078321bff884ea796a521ff6ee5"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a55cc2f3f8db7fddc7c1d7f6f220ee425">PointExpression</a>&#160;</td><td class="memItemRight"><a class="el" href="#aac9c0078321bff884ea796a521ff6ee5">note</a></td></tr>
 <tr class="memdesc:aac9c0078321bff884ea796a521ff6ee5"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a> drawn beside the point.  <br /></td></tr>
 <tr class="memitem:ad131714826ad140b05be9eac4cca7336" id="r_ad131714826ad140b05be9eac4cca7336"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ad131714826ad140b05be9eac4cca7336">joined</a> = true</td></tr>
-<tr class="memdesc:ad131714826ad140b05be9eac4cca7336"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a line joins the points.  <br /></td></tr>
+<tr class="memdesc:ad131714826ad140b05be9eac4cca7336"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a line joins the points; a <span class="tt">Bars</span> series is never joined, whatever this says.  <br /></td></tr>
+<tr class="memitem:af1b531cc0161332a9352382318c80091" id="r_af1b531cc0161332a9352382318c80091"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a2ac4e466cceaf8b9536e8513cd8567c0">SeriesStyle</a>&#160;</td><td class="memItemRight"><a class="el" href="#af1b531cc0161332a9352382318c80091">style</a> = <a class="el" href="../../d1/dc0/author_8hpp.html#a2ac4e466cceaf8b9536e8513cd8567c0a4803e6b9e63dabf04de980788d6a13c4">SeriesStyle::Line</a></td></tr>
+<tr class="memdesc:af1b531cc0161332a9352382318c80091"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the series is drawn as a line of points or as bars.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>One series of a <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a2dba38c54a8cbbf9e6d06674ca6abfe6" title="A chart node: points against a numeric axis, with reference lines.">chart</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05207">5207</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05376">5376</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="ae5ce8616a7d4b4a57961106514bccc64" name="ae5ce8616a7d4b4a57961106514bccc64"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae5ce8616a7d4b4a57961106514bccc64">&#9670;&#160;</a></span>label</h2>
@@ -164,7 +166,7 @@ Public Attributes</h2></td></tr>
 
 <p>The series' name in the legend; required when the chart has two or more series. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05209">5209</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05378">5378</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -182,7 +184,7 @@ Public Attributes</h2></td></tr>
 
 <p>The elements, one point each. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05211">5211</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05380">5380</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -200,7 +202,7 @@ Public Attributes</h2></td></tr>
 
 <p>The value, a number or a quantity; <span class="tt">null</span> leaves a gap. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05213">5213</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05382">5382</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -218,7 +220,7 @@ Public Attributes</h2></td></tr>
 
 <p>The position along the axis, a number, a date or an instant; absent on every series spaces points by index. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05216">5216</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05385">5385</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,7 +238,7 @@ Public Attributes</h2></td></tr>
 
 <p>The point's label on the horizontal axis. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05218">5218</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05387">5387</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +256,7 @@ Public Attributes</h2></td></tr>
 
 <p>Marks the point in a tone; <span class="tt">null</span> leaves it ordinary. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05220">5220</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05389">5389</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,7 +274,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../dd/dfe/structmorph_1_1ui_1_1Text.html" title="Static or bound text.">Text</a> drawn beside the point. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05222">5222</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05391">5391</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>
@@ -288,9 +290,27 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Whether a line joins the points. </p>
+<p>Whether a line joins the points; a <span class="tt">Bars</span> series is never joined, whatever this says. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05224">5224</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05393">5393</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af1b531cc0161332a9352382318c80091" name="af1b531cc0161332a9352382318c80091"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af1b531cc0161332a9352382318c80091">&#9670;&#160;</a></span>style</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/dc0/author_8hpp.html#a2ac4e466cceaf8b9536e8513cd8567c0">SeriesStyle</a> morph::ui::author::ChartSeries::style = <a class="el" href="../../d1/dc0/author_8hpp.html#a2ac4e466cceaf8b9536e8513cd8567c0a4803e6b9e63dabf04de980788d6a13c4">SeriesStyle::Line</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether the series is drawn as a line of points or as bars. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l05395">5395</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

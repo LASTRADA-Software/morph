@@ -4,7 +4,7 @@ var searchData=
   ['false_1',['False',['../d8/d26/rules_8hpp.html#a47ab229d7c8484a52f99e68d3274a865af8320b26d30ab433c5a54546d21f414c',1,'morph::forms']]],
   ['few_2',['Few',['../d5/d8c/message_8hpp.html#a13effbe53b25638b5db8f533b97947a7a8ecfbf4cc4349add09296102925c898c',1,'morph::ui']]],
   ['filled_3',['Filled',['../d4/d51/badge__style_8hpp.html#a1913d7e07652dc18c38e4eb27f028230ad9d586f8c792f8f661052af42536323c',1,'morph::ui']]],
-  ['filter_4',['Filter',['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663ad7778d0c64b6ba21494c97f77a66885a',1,'morph::ui']]],
+  ['filter_4',['Filter',['../dd/def/query_8hpp.html#a505193c4b4069485c9d21a942e6465fdad7778d0c64b6ba21494c97f77a66885a',1,'Filtermorph::table'],['../d8/d0e/expression_8hpp.html#aea78ed2130ba9860f8c92a691d34f663ad7778d0c64b6ba21494c97f77a66885a',1,'Filtermorph::ui']]],
   ['fixed_5',['Fixed',['../d1/d89/structmorph_1_1ui_1_1Sizing.html#af1925b095bf46a1b60325c973d4031d4a4457d440870ad6d42bab9082d9bf9b61',1,'morph::ui::Sizing']]],
   ['flag_6',['Flag',['../dd/d39/document_8hpp.html#a4c5b3506a04505322a0ee00f85be53e1ac5836008c1649301e29351a55db8f65c',1,'morph::ui::detail']]],
   ['focus_7',['Focus',['../dd/d39/document_8hpp.html#ac0d7e4d139a4fa323e9fb63d9428cf0eae24ee2487879116dcab772c0ac4fe341',1,'morph::ui']]],

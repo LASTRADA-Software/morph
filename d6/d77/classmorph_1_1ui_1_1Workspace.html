@@ -176,6 +176,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:aa5e83f98b4979fe0d18c96c854a95098"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every tab, one at a time, stopping at the first veto.  <br /></td></tr>
 <tr class="memitem:a20905db6ad9a8347936a52870a23ea6a" id="r_a20905db6ad9a8347936a52870a23ea6a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a20905db6ad9a8347936a52870a23ea6a">closeSaved</a> (std::function&lt; void(bool)&gt; done)</td></tr>
 <tr class="memdesc:a20905db6ad9a8347936a52870a23ea6a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every tab without unsaved changes, one at a time, stopping at the first veto.  <br /></td></tr>
+<tr class="memitem:ad3b57b7e6eec53a580796d1d3fb4a7eb" id="r_ad3b57b7e6eec53a580796d1d3fb4a7eb"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ad3b57b7e6eec53a580796d1d3fb4a7eb">dirtyTabs</a> () const</td></tr>
+<tr class="memdesc:ad3b57b7e6eec53a580796d1d3fb4a7eb"><td class="mdescLeft">&#160;</td><td class="mdescRight">How many open tabs hold unsaved changes.  <br /></td></tr>
+<tr class="memitem:a8e5bedd16893da44df7043f42380e62c" id="r_a8e5bedd16893da44df7043f42380e62c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a8e5bedd16893da44df7043f42380e62c">closeDirtyTabs</a> ()</td></tr>
+<tr class="memdesc:a8e5bedd16893da44df7043f42380e62c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the tabs that hold unsaved changes without asking: what a change of scope does once the person agreed to discard the work.  <br /></td></tr>
 <tr class="memitem:ae818ab3fa0bd893cba6a6d5485213e7c" id="r_ae818ab3fa0bd893cba6a6d5485213e7c"><td class="memItemLeft">std::optional&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae818ab3fa0bd893cba6a6d5485213e7c">active</a> () const</td></tr>
 <tr class="memdesc:ae818ab3fa0bd893cba6a6d5485213e7c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The active tab's index.  <br /></td></tr>
 <tr class="memitem:a0c05abb39feb16f73b579d7632c318d5" id="r_a0c05abb39feb16f73b579d7632c318d5"><td class="memItemLeft"><a class="el" href="../../da/de8/classmorph_1_1ui_1_1ScreenHandle.html">ScreenHandle</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a0c05abb39feb16f73b579d7632c318d5">handleOf</a> (std::size_t index) const noexcept</td></tr>
@@ -925,6 +929,65 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="ad3b57b7e6eec53a580796d1d3fb4a7eb" name="ad3b57b7e6eec53a580796d1d3fb4a7eb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad3b57b7e6eec53a580796d1d3fb4a7eb">&#9670;&#160;</a></span>dirtyTabs()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::ui::Workspace::dirtyTabs </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>How many open tabs hold unsaved changes. </p>
+<dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8e5bedd16893da44df7043f42380e62c" name="a8e5bedd16893da44df7043f42380e62c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8e5bedd16893da44df7043f42380e62c">&#9670;&#160;</a></span>closeDirtyTabs()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::Workspace::closeDirtyTabs </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Closes the tabs that hold unsaved changes without asking: what a change of scope does once the person agreed to discard the work. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00335">335</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+
+</div>
+</div>
 <a id="ae818ab3fa0bd893cba6a6d5485213e7c" name="ae818ab3fa0bd893cba6a6d5485213e7c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ae818ab3fa0bd893cba6a6d5485213e7c">&#9670;&#160;</a></span>active()</h2>
 
@@ -951,7 +1014,7 @@ Public Member Functions</h2></td></tr>
 <p>The active tab's index. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">std::nullopt</span> while no tab is open. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -987,7 +1050,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its handle, valid while the tab is open; null past the end. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1017,7 +1080,7 @@ Public Member Functions</h2></td></tr>
 <p>The active tab's screen handle. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or null while no tab is open. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00349">349</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00357">357</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1047,7 +1110,7 @@ Public Member Functions</h2></td></tr>
 <p>The active tab's head as two parts, the same reactive content <span class="tt">headRow</span> builds for the in-page rendering, for a host that mounts them elsewhere (a shell's own top bar, say). Neither is null: with no active tab each is an invisible, empty container rather than a null <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39" title="A view-tree node: immutable, shared data.">Node</a></span>, since a caller mounting them may not expect to handle one. </p>
 <dl class="section return"><dt>Returns</dt><dd>The lead and the trail, reactive to the active tab changing and to its head's own content changing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00359">359</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00367">367</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1077,7 +1140,7 @@ Public Member Functions</h2></td></tr>
 <p>Where the active tab's head puts its lead. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The place; <span class="tt">Below</span> with no active tab. With the head in the page (<span class="tt"><a class="el" href="../../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50" title="Above each page, inside the workspace.">HeadPlacement::InPage</a></span>) the tab bar carries the title, so <span class="tt">Inline</span> reads as <span class="tt">Below</span> there. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00392">392</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00400">400</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1107,7 +1170,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the active tab's head is a single line: it has no eyebrow, and its lead is not drawn under the title (it has none, or it sits inline or at the end). A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether the head is one line; <span class="tt">true</span> with no active tab. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00400">400</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00408">408</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1137,7 +1200,7 @@ Public Member Functions</h2></td></tr>
 <p>What ends the active tab's head trail, so a compact top bar can stand the line's end the right distance from the window's edge. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The last element of the trail, in its order (tools, actions, then the head menu): a head menu, whose trigger is an icon button, or a last action that is icon-only or ghost is <span class="tt">Unframed</span>; any other last action is <span class="tt">Framed</span>; with no action and no menu, a head tool is <span class="tt">Framed</span>; an empty trail, and no active tab, is <span class="tt">None</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00423">423</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1167,7 +1230,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the active tab's page continues the head's block: the screen's shown root says so (<span class="tt"><a class="el" href="../../d6/db2/classmorph_1_1ui_1_1ScreenHead.html#ae2f47e76dd10f477481e0a60ef0d24e1" title="Whether the screen&#39;s shown root continues the head&#39;s block (the document&#39;s headJoined on the root,...">ScreenHead::headJoined</a></span>) and the page is not inset, which two tabs or more force. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether the head is joined to the page. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00438">438</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00446">446</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1197,7 +1260,7 @@ Public Member Functions</h2></td></tr>
 <p>The text role the active screen asks for its head's title. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">Heading</span>, or <span class="tt">Headline</span> where the screen asks for it; <span class="tt">Heading</span> with no active tab. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00450">450</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00458">458</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1227,7 +1290,7 @@ Public Member Functions</h2></td></tr>
 <p>The surface the active screen asks the shell to draw its top bar on. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The surface's name; empty with no active tab and while the screen names none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00467">467</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1257,7 +1320,7 @@ Public Member Functions</h2></td></tr>
 <p>The surface the active screen asks the shell to draw the page area on. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The surface's name; empty with no active tab and while the screen names none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00468">468</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00476">476</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1287,7 +1350,7 @@ Public Member Functions</h2></td></tr>
 <p>The active tab's title as runs, which a shell that knows them draws in place of the tab's caption. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The runs; empty with no active tab, or while the active screen gives none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00478">478</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00486">486</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1317,7 +1380,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the shell insets the page around the active tab's screen. A tracked read. The page is inset with no active tab and while the workspace's tab strip shows (two tabs or more), since the strip is a child of the page and would otherwise touch the window's edges; with one tab it is inset unless the screen's shown root lays itself at the page's edges (<span class="tt"><a class="el" href="../../d6/db2/classmorph_1_1ui_1_1ScreenHead.html#ad053fc7b5b04a0b063331335cfde4b30" title="Whether the screen&#39;s shown root lays itself at the page&#39;s edges, so a shell leaves the page uninset a...">ScreenHead::pageEdge</a></span>). </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether the page is inset. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00488">488</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00496">496</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1347,7 +1410,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the active tab's head shows anything: an eyebrow, a subtitle, a badge, a tool, an action or a menu entry. A tracked read, so a shell that shows the head on a line of its own follows a tab switch and a head's own changes; the head row's own visibility is the same rule. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether there is an active tab whose head has content. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00503">503</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1376,7 +1439,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Closes every overlay, then every tab, without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. A callee goes before the opener its call answers, so the opener's <span class="tt">onCancel</span> runs in a live scope; then every call no mount adopted is cancelled. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00519">519</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1406,7 +1469,7 @@ Public Member Functions</h2></td></tr>
 <p>The open tabs, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>Each tab's screen, identity and caption. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00518">518</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00526">526</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>

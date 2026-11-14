@@ -8,5 +8,7 @@ var structmorph_1_1client_1_1ShellOptions =
     [ "history", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#acde215398b689ebb7d4ed8e73521cd13", null ],
     [ "dev", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#a33b5efc267a4f9fcadcb069da886a2de", null ],
     [ "onReloaded", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#a59cdb13b13b9844bdd5bb4b5e27b39f5", null ],
+    [ "locale", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#a90e8cd16817b0e58f3e157fe7c5dc384", null ],
+    [ "onLocale", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#a0eaf381fa21154ba79f79a40faf28db5", null ],
     [ "signIn", "d6/d9c/structmorph_1_1client_1_1ShellOptions.html#ae55bc46d076fa4f7f47ac0aac429c220", null ]
 ];

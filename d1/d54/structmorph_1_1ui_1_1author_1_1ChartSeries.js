@@ -7,5 +7,6 @@ var structmorph_1_1ui_1_1author_1_1ChartSeries =
     [ "xLabel", "d1/d54/structmorph_1_1ui_1_1author_1_1ChartSeries.html#a84aa6ee41e772ec660acbb16ecc4a63c", null ],
     [ "tone", "d1/d54/structmorph_1_1ui_1_1author_1_1ChartSeries.html#aed66e77882a20275331ac205430bfdd2", null ],
     [ "note", "d1/d54/structmorph_1_1ui_1_1author_1_1ChartSeries.html#aac9c0078321bff884ea796a521ff6ee5", null ],
-    [ "joined", "d1/d54/structmorph_1_1ui_1_1author_1_1ChartSeries.html#ad131714826ad140b05be9eac4cca7336", null ]
+    [ "joined", "d1/d54/structmorph_1_1ui_1_1author_1_1ChartSeries.html#ad131714826ad140b05be9eac4cca7336", null ],
+    [ "style", "d1/d54/structmorph_1_1ui_1_1author_1_1ChartSeries.html#af1b531cc0161332a9352382318c80091", null ]
 ];

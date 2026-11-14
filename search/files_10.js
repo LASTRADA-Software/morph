@@ -12,11 +12,15 @@ var searchData=
   ['session_5fcommon_2ehpp_9',['session_common.hpp',['../d3/d3d/session__common_8hpp.html',1,'']]],
   ['shell_2ehpp_10',['shell.hpp',['../d5/d98/shell_8hpp.html',1,'']]],
   ['shell_5fframe_2ehpp_11',['shell_frame.hpp',['../db/d4f/shell__frame_8hpp.html',1,'']]],
-  ['signal_2ehpp_12',['signal.hpp',['../dd/d5f/signal_8hpp.html',1,'']]],
-  ['sort_2ehpp_13',['sort.hpp',['../d4/d54/sort_8hpp.html',1,'']]],
-  ['source_2ehpp_14',['source.hpp',['../d2/d2e/source_8hpp.html',1,'']]],
-  ['step_5fexecutor_2ehpp_15',['step_executor.hpp',['../d0/d53/step__executor_8hpp.html',1,'']]],
-  ['store_2ehpp_16',['store.hpp',['../d1/deb/store_8hpp.html',1,'']]],
-  ['strand_2ehpp_17',['strand.hpp',['../de/dc1/strand_8hpp.html',1,'']]],
-  ['subscription_5fregistry_2ehpp_18',['subscription_registry.hpp',['../d0/dd4/subscription__registry_8hpp.html',1,'']]]
+  ['shell_5fparts_2ehpp_12',['shell_parts.hpp',['../d6/da7/shell__parts_8hpp.html',1,'']]],
+  ['shell_5fparts_5fbinding_2ehpp_13',['shell_parts_binding.hpp',['../de/df5/shell__parts__binding_8hpp.html',1,'']]],
+  ['shell_5fparts_5fmodel_2ehpp_14',['shell_parts_model.hpp',['../d0/db9/shell__parts__model_8hpp.html',1,'']]],
+  ['shell_5fparts_5fview_2ehpp_15',['shell_parts_view.hpp',['../d1/da3/shell__parts__view_8hpp.html',1,'']]],
+  ['signal_2ehpp_16',['signal.hpp',['../dd/d5f/signal_8hpp.html',1,'']]],
+  ['sort_2ehpp_17',['sort.hpp',['../d4/d54/sort_8hpp.html',1,'']]],
+  ['source_2ehpp_18',['source.hpp',['../d2/d2e/source_8hpp.html',1,'']]],
+  ['step_5fexecutor_2ehpp_19',['step_executor.hpp',['../d0/d53/step__executor_8hpp.html',1,'']]],
+  ['store_2ehpp_20',['store.hpp',['../d1/deb/store_8hpp.html',1,'']]],
+  ['strand_2ehpp_21',['strand.hpp',['../de/dc1/strand_8hpp.html',1,'']]],
+  ['subscription_5fregistry_2ehpp_22',['subscription_registry.hpp',['../d0/dd4/subscription__registry_8hpp.html',1,'']]]
 ];

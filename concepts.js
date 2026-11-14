@@ -11,6 +11,8 @@ var concepts =
         [ "HasExplicitSubmit", "d3/d9e/conceptmorph_1_1forms_1_1HasExplicitSubmit.html", null ]
       ] ],
       [ "model", null, [
+        [ "DeclaresGuard", "df/da7/conceptmorph_1_1model_1_1DeclaresGuard.html", null ],
+        [ "GuardRefusalObserver", "d3/dad/conceptmorph_1_1model_1_1GuardRefusalObserver.html", null ],
         [ "HasPayloadShapeInner", "db/db2/conceptmorph_1_1model_1_1HasPayloadShapeInner.html", null ],
         [ "HasPayloadShapeTag", "de/da8/conceptmorph_1_1model_1_1HasPayloadShapeTag.html", null ],
         [ "KeyedModel", "d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html", null ],

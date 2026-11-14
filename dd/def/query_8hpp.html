@@ -167,6 +167,16 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How <span class="tt"><a class="el" href="#af23cf9408f25405db2ffae265d0b835c" title="Runs query over source in the calling thread: the reference implementation of server mode.">apply</a></span> runs.  <a href="../../d7/d2c/structmorph_1_1table_1_1ApplyOptions.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Atable_3A_3APageRows" id="r_morph_3A_3Atable_3A_3APageRows"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/db3/structmorph_1_1table_1_1PageRows.html">morph::table::PageRows</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The rows of one page, as source row indices.  <a href="../../db/db3/structmorph_1_1table_1_1PageRows.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Atable_3A_3APlannedSortKey" id="r_morph_3A_3Atable_3A_3APlannedSortKey"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d80/structmorph_1_1table_1_1PlannedSortKey.html">morph::table::PlannedSortKey</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One sort key of a plan.  <a href="../../d3/d80/structmorph_1_1table_1_1PlannedSortKey.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Atable_3A_3APlannedCondition" id="r_morph_3A_3Atable_3A_3APlannedCondition"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d18/structmorph_1_1table_1_1PlannedCondition.html">morph::table::PlannedCondition</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One condition of a plan: an operator and its parsed operands on one column.  <a href="../../d6/d18/structmorph_1_1table_1_1PlannedCondition.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Atable_3A_3APlannedColumnFilter" id="r_morph_3A_3Atable_3A_3APlannedColumnFilter"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d8/d19/structmorph_1_1table_1_1PlannedColumnFilter.html">morph::table::PlannedColumnFilter</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The conditions on one column.  <a href="../../d8/d19/structmorph_1_1table_1_1PlannedColumnFilter.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Atable_3A_3APlannedGroup" id="r_morph_3A_3Atable_3A_3APlannedGroup"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d2/dfc/structmorph_1_1table_1_1PlannedGroup.html">morph::table::PlannedGroup</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A filter over several columns: a row matches when the group's entries match on any of its columns.  <a href="../../d2/dfc/structmorph_1_1table_1_1PlannedGroup.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Atable_3A_3AQueryPlan" id="r_morph_3A_3Atable_3A_3AQueryPlan"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d2/d26/structmorph_1_1table_1_1QueryPlan.html">morph::table::QueryPlan</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt"><a class="el" href="../../d6/db9/structmorph_1_1table_1_1TableQuery.html" title="A table&#39;s sort, filters and page, as a list action&#39;s body carries them.">TableQuery</a></span> validated and normalised for translation into a store's own query.  <a href="../../d2/d26/structmorph_1_1table_1_1QueryPlan.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Atable_3A_3Adetail_3A_3AIsOptional_3C_20T_20_3E" id="r_morph_3A_3Atable_3A_3Adetail_3A_3AIsOptional_3C_20T_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/dea/structmorph_1_1table_1_1detail_1_1IsOptional.html">morph::table::detail::IsOptional&lt; T &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">true</span> for <span class="tt">std::optional&lt;T&gt;</span>.  <a href="../../d9/dea/structmorph_1_1table_1_1detail_1_1IsOptional.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Atable_3A_3Adetail_3A_3AIsOptional_3C_20std_3A_3Aoptional_3C_20T_20_3E_20_3E" id="r_morph_3A_3Atable_3A_3Adetail_3A_3AIsOptional_3C_20std_3A_3Aoptional_3C_20T_20_3E_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d34/structmorph_1_1table_1_1detail_1_1IsOptional_3_01std_1_1optional_3_01T_01_4_01_4.html">morph::table::detail::IsOptional&lt; std::optional&lt; T &gt; &gt;</a></td></tr>
@@ -187,6 +197,10 @@ Concepts</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
 Typedefs</h2></td></tr>
+<tr class="memitem:a82edb854932cc7c826981fcc181266f9" id="r_a82edb854932cc7c826981fcc181266f9"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a82edb854932cc7c826981fcc181266f9">morph::table::FilterOp</a> = <a class="el" href="../../d8/d8b/classmorph_1_1table_1_1CompiledFilter.html#ab856c78706c848543886e2d3155bfc5f">CompiledFilter::Op</a></td></tr>
+<tr class="memdesc:a82edb854932cc7c826981fcc181266f9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The operators a planned condition carries.  <br /></td></tr>
+<tr class="memitem:ac92eb0a60c6a0999c25c835eaee9bb62" id="r_ac92eb0a60c6a0999c25c835eaee9bb62"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#ac92eb0a60c6a0999c25c835eaee9bb62">morph::table::PlannedOperand</a> = std::variant&lt;std::monostate, std::int64_t, <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a>, double, std::string&gt;</td></tr>
+<tr class="memdesc:ac92eb0a60c6a0999c25c835eaee9bb62"><td class="mdescLeft">&#160;</td><td class="mdescRight">A planned operand, typed by its column's kind: <span class="tt">Rational</span> for integer, key, decimal and quantity columns (quantities in the canonical unit), <span class="tt">double</span> for numbers, <span class="tt">int64</span> for dates (days), date-times (UTC seconds) and booleans (0 or 1), <span class="tt">string</span> for text (folded, or raw for a case-sensitive condition), and empty when the operator takes no operand.  <br /></td></tr>
 <tr class="memitem:a05b2c9c396ec1ae74024242ea14fcd12" id="r_a05b2c9c396ec1ae74024242ea14fcd12"><td class="memTemplParams" colspan="2">template&lt;typename V&gt; </td></tr>
 <tr class="memitem:a05b2c9c396ec1ae74024242ea14fcd12 template"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a05b2c9c396ec1ae74024242ea14fcd12">morph::table::detail::WrappedMember</a> = std::remove_cvref_t&lt;decltype(std::declval&lt;V const&amp;&gt;().*(glz::meta&lt;V&gt;::value))&gt;</td></tr>
 <tr class="memdesc:a05b2c9c396ec1ae74024242ea14fcd12"><td class="mdescLeft">&#160;</td><td class="mdescRight">The member a <span class="tt"><a class="el" href="../../db/d94/conceptmorph_1_1table_1_1detail_1_1MemberWrapper.html" title="A type glaze writes as one of its own members, as morph&#39;s Ranged, Choice, Multiline and Tagged are: i...">MemberWrapper</a></span> is written as.  <br /></td></tr>
@@ -196,6 +210,17 @@ Typedefs</h2></td></tr>
 <tr class="memitem:a3ee261e11b4ade0112817b39cf5d94cb" id="r_a3ee261e11b4ade0112817b39cf5d94cb"><td class="memTemplParams" colspan="2">template&lt;typename Row&gt; </td></tr>
 <tr class="memitem:a3ee261e11b4ade0112817b39cf5d94cb template"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a3ee261e11b4ade0112817b39cf5d94cb">morph::table::RowKey</a> = std::function&lt;<a class="el" href="../../dd/d57/data__source_8hpp.html#af97faffd94c03b7930290a2e2b103b9a">RowId</a>(Row const&amp;)&gt;</td></tr>
 <tr class="memdesc:a3ee261e11b4ade0112817b39cf5d94cb"><td class="mdescLeft">&#160;</td><td class="mdescRight">A key projection: the <span class="tt"><a class="el" href="../../dd/d57/data__source_8hpp.html#af97faffd94c03b7930290a2e2b103b9a" title="A row&#39;s identity: the table&#39;s key, stable across reloads.">RowId</a></span> of a typed row.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
+Enumerations</h2></td></tr>
+<tr class="memitem:af7533bbb6d6d95677aff5b0274ed17ad" id="r_af7533bbb6d6d95677aff5b0274ed17ad"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#af7533bbb6d6d95677aff5b0274ed17ad">morph::table::TotalKind</a> : std::uint8_t { <a class="el" href="#af7533bbb6d6d95677aff5b0274ed17ada1649aed298f99d587e2eb30c1db5946b">Exact</a>
+, <a class="el" href="#af7533bbb6d6d95677aff5b0274ed17adabad91df0cfc5662f3af47244d02d4802">AtLeast</a>
+ }</td></tr>
+<tr class="memdesc:af7533bbb6d6d95677aff5b0274ed17ad"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a page's <span class="tt">total</span> says about the filtered view.  <a href="#af7533bbb6d6d95677aff5b0274ed17ad">More...</a><br /></td></tr>
+<tr class="memitem:a505193c4b4069485c9d21a942e6465fd" id="r_a505193c4b4069485c9d21a942e6465fd"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#a505193c4b4069485c9d21a942e6465fd">morph::table::PlanUse</a> : std::uint8_t { <a class="el" href="#a505193c4b4069485c9d21a942e6465fda6b46ae48421828d9973deec5fa9aa0c3">Sort</a>
+, <a class="el" href="#a505193c4b4069485c9d21a942e6465fdad7778d0c64b6ba21494c97f77a66885a">Filter</a>
+ }</td></tr>
+<tr class="memdesc:a505193c4b4069485c9d21a942e6465fd"><td class="mdescLeft">&#160;</td><td class="mdescRight">What a sort or a filter on a column is used for, as <span class="tt"><a class="el" href="#a2269fb698b9efc3a0a05c68012bc3c38" title="Validates query and normalises it into a plan a model translates into its own query.">planQuery</a></span>'s <span class="tt">translatable</span> predicate sees it.  <a href="#a505193c4b4069485c9d21a942e6465fd">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
@@ -215,6 +240,16 @@ Functions</h2></td></tr>
 <tr class="memdesc:a003d0349c983ea18ac453ec5f36764d4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Escapes <span class="tt">%</span>, <span class="tt">_</span> and the escape character for a SQL <span class="tt">LIKE</span> pattern, so a database-backed server keeps them ordinary characters as the filter semantics require.  <br /></td></tr>
 <tr class="memitem:af23cf9408f25405db2ffae265d0b835c" id="r_af23cf9408f25405db2ffae265d0b835c"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../db/db3/structmorph_1_1table_1_1PageRows.html">PageRows</a>, <a class="el" href="../../d2/db3/structmorph_1_1table_1_1TableError.html">TableError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af23cf9408f25405db2ffae265d0b835c">morph::table::apply</a> (<a class="el" href="../../db/d7d/classmorph_1_1table_1_1DataSource.html">DataSource</a> const &amp;source, <a class="el" href="../../d6/db9/structmorph_1_1table_1_1TableQuery.html">TableQuery</a> const &amp;query, <a class="el" href="../../d7/d2c/structmorph_1_1table_1_1ApplyOptions.html">ApplyOptions</a> const &amp;options={})</td></tr>
 <tr class="memdesc:af23cf9408f25405db2ffae265d0b835c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Runs <code class="param">query</code> over <code class="param">source</code> in the calling thread: the reference implementation of <span class="tt">server</span> mode.  <br /></td></tr>
+<tr class="memitem:a039c521e9d8f3c9cd258b3e23a5e3e02" id="r_a039c521e9d8f3c9cd258b3e23a5e3e02"><td class="memItemLeft"><a class="el" href="#ac92eb0a60c6a0999c25c835eaee9bb62">PlannedOperand</a>&#160;</td><td class="memItemRight"><a class="el" href="#a039c521e9d8f3c9cd258b3e23a5e3e02">morph::table::detail::plannedOperand</a> (<a class="el" href="../../dd/d57/data__source_8hpp.html#a68613ff1694dbba96932041fc5dc895c">ColumnKind</a> kind, <a class="el" href="../../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html">CompiledFilter::Entry</a> const &amp;entry, std::size_t slot)</td></tr>
+<tr class="memdesc:a039c521e9d8f3c9cd258b3e23a5e3e02"><td class="mdescLeft">&#160;</td><td class="mdescRight">The operand a compiled entry holds in <code class="param">slot</code>, typed by the column's kind.  <br /></td></tr>
+<tr class="memitem:a76170a73374baddaf30f289080e7d471" id="r_a76170a73374baddaf30f289080e7d471"><td class="memItemLeft"><a class="el" href="../../d6/d18/structmorph_1_1table_1_1PlannedCondition.html">PlannedCondition</a>&#160;</td><td class="memItemRight"><a class="el" href="#a76170a73374baddaf30f289080e7d471">morph::table::detail::plannedCondition</a> (<a class="el" href="../../d3/d45/structmorph_1_1table_1_1ColumnInfo.html">ColumnInfo</a> const &amp;info, <a class="el" href="../../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html">CompiledFilter::Entry</a> const &amp;entry)</td></tr>
+<tr class="memdesc:a76170a73374baddaf30f289080e7d471"><td class="mdescLeft">&#160;</td><td class="mdescRight">A compiled entry as a planned condition.  <br /></td></tr>
+<tr class="memitem:a50d20b6008557701ff2ac654fe5833d6" id="r_a50d20b6008557701ff2ac654fe5833d6"><td class="memItemLeft"><a class="el" href="../../d8/d19/structmorph_1_1table_1_1PlannedColumnFilter.html">PlannedColumnFilter</a>&#160;</td><td class="memItemRight"><a class="el" href="#a50d20b6008557701ff2ac654fe5833d6">morph::table::detail::plannedColumnFilter</a> (std::span&lt; <a class="el" href="../../d3/d45/structmorph_1_1table_1_1ColumnInfo.html">ColumnInfo</a> const &gt; columns, <a class="el" href="../../de/d62/structmorph_1_1table_1_1CompiledFilter_1_1Column.html">CompiledFilter::Column</a> const &amp;filter)</td></tr>
+<tr class="memdesc:a50d20b6008557701ff2ac654fe5833d6"><td class="mdescLeft">&#160;</td><td class="mdescRight">A compiled column filter as a planned one.  <br /></td></tr>
+<tr class="memitem:aeff1c7316b5bb7859e8d9a5433cf7427" id="r_aeff1c7316b5bb7859e8d9a5433cf7427"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d2/db3/structmorph_1_1table_1_1TableError.html">TableError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aeff1c7316b5bb7859e8d9a5433cf7427">morph::table::detail::untranslatable</a> (<a class="el" href="../../d6/db9/structmorph_1_1table_1_1TableQuery.html">TableQuery</a> const &amp;query, std::function&lt; bool(std::string_view, <a class="el" href="#a505193c4b4069485c9d21a942e6465fd">PlanUse</a>)&gt; const &amp;translatable)</td></tr>
+<tr class="memdesc:aeff1c7316b5bb7859e8d9a5433cf7427"><td class="mdescLeft">&#160;</td><td class="mdescRight">The first sort or filter column of <code class="param">query</code> that <code class="param">translatable</code> refuses.  <br /></td></tr>
+<tr class="memitem:a2269fb698b9efc3a0a05c68012bc3c38" id="r_a2269fb698b9efc3a0a05c68012bc3c38"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d2/d26/structmorph_1_1table_1_1QueryPlan.html">QueryPlan</a>, <a class="el" href="../../d2/db3/structmorph_1_1table_1_1TableError.html">TableError</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2269fb698b9efc3a0a05c68012bc3c38">morph::table::planQuery</a> (<a class="el" href="../../d6/db9/structmorph_1_1table_1_1TableQuery.html">TableQuery</a> const &amp;query, std::span&lt; <a class="el" href="../../d3/d45/structmorph_1_1table_1_1ColumnInfo.html">ColumnInfo</a> const &gt; columns, <a class="el" href="../../de/d29/structmorph_1_1table_1_1QueryLimits.html">QueryLimits</a> const &amp;limits={}, std::function&lt; bool(std::string_view)&gt; const &amp;mayRead={}, <a class="el" href="../../d8/d47/structmorph_1_1table_1_1Services.html">Services</a> const &amp;services={}, std::function&lt; bool(std::string_view, <a class="el" href="#a505193c4b4069485c9d21a942e6465fd">PlanUse</a>)&gt; const &amp;translatable={})</td></tr>
+<tr class="memdesc:a2269fb698b9efc3a0a05c68012bc3c38"><td class="mdescLeft">&#160;</td><td class="mdescRight">Validates <code class="param">query</code> and normalises it into a plan a model translates into its own query.  <br /></td></tr>
 <tr class="memitem:aa1e33980540e56dd86cbda2028f95981" id="r_aa1e33980540e56dd86cbda2028f95981"><td class="memTemplParams" colspan="2">template&lt;typename T&gt; </td></tr>
 <tr class="memitem:aa1e33980540e56dd86cbda2028f95981 template"><td class="memItemLeft">constexpr <a class="el" href="../../dd/d57/data__source_8hpp.html#a68613ff1694dbba96932041fc5dc895c">ColumnKind</a>&#160;</td><td class="memItemRight"><a class="el" href="#aa1e33980540e56dd86cbda2028f95981">morph::table::detail::kindOf</a> ()</td></tr>
 <tr class="memdesc:aa1e33980540e56dd86cbda2028f95981"><td class="mdescLeft">&#160;</td><td class="mdescRight">The column kind a member type gives.  <br /></td></tr>
@@ -244,6 +279,42 @@ Functions</h2></td></tr>
 
 <p class="definition">Definition in file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Typedef Documentation</h2>
+<a id="a82edb854932cc7c826981fcc181266f9" name="a82edb854932cc7c826981fcc181266f9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a82edb854932cc7c826981fcc181266f9">&#9670;&#160;</a></span>FilterOp</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="../../d8/d8b/classmorph_1_1table_1_1CompiledFilter.html#ab856c78706c848543886e2d3155bfc5f">morph::table::FilterOp</a> = CompiledFilter::Op</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The operators a planned condition carries. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00363">363</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac92eb0a60c6a0999c25c835eaee9bb62" name="ac92eb0a60c6a0999c25c835eaee9bb62"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac92eb0a60c6a0999c25c835eaee9bb62">&#9670;&#160;</a></span>PlannedOperand</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#ac92eb0a60c6a0999c25c835eaee9bb62">morph::table::PlannedOperand</a> = std::variant&lt;std::monostate, std::int64_t, math::Rational, double, std::string&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A planned operand, typed by its column's kind: <span class="tt">Rational</span> for integer, key, decimal and quantity columns (quantities in the canonical unit), <span class="tt">double</span> for numbers, <span class="tt">int64</span> for dates (days), date-times (UTC seconds) and booleans (0 or 1), <span class="tt">string</span> for text (folded, or raw for a case-sensitive condition), and empty when the operator takes no operand. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a05b2c9c396ec1ae74024242ea14fcd12" name="a05b2c9c396ec1ae74024242ea14fcd12"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a05b2c9c396ec1ae74024242ea14fcd12">&#9670;&#160;</a></span>WrappedMember</h2>
 
@@ -266,7 +337,7 @@ template&lt;typename V&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00616">616</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -292,7 +363,7 @@ template&lt;typename Row&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00466">466</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00713">713</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -318,7 +389,72 @@ template&lt;typename Row&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00503">503</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00750">750</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Enumeration Type Documentation</h2>
+<a id="af7533bbb6d6d95677aff5b0274ed17ad" name="af7533bbb6d6d95677aff5b0274ed17ad"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af7533bbb6d6d95677aff5b0274ed17ad">&#9670;&#160;</a></span>TotalKind</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#af7533bbb6d6d95677aff5b0274ed17ad">morph::table::TotalKind</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What a page's <span class="tt">total</span> says about the filtered view. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="af7533bbb6d6d95677aff5b0274ed17ada1649aed298f99d587e2eb30c1db5946b" name="af7533bbb6d6d95677aff5b0274ed17ada1649aed298f99d587e2eb30c1db5946b"></a>Exact&#160;</td><td class="fielddoc"><p><span class="tt">total</span> is the count of the filtered view. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="af7533bbb6d6d95677aff5b0274ed17adabad91df0cfc5662f3af47244d02d4802" name="af7533bbb6d6d95677aff5b0274ed17adabad91df0cfc5662f3af47244d02d4802"></a>AtLeast&#160;</td><td class="fielddoc"><p><span class="tt">total</span> is a lower bound: the view has at least that many rows. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a505193c4b4069485c9d21a942e6465fd" name="a505193c4b4069485c9d21a942e6465fd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a505193c4b4069485c9d21a942e6465fd">&#9670;&#160;</a></span>PlanUse</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">enum class <a class="el" href="#a505193c4b4069485c9d21a942e6465fd">morph::table::PlanUse</a> : std::uint8_t</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel strong">strong</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>What a sort or a filter on a column is used for, as <span class="tt">planQuery</span>'s <span class="tt">translatable</span> predicate sees it. </p>
+<table class="fieldtable">
+<tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="a505193c4b4069485c9d21a942e6465fda6b46ae48421828d9973deec5fa9aa0c3" name="a505193c4b4069485c9d21a942e6465fda6b46ae48421828d9973deec5fa9aa0c3"></a>Sort&#160;</td><td class="fielddoc"><p>The column orders the view. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="a505193c4b4069485c9d21a942e6465fdad7778d0c64b6ba21494c97f77a66885a" name="a505193c4b4069485c9d21a942e6465fdad7778d0c64b6ba21494c97f77a66885a"></a>Filter&#160;</td><td class="fielddoc"><p>The column is filtered. </p>
+</td></tr>
+</table>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00357">357</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -360,7 +496,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00121">121</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -401,7 +537,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when one is. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00130">130</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -442,7 +578,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when one has. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -489,7 +625,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The error, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00158">158</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -542,7 +678,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The first violation, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00170">170</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00178">178</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -595,7 +731,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The query with its limit clamped, or the first violation. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00228">228</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -636,7 +772,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The escaped text; wrap it in <span class="tt">%</span> for <span class="tt">contains</span> and so on. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00250">250</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -683,7 +819,242 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The page, or the typed error the client shows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00297">297</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a039c521e9d8f3c9cd258b3e23a5e3e02" name="a039c521e9d8f3c9cd258b3e23a5e3e02"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a039c521e9d8f3c9cd258b3e23a5e3e02">&#9670;&#160;</a></span>plannedOperand()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">PlannedOperand morph::table::detail::plannedOperand </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dd/d57/data__source_8hpp.html#a68613ff1694dbba96932041fc5dc895c">ColumnKind</a></td>          <td class="paramname"><span class="paramname"><em>kind</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html">CompiledFilter::Entry</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>entry</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::size_t</td>          <td class="paramname"><span class="paramname"><em>slot</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The operand a compiled entry holds in <code class="param">slot</code>, typed by the column's kind. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">kind</td><td>The column's kind. </td></tr>
+    <tr><td class="paramname">entry</td><td>The compiled entry. </td></tr>
+    <tr><td class="paramname">slot</td><td>0, or 1 for <span class="tt">Between</span>'s second operand. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The operand. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00445">445</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a76170a73374baddaf30f289080e7d471" name="a76170a73374baddaf30f289080e7d471"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a76170a73374baddaf30f289080e7d471">&#9670;&#160;</a></span>plannedCondition()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">PlannedCondition morph::table::detail::plannedCondition </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d3/d45/structmorph_1_1table_1_1ColumnInfo.html">ColumnInfo</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>info</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d3/d5d/structmorph_1_1table_1_1CompiledFilter_1_1Entry.html">CompiledFilter::Entry</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>entry</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A compiled entry as a planned condition. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">info</td><td>The column. </td></tr>
+    <tr><td class="paramname">entry</td><td>The entry. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The condition. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00471">471</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a50d20b6008557701ff2ac654fe5833d6" name="a50d20b6008557701ff2ac654fe5833d6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a50d20b6008557701ff2ac654fe5833d6">&#9670;&#160;</a></span>plannedColumnFilter()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">PlannedColumnFilter morph::table::detail::plannedColumnFilter </td>
+          <td>(</td>
+          <td class="paramtype">std::span&lt; <a class="el" href="../../d3/d45/structmorph_1_1table_1_1ColumnInfo.html">ColumnInfo</a> const &gt;</td>          <td class="paramname"><span class="paramname"><em>columns</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../de/d62/structmorph_1_1table_1_1CompiledFilter_1_1Column.html">CompiledFilter::Column</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>filter</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>A compiled column filter as a planned one. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">columns</td><td>The table's columns. </td></tr>
+    <tr><td class="paramname">filter</td><td>The compiled filter. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The planned filter. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00493">493</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aeff1c7316b5bb7859e8d9a5433cf7427" name="aeff1c7316b5bb7859e8d9a5433cf7427"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aeff1c7316b5bb7859e8d9a5433cf7427">&#9670;&#160;</a></span>untranslatable()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt; TableError &gt; morph::table::detail::untranslatable </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/db9/structmorph_1_1table_1_1TableQuery.html">TableQuery</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>query</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; bool(std::string_view, <a class="el" href="#a505193c4b4069485c9d21a942e6465fd">PlanUse</a>)&gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>translatable</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The first sort or filter column of <code class="param">query</code> that <code class="param">translatable</code> refuses. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">query</td><td>The validated query. </td></tr>
+    <tr><td class="paramname">translatable</td><td>The model's predicate; empty accepts everything. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The <span class="tt">Unavailable</span> error, or nothing. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00510">510</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2269fb698b9efc3a0a05c68012bc3c38" name="a2269fb698b9efc3a0a05c68012bc3c38"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2269fb698b9efc3a0a05c68012bc3c38">&#9670;&#160;</a></span>planQuery()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::expected&lt; QueryPlan, TableError &gt; morph::table::planQuery </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d6/db9/structmorph_1_1table_1_1TableQuery.html">TableQuery</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>query</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::span&lt; <a class="el" href="../../d3/d45/structmorph_1_1table_1_1ColumnInfo.html">ColumnInfo</a> const &gt;</td>          <td class="paramname"><span class="paramname"><em>columns</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../de/d29/structmorph_1_1table_1_1QueryLimits.html">QueryLimits</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>limits</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; bool(std::string_view)&gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>mayRead</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d8/d47/structmorph_1_1table_1_1Services.html">Services</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>services</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; bool(std::string_view, <a class="el" href="#a505193c4b4069485c9d21a942e6465fd">PlanUse</a>)&gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>translatable</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Validates <code class="param">query</code> and normalises it into a plan a model translates into its own query. </p>
+<p>In order: <span class="tt">validate</span>, the <span class="tt">translatable</span> refusal, the guarded compile step <span class="tt">apply</span> also uses, and a pure projection of the compiled filter. A refusal is therefore the value <span class="tt">apply</span> returns for the same query, except the <span class="tt">Unavailable</span> of <span class="tt">translatable</span>, which only a model gives. <span class="tt">apply</span> over the same rows is the oracle the model's pages are held to (<span class="tt">conformanceFailures</span>). </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">query</td><td>The request body's table query. </td></tr>
+    <tr><td class="paramname">columns</td><td>The row schema's columns. </td></tr>
+    <tr><td class="paramname">limits</td><td>The bounds of <span class="tt">validate</span>. </td></tr>
+    <tr><td class="paramname">mayRead</td><td>Whether the principal may read a column; empty allows every column. </td></tr>
+    <tr><td class="paramname">services</td><td>The collator and date parser operands are compiled with; null members mean their defaults. </td></tr>
+    <tr><td class="paramname">translatable</td><td>Whether the model can sort or filter a column; empty accepts all. A column it refuses is <span class="tt">Unavailable</span>, naming the column. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The plan, or the typed error the client shows. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00556">556</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -721,7 +1092,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The kind. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00622">622</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -765,7 +1136,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The cell: an <span class="tt">int64</span>, or text that an integer column reads as invalid when no <span class="tt">int64</span> holds the value (rather than a wrapped negative number). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00405">405</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00652">652</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -809,7 +1180,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The cell. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00420">420</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00667">667</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -853,7 +1224,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The cell. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00439">439</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00686">686</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -891,7 +1262,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The readers. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00472">472</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00719">719</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -929,7 +1300,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The columns. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00484">484</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00731">731</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>
@@ -1002,7 +1373,7 @@ template&lt;typename Row&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The page, or the typed error the client shows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00644">644</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/def/query_8hpp_source.html#l00891">891</a> of file <a class="el" href="../../dd/def/query_8hpp_source.html">query.hpp</a>.</p>
 
 </div>
 </div>

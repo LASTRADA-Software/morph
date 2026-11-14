@@ -9,6 +9,7 @@ var classmorph_1_1ui_1_1TableWidget =
     [ "setSelectAllLabel", "d7/d70/classmorph_1_1ui_1_1TableWidget.html#aa849e6e485957bb0984de342d01bca8c", null ],
     [ "setRowLabel", "d7/d70/classmorph_1_1ui_1_1TableWidget.html#a0cfe2333c39bf4092e4926467e8de24f", null ],
     [ "setRowHeading", "d7/d70/classmorph_1_1ui_1_1TableWidget.html#a50e3d6791f14fa0d7002ef5c6d3d72c1", null ],
+    [ "setRowSpans", "d7/d70/classmorph_1_1ui_1_1TableWidget.html#a5d08a89b5983c35874c45f89f44fbf8d", null ],
     [ "setSelection", "d7/d70/classmorph_1_1ui_1_1TableWidget.html#ae52b435d2acdb2e4d9c18594bf90a8c8", null ],
     [ "setOnSelectionChange", "d7/d70/classmorph_1_1ui_1_1TableWidget.html#a77d0965830d028e1480f745d9a39e63b", null ],
     [ "setOnActivate", "d7/d70/classmorph_1_1ui_1_1TableWidget.html#ac00fed62056c476c5aec27e4b40b71eb", null ],
