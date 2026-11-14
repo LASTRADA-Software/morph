@@ -21,6 +21,8 @@ struct Model {
 }  // namespace probe
 
 BRIDGE_REGISTER_MODEL(probe::Model, "P_GuardModel")
-BRIDGE_REGISTER_ACTION(probe::Model, probe::Probe, "P_GuardAction")
+// The 4-argument form: MSVC's traditional preprocessor cannot dispatch the variadic BRIDGE_REGISTER_ACTION, and
+// a negative probe would then fail on the macro instead of on the guard.
+BRIDGE_REGISTER_ACTION_4(probe::Model, probe::Probe, "P_GuardAction", ::morph::model::Loggable::Yes)
 
 int main() { return 0; }
