@@ -1910,9 +1910,9 @@ void actionSourceRegistrationRequired() {}
 /// @param NAME String literal used as the action type-id.
 /// @param ...  Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
-#define BRIDGE_REGISTER_ACTION(...)                                                              \
-    BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3) \
-    (__VA_ARGS__)
+#define BRIDGE_REGISTER_ACTION(...) \
+    BRIDGE_DETAIL_EXPAND(           \
+        BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3)(__VA_ARGS__))
 // clang-format on
 
 /// @brief Registers action type @p A (for model @p M) the same way
@@ -1965,10 +1965,9 @@ void actionSourceRegistrationRequired() {}
 /// @param NAME   String literal used as the action type-id.
 /// @param ...    Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
-#define BRIDGE_REGISTER_ACTION_FOR_CLIENT(...)                                               \
-    BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_FOR_CLIENT_5, \
-                                           BRIDGE_REGISTER_ACTION_FOR_CLIENT_4)              \
-    (__VA_ARGS__)
+#define BRIDGE_REGISTER_ACTION_FOR_CLIENT(...)                                                                    \
+    BRIDGE_DETAIL_EXPAND(BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_FOR_CLIENT_5, \
+                                                                BRIDGE_REGISTER_ACTION_FOR_CLIENT_4)(__VA_ARGS__))
 // clang-format on
 
 /// @cond detail
@@ -2164,12 +2163,16 @@ void actionSourceRegistrationRequired() {}
 /// @param NAME String literal used as the action type-id.
 /// @param ...  Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
 // clang-format off -- public macro surface; see CONTRIBUTING.md, "Formatting/linting".
-#define BRIDGE_DECLARE_ACTION(...)                                                            \
-    BRIDGE_DECLARE_ACTION_PICK(__VA_ARGS__, BRIDGE_DECLARE_ACTION_4, BRIDGE_DECLARE_ACTION_3) \
-    (__VA_ARGS__)
+#define BRIDGE_DECLARE_ACTION(...) \
+    BRIDGE_DETAIL_EXPAND(          \
+        BRIDGE_DECLARE_ACTION_PICK(__VA_ARGS__, BRIDGE_DECLARE_ACTION_4, BRIDGE_DECLARE_ACTION_3)(__VA_ARGS__))
 // clang-format on
 
 /// @cond detail
+// Forces a second scan of its argument. The traditional MSVC preprocessor hands `__VA_ARGS__` to a
+// nested macro as one argument; wrapping the dispatch makes it re-split the list before choosing.
+#define BRIDGE_DETAIL_EXPAND(x) x
+
 #define BRIDGE_DECLARE_ACTION_PICK(_1, _2, _3, _4, NAME, ...) NAME
 
 #define BRIDGE_DECLARE_ACTION_3(M, A, NAME) BRIDGE_DECLARE_ACTION_4(M, A, NAME, ::morph::model::Loggable::Yes)
