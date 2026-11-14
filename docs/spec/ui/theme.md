@@ -341,7 +341,8 @@ file the bundle lacks or one that is not an `icon` file, naming the index and th
 
 - **Framework names.** The built-in components draw `empty` (an empty state without an icon of its own),
   `tone.info`, `tone.ok`, `tone.warn`, `tone.err` (a banner's tone), `nav.expand` and `nav.collapse` (a collapsible's
-  and a panel's chevron, and a select's dropdown indicator), `close` (a dismissible banner's close button) and
+  and a panel's chevron), `select.open` and `select.close` (a closed and an open select's drop-down indicator; a set
+  that lacks them leaves the select drawing `nav.expand` and `nav.collapse`), `close` (a dismissible banner's close button) and
   `date.pick` (a date input's calendar button), `more` (an overflow menu's trigger, `⋯`) and `nav.menu` (the compact
   shell frame's navigation menu, `☰`), from the set when it names them, and as their built-in glyph or nothing
   otherwise, so a bundle without a set keeps the built-in look. `nav.back` and `nav.forward` are framework names
@@ -366,7 +367,7 @@ file the bundle lacks or one that is not an `icon` file, naming the index and th
   While the bundle declares a set, a node icon it does not name is reported once per name through the `Components`
   callback (`icon <name> is not in the theme's icon set`); without a set nothing is reported.
 - **On the terminal.** Icons stay text: a framework name is drawn as its glyph (`iconGlyph`: `tone.ok` ✓, `tone.warn`
-  !, `tone.err` ✗, `tone.info` i, `nav.expand` ▸, `nav.collapse` ▾, `close` ×, `date.pick` ▦, `more` ⋯, `nav.menu`
+  !, `tone.err` ✗, `tone.info` i, `nav.expand` ▸, `nav.collapse` ▾, `select.open` ▾, `select.close` ▴, `close` ×, `date.pick` ▦, `more` ⋯, `nav.menu`
   ☰) before a badge's or a
   button's text, or a single-line or password text input's own text, and any other name is not drawn.
 

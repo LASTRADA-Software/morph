@@ -863,6 +863,45 @@ TEST_CASE("qt_quick theme: a bundle's icon set draws the icons it names, and a n
     CHECK(reported.size() == 1);
 }
 
+// Mutation: draw `nav.expand` for the select regardless of `select.open` (the first check fails), or drop the
+// fallback to `nav.expand` (the second fails).
+TEST_CASE("qt_quick theme: a select's indicator prefers select.open and falls back to nav.expand", "[qt_quick]") {
+    Scene scene;
+    auto const svgOf = [](char const* path) {
+        return std::string{R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d=")"} + path +
+               R"("/></svg>)";
+    };
+    auto const urlOf = [](std::string const& svg) {
+        return QStringLiteral("data:image/svg+xml;base64,") +
+               QString::fromLatin1(QByteArray::fromStdString(svg).toBase64());
+    };
+    std::string const section = svgOf("M2 1l4 3-4 3");
+    std::string const own = svgOf("M1 2l3 4 3-4");
+    auto const select = scene.backend().createSelect(nullptr, ui::SelectStyle::Dropdown);
+    scene.settle();
+    auto const indicatorSource = [&scene, &select] {
+        scene.settle();
+        auto* const indicator = Scene::itemOf(*select).findChild<QQuickItem*>(QStringLiteral("indicator"));
+        REQUIRE(indicator != nullptr);
+        return indicator->property("source").toUrl().toString();
+    };
+
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}, {{"nav.expand", section}, {"select.open", own}})
+              .empty());
+    CHECK(indicatorSource() == urlOf(own));
+
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}, {{"nav.expand", section}}).empty());
+    CHECK(indicatorSource() == urlOf(section));
+
+    CHECK(morph::qt_quick::applyBundleTheme(scene.engine(), {}).empty());
+    CHECK(indicatorSource().isEmpty());
+
+    CHECK(ui::iconGlyph("select.open") == "▾");
+    CHECK(ui::iconGlyph("select.close") == "▴");
+    CHECK(std::ranges::contains(ui::kFrameworkIcons, std::string_view{"select.open"}));
+    CHECK(std::ranges::contains(ui::kFrameworkIcons, std::string_view{"select.close"}));
+}
+
 namespace {
 
 /// The brand theme with a card surface, border and radius of its own, so a dialog's colours are the theme's and not
