@@ -412,6 +412,7 @@ endif()
 # once, in src/ui.
 include(GenerateExportHeader)
 add_library(morph STATIC
+    src/ui/interpreter.cpp
     src/ui/library.cpp
 )
 add_library(morph::morph ALIAS morph)
