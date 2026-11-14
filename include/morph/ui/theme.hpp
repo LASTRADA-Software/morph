@@ -45,11 +45,12 @@ inline constexpr std::size_t kMaxThemeVariants = 16;
 inline constexpr std::size_t kMaxThemeIcons = 256;
 
 /// @brief The icon names the built-in components draw: an empty state without an icon of its own, a banner's tone,
-///        a chevron that opens and closes, a close button, a date input's calendar, an overflow menu's trigger, and
-///        the compact shell's navigation menu. A bundle's icon set replaces any of them by name.
-inline constexpr std::array<std::string_view, 13> kFrameworkIcons = {
-    "empty",      "tone.info",    "tone.ok", "tone.warn", "tone.err", "nav.back", "nav.forward",
-    "nav.expand", "nav.collapse", "close",   "date.pick", "more",     "nav.menu"};
+///        a chevron that opens and closes, a select's drop-down indicator, a close button, a date input's calendar,
+///        an overflow menu's trigger, and the compact shell's navigation menu. A bundle's icon set replaces any of
+///        them by name.
+inline constexpr std::array<std::string_view, 15> kFrameworkIcons = {
+    "empty",        "tone.info",   "tone.ok",      "tone.warn", "tone.err",  "nav.back", "nav.forward", "nav.expand",
+    "nav.collapse", "select.open", "select.close", "close",     "date.pick", "more",     "nav.menu"};
 
 /// @brief Whether @p name is an icon name: `[a-z][a-z0-9.-]{0,63}`.
 /// @param name The name.
@@ -67,13 +68,15 @@ inline constexpr std::array<std::string_view, 13> kFrameworkIcons = {
 /// @param name The icon name.
 /// @return The glyph, or empty for a name that has none (`empty`, which a text renderer draws as nothing).
 [[nodiscard]] inline std::string_view iconGlyph(std::string_view name) {
-    static constexpr std::array<std::pair<std::string_view, std::string_view>, 12> kGlyphs = {{
+    static constexpr std::array<std::pair<std::string_view, std::string_view>, 14> kGlyphs = {{
         {"tone.ok", "✓"},
         {"tone.warn", "!"},
         {"tone.err", "✗"},
         {"tone.info", "i"},
         {"nav.expand", "▸"},
         {"nav.collapse", "▾"},
+        {"select.open", "▾"},
+        {"select.close", "▴"},
         {"nav.back", "‹"},
         {"nav.forward", "›"},
         {"close", "×"},
