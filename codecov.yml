@@ -170,6 +170,7 @@ component_management:
       name: "morph framework (include/morph)"
       paths:
         - include/morph/**
+        - src/ui/**
       statuses:
         - type: project
           target: 97%

@@ -26,6 +26,9 @@ if(MORPH_BUILD_HMAC_EXAMPLE_LIBSODIUM)
     add_executable(morph_vetted_hmac_libsodium_demo libsodium_adapter_demo.cpp)
     target_link_libraries(morph_vetted_hmac_libsodium_demo PRIVATE morph::morph PkgConfig::SODIUM)
     apply_bigobj(morph_vetted_hmac_libsodium_demo)
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(morph_vetted_hmac_libsodium_demo ${AF_SANITIZER})
+    endif()
     # Deliberately NOT calling apply_warnings() here — libsodium's public
     # headers are not -Weverything/-Werror clean and would fail the strict
     # build (same rationale as examples/bank/CMakeLists.txt's ORM headers).
@@ -47,6 +50,9 @@ if(MORPH_BUILD_HMAC_EXAMPLE_LIBSODIUM)
             target_link_libraries(morph_vetted_hmac_libsodium_tests
                 PRIVATE morph::morph PkgConfig::SODIUM morph_test_main)
             apply_bigobj(morph_vetted_hmac_libsodium_tests)
+            if(DEFINED AF_SANITIZER)
+                apply_sanitizers(morph_vetted_hmac_libsodium_tests ${AF_SANITIZER})
+            endif()
 
             list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
             include(Catch)
@@ -62,6 +68,9 @@ if(MORPH_BUILD_HMAC_EXAMPLE_OPENSSL)
     add_executable(morph_vetted_hmac_openssl_demo openssl_adapter_demo.cpp)
     target_link_libraries(morph_vetted_hmac_openssl_demo PRIVATE morph::morph OpenSSL::Crypto)
     apply_bigobj(morph_vetted_hmac_openssl_demo)
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(morph_vetted_hmac_openssl_demo ${AF_SANITIZER})
+    endif()
     # Deliberately NOT calling apply_warnings() here — OpenSSL's public
     # headers are not -Weverything/-Werror clean and would fail the strict
     # build (same rationale as examples/bank/CMakeLists.txt's ORM headers).
@@ -79,6 +88,9 @@ if(MORPH_BUILD_HMAC_EXAMPLE_OPENSSL)
             target_link_libraries(morph_vetted_hmac_openssl_tests
                 PRIVATE morph::morph OpenSSL::Crypto morph_test_main)
             apply_bigobj(morph_vetted_hmac_openssl_tests)
+            if(DEFINED AF_SANITIZER)
+                apply_sanitizers(morph_vetted_hmac_openssl_tests ${AF_SANITIZER})
+            endif()
 
             list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
             include(Catch)
