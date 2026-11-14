@@ -421,6 +421,52 @@ TEST_CASE("a_turn_runs_the_tool_and_finishes", "[chat][service]") {
     CHECK(chat_service_test::store().notes.at(0).text == "hi");
 }
 
+TEST_CASE("a_turn_keeps_its_rounds_and_tool_calls_in_order_with_the_arguments", "[chat][service]") {
+    Rig rig;
+    auto const cid = rig.gui();
+    auto const id = rig.instance(cid);
+    rig.fake->script(chat::Response{
+        .text = "Adding it.",
+        .calls = {chat::ToolCall{.id = "1", .name = "notes__Chat_Add", .argumentsJson = R"({"text":"hi"})"}}});
+    rig.fake->script(chat::Response{.text = "All done", .calls = {}, .opaque = {}});
+    auto const turnId = rig.start(Rig::turnOn(id, "add hi"), cid);
+    auto const state = rig.finished(turnId, cid);
+    REQUIRE(state.status == chat::TurnStatus::Done);
+    CHECK(state.text == "Adding it.\n\nAll done");
+    REQUIRE(state.steps.size() == 1);
+    CHECK(state.steps.front().arguments == R"({"text":"hi"})");
+    REQUIRE(state.parts.size() == 3);
+    CHECK(state.parts.at(0).kind == "text");
+    CHECK(state.parts.at(0).text == "Adding it.");
+    CHECK(state.parts.at(1).kind == "tool");
+    CHECK(state.parts.at(1).step.name == "notes__Chat_Add");
+    CHECK(state.parts.at(1).step.ok);
+    CHECK(state.parts.at(1).step.arguments == R"({"text":"hi"})");
+    CHECK(state.parts.at(2).kind == "text");
+    CHECK(state.parts.at(2).text == "All done");
+
+    std::vector<chat::TurnEvent> seen;
+    REQUIRE(waitFor([&] {
+        seen.clear();
+        for (wire::EventBody const& event : rig.eventWire.events()) {
+            if (event.topic == chat::kChatTopic) {
+                auto read = chat::readTurnEvent(event.payload.str);
+                REQUIRE(read.has_value());
+                seen.push_back(*read);
+            }
+        }
+        return !seen.empty() && seen.back().kind == "done";
+    }));
+    REQUIRE(seen.size() == 4);
+    CHECK(seen.at(0).kind == "text");
+    CHECK_FALSE(seen.at(0).newRound);
+    CHECK(seen.at(1).kind == "tool");
+    CHECK(seen.at(1).arguments == R"({"text":"hi"})");
+    CHECK(seen.at(1).ok);
+    CHECK(seen.at(2).kind == "text");
+    CHECK(seen.at(2).newRound);
+}
+
 TEST_CASE("the_provider_is_given_the_screens_tools_and_context", "[chat][service]") {
     Rig rig;
     auto const cid = rig.gui();

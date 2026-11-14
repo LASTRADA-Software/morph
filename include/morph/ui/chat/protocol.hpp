@@ -72,6 +72,18 @@ struct ToolStep {
     bool ok = false;
     /// @brief The action's result, or why it did not run.
     std::string message;
+    /// @brief The call's arguments as JSON text, cut at a character's edge when long.
+    std::string arguments;
+};
+
+/// @brief One piece of a turn, in the order the turn made it.
+struct TurnPart {
+    /// @brief `text` for one round's text, `tool` for a tool call.
+    std::string kind;
+    /// @brief A `text` part's text.
+    std::string text;
+    /// @brief A `tool` part's call.
+    ToolStep step;
 };
 
 /// @brief How far a turn has got.
@@ -88,12 +100,15 @@ struct TurnState {
     std::uint64_t turnId = 0;
     /// @brief How far it has got.
     TurnStatus status = TurnStatus::Running;
-    /// @brief The reply so far.
+    /// @brief The reply so far: the rounds' texts, a blank line between one round and the next.
     std::string text;
     /// @brief Why it failed; empty otherwise.
     std::string error;
     /// @brief The tool calls it has made, in order.
     std::vector<ToolStep> steps;
+    /// @brief The rounds' texts and the tool calls, in the order the turn made them. Empty from a server that does not
+    ///        send it, which a client shows as `steps` and then `text`.
+    std::vector<TurnPart> parts;
     /// @brief The `TurnEvent::seq` this state covers, so a client does not apply an event it already includes.
     std::uint64_t seq = 0;
 };
@@ -114,6 +129,12 @@ struct TurnEvent {
     std::string kind;
     /// @brief The text piece, the tool's name, or the reason.
     std::string text;
+    /// @brief A `tool` event's arguments as JSON text.
+    std::string arguments;
+    /// @brief A `tool` event's outcome: whether the action ran.
+    bool ok = false;
+    /// @brief Whether a `text` event is the first piece of a round that follows tool calls, so it starts a new text.
+    bool newRound = false;
 };
 
 /// @brief Writes a chat message as JSON.
@@ -143,7 +164,7 @@ template <typename T>
 /// @param text The body.
 /// @return The state, or why it was refused.
 [[nodiscard]] inline std::expected<TurnState, std::string> readTurnState(std::string_view text) {
-    return ui::detail::readMessage<TurnState>(text, "the chat turn's state", {"steps"}, {});
+    return ui::detail::readMessage<TurnState>(text, "the chat turn's state", {"steps", "parts"}, {});
 }
 
 /// @brief Reads a `StateRequest`. An empty body is an empty request.

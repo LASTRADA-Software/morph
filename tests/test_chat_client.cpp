@@ -156,8 +156,47 @@ TEST_CASE("text_events_build_the_reply_in_order", "[chat][client]") {
     // Another turn's event is dropped.
     rig.client.deliverEvent(eventOf({.turnId = 8, .seq = 3, .kind = "text", .text = "x"}));
     CHECK(rig.shown() == Shown{"user:hello", "assistant:lo"});
+    // A tool call after the text is shown after it, in the order the turn made them.
     rig.client.deliverEvent(eventOf({.turnId = 7, .seq = 3, .kind = "tool", .text = "lab__Add"}));
-    CHECK(rig.shown() == Shown{"user:hello", "tool:lab__Add", "assistant:lo"});
+    CHECK(rig.shown() == Shown{"user:hello", "assistant:lo", "tool:lab__Add"});
+}
+
+TEST_CASE("a_tool_event_carries_its_arguments_and_outcome_and_a_new_round_starts_a_new_text", "[chat][client]") {
+    Rig rig;
+    rig.started();
+    rig.client.deliverEvent(eventOf({.turnId = 7, .seq = 1, .kind = "text", .text = "Adding it."}));
+    rig.client.deliverEvent(eventOf({.turnId = 7,
+                                     .seq = 2,
+                                     .kind = "tool",
+                                     .text = "lab__Add",
+                                     .arguments = R"({"text":"hi"})",
+                                     .ok = true,
+                                     .newRound = false}));
+    rig.client.deliverEvent(eventOf({.turnId = 7, .seq = 3, .kind = "text", .text = "All ", .newRound = true}));
+    rig.client.deliverEvent(eventOf({.turnId = 7, .seq = 4, .kind = "text", .text = "done"}));
+    CHECK(rig.shown() == Shown{"user:hello", "assistant:Adding it.", "tool:lab__Add", "assistant:All done"});
+    auto const& entries = rig.client.entries();
+    REQUIRE(entries.size() == 4);
+    CHECK(entries.at(2).arguments == R"({"text":"hi"})");
+    CHECK(entries.at(2).ok);
+    CHECK(entries.at(1).arguments.empty());
+}
+
+TEST_CASE("a_state_with_parts_is_shown_in_the_order_the_turn_made_them", "[chat][client]") {
+    Rig rig;
+    rig.started();
+    chat::TurnState state;
+    state.turnId = 7;
+    state.status = chat::TurnStatus::Done;
+    state.text = "first\n\nsecond";
+    state.steps.push_back({.name = "lab__Add", .ok = false, .message = "refused", .arguments = "{}"});
+    state.parts.push_back({.kind = "text", .text = "first", .step = {}});
+    state.parts.push_back({.kind = "tool", .text = {}, .step = state.steps.front()});
+    state.parts.push_back({.kind = "text", .text = "second", .step = {}});
+    rig.fakeExchange.ok(chat::kStateKind, chat::writeMessage(state));
+    CHECK(rig.shown() == Shown{"user:hello", "assistant:first", "tool:lab__Add", "assistant:second"});
+    CHECK_FALSE(rig.client.entries().at(2).ok);
+    CHECK(rig.client.entries().at(2).arguments == "{}");
 }
 
 TEST_CASE("the_final_state_replaces_what_events_built", "[chat][client]") {
