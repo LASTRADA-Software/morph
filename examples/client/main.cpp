@@ -263,6 +263,8 @@ void clickThenSave(ui::AppContext& context, std::shared_ptr<int> problems, std::
         afterLayout(*shot, [&context, problems, shot, next] { clickThenSave(context, problems, shot, next + 1); });
         return;
     }
+#else
+    static_cast<void>(next);
 #endif
     bool const saved = saveGrab(*shot);
     context.quit(*problems == 0 && saved ? 0 : 1);
