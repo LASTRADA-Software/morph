@@ -1170,6 +1170,33 @@ TEST_CASE("qt_quick containers: a scroll area brings the focused child into view
     CHECK(shown.y() + last.height() <= area.height() + 1);
 }
 
+// Mutation: make `content` in MorphScroll.qml the column on every axis.
+TEST_CASE("qt_quick containers: a horizontal scroll lays its children along its axis", "[qt_quick]") {
+    Scene scene;
+    auto scroll = scene.backend().createScroll(nullptr, ui::Axis::Horizontal);
+    scroll->setLayout({.width = ui::Sizing::fixed(60), .height = ui::Sizing::content()});
+    auto first = scene.backend().createTextInput(scroll.get(), ui::TextInputMode::SingleLine);
+    auto second = scene.backend().createTextInput(scroll.get(), ui::TextInputMode::SingleLine);
+    first->setLayout({.width = ui::Sizing::fixed(20)});
+    second->setLayout({.width = ui::Sizing::fixed(20)});
+    scene.settle();
+    QQuickItem const& left = Scene::controlOf(*first);
+    QQuickItem const& right = Scene::controlOf(*second);
+    CHECK(right.mapToScene(QPointF{0, 0}).y() == left.mapToScene(QPointF{0, 0}).y());
+    CHECK(right.mapToScene(QPointF{0, 0}).x() >= left.mapToScene(QPointF{0, 0}).x() + left.width());
+
+    // A vertical scroll still stacks them.
+    auto column = scene.backend().createScroll(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(60), .height = ui::Sizing::fixed(20)});
+    auto top = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto bottom = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    scene.settle();
+    QQuickItem const& above = Scene::controlOf(*top);
+    QQuickItem const& below = Scene::controlOf(*bottom);
+    CHECK(below.mapToScene(QPointF{0, 0}).x() == above.mapToScene(QPointF{0, 0}).x());
+    CHECK(below.mapToScene(QPointF{0, 0}).y() >= above.mapToScene(QPointF{0, 0}).y() + above.height());
+}
+
 namespace {
 
 /// The scene-space distance from the bottom of @p above to the top of @p below.
