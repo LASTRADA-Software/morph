@@ -186,6 +186,20 @@ TEST_CASE("ui theme values: a surface's border style is solid or dashed, and any
 // Mutation: accept any string as a keyword (`round` reads), or leave the paths out of `kThemeTokens` (the bundle's
 // values are dropped).
 TEST_CASE("ui theme values: a keyword is one of the names its spec lists, and any other is refused", "[ui][theme]") {
+    CHECK(ui::themeValues().keywords.at("field.caption.case") == "none");
+    CHECK(valuesOf(R"({"field": {"caption": {"case": {"$type": "keyword", "$value": "uppercase"}}}})")
+              .keywords.at("field.caption.case") == "uppercase");
+    {
+        auto const tokens =
+            ui::parseTokens(R"({"field": {"caption": {"case": {"$type": "keyword", "$value": "title"}}}})");
+        REQUIRE(tokens.has_value());
+        ui::ThemeIndex caseIndex;
+        caseIndex.base = "base";
+        ui::TokenFileLookup const caseFiles = [&](std::string_view) -> ui::TokenSet const* { return &*tokens; };
+        auto const caseRefused = ui::checkTheme(caseIndex, caseFiles);
+        REQUIRE(caseRefused.has_value());
+        CHECK(caseRefused->contains("field.caption.case: only none and uppercase are drawn"));
+    }
     CHECK(ui::themeValues().keywords.at("shape.iconOnly") == "default");
     CHECK(ui::themeValues().keywords.at("font.overline.case") == "none");
     CHECK(valuesOf(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "square"}}})")

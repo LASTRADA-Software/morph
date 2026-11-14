@@ -2671,6 +2671,53 @@ TEST_CASE("qt_quick widgets: a check box has no padding of its own, and its box 
     qreal const unit = themeNumber(scene, "unitHeight");
     qreal const line = control.property("implicitContentHeight").toReal();
     CHECK(control.height() == Catch::Approx(std::max(line, unit)).margin(0.5));
+// Mutation: draw `MorphField`'s caption in `Theme.captionFont` again (the input's caption stays mixed case), or the
+// label role in it (the label text does).
+TEST_CASE("qt_quick widgets: a field caption and a label text are small capitals under field.caption.case",
+          "[qt_quick]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const label = scene.backend().createText(column.get());
+    label->setText("Operator");
+    label->setRole(ui::TextRole::Label);
+    auto const note = scene.backend().createText(column.get());
+    note->setText("A note");
+    note->setRole(ui::TextRole::Caption);
+    auto const input = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    input->setCaption("Sampled by", true);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.settle();
+    QObject const* const theme = themeOf(scene);
+    auto const labelFont = [&](ui::TextWidget const& text) {
+        return Scene::controlOf(text).property("font").value<QFont>();
+    };
+    auto const inputCaption = [&]() -> QQuickItem const* {
+        return Scene::itemOf(*input).findChild<QQuickItem*>(QStringLiteral("caption"));
+    };
+    REQUIRE(inputCaption() != nullptr);
+    auto const captionFont = theme->property("captionFont").value<QFont>();
+    CHECK(labelFont(*label) == captionFont);
+    CHECK(inputCaption()->property("font").value<QFont>() == captionFont);
+
+    auto const tokens =
+        ui::parseTokens(R"({"field": {"caption": {"case": {"$type": "keyword", "$value": "uppercase"}}}})");
+    REQUIRE(tokens);
+    auto const resolved = ui::resolveTokens({&*tokens});
+    REQUIRE(resolved);
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
+    scene.settle();
+    for (QFont const& font : {labelFont(*label), inputCaption()->property("font").value<QFont>()}) {
+        CHECK(font.pixelSize() == static_cast<int>(std::lround(theme->property("smallPixels").toReal())));
+        CHECK(font.weight() == static_cast<QFont::Weight>(theme->property("strongWeight").toInt()));
+        CHECK(font.capitalization() == QFont::AllUppercase);
+        CHECK(font.letterSpacing() > 0.0);
+    }
+    // A note under a control is a caption role, not a field's caption.
+    CHECK(labelFont(*note) == captionFont);
+    CHECK(inputCaption()->property("text").toString() == QStringLiteral("Sampled by"));
+}
+
     CHECK(indicator->height() == Catch::Approx(unit).margin(0.5));
 
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));

@@ -430,7 +430,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     if (state.spec().kind == FieldKind::Boolean) {
         caption = captionSpace(width);
     } else {
-        ui::Text label{.text = [field] { return field->label(); }};
+        ui::Text label{.text = [field] { return field->label(); }, .role = ui::TextRole::Label};
         label.common.testId = "label_" + state.path();
         label.common.layout = {.width = ui::Sizing::fixed(width), .height = {}};
         caption = ui::text(std::move(label));
@@ -483,7 +483,7 @@ inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions c
     }
     std::vector<ui::Node> children;
     if (state.spec().kind != FieldKind::Boolean && state.spec().kind != FieldKind::Object) {
-        ui::Text label{.text = [field] { return field->label(); }};
+        ui::Text label{.text = [field] { return field->label(); }, .role = ui::TextRole::Label};
         label.common.testId = "label_" + state.path();
         children.push_back(ui::text(std::move(label)));
     }

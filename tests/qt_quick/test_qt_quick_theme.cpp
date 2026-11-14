@@ -1841,15 +1841,20 @@ TEST_CASE("qt_quick theme: the theme's keywords reach the Theme singleton", "[qt
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
     CHECK_FALSE(theme->property("iconOnlySquare").toBool());
     CHECK_FALSE(theme->property("overlineCaps").toBool());
+    CHECK_FALSE(theme->property("fieldCaptionCaps").toBool());
+    CHECK(theme->property("fieldCaptionFont").value<QFont>().capitalization() == QFont::MixedCase);
 
     auto const tokens = ui::parseTokens(R"({"shape": {"iconOnly": {"$type": "keyword", "$value": "square"}},
-        "font": {"overline": {"case": {"$type": "keyword", "$value": "uppercase"}}}})");
+        "font": {"overline": {"case": {"$type": "keyword", "$value": "uppercase"}}},
+        "field": {"caption": {"case": {"$type": "keyword", "$value": "uppercase"}}}})");
     REQUIRE(tokens);
     auto const resolved = ui::resolveTokens({&*tokens});
     REQUIRE(resolved);
     REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues(*resolved)).empty());
     CHECK(theme->property("iconOnlySquare").toBool());
     CHECK(theme->property("overlineCaps").toBool());
+    CHECK(theme->property("fieldCaptionCaps").toBool());
+    CHECK(theme->property("fieldCaptionFont").value<QFont>().capitalization() == QFont::AllUppercase);
 }
 
 // Mutation: leave `collapsible.marker` out of `kThemeTokens` (a bundle's `none` is dropped and the marker stays
