@@ -38,8 +38,12 @@ public:
     struct Entry {
         /// @brief `user`, `assistant`, `tool` or `error`.
         std::string kind;
-        /// @brief Its text.
+        /// @brief Its text; a `tool` entry's is the tool's name.
         std::string text;
+        /// @brief A `tool` entry's arguments as JSON text; empty otherwise.
+        std::string arguments;
+        /// @brief Whether a `tool` entry's action ran.
+        bool ok = false;
     };
 
     /// @brief A client over @p exchange.
@@ -75,7 +79,7 @@ public:
         }
         _selected = Key{request.screenId, request.identity};
         Conversation& conversation = _conversations[_selected];
-        conversation.push_back(Entry{.kind = "user", .text = request.text});
+        conversation.push_back(Entry{.kind = "user", .text = request.text, .arguments = {}, .ok = false});
         _active = Active{.key = _selected, .base = conversation.size()};
         notify();
         send(std::string{kTurnKind}, writeMessage(request), [this](ExchangeReply const& reply) { accepted(reply); });
@@ -134,9 +138,17 @@ public:
         }
         _active->seq = read->seq;
         if (read->kind == "text") {
-            _active->text += read->text;
+            // A piece joins the text before it unless a tool call came between, or the server said a round began.
+            if (read->newRound || _active->parts.empty() || _active->parts.back().kind != "text") {
+                _active->parts.push_back(TurnPart{.kind = "text", .text = read->text, .step = {}});
+            } else {
+                _active->parts.back().text += read->text;
+            }
         } else if (read->kind == "tool") {
-            _active->tools.push_back(read->text);
+            _active->parts.push_back(TurnPart{
+                .kind = "tool",
+                .text = {},
+                .step = ToolStep{.name = read->text, .ok = read->ok, .message = {}, .arguments = read->arguments}});
         } else {
             readState();
             return;
@@ -177,8 +189,8 @@ private:
         std::size_t base = 0;
         std::uint64_t turnId = 0;
         std::uint64_t seq = 0;
-        std::vector<std::string> tools;
-        std::string text;
+        // What the turn made, in order: one part per round's text and per tool call.
+        std::vector<TurnPart> parts;
         std::string error;
     };
 
@@ -249,11 +261,16 @@ private:
             return;
         }
         _active->seq = state->seq;
-        _active->text = state->text;
         _active->error = state->error;
-        _active->tools.clear();
-        for (ToolStep const& step : state->steps) {
-            _active->tools.push_back(step.name);
+        _active->parts = state->parts;
+        if (_active->parts.empty()) {
+            // A server that sends no parts is shown as it always was: the tool calls, then the text.
+            for (ToolStep const& step : state->steps) {
+                _active->parts.push_back(TurnPart{.kind = "tool", .text = {}, .step = step});
+            }
+            if (!state->text.empty()) {
+                _active->parts.push_back(TurnPart{.kind = "text", .text = state->text, .step = {}});
+            }
         }
         bool const running = state->status == TurnStatus::Running;
         show(*_active);
@@ -267,14 +284,16 @@ private:
     void show(Active const& active) {
         Conversation& conversation = _conversations[active.key];
         conversation.resize(active.base);
-        for (std::string const& tool : active.tools) {
-            conversation.push_back(Entry{.kind = "tool", .text = tool});
-        }
-        if (!active.text.empty()) {
-            conversation.push_back(Entry{.kind = "assistant", .text = active.text});
+        for (TurnPart const& part : active.parts) {
+            if (part.kind == "tool") {
+                conversation.push_back(Entry{
+                    .kind = "tool", .text = part.step.name, .arguments = part.step.arguments, .ok = part.step.ok});
+            } else if (!part.text.empty()) {
+                conversation.push_back(Entry{.kind = "assistant", .text = part.text, .arguments = {}, .ok = false});
+            }
         }
         if (!active.error.empty()) {
-            conversation.push_back(Entry{.kind = "error", .text = active.error});
+            conversation.push_back(Entry{.kind = "error", .text = active.error, .arguments = {}, .ok = false});
         }
         notify();
     }
