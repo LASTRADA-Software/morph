@@ -22,13 +22,15 @@ the push path every other change uses. The design is in
 
 | Kind | Body | Reply |
 |---|---|---|
-| `ui-chat-turn` | `TurnRequest`: screen, identity, params, the aliases it holds, and the text | `TurnAccepted{turnId}`, at once |
+| `ui-chat-turn` | `TurnRequest`: screen, title, identity, params, the aliases it holds, and the text | `TurnAccepted{turnId}`, at once |
 | `ui-chat-state` | `StateRequest{turnId?}`; with no id, it only asks whether a chat is available | `TurnState` |
 | `ui-chat-cancel` | none | `ok` |
 | `ui-chat-end` | none | `ok` |
 
 A `TurnRequest` describes where the person is, and is a hint about what they mean. It grants nothing, because every
-action it leads to is checked under the envelope's session.
+action it leads to is checked under the envelope's session. Its `title` is the screen's title as the person sees it
+(`DocumentScreenHost::chatContext` reads it from the screen's head), and the system text tells the model that the person
+knows the record by that name, so it speaks of "Sample 16/1" and not of a key or an internal number.
 
 **What a turn reports.** A tool call carries the call's arguments (JSON text, cut like a result's short form) and
 whether it ran, in `ToolStep` and in its `tool` event. A round's text is not glued to the last one's: `TurnState::text`

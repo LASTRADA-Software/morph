@@ -130,7 +130,7 @@ TEST_CASE("a_held_fake_call_reports_its_cancel", "[chat][protocol]") {
     CHECK((*released.done)->text == "now");
 }
 
-TEST_CASE("a_turns_parts_and_arguments_survive_the_wire", "[chat][protocol]") {
+TEST_CASE("a_turns_parts_arguments_and_title_survive_the_wire", "[chat][protocol]") {
     chat::TurnState state;
     state.turnId = 4;
     state.text = "a\n\nb";
@@ -149,6 +149,12 @@ TEST_CASE("a_turns_parts_and_arguments_survive_the_wire", "[chat][protocol]") {
     CHECK(event->arguments == "{}");
     CHECK(event->ok);
     CHECK(event->newRound);
+
+    chat::TurnRequest request;
+    request.title = "16/1";
+    auto const readRequest = chat::readTurnRequest(chat::writeMessage(request));
+    REQUIRE(readRequest.has_value());
+    CHECK(readRequest->title == "16/1");
 
     // A state from a server that sends no parts reads with none.
     auto const legacy = chat::readTurnState(R"({"turnId":4,"status":"done","text":"x","steps":[]})");
