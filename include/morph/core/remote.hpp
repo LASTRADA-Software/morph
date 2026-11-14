@@ -38,6 +38,7 @@
 #include "detail/reply_router.hpp"
 #include "detail/watch_table.hpp"
 #include "effects.hpp"
+#include "envelope_transport.hpp"
 #include "logger.hpp"
 #include "observability.hpp"
 #include "owner_strand.hpp"
@@ -2905,7 +2906,8 @@ private:
 /// @brief `IBackend` adapter that routes all calls through a `RemoteServer` as
 ///        wire `Envelope` messages.
 ///
-/// Intended for testing and in-process simulation of remote execution.
+/// Used for testing, and by a host that runs its models in the same process: it is an `IEnvelopeTransport`, so the UI
+/// and chat services are reachable through it without a socket.
 /// Control envelopes (`bindModel`, `registerModel`, `deregisterModel`, ...) are
 /// processed through `RemoteServer::handleInline`, which answers before it
 /// returns, so a bind settles inside the call. `execute()` is asynchronous: it
@@ -2921,7 +2923,7 @@ private:
 /// each envelope to the handler, in the order the server posted them, with a
 /// `backlog` that always reads `0` -- an in-process hand-off holds nothing
 /// back, so the server never withholds an event or owes a `resync`.
-class SimulatedRemoteBackend : public detail::IBackend {
+class SimulatedRemoteBackend : public detail::IBackend, public IEnvelopeTransport {
 public:
     /// @brief Constructs the backend targeting @p server, unscoped.
     ///
@@ -3227,6 +3229,37 @@ public:
         return comp;
     }
 
+    /// @brief Sends one request envelope of a kind the other verbs do not build (`IEnvelopeTransport::request`)
+    ///        through the server, on this backend's connection scope, and settles with its reply.
+    ///
+    /// The server sees the same connection this backend's events arrive on, so a service that negotiates events or
+    /// names a connection in a reply reaches the right one. The envelope keeps the session it carries; only its
+    /// `callId` is replaced. `cancelPending` rejects the request while it is unanswered.
+    /// @param envelope The request; its `callId` is replaced.
+    /// @param cbExec   Executor the answer is delivered on. Borrowed: it must outlive the returned `Completion`.
+    /// @return A `Completion` resolved with the reply envelope, `ok` or `err`; rejected when the reply is not a
+    ///         decodable envelope or the request is cancelled.
+    ::morph::async::Completion<::morph::wire::Envelope> request(::morph::wire::Envelope envelope,
+                                                                ::morph::exec::IExecutor& cbExec) override {
+        note("SimulatedRemoteBackend::request");
+        auto state = std::make_shared<::morph::async::detail::CompletionState<::morph::wire::Envelope>>();
+        ::morph::async::Completion<::morph::wire::Envelope> comp{state, &cbExec};
+        std::erase_if(_pendingRequests, [](const auto& weak) { return weak.expired(); });
+        _pendingRequests.emplace_back(state);
+        envelope.callId = ++_requestCallId;
+        _server.handle(
+            ::morph::wire::encode(envelope),
+            [state](const std::string& replyJson) {
+                try {
+                    state->setValue(::morph::wire::decode(replyJson));
+                } catch (...) {
+                    state->setException(std::current_exception());
+                }
+            },
+            _cid);
+        return comp;
+    }
+
     /// @brief No-op — models live in `RemoteServer`, not locally.
     void notifyBackendChanged() override {}
 
@@ -3236,6 +3269,11 @@ public:
         note("SimulatedRemoteBackend::cancelPending");
         auto snapshot = std::exchange(_pending, {});
         for (auto& weak : snapshot) {
+            if (auto state = weak.lock()) {
+                state->setException(exc);
+            }
+        }
+        for (auto& weak : std::exchange(_pendingRequests, {})) {
             if (auto state = weak.lock()) {
                 state->setException(exc);
             }
@@ -3360,6 +3398,8 @@ private:
     // two fields below are touched only there.
     std::optional<::morph::exec::detail::OwnerAffinity> _affinity;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
+    std::vector<std::weak_ptr<::morph::async::detail::CompletionState<::morph::wire::Envelope>>> _pendingRequests;
+    std::uint64_t _requestCallId{0};
     ::morph::session::Context _session;
 };
 

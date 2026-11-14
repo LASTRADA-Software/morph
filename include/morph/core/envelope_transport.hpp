@@ -16,8 +16,8 @@ namespace morph::backend {
 
 /// @brief What a wire transport offers beside `IBackend`: one request, one reply, matched by `callId`.
 ///
-/// `SocketBackend` and `QtWebSocketBackend` implement it. A backend without a wire, such as `LocalBackend`, has no
-/// peer and does not.
+/// `SocketBackend`, `QtWebSocketBackend` and `SimulatedRemoteBackend` implement it; the last reaches a `RemoteServer`
+/// in the same process, on its own connection scope. A backend with no server to ask, such as `LocalBackend`, does not.
 class IEnvelopeTransport {
 public:
     IEnvelopeTransport() = default;
