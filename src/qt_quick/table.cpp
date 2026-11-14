@@ -7,6 +7,7 @@
 #include <QVariantMap>
 #include <algorithm>
 #include <cstdint>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -86,6 +87,19 @@ void TableImpl::setRowHeading(ui::Widget& row) {
     mark();
 }
 
+void TableImpl::setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) {
+    auto const* const tableRow = dynamic_cast<TableRowImpl const*>(&row);
+    if (tableRow == nullptr || tableRow->container() != this) {
+        throw std::logic_error{"morph::qt_quick: setRowSpans of a widget that is not this table's row"};
+    }
+    if (spans.empty()) {
+        _spans.erase(tableRow);
+    } else {
+        _spans.insert_or_assign(tableRow, spans);
+    }
+    planSpans(nullptr);
+}
+
 void TableImpl::setSelectColumn(bool shown) { write("selectColumn", shown); }
 
 void TableImpl::setSelectAllLabel(std::string_view label) { write("selectAllLabel", toQString(label)); }
@@ -143,6 +157,7 @@ void TableImpl::adopted(ItemBase& child) {
     static_cast<void>(child);
     mark();
     stripe(nullptr);
+    planSpans(nullptr);
     // A newly-adopted row may be the table's first with columns already set (columns usually arrive before any
     // row), or `setColumns` may not yet have run for every column at mount time -- either way, make sure the cache
     // covers every column before anything reads `widths`. This is an explicit, outside-any-binding call: seeding
@@ -153,10 +168,15 @@ void TableImpl::adopted(ItemBase& child) {
     }
 }
 
-void TableImpl::moved() { stripe(nullptr); }
+void TableImpl::moved() {
+    stripe(nullptr);
+    planSpans(nullptr);
+}
 
 void TableImpl::releasing(ItemBase& child) noexcept {
     stripe(&child);
+    _spans.erase(&child);
+    planSpans(&child);
     // `child`'s item is still parented into the QML body (ItemBase's own destructor calls release() -- which calls
     // this -- before it hides and reparents the item away), so a QML-side rescan of body.children would still see
     // it unless its own item is hidden first. Doing that here, directly, is simpler and safer than teaching the
@@ -167,6 +187,79 @@ void TableImpl::releasing(ItemBase& child) noexcept {
     }
     if (item() != nullptr) {
         QMetaObject::invokeMethod(item(), "invalidateAllColumns", Qt::DirectConnection);
+    }
+}
+
+// Coverage follows the rows' order, so it is worked out here from the rows as they stand, whenever a row comes, goes,
+// moves or is told its spans, and never from a span alone.
+void TableImpl::planSpans(ItemBase const* leaving) {
+    if (_spans.empty() && !_planned) {
+        return;
+    }
+    std::vector<TableRowImpl*> rows;
+    for (ItemBase* const child : children()) {
+        if (auto* const row = dynamic_cast<TableRowImpl*>(child); row != nullptr && child != leaving) {
+            rows.push_back(row);
+        }
+    }
+    std::vector<QVariantList> plans(rows.size());
+    std::vector<QVariantList> coveredColumns(rows.size());
+    std::vector<std::vector<bool>> covered(rows.size());
+    std::vector<std::size_t> coveredUntil;
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        covered.at(index).assign(rows.at(index)->children().size(), false);
+    }
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        auto const found = _spans.find(rows.at(index));
+        if (found == _spans.end() || heading(*rows.at(index))) {
+            continue;
+        }
+        std::size_t const cells = rows.at(index)->children().size();
+        coveredUntil.resize(std::max(coveredUntil.size(), cells), 0);
+        for (ui::RowSpan const& span : found->second) {
+            if (span.column >= cells || span.rows < 2 || coveredUntil.at(span.column) > index) {
+                continue;
+            }
+            std::size_t last = std::min(index + span.rows, rows.size()) - 1;
+            for (std::size_t between = index + 1; between <= last; ++between) {
+                if (heading(*rows.at(between))) {
+                    last = between - 1;
+                    break;
+                }
+            }
+            if (last == index) {
+                continue;
+            }
+            coveredUntil.at(span.column) = last + 1;
+            plans.at(index).append(QVariantMap{{QStringLiteral("column"), static_cast<qulonglong>(span.column)},
+                                               {QStringLiteral("rows"), static_cast<qulonglong>(last - index + 1)}});
+            for (std::size_t between = index + 1; between <= last; ++between) {
+                if (span.column < covered.at(between).size()) {
+                    covered.at(between).at(span.column) = true;
+                    coveredColumns.at(between).append(static_cast<qulonglong>(span.column));
+                }
+            }
+        }
+    }
+    // An origin row is drawn above every row below it, so its spanning cell lies over the rows it covers.
+    bool any = false;
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        TableRowImpl& row = *rows.at(index);
+        bool const origin = !plans.at(index).isEmpty();
+        any = any || origin || !coveredColumns.at(index).isEmpty();
+        row.write("spanPlan", plans.at(index));
+        row.write("coveredColumns", coveredColumns.at(index));
+        if (QQuickItem* const rowItem = row.item(); rowItem != nullptr) {
+            rowItem->setZ(origin ? static_cast<qreal>(rows.size() - index) : 0.0);
+        }
+        auto const& cells = row.children();
+        for (std::size_t column = 0; column < cells.size(); ++column) {
+            cells.at(column)->cover(covered.at(index).at(column));
+        }
+    }
+    _planned = any;
+    if (item() != nullptr) {
+        QMetaObject::invokeMethod(item(), "scheduleSpans", Qt::DirectConnection);
     }
 }
 

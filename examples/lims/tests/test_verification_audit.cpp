@@ -17,23 +17,24 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
 #include <vector>
 
-#include "lims/auth/lims_authorizer.hpp"
-#include "lims/core/errors.hpp"
-#include "lims/db/lims_entity.hpp"
-#include "lims/models/analysis_catalog_model.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/app/lims_authorizer.hpp"
+#include "lims/lab/db/lims_entity.hpp"
+#include "lims/lab/models/analysis_catalog_model.hpp"
+#include "lims/lab/models/sample_model.hpp"
+#include "lims/org/core/errors.hpp"
+#include "lims/org/models/org_model.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
 using morph::math::Numerator;
@@ -65,7 +66,8 @@ struct ReadyToVerify {
         const auto nitrate =
             catalog.execute(lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
         const auto client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-        sample = bench.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+        sample = bench.execute(lims::RegisterSample{
+            .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
         bench.execute(lims::ReceiveSample{});
         bench.execute(lims::StartWork{});
         result = bench.execute(lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
@@ -87,60 +89,10 @@ struct ReadyToVerify {
 
 // ── Roles ──────────────────────────────────────────────────────────────────
 
-TEST_CASE("The first grant bootstraps a lab with no supervisor -- later ones need one", "[lims][audit][roles]") {
-    DbFixture fixture;
-    lims::SampleModel model;
-
-    {
-        // A lab with no supervisor has no way to appoint its first one, so the
-        // first grant is allowed whoever makes it.
-        const ScopedPrincipal alice{"alice"};
-        const auto granted = model.execute(lims::GrantRole{.principal = "alice", .role = lims::LimsRole::Supervisor});
-        CHECK(granted.principal == "alice");
-        REQUIRE(granted.roles.size() == 1);
-        CHECK(granted.roles[0] == lims::LimsRole::Supervisor);
-    }
-    {
-        // And the carve-out closes the instant a supervisor exists.
-        const ScopedPrincipal mallory{"mallory"};
-        CHECK_THROWS_AS(model.execute(lims::GrantRole{.principal = "mallory", .role = lims::LimsRole::Supervisor}),
-                        lims::Forbidden);
-    }
-    {
-        const ScopedPrincipal alice{"alice"};
-        const auto granted = model.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
-        REQUIRE(granted.roles.size() == 1);
-        CHECK(granted.roles[0] == lims::LimsRole::Verifier);
-
-        // Idempotent: re-granting is not an error and does not duplicate.
-        const auto again = model.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
-        CHECK(again.roles.size() == 1);
-
-        CHECK_THROWS_AS(model.execute(lims::GrantRole{.role = lims::LimsRole::Verifier}), lims::ValidationError);
-    }
-    // And with no session at all, before any other check runs.
-    CHECK_THROWS_AS(model.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier}),
-                    lims::EmptyPrincipalError);
-}
-
-TEST_CASE("Roles are not hierarchical", "[lims][audit][roles]") {
-    DbFixture fixture;
-    const ScopedPrincipal alice{"alice"};
-    lims::SampleModel model;
-
-    model.execute(lims::GrantRole{.principal = "alice", .role = lims::LimsRole::Supervisor});
-    // A supervisor is not implicitly a verifier. An implicit hierarchy is
-    // exactly how somebody ends up being the second pair of eyes on their own
-    // work without anyone deciding they should be.
-    const auto held = lims::SampleModel::rolesOf("alice");
-    REQUIRE(held.size() == 1);
-    CHECK(held[0] == lims::LimsRole::Supervisor);
-}
-
 // ── Four eyes ──────────────────────────────────────────────────────────────
 
 TEST_CASE("Verifying needs the verifier role", "[lims][audit][verification]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
 
@@ -148,18 +100,20 @@ TEST_CASE("Verifying needs the verifier role", "[lims][audit][verification]") {
         // Bob has no role at all yet.
         const ScopedPrincipal bob{"bob"};
         lims::SampleModel verifier;
-        CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result.id}),
+                        lims::Forbidden);
     }
 
-    lab.bench.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Analyst});
+    lims::test::grant("bob", lims::LimsRole::Analyst);
     {
         // ...and an analyst is still not a verifier.
         const ScopedPrincipal bob{"bob"};
         lims::SampleModel verifier;
-        CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Forbidden);
+        CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result.id}),
+                        lims::Forbidden);
     }
 
-    lab.bench.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
+    lims::test::grant("bob", lims::LimsRole::Verifier);
     {
         const ScopedPrincipal bob{"bob"};
         lims::SampleModel verifier;
@@ -171,25 +125,26 @@ TEST_CASE("Verifying needs the verifier role", "[lims][audit][verification]") {
 }
 
 TEST_CASE("A verifier cannot verify their own reading, however senior", "[lims][audit][verification]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
 
     // Alice captured the reading. Give her every role in the system — the
     // second pair of eyes still has to belong to a second person, and no role
     // grants an exemption.
-    lab.bench.execute(lims::GrantRole{.principal = "alice", .role = lims::LimsRole::Supervisor});
-    lab.bench.execute(lims::GrantRole{.principal = "alice", .role = lims::LimsRole::Verifier});
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    lims::test::grant("alice", lims::LimsRole::Verifier);
 
-    CHECK_THROWS_AS(lab.bench.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(lab.bench, lims::VerifyResult{.resultId = lab.result.id}),
+                    lims::Forbidden);
     CHECK(lab.bench.execute(lims::ListVerifications{}).verifications.empty());
 }
 
 TEST_CASE("A result is verified once, while the sample is awaiting verification", "[lims][audit][verification]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
-    lab.bench.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
+    lims::test::grant("bob", lims::LimsRole::Verifier);
 
     const ScopedPrincipal bob{"bob"};
     lims::SampleModel verifier;
@@ -197,25 +152,27 @@ TEST_CASE("A result is verified once, while the sample is awaiting verification"
     verifier.execute(lims::VerifyResult{.resultId = lab.result.id});
 
     // Twice is a conflict, not a second signature.
-    CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Conflict);
+    CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result.id}),
+                    lims::Conflict);
     CHECK(verifier.execute(lims::ListVerifications{}).verifications.size() == 1);
 
-    CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lims::ResultId{424242}}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lims::ResultId{424242}}),
+                    lims::Forbidden);
     CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{}), lims::ValidationError);
 }
 
 TEST_CASE("A sample cannot be published while any of its results is unverified", "[lims][audit][verification]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
 
     // This is what makes the four-eyes step load-bearing rather than
     // decorative: publishing is where the lab tells the client a number is
     // true, so it is where a second pair of eyes is insisted on.
-    CHECK_THROWS_AS(lab.bench.execute(lims::PublishSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(lab.bench, lims::PublishSample{}), lims::IllegalTransition);
     CHECK(lab.bench.execute(lims::GetSample{}).state == lims::SampleState::ToBeVerified);
 
-    lab.bench.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
+    lims::test::grant("bob", lims::LimsRole::Verifier);
     {
         const ScopedPrincipal bob{"bob"};
         lims::SampleModel verifier;
@@ -231,7 +188,7 @@ TEST_CASE("The authorizer gates the role-requiring actions and nothing else", "[
     const morph::session::TokenIssuer issuer{secret, morph::session::hmacSha256};
 
     // The role source the authorizer consults. In production this is the same
-    // `lims_operators` query the model uses; here it is a fixed table, so the
+    // `org_role_assignments` query the model uses; here it is a fixed table, so the
     // policy is tested without a schema.
     const lims::auth::RoleLookup roles = [](std::string_view principal) -> std::vector<lims::LimsRole> {
         if (principal == "bob") {
@@ -257,12 +214,16 @@ TEST_CASE("The authorizer gates the role-requiring actions and nothing else", "[
     CHECK_FALSE(authorizer.authorize(carol, "SampleModel", "VerifyResult"));
 
     // Supervisor-gated.
-    CHECK(authorizer.authorize(alice, "SampleModel", "GrantRole"));
-    CHECK_FALSE(authorizer.authorize(bob, "SampleModel", "GrantRole"));
+    CHECK(authorizer.authorize(alice, "OrgModel", "AssignRole"));
+    CHECK_FALSE(authorizer.authorize(bob, "OrgModel", "AssignRole"));
+    CHECK(authorizer.authorize(alice, "OrgModel", "RevokeRole"));
+    CHECK_FALSE(authorizer.authorize(bob, "OrgModel", "RevokeRole"));
 
-    // Everything else needs only a valid token — capturing a reading is an
-    // everyday act, not a privileged one.
-    CHECK(authorizer.authorize(carol, "SampleModel", "CaptureConcentration"));
+    // Capturing a reading needs some role, whichever: bob holds one, carol holds none.
+    CHECK(authorizer.authorize(bob, "SampleModel", "CaptureConcentration"));
+    CHECK_FALSE(authorizer.authorize(carol, "SampleModel", "CaptureConcentration"));
+
+    // Everything else needs only a valid token.
     CHECK(authorizer.authorize(carol, "SampleModel", "GetSample"));
 
     // An unsigned or forged session is refused outright, before any role
@@ -289,14 +250,15 @@ TEST_CASE("An authorizer with no role source fails closed", "[lims][audit][autho
     morph::session::Context bob;
     bob.token = tokenFor(issuer, "bob");
     CHECK_FALSE(authorizer.authorize(bob, "SampleModel", "VerifyResult"));
-    CHECK_FALSE(authorizer.authorize(bob, "SampleModel", "GrantRole"));
+    CHECK_FALSE(authorizer.authorize(bob, "OrgModel", "AssignRole"));
+    CHECK_FALSE(authorizer.authorize(bob, "OrgModel", "RevokeRole"));
     // Ungated actions are unaffected: failing closed means refusing the things
     // that need a role, not refusing everything.
     CHECK(authorizer.authorize(bob, "SampleModel", "GetSample"));
 }
 
 TEST_CASE("The model re-checks the role the authorizer already checked", "[lims][audit][authorizer]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
 
@@ -304,24 +266,26 @@ TEST_CASE("The model re-checks the role the authorizer already checked", "[lims]
     // token-carrying edge is concerned. The point is that no authorizer runs
     // on the Local dispatch path at all, so a model that trusted the edge
     // would be unguarded exactly where the ladder's own tests exercise it.
-    CHECK(lims::SampleModel::rolesOf("bob").empty());
+    CHECK(lims::OrgModel::rolesAnywhere("bob").empty());
     const ScopedPrincipal bob{"bob"};
     lims::SampleModel verifier;
-    CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result.id}),
+                    lims::Forbidden);
 }
 
 // ── The audit trail ────────────────────────────────────────────────────────
 
 TEST_CASE("Every state the sample was ever in is reconstructible from the journal alone", "[lims][audit][dod]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
 
-    lab.bench.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
+    lims::test::grant("bob", lims::LimsRole::Verifier);
     {
         const ScopedPrincipal bob{"bob"};
         lims::SampleModel verifier;
+        verifier.attachActionLog(log, std::string{});
         verifier.execute(lims::VerifyResult{.resultId = lab.result.id});
     }
     lab.bench.execute(lims::PublishSample{});
@@ -354,7 +318,7 @@ TEST_CASE("Every state the sample was ever in is reconstructible from the journa
 
     // And the non-lifecycle steps are there too, each naming its author.
     bool sawCapture = false;
-    bool sawGrant = false;
+    bool sawVerification = false;
     for (const auto& step : trail.steps) {
         CHECK(step.kind != lims::AuditStepKind::Unreadable);
         CHECK_FALSE(step.principal.empty());
@@ -362,21 +326,23 @@ TEST_CASE("Every state the sample was ever in is reconstructible from the journa
             sawCapture = true;
             CHECK(step.principal == "alice");
         }
-        if (step.kind == lims::AuditStepKind::RoleGranted) {
-            sawGrant = true;
+        if (step.kind == lims::AuditStepKind::ResultVerified) {
+            sawVerification = true;
+            CHECK(step.principal == "bob");
         }
     }
     CHECK(sawCapture);
-    CHECK(sawGrant);
+    CHECK(sawVerification);
 }
 
+// Mutation: remove `SampleModel::onGuardRefused` (no refused step appears).
 TEST_CASE("A refused attempt appears in the trail, marked refused", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
 
-    CHECK_THROWS_AS(lab.bench.execute(lims::PublishSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(lab.bench, lims::PublishSample{}), lims::IllegalTransition);
 
     const auto trail = lab.bench.execute(lims::GetAuditTrail{});
     bool sawRefusal = false;
@@ -397,7 +363,7 @@ TEST_CASE("A refused attempt appears in the trail, marked refused", "[lims][audi
 }
 
 TEST_CASE("An entry this build cannot interpret is surfaced, never silently dropped", "[lims][audit][finding]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
@@ -425,6 +391,17 @@ TEST_CASE("An entry this build cannot interpret is surfaced, never silently drop
         corrupt.result = "{ not json";
         corrupt.principal = "alice";
         log->append(corrupt);
+
+        // A role grant an older build recorded against a sample: roles are no longer a sample's history, so the
+        // action id is one this build does not interpret.
+        morph::journal::LogEntry oldGrant;
+        oldGrant.modelType = "SampleModel";
+        oldGrant.entityKey = entityKey;
+        oldGrant.actionType = "GrantRole";
+        oldGrant.payload = R"({"principal":"bob","role":"Verifier"})";
+        oldGrant.result = R"({"principal":"bob","roles":["Verifier"]})";
+        oldGrant.principal = "alice";
+        log->append(oldGrant);
     }
 
     const auto trail = lab.bench.execute(lims::GetAuditTrail{});
@@ -436,19 +413,20 @@ TEST_CASE("An entry this build cannot interpret is surfaced, never silently drop
             CHECK_FALSE(step.detail.empty());
         }
     }
-    REQUIRE(unreadable.size() == 2);
+    REQUIRE(unreadable.size() == 3);
     CHECK(unreadable[0] == "FreezeSample");
     CHECK(unreadable[1] == "ReceiveSample");
+    CHECK(unreadable[2] == "GrantRole");
 
     // The gap is admitted rather than hidden: the step count still covers every
-    // entry in the journal, so a reader can see that two of them could not be
+    // entry in the journal, so a reader can see that three of them could not be
     // interpreted instead of quietly getting a shorter, plausible history.
     CHECK(trail.steps.size() == log->entries(entityKey).size());
 }
 
 TEST_CASE("A renamed payload field decodes to a default, silently -- the payload-evolution gap",
           "[lims][audit][finding]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
@@ -483,11 +461,11 @@ TEST_CASE("A renamed payload field decodes to a default, silently -- the payload
 }
 
 TEST_CASE("A verification appears in the sample's own audit trail", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
-    lab.bench.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
+    lims::test::grant("bob", lims::LimsRole::Verifier);
 
     {
         // Bob's handler is attached to nothing — he acts on a result id. The
@@ -514,16 +492,19 @@ TEST_CASE("A verification appears in the sample's own audit trail", "[lims][audi
     CHECK(sawVerification);
 }
 
+// A guard refusal reaches the sample's own trail through `SampleModel::onGuardRefused`.
+// Mutation: remove `SampleModel::onGuardRefused` (no refused step appears).
 TEST_CASE("A refused verification appears in the trail, marked refused", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     ReadyToVerify lab{log};
-    lab.bench.execute(lims::GrantRole{.principal = "alice", .role = lims::LimsRole::Verifier});
+    lims::test::grant("alice", lims::LimsRole::Verifier);
 
     // Alice captured the reading, so she cannot verify it. The attempt is
     // audit-worthy precisely because it was refused.
-    CHECK_THROWS_AS(lab.bench.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Forbidden);
+    CHECK_THROWS_AS(::morph::model::executeChecked(lab.bench, lims::VerifyResult{.resultId = lab.result.id}),
+                    lims::Forbidden);
 
     const auto trail = lab.bench.execute(lims::GetAuditTrail{});
     bool sawRefusal = false;
@@ -539,7 +520,7 @@ TEST_CASE("A refused verification appears in the trail, marked refused", "[lims]
 }
 
 TEST_CASE("Offline replay and conflict resolution both reach the sample's trail", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
@@ -549,7 +530,8 @@ TEST_CASE("Offline replay and conflict resolution both reach the sample's trail"
     lims::SampleModel bench;
     bench.attachActionLog(log, std::string{});
     const auto client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    const auto sample = bench.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    const auto sample = bench.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     bench.execute(lims::ReceiveSample{});
     const auto atWork = bench.execute(lims::StartWork{});
 
@@ -599,10 +581,10 @@ TEST_CASE("Offline replay and conflict resolution both reach the sample's trail"
 }
 
 TEST_CASE("A verification is refused unless the sample is awaiting verification", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     ReadyToVerify lab;
-    lab.bench.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
+    lims::test::grant("bob", lims::LimsRole::Verifier);
 
     // Back to the bench: the reading is being reworked, so it is not up for
     // verification any more.
@@ -610,11 +592,12 @@ TEST_CASE("A verification is refused unless the sample is awaiting verification"
 
     const ScopedPrincipal bob{"bob"};
     lims::SampleModel verifier;
-    CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(verifier, lims::VerifyResult{.resultId = lab.result.id}),
+                    lims::IllegalTransition);
 }
 
 TEST_CASE("The audit and verification listings need an attached handler", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
@@ -623,7 +606,7 @@ TEST_CASE("The audit and verification listings need an attached handler", "[lims
 }
 
 TEST_CASE("Every refused action kind is named in the trail, not lumped as unreadable", "[lims][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
 
@@ -633,7 +616,8 @@ TEST_CASE("Every refused action kind is named in the trail, not lumped as unread
     lims::SampleModel bench;
     bench.attachActionLog(log, std::string{});
     const auto client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    bench.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    bench.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     bench.execute(lims::ReceiveSample{});
     const auto atWork = bench.execute(lims::StartWork{});
 
@@ -646,19 +630,9 @@ TEST_CASE("Every refused action kind is named in the trail, not lumped as unread
                     lims::ValidationError);
     CHECK_THROWS_AS(bench.execute(lims::QueuedCapture{.sampleId = atWork.id, .capturedBy = "alice"}),
                     lims::ValidationError);
-    CHECK_THROWS_AS(
-        bench.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "no such conflict"}),
-        lims::NotFound);
-    // A supervisor has to exist before a grant can be refused at all — the
-    // bootstrap carve-out lets the *first* grant through whoever makes it.
-    bench.execute(lims::GrantRole{.principal = "alice", .role = lims::LimsRole::Supervisor});
-    {
-        const ScopedPrincipal mallory{"mallory"};
-        lims::SampleModel intruder;
-        intruder.attachActionLog(log, std::to_string(*atWork.id));
-        CHECK_THROWS_AS(intruder.execute(lims::GrantRole{.principal = "mallory", .role = lims::LimsRole::Supervisor}),
-                        lims::Forbidden);
-    }
+    CHECK_THROWS_AS(::morph::model::executeChecked(bench, lims::ResolveConflict{.conflictId = lims::ConflictId{424242},
+                                                                                .note = "no such conflict"}),
+                    lims::Forbidden);
 
     std::vector<lims::AuditStepKind> refusedKinds;
     for (const auto& step : bench.execute(lims::GetAuditTrail{}).steps) {
@@ -672,14 +646,24 @@ TEST_CASE("Every refused action kind is named in the trail, not lumped as unread
     CHECK(has(lims::AuditStepKind::ResultCaptured));
     CHECK(has(lims::AuditStepKind::OfflineReplay));
     CHECK(has(lims::AuditStepKind::ConflictResolved));
-    CHECK(has(lims::AuditStepKind::RoleGranted));
     // And none of them degraded to the catch-all.
     CHECK_FALSE(has(lims::AuditStepKind::Unreadable));
 }
 
 TEST_CASE("Listing conflicts needs an attached handler", "[lims][audit][offline]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
     CHECK_THROWS_AS(model.execute(lims::ListConflicts{}), lims::NotFound);
+}
+
+// Mutation: delete the conflict lookup from ResolveConflict or the result lookup from VerifyResult (an unknown id
+// resolves or verifies nothing and answers success).
+TEST_CASE("verification: the handlers refuse an unknown conflict or result on their own", "[lims][verification]") {
+    lims::test::LabFixture fixture;
+    ScopedPrincipal const carol{"carol"};
+    lims::SampleModel model;
+    CHECK_THROWS_AS(model.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242}, .note = "no such"}),
+                    lims::NotFound);
+    CHECK_THROWS_AS(model.execute(lims::VerifyResult{.resultId = lims::ResultId{424242}}), lims::NotFound);
 }

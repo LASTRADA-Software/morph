@@ -9,6 +9,7 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/action_log_json.hpp>
@@ -17,16 +18,15 @@
 #include <string>
 #include <vector>
 
-#include "lims/core/errors.hpp"
-#include "lims/db/lims_entity.hpp"
-#include "lims/models/analysis_catalog_model.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/lab/db/lims_entity.hpp"
+#include "lims/lab/models/analysis_catalog_model.hpp"
+#include "lims/lab/models/sample_model.hpp"
+#include "lims/org/core/errors.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
 using morph::math::Numerator;
@@ -86,7 +86,8 @@ lims::DefineAnalysisResult defineNitrate(lims::AnalysisCatalogModel& catalog) {
 /// @return The sample, at `InProgress`.
 lims::SampleView sampleAtWork(lims::SampleModel& model) {
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    const auto sample = model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    const auto sample = model.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"});
     model.execute(lims::ReceiveSample{});
     return model.execute(lims::StartWork{});
 }
@@ -324,7 +325,7 @@ TEST_CASE("The four result states survive the offline queue's opaque payload", "
 // ── Capture through the model ──────────────────────────────────────────────
 
 TEST_CASE("A measured result stores its exact value against its analysis version", "[lims][result]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -350,7 +351,7 @@ TEST_CASE("A measured result stores its exact value against its analysis version
 }
 
 TEST_CASE("The three no-number results are stored and read back distinguishably", "[lims][result]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -388,7 +389,7 @@ TEST_CASE("The three no-number results are stored and read back distinguishably"
 }
 
 TEST_CASE("An over-precise reading is rejected, not silently retagged", "[lims][result][precision]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -418,7 +419,7 @@ TEST_CASE("An over-precise reading is rejected, not silently retagged", "[lims][
 }
 
 TEST_CASE("An unknown qualifier code is refused by the model too", "[lims][result]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -434,7 +435,7 @@ TEST_CASE("An unknown qualifier code is refused by the model too", "[lims][resul
 }
 
 TEST_CASE("A concentration action cannot be captured against a non-concentration analysis", "[lims][result][units]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -452,14 +453,15 @@ TEST_CASE("A concentration action cannot be captured against a non-concentration
 }
 
 TEST_CASE("Results can only be captured while a sample is in progress", "[lims][result][lifecycle]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
 
     const auto nitrate = defineNitrate(catalog);
     const auto client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-    model.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-2"});
+    model.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-2"});
 
     const lims::CaptureConcentration capture{.analysisVersionId = nitrate.versionId,
                                              .value = lims::Concentration{exact(12, 5, 3)}};
@@ -481,7 +483,7 @@ TEST_CASE("Results can only be captured while a sample is in progress", "[lims][
 
     // Publishing needs the second pair of eyes first (README §6): a sample
     // whose readings nobody has verified cannot be released to the client.
-    model.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
+    lims::test::grant("bob", lims::LimsRole::Verifier);
     const auto captured = model.execute(lims::ListResults{}).results;
     REQUIRE(captured.size() == 1);
     {
@@ -498,7 +500,7 @@ TEST_CASE("Results can only be captured while a sample is in progress", "[lims][
 }
 
 TEST_CASE("Capturing a result moves the sample's base version", "[lims][result][offline]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -518,7 +520,7 @@ TEST_CASE("Capturing a result moves the sample's base version", "[lims][result][
 
 TEST_CASE("Re-capturing one analysis version replaces its answer, and the journal keeps both",
           "[lims][result][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     lims::AnalysisCatalogModel catalog;
@@ -552,7 +554,7 @@ TEST_CASE("Re-capturing one analysis version replaces its answer, and the journa
 }
 
 TEST_CASE("A result stays bound to the version it was captured under", "[lims][result][versioning]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -583,7 +585,7 @@ TEST_CASE("A result stays bound to the version it was captured under", "[lims][r
 }
 
 TEST_CASE("Capturing with no principal is refused and journals nothing", "[lims][result][audit]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -599,14 +601,15 @@ TEST_CASE("Capturing with no principal is refused and journals nothing", "[lims]
     lims::SampleModel anonymous;
     anonymous.attachActionLog(log, std::string{});
     anonymous.execute(lims::OpenSample{.sampleId = sampleId});
-    CHECK_THROWS_AS(anonymous.execute(lims::CaptureConcentration{.analysisVersionId = versionId,
-                                                                 .value = lims::Concentration{exact(12, 5, 3)}}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        anonymous, lims::CaptureConcentration{.analysisVersionId = versionId,
+                                                              .value = lims::Concentration{exact(12, 5, 3)}}),
                     lims::EmptyPrincipalError);
     CHECK(log->entries().empty());
 }
 
 TEST_CASE("The qualifier picklist is served, and matches the codes the model accepts", "[lims][result][forms]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
 
     const auto options = model.execute(lims::ListResultQualifiers{});
@@ -621,32 +624,38 @@ TEST_CASE("The qualifier picklist is served, and matches the codes the model acc
 }
 
 TEST_CASE("Listing or capturing against an unattached handler is NotFound", "[lims][result]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
 
     const auto nitrate = defineNitrate(catalog);
     CHECK_THROWS_AS(model.execute(lims::ListResults{}), lims::NotFound);
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        model, lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
+                                                          .value = lims::Concentration{exact(12, 5, 3)}}),
+                    lims::NotFound);
+    // The handler refuses on its own too, when it is called past the guard.
     CHECK_THROWS_AS(model.execute(lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
                                                              .value = lims::Concentration{exact(12, 5, 3)}}),
                     lims::NotFound);
 }
 
 TEST_CASE("Capturing against an analysis version that does not exist is NotFound", "[lims][result]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
 
     sampleAtWork(model);
-    CHECK_THROWS_AS(model.execute(lims::CaptureConcentration{.analysisVersionId = lims::AnalysisVersionId{424242},
-                                                             .value = lims::Concentration{exact(12, 5, 3)}}),
+    CHECK_THROWS_AS(::morph::model::executeChecked(
+                        model, lims::CaptureConcentration{.analysisVersionId = lims::AnalysisVersionId{424242},
+                                                          .value = lims::Concentration{exact(12, 5, 3)}}),
                     lims::NotFound);
 }
 
 TEST_CASE("Both halves of the sum engaged is refused by the model, not just by validate()",
           "[lims][result][encoding]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
     lims::SampleModel model;
@@ -669,7 +678,7 @@ TEST_CASE("Both halves of the sum engaged is refused by the model, not just by v
 }
 
 TEST_CASE("A version declaring an impossible precision cannot be captured against", "[lims][result][precision]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::SampleModel model;
     sampleAtWork(model);

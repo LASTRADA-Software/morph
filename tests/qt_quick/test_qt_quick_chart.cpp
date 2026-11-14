@@ -6,9 +6,12 @@
 #include <QAccessible>
 #include <QColor>
 #include <QImage>
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdlib>
 #include <morph/ui/view.hpp>
+#include <optional>
+#include <utility>
 #include <vector>
 
 #include "qt_quick_harness.hpp"
@@ -82,6 +85,93 @@ TEST_CASE("qt_quick chart: a dashed err line, and a marked point as an err cross
         above += rows.at(static_cast<std::size_t>(y));
     }
     CHECK(above > 4);
+}
+
+namespace {
+
+// The theme's first series colour, which a series' bars are filled with.
+constexpr QRgb kSeries1 = 0x0072b2;
+
+bool isSeries1(QColor const& colour) {
+    return std::abs(colour.red() - qRed(kSeries1)) <= 8 && std::abs(colour.green() - qGreen(kSeries1)) <= 8 &&
+           std::abs(colour.blue() - qBlue(kSeries1)) <= 8;
+}
+
+// The runs of columns that hold the first series' colour, each as its first column and width, and the pixels the
+// colour fills in the run's middle column.
+struct Run {
+    int first = 0;
+    int width = 0;
+    int filled = 0;
+};
+
+std::vector<Run> runsOf(QImage const& image) {
+    std::vector<Run> runs;
+    std::optional<int> start;
+    auto const filledIn = [&image](int x) {
+        int filled = 0;
+        for (int y = 0; y < image.height(); ++y) {
+            filled += isSeries1(image.pixelColor(x, y)) ? 1 : 0;
+        }
+        return filled;
+    };
+    for (int x = 0; x <= image.width(); ++x) {
+        // A column belongs to a run when the colour fills more than 10 px of it, which a 5 px marker never does.
+        bool const in = x < image.width() && filledIn(x) > 10;
+        if (in && !start) {
+            start = x;
+        } else if (!in && start) {
+            int const width = x - *start;
+            runs.push_back({*start, width, filledIn(*start + (width / 2))});
+            start.reset();
+        }
+    }
+    return runs;
+}
+
+}  // namespace
+
+// Mutation: draw a `Bars` series as points (no column holds more than 10 px of the series colour), leave the
+// baseline out of the rectangle (the bars are as tall as their tips are high), or ignore `barSlot` (the bars are not
+// four fifths of the distance between positions).
+TEST_CASE("qt_quick chart: a bars series is filled rectangles from the baseline, four fifths of a slot wide",
+          "[qt_quick][chart]") {
+    Scene scene;
+    scene.window().resize(400, 200);
+    auto chart = scene.backend().createChart(nullptr);
+    ui::ChartData data;
+    data.xMin = -0.5;
+    data.xMax = 1.5;
+    data.yMin = 0.0;
+    data.yMax = 8.0;
+    data.barSlot = 1.0;
+    data.series = {{.label = {},
+                    .joined = false,
+                    .style = ui::ChartStyle::Bars,
+                    .points = {{.x = 0.0, .y = 8.0}, {.x = 1.0, .y = 2.0}}}};
+    data.summary = "Two bars";
+    chart->setData(data);
+    scene.settle();
+    QImage const image = scene.window().grabWindow();
+    std::vector<Run> const runs = runsOf(image);
+    REQUIRE(runs.size() == 2);
+    // The positions are one slot apart, and a bar is 0.8 of it wide.
+    double const slot = runs.at(1).first + (runs.at(1).width / 2.0) - (runs.at(0).first + (runs.at(0).width / 2.0));
+    CHECK(runs.at(0).width == Catch::Approx(0.8 * slot).margin(2.0));
+    CHECK(runs.at(1).width == Catch::Approx(0.8 * slot).margin(2.0));
+    // The first bar reaches the axis's top and the second a quarter of the way up from the baseline.
+    CHECK(runs.at(1).filled == Catch::Approx(runs.at(0).filled / 4.0).margin(3.0));
+    // A marked bar is in its tone's colour, and the error colour is then on the image.
+    data.series.front().points.at(1).tone = ui::Tone::Err;
+    chart->setData(data);
+    scene.settle();
+    QImage const marked = scene.window().grabWindow();
+    CHECK(runsOf(marked).size() == 1);
+    int err = 0;
+    for (int count : errPerRow(marked)) {
+        err += count;
+    }
+    CHECK(err > 0);
 }
 
 TEST_CASE("qt_quick chart: a Chart to assistive technology, its summary read once", "[qt_quick][chart]") {

@@ -167,6 +167,26 @@ TEST_CASE("qt_quick interpreter: a bound property follows its value", "[qt_quick
     CHECK(readJson(*screen, R"({"ref": "count"})") == "2");
 }
 
+// A page inside a locale scope: the scope is a slot over a holder column, so the page's parent is no longer the
+// window's root. Mutation: lay the page out only when its parent is a root (the sheet keeps a zero size).
+TEST_CASE("qt_quick interpreter: a page inside a locale scope mounts, lays out and has its size",
+          "[qt_quick][interpreter]") {
+    QtHarness h;
+    auto screen = h.mount(R"({
+      "vocab": "ui/1", "id": "around",
+      "view": { "kind": "localeScope", "locale": "de", "children": [
+        { "kind": "page", "testId": "sheet", "width": 210000, "height": 297000, "a11y": { "name": "Sheet" }, "children": [
+          { "kind": "pageRegion", "anchor": "top", "children": [
+            { "kind": "text", "testId": "total", "text": { "fn": "money", "args": [ { "lit": { "num": 123450, "den": 100, "dp": 2 } }, "EUR" ] } } ] } ] } ] } })");
+    h.scene.settle();
+    constexpr double kPixelsPerMm = 96.0 / 25.4;
+    QQuickItem const* const sheet = QtHarness::widget("sheet").item();
+    REQUIRE(sheet != nullptr);
+    CHECK(sheet->width() == Catch::Approx(210 * kPixelsPerMm).margin(1));
+    CHECK(sheet->height() == Catch::Approx(297 * kPixelsPerMm).margin(1));
+    CHECK(QtHarness::widget("total").shownText() == "1.234,50\u00a0\u20ac");
+}
+
 TEST_CASE("qt_quick interpreter: a refused selection snaps back, an accepted one stays", "[qt_quick][interpreter]") {
     QtHarness h;
     auto screen = h.mount(kBehaviour);

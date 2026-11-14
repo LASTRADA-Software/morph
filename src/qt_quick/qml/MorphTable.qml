@@ -102,6 +102,8 @@ MorphWidget {
     //
     // Each column's widths, read from the caches and the headers, never from the table's own width.
     function measure(): var {
+        // `advanceWidth` is a plain call, so the font is read here for the widths to follow a header font that changes.
+        void headerMetrics.font
         const pad = 2 * Theme.tableCellPaddingX
         const out = []
         for (let i = 0; i < root.columns.length; ++i) {
@@ -385,6 +387,55 @@ MorphWidget {
             root.focusRow(root.shownRows().includes(root.currentRow) ? root.currentRow : root.shownRows()[0])
     }
 
+    // Spanning cells: C++ resolves which row spans which columns (`spanPlan` on the origin row), and here the
+    // heights follow from the rows' own heights. A block, the rows a spanning cell covers, is as tall as those rows
+    // together (a row's `implicitHeight`); when the cell asks for more, the last row it covers is given the
+    // difference (`spanExtra`), so the rows stay rows and the cell never feeds a row's own height back to itself.
+    // Called from the rows' height changes and by C++, once per event loop turn.
+    property bool spansQueued: false
+    function scheduleSpans() {
+        if (!root.spansQueued) {
+            root.spansQueued = true
+            Qt.callLater(root.recomputeSpans)
+        }
+    }
+    function recomputeSpans() {
+        root.spansQueued = false
+        const rows = []
+        for (let i = 0; i < body.children.length; ++i) {
+            const row = body.children[i]
+            if (row.visible && row.table === root)
+                rows.push(row)
+        }
+        const extras = new Map()
+        const inset = 2 * Theme.tableCellPaddingY
+        for (let at = 0; at < rows.length; ++at) {
+            for (const span of rows[at].spanPlan) {
+                const last = Math.min(at + span.rows, rows.length) - 1
+                let own = 0
+                for (let r = at; r <= last; ++r)
+                    own += rows[r].ownHeight
+                const cell = rows[at].content.children[span.column]
+                const need = cell ? cell.implicitHeight + inset : 0
+                extras.set(rows[last], Math.max(extras.get(rows[last]) ?? 0, need - own))
+            }
+        }
+        for (const row of rows)
+            row.spanExtra = Math.max(0, extras.get(row) ?? 0)
+        for (let at = 0; at < rows.length; ++at) {
+            const blocks = []
+            for (const span of rows[at].spanPlan) {
+                const last = Math.min(at + span.rows, rows.length) - 1
+                let height = 0
+                for (let r = at; r <= last; ++r)
+                    height += rows[r].implicitHeight
+                blocks.push({"column": span.column, "height": height})
+            }
+            if (JSON.stringify(blocks) !== JSON.stringify(rows[at].spanBlocks))
+                rows[at].spanBlocks = blocks
+        }
+    }
+
     // The data rows the user can see, in order: a heading row is never current, selected or counted.
     function shownRows(): var {
         const shown = []
@@ -479,7 +530,7 @@ MorphWidget {
 
     FontMetrics {
         id: headerMetrics
-        font: Theme.smallStrongFont
+        font: Theme.tableHeaderFont
     }
 
     // The table's area, which scrolls sideways only while its columns are wider than the table: a table that fits
@@ -564,7 +615,7 @@ MorphWidget {
                         id: headerLabel
                         objectName: "header" + index
                         textFormat: Text.PlainText
-                        font: Theme.smallStrongFont
+                        font: Theme.tableHeaderFont
                         required property int index
                         required property var modelData
                         readonly property bool sorted: root.sortColumn === index

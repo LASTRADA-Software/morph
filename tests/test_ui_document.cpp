@@ -244,7 +244,10 @@ TEST_CASE("ui document: a refusal names the document", "[ui][document]") {
     CHECK(loaded->view->kind == "text");
 
     auto const kinds = morph::ui::nodeKinds();
-    CHECK(kinds.size() == 40);
+    CHECK(kinds.size() == 43);
+    CHECK(std::ranges::find(kinds, "page") != kinds.end());
+    CHECK(std::ranges::find(kinds, "pageRegion") != kinds.end());
+    CHECK(std::ranges::find(kinds, "localeScope") != kinds.end());
     CHECK(std::ranges::find(kinds, "actionBar") != kinds.end());
     CHECK(std::ranges::find(kinds, "chart") != kinds.end());
     CHECK(std::ranges::find(kinds, "dateTimeInput") != kinds.end());

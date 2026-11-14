@@ -371,10 +371,20 @@ struct MenuEntry {
     bool separator = false;
     /// @brief A muted line of help shown with the entry; empty shows none.
     std::string description;
+    /// @brief Whether the entry is a label that is not a command: drawn as muted text, exposed as static text, never
+    ///        chosen or opened. Its other fields are empty.
+    bool heading = false;
 
     /// @brief Memberwise equality, submenus included.
     /// @return Whether every field matches.
     bool operator==(MenuEntry const&) const = default;
+};
+
+/// @brief The marker a button-style menu's trigger draws after its text, to say that it opens.
+enum class MenuCaret : std::uint8_t {
+    None,    ///< No marker.
+    Down,    ///< A chevron pointing down: a menu of actions or of a person.
+    UpDown,  ///< An up and a down chevron: a menu that chooses one of several values, such as a scope.
 };
 
 /// @brief The trigger of a button-style menu.
@@ -385,6 +395,14 @@ struct MenuTrigger {
     std::string icon;
     /// @brief The trigger's emphasis, as a button's.
     ButtonEmphasis emphasis = ButtonEmphasis::Normal;
+    /// @brief A second line under the label; empty for none. The accessible name is the label, then the detail.
+    std::string detail;
+    /// @brief Initials drawn in a filled circle before the label (a person's avatar); empty for none. The terminal
+    ///        draws them in brackets.
+    std::string avatar;
+    /// @brief The marker drawn after the text. The terminal's trigger always ends in a marker, since it has no frame
+    ///        to say that it opens; `None` and `Down` both draw a down chevron there.
+    MenuCaret caret = MenuCaret::None;
 
     /// @brief Memberwise equality.
     /// @return Whether every field matches.
@@ -775,6 +793,17 @@ public:
     /// @param row One of this table's rows.
     virtual void setRowHeading(Widget& row) = 0;
 
+    /// @brief Sets which of a row's cells cover the rows below it. Called for a row with spans once the change's rows
+    ///        are placed, and again on every change, a call with an empty list clearing them; never for a row that
+    ///        has never had one. The spans are resolved against the rows (no unknown column, overlap, heading or span
+    ///        past the last row once a change settles), but a backend derives which cells are covered from the rows'
+    ///        current order when it lays out or paints, never here, and clips a span that runs past its last row or
+    ///        onto a heading row. A spanning cell is drawn once over the rows it covers, in its column, with the
+    ///        look of this row; the covered rows' cells in that column are not shown.
+    /// @param row   One of this table's rows.
+    /// @param spans The row's effective spans, by column, each column once.
+    virtual void setRowSpans(Widget& row, std::vector<RowSpan> const& spans) = 0;
+
     /// @brief Requests the rows with these keys, and marks those it has. Never calls the `onSelectionChange` handler.
     /// @param keys The selected keys.
     virtual void setSelection(std::vector<Key> const& keys) = 0;
@@ -847,8 +876,9 @@ public:
     virtual void setOnChange(std::function<void(std::optional<morph::time::Timestamp>)> onChange) = 0;
 
     /// @brief Sets the pattern the field shows its value in and reads typed text in (`formatDate`, `parseDate`), ISO
-    ///        being always read too. The mount calls it once, before the value, and only for a pattern that is not
-    ///        empty; a new field shows ISO.
+    ///        being always read too. The mount calls it before the value when the pattern is not empty, and again
+    ///        each time the session's pattern changes, an empty one included; the field then shows the value it holds
+    ///        in the new pattern. A new field shows ISO.
     /// @param pattern The pattern, such as `dd-MMM-yyyy HH:mm`.
     virtual void setPattern(std::string_view pattern) = 0;
 
@@ -1101,6 +1131,28 @@ public:
     virtual ContainerWidget& footer() = 0;
 };
 
+/// @brief A non-modal panel that belongs to another widget: the results of a search under its field. It takes no
+///        keyboard focus, dims nothing and traps nothing, so focus stays where it was.
+///
+/// It is anchored under its parent container's box and aligned to the box's leading edge. A backend with a floating
+/// layer draws it over the content and gives it no room in the parent's layout; a backend without one draws its
+/// children in flow, under the parent's other children. A new popover is closed.
+class PopoverWidget : public ContainerWidget {
+public:
+    /// @brief Shows or hides it. Never calls the `onDismiss` handler.
+    /// @param open Whether it is shown.
+    virtual void setOpen(bool open) = 0;
+
+    /// @brief Sets its width.
+    /// @param units The width in units; 0 is the parent's width.
+    virtual void setWidth(int units) = 0;
+
+    /// @brief Sets what a user dismissal calls: a press outside both the panel and its parent, where the backend
+    ///        reports one. The panel takes no keyboard focus, so Escape reaches the widgets that have it, not this.
+    /// @param onDismiss The handler; empty does nothing.
+    virtual void setOnDismiss(Action onDismiss) = 0;
+};
+
 /// @brief Panes along the axis fixed at creation, with handles between them that the user drags.
 class SplitterWidget : public ContainerWidget {
 public:
@@ -1135,6 +1187,16 @@ public:
     /// @param onToggle The handler, given the state the user asked for; empty does nothing.
     virtual void setOnToggle(std::function<void(bool)> onToggle) = 0;
 };
+
+/// @brief A sheet of fixed physical size (docs/spec/ui/document_page.md). Its children are
+///        `PageRegionWidget`s. The geometry is a factory argument; the page reads the width its container gives it
+///        from the container's layout, asks for the sheet's width as its natural width, no least width, and a height
+///        that follows the width it is given, and displays the sheet scaled by `min(1, width / sheet width)`.
+class PageWidget : public ContainerWidget {};
+
+/// @brief A rectangle of a page that holds its children as a vertical stack, clipped to the rectangle. The geometry
+///        is a factory argument. A region whose content does not fit draws an overflow mark.
+class PageRegionWidget : public ContainerWidget {};
 
 /// @brief A region that takes files dropped from the operating system.
 class DropZoneWidget : public ContainerWidget {
@@ -1282,6 +1344,11 @@ public:
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<ToastWidget> createToast(ContainerWidget* parent) = 0;
 
+    /// @brief Makes a non-modal panel anchored under @p parent (see `PopoverWidget`), closed.
+    /// @param parent The container it belongs to and is anchored under, or null for a root.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<PopoverWidget> createPopover(ContainerWidget* parent) = 0;
+
     /// @brief Makes a progress indicator.
     /// @param parent The container to append to, or null for a root.
     /// @return The widget.
@@ -1369,6 +1436,20 @@ public:
     /// @param parent The container to append to, or null for a root.
     /// @return The widget.
     [[nodiscard]] virtual std::unique_ptr<DropZoneWidget> createDropZone(ContainerWidget* parent) = 0;
+
+    /// @brief Makes a page.
+    /// @param parent   The container to append to, or null for a root.
+    /// @param geometry The sheet's size and margins; valid (`PageGeometry::problem`).
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<PageWidget> createPage(ContainerWidget* parent,
+                                                                 PageGeometry const& geometry) = 0;
+
+    /// @brief Makes a page region.
+    /// @param parent   The page to append to.
+    /// @param geometry The region's place; valid on the page.
+    /// @return The widget.
+    [[nodiscard]] virtual std::unique_ptr<PageRegionWidget> createPageRegion(ContainerWidget* parent,
+                                                                             RegionGeometry const& geometry) = 0;
 
     /// @brief Loads the component a `custom` node names, if this backend can. The only factory that may return null:
     ///        null means "not loaded", and the mount shows the node's fallback instead. A backend that loads no

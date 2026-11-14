@@ -196,7 +196,7 @@ reorders children, and only through this.
 | `SlotWidget` | Shown as they are; hosts a Switch case or a Tabs page. A scrollable slot (`setScrollable(true)`) shows a child that does not stretch in height at its natural height in a vertical viewport of its own height, which keeps the focused widget in view, and scrolls only while that child is taller than the slot (a slot whose content fits takes no input and, on the terminal, no focus); a child that stretches in height fills it, as in a slot that does not scroll, but is never shorter than its `minHeight`: while the slot is shorter than that, the slot scrolls it at that height. The slot reads its shown child's height sizing itself. A Tabs page is a slot that fills the tabs node's page area (the mount lays it out `stretch` both ways), is scrollable, and pads its own content by the node's page inset inside its scroll |
 | `TabsWidget` | `setInset(step)` makes the strip and its rule span the widget, starts the first tab that step in and, unless `setPageInset` is called, pads each page by it on every side with nothing else between the strip's rule and the page; the page slot does the padding, inside its own scroll, so a page that scrolls clips at the node's edges, its bar sits there and a bleeding child reaches them; `setPageInset(step)` (the mount calls it once, only when the view gives a page inset, which may be 0) pads each page by its own step in place of the inset's; `setStripSurface(name)` draws the strip, and nothing else, on that surface across the widget (the mount calls each once, only for a nonzero step and a nonempty name). Page slots in the order first shown; the mount keeps exactly the selected page's slot visible, and `setSelected` moves the bar's highlight only |
 | `DialogWidget` | The overlay's content; a focus trap while open; a closed dialog shows nothing and takes no input, its children included. `footer()` is a container the overlay owns and lays out after its content, showing nothing while it is empty; the mount puts the overlay's actions there. A `DrawerWidget` has the same footer. `setSheet(true)` draws the dialog as a sheet that fills the window, square, with a head holding a dismiss control (`setDismissLabel`, "Close" by default) before the title, which dismisses exactly as Escape does; a press outside is not possible. A sheet keeps every rule of the dialog, and changing it while open keeps the content and its state. The sheet's dismiss control is drawn as a ghost button (its label in the accent). On Qt Quick a modal dialog or drawer dims the window behind it with `color.scrim`; a sheet fills the window and draws none, and the terminal draws none |
-| `TableWidget` | Rows, each a horizontal stack of cells in column order; `setSelectColumn(true)` once, before any row, for a table that draws its selection as check boxes; `setRowKey(row, key)` once per row, right after it is built, then `setRowHeading(row)` for a heading row, whose one cell spans every column and the select column, then `setRowTone(row, tone)` for a toned row and `setRowLabel(row, label)` for a named one, and again on every change. A hidden cell keeps its column: the cells after it stay under their own headers |
+| `TableWidget` | Rows, each a horizontal stack of cells in column order; `setSelectColumn(true)` once, before any row, for a table that draws its selection as check boxes; `setRowKey(row, key)` once per row, right after it is built, then `setRowHeading(row)` for a heading row, whose one cell spans every column and the select column, then `setRowTone(row, tone)` for a toned row and `setRowLabel(row, label)` for a named one, and again on every change; `setRowSpans(row, spans)` for a row with spans, once the change's rows are placed, in any order relative to tone and label. A hidden cell keeps its column: the cells after it stay under their own headers |
 
 **Spacing.** `setGap` and `setPadding` take a spacing step, 0 to `kMaxSpacingStep` (5); the mount clamps a document's
 value with `spacingStep`, so a backend never sees another. Each backend maps a step to its own distance: the theme's
@@ -385,22 +385,30 @@ child does. Across, a child its maximum stops from filling is placed by its alig
 | `DialogWidget` | `setOpen`, `setTitle`, `setDescription` (a line under the title in the head, not scrolled with the content, and the overlay's accessible description), `footer()`, `setSheet`, `setDismissLabel` (called only when the document binds or sets them) | `setOnDismiss` (Esc on the TUI), for an open dialog, which the dismissal closes first |
 | `ToastWidget` | `show(text, tone)` (one call: shows the message and restarts the dismiss interval regardless of whether the toast is already on-screen) | — |
 | `BusyWidget` | `setActive`, `setLabel` | — |
-| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)`, `setSelectColumn(bool)`, `setSelectAllLabel(text)`, `setRowLabel(row, text)`, `setRowHeading(row)` (once, after `setRowKey`: the row is never marked, reported or activated), `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold), `setSort(optional<TableSort>)` (marks the column's header with the direction, or none; only for a table with a sortable column) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click), `setOnSort(column)` (a click on a sortable column's header, or Enter or Space on it where the header takes focus; the index counts the columns `setColumns` gave, which the select column is not one of; another header reports nothing). The backend never reorders rows for a sort: it shows `setSort`, and what a click means is the lowering's |
+| `TableWidget` | `setColumns(vector<TableColumn>)`, `setSelectionMode`, `setRowKey(row, key)`, `setRowTone(row, optional<Tone>)` (after `setRowKey`, and on every change), `setSelection(keys)`, `setSelectColumn(bool)`, `setSelectAllLabel(text)`, `setRowLabel(row, text)`, `setRowHeading(row)` (once, after `setRowKey`: the row is never marked, reported or activated), `setRowSpans(row, vector<RowSpan>)` (after `setRowKey`, and on every change; the spans are resolved ([Row spans](view_tree.md#row-spans)), so once a change settles a backend is told none out of range, overlapping, past the last row or on a heading; while it settles it may see one, so it derives coverage at layout or paint time from the rows' current order, never at this call, and clips a span that runs past its last row or onto a heading; a call with an empty list clears the row's), `setExistingKeys(keys)` (every key, in row order, above the virtualization threshold), `setSort(optional<TableSort>)` (marks the column's header with the direction, or none; only for a table with a sortable column) | `setOnSelectionChange(keys, SelectionChange)`, `setOnActivate(Key)` (Enter or a double click), `setOnSort(column)` (a click on a sortable column's header, or Enter or Space on it where the header takes focus; the index counts the columns `setColumns` gave, which the select column is not one of; another header reports nothing). The backend never reorders rows for a sort: it shows `setSort`, and what a click means is the lowering's |
 | `DateTimeInputWidget` | `setValue(optional<Timestamp>)` (`nullopt` or an empty `Timestamp` shows an empty field), `setCaption(label, shown)`; the calendar opens under the field, at the field's start when it fits in the window, else ending at the field's end, and always inside the window | `setOnChange(optional<Timestamp>)` (`nullopt` for a cleared field) |
 | `SliderWidget` | `setRange(minimum, maximum, step)`, `setValue` | `setOnChange(value)`, `setOnCommit(value)` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePickerWidget` | `setPath` | `setOnPicked(path)` |
 | `BannerWidget` | `setTone`, `setText`, `setSpans`, `setActionLabel`, `setDismissible` (once), `setActionStyle(style, stretch)` (once, only for a style that is not `Ghost` or a stretched action: a `Link` draws the action inside the message at the span marked `action`, else after it, and stays a button to assistive technology; a `Button` is framed; a stretched action takes a line of its own, as wide as the banner) | `setOnAction`, `setOnDismiss` |
 | `BadgeWidget` | `setTone`, `setText`, `setIcon` (once), `setStyle` (once, only for `Outline`), `setShape` (once, only for `Round`), `setMono` (once, only for `true`) | `setOnRemove(onRemove, label)`: only for a removable badge, which then draws a remove control after its text (the framework icon `close`) named `label`, and takes the focus; Delete, Backspace, Enter or Space on it, or a click on its control, calls `onRemove`. A badge without it takes no focus |
 | `ProgressWidget` | `setValue(optional<double>)`, `setLabel` | — |
-| `StepsWidget` | `setSteps(vector<Step>)`, `setCurrent(optional<size_t>)`, `setLabelled(bool)` (pure; the mount calls it only when the document gives `labelled`) | — |
+| `StepsWidget` | `setSteps(vector<Step>)` (each `Step` is `{label, state, detail}`. A nonempty `detail` is the step's muted second line. Qt Quick: under the label in the muted colour at the small size, on one line; the circle and the connectors stay centred on the label's line and the indicator is as tall as its tallest step; a step's natural and minimum width are its label's, and a detail wider than that is cut at its end with an ellipsis, so it never widens a step. Terminal: after the label, one space and the detail in brackets, in the muted style; the natural width includes the bracketed detail, and a row narrower than the label plus the whole bracketed detail drops the detail, before the label is cut. An empty detail draws nothing. Unlabelled, no detail is drawn. A step's accessible name, labelled or not, is its label, its detail when nonempty and its state when it has one (`current`, `done`, `failed`), joined by `, `; the indicator's own name, `shownText` and probe text stay the current step's label alone), `setCurrent(optional<size_t>)`, `setLabelled(bool)` (pure; the mount calls it only when the document gives `labelled`) | — |
 | `KeyValueWidget` | `setItems(vector<KeyValueItem>)`, `setCaptionPlacement` (once, only for `Above`), `setCaptionWidth` (once, only when the node gives a width) | — |
 | `EmptyStateWidget` | `setTitle`, `setText`, `setIcon` (once), `setActionLabel` | `setOnAction` |
-| `ChartWidget` | `setData(ChartData)`, at mount and on every change (`view_tree.md`, Chart data); it takes no focus | — |
+| `ChartWidget` | `setData(ChartData)`, at mount and on every change (`view_tree.md`, Chart data); it takes no focus. A `Bars` series is drawn as `view_tree.md`, Bars, lays out (the terminal's cell rules are in `tui/frontend.md`, Qt Quick's in `qt_quick/backend.md`), on the baseline that `ChartData` implies: 0 clamped into `yMin`..`yMax` | — |
 | `DrawerWidget` | `setOpen`, `setTitle`, `setDescription` (as a dialog's), `footer()` | `setOnDismiss` (Esc on the TUI), for an open drawer |
 | `SplitterWidget` | `setSizes(vector<int>)` | `setOnResize(sizes)` |
 | `CollapsibleWidget` | `setTitle`, `setHeader(child)` (at most once), `setOpen` | `setOnToggle(open)`, with the state the user asked for |
 | `DropZoneWidget` | `setAccept(extensions)`, `setMultiple` (both once) | `setOnDrop(paths)` |
 | `CustomWidget` | `setTextProp(name, text)`, `setBoolProp(name, bool)`, `setNumberProp(name, double)` | `setOnEvent(event, payload)` |
+| `PageWidget` (a `ContainerWidget`) | — (made by `createPage(parent, PageGeometry)`; the geometry is a factory argument) | — |
+| `PageRegionWidget` (a `ContainerWidget`) | — (made by `createPageRegion(parent, RegionGeometry)`) | — |
+
+A page asks its container for a natural width of the sheet, a least width of 0 and a height that follows the width it is given
+([`document_page.md`](document_page.md#size-request)); the mount sets its role (`document`) and surface (`paper`). The
+recording backend records `size`, `margins`, `scale` and `displayed` on a `Page`, and `anchor`, `rect` and `overflow` on a
+`PageRegion`, and logs a change of the derived `scale`, `displayed`, `rect` and `overflow` (`setPageAvailableWidth`,
+`setRegionContentHeight`).
 
 **The width class.** `IViewBackend::widthClass()` is the class of the surface the backend draws on, now, and
 `setOnWidthClass(listener)` registers the one listener told of each later change, on the owner and outside any layout
@@ -468,6 +476,24 @@ predicate — an accept-everything one when the node's `accepts` is empty — so
 an empty one. A source or target the user cannot reach (hidden, disabled, or inside such a
 container) takes part in no drag.
 
+## The popover
+
+`PopoverWidget` (`createPopover(parent)`) is a container for a panel that belongs to another widget and is not a dialog:
+a menu of search results under a field. It is non-modal and takes no focus, so focus stays where it was; it dims
+nothing; it is anchored under its parent container's box and aligned to its leading edge, with a width of its own
+(`setWidth(units)`; 0 is the parent's width). `setOpen(bool)` shows or hides it and never calls `onDismiss`;
+`setOnDismiss(handler)` is called when the backend sees a press outside both the popover and its parent; Escape belongs to the field the panel serves, which closes the panel itself. On a
+backend with a floating layer (Qt Quick) it floats over the content and takes no space in its parent's layout; on a
+backend without one (the terminal) it is the rows under the parent, in flow. The recording backend records `open`,
+`width` and its children. `MenuEntry::heading` is a label in a menu that is not a command: drawn as muted text, exposed
+as static text and never chosen; `MenuTrigger::detail` is a button menu's second line under its label, which the
+terminal joins to the label with a dot. `MenuTrigger::avatar` is a person's initials, drawn in a filled circle before
+the label (the terminal draws them in brackets, `[AM] Anna`); `MenuTrigger::caret` is the marker after the text: `Down`
+for a menu that opens, `UpDown` for one that chooses a value, such as a scope. The terminal's trigger always ends in a
+marker, since it has no frame to say it opens, so there `None` and `Down` both draw `▾` and `UpDown` draws `↕`. The
+recording backend records `avatar` and `caret` on every `setTrigger`. Qt Quick draws the circle and the chevron from
+shapes of its own, in the trigger's text colour, so no icon file is needed.
+
 ## RecordingBackend
 
 The headless reference backend and the test double for everything above the contract.
@@ -497,13 +523,13 @@ The headless reference backend and the test double for everything above the cont
   `axis` (Scroll); `tabs`, `selected`, `barShown` (Tabs); `open`, `title`, `description` (Dialog); `active`, `label` (Busy);
   `columns` (each `label:width`, then `;align=` and `;valign=` for a place other than the default),
   `selectionMode`, `selection` (the requested keys it marks, in the order requested),
-  and `rowKey` on a row (Table); `mode`, `offset`, `value`, `pattern` (DateTimeInput); `range`, `value`
+  `rowKey`, and `rowSpans` on a row (`column:rows` pairs joined by commas in column order, as `0:2,3:2`, `none` after a call with an empty list, and absent until the first call; Table); `mode`, `offset`, `value`, `pattern` (DateTimeInput); `range`, `value`
   (Slider); `mode`, `path` (FilePicker); `tone`, `text`, `spans`, `actionLabel`, `dismissible` (Banner);
   `tone`, `text`, `icon`, `style`, and `removable` (the remove control's name) of a removable one (Badge); `value`, `label` (Progress); `steps`, `current` (Steps); `items`
   `captions` and `captionWidth` (KeyValue); `title`, `text`, `icon`, `actionLabel` (EmptyState); `side`, `open`, `title`, `description` (Drawer);
   `axis`, `sizes` (Splitter); `title`, `header` (the header child's id), `open` (Collapsible);
   `accept`, `multiple` (DropZone); `component`, `minVersion` and each prop as `prop.<name>` (Custom);
-  `yRange`, `xRange`, `yLabel`, `yTicks`, `lines`, `series`, `summary` (Chart, each set only when its text
+  `yRange`, `xRange`, `barSlot`, `yLabel`, `yTicks`, `lines`, `series`, `summary` (Chart, each set only when its text
   changed, so a test sees which parts of the data moved).
 - **Components.** `createCustom` loads only the components named by `loadsComponents(names)`, none
   until it is called, so a custom node shows its fallback by default. A loaded one is a `Custom`
@@ -513,11 +539,11 @@ The headless reference backend and the test double for everything above the cont
   ISO-8601 UTC instant with milliseconds, `empty` for an empty `Timestamp`; sizing as `content`,
   `fixed(n)` or `stretch(n)`, a layout as `width/height`; lists as `[a,b]`; options as
   `[key:label,…]`; columns as `[label:sizing,…]`; a slider's range as `minimum..maximum/step`;
-  a fraction in its shortest decimal form (`0.25`); steps as `[label:State,…]`; key-value pairs
+  a fraction in its shortest decimal form (`0.25`); steps as `[label:State,…]`, a nonempty detail following its step as `;detail=<text>` (`[Received:Done;detail=A. Weber\, 09:14,Verified:Active]`), a `;` in a label or detail escaped whether or not the step has a detail; key-value pairs
   as `[label:value,…]`, a value with spans as its runs in brackets and a tone other than `Neutral` following as
   `;tone=<Tone>` (`[Serial number:[DEAB-902114;mono],Containers:180 needed;tone=Err]`), with `;` escaped in a caption
   or value so it cannot forge a tone; sizes as `[n,…]`; a chart's ranges as `[lo,hi]`, its ticks as `[text@value,…]`, its lines
-  as `[label@value;tone;style,…]` (`err`, `dashed`), and its series as `[label;joined;[point|…],…]`, each point
+  as `[label@value;tone;style,…]` (`err`, `dashed`), and its series as `[label;joined;[point|…],…]` (a `Bars` series followed by `;bars` after its points, a `Line` series by nothing: `[Revenue;false;[Jan@0,12;;|Feb@1,15;;];bars]`), each point
   `xLabel@x,y;tone;note` with `y` as a number, `gap` for none, or the axis end followed by `↑` or `↓` for a clipped
   point, and the tone empty for an unmarked one; every chart number shortest-round-trip, so a log is the same on
   every platform; runs as `[Lot ,L-26-0381;mono]`, each run's text followed by `;strong` and
@@ -528,7 +554,7 @@ The headless reference backend and the test double for everything above the cont
   its submenu follows in brackets: `[File[Open;keys=Ctrl+O,Recent[a.txt]],;separator,Wrap;checked=true]`.
 - **Escaping.** Free text is escaped so that every value stays on its line and reads as one field:
   a line feed becomes `\n`, a carriage return `\r`, and a backslash or `=` is preceded by a
-  backslash. Text inside a list also escapes `,`, `[` and `]`, text inside a menu or a run also `;`, text inside a chart
+  backslash. Text inside a list also escapes `,`, `[` and `]`, text inside a menu, a run, a key-value pair or a step also `;`, text inside a chart
   property also `;`, `@` and `|`, and a
   string key also escapes `"`.
 - **Lookups.** `find(kind, name, value)` is the first live widget, by id, of that kind whose
@@ -785,6 +811,12 @@ Each case is named by the rule it checks:
     second Right at the end reports nothing, and Enter reaches the enclosing column's chord.
 54. A list entry holding a column of two texts shows them in its `content()`; a click on the entry and a click on its
     first text each run the entry's action once, and inside a hidden column neither does.
+55. In a table of three rows whose first row spans its first column down all three, that cell's top is the first
+    row's other cell's top and its bottom the last row's other cell's bottom, to a unit, and the second row's cell in
+    that column has no bounds.
+56. In that table, with the spanning column's cells placed at the top of their rows, a click in the spanning cell's
+    column at the third row's line, below the cell's content, selects the first row's key: a click anywhere on the
+    span's height is a click on the span.
 
 ### What the probe cannot reach
 

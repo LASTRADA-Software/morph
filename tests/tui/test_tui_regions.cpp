@@ -356,3 +356,72 @@ TEST_CASE("tui roots: several roots share the screen as a column, the last takin
     CHECK(harness.draw() == Rows{"one", "two"});
     CHECK(WidgetBase::of(*second).view().screenBounds().height == 4);
 }
+
+// Mutations: round sizes instead of edges (the footer drifts a row), place a content-sized Bottom region from its top
+// (the footer leaves the margin), skip the pan offset (the footer stays at column 5 after Right).
+TEST_CASE("tui page: the sheet is drawn at the typewriter pitch in a frame, regions at their cells, and it pans",
+          "[tui][regions][page]") {
+    using morph::tui::detail::PageImpl;
+    using morph::tui::detail::PageRegionImpl;
+    Harness harness{30, 18};
+    ui::PageGeometry const sheet{.width = ui::Mm{100}, .height = ui::Mm{60}, .margins = ui::PageMargins{ui::Mm{10}}};
+    auto const page = harness.make<PageImpl>(nullptr, sheet);
+    auto const window = harness.make<PageRegionImpl>(page.get(), ui::RegionGeometry{.anchor = ui::PageAnchor::Offset,
+                                                                                    .x = ui::Mm{20},
+                                                                                    .y = ui::Mm{15},
+                                                                                    .width = ui::Mm{40},
+                                                                                    .height = ui::Mm{15}});
+    auto const footer = harness.make<PageRegionImpl>(page.get(), ui::RegionGeometry{.anchor = ui::PageAnchor::Bottom});
+    auto const address = harness.make<TextImpl>(window.get());
+    auto const foot = harness.make<TextImpl>(footer.get());
+    address->setText("Address");
+    foot->setText("foot");
+    // 100 mm is 39 columns and 60 mm 14 rows; the frame adds a cell on each side.
+    CHECK(WidgetBase::of(*page).naturalSize().width == 41);
+    CHECK(WidgetBase::of(*page).naturalSize().height == 16);
+    Rows rows = harness.draw();
+    REQUIRE(rows.size() >= 14);
+    CHECK(rows.at(0).starts_with("┌"));
+    // The window: 20 mm is column 8, 15 mm is row 4, inside the frame's cell.
+    // The frame's side is a three-byte character, so a byte offset is two more than its cell.
+    CHECK(rows.at(5).find("Address") == 9 + 2);
+    // The footer lies on the bottom margin: 50 mm is row 12, its one row is row 11, inside the frame's cell.
+    CHECK(rows.at(12).find("foot") == 5 + 2);
+    // The sheet is wider than the viewport: the page takes the focus and pans right.
+    harness.focus(*page);
+    CHECK(harness.focused(*page));
+    for (int pan = 0; pan < 3; ++pan) {
+        CHECK(harness.key(core::tui::KeyCode::Right) == core::tui::EventResult::Handled);
+    }
+    rows = harness.draw();
+    CHECK(page->pan() == 3);
+    // The left side of the frame has panned out of view.
+    CHECK(rows.at(12).find("foot") == 2);
+    CHECK(harness.key(core::tui::KeyCode::End) == core::tui::EventResult::Handled);
+    CHECK(page->pan() == 11);
+    CHECK(harness.key(core::tui::KeyCode::Home) == core::tui::EventResult::Handled);
+    CHECK(page->pan() == 0);
+}
+
+// Mutation: leave the mark out (the clipped row shows no ellipsis).
+TEST_CASE("tui page: a region whose content does not fit is marked in its last row", "[tui][regions][page]") {
+    using morph::tui::detail::PageImpl;
+    using morph::tui::detail::PageRegionImpl;
+    Harness harness{45, 18};
+    ui::PageGeometry const sheet{.width = ui::Mm{100}, .height = ui::Mm{60}, .margins = ui::PageMargins{ui::Mm{10}}};
+    auto const page = harness.make<PageImpl>(nullptr, sheet);
+    // 5 mm is one row; two lines of content do not fit it.
+    auto const box = harness.make<PageRegionImpl>(page.get(), ui::RegionGeometry{.anchor = ui::PageAnchor::Offset,
+                                                                                 .x = ui::Mm{20},
+                                                                                 .y = ui::Mm{15},
+                                                                                 .width = ui::Mm{40},
+                                                                                 .height = ui::Mm{5}});
+    auto const first = harness.make<TextImpl>(box.get());
+    auto const second = harness.make<TextImpl>(box.get());
+    first->setText("one");
+    second->setText("two");
+    Rows const rows = harness.draw();
+    CHECK(box->overflow());
+    CHECK(rows.at(5).find("…") != std::string::npos);
+    CHECK(rows.at(5).find("one") != std::string::npos);
+}

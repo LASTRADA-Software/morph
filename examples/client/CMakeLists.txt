@@ -50,8 +50,8 @@ foreach(_morph_client IN LISTS _morph_clients)
         # Each ladder rung with screens runs in local mode too, when the ladder builds it.
         set(_morph_client_lims 0)
         if(TARGET ladder_lims_screens)
-            target_link_libraries(${_morph_client} PRIVATE morph::ladder_lims_screens
-                                  "$<LINK_LIBRARY:WHOLE_ARCHIVE,morph::ladder_lims_lib>")
+            # ladder_lims_lib is an INTERFACE target whose own links whole-archive lims's modules, so it is linked plain.
+            target_link_libraries(${_morph_client} PRIVATE morph::ladder_lims_screens morph::ladder_lims_lib)
             set(_morph_client_lims 1)
         endif()
         target_compile_definitions(${_morph_client} PRIVATE MORPH_CLIENT_HAS_LIMS=${_morph_client_lims})
@@ -88,6 +88,29 @@ foreach(_morph_client IN LISTS _morph_clients)
         apply_coverage(${_morph_client})
     endif()
 endforeach()
+
+# lims alone, for scripts/shoot_lims.sh. lims keeps its action ids distinct from examples/forms (`ListSamples`) and
+# examples/bank (`ListAccounts`) because the registry refuses one action id on two action types.
+if(TARGET ladder_lims_screens AND NOT EMSCRIPTEN)
+    add_executable(morph_lims_client main.cpp local_apps.hpp lims_apps.cpp)
+    target_link_libraries(morph_lims_client PRIVATE morph::ladder_lims_screens morph::ladder_lims_lib morph::client)
+    if(_morph_client_qt_quick)
+        target_link_libraries(morph_lims_client PRIVATE morph::qt_quick)
+    endif()
+    if(_morph_client_tui)
+        target_link_libraries(morph_lims_client PRIVATE morph::tui)
+    endif()
+    target_compile_definitions(morph_lims_client PRIVATE
+        MORPH_CLIENT_HAS_QT_QUICK=${_morph_client_qt_quick}
+        MORPH_CLIENT_HAS_TUI=${_morph_client_tui})
+    apply_warnings(morph_lims_client)
+    if(DEFINED AF_SANITIZER)
+        apply_sanitizers(morph_lims_client ${AF_SANITIZER})
+    endif()
+    if(AF_COVERAGE)
+        apply_coverage(morph_lims_client)
+    endif()
+endif()
 
 # The client binary itself, end to end: the gallery opened in local mode under Qt Quick, offscreen, quits with 0 once
 # its screen mounted without a problem.

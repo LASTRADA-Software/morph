@@ -82,6 +82,9 @@ coverage_exclusion_reason() {
         morph_effects_unseen_links)
             echo "the BRIDGE_REGISTER_EFFECTS link probe (tests/CMakeLists.txt): two translation units, only one of which sees an action's effects, must link into one program and read the same effects; the fixture record and action exist nowhere else in the tree, so instrumenting it would only score probe-unique template instantiations against the library"
             ;;
+        lims_cross_module_effects_refused|lims_cross_module_effects_control)
+            echo "the lims cross-module effects probes (examples/lims/CMakeLists.txt): one program registers a second effects declaration for another module's action and must be refused, the other omits it and must resolve; they assert a registration rule about one fixture and drive no model code, so instrumenting them would only score probe-specific instantiations against the rung"
+            ;;
         fuzz_wire_decode|fuzz_dispatch_execute)
             echo "libFuzzer harnesses (MORPH_BUILD_FUZZERS=ON only, which the coverage leg does not set); apply_fuzzer() builds them at -O1 under -fsanitize=fuzzer,address, a different instrumentation from apply_coverage()'s"
             ;;

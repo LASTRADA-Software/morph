@@ -19,7 +19,10 @@ or stays visible.
 **The promotion rule (rule-of-three, from the round-7 review):** an
 app-built answer to a framework gap (the polling helper with its timeout,
 an op-id ledger, epoch tokens, a recursive validator, redaction-on-serve)
-may be built twice in `examples/`. The moment a **third** rung consumes it,
+may be built twice in `examples/`. A module of a rung built from modules
+(lims's `org`, `lab`, and the ERP modules that follow) counts as a consumer
+of its own, and inside such a rung the **second** module's need promotes, as
+`AGENTS.md`'s second-place signal says. Across rungs, the moment a **third** rung consumes it,
 it must either be **promoted into `include/morph`** (with its full docs
 tax, drawn from the fix budget) or **explicitly dispositioned in the spec
 as app-layer by design**. Without this rule the ladder ends with a shadow
@@ -55,7 +58,7 @@ The user-code contract is: **you implement Models; morph exposes them.**
     on replay — validation, authorization, dedup, conflict classification —
     stays in the model, which replay re-dispatches through as usual. The
     sanctioned home is a dedicated app-layer write-path class
-    (`examples/lims/include/lims/offline/field_outbox.hpp` is the reference),
+    (`examples/lims/lab/include/lims/lab/offline/field_outbox.hpp` is the reference),
     **not** a screen or a client; the transport-shaped half (queue a
     mutation while offline, replay it in order) is the framework's
     `morph::ui::QueueingDispatcher`.
@@ -69,6 +72,11 @@ The user-code contract is: **you implement Models; morph exposes them.**
 - Models must re-check their own preconditions and authorization
   (`Context::principal`) — the schema's `required` and the client gates are
   UX, not security (`docs/spec/security.md`).
+  An authorization rule that reads the payload or the instance is the action's
+  guard (`using guard = …;`, `docs/spec/core/action_guards.md`), which the
+  framework runs on every dispatch path; a direct caller uses
+  `morph::model::executeChecked`. A rule that must hold atomically with the
+  write is judged again inside the write's transaction.
 - Action failures are thrown as the app's typed error set (one
   `core/errors.hpp`-style header per rung, as bank does) and surface through
   `Completion::onError`; never encode failure as a magic value in a result
@@ -106,6 +114,12 @@ not building UIs; we are proving morph can drive them.
 - **Zero styling effort.** Default Qt Quick controls, default fonts, no
   theming, no animations, no custom drawing. A rung that looks pretty has
   spent effort in the wrong place.
+  lims is exempt from the zero-styling clause, and only lims: its GUI is built
+  to a commercial product's standard against committed mockups
+  (`examples/lims/design/mockups/`), because the limit it looks for is where the
+  declarative UI stops reaching production quality, which a minimal screen
+  never meets. Its look is still a ui/1 document with no hand-written QML and
+  no per-screen client code; bookmarks and bank keep minimalism.
 
 ## 3. Type discipline: strong types only
 
@@ -138,9 +152,11 @@ fit the palette, that is a finding, not a license for `int64_t`.
 Each rung defines its unit system once (`<rung>/include/<rung>/units.hpp`,
 modelled on `examples/forms/lab_units.hpp`): the enum, `UnitTraits`
 metadata, the consteval algebra, and the exact entry-unit relations. Money
-is a unit system too (currency units with per-currency `dp` — respecting
-the `DecimalPlaces >= 1` floor and the documented JPY/KRW convention in
-`docs/spec/util/quantity_type.md`).
+is a unit system too. Where the type fixes the currency, a unit per currency
+declares its decimals, and zero is legal (`docs/spec/util/quantity_type.md`:
+`Dec == 0` is what a zero-decimal currency such as JPY declares). Where the
+currency is known only from the record, as in lims, one money unit carries
+the amount and the currency is a field beside it (lims decision 28).
 
 Every action declares `validate()` (via `allRequiredEngaged` +
 domain checks) and carries `fieldMetadata`/`formRules` where the form needs
@@ -155,7 +171,7 @@ same way [`bank`](bank/README.md) does. **No rung implements any database
 code itself.**
 
 - **Entities** are Lightweight `Field<>`-wrapped records in
-  `include/<rung>/db/*_entity.hpp`, kept strictly separate from the wire
+  `include/<rung>/db/*_entity.hpp` (or, in a rung built from modules, `<module>/include/<rung>/<module>/db/*_entity.hpp`), kept strictly separate from the wire
   DTOs; the model maps DTO ⇄ entity (bank's two-type-layer architecture).
 - **Access** is through `Lightweight::DataMapper`: a model holds no
   connection of its own — each `execute()` acquires one from
@@ -207,7 +223,7 @@ code itself.**
 ## 5. Testing: models are 100% unit tested
 
 - **Every model is 100% unit tested** — line and branch coverage of
-  `src/models/` + `include/<rung>/models/` at 100%. This is a target, not a
+  `src/models/` + `include/<rung>/models/` (per module in a rung built from modules) at 100%. This is a target, not a
   gate: each rung has a `codecov.yml` component
   (`component_management.individual_components`) naming its paths, and every
   component is `informational: true`, so a shortfall is recorded in the rung's

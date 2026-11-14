@@ -504,6 +504,8 @@ TEST_CASE("formView: an inline layout puts the label beside the control; a stack
     std::vector<int> const line = backend.children(cell);
     REQUIRE(line.size() == 2);
     CHECK(line.at(0) == inlined.widget("Text", "label_name"));
+    // A caption is in the `label` role, so the theme's `field.caption.case` shapes it.
+    CHECK(backend.prop(line.at(0), "role") == "Label");
     CHECK(backend.prop(line.at(0), "layout") == "fixed(16)/content");
     CHECK(backend.prop(line.at(1), "layout") == "stretch(1)/content");
     CHECK(backend.children(line.at(1)) == std::vector<int>{inlined.widget("TextInput", "field_name")});
@@ -524,6 +526,7 @@ TEST_CASE("formView: an inline layout puts the label beside the control; a stack
     std::vector<int> const column = stacked.backend.children(stacked.widget("Column", "cell_name"));
     REQUIRE(column.size() == 2);
     CHECK(column.at(0) == stacked.widget("Text", "label_name"));
+    CHECK(stacked.backend.prop(column.at(0), "role") == "Label");
     CHECK(column.at(1) == stacked.widget("TextInput", "field_name"));
     CHECK_FALSE(stacked.has("Row", "cell_name"));
 }
@@ -547,6 +550,27 @@ TEST_CASE("formView: a control an override draws keeps its help as a muted text 
     auto const help = mounted.backend.find("Text", "text", "Shown to the customer");
     REQUIRE(help.has_value());
     CHECK(mounted.backend.prop(*help, "role") == "Muted");
+}
+
+// Mutation: leave `.pattern` out of the form's date input (the property stays empty, and ISO shows).
+TEST_CASE("formView: a date field's input carries the session's date pattern, and the stored value stays ISO",
+          "[forms-engine][view]") {
+    Mounted const iso{kKinds};
+    CHECK(iso.backend.prop(iso.widget("DateTimeInput", "field_when"), "pattern").empty());
+    CHECK(iso.backend.prop(iso.widget("DateTimeInput", "field_day"), "pattern").empty());
+
+    morph::forms::FormSessionOptions options;
+    options.datePattern = "dd.MM.yyyy";
+    options.dateTimePattern = "dd.MM.yyyy HH:mm";
+    Mounted mounted{kKinds, {}, std::move(options)};
+    CHECK(mounted.backend.prop(mounted.widget("DateTimeInput", "field_when"), "pattern") == "dd.MM.yyyy HH:mm");
+    CHECK(mounted.backend.prop(mounted.widget("DateTimeInput", "field_day"), "pattern") == "dd.MM.yyyy");
+    CHECK(mounted.backend.prop(mounted.widget("DateTimeInput", "field_since"), "pattern") == "dd.MM.yyyy");
+
+    auto const instant = morph::forms::detail::engine::draftInstant("2024-01-01T10:00", false, 0);
+    REQUIRE(instant.has_value());
+    mounted.backend.setDateTime(mounted.widget("DateTimeInput", "field_when"), instant);
+    CHECK(mounted.form->field("when").text().peek() == "2024-01-01T10:00:00");
 }
 
 TEST_CASE("formView: a check box, a date-time input and a slider write their draft back to the field",

@@ -88,6 +88,18 @@ public:
         mouseClick(target);
     }
 
+    void clickAt(ui::Widget& across, ui::Widget& along) override {
+        settle();
+        QQuickItem const* const column = Backend::itemOf(across);
+        QQuickItem const* const line = Backend::itemOf(along);
+        if (column == nullptr || line == nullptr || !column->isVisible() || _fault == Fault::DeadInput) {
+            return;
+        }
+        QTest::mouseClick(&_scene.window(), Qt::LeftButton, {},
+                          QPoint{Scene::centreOf(*column).x(), Scene::centreOf(*line).y()});
+        settle();
+    }
+
     void type(ui::Widget& widget, std::string_view text) override {
         settle();
         detail::ItemBase const& field = base(widget);
@@ -277,6 +289,9 @@ public:
             _scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
         if (item == nullptr || theme == nullptr) {
             return std::nullopt;
+        }
+        if (!item->isVisible()) {
+            return ui::testing::WidgetBounds{};  // a hidden item is drawn nowhere, whatever size it keeps
         }
         qreal const unitWidth = theme->property("unitWidth").toReal();
         qreal const unitHeight = theme->property("unitHeight").toReal();

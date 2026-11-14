@@ -3,20 +3,25 @@
 // Sample entry: a private working copy edited section by section, committed only by a save; the save's typed
 // refusals; the dilution series the model computes; the project lookup; and deleting a registration.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <memory>
+#include <morph/core/action_guard.hpp>
+#include <morph/journal/action_log.hpp>
 #include <morph/table/query.hpp>
 #include <morph/util/rational.hpp>
 #include <string>
 #include <vector>
 
-#include "lims/core/errors.hpp"
-#include "lims/models/sample_model.hpp"
+#include "lims/lab/db/lims_entity.hpp"
+#include "lims/lab/models/sample_model.hpp"
+#include "lims/org/core/errors.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/storage_owner.hpp"
 
 using lims::test::ScopedPrincipal;
-using morph::ladder::testkit::DbFixture;
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
 using morph::math::Numerator;
@@ -45,8 +50,11 @@ Rational pct(std::int64_t num, std::int64_t den = 1) {
 void completeCopy(lims::SampleModel& model) {
     auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
     model.execute(lims::NewSample{});
-    model.execute(lims::HeaderSection{
-        .clientId = client.clientId, .reference = "WW-0001", .receivedOn = 20'000, .remarks = "cold chain"});
+    model.execute(lims::HeaderSection{.clientId = client.clientId,
+                                      .reference = "WW-0001",
+                                      .receivedOn = 20'000,
+                                      .remarks = "cold chain",
+                                      .siteId = lims::test::seededSite()});
     model.execute(lims::SelectProject{.projectId = 2});
 }
 
@@ -54,7 +62,7 @@ void completeCopy(lims::SampleModel& model) {
 
 // Mutation: store the working copy on every section action (the second model loads the edited reference).
 TEST_CASE("sample entry: sections edit the working copy and only a save stores it", "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     ScopedPrincipal const alice{"alice"};
     lims::SampleModel model;
     completeCopy(model);
@@ -89,7 +97,7 @@ TEST_CASE("sample entry: sections edit the working copy and only a save stores i
 // Mutation: accept a copy without a project (the last refusal reads `none` and a sample is stored).
 TEST_CASE("sample entry: a save refuses an incomplete copy with a typed reason and stores nothing",
           "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     ScopedPrincipal const alice{"alice"};
     lims::SampleModel model;
     CHECK(model.execute(lims::SaveSample{}).error == lims::SaveError::noWorkingCopy);
@@ -112,7 +120,7 @@ TEST_CASE("sample entry: a save refuses an incomplete copy with a typed reason a
 
 // Mutation: compute the nominal as spike × factor (every nominal after the first is wrong).
 TEST_CASE("sample entry: the model computes the dilution series and its limits exactly", "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
     model.execute(lims::NewSample{});
     CHECK(model.execute(lims::GetDilutionSeries{}).rows.empty());
@@ -146,7 +154,7 @@ TEST_CASE("sample entry: the model computes the dilution series and its limits e
 
 // Mutation: clear both readings for either name (the nitrate reading is gone after clearing turbidity).
 TEST_CASE("sample entry: clearing an optional measurement removes only its reading", "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
     model.execute(lims::NewSample{});
     model.execute(lims::TurbiditySection{.ntu = lims::Turbidity{Rational{2, DecimalPlaces{2}}}});
@@ -158,7 +166,7 @@ TEST_CASE("sample entry: clearing an optional measurement removes only its readi
 }
 
 TEST_CASE("sample entry: a section without a working copy is refused", "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
     CHECK_THROWS_AS(model.execute(lims::GetHeader{}), lims::NotFound);
     CHECK_THROWS_AS(model.execute(lims::NitrateSection{.nitrate = mgL(1)}), lims::NotFound);
@@ -169,7 +177,7 @@ TEST_CASE("sample entry: a section without a working copy is refused", "[lims][s
 // Mutation: ignore the table query (the filter returns every project).
 TEST_CASE("sample entry: the project lookup is sorted, filtered and paged by the table engine",
           "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     lims::SampleModel model;
     lims::ListProjects request;
     request.query.sort.push_back(
@@ -188,7 +196,7 @@ TEST_CASE("sample entry: the project lookup is sorted, filtered and paged by the
 
 // Mutation: delete without the state check (the received sample is deleted).
 TEST_CASE("sample entry: deleting withdraws a registration and refuses a received sample", "[lims][sample-entry]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     ScopedPrincipal const alice{"alice"};
     lims::SampleModel model;
     completeCopy(model);
@@ -203,6 +211,162 @@ TEST_CASE("sample entry: deleting withdraws a registration and refuses a receive
     auto const second = model.execute(lims::SaveSample{});
     REQUIRE(second.error == lims::SaveError::none);
     model.execute(lims::ReceiveSample{});
-    CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::IllegalTransition);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::DeleteSample{}), lims::IllegalTransition);
     CHECK(reader.execute(lims::LoadSample{.id = second.sampleId}).reference == "WW-0001");
+}
+
+// Mutations: drop the id check from LoadSample; let DeleteSample run on a working copy that was never saved.
+TEST_CASE("sample entry: loading names a sample, and a never-saved working copy cannot be deleted",
+          "[lims][sample-entry]") {
+    lims::test::LabFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Analyst);
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    CHECK_THROWS_AS(model.execute(lims::LoadSample{}), lims::ValidationError);
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::DeleteSample{}), lims::NotFound);
+}
+
+// Mutations: skip the client lookup in SaveSample (a header naming a client that does not exist is stored); clear
+// turbidity whichever optional measurement is named.
+TEST_CASE("sample entry: a save names a client that exists, and each optional measurement clears on its own",
+          "[lims][sample-entry]") {
+    lims::test::LabFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Analyst);
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    completeCopy(model);
+    model.execute(lims::HeaderSection{.clientId = lims::ClientId{9999},
+                                      .reference = "WW-0001",
+                                      .receivedOn = 20'000,
+                                      .remarks = {},
+                                      .siteId = lims::test::seededSite()});
+    CHECK_THROWS_AS(::morph::model::executeChecked(model, lims::SaveSample{}), lims::NotFound);
+
+    model.execute(
+        lims::TurbiditySection{.ntu = lims::Turbidity{Rational{Numerator{3}, Denominator{2}, DecimalPlaces{2}}}});
+    model.execute(lims::NitrateSection{
+        .nitrate = lims::Concentration{Rational{Numerator{3}, Denominator{2}, DecimalPlaces{2}}}});
+    auto const cleared = model.execute(lims::ClearOptionalMeasurement{.which = std::string{lims::kNitrate}});
+    CHECK_FALSE(cleared.hasNitrate);
+    CHECK(cleared.hasTurbidity);
+}
+
+// Mutation: DeleteSample reads the stored sample without checking that the working copy was ever saved.
+TEST_CASE("sample entry: the delete handler refuses a never-saved working copy on its own", "[lims][sample-entry]") {
+    lims::test::LabFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    completeCopy(model);
+    CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::NotFound);
+    // The draft survives the refusal.
+    CHECK(model.execute(lims::GetHeader{}).reference == "WW-0001");
+}
+
+// Mutation: let the entry scopes of a handler with no working copy name a site.
+TEST_CASE("sample entry: a handler with no working copy writes to no scope", "[lims][sample-entry]") {
+    lims::SampleModel model;
+    CHECK(model.entryScopes().empty());
+}
+
+// Mutation: ignore a stored entry that does not decode (the sample loads with an empty working copy).
+TEST_CASE("sample entry: a stored entry that does not decode is refused on load", "[lims][sample-entry]") {
+    lims::test::LabFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    completeCopy(model);
+    auto const saved = model.execute(lims::SaveSample{});
+    REQUIRE(saved.error == lims::SaveError::none);
+    {
+        Lightweight::DataMapper mapper;
+        auto entries = mapper.Query<lims::db::SampleEntryRecord>().All();
+        REQUIRE(entries.size() == 1U);
+        entries.front().payload = Lightweight::SqlDynamicAnsiString<4096>{std::string{"not json"}};
+        mapper.Update(entries.front());
+    }
+    lims::SampleModel other;
+    CHECK_THROWS_AS(other.execute(lims::LoadSample{.id = saved.sampleId}), lims::ValidationError);
+}
+
+// Mutation: journal a refused save before checking that the working copy belongs to a stored sample (a never-saved
+// draft gains a trail), or never journal it (a stored sample's trail lacks the refusal).
+TEST_CASE("sample entry: a refused rewrite of a stored sample is journaled in its trail, a never-saved draft's is not",
+          "[lims][sample-entry]") {
+    lims::test::LabFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
+    lims::SampleModel model;
+    model.attachActionLog(log, std::string{});
+
+    // A never-saved draft naming a client that does not exist: refused, and no trail to put it in.
+    completeCopy(model);
+    model.execute(lims::HeaderSection{.clientId = lims::ClientId{9999},
+                                      .reference = "WW-0001",
+                                      .receivedOn = 20'000,
+                                      .remarks = {},
+                                      .siteId = lims::test::seededSite()});
+    auto const before = log->entries().size();
+    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::NotFound);
+    CHECK(log->entries().size() == before);
+
+    // The same refusal on a stored sample is its trail's last step.
+    auto const client = model.execute(lims::RegisterClient{.name = "Second Ltd"});
+    model.execute(lims::HeaderSection{.clientId = client.clientId,
+                                      .reference = "WW-0002",
+                                      .receivedOn = 20'000,
+                                      .remarks = {},
+                                      .siteId = lims::test::seededSite()});
+    auto const saved = model.execute(lims::SaveSample{});
+    REQUIRE(saved.error == lims::SaveError::none);
+    auto const key = std::to_string(*saved.sampleId);
+    model.execute(lims::HeaderSection{.clientId = lims::ClientId{9999},
+                                      .reference = "WW-0002",
+                                      .receivedOn = 20'000,
+                                      .remarks = {},
+                                      .siteId = lims::test::seededSite()});
+    auto const trailBefore = log->entries(key).size();
+    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::NotFound);
+    auto const trail = log->entries(key);
+    REQUIRE(trail.size() == trailBefore + 1U);
+    CHECK(trail.back().outcome == morph::journal::Outcome::Failed);
+    CHECK(trail.back().actionType == "SaveSample");
+}
+
+// Mutation: delete the site lookup from RegisterSample (a sample is written for a site that is not there), or from
+// SaveSample (a working copy naming a site that is not there is stored).
+TEST_CASE("sample entry: an unknown site is refused by the handlers on their own", "[lims][sample-entry]") {
+    lims::test::LabFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    auto const client = model.execute(lims::RegisterClient{.name = "Acme"});
+    CHECK_THROWS_AS(model.execute(lims::RegisterSample{
+                        .siteId = lims::SiteId{9999}, .clientId = client.clientId, .reference = "WW-1"}),
+                    lims::NotFound);
+    completeCopy(model);
+    model.execute(lims::HeaderSection{.clientId = client.clientId,
+                                      .reference = "WW-2",
+                                      .receivedOn = 20'000,
+                                      .remarks = {},
+                                      .siteId = lims::SiteId{9999}});
+    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::NotFound);
+    Lightweight::DataMapper mapper;
+    CHECK(mapper.Query<lims::db::SampleRecord>().All().empty());
+}
+
+// Mutation: delete the stored-sample lookup from SaveSample or DeleteSample (a working copy whose sample row has been
+// removed is rewritten, or deleted, as if the row were there).
+TEST_CASE("sample entry: a working copy of a sample whose row is gone is refused by save and by delete",
+          "[lims][sample-entry]") {
+    lims::test::LabFixture fixture;
+    ScopedPrincipal const alice{"alice"};
+    lims::SampleModel model;
+    completeCopy(model);
+    auto const saved = model.execute(lims::SaveSample{});
+    REQUIRE(saved.error == lims::SaveError::none);
+    {
+        Lightweight::DataMapper mapper;
+        mapper.Query<lims::db::SampleEntryRecord>().Delete();
+        mapper.Query<lims::db::SampleRecord>().Delete();
+    }
+    CHECK_THROWS_AS(model.execute(lims::SaveSample{}), lims::NotFound);
+    CHECK_THROWS_AS(model.execute(lims::DeleteSample{}), lims::NotFound);
 }

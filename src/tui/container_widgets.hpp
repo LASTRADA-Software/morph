@@ -305,6 +305,28 @@ private:
     ScrollViewport _scroller{ui::Axis::Vertical};
 };
 
+/// A popover: the rows of a panel that belongs to another widget, in flow where it is mounted while it is open and
+/// nothing while it is closed. The terminal has no floating layer, so the panel takes room in its parent's column
+/// instead of covering the content; it takes no focus of its own, and the parent's widgets handle Escape, so the
+/// dismissal handler is kept for a caller and never called here.
+class PopoverImpl final : public TuiContainer<ui::PopoverWidget> {
+public:
+    explicit PopoverImpl(Context& context) : TuiContainer{context} {
+        adopt(makeView(*this));
+        applyVisible(false);
+    }
+    void setOpen(bool open) override;
+    /// The width is the parent's: a row of the terminal's column has no narrower box to draw in.
+    void setWidth(int units) override { static_cast<void>(units); }
+    void setOnDismiss(ui::Action onDismiss) override { _onDismiss = std::move(onDismiss); }
+    [[nodiscard]] ::core::tui::Size naturalSize() const override;
+    [[nodiscard]] std::vector<::core::tui::Rect> childAreas(::core::tui::Size size) const override;
+    void paint(::core::tui::Canvas& canvas) override;
+
+private:
+    ui::Action _onDismiss;
+};
+
 /// The overlay of a dialog or a drawer: a box with a border and a title over everything else, holding the children's
 /// views; the widget's place in the tree is an empty anchor. A dialog's box is centred, a drawer's stands against
 /// its side the screen's whole height.

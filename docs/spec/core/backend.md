@@ -227,8 +227,11 @@ envelope, so there is nothing to stamp.
 A protocol layered on the wire, such as the UI service's `ui-*` kinds ([ui/service.md](../ui/service.md)), needs to send
 an envelope of its own kind and read the reply. `IBackend`'s verbs each build their own envelope, so a wire
 transport offers this beside it: `morph::backend::IEnvelopeTransport` (`core/envelope_transport.hpp`), with one
-verb, `request(envelope, cbExec) -> Completion<wire::Envelope>`. `SocketBackend` and `QtWebSocketBackend`
-implement it; `LocalBackend` and `SimulatedRemoteBackend` do not, since a backend without a wire has no peer.
+verb, `request(envelope, cbExec) -> Completion<wire::Envelope>`. `SocketBackend`, `QtWebSocketBackend` and
+`SimulatedRemoteBackend` implement it; `LocalBackend` does not, since it has no server to ask. A
+`SimulatedRemoteBackend` sends through `RemoteServer::handle` on its own connection scope, so a service sees the
+connection the backend's events arrive on; this is how a host that runs its models in process reaches the UI and chat
+services. Its `callId` is one counter of its own, and `cancelPending` rejects what is unanswered.
 It is a separate interface rather than an `IBackend` virtual so that `IBackend`'s many implementations, test
 doubles included, are untouched.
 

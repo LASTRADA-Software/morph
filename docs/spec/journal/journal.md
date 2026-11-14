@@ -89,7 +89,9 @@ runner (server/remote topologies) and `Bridge::executeVia`'s `localOp`
 (`LocalBackend`) — wrap the call in a `try`/`catch (const std::exception&)`:
 the `catch` records a `Failed` entry (`error = exc.what()`, `result` empty)
 and rethrows unchanged, so the caller's error handling is unaffected by the
-recording.
+recording. The action's guard, when it declares one, runs just before
+`Model::execute` in a `try` of its own on the same sites and records its
+refusal the same way ([core/action_guards.md](../core/action_guards.md)).
 
 ### The run's origin
 
@@ -105,11 +107,12 @@ it reads `session::currentOrigin()` itself, or its entries carry no origin.
 
 ### A refused recording is not an execution failure
 
-`Outcome::Failed` means the model rejected the action, and nothing else. Only
-`Model::execute` can produce it, so it is the only call inside the `try` that
-records one.
+`Outcome::Failed` means the action was refused, and nothing else: by
+`Model::execute`, or by the action's guard immediately before it
+([core/action_guards.md](../core/action_guards.md)). Each runs in a `try` of its
+own that records a refusal, and each is the only call inside its `try`.
 
-Two steps run after it and before the caller is answered: serialising the
+Two steps run after `Model::execute` and before the caller is answered: serialising the
 result (`ActionTraits<Action>::resultToJson`, which raises
 `model::detail::ParseError` on a write error) and appending the `LogEntry`. Both
 can throw, and by the time either does the model's mutation has already
@@ -1106,6 +1109,14 @@ relies on. A thread-local, read via a free function, is additive: existing
 explicitly calls `isReplaying()` (the rules engine) observes anything new —
 the same reasoning `session::current()` already established for `Context`.
 
+**Action guards skip by holder, not by this flag.** The four execution sites
+skip an action's guard for the holder `replay()` is reconstructing, which
+`replay()` marks with `IModelHolder::markReconstructing(true)` before its loop
+and clears before returning it. They do not read `isReplaying()`: it is true for
+every dispatch on the thread during the loop, including a nested dispatch onto
+another holder, which runs its guard as always. See
+[core/action_guards.md, "Where it does not run"](../core/action_guards.md#where-it-does-not-run).
+
 **Scope: signals replay, not identity.** `isReplaying()` says nothing about
 *which* entry is being replayed or *which* model instance — a rule reading it
 combines it with the dispatched action's own fields (available inside
@@ -1433,7 +1444,8 @@ These hold for every sink and are relied on by `replay()`/`undoLast()`:
   success, so replaying `payload` re-derives an equivalent `result` for a
   deterministic model. A `Failed` entry has no `result` to derive — see
   `replay()`, next.
-- **A `Failed` entry means the model rejected the action.** It never means the
+- **A `Failed` entry means the action was refused** — by `Model::execute` or by
+  the action's guard just before it. It never means the
   framework could not record a success. Serialising the result and appending the
   entry run after the mutation has committed, outside the `try` that records
   `Failed`; a throw from either is reported to the caller as

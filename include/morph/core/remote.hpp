@@ -38,6 +38,7 @@
 #include "detail/reply_router.hpp"
 #include "detail/watch_table.hpp"
 #include "effects.hpp"
+#include "envelope_transport.hpp"
 #include "logger.hpp"
 #include "observability.hpp"
 #include "owner_strand.hpp"
@@ -2195,7 +2196,8 @@ private:
                 // deployer opts into gating registration by overriding
                 // authorizeRegister. No instance is constructed on denial.
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 // A `shared` register naming a primary is a register-or-attach
@@ -2244,7 +2246,8 @@ private:
                 }
                 stampVerifiedPrincipal(env, cid);
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 acquireSharedInstance(env, reply, cid, ::morph::exec::detail::ModelId{env.modelId});
@@ -2261,7 +2264,8 @@ private:
                 // by an unauthenticated or unauthorized caller either.
                 stampVerifiedPrincipal(env, cid);
                 if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 applyAssign(env);
@@ -2276,7 +2280,8 @@ private:
                 // can refuse listing without refusing use. It discloses the live
                 // key set to anyone admitted — see docs/spec/security.md.
                 if (!_authorizer->authorize(env.session, env.typeId, {})) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 handleInstances(env, reply);
@@ -2293,7 +2298,8 @@ private:
                 // payload fingerprint of every action — so it must not be
                 // reachable by a caller the server would not let execute.
                 if (!_authorizer->authorize(env.session, env.typeId, {})) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, _dispatcher.schemasJson(env.typeId))));
@@ -2310,7 +2316,8 @@ private:
                 // names no type, so both ids are empty; it lets a verifying
                 // authorizer refuse a caller with no valid token outright.
                 if (!_authorizer->authorize(env.session, {}, {})) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 // Per-instance authorization: consult the hook with the recorded
@@ -2319,7 +2326,8 @@ private:
                 // down an instance it does not own.
                 if (const auto* inst = _instances.find(mid);
                     inst != nullptr && !_authorizer->authorizeInstance(env.session, {}, {}, mid.v, inst->owner)) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    reply(::morph::wire::encode(
+                        ::morph::wire::makeErr(std::string{::morph::wire::kUnauthorizedMessage}, env.callId)));
                     return;
                 }
                 // Release exactly the reference *this* connection (`cid`, the
@@ -2401,8 +2409,8 @@ private:
         MORPH_ZONE("RemoteServer::dispatchExecute");
         MORPH_ZONE_TEXT(env.session.requestId);
         noteOwner("RemoteServer::admitExecute");
-        auto reject = [&env, &reply](const char* message) {
-            reply(::morph::wire::encode(::morph::wire::makeErr(message, env.callId)));
+        auto reject = [&env, &reply](std::string_view message) {
+            reply(::morph::wire::encode(::morph::wire::makeErr(std::string{message}, env.callId)));
         };
         // Authenticated and authorized together, once, on entry: one look at
         // the token answers both, so a token cannot pass one check and expire
@@ -2421,7 +2429,7 @@ private:
             return;
         }
         if (!admission.allowed) {
-            reject("unauthorized");
+            reject(::morph::wire::kUnauthorizedMessage);
             return;
         }
         // Make the identity authoritative: the principal verified on entry
@@ -2451,7 +2459,7 @@ private:
         // env.session carries the verified principal (stamped just above), so an
         // ownership authorizer compares the recorded owner against it.
         if (!_authorizer->authorizeInstance(env.session, env.modelType, env.actionType, mid.v, inst->owner)) {
-            reject("unauthorized");
+            reject(::morph::wire::kUnauthorizedMessage);
             return;
         }
         // Action-evolution policy gate (opt-in; see `PayloadCompleteness`).
@@ -2463,7 +2471,7 @@ private:
             const std::string missing = missingRequiredFields(env.modelType, env.actionType, env.body);
             if (!missing.empty()) {
                 const std::string message = "payload missing required field(s): " + missing;
-                reject(message.c_str());
+                reject(message);
                 return;
             }
         }
@@ -2765,16 +2773,19 @@ private:
             run.complete(::morph::wire::encode(::morph::wire::makeOk(run.env.callId, std::move(result))));
         } else {
             ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
-            std::string message = "unknown exception";
+            ::morph::wire::Envelope failure = ::morph::wire::makeErr("unknown exception", run.env.callId);
             try {
                 std::rethrow_exception(error);
+            } catch (const ::morph::model::ActionRefusal& refusal) {
+                // The code and arguments travel beside the message, so the client words the refusal itself.
+                failure = ::morph::wire::makeRefusalErr(refusal, run.env.callId);
             } catch (const std::exception& exc) {
-                message = exc.what();
+                failure = ::morph::wire::makeErr(exc.what(), run.env.callId);
             } catch (...) {  // NOLINT(bugprone-empty-catch): the message stays "unknown exception"
                 // Keeps "unknown exception": the reply still goes out, so the
                 // caller's completion does not wait for its deadline.
             }
-            run.complete(::morph::wire::encode(::morph::wire::makeErr(message, run.env.callId)));
+            run.complete(::morph::wire::encode(failure));
         }
         run.holder->actionGate().leave();
     }
@@ -2895,7 +2906,8 @@ private:
 /// @brief `IBackend` adapter that routes all calls through a `RemoteServer` as
 ///        wire `Envelope` messages.
 ///
-/// Intended for testing and in-process simulation of remote execution.
+/// Used for testing, and by a host that runs its models in the same process: it is an `IEnvelopeTransport`, so the UI
+/// and chat services are reachable through it without a socket.
 /// Control envelopes (`bindModel`, `registerModel`, `deregisterModel`, ...) are
 /// processed through `RemoteServer::handleInline`, which answers before it
 /// returns, so a bind settles inside the call. `execute()` is asynchronous: it
@@ -2911,7 +2923,7 @@ private:
 /// each envelope to the handler, in the order the server posted them, with a
 /// `backlog` that always reads `0` -- an in-process hand-off holds nothing
 /// back, so the server never withholds an event or owes a `resync`.
-class SimulatedRemoteBackend : public detail::IBackend {
+class SimulatedRemoteBackend : public detail::IBackend, public IEnvelopeTransport {
 public:
     /// @brief Constructs the backend targeting @p server, unscoped.
     ///
@@ -3013,7 +3025,7 @@ public:
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
-        throw std::runtime_error("register failed: " + reply.message);
+        std::rethrow_exception(::morph::wire::controlFailure("register", reply.message));
     }
 
     /// @brief Acquires an instance on the server for @p request and settles
@@ -3072,7 +3084,7 @@ public:
         auto reply = ::morph::wire::decode(
             _server.handleInline(::morph::wire::encode(::morph::wire::makeInstances(typeId)), _cid));
         if (reply.kind != "ok") {
-            throw std::runtime_error("instances failed: " + reply.message);
+            std::rethrow_exception(::morph::wire::controlFailure("instances", reply.message));
         }
         std::vector<std::string> keys;
         // Not covered by this file's own test suite: `_server` here is always
@@ -3207,8 +3219,39 @@ public:
                             // `default:` only because the project builds with
                             // -Wswitch-default; every enumerator of the closed
                             // ExecuteReplyKind is handled explicitly above.
-                            throw std::runtime_error(reply.message.empty() ? "malformed reply" : reply.message);
+                            std::rethrow_exception(::morph::wire::executeFailure(reply, "malformed reply"));
                     }
+                } catch (...) {
+                    state->setException(std::current_exception());
+                }
+            },
+            _cid);
+        return comp;
+    }
+
+    /// @brief Sends one request envelope of a kind the other verbs do not build (`IEnvelopeTransport::request`)
+    ///        through the server, on this backend's connection scope, and settles with its reply.
+    ///
+    /// The server sees the same connection this backend's events arrive on, so a service that negotiates events or
+    /// names a connection in a reply reaches the right one. The envelope keeps the session it carries; only its
+    /// `callId` is replaced. `cancelPending` rejects the request while it is unanswered.
+    /// @param envelope The request; its `callId` is replaced.
+    /// @param cbExec   Executor the answer is delivered on. Borrowed: it must outlive the returned `Completion`.
+    /// @return A `Completion` resolved with the reply envelope, `ok` or `err`; rejected when the reply is not a
+    ///         decodable envelope or the request is cancelled.
+    ::morph::async::Completion<::morph::wire::Envelope> request(::morph::wire::Envelope envelope,
+                                                                ::morph::exec::IExecutor& cbExec) override {
+        note("SimulatedRemoteBackend::request");
+        auto state = std::make_shared<::morph::async::detail::CompletionState<::morph::wire::Envelope>>();
+        ::morph::async::Completion<::morph::wire::Envelope> comp{state, &cbExec};
+        std::erase_if(_pendingRequests, [](const auto& weak) { return weak.expired(); });
+        _pendingRequests.emplace_back(state);
+        envelope.callId = ++_requestCallId;
+        _server.handle(
+            ::morph::wire::encode(envelope),
+            [state](const std::string& replyJson) {
+                try {
+                    state->setValue(::morph::wire::decode(replyJson));
                 } catch (...) {
                     state->setException(std::current_exception());
                 }
@@ -3226,6 +3269,11 @@ public:
         note("SimulatedRemoteBackend::cancelPending");
         auto snapshot = std::exchange(_pending, {});
         for (auto& weak : snapshot) {
+            if (auto state = weak.lock()) {
+                state->setException(exc);
+            }
+        }
+        for (auto& weak : std::exchange(_pendingRequests, {})) {
             if (auto state = weak.lock()) {
                 state->setException(exc);
             }
@@ -3330,7 +3378,8 @@ private:
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
-        throw std::runtime_error((request.current.v == 0U ? "register failed: " : "attach failed: ") + reply.message);
+        std::rethrow_exception(
+            ::morph::wire::controlFailure(request.current.v == 0U ? "register" : "attach", reply.message));
     }
 
     void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
@@ -3349,6 +3398,8 @@ private:
     // two fields below are touched only there.
     std::optional<::morph::exec::detail::OwnerAffinity> _affinity;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
+    std::vector<std::weak_ptr<::morph::async::detail::CompletionState<::morph::wire::Envelope>>> _pendingRequests;
+    std::uint64_t _requestCallId{0};
     ::morph::session::Context _session;
 };
 

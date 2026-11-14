@@ -6,12 +6,14 @@ import QtQuick.Layouts
 
 // The steps of a process in order, drawn as numbered circles joined by connectors that share the width. A done step
 // is a filled circle with a tick, the current one an accent outline and number, an upcoming one a grey outline and
-// number; a connector is in the accent after a done step. Unlabelled, only the circles and connectors are drawn, and
-// each step keeps its label as its accessible name.
+// number; a connector is in the accent after a done step. A step's detail hangs under its label in the muted small
+// font, cut at the label's width so that it never widens the step; the circles and connectors stay centred on the
+// label's line. Unlabelled, only the circles and connectors are drawn, and each step keeps its label, detail and state
+// as its accessible name.
 MorphWidget {
     id: root
 
-    // [{label, state (0 pending, 1 active, 2 done, 3 failed)}].
+    // [{label, detail, state (0 pending, 1 active, 2 done, 3 failed)}].
     property var steps: []
     property int current: -1
     property bool labelled: true
@@ -19,7 +21,7 @@ MorphWidget {
     readonly property real circleSize: Math.round(1.7 * Theme.bodyPixels)
     readonly property string currentLabel: current >= 0 && current < steps.length ? steps[current].label : ""
 
-    // The state a step's accessible name carries after its label; a pending step has none.
+    // The state a step's accessible name ends with; a pending step has none.
     function stateName(index: int): string {
         if (index === root.current)
             return "current"
@@ -64,19 +66,24 @@ MorphWidget {
                 readonly property real minimumConnector: 3 * Theme.unitWidth + 2 * connectorInset
 
                 Layout.fillWidth: isConnector
-                Layout.alignment: Qt.AlignVCenter
+                Layout.alignment: Qt.AlignTop
                 Layout.preferredWidth: isConnector ? minimumConnector : implicitWidth
                 Layout.minimumWidth: isConnector ? minimumConnector : implicitWidth
                 implicitWidth: isConnector ? minimumConnector : stepRow.implicitWidth
-                implicitHeight: isConnector ? 2 : stepRow.implicitHeight
+                implicitHeight: isConnector ? root.circleSize : stepRow.implicitHeight
 
                 Accessible.role: isConnector ? Accessible.NoRole : Accessible.ListItem
                 Accessible.ignored: isConnector
                 Accessible.name: {
                     if (isConnector || !step)
                         return ""
+                    const parts = [step.label]
+                    if (step.detail)
+                        parts.push(step.detail)
                     const state = root.stateName(stepIndex)
-                    return state === "" ? step.label : step.label + ", " + state
+                    if (state !== "")
+                        parts.push(state)
+                    return parts.join(", ")
                 }
 
                 Rectangle {
@@ -96,11 +103,12 @@ MorphWidget {
                 RowLayout {
                     id: stepRow
                     visible: !cell.isConnector
-                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.top: parent.top
                     spacing: Theme.spaceOf(2)
 
                     Rectangle {
                         objectName: "circle"
+                        Layout.alignment: Qt.AlignTop
                         implicitWidth: root.circleSize
                         implicitHeight: root.circleSize
                         radius: width / 2
@@ -122,14 +130,39 @@ MorphWidget {
                         }
                     }
 
-                    Label {
-                        objectName: "label"
+                    ColumnLayout {
                         visible: root.labelled
-                        textFormat: Text.PlainText
-                        font: Theme.bodyFont
-                        text: cell.step ? cell.step.label : ""
-                        color: cell.isCurrent ? root.scheme.text : root.scheme.muted
-                        Accessible.ignored: true
+                        Layout.alignment: Qt.AlignTop
+                        // The label's line is centred on the circle.
+                        Layout.topMargin: Math.max(0, (root.circleSize - label.implicitHeight) / 2)
+                        spacing: 0
+
+                        Label {
+                            id: label
+                            objectName: "label"
+                            textFormat: Text.PlainText
+                            font: Theme.bodyFont
+                            text: cell.step ? cell.step.label : ""
+                            color: cell.isCurrent ? root.scheme.text : root.scheme.muted
+                            Accessible.ignored: true
+                        }
+
+                        // The column is as wide as the label: the detail asks for no width of its own, takes the
+                        // label's and elides its end.
+                        Label {
+                            objectName: "detail"
+                            visible: text !== ""
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 0
+                            Layout.minimumWidth: 0
+                            textFormat: Text.PlainText
+                            font: Theme.smallFont
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
+                            text: cell.step && cell.step.detail ? cell.step.detail : ""
+                            color: root.scheme.muted
+                            Accessible.ignored: true
+                        }
                     }
                 }
             }

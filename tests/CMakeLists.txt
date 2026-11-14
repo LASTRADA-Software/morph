@@ -84,6 +84,7 @@ add_executable(morph_tests
     test_remote_step_interleaving.cpp
     test_remote_execute_ordering.cpp
     test_action_validation.cpp
+    test_action_guard.cpp
     test_action_wire_rejection.cpp
     test_security_fixes.cpp
     test_bridge_lifetime.cpp
@@ -210,11 +211,15 @@ add_executable(morph_tests
     test_ui_common.cpp
     test_ui_custom.cpp
     test_ui_shell_frame.cpp
+    test_ui_shell_parts.cpp
     test_ui_explorer.cpp
     test_ui_workspace.cpp
     test_ui_workspace_start.cpp
     test_ui_field.cpp
     test_ui_kinds.cpp
+    test_ui_step_detail.cpp
+    test_ui_chart_bars.cpp
+    test_ui_table_row_span.cpp
     test_ui_value.cpp
     test_ui_include_order.cpp
     test_ui_messages.cpp
@@ -227,7 +232,9 @@ add_executable(morph_tests
     test_ui_interpreter_models.cpp
     test_ui_interpreter_permissions.cpp
     test_ui_interpreter_forms.cpp
+    test_ui_bound_decimals.cpp
     test_ui_interpreter_commands.cpp
+    test_ui_document_page.cpp
     test_ui_interpreter_table.cpp
     test_ui_interpreter_chart.cpp
     test_ui_chart_scale.cpp
@@ -239,6 +246,7 @@ add_executable(morph_tests
     test_ui_theme_values.cpp
     test_ui_author.cpp
     test_ui_author_forms.cpp
+    test_ui_width_class.cpp
     test_cancellation_policy.cpp
     test_file_io_ops.cpp
     test_extension_bag_spike.cpp
@@ -264,6 +272,8 @@ add_executable(morph_tests
     test_ui_preference_sync.cpp
     test_ui_host_vocabulary.cpp
     test_ui_catalogue.cpp
+    test_ui_locale_table.cpp
+    test_action_refusal.cpp
 )
 
 target_link_libraries(morph_tests
@@ -311,6 +321,10 @@ target_compile_definitions(morph_tests PRIVATE
     MORPH_UI_MESSAGES_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/messages.json"
     MORPH_UI_EXPRESSIONS_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/expressions.json"
     MORPH_UI_DOCUMENTS_CORPUS="${CMAKE_CURRENT_SOURCE_DIR}/ui/corpus/documents.json")
+
+# The shipped surfaces of the Qt Quick theme, which the contrast check reads.
+target_compile_definitions(morph_tests PRIVATE
+    MORPH_PAPER_THEME_QML="${CMAKE_SOURCE_DIR}/src/qt_quick/qml/Theme.qml")
 
 # The authoring goldens: builder output checked against JSON files.
 target_compile_definitions(morph_tests PRIVATE MORPH_UI_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/ui/golden")
@@ -569,6 +583,55 @@ if(NOT MORPH_VETTED_HMAC_GUARD_DEFAULT_WORKS_UNGATED)
         "hmacSha256 argument must keep working when the option is off).")
 endif()
 
+# ── Action guard checks ──────────────────────────────────────────────────────
+# Proof that an action whose guard type is only declared where an execution site is instantiated, or whose guard has
+# no callable form, does not compile, and that the same action with a defined guard does -- see
+# docs/spec/core/action_guards.md. The probes are compiled, not linked.
+set(_morph_guard_try_target_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
+unset(MORPH_ACTION_GUARD_INCOMPLETE_COMPILES CACHE)
+try_compile(MORPH_ACTION_GUARD_INCOMPLETE_COMPILES
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/action_guard_incomplete.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+)
+if(MORPH_ACTION_GUARD_INCOMPLETE_COMPILES)
+    message(FATAL_ERROR
+        "action guard check failed: compile_checks/action_guard_incomplete.cpp compiled although its guard type is "
+        "never defined (expected a compile failure -- a site compiled without the guard's definition would leave the "
+        "action unguarded).")
+endif()
+
+unset(MORPH_ACTION_GUARD_NO_FORM_COMPILES CACHE)
+try_compile(MORPH_ACTION_GUARD_NO_FORM_COMPILES
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/action_guard_no_form.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+)
+if(MORPH_ACTION_GUARD_NO_FORM_COMPILES)
+    message(FATAL_ERROR
+        "action guard check failed: compile_checks/action_guard_no_form.cpp compiled although its guard has no "
+        "callable check for the action (expected a compile failure -- the action would run unchecked).")
+endif()
+
+unset(MORPH_ACTION_GUARD_DEFINED_COMPILES CACHE)
+try_compile(MORPH_ACTION_GUARD_DEFINED_COMPILES
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/action_guard_defined.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    OUTPUT_VARIABLE MORPH_ACTION_GUARD_DEFINED_OUTPUT
+)
+if(NOT MORPH_ACTION_GUARD_DEFINED_COMPILES)
+    message(FATAL_ERROR
+        "action guard check failed: compile_checks/action_guard_defined.cpp failed to compile although its guard is "
+        "defined with a callable check (the probes above would pass for any broken include). Compiler output:\n"
+        "${MORPH_ACTION_GUARD_DEFINED_OUTPUT}")
+endif()
+
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_morph_guard_try_target_type}")
+unset(_morph_guard_try_target_type)
+
 # ── MORPH_CLIENT_ONLY guard check ────────────────────────────────────────────
 # Proof that MORPH_CLIENT_ONLY actually suppresses the two model-owning
 # registrars (registerModelOnce, registerActionOnce) -- see
@@ -811,6 +874,7 @@ add_executable(morph_table_tests
     table/test_table_engine.cpp
     table/test_table_changes.cpp
     table/test_table_query.cpp
+    table/test_table_database_pages.cpp
     table/test_table_selection.cpp
     table/test_table_columns.cpp
     table/test_table_pending.cpp

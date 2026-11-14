@@ -111,6 +111,15 @@ public:
     /// @param sink Given the text and the role; returns whether it showed it.
     void setNotifySink(std::function<bool(std::string const&, std::string const&)> sink);
 
+    /// @brief Sets what a document's `setLocale` also calls, after the session changed locale: the shell relabels
+    ///        what it draws and tells the client.
+    /// @param sink Given the locale; empty calls nothing.
+    void setLocaleSink(std::function<void(std::string const&)> sink);
+
+    /// @brief Calls the locale sink if one is set.
+    /// @param locale The BCP 47 locale the session changed to.
+    void setLocale(std::string const& locale) override;
+
     /// @brief Calls the notify sink if one is set.
     /// @param text The message.
     /// @param role `info`, `success`, `warning` or `error`; empty for the default.
@@ -125,6 +134,7 @@ private:
     std::function<void()> _signedOut;
     std::function<void(std::string const&)> _onProblem;
     std::function<bool(std::string const&, std::string const&)> _notifySink;
+    std::function<void(std::string const&)> _localeSink;
 };
 
 /// @brief What a client shell reports, and how it starts.
@@ -151,6 +161,12 @@ struct ShellOptions {
     bool dev = false;
     /// @brief Called after each development reload with the ids of the screens it remounted; empty ignores it.
     std::function<void(std::vector<std::string> const& remounted)> onReloaded;
+    /// @brief The locale the shell starts in; empty is `en`. Its message catalogue, number, money and date formats
+    ///        are installed before the first mount.
+    std::string locale;
+    /// @brief Called after each change of locale, with the new one, for the client to store the choice; empty
+    ///        ignores it.
+    std::function<void(std::string const& locale)> onLocale;
     /// @brief Maps a sign-in mutation's reply to the principal and token the shell installs. Required.
     SignInMapper signIn = defaultSignIn;
 };

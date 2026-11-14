@@ -1,0 +1,9 @@
+# The lims inventory module's header tree holds Lightweight records, whose table name the ORM reads off a member spelled
+# exactly `TableName`. The same single exemption, for the same reason, as examples/lims/lab/include/.clang-tidy, which
+# carries the measurements behind it.
+
+InheritParentConfig: true
+
+CheckOptions:
+  - key:   readability-identifier-naming.VariableIgnoredRegexp
+    value: '^TableName$'

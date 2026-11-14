@@ -6,7 +6,13 @@ whose size is what a real client faces (see [`LADDER.md`](../LADDER.md)).
 
 **Status: built** — §1–§7 below are all implemented, with model tests under [`tests/`](tests) and its screens
 under [`screens/`](screens); see [Definition of
-done](#definition-of-done) for what that does and does not mean. A
+done](#definition-of-done) for what that does and does not mean. Part A of the ERP
+design (`docs/superpowers/specs/2026-11-09-lims-erp-design.md`) is built: modules, companies and sites, scoped
+roles, declared authorization, scoped lists and the administration screens (decisions 21–27). Part B of the ERP
+design is built: the posting contract, the ledger (accounts, periods, entries, rates, reports) and billing (prices,
+billable lines from lab's events, invoices with approval, the edit lease, posting, the billing run) (decisions
+28–41). Models 12, actions 112, screens 8 (registered models and actions, inventory's included, and `ui::screen(` calls, tests excluded;
+the design estimates about 16 models and 115 actions after all four parts). A
 lightweight Laboratory Information Management System:
 register samples, assign analyses, capture results with real units and
 detection limits on versioned forms, verify and publish, keep a regulatory
@@ -51,7 +57,10 @@ Three anchors, each for a different layer:
 
 Models: `SampleModel` keyed by sample id (shared instance — bench and office
 clients attach to the same sample), `AnalysisCatalogModel` (analysis
-definitions = form schemas, versioned). ~~`WorksheetModel`~~ — **struck
+definitions = form schemas, versioned) and `IgnitionModel` in the lab module;
+`LimsAuthModel` (sign-in) and `OrgModel` (companies, sites, role assignments)
+in the org module; `LedgerModel` and `LedgerReportModel` in ledger;
+`PriceListModel`, `InvoiceModel`, `InvoiceEditModel` and `BillingRunModel` in billing. ~~`WorksheetModel`~~ — **struck
 after the rest of the rung was built; see resolved decision 19 for the
 reasoning.**
 
@@ -141,7 +150,12 @@ transitions; journal as regulatory audit.
   new build replays, and a renamed field throws `SchemaMismatchError` rather
   than decoding a lab result to a default. An additive field throws there
   too — `replay()`'s gate is fingerprint equality, not compatibility — and
-  is admitted by a pass-through migration. The *wire* half (an old
+  is admitted by a pass-through migration. This rung's shipped code never
+  calls `journal::replay()` and registers no `PayloadMigrationRegistry`, so the
+  fields an action gains (`RegisterSample::siteId`, `HeaderSection::siteId`)
+  need no migration here: entries recorded afterwards carry the new
+  fingerprint, and only a deployment that replays an older journal registers a
+  pass-through migration for the action. The *wire* half (an old
   `MORPH_CLIENT_ONLY` client against a new server) stays open: nothing
   mechanically enforces the action-evolution policy on that path: there is no
   per-action `hello` fingerprint to assert on.
@@ -200,6 +214,25 @@ flags are set by its own buttons, so an assistant's calls change the working cop
   evolution scheme this rung defines**, verified by replaying a journal
   recorded before a schema migration.
 
+## Modules
+
+lims is built from modules, each its own library with its own include directory (`morph_add_rung`'s `MODULES`):
+
+| Module | Holds | Links |
+|---|---|---|
+| `org/` (shared) | the error set, the model support every module uses, sign-in, companies and sites, role assignments, and declared authorization | nothing in lims |
+| `posting/` (shared) | the posting contract: `PostingRequest` and `PostingResult`, and the port a poster reaches the ledger through | `org` |
+| `lab/` | samples, analyses, results, verification, offline capture, ignition tests | `org` |
+| `ledger/` | the chart of accounts, the monthly periods and the journal entries (balanced, unrounded, immutable once posted, corrected by reversal; postings recorded once per source key; a closed period freezes its balances; dated exchange rates; the trial balance, account balance and account ledger reports) | `org`, `posting` |
+| `billing/` | billing settings, billing clients, dated price lists with per-client prices, billable lines from lab's events, invoices with approval, the edit lease, posting to the ledger and the billing run | `org`, `posting` |
+| `inventory/` | items with a stock unit, locations at a site, lots with an expiry, stock on hand per lot and the movements that change it, requisitions approved within a value limit, suppliers, purchase orders in the supplier's currency, and goods receipts that post their value | `org`, `posting` |
+| `app/` | the server edge's `LimsAuthorizer` and the tables it reads (`declaredRequirements` and `openMutatingActions`), the server's own clients (`InternalClient`), the event relay, the ledger port and the billing schedule | every module |
+
+The server (`src/server/`), the screens (`screens/`) and the suites (`tests/`) belong to the app and link every
+module. A module that includes another module's header does not compile, and neither does one that includes a shared
+module it does not use (`USES` names the shared modules each module links); the `lims.module_boundary.*` tests build
+such an include and pass only when the compiler refuses it, beside a control that must build.
+
 ## Resolved design decisions
 
 Recorded as they are taken, per the [`LADDER.md`](../LADDER.md) discipline
@@ -249,6 +282,7 @@ no authenticated principal must produce no entry at all, because an audit
 entry naming nobody is the failure mode this README's own "Expected strain
 points" calls disqualifying. Both halves are tested and both fail if the
 ordering is swapped.
+Once refusals are the framework guard's, the sample's trail keeps this through `SampleModel::onGuardRefused` (decision 41).
 
 ### 5. The base version moves with **every** content change (§2, §3)
 
@@ -381,7 +415,7 @@ never does.
 The write half could not use a framework seam either: there is no
 enqueue-on-failure hook, and the machine that must make the decision (a
 disconnected field client) has no model on it at all.
-`include/lims/offline/field_outbox.hpp` is the app-layer answer, and it is
+`lab/include/lims/lab/offline/field_outbox.hpp` is the app-layer answer, and it is
 app-layer by design rather than by omission: `IMPLEMENTATION.md` rule 1
 carries a named carve-out for this seam, and `FieldOutbox` is the shape it
 points at (`docs/spec/offline/offline.md`, "Disposition: app-layer by design").
@@ -443,8 +477,9 @@ self-conflict test caught it.
 The verifier must **hold the role** and must **not be the analyst who
 captured the reading**. Only the first is a type-level fact, so only the first
 can be checked before dispatch: `lims::auth::LimsAuthorizer` does it at the
-`RemoteServer` edge, and `SampleModel` re-does it on every dispatch path,
-because no authorizer runs in `Local` mode at all. The second is a row-level
+`RemoteServer` edge, and `SampleModel` re-does it on every dispatch path
+(because no authorizer runs in `Local` mode at all), checking the role at the
+sample's site; decision 25 declares both rules. The second is a row-level
 fact `IAuthorizer` structurally cannot express — it is handed the model and
 action type ids and the caller's session, never the result — so it lives only
 in the model. Neither check stands in for the other, and both are tested.
@@ -457,17 +492,17 @@ second pair of eyes on their own work without anyone deciding they should be.
 `AllowAllAuthorizer` because a role gate needs an
 authenticated principal: a non-authenticating authorizer makes `RemoteServer`
 *clear* `Context::principal` before dispatch, leaving nothing to key on. Roles
-come from the `lims_operators` table, not the token's `roles` claim — a token
+come from the `org_role_assignments` table, not the token's `roles` claim — a token
 lives for its expiry, so a role revoked mid-shift would keep working until it
 aged out.
 
 **The bootstrap carve-out.** A lab with no supervisor cannot appoint its
-first one, so the first `GrantRole` is allowed whoever makes it. The exception
-closes the instant any supervisor exists and the grant is journaled like every
-other, so it is visible in the trail rather than a back door.
+first one, so the first `AssignRole` is allowed whoever makes it. The exception
+closes the instant any supervisor exists and the assignment is journaled like every
+other, so it is visible in the journal rather than a back door.
 `LimsAuthorizer` deliberately does *not* mirror the carve-out — duplicating a
 security exception is how the two copies drift — which means the very first
-grant must be made locally, never remotely against an empty lab.
+assignment must be made locally, never remotely against an empty lab.
 
 **Publishing requires verification.** A four-eyes control nothing depends on
 is theatre, so `PublishSample` refuses while any captured result is
@@ -585,7 +620,7 @@ revisited then rather than treated as settled.
 ## The client
 
 lims' screens are UI documents served by the framework (spec 4), authored with the C++ builders in
-[`screens/lims_screens.cpp`](screens/lims_screens.cpp):
+[`screens/lims_screens.cpp`](screens/lims_screens.cpp) and [`screens/org_screens.cpp`](screens/org_screens.cpp):
 
 - **`lims.register`** registers a client, then a sample for it, through mutations over a private
   instance of `SampleModel`, and opens the new sample's lifecycle.
@@ -605,8 +640,13 @@ lims' screens are UI documents served by the framework (spec 4), authored with t
   `ListProjects`, which the table engine sorts, filters and pages. The screen's identity is its sample,
   and it is dirty while the working copy holds unsaved edits.
 
+- **`lims.org.companies`** lists the companies and sites the viewer's roles reach and creates either through its
+  action's form.
+- **`lims.org.access`** lists the users and role assignments the viewer's roles reach, assigns a role through
+  `AssignRole`'s form (the first assignment on a lab with no supervisor needs none) and revokes one per row.
+
 Each action declares what it changes beside its registration (`BRIDGE_REGISTER_EFFECTS` in
-`include/lims/models/`): a transition updates its `Lims_Sample`, a capture changes `Lims_Result`, the sample-entry
+`lab/include/lims/lab/models/`): a transition updates its `Lims_Sample`, a capture changes `Lims_Result`, the sample-entry
 actions change their instance's working copy, and `OpenSample` changes nothing. A reply refreshes the queries it
 changed, so the screens declare no refreshes; `lims_bundle_loads_without_warnings` keeps it so.
 
@@ -619,32 +659,1221 @@ mounts every screen on Qt Quick offscreen. `morph_examples_client --app lims` ru
 process over a local database (`--db`, default `lims.db`).
 
 
-### 20. Model coverage is 98.96%, and measuring it found a real defect (§ coverage gate)
+### 20. Model coverage is 99.60%, and measuring it found a real defect (§ coverage gate)
 
-`codecov.yml` gains a `lims` component scoped to `examples/lims/src/models/**`
-and `examples/lims/include/lims/models/**` — the paths
-`examples/IMPLEMENTATION.md` rule 5's bar actually names — with a 97% target,
-a margin below the measured 855/864 = 98.96% ceiling.
+`codecov.yml` has one component per module (`lims_lab`, `lims_org`, `lims_ledger`, `lims_billing`), each scoped to
+that module's model paths (`examples/lims/<m>/src/models/**` and `examples/lims/<m>/include/lims/<m>/models/**`) —
+the paths `examples/IMPLEMENTATION.md` rule 5's bar names — with a target 0.5 points below the module's own coverage
+as Codecov counts it (below). Inventory is Part C's and joins when Part C is measured; posting has no model.
 
-The remaining nine lines are three defensive guards, each unreachable through
-the model's own API rather than merely untested: `alreadyDecided`'s empty-key
-guard (validation refuses an empty operation key first), `renderSchemaFor`'s
-malformed-JSON arm (its input is `schemaJson<A>()`), and
-`GetAnalysisVersion`'s dangling-version arm (a declared foreign key forbids
-the row). Each turns an impossible state into a typed error instead of a
-dereference, so each is kept.
+Measured the way CI measures: the `clang-coverage` preset configured with `MORPH_LADDER_RUNGS=lims` (CI passes `all`;
+the other rungs' binaries execute none of these sources), the whole tree built, and every test but the stress cases
+run (`ctest --preset clang-coverage -LE stress`, 5186 tests, all passed, with `LLVM_PROFILE_FILE=%p.profraw` so that
+each test process writes a profile of its own). The profile is a merge of runs, not of one clean run: the tests ran
+in slices, the tests of a slice that timed out were run again, and the profiles of all of them were merged with
+`llvm-profdata merge -sparse` (counters only add, so a rerun cannot lower a figure). The ledger-report tests were run
+once more after the last test was added, and their profiles were merged into the earlier one. `scripts/coverage.sh`
+then reports over all fifteen binaries in `coverage_objects.txt`. The line counts are llvm-cov's; the branch counts
+are llvm-cov's per instantiation, so they are higher than the aggregated figure the branch gate reports.
 
-Measuring rather than assuming was worth it twice. The first measurement came
-in at 93.27%, and the gap was not padding: `AnalysisCatalogModel::attachActionLog`
-had no caller at all, so the catalogue's entire journaling path was
-unverified — and the audit trail's `VerifyResult` branch was **dead**, because
-verifications were journaled under an *empty* entity key. That was a real
-defect rather than a coverage artifact: a sample's audit trail silently
-omitted the second pair of eyes, which is the one thing a four-eyes record
-exists to show. Fixed by rekeying the journal to the result's own sample
-(same for conflict resolutions), and pinned by its own test.
+Two figures describe each module, because llvm-cov and Codecov count differently. llvm-cov counts a line as covered
+when it runs. Codecov, as `codecov.yml` documents for its core components, counts `hits / (hits + misses +
+partials)`, where a line that runs but holds a branch arm never taken is a partial and not a hit. The Codecov figure
+is computed from the `coverage.lcov` that CI uploads: a line with `DA` 0 is a miss, a line with `DA` above 0 and any
+`BRDA` entry taken 0 times or `-` is a partial. It is a computation from the local file, not an observed Codecov
+report. **The targets follow the Codecov figure**, because that is the number Codecov compares them with; each is 0.5
+points below it, rounded down to one decimal, so that a small change which adds one partial line does not turn the
+status red.
+
+| Module | llvm-cov lines | llvm-cov branches | Codecov hits / misses / partials | Codecov | Target (project and patch) |
+|---|---|---|---|---|---|
+| lab | 1284/1299 = 98.85% | 336/354 | 1266 / 8 / 16 | 98.14% | 97.6% |
+| org | 591/591 = 100.00% | 198/216 | 554 / 0 / 11 | 98.05% | 97.5% |
+| ledger | 1144/1146 = 99.83% | 312/330 | 1092 / 0 / 14 | 98.73% | 98.2% |
+| billing | 1750/1752 = 99.89% | 441/466 | 1580 / 0 / 20 | 98.75% | 98.2% |
+| the four | 4769/4788 = 99.60% | 1287/1366 | | | |
+
+llvm-cov warns `10020 functions have mismatched data` over the merged profile. The cause is inferred, not shown: the
+warning is the one llvm-cov gives when functions from different binaries carry different counter layouts, which fits
+fifteen binaries that instantiate the same inline and template functions differently; llvm-cov does not name the
+functions, and none was identified. A control argues that no model function is among them: a profile written by
+`ladder_lims_tests` and `ladder_lims_screen_tests` alone, each running one test, loads with no warning, and the
+*totals* of instrumented lines and functions for all seventeen model files equal the merged run's, file for file. Equal
+totals show that no model function is missing from the report. They do not show that no binary's counts for a model
+function were discarded, which could only lower a figure. That control was run on an earlier revision and not
+repeated on this one. The profile set was empty before the tests ran, so no stale profile is in the merge.
+
+**The rule for what is left uncovered.** A line stays uncovered only if no caller can reach it. A caller, here, is
+any of: an action through the bridge; a direct call to a handler (`execute`), which bypasses the scope guard and so
+reaches every not-found arm a guard would have refused first; a call to a public function; a row the test writes,
+changes or deletes below the model (the lims connection does not enforce foreign keys, so a dangling reference is a
+one-statement setup); and a database that refuses a statement, which a trigger raising an error, or ignoring the row,
+produces from the model's own real statement (`FailingStatements`, `SkippedStatements` and `ScopedTrigger` in
+`tests/lims_test_support.hpp`; `isBusy` decides on the driver's native error code first, 5 or 6, and falls back to
+the message, so a failure message containing "database is locked" is read as a busy database by that fallback. The
+triggers raise `SQLITE_CONSTRAINT`, so the busy tests exercise the message fallback and not the code branch). Every
+arm those reach has a test that asserts its behaviour. The same rule applies to every arm, whatever its kind (a
+validation arm, a not-found arm, a stored enumerator out of range, a failed write that is not the lost race, a busy
+database, an update that changes no row): none is exempted because it looks defensive.
+
+What the rule leaves is the 8 lines below, each of which needs something the callers above cannot do: an input the
+library generates or validates before the line, a branch with no other case to take, or a guard its only caller has
+already satisfied. That each is unreachable is judged by reading the code, not shown by a test. llvm-cov counts 19
+uncovered lines (4788 - 4769); the other 11 are lines that also run but hold a region never entered, such as the
+row-id lambda of a table plan. Seven of the 11 were looked at and are such lambdas and one ternary; four were not
+identified.
+
+*lab*
+- `analysis_catalog_model.cpp:93-94` malformed-JSON arm of `renderSchemaFor`; its input is `schemaJson<A>()`, which the
+  library generates.
+- `sample_entry.cpp:218-219` a working copy that does not encode; the encoder cannot fail on that type.
+- `sample_model.cpp:612-613` the `default` arm of `checkValue`, which has no other kind to reach; `:717-718`
+  `alreadyDecided`'s empty-key guard: the function is private and its one caller has already refused an empty key.
+
+*ledger* has no uncovered line.
+
+*billing* and *org* have none either.
+
+The tests that cover the arms the rule reaches: not-found arms of the handlers by direct call (`RegisterSample`,
+`SaveSample`, `CreateSite`, `RevokeRole`, `SetValueLimit`, `CreateAccount`, `OpenPeriod`, `BeginClosePeriod`,
+`PostEntry`, `ReverseEntry`, `ClosePeriod`, `SetExchangeRate`, `CreatePriceList`, `SetPrice`, `AdvanceBillingRun`,
+`RecordBillableLine`, `CreateInvoice`, `SubmitInvoice`, `ResolveConflict`, `VerifyResult`, a report on a company that
+is gone, the price-list lookup of `storePrice`, which is public, `settingsOf` and `findInvoiceRecord` with an empty
+id, `ListPendingApprovals` with no principal); a stored state, currency or side out of range for entries, periods,
+rates, price lists, billing lines, invoices and runs; a company, sample, entry, line, run, invoice or analysis row
+removed behind the model; and a write the database refuses (busy and not busy) for postings, rates, price lists,
+billing settings, display names, billable lines, runs and the invoice posting's two ways; and a ledger report whose
+read fails with a message the busy check matches. The overflow guard on a foreign gross, the posting date with no
+rate, the December period's end, the price-list lookup of `storePrice` and the company lookup after the posting
+update were each shown to fail their test when the guarded line is mutated (the last two by changing the refusal's
+type, which the test asserts). The overflow guard's check reads `converted.value()`, so a removed guard fails as an
+unexpected `bad_optional_access` and not through undefined behaviour. The other tests assert the refusal's type,
+which a removed check would change to success or to another error; that is reasoning, not a run.
+
+Measuring rather than assuming was worth it twice. The first measurement came in at 93.27%, and the gap was not
+padding: `AnalysisCatalogModel::attachActionLog` had no caller at all, so the catalogue's entire journaling path was
+unverified — and the audit trail's `VerifyResult` branch was **dead**, because verifications were journaled under an
+*empty* entity key. That was a real defect rather than a coverage artifact: a sample's audit trail silently omitted
+the second pair of eyes, which is the one thing a four-eyes record exists to show. Fixed by rekeying the journal to
+the result's own sample (same for conflict resolutions), and pinned by its own test.
+
+### 21. lims is built from modules, and the boundary is a link boundary
+
+Each module is a library whose include path holds its own headers and the shared modules' only, so a module that
+includes another module's header fails to compile rather than drawing a lint finding. ERP modules are written by
+different teams, and the property under test is whether morph lets them cooperate without knowing each other; a
+boundary that only a reviewer enforces would not test it. All modules keep the `lims` namespace and every action id,
+record name, table and migration they had: the split changed where code lives, not what it does, and the suites ran
+unchanged apart from their include lines. `posting`, the second shared module the design names, is added with the
+first module that posts.
+
+The boundary is deliberately a header boundary and not a data boundary. Four couplings are accepted and stated here
+so they are not mistaken for leaks:
+
+- lab's schema uses org's `SiteRecord` table name for the foreign key from `lims_samples.site_id`, because a foreign
+  key names its target table and org owns the table;
+- the one-time role migration writes `org_role_assignments` by raw SQL from lab's migrations, because it moves lab's
+  own `lims_operators` rows into org's table and Lightweight's builder cannot copy rows;
+- org's `db/` headers are on every module's include path, since a module that names an org table needs its record;
+- migrations from different modules are ordered by their global timestamps, so a new module's migrations must carry
+  timestamps after those of every migration they depend on.
+
+### 22. Companies and sites live in org, and every sample is at a site
+
+A company has a base currency and a fiscal-year start; a site belongs to one company. The first org migration seeds
+one company and one site, because every record that existed before companies needs one to belong to, and the lab
+migration that adds `lims_samples.site_id` puts every existing sample at the seeded site.
+
+The site is on the sample, and on nothing hanging off it: results, verifications, conflicts and the entry record reach
+their site through their sample, so a second copy of the site could only disagree with the first. Clients and
+analysis definitions are reference data the whole lab shares and are not at a site; billing gives clients their
+company when it needs to bill them. Ignition tests are the chat's proof and sit outside the sample workflow, so they
+are not at a site either; a lab that needs them per site changes this.
+
+A registration names its site, and a missing site is a validation error, not a default: a sample registered nowhere
+would be visible to nobody once lists are scoped. Sample entry refuses a save without one as `noSite`, a reply like
+its other refusals.
+
+### 23. A role is held in a scope: a company or a site
+
+A role assignment is `(principal, role, scope)`, kept by `lims/org` in `org_role_assignments`, and made with
+`OrgModel`'s `AssignRole` and `RevokeRole`. A role held at a company holds at every site of the company; a role held
+at a site holds there only. Roles themselves stay non-hierarchical (decision 16): the scope is the only thing that
+nests. Grants made before scopes existed were for the whole lab, so the migration moves them to the seeded company.
+
+The bootstrap carve-out moves with the action: the first assignment on a lab with no supervisor anywhere is allowed,
+and the carve-out closes as soon as any supervisor exists. Revoking a company's last supervisor assignment is refused
+(decision 24).
+
+A local client starts on a fresh database with no assignments, and every write on a sample needs a role, so
+`lims::screens::prepareLocal(user)` appoints the local user (`--user`) Supervisor at the seeded company by dispatching
+the ordinary bootstrap `AssignRole` as that user, through a bridge over a local backend that carries the user's
+session. It applies only while the lab has no supervisor; once one exists, roles are assigned as for any lab and
+`prepareLocal` leaves them alone. The appointment is a dispatched action like any other, so it appears in the audit
+trail as an `AssignRole` entry whose principal is the local user, who is also the assignment's maker.
+
+Assignments are not a sample's history, so a sample's audit trail no longer shows them. `OrgModel` is journaled by
+the framework's dispatcher, which records every loggable action it runs, and `AssignRole` and `RevokeRole` are
+loggable: a successful assignment is an `Outcome::Succeeded` entry naming the caller, and a refused one (a model
+refusal such as `Forbidden` or `NotFound`) is an `Outcome::Failed` entry with the exception text. Only a call that
+reaches the dispatcher is journaled: `OrgModel::execute` called directly records nothing, and the lists
+(`Loggable::No`) are never recorded. A `GrantRole` entry an older build wrote into a sample's journal reconstructs as
+an `Unreadable` step, as any entry this build cannot interpret does (decision 17).
+
+An assignment is decided before anything is looked up. A caller who holds `Supervisor` in no scope is refused with
+`Forbidden` whether or not the scope or the assignment it names exists, so it cannot probe which ids exist; a
+supervisor naming a scope that does not exist gets `NotFound`.
+
+### 24. A company's administration is seeded by its creator and is never left empty
+
+Roles are not hierarchical (decision 16) and nothing sits above a company, so the only people who can assign roles at
+a company are its own supervisors. A company created with none could never be given a role again, and a company that
+loses its last one is in the same state.
+
+`CreateCompany` therefore appoints the calling principal `Supervisor` at the new company, in the same transaction as
+the company's row: either both exist or neither does. `RevokeRole` refuses to remove a company's last `Supervisor`
+assignment at that company's scope, however many supervisors exist elsewhere. A supervisor at one of the company's
+sites does not count: a site role cannot administer the company scope, so it would leave the company's administration
+empty all the same.
+
+Two rules look across companies. The bootstrap carve-out applies while no `Supervisor` exists anywhere, and
+`RevokeRole` refuses to remove the last `Supervisor` assignment anywhere, whatever its scope: revoking
+it would reopen the bootstrap carve-out to whoever acted next.
+
+### 25. Authorization is declared per action and checked in the model (hypothesis 6, first instance)
+
+An action's authorization is declared once, beside its registration, by the module that owns it
+(`lims::Authorization<Action>`): the role it needs, the scope its payload names, an optional value limit, and an
+optional separation-of-duties pair. Capture and verify are the first declared pair: verifying a reading needs the
+verifier role at the sample's site (a role at the site's company holds there), and the verifier must not be the analyst
+who captured it. `lims::requireAuthorized` checks a declaration inside the model, on every dispatch path; the server
+edge checks only that the principal holds the declared role somewhere, from a table the app composes from every
+module's declarations (`lims::app::declaredRequirements`).
+
+`CreateCompany` declares `Supervisor` in any scope, because a new company has no scope yet, and is refused while no
+supervisor exists anywhere, so the bootstrap `AssignRole` stays the first administrative act. A supervisor at only a
+site may therefore create a company; that is intended, since the rule is "a Supervisor somewhere". `CreateSite`
+declares `Supervisor` at the site's company.
+
+Every write on a sample declares that the caller holds some role, whichever, at the sample's site (a role at the
+site's company counts): `RegisterSample` at the site its payload names, the lifecycle transitions,
+`CaptureConcentration` and `DeleteSample` at the site of the sample the handler is attached to, `QueuedCapture` at the
+site of the sample it names, `ResolveConflict` at the site of the sample the conflict belongs to, and `SaveSample` at
+the site its header names and, when it updates a stored sample, at the site that sample is stored at, so moving a
+sample needs a role at both sites. A principal of another company is refused on all of them. `QueuedCapture` replays
+as the operator who captured the reading (decision 13), so the check applies to that operator at replay time: an
+operator who has lost their role at the site is refused a new operation when the queue reaches the server, whatever
+role they held when they took the reading, while a redelivery of an operation already decided still answers
+`Skipped`.
+
+Every scoped lab write follows the order decision 23 gives role assignments, one rule for the mechanism: a caller who
+holds no role anywhere is refused with `Forbidden` before anything is looked up; a site, sample or conflict that does
+not exist is `NotFound`; a role held only at another site is `Forbidden`. `LoadSample` stays a read. The remaining
+sample-entry sections and ignition tests are open, listed in `lims::app::openMutatingActions`; ignition tests belong
+to no site (decision 22).
+
+**Hypothesis 6 (authorization cannot see the payload) is confirmed for this instance.**
+`IAuthorizer::authorize(ctx, modelType, actionType)` decides before the payload is decoded: its signature
+(`include/morph/session/session.hpp`) takes the session context and the two ids, never the payload. The scope (the result's sample's
+site), the pair (who captured the result) and any value limit are facts about rows the payload names, so they can only
+be checked where the payload is decoded and the rows are readable: in the model, by `requireAuthorized`. Measured in
+`tests/test_declared_authorization.cpp`: a verifier whose role is at another site of the same company is allowed by
+`LimsAuthorizer` and refused by the model in `Local`, `LocalSingleThread` and `Socket` mode alike, and a verifier at
+the sample's company goes through the same edge and the same model.
+
+This is instance 1 of 2; with billing's approval pairs and value limit as the second, the check is the framework's action guard (decision 41).
+
+### 26. A list shows only what the caller's scopes reach
+
+`ListSamples`, `ListCompanies`, `ListSites`, `ListRoleAssignments` and `ListUsers` answer only records in scopes where
+the caller holds a role: a role at a company reaches the company and all its sites, a role at a site reaches that
+site and, through it, its company, including the company's own role assignments, so a site's staff can see who
+supervises their company. A principal with no role, and an unauthenticated call, sees nothing. A company's creator is
+assigned `Supervisor` at it in the same transaction, since a company nobody holds a role in would be listed to nobody.
+
+`ListAnalyses`, `ListProjects` and `ListIgnitionTests` list unscoped reference data and are deliberately not
+filtered: an analysis, a project and an ignition test belong to no company or site, so there is no scope to filter
+by, and every authenticated caller needs them to enter a sample.
+
+Reading one record by id (`OpenSample`, `GetSample`, the per-sample lists) is not scope-filtered in Part A: those are
+not list queries, and an action that changes a record is authorized by its declaration (decision 25). Which records'
+*changes* reach a principal of another company is hypothesis 7, measured with billing.
+
+**Finding: a shared module's action cannot declare effects on another module's records.** Assigning or revoking a
+role changes which samples a principal sees, so `AssignRole` changes the rows `ListSamples` answers. But `AssignRole`
+belongs to `org`, which cannot name lab's `SampleView`, and a second `BRIDGE_REGISTER_EFFECTS` for the same action
+from `app` is refused as "declares different effects in two registrations". So a screen listing samples does not
+refresh when its viewer's roles change; it refreshes on the next sample change or reload. Registering `SampleView` as
+derived from the role-assignment record would give the same refresh, but the registry refuses a derived record that has
+a key (`include/morph/core/effects.hpp`, the "is derived from other records but has a key" check), and `SampleView`
+has one. Inferred from reading `include/morph/core/effects.hpp` (`addEffects`, the two-declarations check, and the
+derived-record check); not reproduced on a screen, because no Part A screen lists samples. A second module needing the
+same (billing's lines on a role change) makes it a framework gap to file against `include/morph`.
+
+### 27. The organisation is administered from two screens
+
+`lims.org.companies` lists the companies and sites the viewer can see and creates either; `lims.org.access` lists
+the users and role assignments the viewer can see, assigns a role and revokes one. Every form is its action's schema
+and every list refreshes from the declared effects of the action that changed it, so neither screen says what to
+refresh. A user is a principal holding an assignment: lims keeps no user store, and whoever signs in is a principal.
+A refused revoke (the last supervisor's) shows its reason in words. The screens are functional, not finished; the
+production GUI rebuilds them against the org mockups.
+
+### 28. Money is one unit whose currency is a field beside it
+
+An amount is `lims::Amount`, a `Quantity` over the single `ErpUnit::money` unit and an exact `Rational`, and its
+currency is a `CurrencyCode` field on the same record. A unit per currency would let the type refuse adding yen to
+euros, but a `Quantity`'s unit is a template argument, and the currency of a price list, an invoice or a ledger line
+is known only from its row. So the models check what the type cannot: amounts they combine share a currency, and an
+amount fits its currency's minor unit (JPY has none). Posters round with `lims::roundToCurrency`, half away from zero
+— half-up for the positive amounts they round. Totals are summed with `lims::ExactSum`, which refuses an overflow
+instead of saturating, over `Rational` values rather than `Quantity` ones, because a `Quantity` records a provenance
+node per addition while `MORPH_QUANTITY_PROVENANCE` is 1 (the default). The ids billing refers to (client, sample,
+analysis, result) moved from lab to org, unchanged on the wire and in the journal.
+
+### 29. An approver's roles and ceiling are set by someone else, and a limit is confidential
+
+Separation of duties starts before an invoice: a principal who could grant themselves `InvoiceApprover` or raise
+their own value limit would hold a ceiling nobody else chose. `AssignRole` and `SetValueLimit` therefore refuse a
+caller who is the subject of the action, with `Forbidden`, after the role check and before any write. It is a declared
+rule beside the others (`notOnSelf` and `subjectOf` in `lims::Authorization`), judged by `requireAuthorized` in the
+model. The edge sees no payload, so it cannot judge it; the model's check is the authoritative one.
+
+Two self-assignments remain by design, and neither goes through the declared rule: the bootstrap `AssignRole` on a lab
+with no supervisor anywhere (decision 23), including `prepareLocal`'s appointment of the local user, and the
+appointment of a company's creator as its first supervisor by `CreateCompany` (decision 24).
+
+A value limit is one row per principal, company and role, kept by a unique index on `(principal, company_id, role)`;
+`SetValueLimit` updates the row when there is one and inserts otherwise. `ListValueLimits` returns a limit only to the
+supervisors of its company and to the principal it belongs to, not to every holder of a role there.
+
+### 30. The ledger validates and never rounds, and its totals are exact or refused (hypothesis 8, first instance)
+
+A journal entry is recorded only if it has two or more lines whose debits equal their credits in the transaction
+currency and in company currency, each amount a whole number of its currency's minor units (`lims::entryProblem`).
+The ledger rounds nothing: a poster converts and rounds, half-up, line by line, and adds an explicit rounding line
+where that leaves a difference. A posting is recorded once per company and source key through an `IReplayLedger` over
+`ledger_posting_sources`, in the entry's own transaction, so a retry answers the first entry. Entries are immutable
+once posted; a correction is a posted reversal naming the original. A period is open, closing (no new drafts;
+postings and posting of existing drafts continue) or closed (nothing more is recorded; each account's totals are
+frozen in `ledger_period_balances`), and closes only with no draft left in it. An exchange rate is entered per
+company and currency pair from an instant (a unique index keeps one rate per pair and instant); the rate on a date is
+the latest one starting on or before it, and a foreign-currency posting must state exactly that rate.
+
+The reports (`LedgerReportModel`: trial balance, account balance as of an instant, account ledger over a range) total
+posted entries only, in company currency, with `ExactSum`. A closed period that lies wholly inside the range
+contributes its frozen per-account totals instead of its lines; a period the range ends inside is totalled from its
+lines. A total, a balance or a running balance that does not fit `int64` is `OutOfRange`.
+
+**Hypothesis 8, first half (magnitude): refuted for the summation.** Measured by `Stress: Hypothesis 8: ...` in
+`tests/test_ledger_reports.cpp`, on the `linux-everything` Release build (clang), one run:
+
+- 10^7 lines of pseudo-random size up to 10^9 minor units each (total 4,708,027,407,079,500 minor units, inside
+  `int64`) summed through `lims::ExactSum` (`checkedAdd`) in 780 ms; every `add` reported success and the total equals
+  the independently accumulated `int64` sum exactly.
+- Two values of 5 * 10^18 under `ExactSum`: the first `add` succeeds, the second returns `false` and leaves the total
+  unchanged.
+- The same two values under `operator+` answer `9223372036854775807/1` (`INT64_MAX`) with no signal to the caller: the
+  hypothesis' premise about `Rational` is true, so exactness depends on every lims total using `ExactSum`, which the
+  reports and the ledger do and which nothing in morph enforces.
+- A trial balance over two such postings throws `OutOfRange` instead of answering a number, both when one account's
+  total does not fit and when every account fits and the company's total does not; the same holds for an account
+  balance and for an account ledger's running balance.
+
+The design's hypothesis-8 condition is met for two things: the summation step (the 10^7-line `ExactSum` case above) and
+the refusal of an over-range total through the real reports. The 10^7 in-memory loop alone would also pass with plain
+`operator+`, because its totals stay near 5 * 10^15; the over-range control is what distinguishes checked from unchecked
+arithmetic.
+
+The trial balance through the database was measured separately by `Stress: Hypothesis 10: ...` (same file), on the
+same build: 1,000 entries of 200 lines each (2 * 10^5 lines of up to 10^9 minor units, total 47,076,604,421,980 minor
+units) posted through `LedgerModel::record`, then `TrialBalance` through `LedgerReportModel`. The totals equal the
+independently accumulated sum exactly. Posting took 68,135 ms and the trial balance 216 ms. Extrapolated linearly to
+10^7 lines, the trial balance is about 11 s (inferred, not measured: it assumes the report's cost per line stays
+constant and that 10^7 lines fit in memory). What limits it is not the summation but that the report loads every posted
+line into memory with one query per posted entry (`postedLines`); that is hypothesis 10's subject, and the design states
+the 10^7-line trial balance as part of it. Posting dominates the case's time (every posting is its own durable
+transaction), which is why it posts few large entries and not 10^5 small ones: 50,000 two-line entries did not finish
+in 590 s. On the `gcc-debug` build (the nightly's configuration) the 10^7 summation took 2,091 ms and the database case
+92 s (posting 91,275 ms, trial balance 653 ms). Not measured: other hardware.
+
+The two stress cases carry the ctest label `stress` and a 600 s limit (the rung's other tests have 120 s; the database case
+needs 92 s on Debug, too near that for a loaded runner). A local `ctest -L ladder-lims` and a direct run
+of the binary include them; CI's ladder legs and its coverage leg leave them out, and `nightly-slow-checks.yml` (Debug,
+every test) runs them.
+
+`ctest -L ladder-lims` needs two more executables than the rung's test, screen, render-smoke, server and client targets:
+`lims_cross_module_effects_refused` and `lims_cross_module_effects_control`, the probes behind the two
+`lims.cross_module_effects.*` tests. Build them (or the whole tree) before the run, or those two tests report "Not
+Run".
+
+**Exchange rates are facts entered by hand.** A rate for each direction of a pair is its own row, entered separately;
+the opposite direction is never derived as a reciprocal. A rate is not edited: a correction is a new rate with a later
+start.
+
+**One transaction currency per entry.** An entry carries one transaction currency, and balances in it and in company
+currency. The design allows an entry to "sum to zero per transaction currency", which admits one entry mixing
+several; lims's posters each post one document in one currency (an invoice in its client's, a receipt in its
+supplier's), and a single currency per entry keeps the rate one fact of the entry rather than one per line, so
+`PostingRequest` carries one `currency` and one `rate` and `entryProblem` checks that one. A document in several
+currencies would post one entry per currency; nothing in Parts B and C produces one.
+
+### 31. A price is read from the list in force, and a new list replaces the old one whole
+
+A client is billed at a company in the currency it is registered with there (`RegisterBillingClient`); lims's client
+record has no company or currency, since clients are reference data the whole lab shares (decision 22). A price list
+belongs to a company, has a currency and a date it applies from; the list in force on a date is the latest that
+applies by then, in the client's currency. In it, the client's own price for the analysis wins over the list's. A list
+in force with no price for an analysis prices nothing: an older list is never consulted, so retiring a price is
+making a list without it. A company has one list per currency and start, one price per list, analysis and client
+(the list's own price is stored with client 0, since a NULL would be distinct from every other NULL in a unique
+index), and one registration per client and company; each is a unique index, and a concurrent insert that loses the
+race to it is answered as a `Conflict`, like the lookup that precedes it. A company's billing settings (its
+receivable, revenue, tax and rounding account codes, its flat tax rate from 0 to 1 with at most six decimals, how many
+hours an approval may wait, 1 to 720, and the day of the month the billing run drafts invoices, 1 to 28 so that every
+month has it) are a supervisor's; setting them again replaces them. The account codes are text: billing does not read
+the ledger's chart, and the ledger refuses a posting that names a code it lacks. A list stays open to new prices, including one already in
+force; a price is never changed (a second one for the same analysis and client is a `Conflict`), and a correction is
+a new list with a later effective date. A client id is above zero wherever one is given, since 0 is the stored key of
+the list's own price.
+
+### 32. Lab's events reach billing through an outbox, morph's relay and a dispatched consumer (hypothesis 2, first instance)
+
+`PublishSample` writes one `lab.AnalysisPublished` row per result into `lims_outbox`, in the transaction that
+publishes, with the event id `lab.AnalysisPublished:<result>:<sample version>`; a unique index refuses a second row
+with the same id. `lims::app::relayLabEvents` runs one `morph::journal::OutboxRelay` pass: `drainOutbox` and
+`markRelayed` are lab's (`drainLabOutbox`, `markLabOutboxRelayed`, which deletes the delivered rows), and the sink is
+`lims::app::BillingEventSink`, which decodes the event and dispatches `RecordBillableLine` through
+`lims::app::InternalClient`. The client is a `Bridge` over `SimulatedRemoteBackend` into the server's own
+`RemoteServer`, acting as `system:events` with a token the server mints from its own secret, so the line is written
+inside a dispatch: authorized at the edge and by its declared rule (the service role at the site's company, and a
+`system:` principal, so a person given the role still cannot send it), journaled, and fanned out to watchers. A
+`system:` principal is one no sign-in yields (`LimsLogin` refuses the namespace) and holds `LimsRole::Service` at a
+company through `AssignRole` like any role; the server grants itself nothing. The bridge belongs to a one-thread
+executor of its own, where every call is issued and settled, so `call` may block a relay pass without blocking the
+thread that delivers its answer. That owner is an `OwnerStrand` over a one-thread pool, because a `Completion`'s
+owner must be serial and a bare `ThreadPoolExecutor` is not, even with one worker. Billing records each event id in
+`billing_consumed_events` through an `IReplayLedger`, in the line's transaction, so a redelivery answers the line it
+made; two deliveries that race past the lookup are settled by the unique index, whose loser answers the winner's
+line. A result with no price in force (or a client not registered for billing at the company) is billed `Unpriced`
+with no amount rather than refused, because a consumer that refuses an event stops the relay at it. The server relays
+once a second, on a background thread a `QTimer` posts to.
+
+**Hypothesis 2 is refuted for this instance.** The criterion, set before measuring, was the design's: each event
+received exactly once in effect across a restart, with only wiring code in `lims/app` and no per-consumer delivery
+loop or cursor. Measured in `tests/test_domain_events.cpp`: a relay that delivers and then dies before marking leaves
+one line and the event still in the outbox; a fresh relay over the same database redelivers it, billing answers the
+same line (same id), and the outbox is then empty. The delivery loop is `OutboxRelay`'s and the cursor is the
+outbox's own rows. What `lims/app` holds for this consumer is wiring: `BillingEventSink` (decode, dispatch, 55 lines
+with `relayLabEvents`), the relay's configuration, and the principal's names. The only `for` in `event_wiring.cpp` is
+`entries()`'s filter over what was delivered (the `IActionLog` read API, not delivery); a search of `app/` and billing
+for cursor, last id, position and offset finds nothing; billing's only delivery-related table is the replay ledger
+every consumer of an at-least-once source needs. The internal client is 177 lines in `app/` (118 header, 59 source) and
+is shared by every background job. With `lineOfEvent` made always empty, the redelivery is refused at the unique index
+and the relay throws, so the redelivery case fails (three checks); with the lookups and the unique index both removed,
+the restart no longer leaves one line (measured: the redelivery case fails on its line count). The consumer-side
+idempotence code billing hand-wrote is separate from that wiring and counted apart: about 70 lines, being the
+`ConsumedEvents` adapter (36), `lineOfEvent` (14), the race catch in `storeLine` (11) and the table and unique index in
+the migration (8). `billing_consumed_events` duplicates `billing_lines.event_id`; a unique index on the line's own
+event id would let the line be the dedup record. The verdict stands (the design requires idempotent consumers and
+excludes only a delivery loop or cursor), and Part C's second consumer is to be compared against this cost: if it
+copies the adapter, the lookup and the race catch, that is a framework seam to promote, a ledger morph provides over a
+consumer's own table.
+
+Not measured, and the limits of the verdict. One consumer reads this outbox. `OutboxRelay` has one sink and
+`markLabOutboxRelayed` deletes a batch whole, and `BillingEventSink` throws on an event type it does not consume
+(skipping it would lose it for its real consumer once it is deleted). So a second event type in `lims_outbox`, or a
+second consumer of the same event, needs a routing sink that fans one drained batch out to several consumers, which is
+wiring but has to be written; that is inferred from reading `OutboxRelay`, not measured, and the second instance
+decides it. A consumer that refuses an event holds back every event after it: `OutboxRelay` delivers in drain order
+and marks only a whole batch (measured, same file). Exactly-once here is at-least-once delivery plus a consumer that
+dedups by event id; the dedup table is the consumer's, which the design requires, and is what `IReplayLedger` is for.
+
+### 33. An invoice is one client's lines at one site, in the client's currency; the type does not know which (hypothesis 8, invoice half of instance 2)
+
+`CreateInvoice` collects every unbilled line of a client at a site and marks them invoiced in the same transaction, so
+a second draft finds none (`Conflict`). Each line is claimed by a conditional update that requires it still
+Unbilled, so a draft racing another for the same line is a `Conflict` too and its invoice row is rolled back with
+it. The site must be a site of the named company, and the company must have billing settings and the client be
+registered for billing there. Tax is the company's flat rate on the net total, rounded
+half-up once to the currency's decimals, and the gross is net plus tax; rounding each line's tax and summing would
+drift from the rate on the whole. The site is the invoice's because its approval is judged there (decision 35).
+Every sum, product and the tax are the checked operations (`ExactSum`, `checkedMul`, `checkedAdd`,
+`roundToCurrency`): an invoice whose lines, tax or gross do not fit an `int64` is refused as `OutOfRange` and leaves
+its lines unbilled, never saturated. `GetInvoice` answers `NotFound` for an invoice of a company the caller cannot
+see, and `ListInvoices` lists nothing for one.
+
+**Hypothesis 8's runtime-currency half is confirmed for invoices.** Measured in `tests/test_invoices.cpp`: with the
+currency known only from the record, the amount is a `Quantity` over the one money unit, so a yen line among a euro
+client's lines is refused by `draftInvoice`, not by the type, and the served schema of a JPY price's form still
+advertises `x-decimalPlaces: 2`, because the declared precision is the type's. What keeps currencies apart is model
+code: `draftInvoice` refuses a line in another currency and `fitsCurrency` refuses fractional yen. `Quantity` holds the
+amount exactly; it cannot hold its currency. Purchase orders in a supplier's currency (Part C) are the second
+instance; a form that follows a record's currency is Part D's (`morph::forms::InstanceConstraints` serves
+per-instance decimals and is the existing seam to try there).
+
+### 34. The billing run is a cursor in billing's tables, ticked through an internal client by a timer in the server (hypothesis 4, first instance)
+
+A run belongs to a company and a calendar month (`YYYY-MM`), at most one per pair: `StartBillingRun` refuses a
+second with `Conflict`, and a unique index refuses the second of two starts that raced. Starting it writes one item per
+client and site with unbilled lines. Advancing it drafts one item's invoice and marks the item done in one
+transaction, so an interruption anywhere leaves every item wholly done or wholly pending. Two guarantees keep an
+invoice from being drafted twice, and they are separate: the claim of the invoice's lines (decision 33) is what
+refuses a second invoice for the same lines, and the cursor is what gives the run its progress and lets a resume skip
+the items already done instead of walking them again. An item is claimed by a conditional update that requires it still
+pending, and its invoice's lines by the update decision 33 describes; an item whose claim fails stays pending and the
+next advance judges it afresh, and one whose lines were all invoiced since the run started is done with no invoice.
+Progress is the run's done items of its total, counted from the items. A batch is a whole number of at least one.
+
+The schedule is one action, `RunBillingSchedule`: it starts the run of every company that is due (the day of the
+month has reached its billing day and the company has no run for the month) and advances every unfinished run by
+one batch. `lims::app::BillingScheduler` dispatches it through an internal client as `system:billing-schedule`; the
+server ticks it at start-up, which resumes a run a restart interrupted, and every ten seconds. One batch per tick,
+each tick a dispatch, is what makes progress observable: each tick's `changes<BillingRunView>` reaches a watching
+clerk, and `done` moves between ticks rather than jumping to the end inside one call. The schedule acts only for
+companies where its principal holds `LimsRole::Service`, so what it may do is in the role assignments.
+
+A refusal by the domain while drafting an item (a currency mismatch, an invoice total that does not fit) rolls that
+item's draft back and marks the item `failed` with the refusal's text; the item is skipped for the rest of the run,
+the other items and the other companies' runs go on, and the tick succeeds, so what it committed reaches the watching
+clerks. `BillingRunView` carries `failed` (a count) and `lastError` (the text of the failed item with the highest
+id). A run with no pending item left ends `Finished` when every item is done and `FinishedWithFailures` when any
+failed, so a failure stays visible on a run that has stopped; its failed items' lines stay unbilled and the next
+month's run picks them up. Any other exception (a database failure, a server stopping) is not the item's fault: it
+leaves the item pending, ends the tick with the error, which the server logs, and the next tick resumes. A run
+that starts with nothing to draft is `Finished` at once. A month the server was down for entirely gets no run; its
+lines go to the next month's run. The day is the UTC day, as is the month.
+
+**Hypothesis 4 is confirmed for this instance.** Measured in `tests/test_billing_run.cpp`: the run starts on its day
+and once; each tick advances one batch, and a clerk watching `Billing_Run` is told after each; a run failed after its
+first invoice shows 1 of 3 done, and a fresh server and scheduler after the "restart" finish it with one invoice per
+client. The dispatch is public (an internal client over decision 32's, `billing_scheduler.hpp` is 39 lines and
+`billing_scheduler.cpp` 12; `main.cpp` gains a client, a scheduler and a timer, 18 lines, and no lims code outside
+the tests installs a session by hand), but nothing in morph starts work on a schedule or resumes it: the trigger is
+a `QTimer` in the server, the resume is a cursor table of billing's own, and the tick is billing's own action, a
+scheduler per module. morph's public timers are one-shot loop timers (`IoLoop::loop().addTimer`, which a component
+such as `offline::NetworkMonitor` re-arms itself) and `TimeoutScheduler` is a detail type; nothing is periodic or
+resumable. The verdict rests on where the hand-rolled code lives; the tests measure that the hand-rolled guarantee
+holds. Approval escalation, the design's
+second candidate, is not scheduled work (decision 35), so this is the one instance Part B has.
+
+### 35. Invoice approval is ordinary actions on the invoice's row, and escalation is its deadline (hypothesis 5; hypothesis 4 mis-framed for escalation)
+
+`SubmitInvoice` and `ApproveInvoice` move an invoice from draft to submitted to approved; the state, who submitted and
+approved it, the approval deadline and the gross in company currency are columns of its row. The deadline is the
+submission time plus the company's approval hours. Before it, the approver's role is judged at the invoice's site (a
+role at the company holds there too); from it, only at the company: an approver at the site no longer can, and
+`ListPendingApprovals` shows the invoice to whoever could approve it now, through the same declared rule
+(`authorizationFactsOf`). The design's lifecycle names no way back from submitted, so there is none. Each transition is
+a conditional update that requires the state the action read, and a statement that matches no row is a `Conflict`, so
+two clerks submitting one invoice, or two approvers approving it, cannot both succeed. Approving an invoice that is
+not submitted is an `IllegalTransition` for everyone, asked before the rule so that it never names who created it.
+A foreign-currency invoice has no value in its company's currency until the ledger's dated rate values it, so
+`SubmitInvoice` refuses one. `SubmitInvoice` declares `changes<InvoiceView>` and not `updates`: it moves a row into the
+approvers' filtered list, which held no entry for its key, and `updates` refetches only the entries that hold the key.
+An action that moves a row into a filtered list declares `changes`; `screens/tests/test_lims_approval_inbox.cpp`
+mounts an inbox showing no pending invoice, submits, and waits for the invoice to appear.
+
+**Hypothesis 5 is refuted for this instance.** Measured in `tests/test_invoice_approval.cpp`: an invoice submitted
+by one principal on one rig is approved by another a day later on a new rig, in `Local`, `LocalSingleThread` and
+`Socket` mode; four eyes and the value limit hold. The lifecycle needed no state outside the row and no code shared
+with lab's verification but the declared authorization (`lims::Authorization`, `requireAuthorized`,
+`authorizationFactsOf`, `authorizationVerdict`). Requisition approval in Part C is the second instance.
+
+**Hypothesis 4 is mis-framed for escalation.** The design listed approval escalation as hypothesis 4's second
+instance, but escalation is not scheduled work: it is a deadline the rule reads when an approver acts or lists, so
+nothing has to start at the deadline or resume after a restart. Measured in the same file with the clock before and
+after the deadline. The one consequence is an effects question, not a scheduling one, measured in
+`screens/tests/test_lims_approval_inbox.cpp`: a site approver's inbox, mounted before the deadline, still lists the
+invoice after it, and shows the escalation only when it asks again. What the test measures is that the open inbox is
+not told: it is checked after the harness advances past the deadline. The cause is inferred, not measured: no action
+ran, so no effect was declared or fanned out. Hypothesis 4 therefore has one instance in this design, the billing run
+(decision 34), and the design's row says so. Part C's requisition escalation is expected to take this shape.
+
+### 36. Billing's approval pairs and the approver's value limit are declared, and checked in the model (hypothesis 6, second instance)
+
+`Authorization<ApproveInvoice>` declares the invoice approver role in a scope its payload's invoice decides (site or,
+past the deadline, company), a value limit (the invoice's gross in company currency, recorded at submission, against
+the approver's limit at that company, `SetValueLimit`), and two separation-of-duties pairs: with `CreateInvoice`, and
+with `SubmitInvoice`, so an invoice the billing run drafted, its creator the schedule's service principal, still
+needs a second person. `lims/org/authorization/declared.hpp` holds a form for several pairs (`separations`,
+`firstPerformersOf`) beside lab's single one, and `authorizationFactsOf` gathers the facts a rule is judged on so the
+pending list and `requireAuthorized` judge by the same ones. The limit is compared with the invoice's gross by an exact
+comparison; no sum or conversion happens in the check, and a submission that recorded no company-currency gross
+refuses the approval.
+
+**Hypothesis 6 is confirmed for its second instance.** Measured in `tests/test_invoice_approval.cpp`:
+`LimsAuthorizer` allows both the invoice's creator and an approver over their limit (it sees the principal, the model
+and the action), and the model refuses both, in every mode; the clerk who submitted a run-drafted invoice is refused
+too. The same hand-rolled guarantee recurred: each declared action's handler calls `requireRoleSomewhere` and
+`requireAuthorized` itself (32 and 28 call sites in the modules' sources), the edge's table restates every
+declaration by hand (37 entries), and the coverage test lists every mutating action by hand because nothing
+enumerates a model's actions publicly. Together they are the case for a framework seam.
+
+### 37. A draft invoice is leased to its editor, and the lease lapses with the editor's instance (hypothesis 3, first instance)
+
+`InvoiceEditModel` is one private instance per editor. `LeaseInvoice` writes a lease row — the invoice, the holder,
+the instance's token, an expiry fifteen minutes after the last edit — and refuses another editor's live lease in words
+naming its holder; `GetInvoiceLease` shows the holder to anyone who can see the invoice. Each edit (removing a line,
+setting the client reference) requires the instance's own live lease and renews it in the same conditional update. An
+expired lease is free to the next `LeaseInvoice`, so the timeout needs no timer. Taking a lease is a write conditional
+on the row as it was read, and the table has a unique index on the invoice, so two editors taking one lease at once give
+one success and one `Conflict`. `ReleaseInvoice` declares `changes<InvoiceLeaseView>`, so a second clerk watching
+`Billing_Lease` is told when the holder lets go — measured on a second connection.
+
+**Hypothesis 3 is refuted for this instance, through an existing hook that is not a lease hook.** Measured in
+`tests/test_invoice_lease.cpp` over a real `RemoteServer`: closing the holder's connection frees the lease, and the
+second clerk takes it without waiting for the timeout. The hook is the instance's destructor: `closeConnection`
+erases a private instance, and `~InvoiceEditModel` deletes its lease by token. What that costs, stated plainly: the
+release does database work in a destructor, on whatever thread drops the last reference (inferred from
+`closeConnection`'s documentation, not measured: the server strand when a connection closes with nothing in flight,
+the model strand after the action when one is). On the server strand the blocking SQLite delete, up to the busy
+timeout, stalls routing for every connection, which is the cost a framework-level release hook would have to avoid. A
+failure there can only be logged; a crash that kills the process releases nothing, and the
+timeout is then the only lapse. And the lapse is not told: a second clerk watching `Billing_Lease` hears of a release
+but not of a lapse on disconnect, because the destructor is not an action and nothing derives a change from it —
+measured on the same second connection; the clerk learns of it only by asking. The lease guards the editor's own two
+edits, and `SubmitInvoice`, which refuses with `Conflict` naming the holder when it finds another principal's live
+lease on the draft (a submitter's own lease is no obstacle); no other `InvoiceModel` mutation consults it. That check
+and the submission's write are two steps, so a lease taken between them is not refused; nothing is lost by it, because
+submission writes conditionally on the gross it read (a line removed in between is a `Conflict`, not a stale approval
+amount) and the editor's later edits fail their draft check. A lease outlives submission and the holder's role until
+it lapses. Decision 47 is the second instance.
+
+### 38. Posting an invoice: two commits in sequence keep each module's action; one transaction gives the ledger's up (hypothesis 1, first instance)
+
+`PostInvoice` builds the invoice's `PostingRequest` (`lims::postingFor`: receivable debit, revenue and tax credits,
+each converted at the ledger's dated rate and rounded half-up on its own, and a line to the company's rounding account
+for the difference, whole yen in a yen company) and hands it to the ledger through the port the app installs
+(`lims::app::installLedgerPort`). Billing then assigns the next number of the company's fiscal-year series
+(`INV-<fiscal year>-<six digits>`, the fiscal year of the entry's date, named by the calendar year it begins in),
+marks the invoice posted with its entry, and commits. The number is assigned in billing's commit, so no failure leaves
+a hole in the series. The port reaches the ledger one of two ways, and both were measured in
+`tests/test_invoice_posting.cpp`. Dispatched, the ledger's half is `RecordPosting`, the ledger's own action, sent by
+the app's internal client as `system:posting`: it is authorized by its declared rule (the service role at the
+company), journaled, and its `Ledger_Entry` change reaches a watching accountant, and it commits alone, so a failure
+before billing's commit leaves the ledger holding an entry for an invoice that is approved, unnumbered and unposted.
+In one shared transaction, the port writes the entry through billing's own mapper (`recordPostingIn`) and both halves
+commit once: a failure at either fault point leaves nothing, and no hole. The server posts dispatched.
+
+**Hypothesis 1 is confirmed, with the workaround's cost.** The database can make the two halves one fact, and lims
+did, with seams that exist, which is the design's refutation condition on its letter. But only by not running the
+ledger's half as the ledger's action. Measured, in the shared transaction: no `Ledger_Entry` change reached the
+watching accountant (it did in the dispatched posting); the posting succeeded with the posting principal holding no
+role, where the dispatched posting was refused (at the server, by the declared role table or the ledger's rule; the
+test does not separate the two); and the journal holds no `LedgerModel` `RecordPosting` for it (it does for the
+dispatched posting). With the ledger's half as its action, the window is real: a failure at either fault point leaves
+the entry committed and the invoice approved, unnumbered and unposted, and no number is spent. What morph lacks is a
+way to run two models' actions as one fact while keeping each one's authorization, effects and journal. The server
+keeps the dispatched posting until that seam exists. Goods receipt in Part C is the second instance, and the seam is
+designed against both.
+
+Three costs of the dispatched posting that only measuring showed:
+
+- **A retry numbers the invoice against the entry already recorded.** The ledger answers a repeated source key only
+  for an identical request, and a request built again is not identical once the day, the company's receivable account
+  or a back-dated rate has changed: the key comes from the invoice, so the ledger would refuse it for good. A dispatched
+  `PostInvoice` therefore asks the ledger first (`FindPosting`) for the entry under the invoice's key and, if there is
+  one, numbers and posts the invoice against that entry without building the posting again, in the fiscal year of the
+  entry's date, which can be the year before the retry's. What it relies on rather than checks: the key is billing's
+  own and is looked up in the invoice's company, and the entry was built from the invoice's totals, which cannot change
+  once it is approved. The retry then fails only for what stops the second commit itself (a busy database, the invoice
+  posted meanwhile). The shared transaction needs none of this: nothing outlives a failure.
+- **The ledger's transaction takes the write lock first.** SQLite turns a transaction that read and then wrote away at
+  once, without waiting, when another holds the write lock, so two postings at once failed with a raw "database is
+  locked". `recordPostingIn` opens with a statement that writes nothing and takes the lock, and a database that is
+  still busy after the ledger's retry is a `Conflict`, as it is in billing's numbering transaction. Two clerks posting at
+  once get consecutive numbers; the test holds both postings between the halves so that their numbering transactions
+  overlap.
+- **Posting is conditional on the state it read.** The invoice moves from approved to posted by a conditional update,
+  and the series advances only from the number read, so a second posting of one invoice changes nothing and spends no
+  number.
+
+`SubmitInvoice` is a Task handler that awaits the same port's `GetRateOn` to value a foreign-currency invoice at the
+ledger's rate on the submission date, so the approver's limit is judged against its worth in the company's currency; it
+refuses with a `ValidationError` when no ledger is wired or no rate is valid. `GetRateOn` refuses a caller that cannot
+see the company (`Forbidden`) rather than answer "no rate": until an administrator grants `system:posting` the service
+role at a company, a foreign-currency submission there fails for the grant, not for missing data. `FindPosting` answers
+empty for such a caller, which cannot mislead, since recording the posting refuses the same caller with the reason.
+
+### 39. One module's write reaches another module's watcher only as that module's own dispatched action
+
+Two causes, measured apart in `tests/test_cross_module_effects.cpp` and by the `lims.cross_module_effects.*` probes.
+
+**(i) An action cannot declare an effect on another module's record — confirmed.** `PostInvoice` posting in one
+shared transaction (decision 38) writes the ledger's `Ledger_Entry` inside billing's action; an accountant watching
+`Ledger_Entry` is not told, while the ledger's own `CreateDraftEntry` on the same connection is heard. Billing cannot
+name the ledger's record (it does not include the ledger), and the composing code, which sees both, cannot add the
+declaration: a second `BRIDGE_REGISTER_EFFECTS` for `PostInvoice` makes the effects configuration refuse to resolve,
+"action `PostInvoice` declares different effects in two registrations" (the `refused` probe prints it; the `control`
+probe, without the second registration, resolves).
+
+**(ii) A write outside any action derives no changes — confirmed, and not a gap.** `RecordBillableLine` run in process
+outside any dispatch writes the line and no watcher of `Billing_Line` is told; the same write dispatched through the
+events client is heard. Changes are derived from executed actions by design: the backend fans out "after an
+`execute` succeeds" (`docs/spec/core/backend.md`, Fan-out), and effects "are declared, not computed"
+(`docs/KEEPING-SCREENS-CURRENT.md`). The internal client is how a reaction becomes an action (decision 32).
+
+The measured miss exists only in the shared-transaction mode. The shipped server posts dispatched, and there the
+ledger's half runs as the ledger's own `RecordPosting`, which a watching accountant hears (decision 38's test). The
+shared transaction is itself the workaround for hypothesis 1's missing seam — two modules' actions as one fact, each
+keeping its effects — and if that seam lands this instance goes with it. The instance no other seam fixes is decision
+26's, still inferred: org's `AssignRole` changes which samples lab's list returns, a change of visibility rather than a
+write, which neither dispatching nor a multi-action seam would make lab's screen hear. The one existing mechanism that
+carries a change from one record to another, `record::derivedFrom`, is refused on a keyed record, and both
+`Ledger_Entry` and `SampleView` are keyed. So cause (i) is filed against `include/morph` as a missing seam: a way for
+the code that composes modules to state that one module's action changes another module's records. A screen over these
+records, rather than a raw watching connection, was not measured; its refresh is driven by the same `changes` events,
+so it is inferred to behave the same.
+
+### 40. An invoice change in one company reaches another company's watching clerk (hypothesis 7, first instance)
+
+**Hypothesis 7 is confirmed for invoices, and what leaks depends on the effect the action declares.** Measured in
+`tests/test_two_company_effects.cpp` over a real `RemoteServer`, with the first company's clerk watching
+`Billing_Invoice` on a connection of her own and the second company's clerk watching it on another as the control:
+
+- `CreateInvoice` declares `changes<InvoiceView>`. Company B creates an invoice; company A is sent the record without
+  any key ("sent to company A: Billing_Invoice as a whole", printed by `-s`). It learns that the second company's
+  invoices changed, and when.
+- `ApproveInvoice` declares `updates<InvoiceView>`. Company B approves an invoice; company A is sent the record with
+  the invoice's id ("sent to company A: Billing_Invoice with key 1", the same key company B's own clerk is sent).
+  `Billing_Invoice` is registered without `record::privateKeys`, so nothing strips the key. Declaring
+  `changes<InvoiceView>` on `ApproveInvoice` instead makes the same case fail (the approval is then sent as a whole
+  record to both companies).
+
+This is the framework's documented design and not a defect: record events are type-level, a watch is admitted and
+re-authorised by whether its principal may still run some action that returns the record, and nothing in that path
+sees the row. docs/spec/security.md, "What an event reveals": "Those keys are ids of rows the recipient could list
+through some action returning that record, but not necessarily the same rows: a model may filter rows per principal";
+`privateKeys` is the documented way to withhold them. Leaving `privateKeys` off a tenant-owned record therefore
+discloses its ids across tenants whenever an action declares `updates<>` on it. The lists stay scoped by the
+company in `ListInvoices`' payload and the visibility check the model runs on it (inferred from the handler; the
+refetch was not measured here). Hiding
+the event itself needs a row-company judgement in the fan-out, which only the model has (inferred from the fan-out's
+documentation). If Part C's stock instance needs the same workaround (per-company record names, or `privateKeys` on a
+tenant-owned record), a per-tenant scoping seam for record events becomes an enhancement against `include/morph`;
+until then it is not filed.
+
+### 41. Declared authorization is the framework's action guard (hypothesis 6, resolved)
+
+Every action with a `lims::Authorization` rule declares `using guard = ::lims::DeclaredRuleGuard;`
+(`docs/spec/core/action_guards.md`), and the framework runs that guard on the decoded action on every dispatch path,
+after its validator and before the handler: the principal, the role somewhere, then the rule — in the scope the
+payload names, or, for the nine writes on a sample the handler holds (the six transitions, `CaptureConcentration`,
+`SaveSample`, `DeleteSample`), in every scope the model resolves from its attached sample or working copy, read
+`const` before the handler runs. The rules stay lims's. No handler calls the check, with two kinds of exception:
+`QueuedCapture` declares no guard and keeps its check, because it answers a redelivery before the role (decision 25);
+and five handlers judge their rule again just before their write: `BeginClosePeriod`, `PostEntry`, `ReverseEntry` and
+`ClosePeriod` (the scope is read from the row once more) and `ApproveInvoice` (the scope, the recorded gross and the
+performers are read once more). The second judgment reads on the rule's own connection, so it sees committed rows and
+not the handler's transaction, which has written nothing yet; what it adds is that a role or limit changed since the
+guard ran is seen. `SubmitInvoice` is judged once, by the guard: its only write is a conditional update on the
+invoice's state and gross, which refuses a stale submission by itself; a role revoked while it awaits the rate lookup
+is not seen, and the submission stands. `ApproveInvoice` judges committed rows rather than its own transaction's
+because a submitted invoice's gross and performers cannot change: there is no way back to `Draft`, and every edit is
+conditional on `Draft`. Its conditional update from `Submitted` then binds what was judged to what is written, and is
+also what makes it safe against a concurrent approval, not the second judgment. The first role assignment on a lab with no
+supervisor is exempt in the guard (`Authorization<AssignRole>::bootstrapOpen`).
+
+**Unknown ids.** A caller who names a row that does not exist, and holds a role somewhere, is refused in words rather
+than told the row is missing, because the guard runs before the handler looks the row up and a missing row resolves to
+a scope that holds no role. The rule applied throughout is that an id that names nothing and one the caller has no
+role over are refused with the same exception type, `Forbidden`, so the type does not tell them apart. The cases that
+changed from `NotFound` to `Forbidden`: `VerifyResult` and `ResolveConflict` of an unknown id; `SaveSample` naming a
+missing site or updating a sample whose row is gone; `DeleteSample` of a sample whose row is gone; `RegisterSample` at a
+missing site; `CreateSite`, `CreateItem`, `CreateLocation`, `CreateInvoice`, `SetExchangeRate` and the price-list
+writes naming a missing company or list; `OpenPeriod`, `BeginClosePeriod`, `ClosePeriod`, `PostEntry` and
+`ReverseEntry` of an unknown id; `AdvanceBillingRun` and `SubmitInvoice` of an unknown run or invoice; `RevokeRole` of an unknown assignment; and `QueuedCapture` of a missing sample, whose replay judges its own
+rule and used to be the one scoped write that still answered `NotFound` where the sample's site was refused. Decision 23
+promised `NotFound` for these; it now holds only for a handler attached to nothing, which names no id. The words are the same too:
+a rule whose scope is read from a row (every rule that looks something up, and every model-scoped write) names no
+scope, so a missing id and a record in a scope the caller holds nothing in both read "... does not hold the verifier
+role where this applies". Only a rule whose payload spells out its scope (`scopeInPayload`: a company or site the
+caller wrote) repeats it, "at company 3", because that tells the caller nothing new. The decision is made in
+`judgedFactsIn`, so a rule that does not declare `scopeInPayload` hides its scope by default.
+
+**`ApproveInvoice` is judged in a fixed order**, and it differs from the other rules because an approval is the one
+write whose refusal must reveal nothing about an invoice outside the approver's reach: first the role, held where the
+invoice is visible (`Forbidden`, with the same words for an unknown id and for another company's invoice, naming
+neither the scope nor the invoice); then the invoice's state (`IllegalTransition`); then separation of duties and the
+value limit. This is done through the rule's optional `checkState` hook, which runs once the role is held. An approver
+therefore learns the state of an invoice only if they could see it.
+
+**`SaveSample`'s `SaveError` now follows the guard.** The handler used to describe an incomplete working copy in the
+result (`noClient`, `noReference`, `noProject`, `noSite`) before it asked for any role. The guard now runs first, so a
+caller who holds no role is refused with `Forbidden` and is not told what the copy lacks; a caller who holds a role
+somewhere still gets the in-band `SaveError`, and a header that names no site contributes no scope, so `noSite` is
+still answered by the handler. The rule is the one above: nothing about the model's contents reaches a caller the
+guard would not let write.
+
+A guard's refusal is journaled by the framework as any refused execute is, whatever the principal, wherever a holder
+carries a log. The sample's own audit trail hears a refusal through `SampleModel::onGuardRefused`, which records what
+the handlers recorded before — a refused verification or transition — and never an unauthenticated attempt, so
+decision 4 holds for the trail.
+
+**The edge keeps its per-id role table** (`declaredRequirements`): on the server it refuses a principal without the
+role before decoding, and it is what admits watches, which run no action and so no guard. `authorize` is not told
+whether it answers an execute or a watch, and `RemoteServer` admits a watch on a record when the principal is
+authorized for some action holding that record, and a watch on a model's instances when it is authorized for any of the
+model's actions, so the table is not narrowed.
+
+**The watch measurement.** `RemoteServer` answers a watch with an `ok` reply that names the records it refused, so
+refusal is read from the reply's body, not its kind. Measured over a socket backend with `mallory`, who holds no role,
+and `alice`, an accountant, watching `Ledger_Entry` and `Billing_Invoice`, against the edge as it stood before this
+change (a test-local copy of that `authorize` body):
+
+```
+BASEMEASURE record=Ledger_Entry principal=mallory kind=ok body={"refusedRecords":[],"refusedInstances":[]}
+BASEMEASURE record=Ledger_Entry principal=alice kind=ok body={"refusedRecords":[],"refusedInstances":[]}
+BASEMEASURE record=Billing_Invoice principal=mallory kind=ok body={"refusedRecords":[],"refusedInstances":[]}
+BASEMEASURE record=Billing_Invoice principal=alice kind=ok body={"refusedRecords":[],"refusedInstances":[]}
+```
+
+The per-id answer admitted a principal with no role to both records, as reading the code predicted:
+`effects::actionsHolding` counts every action whose result holds a record, reads included, so `Ledger_Entry` is held by
+`GetEntry`, `ListEntries` and `ListEntriesPage`, and `Billing_Invoice` by `GetInvoice`, `ListInvoices` and
+`ListPendingApprovals`, which declare no rule, and the edge answered `true` for them after the signature check. The
+edge's answer for every action of the ledger, ledger-report, price-list, invoice, invoice-edit and billing-run models
+that declares no rule is therefore "holds some role anywhere" (`holdsAny`), reads included; the sign-in exemptions stay
+first. The tightening closes **executing** `GetEntry`, `GetInvoice` and the list actions by id for a principal with no
+role as well as watching them: the leak was never specific to watches. No existing case changed: the full ladder-lims suite passed with the tightened edge, so no case read these models as a role-less principal. The lab, org
+and inventory models keep the open answer for their reads (`GetSample`, `ListSamples` and the rest): a watch on a
+sample, a company or a stock record is still admitted to any signed-in principal, and what a caller sees there is
+narrowed by the handlers' own visibility rules (decision 26); that is not changed here.
+
+Coverage of "every action is guarded, deliberately open, or a declared read" is proved by enumerating the dispatcher
+(`morph::model::isGuarded`, `effects::effectsOf`) over the org, sample, analysis-catalog, ignition, ledger, ledger-report,
+price-list, invoice, invoice-edit, billing-run and stock models, failing closed: a read is
+registered `Loggable::No` and declares no effect (48 of the models' actions; `ListAnalyses` and `GetAnalysisVersion`
+gained `Loggable::No` for it), and a writer is loggable unless it says otherwise, so an undeclared writer matches no
+class and fails. A read cannot instead declare `effects::none`: in a ui document a query's action must declare no
+effect, and `none` is a declaration, so the action would run as a mutation (measured: the lims render smoke failed with
+"a query reads, so its action declares no effects; `ListSites` declares `none`, so it runs as a mutation"). The table is proved to list exactly the guarded actions and `QueuedCapture`. `LimsAuth`'s sign-in is not listed:
+the edge exempts it and it declares no rule.
+
+**Hypothesis 6 is resolved by the seam** for execution: a declared rule that sees the payload or the instance is
+checked once, by the framework, for every module. It is not resolved for reads: watch admission still needs the
+edge's id-level answer.
+
+### 42. Stock is held in the item's unit, and a quantity's unit travels beside it
+
+An item has one stock unit, chosen when it is created, and every lot of it holds its stock on hand in that unit. A
+quantity entered in another unit of the same dimension is converted exactly before it is stored (250 mL of a reagent
+stocked in L is 0.25 L), by `lims::convertStock`, which reads the relation from `UnitTraits<StockUnit>::relations`; a
+quantity in another dimension is refused. A lot's stock on hand changes only through a movement written in the same
+transaction, and the lot's update is conditional on the stock on hand that was read, so a lot's movements always sum
+to it and two movements on one lot cannot both apply to the same read. A lot number names one lot of an item. An
+opening lot, for stock a company held before lims, posts nothing: its value is the accountant's opening entry.
+
+**The runtime-unit shape of hypothesis 8 recurs for stock.** Measured in `tests/test_stock.cpp`: `Quantity` converts
+250 mL to 0.25 L exactly when both units are template arguments, and an action cannot use that, because an item's
+unit is a fact of its row. The quantity is therefore a `Measure` (an exact decimal in a carrier unit) with a
+`StockUnit` field beside it, and the conversion is inventory's own walk over the same relations — 30 lines in
+`units.cpp`. This is the shape decision 28 gave money, for the same reason: a `Quantity`'s unit is a compile-time
+tag. Purchase orders in a supplier's currency (decision 44) are hypothesis 8's named second instance; this is a third
+place the same shape is needed, recorded here and weighed with both when the seam is decided.
+
+### 43. A requisition is approved as an invoice is, with its own limit, and nothing shared but the declared rule (hypothesis 5, second instance)
+
+A requisition is raised at a site by anyone who holds a role there, and only its requester adds lines and submits
+it. Each line is an item, a quantity converted to the item's unit, and an estimated line total in the company's
+currency; the requisition's total is their exact sum, and an estimate or a total that does not fit is refused.
+`SubmitRequisition` records the submitter, the deadline (now plus the company's approval hours) and requires the
+total it read, so a line added meanwhile is a `Conflict` and not a stale amount for the approver's limit.
+`ApproveRequisition` is a purchase approver's, at the requisition's site before the deadline and at its company from
+it, within their limit for that role, and never the requester's or the submitter's. Each transition is a conditional
+update on the state read; two approvers acting at once give one approval and one `Conflict`, measured over ten
+rounds of two threads with no other failure. A value limit belongs to a principal, a company and a role, because one
+person approves invoices and requisitions up to different amounts; limits set before roles had them are the invoice
+approver's.
+
+**Hypothesis 5 is refuted for its second instance.** Measured in `tests/test_requisitions.cpp`: a requisition
+submitted on one rig is approved on another a day later in `Local`, `LocalSingleThread` and `Socket` mode; four eyes
+and the limit hold. The lifecycle needed no state outside the row, and shares no code with invoice approval but the
+declared authorization: each lifecycle wrote its own transition helper, pending list and escalation predicate
+(`requisitions.cpp`, 320 lines; `invoice_approval.cpp`, 250). Escalation is again a deadline the rule reads, not
+scheduled work (decision 35); and again an approver's open inbox is not told when the deadline passes. That is
+measured on a site approver's watching connection, with a requisition raised after the deadline in the same case as
+the control that the connection hears a change of the record. It is the same gap in a second module, so it is filed
+against `include/morph`; Part D Task 20 builds the deadline effect.
+
+**Declared authorization, third module.** The rule is declared once beside each action
+(`inventory_authorization.hpp`) and the framework's guard runs it; no handler makes the first authorization call.
+`ApproveRequisition` judges its rule again just before its write, as `ApproveInvoice` does (decision 41), and for the
+same reason: a role or limit changed since the guard ran is seen. Its order is the invoice's: the role where the
+requisition is visible, then its state, then the pairs and the limit. A requisition that does not exist and one the
+caller cannot see are refused in the same words, because the role refusal of a rule with a state check is spelled "...
+where this applies" and names no scope. Measured: declaring `scopeInPayload` on the rule changes nothing, since that
+refusal never reads it; appending the scope to those words makes the two refusals differ and the case fail.
+
+### 44. A purchase order is in its supplier's currency; the type does not know which (hypothesis 8, orders half of instance 2)
+
+An approved requisition becomes one purchase order to one supplier, in the supplier's currency. The purchaser prices
+every requisition line per stock unit; a line total is the quantity times the unit price, rounded half-up once to the
+currency's decimals, and the order total is their exact sum, every product and sum checked and an order that does not
+fit refused as `OutOfRange`. Ordering moves the requisition from approved to ordered by a conditional update in the
+order's transaction, and a unique index on the requisition settles two orders that raced: a requisition is ordered
+once. Ordering judges the purchaser's rule again before that write, as approving a requisition does (decision 43).
+
+**Hypothesis 8's runtime-currency half is confirmed for its second instance.** Measured in
+`tests/test_purchase_orders.cpp`: a unit price of 850.50 for a yen supplier is refused by the model (`fitsCurrency`),
+and the served form of `CreatePurchaseOrder` still advertises `x-decimalPlaces: 2`, for its nested price, because the
+declared precision is the type's. The currency is known only from the supplier's row, as an invoice's is from its
+client's (decision 33), and a stock quantity's unit from its item's (decision 42). Three places in two modules now
+carry an amount beside a field naming its unit and check the pair by hand.
+
+### 45. A goods receipt posts its value as an invoice does, and meets the same choice (hypothesis 1, second instance)
+
+`ReceiveGoods` takes a delivery against an open order: each line a new lot at a location of the order's site, its
+quantity converted to the item's unit, several lots to one order line allowed, and never more than was ordered. The
+receipt is valued at the order's prices in the supplier's currency, each line rounded half-up once, and posted
+through the one ledger port the app installs (which now lives in `posting`, because two posters reach it: an
+amendment of the design's "request and result DTOs only" for that module): a debit to stock per line, converted at the
+ledger's rate on the receipt's date and rounded per line, against one credit to goods received not invoiced for the
+total, rounded once, and a line to the rounding account for what the per-line rounding left. A lot's unit cost is its
+line's company-currency value over its quantity, exactly. The number, `GR-<fiscal year>-<six digits>`, is gap-free per
+company and fiscal year, assigned in inventory's commit. A receipt is refused without a rate on its date, for a lot
+number the item already has, and beyond what was ordered, each before the ledger is called; two receipts against the
+last of an order line give one receipt and one `Conflict`. A dispatched attempt that fails after the ledger call is
+retried under the same source key with the same body (the body carries no lot number, so a corrected lot number
+converges on the recorded entry), and a retry with other lines is refused naming the entry, never posted twice.
+
+**Hypothesis 1 is confirmed for its second instance.** Measured in `tests/test_goods_receipt.cpp`: in one shared
+transaction a failure between the halves leaves nothing and no hole in the receipt numbers, but the ledger's entry is
+not heard by a watching accountant and not journaled as the ledger's own action, and is not refused by the ledger's
+rule (a receipt succeeds both with the posting principal holding no role and with it holding the role at another
+company only, where the dispatched receipt is refused, in the first case by the edge's role table and in the second by
+`RecordPosting`'s own rule at the receipt's company); dispatched, the ledger keeps all three, and a failure between the
+halves leaves an entry for goods that are not on hand until the receipt is retried, which converges on the same entry
+by its source key. The two postings needed the same
+thing and neither has it: two models' actions committed as one fact, each keeping its authorization, effects and
+journal.
+
+### 46. A captured result consumes reagent from the first-expiring lot, through the same relay, routed by type (hypothesis 2, second instance)
+
+An analysis's reagent use is declared in inventory, per company: a quantity of an item per analysis, referring to the
+analysis by its shared id, because lab cannot know items. Lab writes `lab.ResultCaptured` into its outbox in the
+capture's transaction (every capture path writes it: entry, replayed offline capture, a conflict applied anyway), with
+the event id `lab.ResultCaptured:<result>:<sample version>`, so a re-capture is a new event and consumes again. The
+relay's one sink is now `lims::app::LabEventRouter`, which hands each event to the consumer its type is routed to,
+analysis-published to billing and result-captured to inventory, and refuses a type with no route rather than let the
+relay delete it unconsumed. `RecordConsumption`, sent only by the server's own client, takes each recipe line from the
+lots of the item at the event's site that have not expired (a lot is usable through its expiry instant), first-expiring
+first, each lot's movement conditional on its stock as read; what the lots cannot cover is a shortfall movement (a
+negative quantity naming no lot), not a refusal, because a refused event holds back every event behind it. The cost of
+a consumption is the sum, per lot taken, of the quantity times the lot's unit cost, rounded half-up per lot to the
+company's currency; it is posted through the one ledger port as a debit to the consumption account against a credit to
+stock, under the source key `inventory.consumption:<event id>`, and fixed by the committed consumption, never
+recomputed. A redelivery whose cost is still owed first asks the ledger for the entry under that key and, when there is
+one, stores it without building the posting again, because the accounts come from the settings and a change to them
+between the deliveries would make the ledger refuse the repeat as another body. In
+`PostingMode::SharedTransaction` the entry commits with the consumption; in `PostingMode::Dispatched` the consumption
+commits with its cost and no entry, then the handler (a `Task`) awaits the ledger and stores the entry by a conditional
+update, and a redelivered event whose consumption holds a cost and no entry is posted then: the consumer's answer to a
+redelivery includes "the posting is still owed". A consumption with a cost and no ledger wired is refused with nothing
+moved, because committing it would owe a posting nobody makes; a recipe is refused for a company with no inventory
+settings for the same reason.
+
+**Hypothesis 2 is refuted for its second instance.** The criterion is decision 32's: each event received exactly once
+in effect across a restart, only wiring in `lims/app`, and no per-consumer delivery loop or cursor. Measured in
+`tests/test_consumption.cpp`: a relay that delivers both events and dies before marking, then a fresh relay over the
+same database, leaves each lot as the first delivery left it, the books with the two entries the first delivery made,
+and the outbox empty. There is no delivery loop or cursor: the only `for`s in `event_wiring.cpp` are the router's search
+for the route of an event type, the sinks' filters over what they delivered (the `IActionLog` read API) and the router's
+pass over its sinks for `flush` and `entries`; a search of `app/` and inventory for cursor, last id, position and offset
+finds nothing. The word "wiring" does not describe all of `event_wiring.cpp`, which is 58 lines for this consumer:
+
+- `InventoryEventSink` is 30 of them, a near-verbatim copy of `BillingEventSink` (31): check the event type, decode the
+  payload, dispatch one action through the internal client, record the entry as delivered, and an `entries()` filter
+  that is identical. Only the event type, the payload type and the action's fields differ. That is a per-consumer
+  dispatch adapter, hand-written for each consumer of a multi-type outbox, which is what the hypothesis names
+  ("delivering events to a model consumer needs hand-rolled code per consumer"), not configuration of morph's relay. It
+  has no loop and no cursor, so it does not change the verdict word the criterion gives; it is the first half of the
+  seam below.
+- The router and `labEventRouter` are the rest. `OutboxRelay` has one sink, so a second event type needs a sink that
+  chooses by type; the router refuses an event type it has no route for (measured, same file) rather than let the relay
+  delete it unconsumed.
+
+What inventory hand-wrote for idempotence is 35 lines, counted as billing's 70 were: `consumedRow` and
+`consumptionOfEvent` (24; billing's adapter and `lineOfEvent` were 50), the race catch in `storeConsumption` (8;
+billing's 11) and the unique index with the event id column (3; billing's table and index 8). The 35 is a lower bound.
+It leaves out what exists only so that a redelivery can be answered with the original consumption: the movement's
+`event_id` column and its index, `MovementRecord::eventId`, `moveLot`'s event id parameter and its plumbing, and the
+`event_id` filter in `consumptionView`, about 14 more lines by a hand count of the diff. Billing needed none of them,
+because its line is its own record of the event. So "35 against 70" is not half the cost.
+
+Decision 32 said that if the second consumer copies the adapter, the lookup and the race catch, that is a framework seam
+to promote. This instance copied two of those three parts, the lookup and the race catch, in the same shape
+(`storeConsumption` is `storeLine` with the names changed, comment included). It took no consumer-side adapter: it took
+the cheaper form decision 32 named, in which the consumption's own row is the dedup record. The adapter that was copied is the sink, a
+different adapter, one level out. Read literally the condition is therefore met in part; read for what it is for,
+whether the same hand-rolled guarantee is needed twice, it is met, and the verdict on the hypothesis is not changed by
+the difference.
+
+Task 8 must specify both halves of the seam, not the second alone:
+
+- Delivering an event to a model action: the dispatch adapter, with the router that chooses it by event type. Two
+  sinks differ only in event type, payload type and action.
+- The consumer-side once-only record: look an event id up before the write, settle a lost race by a unique index, and
+  answer the winner's result. It has been needed twice, over two different rows.
+
+That a consumer of another outbox (bookmarks, a CRM) would need both unchanged is inferred from the shape of the two
+copies; it was not measured. Nothing is built for the seam here.
+
+### 47. A sample's lots are reserved by the bench that will use them, and the reservation lapses with the bench's instance (hypothesis 3, second instance)
+
+`ReservationModel` is one private instance per bench. `ReserveForSample` reserves, for one sample, what each recipe line
+of its analyses will consume: per item, the first-expiring lot at the sample's site whose available stock (on hand less
+every other sample's live reservation) covers the item's need, summed over the analyses. The rows carry the holder, the
+instance's token and an expiry an hour after the last reservation; a lapsed row counts for nothing, so the hour needs no
+timer. A bench that reserves again replaces its own earlier rows, and its own hold on a lot does not count against it.
+Contention for a lot is ordered by its `reservation_version`, the first write of each reservation's transaction, a
+conditional update on the version and the stock on hand that were read: two benches racing for the last lot give one
+reservation and a `Conflict` naming the holder. A bench that loses a lot, to whoever, plans again (up to three
+attempts): another lot, or the same one, may still cover its need, and planning refuses with the named `Conflict` only
+when none does. The refusal naming the holder of the lost lot is what a bench gets when the attempts run out.
+A capture consumes its sample's reservation first, shrinking the row by what it took and deleting it when nothing is
+left, and then the first-expiring order, each lot's take capped at what no other sample has reserved.
+
+Inventory cannot check that a reserved sample exists or is at the site the payload names: no module reads another's
+tables, and lab tells inventory of a sample only when a result is captured. A reservation for a sample that does not
+exist holds stock until it lapses; the caller's analyst role at the named site is what authorizes it. Reservation is a
+bench action of its own rather than a side effect of assigning analyses: the assignment is lab's, inventory cannot see
+it, and lab may not call inventory, so the bench reserves when it assigns. `ReleaseReservation` declares no role: it
+deletes only the rows of the instance that sends it.
+
+**Hypothesis 3 is refuted for its second instance, through the same hook.** Measured in `tests/test_reservation.cpp`
+over a real `RemoteServer`: closing the holder's connection frees the reservation, and the second bench takes the lot
+without waiting for the hour. The race was measured over ten rounds of two threads with both benches alive: one
+reservation and one named refusal each round, and no other failure. The hook is again the instance's destructor, with
+again its costs (decision 37): database work on whatever thread drops the last reference (inferred, as in decision 37,
+from `closeConnection`'s documentation; not measured for either lease), a failure that can only be logged, and nothing
+released by a crash. And again the lapse is not told: a bench watching `Inventory_Reservation` and `Inventory_Lot` hears
+nothing of a lapse on disconnect over a one-second window, measured on the same connection; a release, which is an
+action, is heard.
+
+The second lease copied the first's mechanism. By a hand count, 42 lines: the token generator (8: `newToken` in
+`inventory/src/models/reservation_model.cpp`), the destructor's release (17: `ReservationModel::~ReservationModel`), the
+moved-on check adapted to the lot's version (13: `lotMovedOn`) and the expiry rule (4: the lease-length constant in the
+same file, and the two expiry filters in `inventory/src/db/inventory_store.cpp`); `isBusy` is org's and was called, not
+copied. None of them is about stock. That is the same hand-rolled guarantee in a second module: a lease tied to a
+connection, released on close, and not told to watchers as a change.
+
+The verdict stands: the condition was a release through an existing hook without a timer of the model's own, and that
+was measured. What follows from it is that two modules now hand-roll a lease, and both lapses reach no watcher: a
+screen watching `Inventory_Lot` keeps showing a `reserved` quantity that has lapsed, and nothing tells it to refresh.
+The lapse at the hour is as untold as the lapse on disconnect: it is a rule applied when rows are read and runs no
+action, so nothing declares an effect for it (inferred from reading the code; the measurement above covers only the
+disconnect).
+
+Task 8 must specify the seam: a lease that morph holds for a model, whose lapse, by disconnect or by expiry, is
+announced to watchers as the model's declared effect. It would replace the token, the destructor's release, the
+moved-on check and the expiry rule, and give the lapse a place to be told from. Nothing is built for the seam here.
+
+### 48. A stock change in one company reaches another company's watching stock keeper (hypothesis 7, second instance)
+
+**Hypothesis 7 is confirmed for its second instance, and what leaks is the same as decision 40's `changes<>` case.**
+Measured in `tests/test_two_company_stock.cpp` over a real `RemoteServer`, with company A's stock keeper watching
+`Inventory_Lot` and `Inventory_Movement` on a connection of her own: a lot recorded by company B's stock keeper is
+heard on company A's connection ("sent to company A: Inventory_Lot as a whole" and "sent to company A:
+Inventory_Movement as a whole", printed by `-s`), so company A learns that the other company's lots and movements changed, and when, not which lot. A lot
+recorded at company A is heard (the control). `RecordOpeningLot` declares `changes<LotStockView>` and
+`changes<StockMovementView>`, which is why no key is sent; `Inventory_Lot` is registered with a key
+(`record::key<&LotStockView::lot>`) and without `privateKeys`, so an action of inventory that declares `updates<>` on
+it would send company A the lot's id, as `ApproveInvoice` does for invoices (inferred from decision 40's measurement
+of the same fan-out; no inventory action declares `updates<>` yet, so it was not measured for stock).
+
+What is measured is the company-granularity leak: that the other company's lots and movements changed, and when.
+The row half (a lot's id through `updates<>`) is inferred for stock, as above. That the fan-out re-authorizes each
+watcher at the model and action level and never asks whether the record is in a scope the watcher can see is
+inferred from the fan-out's documentation, as in decision 40. Decision 40 judged this the framework's documented
+design, not a defect, and named the trigger for a seam: stock needing the same workaround (per-company record names,
+or `privateKeys` on a tenant-owned record). Stock needed neither, and `privateKeys` would not hide a keyless
+`changes<>` event. Whether existence and timing leaking across two modules warrants a seam is the question Task 8
+decides. A screen over these records, rather than a raw watching connection, was not measured.
+
+### 50. lims's screens are held to committed mockups through a kit, two catalogues and side-by-side grabs
+
+Every screen formats money, balances, days, quantities and states through `screens/kit/`, so no screen shows a raw
+id, an enum name or an unformatted number; English and German catalogues, kept per module and merged into the bundle,
+must hold the same keys. The width-class helpers are morph's (`ui::widthClass`, `ui::byWidth`): the gallery held the
+first copy and lims needed the second. `LIMS_SCENARIO=1` seeds the mockups' scenario through the models, and
+`scripts/shoot_lims.sh` grabs each screen at both widths beside its mockup; each module's screens, scenario,
+catalogue and grabs live in files of their own, so screen tasks merge without touching each other's lists. The design
+names the invoice editor, the goods-receipt dialog and the print view as hypothesis 9's instances in its table and
+calls them hypothesis 10's in its Part D text; they are hypothesis 9's (an action spanning several models, a
+document layout), and hypothesis 10 is the large lists; the design's sentence now says 9. `IMPLEMENTATION.md` rule 2
+exempts lims's look, and only lims's.
+
+### 51. A person has a display name, kept by org beside the principal
+
+A principal is a login; org keeps a display name per principal (`org_people`), set by the person or by a supervisor of
+one of their companies (`SetDisplayName`), and every user view carries it. Screens name a person by mapping a
+principal through the users list (`kit::personName`), and fall back to the login where no name is set; a refusal that
+names a person carries the name the server resolved (`OrgModel::displayNameOf`). The rule relates two principals,
+which the declared table's role and scope cannot say, so the model checks it and the action is listed as open. A
+person who holds no role anywhere is named by no supervisor, because no company is theirs yet; they name themselves.
+
+### 52. A refusal reaches a screen as a code with its arguments, and the screen words it
+
+Every lims error is a `morph::model::ActionRefusal`: its class gives a default code (`lims.refusal.conflict`, ...) and
+a refusal a screen shows gives a specific one with its arguments (`lims.billing.invoiceLeased`, holder). A person
+named in a refusal is named by the display name the server resolved. The code travels in the `err` envelope beside
+the message; a screen shows `refusalText`, the catalogue's words for the code in the user's locale, or its class's
+sentence, and never the message, which stays what lims logs and its tests read. Every code a module throws is listed
+beside it, and a test holds both catalogues to the list. A refusal that withholds a scope or a record's existence
+(`Forbidden` and `NotFound` from the declared authorization) keeps its class code and carries no argument, so the
+words say no more than the message does.
+
+### 53. The shell's switcher, counts, search, inbox and principal menu are declared, and morph draws them
+
+lims declares its shell as data (`ShellParts`, `screens/lims_shell_parts.cpp`): the scopes the caller can see
+(`ListMyScopes`), each module's open work through that module's own count (`CountSamplesToVerify`,
+`CountOpenInvoiceWork`, `CountClosingPeriods`, `CountPendingRequisitions`), a search action per module
+(`SearchSamples`, `SearchInvoices`, `SearchAccounts`, `SearchStock`), the approvals inbox's sources
+(`CountPendingApprovals`, `CountPendingRequisitions`), and the signed-in person's name and roles
+(`GetSignedInUser`). One action type belongs to one model, so the counts are four actions composed by the
+declaration, not one action in four modules. morph's shell draws each part on both frontends and hands the chosen
+scope to every screen as `env("context")`. Nothing in morph knows a company, a module's work or a record kind.
+
+A scope is a company, which departs from the mockup's switcher: it offers a company and a site ("Rheinlab Analytik
+GmbH · Köln", with "All sites" beside each). The context is one JSON string or integer, and every list a screen reads
+is keyed by company, so the option's value is the company's id and a screen passes `env("context")` into a
+`CompanyId` member as it is; a value that named a company and a site would need a structured context, which
+`env("context")` is not. The option's second line is the company's base currency and how many of its sites the caller
+can see (`EUR · 2 sites`, worded from the catalogue in the session's language), and a person who holds a role at one
+site of a company sees that company with that one site counted. Where a screen needs a site, it asks for it itself.
+`kit::pageHead` reads the context today: the eyebrow names the module and the chosen company. No list
+passes it into a query yet.
+
+A count is a `Count`: `OpenWork<Source>` carries one, which a client reads as a whole, non-negative number whether it
+arrives as a plain integer or as the bare exact value `{num, den, dp}` that a `Count` is written as. `OpenWork<Source>`
+and `SearchHits<Source>` are defined once in org and instantiated per module with the record the answer is derived
+from, so a count is its own keyless, derived record: a sample's change refreshes the lab's count and no other
+module's.
+
+A count and a search answer about the companies the caller can see and nothing about the others: a company the caller
+cannot see counts zero and finds nothing, the same as a company with no work. A search matches the start of a
+reference, number, code or lot number (and of a client's or account's name), ignoring case, answers at most eight
+hits and the exact total. A hit names the screen that opens the record and its params; those screens are
+`lims.lab.sample`, `lims.billing.invoice`, `lims.ledger.accounts` and `lims.inventory.stock`, and nothing checks a
+hit's screen yet, because the server cannot read a screen named inside a reply.
+
+The bundle declares a module's count and search only when the module lists a screen, and the inbox only when
+`lims.approvals` is registered. The registry refuses a part whose module no registered screen has, or whose inbox
+screen is not registered, when the parts are set, so a part cannot be declared ahead of its screens. A person the
+catalog hides a module from (a person with no role has no billing or ledger screens) is drawn the shell without that
+module's count, search source or inbox, and the client reports nothing.
+
+The grabs of the org screens beside `Shell.dc.html` (expanded and compact, `scripts/shoot_lims.sh`) differ in these
+ways. Domain: the scope is a company, as above; the person's second line is empty, because a role is an enum name here
+and the mockup's "Lab director" is a title no model holds. Pending: the global search, the approvals inbox, the
+module groups with their counts and icons, and the page head appear as the module screens land, since the real
+bundle declares them only then. Framework: the chevron, the product mark, the help button, the person's avatar and the
+connection and version footer are drawn; the help button is a wide `?` where the mockup has a square icon button, the
+mark is round, the person's menu has no title line, and the product's "ERP" tag is not drawn. Screen: the switcher's
+second line shows the currency and the number of sites, where the mockup shows the chosen site and the currency.
+
+### 58. The journal and the trial balance load every row they page or total (hypothesis 10, first instance)
+
+**Hypothesis 10 is confirmed for the journal and the trial balance.** Measured in `tests/test_ledger_scale.cpp` on the
+`linux-everything` Release build (clang `-O3`, SQLite on disk, one process, rows written through `DataMapper` in
+transactions of 10,000): `ListEntries` over 10^6 posted two-line entries took 527,574 ms with every entry loaded
+(resident memory 46 MB to 1,907 MB, peak 46 MB to 2,777 MB), and a page of 50 through `table::apply` over what it
+returned took 140 ms. A trial balance over 10^7 posted lines (5 * 10^6 entries of up to 10^9 minor units) took
+168,209 ms and peaked at 10,857 MB; its totals equal the independently accumulated `int64` sums exactly, so it
+answers, but by loading every line, which is not the production criterion. The inference in decision 30 (about 11 s at
+10^7) was a time estimate that assumed the lines fit in memory; the measured time is 168 s and the memory it left out is
+10.9 GB. `ListEntries` makes about five queries per entry, so most of its time is that pattern; one flat read of the
+narrow rows was not measured. Writing the rows took 25 s and 121 s. Not measured: other hardware, other databases.
+
+The first case's run was 592 s against a 600 s ctest limit, so a case named for a 10^6 or 10^7 table has a 1,800 s
+limit (`cmake/morph_add_rung.cmake`); both are `Stress:` cases and outside `ctest -L ladder -LE stress`.
+
+morph gained the database-page seam (`docs/spec/table/database_pages.md`): `table::planQuery`, a validated plan a model
+translates into its own query; `Page::totalKind`, a total that is the count or a lower bound; and
+`table::conformanceFailures`, which holds the translation to `apply`'s pages. It covers the journal's list. The trial
+balance is a sum, not a page: it computes its rows in the store and pages them with `apply` or with a plan over the
+aggregate, which the seam does not describe.
+
+On the seam, the same page (`ListEntriesPage`: 50 rows at offset 500,000 of 10^6 entries) took 180 ms with resident
+memory 46 MB to 48 MB (peak 47 MB to 51 MB), and the trial balance over 10^7 lines took 3,885 ms with peak memory 41 MB
+(40 MB before), summed in the database, exact or refused as `OutOfRange`. Same build and machine as above, one run each;
+the totals equal the independently accumulated sums exactly. The sample list pages on it too. Stock movements are the
+second instance, which is the stock movements of the inventory module.
+
+How it is held to the engine. `ListEntriesPage` and `ListSamples` translate the plan into one `SELECT` (the plan's
+filters to a `WHERE`, its sort to an `ORDER BY` ending in the row id, offset and limit) and count the filtered view
+with one `COUNT` in the same read transaction, so the total is `Exact` at any size. That read transaction holds SQLite's shared lock until the page's rows are loaded (2.7 s for the filtered page at 10^6 entries), so a concurrent writer can be turned away for that window; a busy or locked database is reported as `Conflict`. The tests run
+`conformanceFailures` over `standardCorpus` of each list's own rows, against SQLite, with the total cap lowered to 10,
+plus date-time queries the corpus cannot derive; each mutation named beside those tests fails them. Three
+rules of the spec decided the translation. Text: the default collator folds ASCII and Latin-1 letters, SQLite's `lower`
+folds ASCII, so the statement lowers and replaces the 29 Latin-1 capitals itself and compares and orders the result
+bytewise; the conformance data carries accents, a Greek capital and `?`, `{`, `'` and `%` to hold that. Dates: a
+`DateTime` column is the whole UTC second of a millisecond column, floored, so sub-second instants tie and `eq` is a
+second. Integers: an operand is never rounded, `eq 1.5` matches nothing and `lt 1.5` is `<= 1`. Empty cells sort last,
+and an exclude keeps them. `lines` and `rate` of the journal are refused with `Unavailable`: `lines` is another table
+serialised, and `rate` is a numerator and denominator whose exact comparison multiplies two `int64` values, which
+SQLite turns into a real on overflow.
+
+The trial balance sums `company_num` per account, side and denominator in the database and adds the few sums per
+account exactly. This is not the brief's sum of minor units: the ledger's own tests hold 5 * 10^18 whole units as a
+figure that reports exactly, which is 5 * 10^20 minor units and does not fit `int64`. The boundary it keeps is the old
+one up to the denominator: a sum of numerators of one denominator past `int64` is refused even where it would reduce
+to a representable value. SQLite's `SUM` raises `integer overflow` rather than wrapping (measured by a test, not read
+from the manual), and the ledger reports that as `OutOfRange`.
 
 ## Findings raised by this rung
+
+- **Paging a table in the database is raw SQL.** Lightweight's query builder has no `COALESCE`, `CASE`, `NULLIF`,
+  `instr`, `replace` or computed `ORDER BY`, which the engine's meaning of empty cells, enum names and the collator's
+  fold need, so `org/core/plan_sql.hpp` writes the statement text and runs it with `SqlStatement::Prepare` and
+  `ExecuteWithVariants`: IMPLEMENTATION.md rule 4's escape tier. The statement text holds only the model's own column
+  mapping, enumerator names and the plan's clamped numbers; every operand a client sent is a `?` with a value bound
+  at run time, so no escaping is involved. A text operand holding a NUL byte is refused in words, since SQLite's
+  `length` and `instr` stop at it. Tests run quotes, a statement terminator, `%`, `_`, backslashes, `?` and a driver
+  escape through the page and compare it with the engine's. Not verified: other databases (the `lower` and `replace`
+  fold is SQLite's), a SQLite built with ICU (its `lower` would fold more than the collator and the conformance run
+  would fail). Upstream: no Lightweight issue was searched for or filed.
+
+- **The standard conformance corpus built date operands that never parsed. Fixed in morph.** Its operands were the
+  cells' own text, and a date-time cell shows as whole seconds (`1793437200`), which the default date parser does not
+  read, so `apply` and the plan refused such a query identically and the helper counted that as agreement. Measured: a
+  translation that truncated a negative millisecond instant toward zero instead of flooring it passed the corpus and
+  failed only when the lims tests built the operands from the rows' own seconds by hand. `standardCorpus` now writes
+  ISO operands, `conformanceFailures` reports a column whose queries were all refused identically, and a framework
+  test holds the truncating model.
+
+- **A data migration that copies rows needs raw SQL.** Lightweight's migration builder inserts literal rows only, so
+  moving `lims_operators` into `org_role_assignments` is one `RawSql` `INSERT ... SELECT`
+  (`lab/src/db/schema.cpp`, migration `20261109000004`), under IMPLEMENTATION.md rule 4's escape tier. Upstream: a
+  search of LASTRADA-Software/Lightweight's issues for "migration insert select" finds none for this; none was filed.
+  Dropping an index by its name is raw SQL too: the migration builder drops an index by column
+  (`org/src/db/org_schema.cpp`, migration `20261120000003`).
+
+- **A conditional UPDATE is the query builder, not the DataMapper.** The ledger changes an entry's state or its
+  reversed mark only where the row still holds what the action read (`state` is Draft; `reversed_by_id` is NULL), and
+  a statement that matches no row is a `Conflict`, so two callers acting on one read cannot both succeed.
+  `DataMapper::Update` writes by primary key alone and has no WHERE of its own, so `ledger_entries.cpp` builds the
+  statement with `Connection().Query(table).Update().Set(...).Where(...)` and counts the rows the cursor reports. That
+  is the typed query tier, not raw SQL. The race is simulated, not run concurrently: the tests make a trigger mark
+  the original between the read and the mark, which fails with the guard removed; the post guard's condition has no
+  such seam, so only its zero-row handling is tested.
+  Billing's `draftInvoice` claims each line the same way (`state` is Unbilled) and counts the rows. Billing and
+  inventory each hold the two-line helper that executes the builder's statement and counts the rows (`changedRows`);
+  it is Lightweight usage, not a morph seam, so it is copied rather than promoted.
+
+- **A source key is bound to one posting body.** The ledger records a posting once per company and source key. A
+  repeat of the same request (date, source reference, currency, rate, and every line's account, side and amounts,
+  compared by value) answers the first entry and writes nothing, even after the dated rate or the period has
+  changed; a repeat with a different body is a `Conflict`, because answering the first entry would tell the poster
+  its changed document was booked. Two simultaneous first calls with one key record one entry: the unique index
+  refuses the second row, that call rolls back and answers as a repeat.
+
+- **SQLite foreign keys are not enforced on the lims connection.** `PRAGMA foreign_keys` answers 0 there (measured by
+  a test), so the foreign keys the ledger migration declares (line to entry, line to account, entry to period) are
+  declared but not enforced. What keeps a line on its own company's chart is the company filter in the ledger's
+  account lookup, and a read of a line whose account is gone is refused rather than shown with an empty code.
 
 - **`ModelKey` rejected strong id types. Closed upstream.** `BRIDGE_MODEL_KEY`
   routes the key through `keyToString`, whose concept admitted only
@@ -689,7 +1918,7 @@ exists to show. Fixed by rekeying the journal to the result's own sample
   worked example is this rung's own `CaptureConcentration`. The sanctioned
   escape (`optionalFields`) is still what makes the rule the only gate on the
   pair; `CaptureConcentration`'s own doc comment
-  (`include/lims/dto/result_dto.hpp`) explains why it is still needed even
+  (`lab/include/lims/lab/dto/result_dto.hpp`) explains why it is still needed even
   though omitting it is now a loud error rather than a silent one. Guarded
   here by a test asserting `required` is exactly `["analysisVersionId"]`.
 - **the three shipped `IOfflineQueue`s disagree about repeated idempotency
@@ -752,7 +1981,7 @@ exists to show. Fixed by rekeying the journal to the result's own sample
   `IMPLEMENTATION.md` rule 5 requires the audit trail to be tested through —
   records nothing, so a model that journals carries its own
   `attachActionLog`/`logAction` pair; this rung shares one copy between its
-  two models (`include/lims/core/self_journal.hpp`). Not
+  two models (`lab/include/lims/lab/core/self_journal.hpp`). Not
   filed as a separate finding pending a decision on whether "models do not
   journal, dispatchers do" is the intended contract — but if it is, the
   contract makes the "reconstructible from the journal alone" DoD untestable

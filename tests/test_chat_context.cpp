@@ -47,6 +47,10 @@ constexpr std::string_view kKeyed = R"({
   "queries": { "read": { "model": "lab", "action": "Lims_Attach", "body": { "obj": {} } } },
   "view": { "kind": "text", "text": "Keyed" } })";
 
+constexpr std::string_view kTitled = R"({
+  "vocab": "ui/1", "id": "titled", "title": { "t": "titled.title", "fallback": "Sample 16/1" },
+  "view": { "kind": "text", "text": "Titled" } })";
+
 constexpr std::string_view kPlain = R"({
   "vocab": "ui/1", "id": "plain",
   "view": { "kind": "text", "text": "Plain" } })";
@@ -63,7 +67,8 @@ private:
         static std::map<std::string, std::shared_ptr<Document const>, std::less<>> const documents{
             {"sample", loadOrFail(kScreen, morph::ui::testing::corpusCatalog())},
             {"keyed", loadOrFail(kKeyed, morph::ui::testing::corpusCatalog())},
-            {"plain", loadOrFail(kPlain, morph::ui::testing::corpusCatalog())}};
+            {"plain", loadOrFail(kPlain, morph::ui::testing::corpusCatalog())},
+            {"titled", loadOrFail(kTitled, morph::ui::testing::corpusCatalog())}};
         DocumentScreenHostOptions made;
         made.documents = [](std::string_view id) -> std::shared_ptr<Document const> {
             auto const found = documents.find(id);
@@ -91,6 +96,18 @@ TEST_CASE("a_mounted_screen_reports_its_id_params_and_identity", "[chat][context
     CHECK_FALSE(context->identity.empty());
     CHECK(context->identity.contains("42"));
     CHECK(context->text.empty());
+}
+
+TEST_CASE("a_mounted_screen_reports_its_title", "[chat][context]") {
+    Harness harness;
+    Shell shell{harness};
+    auto mounted = shell.mount("titled", ParamMap{});
+    REQUIRE(mounted.has_value());
+    harness.settle();
+    auto const context = DocumentScreenHost::chatContext(**mounted);
+    REQUIRE(context.has_value());
+    CHECK(context->title == "Sample 16/1");
+    CHECK(context->title == (*mounted)->title().peek());
 }
 
 TEST_CASE("a_screen_with_no_identity_reports_none", "[chat][context]") {

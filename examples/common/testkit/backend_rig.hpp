@@ -3,7 +3,7 @@
 
 #include <QCoreApplication>
 #include <QEventLoop>
-#include <QTimer>
+#include <QMetaObject>
 #include <QUrl>
 #include <chrono>
 #include <functional>
@@ -20,6 +20,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "testkit/server_connection.hpp"
+
 /// @file
 /// The dual/triple-mode fixture (examples/TESTING.md, "The dual-mode
 /// fixture"): one test body, parameterized by Catch2 GENERATE over Mode, runs
@@ -30,7 +32,7 @@ namespace morph::ladder::testkit {
 namespace detail {
 
 /// @brief Wraps a `MainThreadExecutor` so every `post()` also schedules a
-///        same-loop-iteration `runFor()` via a zero-delay `QTimer`.
+///        same-loop-iteration `runFor()` via a queued invocation.
 ///
 /// `pump.hpp`'s `pumpUntil`/`awaitQt` only pump the Qt event loop
 /// (`QCoreApplication::processEvents()`) — they never call
@@ -54,8 +56,8 @@ public:
     /// @brief Enqueues @p task and schedules a drain on the Qt event loop.
     ///
     /// The drain lambda holds a `weak_ptr` to `_liveness` and touches nothing
-    /// else until it locks — never a bare `this`. A zero-delay
-    /// `QTimer::singleShot` is a *posted Qt event*, and nothing cancels it
+    /// else until it locks — never a bare `this`. A
+    /// queued invocation is a *posted Qt event*, and nothing cancels it
     /// when this executor dies: a `BackendRig` in `Mode::LocalSingleThread`
     /// is routinely destroyed with one still in flight (the last completion
     /// callback of a test case posts, the test body returns, the rig
@@ -82,12 +84,19 @@ public:
             ::core::async::ExecutorScope const scope{*self};
             task();
         });
-        QTimer::singleShot(0, [this, weakLiveness = std::weak_ptr<const void>{_liveness}] {
-            if (weakLiveness.expired()) {
-                return;  // This executor is gone; `this` is dangling.
-            }
-            _inner.runFor(kDrainBudget);
-        });
+        // The application object is the context: `post` may be called from a thread that runs no Qt event loop
+        // (an internal client's pool thread settling a dispatched call), and a context-free single-shot would
+        // queue its drain to that thread, where it never runs. With the application object the drain lands
+        // on the main thread's loop, the one the test pumps.
+        QMetaObject::invokeMethod(
+            QCoreApplication::instance(),
+            [this, weakLiveness = std::weak_ptr<const void>{_liveness}] {
+                if (weakLiveness.expired()) {
+                    return;  // This executor is gone; `this` is dangling.
+                }
+                _inner.runFor(kDrainBudget);
+            },
+            Qt::QueuedConnection);
     }
 
 private:
@@ -232,10 +241,13 @@ public:
             }
             case Mode::Socket: {
                 _workerPool = std::make_unique<::morph::exec::ThreadPoolExecutor>(4);
+                ::morph::backend::ServerConfig config;
+                // Lets a connection from connect() take events; a socket client never sends this kind.
+                config.services.push_back(std::make_shared<EventsHello>());
                 if (authorizer) {
-                    _server = std::make_shared<::morph::backend::RemoteServer>(*_workerPool, authorizer);
+                    _server = std::make_shared<::morph::backend::RemoteServer>(*_workerPool, authorizer, config);
                 } else {
-                    _server = std::make_shared<::morph::backend::RemoteServer>(*_workerPool);
+                    _server = std::make_shared<::morph::backend::RemoteServer>(*_workerPool, config);
                 }
 #ifdef QT_NO_SSL
                 _wsServer =
@@ -422,6 +434,27 @@ public:
             throw std::logic_error("BackendRig::url: only Mode::Socket runs a server; there is no URL in this mode");
         }
         return _url;
+    }
+
+    /// @brief The server the rig's clients reach, for an internal client of the application under test.
+    /// @return The server, owned by this rig.
+    /// @throws std::logic_error in `Local`/`LocalSingleThread`, which run no server.
+    [[nodiscard]] ::morph::backend::RemoteServer& server() {
+        if (_mode != Mode::Socket) {
+            throw std::logic_error("BackendRig::server: only Mode::Socket runs a server");
+        }
+        return *_server;
+    }
+
+    /// @brief Opens a connection on the rig's server in process: one a test can close while the others stay, and
+    ///        that keeps what the server sent it.
+    /// @return The connection; destroy it before this rig.
+    /// @throws std::logic_error in `Local`/`LocalSingleThread`, which run no server.
+    [[nodiscard]] std::unique_ptr<ServerConnection> connect() {
+        if (_mode != Mode::Socket) {
+            throw std::logic_error("BackendRig::connect: only Mode::Socket runs a server");
+        }
+        return std::make_unique<ServerConnection>(_server);
     }
 
 private:

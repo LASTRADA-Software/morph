@@ -434,7 +434,10 @@ Open framework facts every WASM client must respect (verified):
   screen_tests,render_smoke,tests}` with `catch_discover_tests` + ctest labels
   (`ladder`, `ladder-<rung>` — Catch2's own tags like `[stress]`/`[tsan]`
   are not translated into ctest labels anywhere in this repo; select on
-  them with `ctest -R` against the test name instead), a `TEST_PREFIX` of
+  them with `ctest -R` against the test name instead. The exception is the
+  name prefix: a `TEST_CASE` named `Journey: …` also gets `journey` and one
+  named `Stress: …` also gets `stress`, which CI's ladder and coverage legs
+  exclude with `-LE stress`), a `TEST_PREFIX` of
   `<rung>.` on every discovered ctest name (a ctest name is global to the
   build tree, so without the prefix two rungs sharing a `TEST_CASE` name give
   `ctest -L ladder-<rung>` another rung's cases as well as its own;
@@ -442,7 +445,13 @@ Open framework facts every WASM client must respect (verified):
   the names distinct, and note the prefix reaches the *ctest* entry only, so
   `ctest -R` still matches the bare test name), warnings and
   sanitizers **applied to all app code**, AUTOMOC, and a TIMEOUT on every
-  binary. Bank builds the same names by hand in its own `CMakeLists.txt`
+  binary. A rung built from modules passes `MODULES`, `SHARED_MODULES`, `USES`
+  and `APP_MODULE`: each module becomes `ladder_<rung>_<module>` with its own
+  include directory, linked only to the shared modules `USES` names for it (the app module to all),
+  and `ladder_<rung>_lib` links them all (a module with sources
+  whole-archive, one without sources plain)
+  (`cmake/morph_add_rung.cmake` states the rules); lims is built that way.
+  Bank builds the same names by hand in its own `CMakeLists.txt`
   (`ladder_bank_server`, `ladder_bank_tests` with the `bank.` prefix and the
   `ladder-bank` label), without `apply_warnings()`: its targets pull the ORM's
   headers in through its model headers, and those are not `-Werror` clean.

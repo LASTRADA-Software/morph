@@ -279,6 +279,7 @@ inline std::unique_ptr<::morph::model::detail::IModelHolder> replay(
     // recorded actions, and without this each replayed dispatch would re-record
     // into the live sink, corrupting the very audit trail we are reading from.
     holder->attachActionLog(nullptr, {});
+    holder->markReconstructing(true);
     const detail::ScopedReplayFlag replayFlag;
     for (const auto& entry : entries) {
         // A Failed entry (see action_log.hpp's `Outcome`) never mutated model
@@ -312,6 +313,7 @@ inline std::unique_ptr<::morph::model::detail::IModelHolder> replay(
         }
         dispatcher.dispatch(entry.modelType, entry.actionType, *holder, payload);
     }
+    holder->markReconstructing(false);
     return holder;
 }
 

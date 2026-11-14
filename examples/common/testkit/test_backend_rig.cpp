@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -11,6 +12,7 @@
 #include <morph/session/session.hpp>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 #include "testkit/backend_rig.hpp"
 #include "testkit/pump.hpp"
@@ -277,4 +279,37 @@ TEST_CASE("QtDrivenMainThreadExecutor's pending drain is inert after the executo
     // no-op, not a use-after-free.
     REQUIRE_FALSE(morph::ladder::testkit::pumpUntil([] { return false; }, std::chrono::milliseconds{50}));
     CHECK_FALSE(taskRan);
+}
+
+// A resumption posted from a thread that runs no Qt event loop (an internal client's pool thread settling a
+// dispatched call) must still be drained by the Qt loop of the thread that pumps. The drain is scheduled
+// with the application object as its context, so it lands on the main thread's loop; a context-free
+// single-shot would instead queue it to the posting thread, whose loop never turns.
+// Mutation: schedule the drain with `QTimer::singleShot(0, [..] {..})` (no context object).
+TEST_CASE("QtDrivenMainThreadExecutor drains work posted from a thread without an event loop",
+          "[ladder][testkit][rig]") {
+    morph::ladder::testkit::detail::QtDrivenMainThreadExecutor executor;
+    std::atomic<bool> taskRan{false};
+    std::thread poster{[&executor, &taskRan] { executor.post([&taskRan] { taskRan = true; }); }};
+    bool const drained = morph::ladder::testkit::pumpUntil([&taskRan] { return taskRan.load(); });
+    poster.join();
+    CHECK(drained);
+}
+
+// Mutation: drop EventsHello from the Socket-mode config (the server refuses the connection's events hello, so
+// takesEvents() is false, and the lims fan-out cases then hear nothing).
+TEST_CASE("BackendRig: connect() opens a closable connection on the Socket-mode server", "[testkit][rig]") {
+    morph::ladder::testkit::BackendRig rig{morph::ladder::testkit::Mode::Socket, 0};
+    auto first = rig.connect();
+    auto second = rig.connect();
+    CHECK(first->takesEvents());
+    CHECK(second->takesEvents());
+    CHECK(first->watch({}, {}).kind == "ok");
+    first->close();
+    first->close();  // idempotent
+    CHECK(second->watch({}, {}).kind == "ok");
+    CHECK_NOTHROW(rig.server());
+    morph::ladder::testkit::BackendRig local{morph::ladder::testkit::Mode::Local, 1};
+    CHECK_THROWS_AS(local.connect(), std::logic_error);
+    CHECK_THROWS_AS(local.server(), std::logic_error);
 }

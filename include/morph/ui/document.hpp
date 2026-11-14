@@ -10,6 +10,7 @@
 #include <format>
 #include <functional>
 #include <initializer_list>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -24,6 +25,8 @@
 
 #include "control_shape.hpp"
 #include "expression.hpp"
+#include "page_layout.hpp"
+#include "shell_parts.hpp"
 #include "value.hpp"
 
 /// @file
@@ -257,6 +260,7 @@ enum class CommandKind : std::uint8_t {
     SwitchBackend,  ///< `{"switchBackend": "name"}`
     ResetPrefs,     ///< `{"resetPrefs": "point" | "all"}`
     SetLocale,      ///< `{"setLocale": "de"}`
+    SetContext,     ///< `{"setContext": e}`
     Notify,         ///< `{"notify": e, "role": "success"}`
     Seq,            ///< `{"seq": [...]}`
     All,            ///< `{"all": [...]}`
@@ -602,6 +606,8 @@ struct Document {
     ExprPtr pageSurface;
     /// @brief The app document's principal placement, `sidebar` or `head`; empty for the default, `sidebar`.
     std::string principalPlacement;
+    /// @brief The shell's declared parts, the app document's only; their reads are queries of `scope`.
+    std::optional<ShellParts> shell;
     /// @brief The head's status badges: `headBadge` parts, in order.
     std::vector<DocNodePtr> status;
     /// @brief The head's actions: `actionButton` parts, in order.
@@ -795,11 +801,12 @@ inline constexpr std::array<KeySpec, 12> kButtonKeys = {{{"label", Shape::Expr},
                                                          {"mono", Shape::Flag},
                                                          {"weight", Shape::Text}}};
 /// @brief The keys of `textInput`.
-inline constexpr std::array<KeySpec, 15> kTextInputKeys = {{{"value", Shape::Expr},
+inline constexpr std::array<KeySpec, 16> kTextInputKeys = {{{"value", Shape::Expr},
                                                             {"placeholder", Shape::Expr},
                                                             {"mode", Shape::Expr},
                                                             {"icon", Shape::Expr},
                                                             {"unit", Shape::Expr},
+                                                            {"decimals", Shape::Expr},
                                                             {"prefix", Shape::Expr},
                                                             {"emphasis", Shape::Text},
                                                             {"mono", Shape::Flag},
@@ -951,7 +958,7 @@ inline constexpr std::array<KeySpec, 7> kForEachKeys = {{{"rows", Shape::Expr, {
                                                          {"divided", Shape::Flag},
                                                          {"children", Shape::Nodes, {}, kInner}}};
 /// @brief The keys of `table`.
-inline constexpr std::array<KeySpec, 27> kTableKeys = {{{"rows", Shape::Expr},
+inline constexpr std::array<KeySpec, 28> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"key", Shape::Expr, {}, kInner},
                                                         {"model", Shape::Name},
                                                         {"action", Shape::Text},
@@ -974,6 +981,7 @@ inline constexpr std::array<KeySpec, 27> kTableKeys = {{{"rows", Shape::Expr},
                                                         {"group", Shape::Part, "group"},
                                                         {"filters", Shape::Expr},
                                                         {"rowTone", Shape::Expr, {}, kInner},
+                                                        {"rowSpans", Shape::Expr, {}, kInner},
                                                         {"highlightKey", Shape::Expr},
                                                         {"onActivate", Shape::Commands, {}, kInner},
                                                         {"valign", Shape::Text},
@@ -1074,14 +1082,15 @@ inline constexpr std::array<KeySpec, 7> kChartKeys = {{{"summary", Shape::Expr, 
                                                        {"yLabel", Shape::Expr}}};
 /// @brief The keys of a chart's `series` part. The keys read per point are evaluated in the part's row scope, with
 ///        `row` the point's element.
-inline constexpr std::array<KeySpec, 8> kSeriesKeys = {{{"points", Shape::Expr, {}, kRequired},
+inline constexpr std::array<KeySpec, 9> kSeriesKeys = {{{"points", Shape::Expr, {}, kRequired},
                                                         {"y", Shape::Expr, {}, kRequired | kInner},
                                                         {"x", Shape::Expr, {}, kInner},
                                                         {"xLabel", Shape::Expr, {}, kInner},
                                                         {"tone", Shape::Expr, {}, kInner},
                                                         {"note", Shape::Expr, {}, kInner},
                                                         {"label", Shape::Expr},
-                                                        {"joined", Shape::Flag}}};
+                                                        {"joined", Shape::Flag},
+                                                        {"style", Shape::Text}}};
 /// @brief The keys of a chart's reference `line` part.
 inline constexpr std::array<KeySpec, 4> kLineKeys = {
     {{"value", Shape::Expr, {}, kRequired}, {"label", Shape::Expr}, {"tone", Shape::Expr}, {"style", Shape::Text}}};
@@ -1107,6 +1116,21 @@ inline constexpr std::array<KeySpec, 5> kActionBarKeys = {{{"children", Shape::N
 /// @brief The keys of `dropZone`.
 inline constexpr std::array<KeySpec, 4> kDropZoneKeys = {
     {{"accept", Shape::Expr}, {"multiple", Shape::Expr}, {"children", Shape::Nodes}, {"onDrop", Shape::Commands}}};
+/// @brief The keys of `page`: its sheet's size and margins as literal micrometres.
+inline constexpr std::array<KeySpec, 4> kPageKeys = {{{"width", Shape::Expr, {}, kRequired},
+                                                      {"height", Shape::Expr, {}, kRequired},
+                                                      {"margins", Shape::Expr},
+                                                      {"children", Shape::Nodes}}};
+/// @brief The keys of `pageRegion`: its anchor and place as literal micrometres.
+inline constexpr std::array<KeySpec, 6> kPageRegionKeys = {{{"anchor", Shape::Text, {}, kRequired},
+                                                            {"x", Shape::Expr},
+                                                            {"y", Shape::Expr},
+                                                            {"width", Shape::Expr},
+                                                            {"height", Shape::Expr},
+                                                            {"children", Shape::Nodes}}};
+/// @brief The keys of `localeScope`.
+inline constexpr std::array<KeySpec, 2> kLocaleScopeKeys = {
+    {{"locale", Shape::Expr, {}, kRequired}, {"children", Shape::Nodes}}};
 /// @brief The keys of `customize`.
 inline constexpr std::array<KeySpec, 1> kCustomizeKeys = {{{"point", Shape::Name, {}, kRequired}}};
 /// @brief The keys of `boundary`.
@@ -1150,7 +1174,7 @@ inline constexpr std::array<KeySpec, 1> kDragKeys = {{{"payload", Shape::Expr, {
 inline constexpr std::array<KeySpec, 2> kDropKeys = {{{"accepts", Shape::Expr}, {"onDrop", Shape::Commands}}};
 
 /// @brief The view node kinds of `ui/1` and the part kinds inside them.
-inline constexpr std::array<KindSpec, 58> kKinds = {{
+inline constexpr std::array<KindSpec, 61> kKinds = {{
     {"text", kTextKeys, kField},
     {"button", kButtonKeys},
     {"textInput", kTextInputKeys, kField | kWritable, kInputValues},
@@ -1185,6 +1209,9 @@ inline constexpr std::array<KindSpec, 58> kKinds = {{
     {"collapsible", kCollapsibleKeys},
     {"dropZone", kDropZoneKeys},
     {"actionBar", kActionBarKeys},
+    {"page", kPageKeys},
+    {"pageRegion", kPageRegionKeys},
+    {"localeScope", kLocaleScopeKeys},
     {"customize", kCustomizeKeys},
     {"boundary", kBoundaryKeys},
     {"form", kFormKeys, kOpenValues, kFormValues},
@@ -1211,6 +1238,90 @@ inline constexpr std::array<KindSpec, 58> kKinds = {{
     {"line", kLineKeys, kPart},
 }};
 // NOLINTEND(modernize-use-designated-initializers)
+
+/// @brief A literal length of a page node: an integer count of micrometres.
+/// @param expr The key's expression.
+/// @param key  The key, for the refusal.
+/// @return The length.
+[[nodiscard]] inline Mm pageLengthOf(ExprPtr const& expr, std::string_view key) {
+    std::int64_t const* const count = expr->kind == ExprKind::Literal ? expr->literal.asInt() : nullptr;
+    if (count == nullptr || *count < 0 || *count > std::numeric_limits<std::int32_t>::max()) {
+        refuse(expr->path, "`" + std::string{key} + "` is a literal integer count of micrometres, 0 or more");
+    }
+    return Mm::fromMicrometres(static_cast<std::int32_t>(*count));
+}
+
+/// @brief A page node's geometry, from its literal keys; the loader has checked nothing about it yet.
+/// @param node A `page` node.
+/// @return The geometry.
+/// @throws DocumentRefused when a key is not a literal length, or the geometry is not valid.
+[[nodiscard]] inline PageGeometry pageGeometryOf(DocNode const& node) {
+    PageGeometry geometry;
+    geometry.width = pageLengthOf(node.prop("width"), "width");
+    geometry.height = pageLengthOf(node.prop("height"), "height");
+    if (ExprPtr const margins = node.prop("margins")) {
+        if (margins->kind == ExprKind::Literal && margins->literal.asRecord() != nullptr) {
+            ValueRecord const& record = *margins->literal.asRecord();
+            for (auto const& [side, amount] : record) {
+                std::int64_t const* const count = amount.asInt();
+                Mm* const target = side == "top"      ? &geometry.margins.top
+                                   : side == "right"  ? &geometry.margins.right
+                                   : side == "bottom" ? &geometry.margins.bottom
+                                   : side == "left"   ? &geometry.margins.left
+                                                      : nullptr;
+                if (target == nullptr || count == nullptr || *count < 0 ||
+                    *count > std::numeric_limits<std::int32_t>::max()) {
+                    refuse(margins->path,
+                           "`margins` is a literal count of micrometres, or a record of `top`, `right`, "
+                           "`bottom` and `left` counts");
+                }
+                *target = Mm::fromMicrometres(static_cast<std::int32_t>(*count));
+            }
+        } else {
+            geometry.margins = PageMargins{pageLengthOf(margins, "margins")};
+        }
+    }
+    if (std::optional<std::string> const problem = geometry.problem()) {
+        refuse(node.path, *problem);
+    }
+    return geometry;
+}
+
+/// @brief A page region's geometry, from its literal keys.
+/// @param node A `pageRegion` node.
+/// @param page The sheet it is on.
+/// @return The geometry.
+/// @throws DocumentRefused when a key is not a literal length, the anchor is unknown, or the region is not valid on
+///         the sheet.
+[[nodiscard]] inline RegionGeometry regionGeometryOf(DocNode const& node, PageGeometry const& page) {
+    RegionGeometry geometry;
+    std::string_view const anchor = node.name("anchor");
+    if (anchor == "top") {
+        geometry.anchor = PageAnchor::Top;
+    } else if (anchor == "bottom") {
+        geometry.anchor = PageAnchor::Bottom;
+    } else if (anchor == "offset") {
+        geometry.anchor = PageAnchor::Offset;
+    } else {
+        refuse(pointerAppend(node.path, "anchor"), "`anchor` is `top`, `bottom` or `offset`");
+    }
+    if (ExprPtr const x = node.prop("x")) {
+        geometry.x = pageLengthOf(x, "x");
+    }
+    if (ExprPtr const y = node.prop("y")) {
+        geometry.y = pageLengthOf(y, "y");
+    }
+    if (ExprPtr const width = node.prop("width")) {
+        geometry.width = pageLengthOf(width, "width");
+    }
+    if (ExprPtr const height = node.prop("height")) {
+        geometry.height = pageLengthOf(height, "height");
+    }
+    if (std::optional<std::string> const problem = geometry.problem(page)) {
+        refuse(node.path, *problem);
+    }
+    return geometry;
+}
 
 /// @brief Looks up a node kind or a part kind.
 /// @param kind The kind.
@@ -1348,6 +1459,7 @@ public:
             }
         }
         doc.scope = scope(*object, "");
+        shellParts(*object, doc);
         for (std::string_view const key : {"onMount", "onUnmount", "onClose", "onSave", "onBackendChange"}) {
             if (Json const* const commands = member(*object, key)) {
                 doc.lifecycle.emplace(std::string{key}, commandList(*commands, pointerAppend("", key)));
@@ -1586,6 +1698,125 @@ private:
             parts.push_back(part(array->at(index), kind, pointerAppend(path, index)));
         }
         return parts;
+    }
+
+    /// @brief Reads the app document's `shell` member, checks it, and appends the queries and state it lowers to.
+    /// @param object The document's JSON object.
+    /// @param doc    The document being built; its scope receives the lowered declarations.
+    void shellParts(Json::object_t const& object, Document& doc) {
+        Json const* const declared = member(object, "shell");
+        if (declared == nullptr) {
+            return;
+        }
+        if (doc.id != "app") {
+            refuse("/shell", "`shell` is the app document's; a screen has none");
+        }
+        ShellParts parts;
+        auto const text = glz::write_json(*declared);
+        if (!text || glz::read_json(parts, *text)) {
+            refuse("/shell",
+                   "`shell` holds the parts: context, modules, search, inbox, principal, brand, help, searchHint");
+        }
+        checkShellParts(parts);
+        auto const checkNames = [](auto const& declarations) {
+            for (auto const& entry : declarations) {
+                if (shell_names::reserved(entry.name)) {
+                    refuse(entry.path, "`" + entry.name + "` is reserved: the shell's parts declare it");
+                }
+            }
+        };
+        checkNames(doc.scope.models);
+        checkNames(doc.scope.state);
+        checkNames(doc.scope.lets);
+        checkNames(doc.scope.queries);
+        checkNames(doc.scope.mutations);
+        auto lowered = parseJson(lowerShellParts(parts));
+        auto const* const loweredObject = lowered ? std::get_if<Json::object_t>(&lowered->data) : nullptr;
+        if (loweredObject == nullptr) {
+            refuse("/shell", "the shell's parts do not lower");
+        }
+        ScopeDecl extra = scope(*loweredObject, "/shell");
+        auto append = [](auto& into, auto& from) {
+            into.insert(into.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end()));
+        };
+        append(doc.scope.models, extra.models);
+        append(doc.scope.state, extra.state);
+        append(doc.scope.queries, extra.queries);
+        append(doc.scope.mutations, extra.mutations);
+        doc.shell = std::move(parts);
+    }
+
+    /// @brief Refuses a declaration that cannot be read: a repeated module, an empty required field, a repeated tag.
+    /// @param parts The parts.
+    static void checkShellParts(ShellParts const& parts) {
+        auto required = [](std::string const& value, std::string const& path) {
+            if (value.empty()) {
+                refuse(path, "the shell's part needs this name");
+            }
+        };
+        auto distinct = [](auto const& list, std::string const& path, auto key) {
+            std::set<std::string> seen;
+            for (auto const& entry : list) {
+                if (!seen.insert(key(entry)).second) {
+                    refuse(path, "the shell's parts list `" + key(entry) + "` twice");
+                }
+            }
+        };
+        if (parts.context) {
+            required(parts.context->model, "/shell/context/model");
+            required(parts.context->action, "/shell/context/action");
+            required(parts.context->optionsField, "/shell/context/optionsField");
+            required(parts.context->labelField, "/shell/context/labelField");
+            required(parts.context->valueField, "/shell/context/valueField");
+        }
+        auto count = [&](ModuleCount const& entry, std::string const& path) {
+            required(entry.model, path + "/model");
+            required(entry.action, path + "/action");
+            required(entry.countField, path + "/countField");
+        };
+        for (std::size_t index = 0; index < parts.modules.size(); ++index) {
+            count(parts.modules.at(index), "/shell/modules/" + std::to_string(index));
+        }
+        distinct(parts.modules, "/shell/modules", [](ModuleCount const& entry) { return entry.module; });
+        for (std::size_t index = 0; index < parts.search.size(); ++index) {
+            std::string const path = "/shell/search/" + std::to_string(index);
+            required(parts.search.at(index).model, path + "/model");
+            required(parts.search.at(index).action, path + "/action");
+            required(parts.search.at(index).queryField, path + "/queryField");
+            required(parts.search.at(index).resultsField, path + "/resultsField");
+        }
+        distinct(parts.search, "/shell/search", [](SearchSource const& entry) { return entry.module; });
+        if (parts.inbox) {
+            required(parts.inbox->screen, "/shell/inbox/screen");
+            if (parts.inbox->sources.empty()) {
+                refuse("/shell/inbox/sources", "an inbox sums at least one source");
+            }
+            for (std::size_t index = 0; index < parts.inbox->sources.size(); ++index) {
+                count(parts.inbox->sources.at(index), "/shell/inbox/sources/" + std::to_string(index));
+            }
+        }
+        if (parts.principal) {
+            PrincipalMenu const& menu = *parts.principal;
+            required(menu.model, "/shell/principal/model");
+            required(menu.action, "/shell/principal/action");
+            required(menu.nameField, "/shell/principal/nameField");
+            distinct(menu.locales, "/shell/principal/locales", [](std::string const& tag) { return tag; });
+            distinct(menu.formats, "/shell/principal/formats", [](std::string const& tag) { return tag; });
+        }
+        if (parts.brand) {
+            required(parts.brand->title, "/shell/brand/title");
+        }
+        if (parts.help) {
+            HelpEntry const& help = *parts.help;
+            if (help.screen.empty() == help.action.empty()) {
+                refuse("/shell/help", "the help button opens a screen or runs an action: name one of the two");
+            }
+            if (!help.action.empty()) {
+                required(help.model, "/shell/help/model");
+            } else if (!help.model.empty()) {
+                refuse("/shell/help/model", "a model belongs to an action; the help button opens a screen");
+            }
+        }
     }
 
     // NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per kind of declaration.
@@ -1835,7 +2066,7 @@ private:
     };
 
     // NOLINTBEGIN(modernize-use-designated-initializers): one row per command reads as a table.
-    static constexpr std::array<CommandSpec, 23> kCommands = {{
+    static constexpr std::array<CommandSpec, 24> kCommands = {{
         {"set", CommandKind::Set, {"value"}},
         {"reset", CommandKind::Reset, {}},
         {"run", CommandKind::Run, {"body", "as", "each"}},
@@ -1849,6 +2080,7 @@ private:
         {"switchBackend", CommandKind::SwitchBackend, {}},
         {"resetPrefs", CommandKind::ResetPrefs, {}},
         {"setLocale", CommandKind::SetLocale, {}},
+        {"setContext", CommandKind::SetContext, {}},
         {"notify", CommandKind::Notify, {"role"}},
         {"seq", CommandKind::Seq, {}},
         {"all", CommandKind::All, {}},
@@ -1964,6 +2196,7 @@ private:
                 navigate(cmd, fields, primary, path);
                 break;
             case CommandKind::Return:
+            case CommandKind::SetContext:
                 cmd.value = expr(primary, where);
                 break;
             case CommandKind::Host:
@@ -3337,6 +3570,9 @@ private:
     }
 
     void checkNode(DocNode const& node, CheckContext const& context) {
+        if (node.kind == "pageRegion") {
+            refuse(node.path, "a page region belongs in a page");
+        }
         if (!node.name("alignSelf").empty()) {
             refuse(pointerAppend(node.path, "alignSelf"), std::string{kAlignSelfPlaces});
         }
@@ -3394,6 +3630,9 @@ private:
         bool const bleeds = parent.kind == "column" || parent.kind == "panel" || parent.kind == "tab";
         for (auto const& [key, nodes] : parent.children) {
             for (DocNodePtr const& child : nodes) {
+                if (child->kind == "pageRegion" && parent.kind != "page") {
+                    refuse(child->path, "a page region belongs in a page");
+                }
                 if (!child->name("alignSelf").empty() && (!places || key != "children")) {
                     refuse(pointerAppend(child->path, "alignSelf"), std::string{kAlignSelfPlaces});
                 }
@@ -3546,6 +3785,13 @@ private:
                 refuse(one.path, "`x` is on every series of a chart or on none");
             }
             checkChartTone(one);
+            std::string_view const style = one.name("style");
+            if (!style.empty() && style != "line" && style != "bars") {
+                refuse(pointerAppend(one.path, "style"), "a series `style` is `line` or `bars`");
+            }
+            if (style == "bars" && one.flag("joined")) {
+                refuse(pointerAppend(one.path, "joined"), "a `bars` series is not joined");
+            }
         }
         for (DocNodePtr const& line : node.partList("lines")) {
             checkChartTone(*line);
@@ -3599,6 +3845,10 @@ private:
             checkTabsInset(node);
         } else if (node.kind == "chart") {
             checkChart(node);
+        } else if (node.kind == "page") {
+            checkPage(node);
+        } else if (node.kind == "localeScope") {
+            checkLocaleScope(node);
         } else if (node.kind == "customize" && !_doc->customize.contains(node.name("point"))) {
             refuse(pointerAppend(node.path, "point"),
                    "`" + std::string{node.name("point")} + "` is not a customization point of this document");
@@ -3621,6 +3871,54 @@ private:
             checkTablePaging(node);
             checkTableGroup(node);
             checkRowsTableKeys(node);
+        }
+    }
+
+    // Whether a node gives the common key @p key.
+    static bool gives(DocNode const& node, std::string_view key) {
+        return node.props.contains(key) || node.names.contains(key) || node.flags.contains(key) ||
+               node.parts.contains(key) || (key == "keys" && !node.keys.empty()) || (key == "id" && !node.id.empty());
+    }
+
+    // The common keys a page node does not take, each refused where it is written.
+    static void refuseKeys(DocNode const& node, std::span<std::string_view const> keys, std::string_view why) {
+        for (std::string_view const key : keys) {
+            if (gives(node, key)) {
+                refuse(pointerAppend(node.path, key), "`" + std::string{key} + "` " + std::string{why});
+            }
+        }
+    }
+
+    // A page holds regions and nothing else, each valid on the sheet; the sheet sizes itself.
+    static void checkPage(DocNode const& node) {
+        static constexpr std::array<std::string_view, 9> kRefused = {
+            "sizing", "minWidth", "maxWidth", "minHeight", "maxHeight", "bleed", "drag", "drop", "autofocus"};
+        refuseKeys(node, kRefused, "is refused on a page: the sheet is sized by its geometry");
+        if (node.name("alignSelf") == "stretch") {
+            refuse(pointerAppend(node.path, "alignSelf"), "a page is never stretched; `alignSelf` places the sheet");
+        }
+        PageGeometry const page = pageGeometryOf(node);
+        for (DocNodePtr const& child : node.nodes("children")) {
+            if (child->kind != "pageRegion") {
+                refuse(child->path, "a page holds page regions and nothing else");
+            }
+            static constexpr std::array<std::string_view, 11> kRegionRefused = {
+                "sizing", "minWidth", "maxWidth", "minHeight", "maxHeight", "alignSelf",
+                "bleed",  "span",     "drag",     "drop",      "autofocus"};
+            refuseKeys(*child, kRegionRefused, "is refused on a page region: its geometry names its size");
+            static_cast<void>(regionGeometryOf(*child, page));
+        }
+    }
+
+    // A scope is not a widget, so it takes none of the keys every widget takes.
+    static void checkLocaleScope(DocNode const& node) {
+        for (KeySpec const& key : kCommonKeys) {
+            if (gives(node, key.key)) {
+                refuse(pointerAppend(node.path, key.key),
+                       "`" + std::string{key.key} +
+                           "` is refused on a locale scope: it is not a widget; wrap it in a "
+                           "node that has one");
+            }
         }
     }
 
@@ -4453,8 +4751,8 @@ private:
         if (name == nullptr || *name != "multiline") {
             return;
         }
-        for (std::string_view const key :
-             {std::string_view{"unit"}, std::string_view{"icon"}, std::string_view{"prefix"}}) {
+        for (std::string_view const key : {std::string_view{"unit"}, std::string_view{"icon"},
+                                           std::string_view{"prefix"}, std::string_view{"decimals"}}) {
             if (node.prop(key) != nullptr) {
                 refuse(pointerAppend(node.path, key), "a multiline input shows no " + std::string{key});
             }
@@ -4872,6 +5170,7 @@ private:
             case CommandKind::Notify:
             case CommandKind::SwitchBackend:
             case CommandKind::SetLocale:
+            case CommandKind::SetContext:
             case CommandKind::SignOut:
             default:
                 if (cmd.value) {
@@ -5249,7 +5548,7 @@ inline std::expected<Type, std::string> ScopeResolver::row(std::span<std::string
 }
 
 inline std::expected<Type, std::string> ScopeResolver::control(ExprKind form, std::string_view name) const {
-    if (form == ExprKind::Can && name.starts_with("host:")) {
+    if (form == ExprKind::Can && (name.starts_with("host:") || name == "context")) {
         return Type::of(TypeKind::Bool);
     }
     NameEntry const* const entry = DocumentValidator::lookup(_context.scope, name);

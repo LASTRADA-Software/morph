@@ -210,7 +210,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
 [[nodiscard]] inline ui::Node fieldControl(FormSession& session, FieldState& state, ViewOptions const& options) {
     FieldState* const field = &state;
     FieldSpec const& spec = state.spec();
-    auto const textInput = [field](ui::TextInputMode mode, std::string unit = {}, int decimals = -1) {
+    auto const textInput = [field](ui::TextInputMode mode, std::string unit = {}, ui::Prop<int> decimals = -1) {
         return ui::textInput(ui::TextInput{
             .value = [field] { return field->text().get(); },
             .onChange = [field](std::string text) { field->text().set(std::move(text)); },
@@ -219,30 +219,43 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             .placeholder = field->placeholder(),
             .mode = mode,
             .unit = std::move(unit),
-            .decimals = decimals,
+            .decimals = std::move(decimals),
             .label = [field] { return field->label(); },
             .showLabel = false,
             .field = fieldState(field),
             .common = controlCommon(field),
         });
     };
-    // A number's input shows its unit and knows its entry places: an integer's 0, the entry unit's, a plain
-    // number's display places, a decimal's declared ones; -1 where none is declared.
+    // A number's input shows its unit and knows its entry places: an integer's 0, the chosen unit's, a plain
+    // number's display places, a decimal's declared ones; -1 where none is declared. A record's places
+    // (`FieldState::places`) replace the canonical unit's, or a plain number's, and no other unit's.
     auto const numberInput = [&] {
-        int decimals = -1;
         if (spec.kind == FieldKind::Integer) {
-            decimals = 0;
-        } else if (!spec.units.empty()) {
-            decimals = static_cast<int>(spec.units.at(spec.entryUnit).decimals);
-        } else if (spec.displayDecimals) {
+            return textInput(ui::TextInputMode::SingleLine, spec.unit, 0);
+        }
+        if (!spec.units.empty()) {
+            return textInput(ui::TextInputMode::SingleLine, spec.unit, [field] {
+                auto const& units = field->spec().units;
+                std::size_t const unit = std::min(field->unit().get(), units.size() - 1);
+                std::optional<std::uint32_t> const places = field->places().get();
+                return static_cast<int>(unit == 0 && places.has_value() ? *places : units.at(unit).decimals);
+            });
+        }
+        int decimals = -1;
+        if (spec.displayDecimals) {
             decimals = static_cast<int>(*spec.displayDecimals);
         } else if (spec.decimalPlaces) {
             decimals = static_cast<int>(*spec.decimalPlaces);
         }
-        return textInput(ui::TextInputMode::SingleLine, spec.unit, decimals);
+        return textInput(ui::TextInputMode::SingleLine, spec.unit, [field, decimals] {
+            std::optional<std::uint32_t> const places = field->places().get();
+            return places.has_value() ? static_cast<int>(*places) : decimals;
+        });
     };
     auto const dateInput = [&](bool date) {
         int const offset = date ? 0 : session.options().displayOffsetMinutes;
+        // The input shows and reads the session's pattern; the draft text below stays ISO.
+        std::string const pattern = date ? session.options().datePattern : session.options().dateTimePattern;
         return ui::dateTimeInput(ui::DateTimeInput{
             .value = [field, date, offset] { return draftInstant(trim(field->text().get()), date, offset); },
             .onChange =
@@ -255,6 +268,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
             .showLabel = false,
             .field = fieldState(field),
             .common = controlCommon(field),
+            .pattern = pattern,
         });
     };
     if (spec.kind == FieldKind::Multiline) {
@@ -419,7 +433,7 @@ using ViewOptions = std::shared_ptr<FormViewOptions const>;
     if (state.spec().kind == FieldKind::Boolean) {
         caption = captionSpace(width);
     } else {
-        ui::Text label{.text = [field] { return field->label(); }};
+        ui::Text label{.text = [field] { return field->label(); }, .role = ui::TextRole::Label};
         label.common.testId = "label_" + state.path();
         label.common.layout = {.width = ui::Sizing::fixed(width), .height = {}};
         caption = ui::text(std::move(label));
@@ -472,7 +486,7 @@ inline ui::Node fieldCell(FormSession& session, FieldState& state, ViewOptions c
     }
     std::vector<ui::Node> children;
     if (state.spec().kind != FieldKind::Boolean && state.spec().kind != FieldKind::Object) {
-        ui::Text label{.text = [field] { return field->label(); }};
+        ui::Text label{.text = [field] { return field->label(); }, .role = ui::TextRole::Label};
         label.common.testId = "label_" + state.path();
         children.push_back(ui::text(std::move(label)));
     }

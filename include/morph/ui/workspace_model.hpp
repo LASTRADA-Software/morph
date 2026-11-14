@@ -301,6 +301,24 @@ public:
         closeEach(std::move(ids), std::move(done));
     }
 
+    /// @brief How many tabs hold unsaved changes. Not a tracked read.
+    /// @return The count.
+    [[nodiscard]] std::size_t dirtyTabs() const {
+        return static_cast<std::size_t>(
+            std::ranges::count_if(_tabs, [](auto const& tab) { return tab->handle->dirty().peek(); }));
+    }
+
+    /// @brief Closes every tab that holds unsaved changes without asking, newest first, and cancels the calls no
+    ///        mount adopted. What a change of scope does once the person agreed to discard the work.
+    void forceCloseDirtyTabs() {
+        for (std::size_t index = _tabs.size(); index > 0; --index) {
+            if (index <= _tabs.size() && _tabs.at(index - 1)->handle->dirty().peek()) {
+                removeTab(_tabs.at(index - 1)->id, true);
+            }
+        }
+        _host->cancelUnclaimedCalls();
+    }
+
     /// @brief Closes every tab without asking, newest first: what signing out does, since no close guard may keep a
     ///        screen of the principal who is leaving. Then cancels every call no mount adopted
     ///        (`DocumentScreenHost::cancelUnclaimedCalls`), so none outlives the screens it was filed among.

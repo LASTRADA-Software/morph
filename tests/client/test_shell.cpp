@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <expected>
 #include <functional>
 #include <memory>
@@ -22,6 +23,8 @@
 #include <morph/session/session.hpp>
 #include <morph/ui/chat/protocol.hpp>
 #include <morph/ui/service.hpp>
+#include <morph/ui/shell_parts.hpp>
+#include <morph/ui/shell_parts_view.hpp>
 #include <morph/ui/testing/recording_backend.hpp>
 #include <optional>
 #include <string>
@@ -30,6 +33,8 @@
 #include <testkit/wait.hpp>
 #include <utility>
 #include <vector>
+
+#include "probe_app.hpp"
 
 namespace client = morph::client;
 namespace ui = morph::ui;
@@ -344,7 +349,10 @@ public:
     std::shared_ptr<std::function<void()>> disconnectHook;
     // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
-    DroppingSource() = default;
+    /// @param bundle Builds the application's bundle; by default the env screen's.
+    explicit DroppingSource(
+        std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> bundle = &envBundle)
+        : _bundle{std::move(bundle)} {}
     ~DroppingSource() override { close(); }
     DroppingSource(DroppingSource const&) = delete;
     DroppingSource& operator=(DroppingSource const&) = delete;
@@ -356,7 +364,7 @@ public:
 
 protected:
     [[nodiscard]] std::expected<Transport, ui::ConnectError> connect(ui::AppContext& /*context*/) override {
-        auto served = envBundle();
+        auto served = _bundle();
         REQUIRE(served.has_value());
         _service = std::make_shared<ui::UiService>(std::move(*served), morph::model::detail::defaultDispatcher());
         _workers = std::make_unique<morph::exec::ThreadPoolExecutor>(1);
@@ -376,6 +384,7 @@ protected:
     }
 
 private:
+    std::function<std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal>()> _bundle;
     std::shared_ptr<ui::UiService> _service;
     std::unique_ptr<morph::exec::ThreadPoolExecutor> _workers;
 };
@@ -515,6 +524,69 @@ TEST_CASE("Client shell: env online follows the transport's drop and reconnect",
     source.close();
 }
 
+namespace {
+
+/// The env screen as one a signed-in person opens, with a product mark that carries a version.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> brandedBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::CatalogEntry entry;
+    entry.id = "probe.env";
+    entry.title = "Env";
+    if (auto added = served.addScreen(std::move(entry), std::string{kEnvScreen}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    ui::ShellParts parts;
+    parts.brand = ui::BrandMark{.title = "Probe", .icon = {}, .version = "v1"};
+    if (auto set = served.setShellParts(std::move(parts)); !set) {
+        return std::unexpected(std::move(set.error()));
+    }
+    return served.build();
+}
+
+}  // namespace
+
+// Mutation: drop the shell's showConnection call from the online listener (the foot stays "Connected"), never arm
+// the offline timer (it stays "Reconnecting…"), or leave the timer armed across a reconnect (it turns "Offline"
+// while the transport is up).
+TEST_CASE("Client shell: the foot follows the transport, reconnecting at once and offline after a while",
+          "[client][shell][parts]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    DroppingSource source{&brandedBundle};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.env"});
+        auto const state = [&backend] { return propOf(backend, "Text", "shell_connection", "text"); };
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Connected"; }));
+        CHECK(propOf(backend, "Text", "shell_version", "text") == "v1");
+
+        (*source.disconnectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Reconnecting…"; }));
+        context.clock().advance(ui::kOfflineAfter - std::chrono::seconds{1});
+        static_cast<void>(pumpUntil(context.owner(), [] { return false; }, std::chrono::milliseconds{50}));
+        CHECK(state() == "Reconnecting…");
+        context.clock().advance(std::chrono::seconds{1});
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Offline"; }));
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Connected"; }));
+
+        // A drop that heals within the grace never says offline.
+        (*source.disconnectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Reconnecting…"; }));
+        (*source.connectHook)();
+        REQUIRE(pumpUntil(context.owner(), [&state] { return state() == "Connected"; }));
+        context.clock().advance(ui::kOfflineAfter * 2);
+        static_cast<void>(pumpUntil(context.owner(), [] { return false; }, std::chrono::milliseconds{50}));
+        CHECK(state() == "Connected");
+    }
+    source.close();
+}
+
 // Mutation: drop the shell's setEnvironmentValue calls (the screen reads an empty text).
 TEST_CASE("Client shell: a screen reads the backend's width class, and follows a change", "[client][shell]") {
     FakeAppContext context;
@@ -567,6 +639,21 @@ TEST_CASE("Client shell: the top bar's head slots show while the active tab's he
     source.close();
 }
 
+namespace {
+
+/// The dialogs the screens opened: the frame's own compact-search sheet is a dialog too, and is always in the tree.
+std::vector<int> screenDialogs(ui::testing::RecordingBackend const& backend) {
+    std::vector<int> dialogs;
+    for (int const id : backend.all("Dialog")) {
+        if (backend.prop(id, "testId") != "shell_search_overlay") {
+            dialogs.push_back(id);
+        }
+    }
+    return dialogs;
+}
+
+}  // namespace
+
 // Control: route `as` to the tab path in the shell's navigation (the bar gains a tab, and no dialog is drawn); or drop
 // the host's onScreenClosed (the callee's tab stays after its return).
 TEST_CASE("Client shell: a navigate as a dialog draws a dialog, and a screen that returns from a tab loses it",
@@ -587,12 +674,12 @@ TEST_CASE("Client shell: a navigate as a dialog draws a dialog, and a screen tha
                                  .onProblem = [&problems](std::string const& text) { problems.push_back(text); }});
         REQUIRE(pumpUntil(context.owner(), [&backend] { return propOf(backend, "Text", "got", "text") == "none"; }));
         backend.click(*backend.find("Button", "testId", "askDialog"));
-        REQUIRE(pumpUntil(context.owner(), [&backend] { return !backend.all("Dialog").empty(); }));
-        CHECK(backend.prop(backend.all("Dialog").front(), "open") == "true");
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return !screenDialogs(backend).empty(); }));
+        CHECK(backend.prop(screenDialogs(backend).front(), "open") == "true");
         CHECK(tabCaptions(backend) == "[Asker]");
         backend.click(*backend.find("Button", "testId", "answer"));
         REQUIRE(pumpUntil(context.owner(), [&backend] { return propOf(backend, "Text", "got", "text") == "yes"; }));
-        CHECK(pumpUntil(context.owner(), [&backend] { return backend.all("Dialog").empty(); }));
+        CHECK(pumpUntil(context.owner(), [&backend] { return screenDialogs(backend).empty(); }));
 
         backend.click(*backend.find("Button", "testId", "askTab"));
         REQUIRE(pumpUntil(context.owner(), [&backend] { return tabCaptions(backend) == "[Asker,Callee]"; }));
@@ -977,4 +1064,163 @@ TEST_CASE("switching_tabs_switches_the_conversation", "[client][chat]") {
     REQUIRE(pumpUntil(rig.context.owner(), [&] { return !shown(rig.backend, "other").empty(); }));
     CHECK(
         pumpUntil(rig.context.owner(), [&] { return !rig.backend.find("Text", "testId", "chat_entry").has_value(); }));
+}
+
+namespace {
+
+/// A screen that shows the scope it was mounted with and the scope now.
+constexpr std::string_view kScoped = R"({
+  "vocab": "ui/1", "id": "probe.scoped",
+  "state": { "first": { "init": { "fn": "coalesce", "args": [ { "env": "context" }, "none" ] } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "text", "testId": "first", "text": { "ref": "first" } },
+    { "kind": "text", "testId": "scoped", "text": { "fn": "coalesce", "args": [ { "env": "context" }, "none" ] } } ] } })";
+
+/// The scoped screen, with a scope switcher over the probe model's `Probe_Scopes`, declared through the registry.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> scopedBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}};
+    ui::CatalogEntry entry;
+    entry.id = "probe.scoped";
+    entry.title = "Scoped";
+    if (auto added = served.addScreen(std::move(entry), std::string{kScoped}); !added) {
+        return std::unexpected(std::move(added.error()));
+    }
+    ui::ShellParts parts;
+    parts.context = ui::ContextSwitch{.model = "Probe_Model",
+                                      .action = "Probe_Scopes",
+                                      .localeField = {},
+                                      .optionsField = "options",
+                                      .labelField = "label",
+                                      .valueField = "value",
+                                      .detailField = {},
+                                      .groupField = {}};
+    if (auto set = served.setShellParts(std::move(parts)); !set) {
+        return std::unexpected(std::move(set.error()));
+    }
+    return served.build();
+}
+
+}  // namespace
+
+// Mutation: mount the start screen before the switcher answers (the screen's first read of the scope is `none`).
+TEST_CASE("Client shell: the start screen mounts once the switcher has answered, and follows the scope chosen",
+          "[client][shell][parts]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &scopedBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        auto const shell = client::mountShell(context, backend, std::move(*opened), source,
+                                              client::ShellOptions{.startScreen = "probe.scoped"});
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return !shown(backend, "scoped").empty(); }));
+        // It mounted after the switcher answered, so it never read an unscoped context.
+        CHECK(shown(backend, "first") == "n");
+        CHECK(shown(backend, "scoped") == "n");
+        auto const menu = backend.find("Menu", "testId", "shell_context");
+        REQUIRE(menu.has_value());
+        CHECK(backend.prop(*menu, "label").contains("North"));
+        backend.chooseMenuEntry(*menu, {1});
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return shown(backend, "scoped") == "s"; }));
+    }
+    source.close();
+}
+
+namespace {
+
+/// A second screen, so that a search has two tabs to open.
+constexpr std::string_view kSecondScreen = R"({
+  "vocab": "ui/1", "id": "probe.second",
+  "view": { "kind": "text", "testId": "second", "text": "Second" } })";
+
+/// Two screens of one module, with a search over both, a count of the module, and an inbox opening one of them.
+std::expected<std::shared_ptr<ui::ServedBundle const>, ui::Refusal> searchBundle() {
+    ui::UiRegistry served{ui::ApplicationInfo{.id = "probe", .version = "1"}, probe::searchCatalog()};
+    for (auto const& [id, text] : {std::pair{"probe.width", kWidthScreen}, std::pair{"probe.second", kSecondScreen}}) {
+        ui::CatalogEntry entry;
+        entry.id = id;
+        entry.title = id;
+        entry.module = "probe";
+        entry.isPublic = false;
+        if (auto added = served.addScreen(std::move(entry), std::string{text}); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
+    ui::ShellParts parts;
+    parts.modules = {ui::ModuleCount{.module = "probe",
+                                     .model = "Probe_Model",
+                                     .action = "Probe_Count",
+                                     .countField = "n",
+                                     .contextField = {},
+                                     .localeField = {}}};
+    parts.search = {ui::SearchSource{.module = "probe",
+                                     .title = "Probe",
+                                     .model = "Probe_Model",
+                                     .action = "Probe_Search",
+                                     .queryField = "q",
+                                     .resultsField = "hits",
+                                     .contextField = {},
+                                     .localeField = {}}};
+    parts.inbox = ui::InboxEntry{.screen = "probe.second",
+                                 .sources = {ui::ModuleCount{.module = "probe",
+                                                             .model = "Probe_Model",
+                                                             .action = "Probe_Count",
+                                                             .countField = "n",
+                                                             .contextField = {},
+                                                             .localeField = {}}}};
+    if (auto set = served.setShellParts(std::move(parts)); !set) {
+        return std::unexpected(std::move(set.error()));
+    }
+    return served.build();
+}
+
+}  // namespace
+
+// Mutation: openTargets opens each hit once, so the last one opened stays the active tab.
+TEST_CASE("Client shell: Shift Enter opens every hit and the first one is the active tab", "[client][shell][parts]") {
+    FakeAppContext context;
+    ui::testing::RecordingBackend backend;
+    client::LocalSource source{client::LocalApp{.name = "probe", .bundle = &searchBundle}, client::LocalSetup{}};
+    std::optional<std::expected<ui::Bundle, ui::ConnectError>> opened;
+    source.open(context,
+                [&opened](std::expected<ui::Bundle, ui::ConnectError> result) { opened = std::move(result); });
+    REQUIRE(pumpUntil(context.owner(), [&opened] { return opened.has_value(); }));
+    REQUIRE(opened->has_value());
+    {
+        std::vector<std::string> problems;
+        auto const shell = client::mountShell(
+            context, backend, std::move(*opened), source,
+            client::ShellOptions{.startScreen = "probe.width",
+                                 .onProblem = [&problems](std::string const& text) { problems.push_back(text); }});
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return !tabCaptions(backend).empty(); }));
+        auto const search = backend.find("TextInput", "testId", "shell_search");
+        REQUIRE(search.has_value());
+        backend.edit(*search, "w");
+        // The request waits out its pause on the manual clock.
+        REQUIRE(pumpUntil(context.owner(),
+                          [&backend] { return backend.find("Text", "testId", "shell_search_busy").has_value(); }));
+        context.clock().advance(std::chrono::milliseconds{ui::kSearchPause});
+        bool const drawn = pumpUntil(context.owner(), [&backend] {
+            return backend.find("Button", "testId", "shell_search_hit_0_1").has_value();
+        });
+        REQUIRE(drawn);
+        CHECK(backend.press(*search, "Shift+Enter"));
+        REQUIRE(pumpUntil(context.owner(), [&backend] { return tabCaptions(backend).contains(','); }));
+        auto const bars = backend.all("Tabs");
+        REQUIRE_FALSE(bars.empty());
+        // The screens declare no identity, so every hit opens a tab: the start screen's, then the first hit's, then
+        // the second's. The first hit's tab is the one left active.
+        CAPTURE(tabCaptions(backend));
+        CHECK(backend.prop(bars.front(), "selected") == "1");
+        auto const once = [&problems](std::string_view needle) {
+            return std::ranges::count_if(problems,
+                                         [needle](std::string const& text) { return text.contains(needle); });
+        };
+        // The module count and the inbox source read the same action.
+        CHECK(once("the reply of Probe_Count is not a registered record") == 2);
+    }
+    source.close();
 }

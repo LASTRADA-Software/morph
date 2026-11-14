@@ -1,0 +1,209 @@
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <morph/core/records.hpp>
+#include <morph/util/datetime.hpp>
+#include <string>
+#include <vector>
+
+#include "lims/billing/core/types.hpp"
+#include "lims/billing/dto/line_dto.hpp"
+#include "lims/billing/dto/settings_dto.hpp"
+#include "lims/org/authorization/declared_guard.hpp"
+#include "lims/org/core/money.hpp"
+#include "lims/org/core/references.hpp"
+#include "lims/org/core/types.hpp"
+#include "lims/org/dto/limit_dto.hpp"
+#include "lims/org/dto/role_dto.hpp"
+#include "lims/org/dto/shell_dto.hpp"
+#include "lims/posting/posting.hpp"
+
+/// @file
+/// Invoices: one client's billable lines at one site, in the client's currency.
+
+namespace lims {
+
+/// @brief An invoice with its lines and totals.
+struct InvoiceView {
+    /// @brief Its id.
+    InvoiceId id;
+    /// @brief The company that bills.
+    CompanyId company;
+    /// @brief The site whose approver judges it.
+    SiteId site;
+    /// @brief The billed client.
+    ClientId client;
+    /// @brief The currency of every amount on it.
+    CurrencyCode currency = CurrencyCode::EUR;
+    /// @brief Where it stands.
+    InvoiceState state = InvoiceState::Draft;
+    /// @brief Its number; empty until posted.
+    std::string number;
+    /// @brief Its lines, by id.
+    std::vector<BillableLineView> lines;
+    /// @brief The lines' exact sum.
+    Amount net;
+    /// @brief The flat tax on the net total, rounded half-up once.
+    Amount tax;
+    /// @brief The net plus the tax.
+    Amount gross;
+    /// @brief The reference the poster supplies to the ledger; empty until submitted.
+    std::string reference;
+    /// @brief Who drafted it.
+    std::string createdBy;
+    /// @brief Who submitted it; empty until submitted.
+    std::string submittedBy;
+    /// @brief Who approved it; empty until approved.
+    std::string approvedBy;
+    /// @brief Who posted it; empty until posted.
+    std::string postedBy;
+    /// @brief When it was submitted; empty until then.
+    ::morph::time::Timestamp submittedAt;
+    /// @brief When its approval escalates to the company; empty until submitted.
+    ::morph::time::Timestamp approvalDeadline;
+    /// @brief Who must approve it: `Company` once the deadline has passed.
+    ApprovalLevel level = ApprovalLevel::Site;
+    /// @brief Its journal entry; empty until posted.
+    JournalEntryId entry;
+};
+
+/// @brief Drafts an invoice over every unbilled line of a client at a site.
+struct CreateInvoice {
+    using guard = ::lims::DeclaredRuleGuard;
+
+    /// @brief The company that bills.
+    CompanyId company;
+    /// @brief The site whose lines are collected.
+    SiteId site;
+    /// @brief The client.
+    ClientId client;
+
+    /// @brief Whether the invoice is fully named.
+    /// @return `true` when the company, site and client are.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue() && site.hasValue() && client.hasValue(); }
+
+    /// @brief Sent by its button, never per keystroke.
+    static constexpr bool explicitSubmit = true;
+};
+
+/// @brief Reads one invoice.
+struct GetInvoice {
+    /// @brief The invoice.
+    InvoiceId invoiceId;
+
+    /// @brief Whether an invoice is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return invoiceId.hasValue(); }
+};
+
+/// @brief Submits a draft invoice for approval.
+struct SubmitInvoice {
+    using guard = ::lims::DeclaredRuleGuard;
+
+    /// @brief The invoice.
+    InvoiceId invoiceId;
+
+    /// @brief Whether an invoice is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return invoiceId.hasValue(); }
+
+    /// @brief Sent by its button, never per keystroke.
+    static constexpr bool explicitSubmit = true;
+};
+
+/// @brief Approves a submitted invoice.
+struct ApproveInvoice {
+    using guard = ::lims::DeclaredRuleGuard;
+
+    /// @brief The invoice.
+    InvoiceId invoiceId;
+
+    /// @brief Whether an invoice is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return invoiceId.hasValue(); }
+
+    /// @brief Sent by its button, never per keystroke.
+    static constexpr bool explicitSubmit = true;
+};
+
+/// @brief Posts an approved invoice to the ledger and numbers it.
+struct PostInvoice {
+    using guard = ::lims::DeclaredRuleGuard;
+
+    /// @brief The invoice.
+    InvoiceId invoiceId;
+
+    /// @brief Whether an invoice is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return invoiceId.hasValue(); }
+
+    /// @brief Sent by its button, never per keystroke.
+    static constexpr bool explicitSubmit = true;
+};
+
+/// @brief Lists the submitted invoices the caller could approve now.
+struct ListPendingApprovals {
+    /// @brief Whether the query is well-formed.
+    /// @return Always `true`: it names nothing.
+    [[nodiscard]] bool validate() const noexcept { return true; }
+};
+
+/// @brief Lists a company's invoices.
+struct ListInvoices {
+    /// @brief The company.
+    CompanyId company;
+
+    /// @brief Whether a company is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
+};
+
+/// @brief The invoices, by id.
+struct ListInvoicesResult {
+    /// @brief The invoices.
+    std::vector<InvoiceView> invoices;
+};
+
+/// @brief Counts the invoices still being drafted or waiting for approval at a company: billing's open work in the
+///        shell.
+struct CountOpenInvoiceWork {
+    /// @brief The company.
+    CompanyId company;
+
+    /// @brief Whether a company is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
+};
+
+/// @brief Counts the submitted invoices at a company that the caller could approve now: the approvals inbox's
+///        billing source.
+struct CountPendingApprovals {
+    /// @brief The company.
+    CompanyId company;
+
+    /// @brief Whether a company is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
+};
+
+/// @brief Finds invoices at a company by the start of their number or of their client's name.
+struct SearchInvoices {
+    /// @brief The text typed.
+    std::string query;
+    /// @brief The company.
+    CompanyId company;
+
+    /// @brief Whether a company is named.
+    /// @return `true` when it is.
+    [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
+};
+
+}  // namespace lims
+
+BRIDGE_REGISTER_RECORD(lims::InvoiceView, "Billing_Invoice")
+BRIDGE_REGISTER_RECORD(
+    lims::OpenWork<lims::InvoiceView>, "Billing_OpenInvoiceWork", ::morph::record::keyless,
+    ::morph::record::derivedFrom<lims::InvoiceView, lims::SiteView, lims::RoleAssignmentView, lims::ValueLimitView>)
+BRIDGE_REGISTER_RECORD(
+    lims::SearchHits<lims::InvoiceView>, "Billing_InvoiceHits", ::morph::record::keyless,
+    ::morph::record::derivedFrom<lims::InvoiceView, lims::BillingClientView, lims::SiteView, lims::RoleAssignmentView>)

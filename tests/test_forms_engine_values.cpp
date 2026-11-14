@@ -177,6 +177,28 @@ TEST_CASE("values: a plain number is a JSON number of the digits typed, gated by
     CHECK(error(morph::forms::encodeScalar(whole, "12.5", 0, plainContext())) == "too-precise");
 }
 
+TEST_CASE("values: a plain Number's bound places replace the schema's for entry and for a loaded value",
+          "[forms-engine][values][bound-decimals]") {
+    FieldSpec const reading = field(R"({"type":"number","x-displayDecimals":2})");
+    auto const decoded = [&](std::string_view wire, std::optional<std::uint32_t> places) {
+        auto const dom = engine::parseJson(wire);
+        REQUIRE(dom.has_value());
+        return morph::forms::decodeScalar(reading, *dom, plainContext(), places);
+    };
+
+    // Above the schema's places: shown unrounded, and accepted when typed again.
+    CHECK(decoded("1.234", 3) == "1.234");
+    CHECK(json(morph::forms::encodeScalar(reading, "1.234", 0, plainContext(), 3)) == "1.234");
+    CHECK(error(morph::forms::encodeScalar(reading, "1.2345", 0, plainContext(), 3)) == "too-precise");
+    // Below them: padded only to the bound places, and what is typed beyond them is refused.
+    CHECK(decoded("1000", 0) == "1000");
+    CHECK(json(morph::forms::encodeScalar(reading, "12", 0, plainContext(), 0)) == "12");
+    CHECK(error(morph::forms::encodeScalar(reading, "12.5", 0, plainContext(), 0)) == "too-precise");
+    // No bound places: the schema's.
+    CHECK(decoded("1000", std::nullopt) == "1000.00");
+    CHECK(error(morph::forms::encodeScalar(reading, "1.234", 0, plainContext())) == "too-precise");
+}
+
 TEST_CASE("values: booleans, enums, choices, dates and arrays encode to their wire shapes", "[forms-engine][values]") {
     FieldSpec const flag = field(R"({"type":"boolean"})");
     CHECK(json(morph::forms::encodeScalar(flag, "true", 0, plainContext())) == "true");

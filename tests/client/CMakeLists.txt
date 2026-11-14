@@ -8,6 +8,7 @@ add_executable(morph_client_tests
     probe_app.cpp
     test_client_args.cpp
     test_shell.cpp
+    test_shell_locale.cpp
     test_sign_in.cpp
     test_sources.cpp
     test_wait.cpp

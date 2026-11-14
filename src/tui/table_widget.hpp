@@ -72,6 +72,8 @@ public:
     void setRowLabel(ui::Widget& row, std::string_view label) override;
     /// Throws std::logic_error when @p row is not one of this table's rows.
     void setRowHeading(ui::Widget& row) override;
+    /// Throws std::logic_error when @p row is not one of this table's rows.
+    void setRowSpans(ui::Widget& row, std::vector<ui::RowSpan> const& spans) override;
     void setSelection(std::vector<ui::Key> const& selection) override;
     void setOnSelectionChange(
         std::function<void(std::vector<ui::Key>, ui::SelectionChange)> onSelectionChange) override;
@@ -88,10 +90,34 @@ public:
     void clickWith(::core::tui::Point cell, ::core::tui::Modifier modifiers) override;
     [[nodiscard]] bool wheel(int delta) override;
 
+    /// Works out which cells span and which are covered from the shown rows' order and their spans, clipping a span
+    /// that runs past the last row or onto a heading, lifts the spanning cells into the table's view and hides the
+    /// covered ones, and finds the lines a spanning cell needs beyond the rows it covers.
+    /// Runs before every frame's layout, as well as in the frame, so the table is sized by rows that already
+    /// lack their lifted cells.
+    void planSpans();
+
 protected:
     void childForgotten(WidgetBase& child) override;
 
 private:
+    /// A spanning cell as the last plan found it: lifted out of its origin row and drawn over the rows it covers.
+    struct SpanPlace {
+        WidgetBase* origin = nullptr;  ///< The row that gives the span.
+        WidgetBase* cell = nullptr;    ///< The spanning cell, a child of the table's view while the plan holds it.
+        std::size_t column = 0;
+        std::size_t first = 0;  ///< The origin's place among the shown rows.
+        std::size_t last = 0;   ///< The last covered row's place.
+    };
+    /// The lines of @p row: its natural height, a line at least, and what a spanning cell it ends needs besides.
+    [[nodiscard]] int heightOf(WidgetBase const& row) const;
+    /// The area of each spanning cell for a table of @p size: the lines of the rows it covers, clipped to those
+    /// shown, and its column's cells, placed down them by the column's `valign`; empty while none shows. With
+    /// @p blocks, those lines and cells before the placement: where a click selects the cell's origin row.
+    [[nodiscard]] std::vector<::core::tui::Rect> spanAreas(::core::tui::Size size,
+                                                           std::vector<::core::tui::Rect>* blocks = nullptr) const;
+    /// The origin row of the spanning cell at @p cell, or null.
+    [[nodiscard]] WidgetBase* spanOriginAt(::core::tui::Point cell) const;
     /// The cells before the first column: the marks, and the select column's box when it is drawn.
     [[nodiscard]] int gutter() const noexcept;
     /// The header's box: `[x]` while every shown row is selected, `[-]` while some are, `[ ]` while none are.
@@ -168,6 +194,9 @@ private:
     ui::SelectionMode _mode = ui::SelectionMode::None;
     std::unordered_map<WidgetBase const*, ui::Key> _keys;
     std::unordered_set<WidgetBase const*> _headings;
+    std::unordered_map<WidgetBase const*, std::vector<ui::RowSpan>> _spans;  ///< Each row's effective spans.
+    std::vector<SpanPlace> _plan;                                            ///< The spanning cells, as last planned.
+    std::unordered_map<WidgetBase const*, int> _extraLines;  ///< The lines a spanning cell adds to its last row.
     std::vector<ui::Key> _selection;  ///< The keys requested or selected by the user, in that order.
     WidgetBase* _cursor = nullptr;    ///< The cursor row; null for the first shown row.
     std::optional<ui::Key> _anchor;   ///< Where a range starts: the row last clicked or toggled.

@@ -10,9 +10,9 @@
 #include <morph/session/session.hpp>
 #include <string>
 
-#include "lims/core/errors.hpp"
-#include "lims/db/lims_entity.hpp"
-#include "lims/models/analysis_catalog_model.hpp"
+#include "lims/lab/db/lims_entity.hpp"
+#include "lims/lab/models/analysis_catalog_model.hpp"
+#include "lims/org/core/errors.hpp"
 #include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/storage_owner.hpp"
@@ -235,4 +235,18 @@ TEST_CASE("An analysis with no versions is skipped rather than listed half-forme
     const auto listed = model.execute(lims::ListAnalyses{});
     REQUIRE(listed.analyses.size() == 1);
     CHECK(listed.analyses.front().name == "Nitrate");
+}
+
+// Mutation: drop the analysis lookup from GetAnalysisVersion (a version whose analysis row is gone is served with an
+// empty name).
+TEST_CASE("GetAnalysisVersion refuses a version whose analysis row is gone", "[lims][catalog]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    lims::AnalysisCatalogModel model;
+    const auto created = model.execute(nitrate());
+    {
+        Lightweight::DataMapper mapper;
+        mapper.Query<lims::db::AnalysisRecord>().Delete();
+    }
+    CHECK_THROWS_AS(model.execute(lims::GetAnalysisVersion{.versionId = created.versionId}), lims::NotFound);
 }

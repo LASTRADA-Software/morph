@@ -47,6 +47,7 @@ QVariantList menuEntries(std::vector<ui::MenuEntry> const& entries) {
             {QStringLiteral("items"), menuEntries(entry.items)},
             {QStringLiteral("separator"), entry.separator},
             {QStringLiteral("description"), toQString(entry.description)},
+            {QStringLiteral("heading"), entry.heading},
         });
     }
     return list;
@@ -161,7 +162,11 @@ MenuImpl::MenuImpl(Context& context, ui::ContainerWidget* parent, ui::MenuStyle 
 void MenuImpl::setTrigger(ui::MenuTrigger const& trigger) {
     context().checkIcon(trigger.icon);
     write("triggerLabel", toQString(trigger.label));
+    write("triggerDetail", toQString(trigger.detail));
     write("triggerIcon", toQString(trigger.icon));
+    write("triggerAvatar", toQString(trigger.avatar));
+    // MorphMenu's `triggerCaret`: 0 none, 1 down, 2 up and down.
+    write("triggerCaret", trigger.caret == ui::MenuCaret::Down ? 1 : trigger.caret == ui::MenuCaret::UpDown ? 2 : 0);
     // MorphMenu's `triggerEmphasis`: 0 normal, 1 primary, 2 danger, 3 ghost.
     int shown = 0;
     if (trigger.emphasis == ui::ButtonEmphasis::Primary) {
@@ -322,6 +327,7 @@ void StepsImpl::setSteps(std::vector<ui::Step> const& steps) {
     QVariantList list;
     for (ui::Step const& step : steps) {
         list.append(QVariantMap{{QStringLiteral("label"), toQString(step.label)},
+                                {QStringLiteral("detail"), toQString(step.detail)},
                                 {QStringLiteral("state"), static_cast<int>(step.state)}});
     }
     write("steps", list);
@@ -367,6 +373,7 @@ void ChartImpl::setData(ui::ChartData const& data) {
         }
         series.append(QVariantMap{{QStringLiteral("label"), toQString(one.label)},
                                   {QStringLiteral("joined"), one.joined},
+                                  {QStringLiteral("style"), static_cast<int>(one.style)},
                                   {QStringLiteral("points"), points}});
     }
     write("summary", toQString(data.summary));
@@ -374,6 +381,7 @@ void ChartImpl::setData(ui::ChartData const& data) {
                                {QStringLiteral("xMax"), data.xMax},
                                {QStringLiteral("yMin"), data.yMin},
                                {QStringLiteral("yMax"), data.yMax},
+                               {QStringLiteral("barSlot"), data.barSlot},
                                {QStringLiteral("yLabel"), toQString(data.yLabel)},
                                {QStringLiteral("ticks"), ticks},
                                {QStringLiteral("lines"), lines},

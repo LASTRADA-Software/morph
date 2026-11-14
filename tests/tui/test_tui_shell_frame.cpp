@@ -78,7 +78,7 @@ TEST_CASE("tui shell frame: below expanded the page starts at its padding, and b
     FramedPage const medium{80};
     CHECK(medium.backend.widthClass() == "medium");
     CHECK(medium.pageColumn() == 2);
-    FramedPage const wide{160};
+    FramedPage wide{160};
     CHECK(wide.backend.widthClass() == "expanded");
     CHECK(wide.pageColumn() == 30);
 }
@@ -274,4 +274,100 @@ TEST_CASE("tui shell frame: the compact bar's padding is no row, and the end ins
     REQUIRE(rowOf(page.screen, "SCAN") == padded);
     std::string const after = rowsOf(page.screen).at(padded);
     CHECK(after.find("SCAN") < before.find("SCAN"));
+}
+
+// Control: the frame draws no part (a default view), or the terminal drops the switcher's detail.
+TEST_CASE("tui shell frame: the declared parts are drawn, each usable on the terminal's rows", "[tui][shell]") {
+    FramedPage wide{160};
+    ui::ShellPartsView view;
+    view.context =
+        ui::ShellContextView{.shown = true,
+                             .options = {ui::ShellOptionView{.label = "Koeln", .detail = "EUR", .group = {}}},
+                             .chosen = 0,
+                             .enabled = true};
+    view.search = ui::ShellSearchView{.shown = true, .hint = "Search samples", .sources = {}};
+    view.inbox = ui::ShellInboxView{.shown = true, .title = "Approvals", .count = 7, .failed = false};
+    view.principal = ui::ShellPrincipalView{.shown = true, .name = "Anna Meyer", .subtitle = "Lab director"};
+    wide.frame->setParts(view);
+    static_cast<void>(wide.loop.runUntilIdle());
+    wide.backend.fit();
+    wide.screen.draw();
+    std::vector<std::string> const rows = rowsOf(wide.screen);
+    auto const shown = [&rows](std::string const& text) {
+        return std::ranges::any_of(rows, [&text](std::string const& row) { return row.contains(text); });
+    };
+    CHECK(shown("Koeln · EUR"));
+    CHECK(shown("Search samples (Ctrl K)"));
+    CHECK(shown("Approvals"));
+    CHECK(shown("7"));
+    CHECK(shown("Anna Meyer · Lab director"));
+
+    // The results are the rows under the field, in flow, and a hit is a row.
+    ui::ShellPartsView found = view;
+    found.search.sources = {
+        ui::ShellSourceView{.title = "Lab",
+                            .failed = false,
+                            .pending = false,
+                            .hits = {ui::ShellHitView{.kind = "Sample", .title = "S-7", .detail = {}}}}};
+    wide.frame->setParts(found);
+    wide.frame->setSearchText("S-");
+    static_cast<void>(wide.loop.runUntilIdle());
+    wide.backend.fit();
+    wide.screen.draw();
+    std::vector<std::string> const after = rowsOf(wide.screen);
+    CHECK(std::ranges::any_of(after,
+                              [](std::string const& row) { return row.contains("Sample") && row.contains("S-7"); }));
+}
+
+// Mutation: MenuButtonImpl::triggerText drops the avatar, or draws a down chevron for the switcher; the frame leaves
+// the brand, the help button or the foot out.
+TEST_CASE("tui shell frame: the brand, the help button, the avatar, the chevrons and the foot are drawn",
+          "[tui][shell]") {
+    FramedPage wide{160};
+    ui::ShellPartsView view;
+    view.brand = ui::ShellBrandView{.shown = true, .title = "Lims", .icon = {}, .version = "v4.2"};
+    view.context =
+        ui::ShellContextView{.shown = true,
+                             .options = {ui::ShellOptionView{.label = "Koeln", .detail = "EUR", .group = {}}},
+                             .chosen = 0,
+                             .enabled = true};
+    view.help = ui::ShellHelpView{.shown = true};
+    view.principal = ui::ShellPrincipalView{
+        .shown = true, .name = "Anna Meyer", .subtitle = "Lab director", .initials = "AM", .detail = {}};
+    view.connection = ui::ConnectionState::Reconnecting;
+    wide.frame->setParts(view);
+    static_cast<void>(wide.loop.runUntilIdle());
+    wide.backend.fit();
+    wide.screen.draw();
+    std::vector<std::string> rows = rowsOf(wide.screen);
+    auto const shown = [&rows](std::string const& text) {
+        return std::ranges::any_of(rows, [&text](std::string const& row) { return row.contains(text); });
+    };
+    CHECK(shown("Lims"));
+    // The switcher's marker says it chooses a value; the person's says it opens.
+    CHECK(shown("Koeln · EUR ↕"));
+    CHECK(shown("[[AM] Anna Meyer · Lab director ▾]"));
+    CHECK(shown("[ ? ]"));
+    CHECK(shown("Reconnecting…"));
+    CHECK(shown("v4.2"));
+
+    view.connection = ui::ConnectionState::Offline;
+    wide.frame->setParts(view);
+    static_cast<void>(wide.loop.runUntilIdle());
+    wide.backend.fit();
+    wide.screen.draw();
+    rows = rowsOf(wide.screen);
+    CHECK(shown("Offline"));
+    CHECK_FALSE(shown("Reconnecting…"));
+
+    // A frame that knows nothing of the connection draws no foot.
+    view.connection.reset();
+    view.brand.version.clear();
+    wide.frame->setParts(view);
+    static_cast<void>(wide.loop.runUntilIdle());
+    wide.backend.fit();
+    wide.screen.draw();
+    rows = rowsOf(wide.screen);
+    CHECK_FALSE(shown("Offline"));
+    CHECK_FALSE(shown("v4.2"));
 }

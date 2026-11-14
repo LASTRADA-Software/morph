@@ -10,7 +10,10 @@ MorphWidget {
 
     // 0 vertical, 1 horizontal; fixed at creation.
     property int axis: 0
-    readonly property Item content: column
+    // Where the children go: a column down a vertical scroll, a row along a horizontal one, as on the terminal.
+    readonly property Item content: root.axis === 1 ? row.content : column
+    // The item that is the scrolled content, whose size is the flickable's content size.
+    readonly property Item body: root.axis === 1 ? row : column
     // The bar's part, `MorphScrollBar` or its restyle, which C++ passes at creation; instantiated once, on the axis.
     property Component bar: null
     // The bar made from `bar`, or null without one.
@@ -30,8 +33,8 @@ MorphWidget {
         if (!item)
             return
         for (let up = item; up; up = up.parent) {
-            if (up === column) {
-                const at = item.mapToItem(column, 0, 0)
+            if (up === root.body) {
+                const at = item.mapToItem(root.body, 0, 0)
                 if (root.axis === 0) {
                     if (at.y < flick.contentY)
                         flick.contentY = at.y
@@ -48,15 +51,15 @@ MorphWidget {
         }
     }
 
-    implicitWidth: root.axis === 0 ? column.implicitWidth : Math.min(column.implicitWidth, 40 * Theme.unitWidth)
-    implicitHeight: root.axis === 0 ? Math.min(column.naturalHeight, 20 * Theme.unitHeight) : column.naturalHeight
+    implicitWidth: root.axis === 0 ? column.implicitWidth : Math.min(row.implicitWidth, 40 * Theme.unitWidth)
+    implicitHeight: root.axis === 0 ? Math.min(column.naturalHeight, 20 * Theme.unitHeight) : row.implicitHeight
     clip: true
 
     Flickable {
         id: flick
         objectName: "flick"
         anchors.fill: parent
-        contentWidth: root.axis === 0 ? (root.overX ? root.needX : width) : column.width
+        contentWidth: root.axis === 0 ? (root.overX ? root.needX : width) : row.width
         contentHeight: root.axis === 0 ? column.naturalHeight : height
         flickableDirection: root.axis === 1 ? Flickable.HorizontalFlick
                                             : root.overX ? Flickable.HorizontalAndVerticalFlick
@@ -65,12 +68,21 @@ MorphWidget {
         ScrollBar.vertical: root.axis === 0 ? root.barItem : null
         ScrollBar.horizontal: root.axis === 1 ? root.barItem : root.sideBarItem
 
-        // Along a horizontal axis the content is at least the viewport's width, so a child that stretches fills the
-        // viewport while it is narrower, and scrolls once it is wider; the terminal sizes it the same way.
+        // The content of a vertical scroll: a column as wide as the viewport, or as its minimum when that is wider.
         MorphShareColumn {
             id: column
+            visible: root.axis === 0
             height: column.naturalHeight
-            width: root.axis === 0 ? (root.overX ? root.needX : flick.width) : Math.max(implicitWidth, flick.width)
+            width: root.overX ? root.needX : flick.width
+        }
+        // The content of a horizontal scroll: a row at least as wide as the viewport, so a child that stretches fills it
+        // while it is narrower and scrolls once it is wider; the terminal sizes it the same way.
+        MorphStack {
+            id: row
+            visible: root.axis === 1
+            axis: 1
+            height: row.implicitHeight
+            width: Math.max(row.implicitWidth, flick.width)
         }
     }
 

@@ -441,3 +441,26 @@ TEST_CASE("table: with no total known, a short reply waits for the rest and an e
     CHECK(window.visible(0, 5).empty());  // page 0 is complete, page 1 still in flight
     CHECK(window.row(4) == nullptr);
 }
+
+namespace {
+
+class ThrowingFold final : public TextCollator {
+public:
+    [[nodiscard]] std::string sortKey(std::string_view text) const override { return std::string{text}; }
+    [[nodiscard]] std::string fold(std::string_view /*text*/) const override {
+        throw std::runtime_error{"collator down"};
+    }
+};
+
+}  // namespace
+
+TEST_CASE("table: a collator that throws while the filter compiles is a ServiceFailed error from apply",
+          "[table][query]") {
+    ApplyOptions options;
+    options.services.collator = std::make_shared<ThrowingFold const>();
+    TableQuery query;
+    query.filters = filterOn("analysis", FilterEntry{.contains = "pH"});
+    auto const page = apply(resultRows(10), byId(), query, options);
+    REQUIRE_FALSE(page.has_value());
+    CHECK(page.error().code == TableErrorCode::ServiceFailed);
+}

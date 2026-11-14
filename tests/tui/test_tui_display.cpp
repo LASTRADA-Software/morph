@@ -138,6 +138,24 @@ TEST_CASE("tui steps: one row per step with its state's mark", "[tui][display]")
     CHECK(steps->probeText().empty());
 }
 
+// Mutation: leave the detail out of the painted row (the first check fails), out of the natural width (the second), or
+// draw it whatever the width (the third).
+TEST_CASE("tui steps: a step's detail follows its label in brackets and is dropped from a row too narrow",
+          "[tui][display]") {
+    Harness harness{30, 5};
+    auto const steps = harness.make<StepsImpl>(nullptr);
+    steps->setSteps({{.label = "Received", .state = ui::StepState::Done, .detail = "A. Weber, 09:14"},
+                     {.label = "Verified", .state = ui::StepState::Active}});
+    CHECK(harness.draw() == Rows{"[x] Received [A. Weber, 09:14]", "[>] Verified"});
+    CHECK(steps->naturalSize().width == 30);
+    Harness narrow{29, 5};
+    auto const cut = narrow.make<StepsImpl>(nullptr);
+    cut->setSteps({{.label = "Received", .state = ui::StepState::Done, .detail = "A. Weber, 09:14"}});
+    CHECK(narrow.draw() == Rows{"[x] Received"});
+    cut->setLabelled(false);
+    CHECK(narrow.draw() == Rows{"[x]"});
+}
+
 // Mutation: draw the unlabelled indicator as the row-per-step list (it then has four rows, not one).
 TEST_CASE("tui steps: unlabelled, the marks sit in one row joined to the width", "[tui][display]") {
     Harness harness{30, 5};

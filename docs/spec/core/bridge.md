@@ -174,6 +174,21 @@ never look at the two remote-path callables. See
 [backend.md](backend.md), "Why the callables are function pointers", for the
 measurement and for the borrow contract that shape carries.
 
+**`localOp` and `localTaskOp` run the action's guard.** After the validator
+and immediately before `Model::execute` (for a `Task` handler, before the Task
+is created), both run the guard the action declares (`Action::guard`), under
+the call's session on the model's strand, through the same
+`detail::runGuardJournaled` the server's runners use: a refusal resolves the
+`Completion` through `onError`, is journaled as `Outcome::Failed` exactly as a
+throw from `execute` is, and reaches the model's `onGuardRefused` when it
+declares one, so a guarded action is refused identically on `LocalBackend` and
+on every remote topology. In `localOp` the guard's call sits with the
+`execute` call inside the `MORPH_CLIENT_ONLY` exclusion. `evaluate` and
+`journal::replay()` never reach these two sites — the first runs no execution
+site at all, the second dispatches through the server's runner, which skips the
+guard for the holder replay reconstructs. See
+[action_guards.md](action_guards.md).
+
 **`localOp` is compiled — and so needs `Model::execute`'s definition to
 link — every time `executeVia<Model, Action>` is instantiated, regardless of
 which backend ends up installed at runtime.** Only `LocalBackend::execute`
@@ -343,7 +358,9 @@ continuation and every held call with `HandlerDestroyedError`; deregisters
 and removes the binding from tracking.
 
 **`setDefaultSession(session)`** / **`defaultSession()`** installs a default
-`morph::session::Context` that is attached to every `executeVia()` call.
+`morph::session::Context` that is attached to every `executeVia()` call. The
+copy is taken when the call is made: a call held behind a bind or an attach keeps
+the session in force at `execute()`, whatever the default is when it is dispatched.
 `setDefaultSession` also pushes the new session to the active backend via
 `IBackend::setSession`, so every control envelope
 (`register`/`registerShared`/`attach`/`assign`/`deregister`) the backend

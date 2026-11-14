@@ -1,0 +1,186 @@
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include <algorithm>
+#include <functional>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+#include <morph/ui/service.hpp>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "lims/app/declared_requirements.hpp"
+#include "lims/org/dto/role_dto.hpp"
+
+/// @file
+/// This rung's one `IAuthorizer`: the coarse, type-level half of the
+/// four-eyes control (README build order §6).
+///
+/// @par What it can and cannot do, exactly
+/// `IAuthorizer::authorize` is handed the caller's `Context` plus the target
+/// **model type** and **action type** ids — and nothing else. It can answer
+/// "may this principal ever verify a result?" from the declared roles
+/// (`lims::app::declaredRequirements`); it cannot answer "may this principal
+/// verify *this* result?", because it never sees the result, its site or who
+/// captured it.
+///
+/// The action's guard (`lims::DeclaredRuleGuard`) enforces every declared rule
+/// on every execution, whichever way the call arrives. This class is not that
+/// enforcement: on the server its per-id answer refuses a principal who holds
+/// no role the action could need before the payload is decoded, and it is what
+/// admits watches. A watch runs no action and so no guard, and `authorize` is
+/// not told whether it answers an execute or a watch; `RemoteServer` admits a
+/// watch on a record when the principal is authorized for some action holding
+/// it, and a watch on a model's instances when authorized for any of the
+/// model's actions. The table is therefore not narrowed to what a guard would
+/// refuse anyway.
+///
+/// @par Reads
+/// An action that declares no rule is still an action holding records, and a
+/// watch is admitted through it. For the models that keep a company's ledger
+/// and billing (`isBooksModel`) the answer for such an action is "holds some
+/// role", so reading or watching those records needs a role, not only a valid
+/// token.
+///
+/// @par Why it derives from `SigningAuthorizer`
+/// A role gate is only worth anything if the principal is authenticated. A
+/// non-authenticating authorizer returns `nullopt` from `authenticate()`, and
+/// `RemoteServer` then **clears** `Context::principal` before dispatch rather
+/// than passing the client's unverified claim through — so there is no
+/// identity for a role check to key on at all. An authorizer that gates
+/// nothing on identity can derive from `AllowAllAuthorizer`; this rung's
+/// cannot.
+///
+/// @par Where the roles come from
+/// From a caller-supplied `RoleLookup`, which production wires to the
+/// `org_role_assignments` table, through `OrgModel::rolesAnywhere` — the same
+/// table every model's own check reads. One source of truth, two enforcement points. Deliberately *not* the token's
+/// own `roles` claim: a token is minted once and lives for its expiry, so a role revoked mid-shift would keep working
+/// until the token aged out, which in a 21 CFR Part 11-framed lab is the wrong default. The claim is still available
+/// and a deployment that wants token-carried roles can supply a `RoleLookup` that reads it.
+
+namespace lims::auth {
+
+/// @brief Looks up every role a principal currently holds.
+///
+/// A `std::function` rather than a hard-wired database read so the policy is
+/// unit-testable without a schema, and so a deployment can source roles from
+/// somewhere else (LDAP, the token's own claim) without touching this class.
+using RoleLookup = std::function<std::vector<LimsRole>(std::string_view principal)>;
+
+/// @brief This rung's authorizer: a signed-token gate plus a role check on the
+///        actions that declare a role.
+class LimsAuthorizer : public ::morph::session::SigningAuthorizer {
+public:
+    /// @param secret Shared secret tokens are signed with.
+    /// @param roles How to look up a principal's current roles.
+    ///
+    /// Names the MAC primitive explicitly rather than taking
+    /// `SigningAuthorizer`'s default. Under `-DMORPH_REQUIRE_VETTED_HMAC` that
+    /// default does not exist -- the option's whole purpose is to make an
+    /// application call site state its choice instead of inheriting one -- and
+    /// this class is exactly such a call site, so relying on the default made
+    /// the rung unbuildable under that option. Passing `hmacSha256` here
+    /// compiles either way and says which primitive the rung uses.
+    ///
+    /// A real deployment injects a vetted implementation through the overload
+    /// below; see `docs/spec/security.md`, "Recommended production wiring: a vetted library".
+    LimsAuthorizer(std::string secret, RoleLookup roles)
+        : ::morph::session::SigningAuthorizer{std::move(secret), ::morph::session::hmacSha256},
+          _roles{std::move(roles)} {}
+
+    /// @brief As above, with an injected MAC primitive.
+    /// @param secret Shared secret tokens are signed with.
+    /// @param mac    MAC primitive to sign and verify with.
+    /// @param roles  How to look up a principal's current roles.
+    LimsAuthorizer(std::string secret, ::morph::session::MacFunction mac, RoleLookup roles)
+        : ::morph::session::SigningAuthorizer{std::move(secret), std::move(mac)}, _roles{std::move(roles)} {}
+
+    /// @brief Allows the call iff the token verifies **and** the caller holds
+    ///        whatever role the action requires.
+    ///
+    /// The bootstrap carve-out `AssignRole`'s guard implements —
+    /// the first assignment on a lab with no supervisor — is deliberately **not**
+    /// mirrored here. This layer cannot see whether the lab has a supervisor
+    /// yet without a second lookup, and duplicating a security exception in two
+    /// places is how the two copies drift; the guard is the one
+    /// that decides, and it runs on every path including this one. The
+    /// practical consequence is stated in the rung README: the very first
+    /// `AssignRole` must be made locally (or by a principal already holding
+    /// `Supervisor`), never remotely against an empty lab.
+    /// @param ctx        Per-call session (its `token` is verified upstream).
+    /// @param modelType  Target model type id.
+    /// @param actionType Target action type id.
+    /// @return `true` to allow dispatch, `false` to reject.
+    [[nodiscard]] bool authorize(const ::morph::session::Context& ctx,
+                                 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                                 std::string_view modelType, std::string_view actionType) const override {
+        // lims serves its sign-in screen, so a client with no token yet may greet the UI service, read its catalog
+        // and fetch that screen; every other screen stays behind its own queries' authorisation. Signing in is how a
+        // client gets its token, so it needs none.
+        if (::morph::ui::isUiServiceRead(modelType, actionType) ||
+            (modelType == "LimsAuth" && actionType == "LimsLogin")) {
+            return true;
+        }
+        if (!::morph::session::SigningAuthorizer::authorize(ctx, modelType, actionType)) {
+            return false;
+        }
+        // The token verified, so `authenticate()` gives the identity the server
+        // is about to make authoritative. Keying the role check on anything
+        // else — `ctx.principal` as the client sent it, say — would be keying
+        // it on unverified wire input.
+        const auto principal = authenticate(ctx);
+        if (!principal.has_value()) {
+            return false;
+        }
+        // The edge sees no payload, so it asks whether the principal holds the declared role anywhere; the scope, a
+        // value limit and a separation-of-duties pair are judged by the action's guard, which has the payload.
+        if (auto const requirement = ::lims::app::requirementFor(actionType)) {
+            return requirement->role.has_value() ? holds(*principal, *requirement->role) : holdsAny(*principal);
+        }
+        // An action with no declared rule still reaches the records of a company's books: a watch admits a principal
+        // authorized for any action holding the record, and a read holds it too. For the ledger and billing models
+        // that answer is "holds some role", so a read cannot admit a principal with no role.
+        if (isBooksModel(modelType)) {
+            return holdsAny(*principal);
+        }
+        return true;
+    }
+
+private:
+    /// @brief Whether @p modelType keeps a company's ledger or billing records.
+    /// @param modelType The model type id.
+    /// @return `true` for the ledger, ledger-report, price-list, invoice, invoice-edit and billing-run models.
+    [[nodiscard]] static bool isBooksModel(std::string_view modelType) noexcept {
+        return modelType == "LedgerModel" || modelType == "LedgerReportModel" || modelType == "PriceListModel" ||
+               modelType == "InvoiceModel" || modelType == "InvoiceEditModel" || modelType == "BillingRunModel";
+    }
+
+    /// @brief Whether @p principal currently holds @p role.
+    /// @param principal The authenticated principal.
+    /// @param role The role to check for.
+    /// @return `true` when the lookup reports the role.
+    [[nodiscard]] bool holds(const std::string& principal, LimsRole role) const {
+        if (!_roles) {
+            // Fail closed. An authorizer with no way to look up roles must
+            // refuse the role-gated actions, not wave them through.
+            return false;
+        }
+        const auto held = _roles(principal);
+        return std::ranges::find(held, role) != held.end();
+    }
+
+    /// @brief Whether @p principal currently holds any role at all.
+    /// @param principal The authenticated principal.
+    /// @return `true` when the lookup reports at least one role.
+    [[nodiscard]] bool holdsAny(const std::string& principal) const {
+        // Fails closed like `holds`.
+        return _roles && !_roles(principal).empty();
+    }
+
+    RoleLookup _roles;
+};
+
+}  // namespace lims::auth

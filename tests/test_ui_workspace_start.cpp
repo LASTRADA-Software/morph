@@ -471,13 +471,13 @@ TEST_CASE("navigator: a count sits at the end of its entry, named with it, and t
     REQUIRE(menu.size() == 5);
     CHECK(menu.at(0).label == "Users");
     CHECK(menu.at(1).separator);
-    CHECK(menu.at(2).label == "Lab / Work");
+    CHECK(menu.at(2).label == "Work");
     REQUIRE(menu.at(2).items.size() == 2);
     CHECK(menu.at(2).items.at(0).label == "Samples");
     CHECK(menu.at(2).items.at(0).checked == true);
     CHECK(menu.at(2).items.at(1).label == "Results · 4");
     CHECK_FALSE(menu.at(2).items.at(1).checked.has_value());
-    CHECK(menu.at(3).label == "Lab / Office");
+    CHECK(menu.at(3).label == "Office");
     CHECK_FALSE(menu.at(3).items.at(0).enabled);
     CHECK(menu.at(4).label == "Admin");
 

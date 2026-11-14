@@ -179,7 +179,8 @@ MorphField {
                                                                 : root.role === 8 ? Theme.smallFont
                                                                 : root.role === 9 ? Theme.overlineFont
                                                                 : root.role === 12 ? Theme.headlineFont
-                                                                : root.role === 10 || root.role === 11 ? Theme.captionFont
+                                                                : root.role === 11 ? Theme.fieldCaptionFont
+                                                                : root.role === 10 ? Theme.captionFont
                                                                                    : Theme.fontOf(Theme.bodyPixels,
                                                                                                   Font.Normal),
                               root.role === 6 ? Theme.monoFamilies : Theme.families, root.tabularFigures)

@@ -158,6 +158,12 @@ and the placement), so a hidden copy is in neither the layout nor the accessibil
 | `inline` | `HeadParts::inlineLead` | `head_lead_inline`, `head_subtitle_inline`, `head_status_inline_<n>` | stretches, with no minimum: it fills the width the title line gives it, so its subtitle wraps there |
 | `end` | inside `HeadParts::trail`, between the tools and the actions | `head_lead_end`, `head_subtitle_end`, `head_status_end_<n>` | content-sized |
 
+A shell whose application declares [parts](shell_parts.md) (search, inbox or the principal's menu) builds its workspace
+with `HeadPlacement::InPage`: the head is in the page, the top bar holds the parts, and `headPartsForActive()` is not
+mounted into the frame. A screen reads the shell's scope as `{"env": "context"}`, and the workspace opens the screens a
+search hit names as tabs (`navigate`, `as: tab`) in the order given, the first one active. `Workspace::dirtyTabs()` counts
+the tabs with unsaved changes and `closeDirtyTabs()` closes them without asking, for the shell's scope switch.
+
 A lead at the `end` counts as trail content. In the page (`HeadPlacement::InPage`) the tab bar carries the title, so
 `inline` draws as `below` there, and `end` sits in the trail. `activeLeadPlacement()` is a tracked read of the active
 head's place (`Below` with no active tab), `activeHeadOneLine()` of whether the head has no eyebrow and nothing under the
@@ -277,7 +283,16 @@ A name with no factory refuses the mount with `no host screen `<name>` is regist
 - **Unavailable entries** are disabled, with their reason as the tooltip, and neither open nor prefetch.
 - **Search.** The search (`navigator_search`) shows the entries one of whose titles contains the text, ignoring
   ASCII case, and the headings of the groups that still show an entry.
-  - `NavigatorOptions::titles` gives an entry's titles, one per locale (spec 6 §19), and the first one is shown.
+  - `NavigatorOptions::titles` gives an entry's titles, one per locale (spec 6 §19), and the first one is shown;
+    the client gives the active locale's first (`catalogTitlesIn`). The title text's test id is `nav_title_<id>`.
+  - The heading is the group, or the module when the entry has no group, through `NavigatorOptions::label` when one
+    is given and as written when not (there is no `module / group` join); the test ids
+    `navigator_group_<module>/<group>` are unchanged.
+  - `relabel()` re-reads every entry's titles and every heading, and so updates the entry buttons and their accessible
+    names (with their badges, "Review, 4"), the pin buttons, the group headings and the search filter over the new
+    titles; it keeps the pins, the current entry, the badges and the search text. It then calls the on-changed handler
+    so `menuEntries()` follows. The client calls it on a locale
+    change and after a reload that changed a catalogue.
   - Without it, the title is `catalogTitles(entry, nullptr)`: the entry's string, or a message reference's
     `fallback`, else the entry's id.
   - `focusSearch()` is what the navigator's shortcut calls.

@@ -165,11 +165,16 @@ TEST_CASE("shell frame: the head shares the title's wrapping line, its slots sho
     // slot; the inline lead shares the title's line.
     CHECK(backend.prop(main, "wrap") == "true");
     CHECK(backend.prop(main, "justify") == "end");
-    REQUIRE(backend.children(main).size() == 3);
+    // The top bar's tools (search, inbox, the person's menu) stand between the menu and the lead block, hidden until
+    // the application declares a part.
+    int const tools = backend.find("Row", "testId", "shell_topbar_tools").value();
+    REQUIRE(backend.children(main).size() == 4);
     CHECK(backend.children(main).at(0) == menu);
+    CHECK(backend.children(main).at(1) == tools);
+    CHECK(backend.prop(tools, "visible") == "false");
     int const trail = backend.find("Row", "testId", "shell_head_trail").value();
     int const principal = backend.find("Text", "testId", "shell_head_principal").value();
-    int const block = backend.children(main).at(1);
+    int const block = backend.children(main).at(2);
     CHECK(backend.prop(block, "layout") == "stretch(1) min=32/content");
     int const titleLine = backend.find("Row", "testId", "shell_title_line").value();
     int const inlineSlot = backend.find("Row", "testId", "shell_head_inline").value();
@@ -177,7 +182,7 @@ TEST_CASE("shell frame: the head shares the title's wrapping line, its slots sho
     CHECK(backend.prop(titleLine, "wrap") == "true");
     CHECK(backend.children(titleLine) == std::vector<int>{title, inlineSlot});
     // The trail is a wrapping row of the slot and the principal: an empty slot takes no gap before the principal.
-    CHECK(backend.children(main).at(2) == trail);
+    CHECK(backend.children(main).at(3) == trail);
     CHECK(backend.prop(trail, "wrap") == "true");
     CHECK(backend.children(trail) == std::vector<int>{slot, principal});
     std::vector<int> const lineChildren = backend.children(backend.find("Row", "testId", "shell_topbar_line").value());
@@ -370,7 +375,7 @@ TEST_CASE("shell frame: an inline lead shows its slot on the title's line and ch
     ShellFrame frame{backend, nullptr, frameOptions(opened, signOuts)};
     int const main = backend.find("Row", "testId", "shell_topbar_main").value();
     int const inlineSlot = backend.find("Row", "testId", "shell_head_inline").value();
-    int const block = backend.children(main).at(1);
+    int const block = backend.children(main).at(2);
     std::string const blockLayout = backend.prop(block, "layout");
     std::string const slotLayout = backend.prop(inlineSlot, "layout");
 

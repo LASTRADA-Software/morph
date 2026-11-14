@@ -97,7 +97,11 @@ application. Be explicit about the boundary:
 - **Local-path authorization.** `LocalBackend` installs the session
   context around each action but never calls the authorizer (the authorizer is a remote-only gate,
   `remote.hpp` `dispatchExecute` is the sole call site). Security-critical checks
-  must be enforced inside the model so they hold in both modes.
+  must be enforced inside the model so they hold in both modes. A check that
+  reads the payload or the instance is declared as the action's guard
+  ([core/action_guards.md](core/action_guards.md)), which the framework runs on
+  both paths before `Model::execute`. The authorizer's id-level answer still
+  admits watches, which run no action and so no guard.
 
 ## The trust boundary: `Context` is untrusted input
 
@@ -303,14 +307,18 @@ judge a token:
 - `authorize(ctx, modelType, actionType)` returns `true` only for a token with a
   valid signature and unexpired claims — and, if a `Policy` is supplied, one the
   policy admits. An invalid/absent/expired token → `false` → the server replies
-  `err "unauthorized"`.
+  `err "unauthorized"` (`wire::kUnauthorizedMessage`). Clients classify exactly that text, and a failed `register` or
+  `attach` that carries it as `wire::UnauthorizedError`, as the error kind `denied`; see
+  [the wire spec](core/wire.md#a-refusal-by-the-authoriser).
 - `authenticate(ctx)` returns the verified `principal`.
 - `admit(ctx, modelType, actionType)` answers both from **one** verification.
   It verifies the token, then calls `authenticate` and `authorize` through the
   vtable, as the default does, so a subclass that overrides either keeps its
   own decision — a carve-out that needs no token, or a rule stricter than the
   token's. While `admit` runs, `SigningAuthorizer`'s own `authenticate` and
-  `authorize` answer from that verification instead of verifying again. `RemoteServer` (`dispatchExecute`) calls it once per `execute`, on
+  `authorize` answer from that verification instead of verifying again. `authorize` is called with a `ctx` whose
+  `principal` is the verified one (empty when the token does not verify), so a role or tenant check reading
+  `ctx.principal` sees the same value on `execute` as on every other envelope. `RemoteServer` (`dispatchExecute`) calls it once per `execute`, on
   entry, before any admission check, and once the call is allowed
   **overwrites** `env.session.principal` with the verified value before
   building the `ScopedContext`. So a model reading

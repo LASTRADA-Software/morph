@@ -374,4 +374,49 @@ struct TitleParts {
     return {parts.fallback.value_or(entry.id)};
 }
 
+/// @brief A catalog entry's titles with the one in @p locale first: what a navigator shows and searches.
+///
+/// The title in @p locale (`catalogTitle`), then every other locale's title that differs from it, so a search matches
+/// a title in any language and the first one shown is the person's own.
+/// @param entry      The entry.
+/// @param catalogues The message catalogues, or null for none.
+/// @param locale     The BCP 47 locale to show first.
+/// @return The titles; never empty.
+[[nodiscard]] inline std::vector<std::string> catalogTitlesIn(CatalogEntry const& entry,
+                                                              MessageCatalogues const* catalogues,
+                                                              std::string_view locale) {
+    std::vector<std::string> out{catalogTitle(entry, catalogues, locale)};
+    for (std::string& title : catalogTitles(entry, catalogues)) {
+        if (std::ranges::find(out, title) == out.end()) {
+            out.push_back(std::move(title));
+        }
+    }
+    return out;
+}
+
+/// @brief Text that may be a message key, as a heading is: its message when a catalogue holds the key, else itself.
+///
+/// The message comes from the first of: the catalogue for @p locale (the exact tag, then each shorter one), the `en`
+/// catalogue, any other catalogue that holds the key. It is formatted with no arguments. A heading has no fallback
+/// text, so a locale without a catalogue shows `en`'s words rather than the key.
+/// @param catalogues The message catalogues.
+/// @param text       The text, a message key or plain text.
+/// @param locale     The BCP 47 locale.
+/// @return The message, or @p text as written when no catalogue holds it as a key.
+[[nodiscard]] inline std::string catalogLabel(MessageCatalogues const& catalogues, std::string_view text,
+                                              std::string_view locale) {
+    std::vector<std::string> tried{std::string{locale}, "en"};
+    for (std::string const& other : catalogues.locales()) {
+        tried.push_back(other);
+    }
+    for (std::string const& where : tried) {
+        if (auto const pattern = catalogues.lookup(text, where)) {
+            if (auto shown = detail::catalogue::formatPattern(*pattern, where)) {
+                return std::move(*shown);
+            }
+        }
+    }
+    return std::string{text};
+}
+
 }  // namespace morph::ui

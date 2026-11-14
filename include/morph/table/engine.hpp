@@ -992,15 +992,9 @@ private:
         }
     }
 
-    // compileFilter, with an exception from the collator or date parser as an error.
+    // The shared guarded compile: an exception from the collator or date parser is an error.
     [[nodiscard]] std::expected<CompiledFilter, TableError> compile(FilterSpec const& spec) const {
-        try {
-            return compileFilter(spec, _columns, _options.services);
-        } catch (std::exception const& error) {
-            return std::unexpected(serviceFailed(error.what()));
-        } catch (...) {
-            return std::unexpected(serviceFailed("unknown exception"));
-        }
+        return compileFilterGuarded(spec, _columns, _options.services);
     }
 
     [[nodiscard]] static TableError serviceFailed(std::string const& what) {

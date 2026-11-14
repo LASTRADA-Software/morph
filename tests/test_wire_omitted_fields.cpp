@@ -59,6 +59,7 @@ morph::wire::Envelope fullyPopulated() {
     env.session.metadata["flag"] = "on";
     env.protocolVersion = 7U;
     env.cancelCallId = 11U;
+    env.refusal = morph::wire::RefusalBody{.code = "probe.taken", .args = {{"holder", "Alice"}}};
     return env;
 }
 
@@ -81,6 +82,13 @@ void requireEqual(const morph::wire::Envelope& lhs, const morph::wire::Envelope&
     CHECK(lhs.session.metadata == rhs.session.metadata);
     CHECK(lhs.protocolVersion == rhs.protocolVersion);
     CHECK(lhs.cancelCallId == rhs.cancelCallId);
+    REQUIRE(lhs.refusal.has_value() == rhs.refusal.has_value());
+    if (lhs.refusal) {
+        CHECK(lhs.refusal->code == rhs.refusal->code);
+        REQUIRE(lhs.refusal->args.size() == rhs.refusal->args.size());
+        CHECK(lhs.refusal->args.front().name == rhs.refusal->args.front().name);
+        CHECK(lhs.refusal->args.front().value == rhs.refusal->args.front().value);
+    }
 }
 
 }  // namespace

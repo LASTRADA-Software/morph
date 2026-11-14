@@ -59,6 +59,14 @@ public:
     void applyVisible(bool visible);
     /// Shown or hidden by its container (a collapsed panel), independently of `visible`.
     void setStructuralVisible(bool visible);
+    /// Whether a table has lifted this cell out of its row to draw it over the rows below (a spanning cell): the
+    /// cell's view is then a child of the table's, placed by the table, and its row neither places it nor counts it in
+    /// its height.
+    [[nodiscard]] bool lifted() const noexcept { return _lifted; }
+    void setLifted(bool lifted) noexcept { _lifted = lifted; }
+    /// Whether a table hides this cell because a spanning cell above covers it.
+    [[nodiscard]] bool spanCovered() const noexcept { return _spanCovered; }
+    void setSpanCovered(bool covered) noexcept { _spanCovered = covered; }
     [[nodiscard]] bool userVisible() const noexcept { return _userVisible; }
     [[nodiscard]] bool shown() const noexcept { return _userVisible && _structuralVisible; }
     void applyEnabled(bool enabled);
@@ -225,6 +233,8 @@ private:
     ContainerBase* _container = nullptr;
     bool _userVisible = true;
     bool _structuralVisible = true;
+    bool _lifted = false;
+    bool _spanCovered = false;
     bool _enabled = true;
     ui::LayoutHints _layout{};
     std::optional<ui::Key> _dragKey;

@@ -2,18 +2,19 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 
-// Points against a numeric axis, with horizontal reference lines, painted on one Canvas from the ChartData the C++
-// widget writes as `chart`. Every text arrives formatted; only positions are computed here. The axis labels (the
+// Points or bars against a numeric axis, with horizontal reference lines, painted on one Canvas from the ChartData the
+// C++ widget writes as `chart`. Every text arrives formatted; only positions are computed here. The axis labels (the
 // reference lines' when three or more label the axis, else the ticks) sit in a gutter at the left, the points' labels
 // in a row below the plot, and the legend below that when there are two or more series. A series is told apart by
 // its shape as well as its colour, a marked point by a cross no series uses, and a clipped point by an open triangle
-// at the edge it lies beyond, so nothing rests on colour alone.
+// at the edge it lies beyond, so nothing rests on colour alone. The bars of several series stand side by side at each
+// position, in series order, and are told apart by that place as well as by colour.
 MorphWidget {
     id: root
 
-    // {xMin, xMax, yMin, yMax, yLabel, ticks: [{value, text}], lines: [{value, label, tone, style}],
-    //  series: [{label, joined, points: [{x, y, gap, clip, xLabel, tone, note}]}]}; tone -1 is none, clip 0 none,
-    //  1 below, 2 above, style 0 solid, 1 dashed, 2 dotted.
+    // {xMin, xMax, yMin, yMax, barSlot, yLabel, ticks: [{value, text}], lines: [{value, label, tone, style}],
+    //  series: [{label, joined, style, points: [{x, y, gap, clip, xLabel, tone, note}]}]}; tone -1 is none, clip 0
+    //  none, 1 below, 2 above, a line's style 0 solid, 1 dashed, 2 dotted, a series' style 0 line, 1 bars.
     property var chart: ({})
     property string summary: ""
 
@@ -142,6 +143,39 @@ MorphWidget {
                     ctx.fillText(tick.text, left - unitW / 2, py(tick.value))
             }
 
+            // The bars, tallest first: of two bars sharing room the one whose tip is
+            // nearer the baseline is drawn over the other, the later series over the earlier on a tie.
+            const barSeries = []
+            for (let index = 0; index < data.series.length; ++index)
+                if (data.series[index].style === 1)
+                    barSeries.push(index)
+            const baseline = Math.min(Math.max(0, data.yMin), data.yMax)
+            const groupWidth = Math.max(barSeries.length, 0.8 * data.barSlot * (right - left) / xSpan)
+            const barWidth = groupWidth / Math.max(1, barSeries.length)
+            // A bar's centre and its tip's side: up for a value above the baseline or beyond the upper end.
+            const barCentre = (index, point) =>
+                px(point.x) - groupWidth / 2 + (barSeries.indexOf(index) + 0.5) * barWidth
+            const barUp = point => point.clip === 2 || (point.clip === 0 && point.y >= baseline)
+            const bars = []
+            for (const index of barSeries) {
+                for (const point of data.series[index].points) {
+                    if (point.gap)
+                        continue
+                    const tip = py(point.y)
+                    bars.push({
+                        x: barCentre(index, point) - barWidth / 2,
+                        top: Math.min(tip, py(baseline)),
+                        height: Math.abs(tip - py(baseline)),
+                        colour: point.tone >= 0 ? root.toneOf(point.tone) : root.seriesColor(index)
+                    })
+                }
+            }
+            bars.sort((a, b) => b.height - a.height)
+            for (const bar of bars) {
+                ctx.fillStyle = bar.colour
+                ctx.fillRect(bar.x, bar.top, barWidth, bar.height)
+            }
+
             // The reference lines, then their labels: in the gutter when they label the axis, else at their right end.
             ctx.lineWidth = 1
             for (const line of data.lines) {
@@ -167,6 +201,8 @@ MorphWidget {
             for (let index = 0; index < data.series.length; ++index) {
                 const series = data.series[index]
                 const colour = root.seriesColor(index)
+                if (series.style === 1)
+                    continue
                 if (series.joined) {
                     ctx.strokeStyle = colour
                     ctx.lineWidth = 1.5
@@ -197,8 +233,10 @@ MorphWidget {
                 for (const point of data.series[index].points) {
                     if (point.gap)
                         continue
-                    const x = px(point.x)
-                    const y = py(point.y)
+                    const isBar = data.series[index].style === 1
+                    const x = isBar ? barCentre(index, point) : px(point.x)
+                    // A bar's cross and note sit half a unit beyond its tip; its triangle is on the axis end.
+                    const y = py(point.y) + (isBar && point.clip === 0 ? (barUp(point) ? -unitH / 2 : unitH / 2) : 0)
                     const colour = point.tone >= 0 ? root.toneOf(point.tone) : root.seriesColor(index)
                     if (point.clip !== 0) {
                         ctx.strokeStyle = colour
@@ -259,7 +297,10 @@ MorphWidget {
                 ctx.textAlign = "left"
                 for (let index = 0; index < data.series.length; ++index) {
                     ctx.fillStyle = root.seriesColor(index)
-                    marker(ctx, index, x + 3, y)
+                    if (data.series[index].style === 1)
+                        ctx.fillRect(x, y - 0.4 * unitH, unitW, 0.8 * unitH)
+                    else
+                        marker(ctx, index, x + 3, y)
                     ctx.fillStyle = root.scheme.text
                     ctx.fillText(data.series[index].label, x + 3 + unitW, y)
                     x += 3 + 2 * unitW + ctx.measureText(data.series[index].label).width

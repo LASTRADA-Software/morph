@@ -144,6 +144,20 @@ namespace detail::engine {
     return quotient.has_value() && quotient->isInteger();
 }
 
+/// @brief The canonical text of a Decimal node `{num, den, dp}`, at the node's own places.
+/// @param node The node.
+/// @return The text, or `std::nullopt` when `num` or `den` is missing, or `den` is zero.
+[[nodiscard]] inline std::optional<std::string> decimalObjectText(Json const& node) {
+    auto const num = SchemaReader::signedOf(member(node, "num"));
+    auto const den = SchemaReader::signedOf(member(node, "den"));
+    if (!num || !den || *den == 0) {
+        return std::nullopt;
+    }
+    auto const places = SchemaReader::unsignedOf(member(node, "dp")).value_or(0);
+    math::Rational const exact{math::Numerator{*num}, math::Denominator{*den}, math::DecimalPlaces{0}};
+    return decimalText(exact, static_cast<std::uint32_t>(std::min<std::uint64_t>(places, math::kMaxDecimalPlaces)));
+}
+
 /// @brief A canonical decimal in @p locale's spelling, without grouping — what a control is seeded with.
 /// @param canonical Canonical decimal text.
 /// @param locale    The display locale.
@@ -208,15 +222,19 @@ namespace detail::engine {
 /// @param spec    The field.
 /// @param text    The trimmed draft.
 /// @param context The locale and messages.
+/// @param places  The field's places when a record gives it its own; they bound the accepted fraction digits in place
+///                of `spec.displayDecimals`.
 /// @return The encoding.
-[[nodiscard]] inline Encoding encodeNumber(FieldSpec const& spec, std::string_view text, ValueContext const& context) {
+[[nodiscard]] inline Encoding encodeNumber(FieldSpec const& spec, std::string_view text, ValueContext const& context,
+                                           std::optional<std::uint32_t> places = std::nullopt) {
     auto const canonical = render::normalizeLocaleNumber(text, context.locale);
     if (!canonical || !isCanonicalDecimal(*canonical)) {
         return std::unexpected(fieldError("malformed", context));
     }
     auto const dot = canonical->find('.');
-    std::size_t const places = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
-    if (spec.displayDecimals && places > *spec.displayDecimals) {
+    std::size_t const typed = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
+    auto const allowed = places ? places : spec.displayDecimals;
+    if (allowed && typed > *allowed) {
         return std::unexpected(fieldError("too-precise", context));
     }
     if (auto const violation = decimalBounds(spec, *canonical, context)) {
@@ -233,19 +251,27 @@ namespace detail::engine {
 /// @param text    The trimmed draft.
 /// @param unit    Index into `spec.units`.
 /// @param context The locale and messages.
+/// @param places  The field's places when a record gives it its own: what `x-decimalPlaces` means, so the canonical
+///                unit's entry places and the wire `dp`. A draft typed in another unit keeps that unit's places.
 /// @return The encoding.
 [[nodiscard]] inline Encoding encodeExact(FieldSpec const& spec, std::string_view text, std::size_t unit,
-                                          ValueContext const& context) {
+                                          ValueContext const& context,
+                                          std::optional<std::uint32_t> places = std::nullopt) {
     UnitOption const fallback{
         .id = spec.unitAscii, .display = spec.unit, .decimals = spec.decimalPlaces.value_or(0), .num = 1, .den = 1};
-    UnitOption const& entry = unit < spec.units.size() ? spec.units.at(unit) : fallback;
+    UnitOption entry = unit < spec.units.size() ? spec.units.at(unit) : fallback;
+    std::optional<std::uint32_t> const own =
+        places.has_value() ? std::optional<std::uint32_t>{std::min(*places, math::kMaxDecimalPlaces)} : std::nullopt;
+    if (own.has_value() && (unit == 0 || unit >= spec.units.size())) {
+        entry.decimals = *own;
+    }
     auto const canonical = render::normalizeLocaleNumber(text, context.locale);
     if (!canonical || !isCanonicalDecimal(*canonical)) {
         return std::unexpected(fieldError("malformed", context));
     }
     auto const dot = canonical->find('.');
-    std::size_t const places = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
-    if (places > entry.decimals) {
+    std::size_t const typedPlaces = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
+    if (typedPlaces > entry.decimals) {
         return std::unexpected(fieldError("too-precise", context));
     }
     auto const typed = render::parseDecimal(*canonical, render::NumericLocale{}, entry.decimals);
@@ -263,7 +289,7 @@ namespace detail::engine {
     }
     std::int64_t const num = scaled * entry.num;
     std::int64_t const den = scale * entry.den;
-    std::uint32_t const canonDp = spec.decimalPlaces.value_or(0);
+    std::uint32_t const canonDp = own.value_or(spec.decimalPlaces.value_or(0));
     math::Rational const value{math::Numerator{num}, math::Denominator{den}, math::DecimalPlaces{canonDp}};
     if (spec.minimum && compareRationalToDecimal(value, *spec.minimum) == std::strong_ordering::less) {
         return std::unexpected(fieldError("below-minimum", context));
@@ -342,10 +368,13 @@ namespace detail::engine {
 /// @param draft   What the user typed, or what a control holds (an option's `valueJson`, `true`/`false`).
 /// @param unit    For a Decimal or Quantity, the index into `spec.units` the draft is typed in.
 /// @param context The locale, display zone and translations.
+/// @param places  For a Number, Decimal or Quantity, the field's places when a record gives it its own (see
+///                `encodeExact`).
 /// @return The encoding.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind.
 [[nodiscard]] inline Encoding encodeScalar(FieldSpec const& spec, std::string_view draft, std::size_t unit,
-                                           ValueContext const& context) {
+                                           ValueContext const& context,
+                                           std::optional<std::uint32_t> places = std::nullopt) {
     using namespace detail::engine;
     std::string_view const text = trim(draft);
     if (text.empty()) {
@@ -415,10 +444,10 @@ namespace detail::engine {
         case FieldKind::Slider:
             return spec.jsonType == "number" ? encodeNumber(spec, text, context) : encodeInteger(spec, text, context);
         case FieldKind::Number:
-            return encodeNumber(spec, text, context);
+            return encodeNumber(spec, text, context, places);
         case FieldKind::Decimal:
         case FieldKind::Quantity:
-            return encodeExact(spec, text, unit, context);
+            return encodeExact(spec, text, unit, context, places);
         case FieldKind::Array:
             return encodeArray(spec, text, context);
         case FieldKind::Object:
@@ -434,10 +463,14 @@ namespace detail::engine {
 /// @param spec    The field.
 /// @param value   The wire value (JSON null and a mismatched shape decode to blank).
 /// @param context The locale and display zone.
+/// @param places  For a Number, Decimal or Quantity, the field's places when a record gives it its own (see
+///                `encodeExact`); the value is shown at them rather than at the schema's, so what is loaded is what is
+///                accepted.
 /// @return The draft text.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity): one case per kind.
 [[nodiscard]] inline std::string decodeScalar(FieldSpec const& spec, detail::engine::Json const& value,
-                                              ValueContext const& context) {
+                                              ValueContext const& context,
+                                              std::optional<std::uint32_t> places = std::nullopt) {
     using namespace detail::engine;
     if (value.is_null()) {
         return {};
@@ -481,18 +514,20 @@ namespace detail::engine {
         case FieldKind::Slider:
             return numberText(value).value_or(std::string{});
         case FieldKind::Number: {
-            auto canonical = numberText(value);
+            // A Number field's own value is a Decimal `{num, den, dp}`, so a loaded value arrives in that shape too,
+            // shown at the places the Decimal itself carries.
+            auto canonical = value.is_object() ? decimalObjectText(value) : numberText(value);
             if (!canonical) {
                 return {};
             }
-            if (spec.displayDecimals) {
+            if (auto const padTo = places ? places : spec.displayDecimals) {
                 auto const dot = canonical->find('.');
-                std::size_t const places = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
-                if (places < *spec.displayDecimals) {
+                std::size_t const have = dot == std::string::npos ? 0 : canonical->size() - dot - 1;
+                if (have < *padTo) {
                     if (dot == std::string::npos) {
                         *canonical += '.';
                     }
-                    canonical->append(*spec.displayDecimals - places, '0');
+                    canonical->append(*padTo - have, '0');
                 }
             }
             return draftNumber(*canonical, context.locale);
@@ -505,7 +540,9 @@ namespace detail::engine {
                 return {};
             }
             math::Rational const exact{math::Numerator{*num}, math::Denominator{*den}, math::DecimalPlaces{0}};
-            return draftNumber(decimalText(exact, spec.decimalPlaces.value_or(0)), context.locale);
+            std::uint32_t const shown =
+                places.has_value() ? std::min(*places, math::kMaxDecimalPlaces) : spec.decimalPlaces.value_or(0);
+            return draftNumber(decimalText(exact, shown), context.locale);
         }
         case FieldKind::Array: {
             if (!value.is_array()) {

@@ -401,8 +401,13 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
             $MORPH_PACE_AUTO_INSTALL_FLAG
 
+      # One compile per CPU, not ninja's default of two more. The heaviest
+      # translation units peak at 2.5-3.4 GB each, so six at once outgrow a
+      # hosted runner's 16 GB, and the runner dies with exit 143 or "lost
+      # communication" rather than a compiler error. Every Linux build step
+      # below passes the same --parallel for the same reason.
       - name: Build
-        run: cmake --build --preset ${{ matrix.preset }}
+        run: cmake --build --preset ${{ matrix.preset }} --parallel "$(nproc)"
 
       # Release legs run the suite too: these are the only builds with NDEBUG
       # defined, so code on those paths runs nowhere else.
@@ -536,7 +541,7 @@ jobs:
             $MORPH_PACE_AUTO_INSTALL_FLAG
 
       - name: Build
-        run: cmake --build --preset ${{ matrix.preset }}
+        run: cmake --build --preset ${{ matrix.preset }} --parallel "$(nproc)"
 
       # A sanitizer job whose binaries are not instrumented runs the whole suite
       # and learns nothing, while reporting success. Asserting this over one
@@ -784,7 +789,7 @@ jobs:
       - name: Build
         env:
           QT_QPA_PLATFORM: offscreen
-        run: cmake --build --preset clang-coverage
+        run: cmake --build --preset clang-coverage --parallel "$(nproc)"
 
       - name: Test
         env:
@@ -792,7 +797,7 @@ jobs:
           # on a runner with no display.
           QT_QPA_PLATFORM: offscreen
         run: |
-          LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage
+          LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage -LE stress
 
       # Deliberately left on the implicit `success()`, unlike the three test
       # steps that carry `!cancelled()` (ladder-tests' scenario corpus,
@@ -894,10 +899,10 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
       # The build ends with several heavy test files at once, close to what the
-      # runner's 16 GB and 3 GB of swap can hold. The likely sign of going past
-      # it is the runner's "shutdown signal", exit 143, with no compiler error.
-      # The Build step prints the swap used. Extra swap costs nothing unless it
-      # is needed; lowering -j would slow the whole build instead.
+      # runner's 16 GB and 3 GB of swap can hold even at one compile per CPU.
+      # The likely sign of going past it is the runner's "shutdown signal",
+      # exit 143, with no compiler error. The Build step prints the swap used.
+      # Extra swap costs nothing unless it is needed.
       - name: Add swap for the build's heaviest compiles
         run: |
           sudo fallocate -l 12G /mnt/build-swap
@@ -908,7 +913,7 @@ jobs:
 
       - name: Build
         run: |
-          cmake --build --preset gcc-debug
+          cmake --build --preset gcc-debug --parallel "$(nproc)"
           free -m
           grep -E '^(pswpin|pswpout) ' /proc/vmstat
 
@@ -1208,7 +1213,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          cmake --build --preset gcc-debug
+          cmake --build --preset gcc-debug --parallel "$(nproc)"
           # ladder_bank_server is already in the all-target above whenever the
           # configure got -DMORPH_BUILD_BANK_EXAMPLE=ON, so this second
           # invocation is a no-op then. It is here for when it is not: drop that
@@ -1218,7 +1223,7 @@ jobs:
           # rule to make target" here instead. The pre-flight near the top of
           # this job cannot cover this half -- it reads the source tree, not the
           # configure.
-          cmake --build --preset gcc-debug --target ladder_bank_server
+          cmake --build --preset gcc-debug --target ladder_bank_server --parallel "$(nproc)"
 
       # ── moc output that climbs out of the build tree ─────────────────
       # Same gate as linux-qt above, and for the same reason -- see its
@@ -1524,7 +1529,7 @@ jobs:
         if: steps.filter.outputs.run == 'true'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: cmake --build --preset clang-asan
+        run: cmake --build --preset clang-asan --parallel "$(nproc)"
 
       # A sanitizer job whose binaries are not actually instrumented is worse
       # than no job: it runs the full suite, costs the full runtime and always

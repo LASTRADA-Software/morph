@@ -358,3 +358,90 @@ TEST_CASE("SigningAuthorizer::admit keeps a subclass's own authorize decisions",
     CHECK(authz.authenticate(withToken) == "verified-user");
     CHECK(clock.reads->load() - outside == 2);
 }
+
+// ── authorize() sees the verified principal on execute ───────────────────────
+
+namespace {
+
+/// Admits only a session whose `principal` is "admin", with the token's rules on top: the decision a role check
+/// makes by reading `ctx.principal` inside `authorize`.
+struct AdminByPrincipalAuthorizer final : morph::session::SigningAuthorizer {
+    using SigningAuthorizer::SigningAuthorizer;
+
+    [[nodiscard]] bool authorize(const morph::session::Context& ctx,
+                                 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                                 std::string_view modelType, std::string_view actionType) const override {
+        return ctx.principal == "admin" && SigningAuthorizer::authorize(ctx, modelType, actionType);
+    }
+};
+
+/// The same decision over the default `admit`: `authenticate` names "admin" for the token "admin-token", and
+/// nothing else.
+struct AdminByDefaultAdmit final : morph::session::IAuthorizer {
+    [[nodiscard]] bool authorize(const morph::session::Context& ctx, std::string_view,
+                                 std::string_view) const override {
+        return ctx.principal == "admin";
+    }
+    [[nodiscard]] std::optional<std::string> authenticate(const morph::session::Context& ctx) const override {
+        if (ctx.token == "admin-token") {
+            return "admin";
+        }
+        return ctx.token.empty() ? std::nullopt : std::optional<std::string>{"mallory"};
+    }
+};
+
+std::string executeAs(const std::shared_ptr<morph::session::IAuthorizer>& authz, std::string claimed,
+                      std::string token) {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto registry = makeEchoRegistry();
+    auto dispatcher = makeEchoDispatcher();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authz, dispatcher, registry);
+
+    morph::session::Context session;
+    session.principal = std::move(claimed);
+    session.token = std::move(token);
+    auto regEnv = morph::wire::makeRegister("SEC_EchoModel");
+    regEnv.session = session;
+    morph::testing::WaitReply reg;
+    server->handle(morph::wire::encode(regEnv), std::ref(reg));
+    if (!reg.await() || reg.env.kind != "ok") {
+        return "register: " + reg.env.kind;
+    }
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.modelId = reg.env.modelId;
+    req.modelType = "SEC_EchoModel";
+    req.actionType = "SEC_Echo";
+    req.body = "{}";
+    req.session = session;
+    morph::testing::WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    static_cast<void>(waiter.await());
+    return waiter.env.kind == "ok" ? waiter.env.body : waiter.env.kind + ": " + waiter.env.message;
+}
+
+}  // namespace
+
+TEST_CASE("RemoteServer::dispatchExecute: authorize() reads the verified principal, not the client's claim",
+          "[remote][auth][security]") {
+    const std::string secret = "sec-admin-key";
+    auto const tokenFor = [&](std::string who) {
+        return morph::session::TokenIssuer{secret}.issue(
+            morph::session::SessionToken{.principal = std::move(who), .expiresAtMs = 9'999'999'999'999, .roles = {}});
+    };
+    auto const signing = std::make_shared<AdminByPrincipalAuthorizer>(secret);
+    auto const plain = std::make_shared<AdminByDefaultAdmit>();
+
+    SECTION("a forged claim of admin over another principal's token is refused") {
+        CHECK(executeAs(signing, "admin", tokenFor("mallory")).starts_with("err"));
+        CHECK(executeAs(plain, "admin", "mallory-token").starts_with("err"));
+    }
+    SECTION("the verified admin is admitted whatever it claims") {
+        CHECK(executeAs(signing, "spoofed", tokenFor("admin")) == "\"admin\"");
+        CHECK(executeAs(plain, "spoofed", "admin-token") == "\"admin\"");
+    }
+    SECTION("no token leaves no principal for authorize to read") {
+        CHECK(executeAs(signing, "admin", "").contains("err"));
+        CHECK(executeAs(plain, "admin", "").contains("err"));
+    }
+}

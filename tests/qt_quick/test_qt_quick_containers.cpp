@@ -98,6 +98,16 @@ QQuickItem const* textItemOf(char const* testId, QString const& text) {
     return *found;
 }
 
+// The item named @p name inside @p root, or null.
+QQuickItem const* namedItem(QQuickItem const& root, char const* name) {
+    for (QQuickItem* const item : root.findChildren<QQuickItem*>()) {
+        if (item->objectName() == QLatin1String{name}) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
 }  // namespace
 
 TEST_CASE(
@@ -1158,6 +1168,33 @@ TEST_CASE("qt_quick containers: a scroll area brings the focused child into view
     QPointF const shown = last.mapToItem(&area, QPointF{0, 0});
     CHECK(shown.y() >= 0);
     CHECK(shown.y() + last.height() <= area.height() + 1);
+}
+
+// Mutation: make `content` in MorphScroll.qml the column on every axis.
+TEST_CASE("qt_quick containers: a horizontal scroll lays its children along its axis", "[qt_quick]") {
+    Scene scene;
+    auto scroll = scene.backend().createScroll(nullptr, ui::Axis::Horizontal);
+    scroll->setLayout({.width = ui::Sizing::fixed(60), .height = ui::Sizing::content()});
+    auto first = scene.backend().createTextInput(scroll.get(), ui::TextInputMode::SingleLine);
+    auto second = scene.backend().createTextInput(scroll.get(), ui::TextInputMode::SingleLine);
+    first->setLayout({.width = ui::Sizing::fixed(20)});
+    second->setLayout({.width = ui::Sizing::fixed(20)});
+    scene.settle();
+    QQuickItem const& left = Scene::controlOf(*first);
+    QQuickItem const& right = Scene::controlOf(*second);
+    CHECK(right.mapToScene(QPointF{0, 0}).y() == left.mapToScene(QPointF{0, 0}).y());
+    CHECK(right.mapToScene(QPointF{0, 0}).x() >= left.mapToScene(QPointF{0, 0}).x() + left.width());
+
+    // A vertical scroll still stacks them.
+    auto column = scene.backend().createScroll(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(60), .height = ui::Sizing::fixed(20)});
+    auto top = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    auto bottom = scene.backend().createTextInput(column.get(), ui::TextInputMode::SingleLine);
+    scene.settle();
+    QQuickItem const& above = Scene::controlOf(*top);
+    QQuickItem const& below = Scene::controlOf(*bottom);
+    CHECK(below.mapToScene(QPointF{0, 0}).x() == above.mapToScene(QPointF{0, 0}).x());
+    CHECK(below.mapToScene(QPointF{0, 0}).y() >= above.mapToScene(QPointF{0, 0}).y() + above.height());
 }
 
 namespace {
@@ -3494,4 +3531,179 @@ TEST_CASE("qt_quick containers: a grid's cells lie on whole pixels, so a clippin
             CHECK(item.x() + item.width() <= std::ceil(width));
         }
     }
+}
+
+// Mutations: read the screen's DPI for the sheet (the size changes with it), size the page by its content only (the
+// narrow window keeps the sheet at 794 px), place a content-sized footer from the top (its bottom edge moves with its
+// content), and take the offset from the margin box (the window lies 10 mm lower).
+TEST_CASE("qt_quick page: the sheet is 96 px to 25.4 mm, scaled to the width it is given, regions lie at their places",
+          "[qt_quick][page]") {
+    namespace ui = morph::ui;
+    Scene scene;
+    ui::PageGeometry const a4{.width = ui::Mm{210}, .height = ui::Mm{297}, .margins = ui::PageMargins{ui::Mm{10}}};
+    auto page = scene.backend().createPage(nullptr, a4);
+    auto window = scene.backend().createPageRegion(page.get(), {.anchor = ui::PageAnchor::Offset,
+                                                                .x = ui::Mm{20},
+                                                                .y = ui::Mm{45},
+                                                                .width = ui::Mm{85},
+                                                                .height = ui::Mm{45}});
+    auto footer = scene.backend().createPageRegion(page.get(), {.anchor = ui::PageAnchor::Bottom});
+    auto footerText = scene.backend().createText(footer.get());
+    footerText->setText("Footer");
+    scene.settle();
+    constexpr double kPixelsPerMm = 96.0 / 25.4;
+    QQuickItem const& sheet = Scene::itemOf(*page);
+    // The window is 800 px wide: the sheet at its own size, A4 at 794 x 1123.
+    CHECK(sheet.width() == Catch::Approx(210 * kPixelsPerMm).margin(1));
+    CHECK(sheet.height() == Catch::Approx(297 * kPixelsPerMm).margin(1));
+    QQuickItem const& windowItem = Scene::itemOf(*window);
+    CHECK(windowItem.x() == Catch::Approx(20 * kPixelsPerMm).margin(1));
+    CHECK(windowItem.y() == Catch::Approx(45 * kPixelsPerMm).margin(1));
+    CHECK(windowItem.width() == Catch::Approx(85 * kPixelsPerMm).margin(1));
+    // The footer lies on the bottom margin, whatever its content asks for.
+    QQuickItem const& footerItem = Scene::itemOf(*footer);
+    CHECK(footerItem.height() > 0);
+    CHECK(footerItem.y() + footerItem.height() == Catch::Approx((297 - 10) * kPixelsPerMm).margin(1));
+    // Narrower than the sheet: scaled down, uniformly, with the height following.
+    scene.window().resize(397, 600);
+    scene.settle();
+    scene.settle();
+    double const scale = sheet.width() / (210 * kPixelsPerMm);
+    CHECK(scale == Catch::Approx(0.5).margin(0.01));
+    CHECK(sheet.height() == Catch::Approx(297 * kPixelsPerMm * scale).margin(1));
+    // The inner item, not the regions, carries the scale.
+    CHECK(windowItem.parentItem()->scale() == Catch::Approx(scale).margin(0.001));
+    CHECK(windowItem.x() == Catch::Approx(20 * kPixelsPerMm).margin(1));
+    // Wider again: never up.
+    scene.window().resize(1600, 600);
+    scene.settle();
+    scene.settle();
+    CHECK(sheet.width() == Catch::Approx(210 * kPixelsPerMm).margin(1));
+}
+
+// Mutation: size the page by its content only (the sheet keeps its 794 px inside the narrower column and overflows
+// it).
+TEST_CASE("qt_quick page: a page in a column narrower than the sheet is as wide as the column and scaled",
+          "[qt_quick][page]") {
+    Scene scene;
+    ui::PageGeometry const a4{.width = ui::Mm{210}, .height = ui::Mm{297}, .margins = ui::PageMargins{ui::Mm{10}}};
+    auto column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    column->setLayout({.width = ui::Sizing::fixed(30)});
+    auto page = scene.backend().createPage(column.get(), a4);
+    auto region = scene.backend().createPageRegion(page.get(), {.anchor = ui::PageAnchor::Top});
+    auto text = scene.backend().createText(region.get());
+    text->setText("Body");
+    scene.settle();
+    scene.settle();
+    constexpr double kPixelsPerMm = 96.0 / 25.4;
+    QQuickItem const& columnItem = Scene::itemOf(*column);
+    QQuickItem const& sheet = Scene::itemOf(*page);
+    REQUIRE(columnItem.width() < 210 * kPixelsPerMm);
+    CHECK(sheet.width() == Catch::Approx(columnItem.width()).margin(1));
+    CHECK(sheet.height() == Catch::Approx(sheet.width() * 297 / 210).margin(1));
+}
+
+// The vocabulary before pages, measured: what a column of fixed size says about a sheet. A column of stated height
+// with a stretching spacer holds a footer at its bottom, so pinning alone is expressible; units are not millimetres.
+TEST_CASE("qt_quick page: without pages, a fixed column pins a footer but its size is in units, not millimetres",
+          "[qt_quick][page][probe]") {
+    Scene scene;
+    auto sheet = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    sheet->setLayout({.width = ui::Sizing::fixed(210), .height = ui::Sizing::fixed(297)});
+    auto body = scene.backend().createText(sheet.get());
+    body->setText("Body");
+    auto gap = scene.backend().createSpacer(sheet.get());
+    auto footer = scene.backend().createText(sheet.get());
+    footer->setText("Footer");
+    scene.settle();
+    QQuickItem const& column = Scene::itemOf(*sheet);
+    QQuickItem const& footerItem = Scene::itemOf(*footer);
+    // The footer lies on the column's bottom edge.
+    CHECK(footerItem.y() + footerItem.height() == Catch::Approx(column.height()).margin(1));
+    // 210 units are not 210 mm: the size follows the font.
+    CHECK(column.width() != Catch::Approx(210 * 96.0 / 25.4).margin(20));
+}
+
+// Mutation: leave `overflow` unwritten (the mark stays hidden).
+TEST_CASE("qt_quick page: a region whose content does not fit shows its overflow mark", "[qt_quick][page]") {
+    Scene scene;
+    ui::PageGeometry const a4{.width = ui::Mm{210}, .height = ui::Mm{297}, .margins = ui::PageMargins{ui::Mm{10}}};
+    auto page = scene.backend().createPage(nullptr, a4);
+    auto box = scene.backend().createPageRegion(page.get(), {.anchor = ui::PageAnchor::Offset,
+                                                             .x = ui::Mm{20},
+                                                             .y = ui::Mm{45},
+                                                             .width = ui::Mm{85},
+                                                             .height = ui::Mm{5}});
+    auto first = scene.backend().createText(box.get());
+    first->setText("one");
+    auto second = scene.backend().createText(box.get());
+    second->setText("two");
+    scene.settle();
+    scene.settle();
+    QQuickItem const& item = Scene::itemOf(*box);
+    auto const* const mark = item.findChild<QQuickItem*>(QStringLiteral("overflowMark"));
+    REQUIRE(mark != nullptr);
+    CHECK(mark->isVisible());
+}
+
+// Mutation: the frame never calls the trigger's avatar or caret (neither item is visible), leaves the brand above
+// the switcher out, or puts the foot above the navigator.
+TEST_CASE("qt_quick containers: the shell draws its brand, help button, avatar, chevron and foot", "[qt_quick]") {
+    Scene scene;
+    morph::ui::ShellFrameOptions options;
+    options.applicationName = "App";
+    morph::ui::ShellFrame frame{scene.backend(), nullptr, std::move(options)};
+    frame.showSignedIn(true);
+    morph::ui::ShellPartsView view;
+    view.brand = morph::ui::ShellBrandView{.shown = true, .title = "Lims", .icon = {}, .version = "v4.2"};
+    view.context = morph::ui::ShellContextView{
+        .shown = true,
+        .options = {morph::ui::ShellOptionView{.label = "Koeln", .detail = "EUR", .group = {}}},
+        .chosen = 0,
+        .enabled = true};
+    view.help = morph::ui::ShellHelpView{.shown = true};
+    view.search = morph::ui::ShellSearchView{.shown = true, .hint = "Search", .sources = {}};
+    view.principal = morph::ui::ShellPrincipalView{
+        .shown = true, .name = "Anna Meyer", .subtitle = "Lab director", .initials = "AM", .detail = {}};
+    view.connection = morph::ui::ConnectionState::Offline;
+    frame.setParts(view);
+    scene.settle();
+    auto const widgetItem = [](char const* testId) -> QQuickItem const& {
+        detail::ItemBase const* const widget = detail::findWidget(QString::fromLatin1(testId));
+        REQUIRE(widget != nullptr);
+        REQUIRE(widget->item() != nullptr);
+        return *widget->item();
+    };
+    QQuickItem const& title = *textItemOf("shell_brand_title", QStringLiteral("Lims"));
+    QQuickItem const& mark = *textItemOf("shell_brand_mark", QStringLiteral("L"));
+    CHECK(title.isVisible());
+    CHECK(mark.isVisible());
+    QQuickItem const& context = widgetItem("shell_context");
+    QQuickItem const& brand = widgetItem("shell_brand");
+    CHECK(brand.mapToScene(QPointF{0, 0}).y() < context.mapToScene(QPointF{0, 0}).y());
+    // The product mark stands in the application's name's place.
+    CHECK_FALSE(widgetItem("shell_application").isVisible());
+
+    QQuickItem const& help = widgetItem("shell_help");
+    CHECK(help.isVisible());
+    CHECK(textItemOf("shell_help", QStringLiteral("?"))->isVisible());
+
+    QQuickItem const* const avatar = namedItem(widgetItem("shell_principal_menu"), "contentAvatar");
+    REQUIRE(avatar != nullptr);
+    CHECK(avatar->isVisible());
+    CHECK(namedItem(*avatar, "contentAvatarText")->property("text").toString() == "AM");
+    CHECK(namedItem(widgetItem("shell_principal_menu"), "contentCaret")->isVisible());
+    QQuickItem const* const switcherCaret = namedItem(context, "contentCaret");
+    REQUIRE(switcherCaret != nullptr);
+    CHECK(switcherCaret->isVisible());
+    CHECK(context.property("triggerCaret").toInt() == 2);
+
+    QQuickItem const& state = *textItemOf("shell_connection", QStringLiteral("Offline"));
+    QQuickItem const& version = *textItemOf("shell_version", QStringLiteral("v4.2"));
+    QQuickItem const& sidebar = widgetItem("shell_sidebar");
+    CHECK(state.isVisible());
+    CHECK(version.isVisible());
+    // The foot is at the sidebar's bottom, with the version at the far end of its line.
+    CHECK(state.mapToScene(QPointF{0, 0}).y() > sidebar.height() / 2);
+    CHECK(version.mapToScene(QPointF{0, 0}).x() > state.mapToScene(QPointF{0, 0}).x());
 }

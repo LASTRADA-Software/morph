@@ -20,10 +20,13 @@
 // LimsAuthorizer` is that authorizer, so the matrix runs it end-to-end
 // against a real server rather than only unit-testing its policy.
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <memory>
+#include <morph/core/action_guard.hpp>
 #include <morph/core/backend.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/model.hpp>
@@ -31,15 +34,19 @@
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include "lims/auth/lims_authorizer.hpp"
-#include "lims/core/errors.hpp"
-#include "lims/models/analysis_catalog_model.hpp"
-#include "lims/models/sample_model.hpp"
-#include "lims/offline/field_outbox.hpp"
+#include "lims/app/lims_authorizer.hpp"
+#include "lims/lab/models/analysis_catalog_model.hpp"
+#include "lims/lab/models/sample_model.hpp"
+#include "lims/lab/offline/field_outbox.hpp"
+#include "lims/org/core/errors.hpp"
+#include "lims/org/db/org_entity.hpp"
+#include "lims/org/models/org_model.hpp"
+#include "lims_test_support.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
@@ -82,12 +89,12 @@ constexpr std::string_view kSecret = "lims-matrix-test-secret-at-least-32-bytes"
     return ctx;
 }
 
-/// @brief This rung's real authorizer, wired to the same `lims_operators`
-///        query the model reads.
+/// @brief This rung's real authorizer, wired to the same role assignments
+///        the models read.
 /// @return The authorizer, for `BackendRig`'s `Socket` mode.
 [[nodiscard]] std::shared_ptr<lims::auth::LimsAuthorizer> makeAuthorizer() {
     return std::make_shared<lims::auth::LimsAuthorizer>(
-        std::string{kSecret}, [](std::string_view principal) { return lims::SampleModel::rolesOf(principal); });
+        std::string{kSecret}, [](std::string_view principal) { return lims::OrgModel::rolesAnywhere(principal); });
 }
 
 }  // namespace
@@ -95,7 +102,7 @@ constexpr std::string_view kSecret = "lims-matrix-test-secret-at-least-32-bytes"
 TEST_CASE("SampleModel over the full backend-mode matrix: register, attach, transition, capture", "[lims][matrix]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
 
     BackendRig rig{mode, 1, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
@@ -119,8 +126,8 @@ TEST_CASE("SampleModel over the full backend-mode matrix: register, attach, tran
     // the completion resolves. Nothing in the model suites exercises this —
     // they construct the model directly.
     BridgeHandler<lims::SampleModel, AllowShared> handler{rig.bridge(0), rig.executor()};
-    const auto registered =
-        awaitQt(handler.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"}));
+    const auto registered = awaitQt(handler.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-1"}));
     REQUIRE(registered.id.hasValue());
     CHECK(registered.state == lims::SampleState::Registered);
 
@@ -146,7 +153,7 @@ TEST_CASE("SampleModel over the full backend-mode matrix: register, attach, tran
 TEST_CASE("A payload-keyed OpenSample attaches a fresh handler in every mode", "[lims][matrix]") {
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
 
     BackendRig rig{mode, 1, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
@@ -154,8 +161,8 @@ TEST_CASE("A payload-keyed OpenSample attaches a fresh handler in every mode", "
 
     auto creator = rig.client<lims::SampleModel>(0);
     const auto client = awaitQt(creator.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
-    const auto registered =
-        awaitQt(creator.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-2"}));
+    const auto registered = awaitQt(creator.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-2"}));
 
     // A *different*, freshly built handler attaches by id — the payload-keyed
     // path, through `ActionKeyTraits<OpenSample>`.
@@ -169,11 +176,167 @@ TEST_CASE("A payload-keyed OpenSample attaches a fresh handler in every mode", "
     CHECK(awaitQt(office.execute(lims::GetSample{})).state == lims::SampleState::Received);
 }
 
+TEST_CASE("OrgModel over the full backend-mode matrix: a company, its site and a sample registered there",
+          "[lims][matrix][org]") {
+    const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+
+    BackendRig rig{mode, 1, makeAuthorizer()};
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "alice"));
+
+    auto org = rig.client<lims::OrgModel>(0);
+    const auto company = awaitQt(org.execute(lims::CreateCompany{
+        .name = "Osaka branch", .baseCurrency = lims::CurrencyCode::JPY, .fiscalYearStart = lims::Month::April}));
+    REQUIRE(company.id.hasValue());
+    const auto site = awaitQt(org.execute(lims::CreateSite{.companyId = company.id, .name = "Osaka lab"}));
+    REQUIRE(site.id.hasValue());
+    CHECK(site.companyId == company.id);
+
+    const auto companies = awaitQt(org.execute(lims::ListCompanies{})).companies;
+    REQUIRE(companies.size() == 2);
+    CHECK(companies.back().id == company.id);
+    CHECK(companies.back().baseCurrency == lims::CurrencyCode::JPY);
+    CHECK(companies.back().fiscalYearStart == lims::Month::April);
+    const auto sites = awaitQt(org.execute(lims::ListSites{})).sites;
+    REQUIRE(sites.size() == 2);
+    CHECK(sites.back().id == site.id);
+    CHECK(sites.back().companyId == company.id);
+
+    auto bench = rig.client<lims::SampleModel>(0);
+    const auto client = awaitQt(bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
+    const auto registered = awaitQt(
+        bench.execute(lims::RegisterSample{.siteId = site.id, .clientId = client.clientId, .reference = "OS-1"}));
+    CHECK(registered.siteId == site.id);
+}
+
+TEST_CASE("OrgModel over the full backend-mode matrix: assign, list and revoke a role", "[lims][matrix][org][roles]") {
+    const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    DbFixture fixture;
+    // The server edge refuses AssignRole to a caller holding no supervisor role, and does not mirror the model's
+    // bootstrap carve-out, so alice is appointed before the rig starts.
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+
+    BackendRig rig{mode, 1, makeAuthorizer()};
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "alice"));
+
+    auto org = rig.client<lims::OrgModel>(0);
+    const auto bob = awaitQt(org.execute(lims::AssignRole{
+        .principal = "bob", .role = lims::LimsRole::Verifier, .company = {}, .site = lims::test::seededSite()}));
+    REQUIRE(bob.id.hasValue());
+    CHECK(bob.scopeKind == lims::ScopeKind::Site);
+    CHECK(bob.site == lims::test::seededSite());
+    CHECK_FALSE(bob.company.hasValue());
+    CHECK(bob.grantedBy == "alice");
+
+    const auto assignments = awaitQt(org.execute(lims::ListRoleAssignments{})).assignments;
+    REQUIRE(assignments.size() == 3);
+    CHECK(assignments.back().id == bob.id);
+    CHECK(assignments.back().principal == "bob");
+    CHECK(assignments.back().role == lims::LimsRole::Verifier);
+
+    const auto users = awaitQt(org.execute(lims::ListUsers{})).users;
+    REQUIRE(users.size() == 3);
+    CHECK(users[0].id == "alice");
+    CHECK(users[1].id == "bob");
+    CHECK(users[1].roles == std::vector<lims::LimsRole>{lims::LimsRole::Verifier});
+    CHECK(users[2].id == "lab-supervisor");
+
+    CHECK(awaitQt(org.execute(lims::RevokeRole{.assignmentId = bob.id})).assignmentId == bob.id);
+    CHECK(awaitQt(org.execute(lims::ListRoleAssignments{})).assignments.size() == 2);
+    CHECK(lims::OrgModel::rolesAnywhere("bob").empty());
+}
+
+// Mutation: make Amount's wire form drop its decimal places (the listed limit comes back at the wrong scale); let
+// the edge and the model both accept bob (his limit is overwritten with 1).
+TEST_CASE("OrgModel over the full backend-mode matrix: a supervisor sets a value limit, a non-supervisor is refused",
+          "[lims][matrix][org][limits]") {
+    const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
+    CAPTURE(mode);
+    DbFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    lims::test::grant("bob", lims::LimsRole::InvoiceApprover);
+
+    // One bridge, its session switched between settled calls: in the in-process modes BackendRig hands every client
+    // index the same bridge, so a second index would not keep alice and bob apart.
+    BackendRig rig{mode, 1, makeAuthorizer()};
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "alice"));
+    auto org = rig.client<lims::OrgModel>(0);
+    const auto set = awaitQt(org.execute(
+        lims::SetValueLimit{.principal = "bob",
+                            .company = lims::test::seededCompany(),
+                            .limit = lims::Amount{morph::math::Rational{12345, morph::math::DecimalPlaces{2}}},
+                            .role = lims::LimsRole::InvoiceApprover}));
+    CHECK(set.principal == "bob");
+    CHECK(set.setBy == "alice");
+
+    const auto listed = awaitQt(org.execute(lims::ListValueLimits{})).limits;
+    REQUIRE(listed.size() == 1);
+    CHECK(listed.front().id == set.id);
+    CHECK(*listed.front().limit == morph::math::Rational{12345, morph::math::DecimalPlaces{2}});
+    CHECK((*listed.front().limit).getDecimalPlaces() == morph::math::DecimalPlaces{2});
+
+    rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "bob"));
+    // The socket server's edge refuses bob before the model sees the request; the in-process modes have no edge, so
+    // the model's own refusal answers.
+    const std::string refusal = mode == Mode::Socket ? "unauthorized" : "does not hold the supervisor role";
+    CHECK_THROWS_WITH(awaitQt(org.execute(lims::SetValueLimit{
+                          .principal = "bob",
+                          .company = lims::test::seededCompany(),
+                          .limit = lims::Amount{morph::math::Rational{1, morph::math::DecimalPlaces{2}}},
+                          .role = lims::LimsRole::InvoiceApprover})),
+                      Catch::Matchers::ContainsSubstring(refusal));
+    CHECK(lims::OrgModel::valueLimit("bob", lims::test::seededCompany(), lims::LimsRole::InvoiceApprover) ==
+          morph::math::Rational{12345, morph::math::DecimalPlaces{2}});
+}
+
+// The server answers an exception from the authorizer with an error reply carrying its text. The authorizer's role
+// lookup is a lambda of its own, so a message only that lambda throws can only have come from authorize(): the model
+// reads roles through OrgModel::rolesAnywhere and never sees it. Mutation: authorize() catches the exception and
+// returns true (the request reaches the model, which refuses bob with its own message, and the check fails).
+TEST_CASE("A role lookup that throws inside authorize() fails the request cleanly and the server keeps serving",
+          "[lims][matrix][org][roles][socket-only]") {
+    lims::test::LabFixture fixture;
+    lims::test::grant("alice", lims::LimsRole::Supervisor);
+    lims::test::grant("bob", lims::LimsRole::Verifier);
+
+    auto const authorizer = std::make_shared<lims::auth::LimsAuthorizer>(
+        std::string{kSecret}, [](std::string_view principal) -> std::vector<lims::LimsRole> {
+            if (principal == "bob") {
+                throw std::runtime_error{"authorizer lookup failed for bob"};
+            }
+            return lims::OrgModel::rolesAnywhere(principal);
+        });
+    BackendRig rig{Mode::Socket, 2, authorizer};
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+    rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "bob"));
+    rig.bridge(1).setDefaultSession(tokenContextFor(issuer, "alice"));
+
+    // bob's role-gated request makes the server run the lookup inside authorize().
+    auto asBob = rig.client<lims::OrgModel>(0);
+    CHECK_THROWS_WITH(
+        awaitQt(asBob.execute(lims::AssignRole{
+            .principal = "bob", .role = lims::LimsRole::Analyst, .company = lims::test::seededCompany(), .site = {}})),
+        Catch::Matchers::ContainsSubstring("authorizer lookup failed for bob"));
+
+    // The same connection and another one both keep being served.
+    CHECK(awaitQt(asBob.execute(lims::ListCompanies{})).companies.size() == 1);
+    auto asAlice = rig.client<lims::OrgModel>(1);
+    const auto carol = awaitQt(asAlice.execute(lims::AssignRole{
+        .principal = "carol", .role = lims::LimsRole::Analyst, .company = lims::test::seededCompany(), .site = {}}));
+    CHECK(carol.principal == "carol");
+}
+
 TEST_CASE("Two connections attached to one sample share the instance", "[lims][matrix][socket-only]") {
     // Socket mode only: it is the only mode with a server-side shared-instance
     // directory, which is the thing under test here rather than mere
     // cross-handler sharing inside one process.
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
     BackendRig rig{Mode::Socket, 2, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "alice"));
@@ -181,8 +344,8 @@ TEST_CASE("Two connections attached to one sample share the instance", "[lims][m
 
     auto creator = rig.client<lims::SampleModel>(0);
     const auto client = awaitQt(creator.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
-    const auto registered =
-        awaitQt(creator.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-3"}));
+    const auto registered = awaitQt(creator.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-3"}));
 
     BridgeHandler<lims::SampleModel, AllowShared> bench{rig.bridge(0), rig.executor()};
     BridgeHandler<lims::SampleModel, AllowShared> office{rig.bridge(1), rig.executor()};
@@ -206,7 +369,7 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
     // `onBackendChanged()` drain cannot carry a session.
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
 
     BackendRig rig{mode, 1, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
@@ -219,8 +382,8 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
     auto creator = rig.client<lims::SampleModel>(0);
     const auto client = awaitQt(creator.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
     BridgeHandler<lims::SampleModel, AllowShared> handler{rig.bridge(0), rig.executor()};
-    const auto registered =
-        awaitQt(handler.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-4"}));
+    const auto registered = awaitQt(handler.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-4"}));
     awaitQt(handler.execute(lims::ReceiveSample{}));
     const auto atWork = awaitQt(handler.execute(lims::StartWork{}));
 
@@ -253,7 +416,9 @@ TEST_CASE("An offline capture replays through the bridge under its operator's ow
 }
 
 TEST_CASE("A queued capture replayed as the wrong operator is refused over the wire too", "[lims][matrix][offline]") {
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
+    // Mallory holds a role, so the operator check is what refuses the replay, not the role check in front of it.
+    lims::test::grant("mallory", lims::LimsRole::Analyst);
     BackendRig rig{Mode::Socket, 1, makeAuthorizer()};
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     // The bridge is authenticated as *mallory*, and the queued item claims
@@ -268,8 +433,8 @@ TEST_CASE("A queued capture replayed as the wrong operator is refused over the w
     auto creator = rig.client<lims::SampleModel>(0);
     const auto client = awaitQt(creator.execute(lims::RegisterClient{.name = "Waterworks Ltd"}));
     BridgeHandler<lims::SampleModel, AllowShared> handler{rig.bridge(0), rig.executor()};
-    const auto registered =
-        awaitQt(handler.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-5"}));
+    const auto registered = awaitQt(handler.execute(
+        lims::RegisterSample{.siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-5"}));
     awaitQt(handler.execute(lims::ReceiveSample{}));
     const auto atWork = awaitQt(handler.execute(lims::StartWork{}));
 
@@ -280,7 +445,8 @@ TEST_CASE("A queued capture replayed as the wrong operator is refused over the w
         outbox.enqueue(atWork.id, lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
                                                              .value = lims::Concentration{exact(12, 5, 3)}});
 
-    CHECK_THROWS(awaitQt(handler.execute(queued)));
+    CHECK_THROWS_WITH(awaitQt(handler.execute(queued)),
+                      Catch::Matchers::ContainsSubstring("replay must run as the capturing operator"));
     CHECK(awaitQt(handler.execute(lims::ListResults{})).results.empty());
 }
 
@@ -304,7 +470,7 @@ TEST_CASE("onBackendChanged fires on switchBackend, and fails closed with no ses
     // exactly what the README calls disqualifying. But it does mean the
     // framework's own replay seam cannot carry an authenticated replay, which
     // is why §7's supported path is the re-dispatch above.
-    DbFixture fixture;
+    lims::test::LabFixture fixture;
 
     // The model drains the queue on its strand, synchronously, so the queue
     // belongs to the one thread the new backend runs its models on.
@@ -321,7 +487,8 @@ TEST_CASE("onBackendChanged fires on switchBackend, and fails closed with no ses
                 .versionId;
         lims::SampleModel setup;
         const auto client = setup.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
-        const auto sample = setup.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-6"});
+        const auto sample = setup.execute(lims::RegisterSample{
+            .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-6"});
         setup.execute(lims::ReceiveSample{});
         const auto atWork = setup.execute(lims::StartWork{});
         sampleId = atWork.id;

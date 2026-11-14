@@ -22,13 +22,22 @@ the push path every other change uses. The design is in
 
 | Kind | Body | Reply |
 |---|---|---|
-| `ui-chat-turn` | `TurnRequest`: screen, identity, params, the aliases it holds, and the text | `TurnAccepted{turnId}`, at once |
+| `ui-chat-turn` | `TurnRequest`: screen, title, identity, params, the aliases it holds, and the text | `TurnAccepted{turnId}`, at once |
 | `ui-chat-state` | `StateRequest{turnId?}`; with no id, it only asks whether a chat is available | `TurnState` |
 | `ui-chat-cancel` | none | `ok` |
 | `ui-chat-end` | none | `ok` |
 
 A `TurnRequest` describes where the person is, and is a hint about what they mean. It grants nothing, because every
-action it leads to is checked under the envelope's session.
+action it leads to is checked under the envelope's session. Its `title` is the screen's title as the person sees it
+(`DocumentScreenHost::chatContext` reads it from the screen's head), and the system text tells the model that the person
+knows the record by that name, so it speaks of "Sample 16/1" and not of a key or an internal number.
+
+**What a turn reports.** A tool call carries the call's arguments (JSON text, cut like a result's short form) and
+whether it ran, in `ToolStep` and in its `tool` event. A round's text is not glued to the last one's: `TurnState::text`
+puts a blank line between rounds, and a `text` event whose `newRound` is set is the first piece of a round that follows
+tool calls. `TurnState::parts` lists the rounds' texts and the tool calls in the order the turn made them, so a client can
+draw what was said before a call before it, not after. A state without `parts`, from a server that does not send them, is
+read as its `steps` and then its `text`.
 
 A turn's progress goes out as `TurnEvent`s on the `chat` event topic, to that connection only. **Events are hints.** The
 server writes nothing to a connection that is behind, so a turn's last event can be lost with no error. `TurnState` is
@@ -170,6 +179,9 @@ session. It runs on the owner, and takes the source's exchange, the current sess
   other answer means it does not, which is not a fault to report.
 - **State beats events.** It reads `TurnState` when a turn starts, when an event says one ended, and on `resync`. What it
   reads replaces what events built, and `TurnState::seq` says which events it already covers.
+- **A turn is kept as its parts.** An `Entry` of a tool call carries the call's `arguments` and `ok`, and each round's text
+  is its own `assistant` entry, in the order the turn made them. Events build the same parts: a `text` piece joins the
+  text before it unless a tool call came between or the event says `newRound`.
 - **A turn belongs to its conversation.** Switching tabs selects another conversation and leaves a running turn where it
   started.
 - **A reconnect ends a running turn.** A new connection has new instance ids, and the old connection's close stopped the

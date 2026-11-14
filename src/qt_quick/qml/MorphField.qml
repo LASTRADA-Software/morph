@@ -70,7 +70,7 @@ MorphWidget {
 
     Label {
         textFormat: Text.PlainText
-        font: Theme.captionFont
+        font: Theme.fieldCaptionFont
         id: captionLabel
         objectName: "caption"
         // Elided short of the mark and the hint, so both stay visible after it.

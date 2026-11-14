@@ -14,7 +14,7 @@ MorphField {
     property bool edited: false
     // The display zone, minutes from UTC: the calendar's today is the zone's, not the system's.
     property int offsetMinutes: 0
-    // The pattern the field shows and reads its value in; empty is ISO. Set once.
+    // The pattern the field shows and reads its value in; empty is ISO. Set again when the session's pattern changes.
     property string pattern: ""
     // The field's day as C++ last read it, `{year, month (zero-based), day}`, or null when it names none.
     property var chosen: null
@@ -25,6 +25,9 @@ MorphField {
 
     // The month the calendar shows, zero-based as `MonthGrid` takes it.
     property int pickerMonth: 0
+    // English whatever the desktop's language: both frontends write the session's text, not the system's.
+    readonly property var monthNames: ["January", "February", "March", "April", "May", "June", "July", "August",
+                                       "September", "October", "November", "December"]
     property int pickerYear: 0
 
     // The field's date, which the calendar opens on and marks.
@@ -179,7 +182,8 @@ MorphField {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     color: root.scheme.text
-                    text: Qt.locale().monthName(root.pickerMonth, Locale.LongFormat) + " " + root.pickerYear
+                    objectName: "datePickerMonth"
+                    text: root.monthNames[root.pickerMonth] + " " + root.pickerYear
                 }
 
                 ToolButton {
@@ -208,6 +212,9 @@ MorphField {
             MonthGrid {
                 id: grid
                 objectName: "datePickerGrid"
+                // The C locale: the weekday names are English and the week starts on Monday, whatever the
+                // desktop's language, as the month names above are and as `MMM` is.
+                locale: Qt.locale("C")
                 month: root.pickerMonth
                 year: root.pickerYear
                 delegate: Item {

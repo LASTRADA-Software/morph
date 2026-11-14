@@ -214,6 +214,9 @@ void setPlainTokens(QObject& theme, ui::ThemeValues const& values, std::vector<s
     if (!theme.setProperty("overlineCaps", keywordIs(values, "font.overline.case", "uppercase"))) {
         unset.emplace_back("overlineCaps");
     }
+    if (!theme.setProperty("fieldCaptionCaps", keywordIs(values, "field.caption.case", "uppercase"))) {
+        unset.emplace_back("fieldCaptionCaps");
+    }
     if (auto const weight = values.numbers.find("font.weight.strong");
         weight != values.numbers.end() && !theme.setProperty("strongWeight", static_cast<int>(weight->second))) {
         unset.emplace_back("strongWeight");

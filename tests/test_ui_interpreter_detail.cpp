@@ -83,6 +83,33 @@ TEST_CASE("interpreter: the default error kinds name the bridge's own failures",
     CHECK(defaultErrorKind(std::make_exception_ptr(42)) == "error");
 }
 
+// Mutation: drop the unauthorized arm of defaultErrorKind (a server's refusal is classified `error`, so a shell part
+// the signed-out sign-in screen asks for is reported as a failure).
+TEST_CASE("interpreter: a server's refusal is the error kind denied, and only that exact text", "[ui][interpreter]") {
+    using ui::detail::defaultErrorKind;
+    CHECK(defaultErrorKind(std::make_exception_ptr(std::runtime_error{"unauthorized"})) == "denied");
+    CHECK(defaultErrorKind(std::make_exception_ptr(std::runtime_error{"unauthorized: the ledger is closed"})) ==
+          "error");
+    CHECK(defaultErrorKind(std::make_exception_ptr(std::runtime_error{""})) == "error");
+}
+
+// Mutation: drop the UnauthorizedError arm of defaultErrorKind (a refused register or attach is then `error`).
+TEST_CASE("interpreter: a refused register or attach is the error kind denied", "[ui][interpreter]") {
+    using ui::detail::defaultErrorKind;
+    CHECK(defaultErrorKind(morph::wire::controlFailure("register", "unauthorized")) == "denied");
+    CHECK(defaultErrorKind(morph::wire::controlFailure("attach", "unauthorized")) == "denied");
+    CHECK(defaultErrorKind(morph::wire::controlFailure("register", "server busy")) == "error");
+    CHECK(defaultErrorKind(morph::wire::controlFailure("register", "unauthorized: closed")) == "error");
+}
+
+// Mutation: move the ActionRefusal arm of defaultErrorKind after the runtime_error arm (a refusal worded
+// `unauthorized` is then classified `denied`).
+TEST_CASE("interpreter: an action's own refusal keeps the error kind whatever it says", "[ui][interpreter]") {
+    using ui::detail::defaultErrorKind;
+    morph::model::ActionRefusal const refusal{"app.closed", {}, "unauthorized"};
+    CHECK(defaultErrorKind(std::make_exception_ptr(refusal)) == "error");
+}
+
 // Mutation: report a non-standard exception's text as empty instead of `unknown error`.
 TEST_CASE("interpreter: a failure's text is what() or `unknown error`", "[ui][interpreter]") {
     using ui::detail::failureText;

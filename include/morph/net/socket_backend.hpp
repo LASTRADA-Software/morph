@@ -754,7 +754,7 @@ private:
             return;
         }
         if (reply.kind != "ok") {
-            pending.reject(std::make_exception_ptr(std::runtime_error(pending.what + " failed: " + reply.message)));
+            pending.reject(::morph::wire::controlFailure(pending.what, reply.message));
             return;
         }
         if (pending.state) {
@@ -1130,7 +1130,7 @@ private:
                     // `default:` only because the project builds with
                     // -Wswitch-default; ExecuteReplyKind is a closed enum and
                     // all three enumerators are handled explicitly.
-                    pending->state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
+                    pending->state->setException(::morph::wire::executeFailure(env));
                     break;
             }
         }

@@ -17,6 +17,7 @@
 #include "../core/executor.hpp"
 #include "../reactive/scheduler.hpp"
 #include "../session/session.hpp"
+#include "../ui/catalogue.hpp"
 #include "../ui/document.hpp"
 #include "../ui/explorer.hpp"
 #include "../ui/frontend.hpp"
@@ -128,6 +129,10 @@ public:
     /// @brief The bundle the catalog currently lists.
     /// @return It; null before a bundle was delivered.
     [[nodiscard]] ui::Bundle const* bundle() const noexcept { return _loaded ? &_loaded->bundle : nullptr; }
+
+    /// @brief The message catalogues of the current bundle, loaded from its verified files.
+    /// @return They; empty before a bundle was delivered. Their `problems()` list each catalogue that did not load.
+    [[nodiscard]] ui::MessageCatalogues catalogues() const;
 
     /// @brief The catalog for the current principal: its entries, what the principal may run, and the facts.
     /// @return It; null before a bundle was delivered.

@@ -92,18 +92,19 @@ which maps it (the theme's `space.<step>` on Qt Quick, rows and columns on the t
 The node kinds are the palette of the UI document design (§9): its base kinds (text, button, text
 input, checkbox, select, menu, column, row, grid, spacer, panel, scroll, switch, tabs, dialog, busy,
 forEach, table, date-time input, slider and file picker) and its further kinds (banner, badge,
-progress, steps, key-value, empty state, drawer, splitter, collapsible, drop zone, chart), with `custom`,
+progress, steps, key-value, empty state, drawer, splitter, collapsible, drop zone, chart, page, page region), with `custom`,
 which this mount shows as its fallback. Every other node carries the common properties, inputs and text
-carry the field state, and menu items nest. `boundary` and `customize` are not view-tree kinds: a
-boundary decides what to show from the state of the queries its children read, and a customization
-point's editor from the application's customization store, so the interpreter that owns those
+carry the field state, and menu items nest. `boundary`, `customize` and `localeScope` are not view-tree kinds: a
+boundary decides what to show from the state of the queries its children read, a customization
+point's editor from the application's customization store, and a locale scope formats its children in another
+locale ([`document_page.md`](document_page.md#the-locale-scope)), so the interpreter that owns those
 lowers them to the kinds below.
 
 | Node | Builder | Props and callbacks |
 |---|---|---|
 | `Text` | `text` | `text`, `spans` (`std::vector<TextSpan>`, each `{text, strong, mono, tone, action}`, `action` marking the run a banner draws as its link, which only a banner reads: while bound or not empty, shown in place of `text`, which is then not applied), `align` (a `std::optional<TextAlign>` of `TextAlign{Start, Center, End}`, set once; the mount calls `TextWidget::setAlign` only for a text whose document gives one, `Start` included, so that a text in a table keeps an alignment of its own over its column's; it places each line within the text's width), `role` (`TextRole{Normal, Muted, Heading, Error, Success, Section, Mono, Display, Small, Overline, Caption, Label, Headline}`; `Headline` is a record's identity (`font.size.headline`, strong, the text colour; between `Heading` and `Display`; the terminal draws it as `Heading`); `Label` is a field's or a group's caption (`font.size.caption`, regular, the text colour; the terminal draws it as `Normal`); `Caption` is a note under a control or a figure (`font.size.caption`, muted; the terminal draws it as `Muted`); `Overline` is a short label over a group: `Section`'s look unless the theme's `font.overline.case` is `uppercase`, which draws it at the small size, strong, muted, in capitals, letter-spaced by 0.05 times the small size; the terminal draws it as `Section`, whatever the theme; `Section` heads a group within a list: body size, bold and muted, a step below `Heading`; `Mono` is an identifier, in the theme's fixed-pitch family; `Display` is a figure that stands out, at the theme's display size and strong weight; `Small` is a footnote at the theme's small size. A terminal draws `Display` bold and `Small` as `Normal`: a cell has one size) |
 | `Button` | `button` | `child` (an item's content, mounted into `content()` and drawn in place of the label, which then names it; the mount refuses a child on a push button), `label`, `onClick`, `emphasis` and `icon` (set once; the mount tells the widget only a non-`Normal` emphasis and a non-empty icon), `style` (a `ButtonStyle`, `Push` or `Item`, set once; the mount tells the widget only `Item`) and `selected` (a `Prop<bool>`, default `false`: whether an item is the current entry or a push button is pressed in, told to the widget for either style, only when bound or `true`), `shape` (a `ControlShape`, `Default` or `Round`, set once; the mount tells the widget only `Round`), `size` (a `ButtonSize`, `Normal` or `Small`, set once; only `Small` is told), `mono` (a `bool`, set once; only `true` is told) and `weight` (an `int`, 0 the theme's, set once; only a nonzero one is told) |
-| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once), `unit` (the unit the input shows; empty: none), `decimals` (a number's entry places, set once; −1: not a number), `icon` (an icon of the theme's icon set, drawn at the leading edge; empty: none; set once — the mount refuses a multiline input with one, as it does `unit`/`decimals`), `label` and `showLabel` (below); `emphasis` (`InputEmphasis{Normal, Prominent}`, set once; the mount tells the widget only `Prominent` and refuses it on a multiline input), `prefix` (the text the input shows muted at its leading edge; empty: none; the mount refuses a multiline input with one), `mono` (set once; only `true` is told) and `align` (`Align{Start, Center, End}`, set once; only `Center` and `End` are told, and the mount refuses them on a multiline input) |
+| `TextInput` | `textInput` | `value`, `onChange` (the whole text after each user edit), `onSubmit`, `onCommit` (Enter, before `onSubmit`, or focus leaving after an edit), `placeholder`, `mode` (`TextInputMode{SingleLine, Multiline, Password}`, set once), `unit` (the unit the input shows; empty: none), `decimals` (a number's entry places, a `Prop<int>`: it follows its binding, as `unit` does, and the mount tells the widget again on each change; −1: not a number), `icon` (an icon of the theme's icon set, drawn at the leading edge; empty: none; set once — the mount refuses a multiline input with one, as it does `unit`/`decimals`), `label` and `showLabel` (below); `emphasis` (`InputEmphasis{Normal, Prominent}`, set once; the mount tells the widget only `Prominent` and refuses it on a multiline input), `prefix` (the text the input shows muted at its leading edge; empty: none; the mount refuses a multiline input with one), `mono` (set once; only `true` is told) and `align` (`Align{Start, Center, End}`, set once; only `Center` and `End` are told, and the mount refuses them on a multiline input) |
 | `Checkbox` | `checkbox` | `label`, `checked`, `onToggle` |
 | `Select` | `select` | `options` (`std::vector<SelectOption{key, label}>`), `selected` (`std::optional<Key>`; a key outside the options marks none), `onSelect`, `onOpen` (the user opened the dropdown, also with no options; a hint a backend may not report), `style` (`SelectStyle{Dropdown, Radio, Segmented}`, set once), `label` and `showLabel` (below) |
 | `Menu` | `menu` | `items` (`MenuItem{label, onSelect, icon, keys, checked, enabled, items, separator, description, visible}`: each label beside its handler, so there are no parallel lists. `icon` and `keys` are set once, and `keys` only shows a chord; `checked` engaged makes the entry checkable, and its mark follows the binding alone; an entry with `items` opens a submenu and is not itself chosen; a `separator` is a line between entries; a hidden entry is not sent. The tree is set once; each entry's `label`, `description`, `checked`, `enabled` and `visible` may be bound), `style` (`MenuStyle::Bar`, or `Button`: one button that opens the entries), and a button-style menu's trigger: `label` (may be bound), `icon` and `emphasis` (set once) |
@@ -117,14 +118,14 @@ lowers them to the kinds below.
 | `Dialog` | `dialog` | `open`, `title`, `description` (applied only when bound or not empty), `descriptionSpans` (the description as runs; while bound or not empty, `setDescriptionSpans` is called in place of `setDescription`), `child`, `onDismiss`, `sheet` (default `false`), `dismissLabel` (default `Close`): the mount calls `setSheet` and `setDismissLabel` only when they are bound or not the default |
 | `Busy` | `busy` | `active`, `label` |
 | `ForEach` | `forEach<RowT>` | rows, key function, row view, `axis`, `gap`, `common` (the row container's, as on every kind), `wrap` (a `bool`; honoured on a horizontal `axis` only, as a Row's), `divided` (a `bool`; honoured on a vertical `axis` only, as a Column's) ([below](#keyed-collections)) |
-| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width, role, align, valign, sortable, wrap, shrink}`, set once; a `Stretch` `width` starts from the column's content and its weight shares only the width the content leaves (the contract's four steps), and `shrink` also makes the column give up width before the other stretch columns; `sortable` makes a click on the header ask to sort by the column; `role` styles a column's default cell and has no effect on the style of one with its own `.cell`, and a `Mono` role makes a fixed width count monospace characters; `wrap`, default `true`, with `false` keeps the column's text cells to one line, cut at the column's width with an ellipsis; `align`, default `Start`, places a text's or a text input's text, a label-width cell and the header label across the column, and `valign`, default `Center`, places every cell down its row, `Stretch` filling it), rows, key function, cells — or a row view answering `TableRowView{cells, tone, label, heading}`, whose tone and label bind in the row's own scope and whose `heading` makes the row a heading of exactly one cell (`ui::table` refuses any other count, as it refuses a data row of the wrong count) — and `TableOptions{selectionMode, selection, onSelectionChange (the keys and a `SelectionChange`: `Replace`, the whole selection, or `Extend`, which keeps the keys the backend does not hold), onActivate, selectColumn (set once: a leading column of check boxes drawing the selection), selectAllLabel (the header box's name, default `Select all`), sort (a `Prop<std::optional<TableSort{column, direction}>>`: the column whose header marks the sort, and its `SortDirection`; the table never reorders its rows, which arrive sorted), onSort (a sortable column's index when the user asks to sort by it), common}`; the mount tells the widget `sort` and `onSort` only when a column is sortable ([below](#keyed-collections)) |
+| `Table` | `table<RowT>` | `columns` (`TableColumn{label, width, role, align, valign, sortable, wrap, shrink}`, set once; a `Stretch` `width` starts from the column's content and its weight shares only the width the content leaves (the contract's four steps), and `shrink` also makes the column give up width before the other stretch columns; `sortable` makes a click on the header ask to sort by the column; `role` styles a column's default cell and has no effect on the style of one with its own `.cell`, and a `Mono` role makes a fixed width count monospace characters; `wrap`, default `true`, with `false` keeps the column's text cells to one line, cut at the column's width with an ellipsis; `align`, default `Start`, places a text's or a text input's text, a label-width cell and the header label across the column, and `valign`, default `Center`, places every cell down its row, `Stretch` filling it), rows, key function, cells — or a row view answering `TableRowView{cells, tone, label, heading, spans}`, whose tone, label and `spans` bind in the row's own scope and whose `heading` makes the row a heading of exactly one cell (`ui::table` refuses any other count, as it refuses a data row of the wrong count); a row's `spans` let its cells cover the rows below it ([Row spans](#row-spans)), and a sorted or virtualized table draws no spans, and a bad span is refused alone — and `TableOptions{selectionMode, selection, onSelectionChange (the keys and a `SelectionChange`: `Replace`, the whole selection, or `Extend`, which keeps the keys the backend does not hold), onActivate, selectColumn (set once: a leading column of check boxes drawing the selection), selectAllLabel (the header box's name, default `Select all`), sort (a `Prop<std::optional<TableSort{column, direction}>>`: the column whose header marks the sort, and its `SortDirection`; the table never reorders its rows, which arrive sorted), onSort (a sortable column's index when the user asks to sort by it), common}`; the mount tells the widget `sort` and `onSort` only when a column is sortable ([below](#keyed-collections)) |
 | `DateTimeInput` | `dateTimeInput` | `value` (`std::optional<time::Timestamp>`; `nullopt` or an empty `Timestamp` shows an empty field), `onChange` (`nullopt` for a cleared field; the change is the commit, since both backends report one only when an edit is finished), `onCommit` (the same value, after `onChange`), `mode` (`DateMode{Date, DateTime}`), `offsetMinutes` (the display zone's offset from UTC), `pattern` (the pattern it shows and reads its value in; empty is ISO) — the last three set once; `label` and `showLabel` (below) |
 | `Slider` | `slider` | `value` (`std::int64_t`), `minimum`, `maximum`, `step` (the three set once), `onChange` (each step while a drag lasts), `onCommit` (a finished move: a release after a drag, a key step, or a wheel step) |
 | `FilePicker` | `filePicker` | `path`, `mode` (`FilePickerMode{Open, Save}`, set once), `onPicked` |
 | `Banner` | `banner` | `tone` (`Tone{Neutral, Info, Ok, Warn, Err}`), `text`, `spans` (as a `Text`'s), `action` (`ActionButton{label, onClick}`; an empty label shows no button), `dismissible` (set once), `actionStyle` (`BannerActionStyle{Ghost, Button, Link}`, set once) and `actionStretch` (a `bool`, set once; the mount calls `BannerWidget::setActionStyle` only when the style is not `Ghost` or the action stretches), `onDismiss` — a dismissal leaves the banner shown: the application hides it |
 | `Badge` | `badge` | `tone`, `text`, `icon` (set once), `style` (`BadgeStyle{Filled, Outline, Quiet}`, set once; the mount tells the widget only `Outline` or `Quiet`), `onRemove` (set once; given, the badge is removable and takes the focus), `removeLabel` (the remove control's accessible name; empty: `Remove ` and the text), `shape` (a `ControlShape`, set once; only `Round` is told) and `mono` (a `bool`, set once; only `true` is told) |
 | `Progress` | `progress` | `value` (`std::optional<double>`, 0 to 1; `nullopt` is indeterminate), `label` |
-| `Steps` | `steps` | `items` (`Step{label, state}`, `StepState{Pending, Active, Done, Failed}`), `current` (`std::optional<std::size_t>`), `labelled` (`bool`, default true) |
+| `Steps` | `steps` | `items` (`Step{label, state, detail}`, `StepState{Pending, Active, Done, Failed}`; `detail` is a step's muted second line, who and when, and is bound like `label`: it is a field of the step, so it follows the `items` binding and a change of either re-sends the list. Qt Quick draws it under the label, in the muted text colour at the small size, on one line; the circle and the connectors stay centred on the label's line, and the indicator is as tall as its tallest step. The terminal draws it after the label, one space then the detail in brackets, in the muted style (`Received [A. Weber, 09:14]`). An empty `detail` shows nothing: no second line, no brackets. A step's width comes from its label alone: on Qt Quick the detail is cut at that width with an ellipsis at its end and never widens the step; on the terminal a row too narrow for the label and the whole bracketed detail drops the detail, before the label is cut. Unlabelled, a steps indicator draws no detail either. A step's accessible name, labelled or not, is its label, then its detail when there is one, then its state when it has one (`current`, `done` or `failed`), joined by `, ` (`Received, A. Weber, 09:14, done`)), `current` (`std::optional<std::size_t>`), `labelled` (`bool`, default true) |
 | `KeyValue` | `keyValue` | `items` (`KeyValueItem{label, value, spans, tone}`: `spans` not empty is shown in place of `value`; `tone` `Neutral` is none), `captions` (`CaptionPlacement{Beside, Above}`, set once), `captionWidth` (`optional<int>`, units 1 to 64, set once; the mount throws `std::invalid_argument` for a value below 1 or one given with `Above`) |
 | `EmptyState` | `emptyState` | `title`, `text`, `icon` (set once), `action` |
 | `Drawer` | `drawer` | A `Dialog`'s fields and rules, plus `side` (`Side{Start, End}`, set once) |
@@ -132,7 +133,9 @@ lowers them to the kinds below.
 | `Splitter` | `splitter` | `children` (a null child is skipped), `orientation` (`Axis`, set once), `sizes` (`std::vector<int>`; empty, or of a length other than the pane count, places each pane of a horizontal splitter by its own width sizing: fixed in units, percent as a share of the splitter's width, stretch by weight, content as a stretch of weight 1, so equal panes share equally; a vertical splitter shares its height equally; every pane's `minWidth`/`maxWidth` (`minHeight`/`maxHeight` for a vertical splitter) bound it, a user's drag included; matching `sizes` place the panes and the bounds still apply), `onResize` (every pane's size after the user dragged a handle) |
 | `Collapsible` | `collapsible` | `title`, `open`, `onToggle` (the state the user asked for), `header` (shown beside the title, usable while closed), `child` (mounted once, hidden while closed) |
 | `DropZone` | `dropZone` | `accept` (extensions such as `".csv"`, without regard to case; empty takes every file), `multiple` (both set once), `onDrop` (the paths of a drop it took; a drop with a refused file, or several files when not `multiple`, is refused whole), `child` |
-| `Chart` | `chart` | `data` (`ChartData`, below): points against a numeric axis with horizontal reference lines. It takes no focus and calls no handler |
+| `Chart` | `chart` | `data` (`ChartData`, below): points, joined or as bars, against a numeric axis with horizontal reference lines. It takes no focus and calls no handler |
+| `Page` | `page` | `geometry` (`PageGeometry{width, height, margins}`, millimetres, set once), `children` (`PageRegion` nodes only; the mount refuses any other). A sheet of fixed physical size, drawn on the `paper` surface and displayed scaled down to the width its container offers, never up; its `layout` hints are refused, its `alignSelf` places it. [`document_page.md`](document_page.md) |
+| `PageRegion` | `pageRegion` | `geometry` (`RegionGeometry{anchor, x, y, width, height}`, millimetres, set once; `anchor` a `PageAnchor` of `Top`, `Bottom` or `Offset`), `children` (laid out as a vertical stack whose width is definite and whose height is when given). A rectangle of a page, anchored to its margin box or placed at an offset from the sheet's edges; regions draw in node order. Only inside a `Page`; its `layout` hints are refused. [`document_page.md`](document_page.md) |
 | `Custom` | `custom` | `name`, `fallback` (never null: `custom` throws `std::invalid_argument`), `props` (`CustomProp`: a name and a `Prop` of text, `bool` or `double`), `minVersion`, `onEvent(event, payload)`. `Mounted` asks `IViewBackend::createCustom` for the component and mounts the fallback only when it returns null; `Custom` has no `Common` of its own |
 
 Every node but `Custom` also carries `Common`:
@@ -186,17 +189,49 @@ Everything in it is computed before the backend sees it ([`interpreter.md`](inte
 
 | Field | Meaning |
 |---|---|
-| `xMin`, `xMax`, `yMin`, `yMax` | The plotted range of each axis, padding included |
+| `xMin`, `xMax`, `yMin`, `yMax` | The plotted range of each axis, padding included; with a `Bars` series, `xMin`/`xMax` also hold half a bar slot beyond the outermost position, and `yMin`/`yMax` hold the baseline, which is the end itself when nothing lies beyond it |
+| `barSlot` | The width, in `x` units, of the room one position gives its bars (the smallest distance between two positions of `Bars` series, gaps included, or 1 for one position); 0 when no series is `Bars` or none has a point |
 | `yLabel` | The value axis's unit or name; empty for none |
 | `yTicks` | `ChartTick{value, text}`s labelling the value axis; empty when three or more reference lines label it |
 | `lines` | `ChartLine{value, label, tone, style}`: a horizontal reference line in its `Tone`'s colour, `ChartLineStyle{Solid, Dashed, Dotted}` |
-| `series` | `ChartSeries{label, joined, points}`, at most four, in drawing order; `label` names it in the legend |
+| `series` | `ChartSeries{label, joined, style, points}`, at most four, in drawing order; `label` names it in the legend; `style` is `ChartStyle{Line, Bars}`, `Line` by default; `joined` is false for a `Bars` series and a backend reads it for a `Line` series only |
 | `series[].points` | `ChartPoint{x, y, clip, xLabel, tone, note}`: `x` is an index, a number or an instant's milliseconds since the epoch; `y` empty is a gap no line joins across; `clip` (`ChartClip{None, Below, Above}`) marks a value beyond an axis end the document fixed, and `y` is then that end; `tone` engaged marks the point; `note` is text beside it |
 | `summary` | The text alternative: the accessible description, and what a probe reads as the chart's text |
 
 A series is told apart by its shape as well as its colour (`color.chart.1` to `.4`, [`theme.md`](theme.md)), a
 marked point by a shape no series uses, and a clipped point by an open triangle at the edge, so nothing a chart
 says rests on colour alone.
+
+**Bars.** A `Bars` series draws, at each position that has a value, a rectangle from the baseline to the value
+instead of a point and a joining line. The baseline is 0 clamped into the value axis, so a document that fixes
+`yMin` above 0 grows its bars from the bottom edge and one that fixes `yMax` below 0 hangs them from the top edge.
+A negative value hangs below the baseline. A value beyond a fixed end is clipped as a point is: the bar reaches the
+end and the open triangle is drawn there, as for a clipped point; a bar clipped on the baseline's own side has no
+extent and draws only the triangle. A `tone` marks its bar in that tone's colour with the cross centred half a unit
+(one cell in the terminal) beyond its tip; clip wins over tone, as for points. A bar's `note` is drawn beside the
+marker's place, or the tip's where there is no marker, as a point's note is beside the point.
+
+- **A group.** The `Bars` series of a chart, *n* of them in series order, stand side by side at every position, each
+  `0.8 × barSlot / n` wide, touching one another, left to right in series order, the group centred on the position
+  and a gap of `0.2 × barSlot` between two groups at the nearest positions. A position at which a series has no
+  value (a gap, which is a `null` `y`, or no point at all) leaves that series' place in the group empty, so a
+  series' bars keep their place from one position to the next and the other series' bars do not widen to fill it. A
+  `Line` series takes no place in a group. A frontend draws a bar at least one pixel (in the terminal, one column)
+  wide; bars that then share room overlap, the one whose tip is nearer the baseline in front, the later series in
+  front on a tie.
+- **Mixing.** `Line` and `Bars` series share the axes. The bars are drawn first, then the reference lines over them
+  where the frontend can draw two things in one place (a terminal cell holds one glyph, so a line leaves the cells
+  of a bar alone), then the lines and points of the `Line` series, then the clipped and marked points, so a point is
+  never hidden by a bar. Only positions of `Bars` series, gaps included, set the bar slot, and only `Bars` series
+  count towards *n*. A `Line` series' points keep their exact positions, never moved to a group's centre or a bar's
+  place.
+- **Telling bars apart.** A series' bar is told apart from the others by its place in the group, which is the order
+  of the legend, as well as by `color.chart.1` to `.4`. The legend marks a `Bars` series with a bar-shaped swatch, a
+  shape no point marker has.
+- **Axis labels.** A point's `xLabel` is drawn under the centre of its group, as under a point.
+
+A client older than this vocabulary ignores the `style` key and draws the series as a joined line, so a document that
+may reach one gives the chart a `summary` that carries the values.
 
 The builder for a Switch is `switchOf` because `switch` is a keyword. `switchOn<E>(selector, cases,
 fallback)` is the enumeration form: `selector` is a `std::function<E()>`, `cases` pairs enumerators
@@ -279,7 +314,8 @@ Widget callbacks are events, not part of a mount, and may ([below](#callbacks)).
    set once (a stack's gap, a grid's columns and gap, a panel's padding and collapsibility, a
    slider's range, a Tabs' labels, a Table's columns and selection mode) are passed to their
    setters once. A TextInput's `unit` and `prefix` are applied only when bound or not empty, and its `decimals`
-   only when 0 or more, so an input that holds no number is told neither; a multiline input with
+   only when bound or 0 or more, so an input that holds no number is told neither (a bound `decimals` is told as it reads;
+   the interpreter's binding gives -1 for no places, so an input whose places go away is told so); a multiline input with
    either is refused (`std::logic_error`). A TextInput's, Select's and DateTimeInput's `label` is
    applied, as `setCaption(label, showLabel)`, only when bound, not empty, or `showLabel` is set. Each callback is handed over once, as an empty function when the node has none —
    except a Menu's `setOnActivate`, which always gets the mount's dispatcher over its items. Then
@@ -442,6 +478,87 @@ A Table's `selection` binding is made after its rows. The widget marks a request
 its row arrives, so the order only shapes the log: the first `setSelection` already finds the
 rows.
 
+### Row spans
+
+A table row may give `spans`, a `std::vector<RowSpan{column, rows}>`: `TableRowView::spans` and `Row::spans` are
+`std::optional<Prop<std::vector<RowSpan>>>`, bound in the row's own scope as the tone is, and disengaged when the row
+gives none (the mount refuses an engaged one on a row outside a table, and binds nothing for a row without one). Each
+`RowSpan` names a column by its index in the table's `columns` (the select column is not one) and a `rows` count that
+includes the row itself: `{.column = 0, .rows = 2}` on a row makes its column-0 cell cover that row and the one after
+it. The cell is the row's own, built in the row's scope; the cells in that column of the rows it covers (*covered
+cells*) are mounted and bound as every cell is, so a row keeps exactly one non-null cell per column, but they are not
+shown: not drawn, not placed, not focusable, absent from the accessibility tree, and they widen no column. Their values
+are ignored, not required to be empty; a document leaves them empty anyway, because a client that does not know spans
+draws them. A spanning cell whose own `visible` is false is hidden, and its covered cells stay covered and blank: the
+span is a property of the row, not of the cell.
+
+**The mount resolves the requested spans.** Three pieces of the mount do it:
+
+- `mountRows` takes an *after-reconcile* callback, which the rows Effect runs, untracked, after `reconcile` has brought
+  the rows into the snapshot's order. It receives the realized rows in order. The per-row `RowHook` is not used for
+  this: it fires in the middle of a reconcile, while the list is half updated.
+- Per-table *span state* holds each realized key's requested spans and whether it is a heading, and the effective
+  spans last sent to the widget for each row.
+- A row's `spans` binding, in the row's scope, stores the request in that state. During a reconcile it only marks the
+  state dirty; outside one (a row's `spans` changing on its own) it resolves at once.
+- The sort is read by the rows Effect itself, not by an Effect of its own, so two Effects cannot resolve against either
+  order. Whether the sort is engaged and the rows' order come from the same pass when the rows source reorders in the
+  batch that sets the sort (a local sort). A sort bound to state that drives a server query does not: clearing it
+  re-runs the Effect while the rows are still in the sorted order, and the resolve can report one spurious
+  `kRowSpanOverrun` until the rows arrive.
+
+The resolve walks the rows top to bottom, one column at a time, and diffs the result against what was last sent:
+`TableWidget::setRowSpans` is called for each row whose effective spans changed, the last call for a row with an empty
+list, and never for a row that has never had one. A row that was removed needs no call. It resolves after the rows
+Effect's reconcile and after a change of one row's `spans`, so a backend can see an inconsistent span, for the
+duration of one change (the last covered row removed, the rows moved under an unchanged span). Hence the backends'
+tolerance below. A requested span is refused, and its cell draws in its own row alone, when:
+
+- its `column` is not a column of the table, or its `rows` is 0 (`rows` of 1 is valid and covers nothing);
+- the row is a heading row;
+- it runs past the last row the mount holds (a table paged by the document holds one page, so a span across a page
+  boundary runs past the last row), or over a heading row;
+- the row's column is covered by an earlier row's effective span, whether or not this row has a span of its own
+  there; the earlier span wins, so the later one never overlaps it;
+- the row repeats a column its earlier `RowSpan` already named (the first wins).
+
+Only the bad span is refused; the row's other spans and every other row's stay. Each refusal is reported, not ignored:
+`detail::site::kRowSpanInvalid` for an unknown column, a `rows` of 0, a heading row's span and a repeated column,
+`kRowSpanOverrun` for a span that runs past the last row or over a heading, and `kRowSpanOverlap` for a covered
+column. A refusal is reported once per table for as long as the set of refused spans is the same, and again when the
+set changes. A site is a bare string: the mount's reports carry no path, so an author looks at the rows' order.
+
+Two conditions draw no spans at all. While the table's `sort` is engaged, the spans are not drawn and nothing is
+reported, since a sort moves the rows apart and a header click is the user's doing; they return when the sort is
+cleared. The sort counts only where the mount wires it, on a table with a sortable column (`setSort` is told it only
+then), so a table with a `sort` and no sortable column keeps its spans; and a sort the interpreter cannot compare
+still counts as engaged while the rows keep their order. And while the table is above its virtualization threshold,
+where a row's widget may be released while the rows it covers are still shown, spans are refused, and
+`kRowSpanVirtualized` is reported once per table, only when some row requests a span of two or more rows.
+
+**What the backends do** with a row's effective spans, `setRowSpans(row, spans)` (see
+[`backend_contract.md`](backend_contract.md)). A backend derives which cells are covered from the current order of the
+rows and their spans, at layout or paint time and never when `setRowSpans` is called, so a move of rows under an
+unchanged span, which sends nothing, is followed. It clips a span that runs past its last row or onto a heading row
+rather than trusting it. Then:
+
+- The spanning cell is laid out as a cell of its column and row, for the width of the column, and its height is the
+  height of the rows it covers plus the gaps between them. The spanning cell is left out of its origin row's height:
+  a row's height is that of its tallest cell that covers only that row. When a spanning cell is taller than the rows
+  it covers together, the shortfall is added to the last of them. That is computed for the table, as a cross-row
+  value, not by the row. The cell is placed down the height by its column's `valign`. Its width counts toward its
+  column's content width as any cell's does.
+- A spanning cell takes the look of its origin row over its whole height: tone, stripe (`alternate`), selection,
+  hover and focus, on an opaque surface, with the row rule between the covered rows not drawn through it. A covered
+  row draws its own look in its other columns; a covered row that is selected while its origin row is not shows the
+  origin row's unselected look in the spanned column, and a covered row's focus ring is partly under the spanning
+  cell. Both are intended.
+- Rows stay rows. A click, a double click, a tap, hover or Enter on the spanning cell, wherever on its height, acts
+  on its origin row; the same on any other cell of a covered row acts on that row. Selection, the current row, a
+  range and Ctrl+A count each row as before, and a covered row's key is reported as its own.
+- The accessible name of a row (`label`) is the row's alone. The spanning cell is the origin row's, and a covered
+  row's reading leaves it out; a document that needs its text in each row's reading says so in `rowLabel`.
+
 ## Controlled inputs
 
 The document is the single source of truth: a widget shows what its slot says, and a user's action
@@ -570,7 +687,7 @@ rows appear at the next change of the rows.
 
 ## Out of scope
 
-Not in the palette: themes beyond `TextRole`, images, charts other than points against a numeric axis (bars,
-histograms, areas, pies), chart interaction, and translation catalogues — a
+Not in the palette: themes beyond `TextRole`, images, charts other than points and bars against a numeric axis (histograms,
+areas, pies, stacked bars), chart interaction, and translation catalogues — a
 binding produces translated text. The document's further kinds and properties join with the
 interpreter ([The palette](#the-palette)).

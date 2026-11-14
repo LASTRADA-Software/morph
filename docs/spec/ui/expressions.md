@@ -34,8 +34,9 @@ clients keeps such documents free of it. The shared corpus is
 | `{"get": e, "path": "a.b"}` | `Get` | A path read out of any expression's value, as `ref` reads below its name |
 | `{"query": "q"}` | `Query` | A query's value |
 | `{"pending": "x"}`, `{"error": "x"}`, `{"errorKind": "x"}` | `Pending`, `Error`, `ErrorKind` | A query's or mutation's flight, error text and error kind |
+| `{"refusal": "x"}` | `Refusal` | A query's or mutation's last failure when it was an action refusal: `null`, or `{code, args}` ([`refusals.md`](refusals.md)) |
 | `{"result": "m"}` | `Result` | A mutation's last result |
-| `{"can": "x"}` | `Can` | Whether the principal may run a query or mutation, or the client has `host:<command>` |
+| `{"can": "x"}` | `Can` | Whether the principal may run a query or mutation, or the client has `host:<command>`, or (`context`) a scope switcher with an option is installed, which is when `setContext` can run |
 | `{"pref": "point.path"}` | `Pref` | A customization point's choice |
 | `{"fn": "name", "args": [...]}` | `Call` | A library function |
 | `{"t": "key", "fallback": "text", "args": {...}}` | `Call` (`t`) | The translated message |
@@ -44,7 +45,7 @@ clients keeps such documents free of it. The shared corpus is
 | `{"map": e, "as": "x", "to": e}`, `{"filter": e, "as": "x", "where": e}` | `Map`, `Filter` | Comprehensions over a list |
 | `{"runs": e, "as": "x", "by": e}` | `Runs` | The list split into runs of adjacent elements whose `by` values are equal, each a record `{key, count, first, last, items}` |
 | `{"sort": e, "as": "x", "by": e, "order": e}` | `Sort` | The list ordered by the value `by` gives each element; `order` is `"asc"` (also when absent or `null`) or `"desc"` |
-| `{"env": "name"}` | `Env` | `widthClass`, `locale`, `platform`, `online`, `backend` (see below) |
+| `{"env": "name"}` | `Env` | `widthClass`, `locale`, `platform`, `online`, `backend`, `context` (see below) |
 | `{"session": "name"}` | `Session` | `principal`, `userName`, `displayName`, `userKey`, `tenant`, `authenticated` |
 | `{"host": "name"}` | `Host` | A value the application registered, `null` when absent |
 
@@ -56,7 +57,7 @@ the first mount and updates it on a resize. The terminal counts its columns, so 
 Quick counts the window's width in `Theme.unitWidth`s. A document's breakpoints therefore sit at the same number of
 its own units on both frontends.
 
-The other four names, as the client sets them:
+The other five names, as the client sets them:
 
 | Name | Value | Source |
 |---|---|---|
@@ -64,6 +65,7 @@ The other four names, as the client sets them:
 | `platform` | `linux`, `macos`, `windows`, `web`, `android` or `unknown` | The platform the client binary was built for |
 | `online` | `true` or `false` | The client's source: `false` from the moment its transport drops until it connects again; an in-process source has no transport to lose and stays `true`. A drop the transport does not report (a server that stops answering on a connection that stays open) is not seen |
 | `backend` | `primary`, `local` or `remote` | The client's source: `local` for a linked application run in process, `remote` for a server. A committed backend switch replaces it |
+| `context` | the chosen option's value (a string or an integer), `null` with no scope switcher or before it answers | The shell's scope switcher ([`shell_parts.md`](shell_parts.md#the-context)). `context` is the one name `ui/1` gained after `env`'s first five; it is read like the others and changed only by the `setContext` command |
 
 A `Session` that no client drives (a test, or an application's own) reads `null` for `platform`, `online` and
 `backend` until its owner sets them with `setEnvironmentValue`.
@@ -207,9 +209,9 @@ arithmetic, and `any` where it depends on data the document does not describe.
 | Strings | `concat(s, ...)`, `format(template, args...)`, `trim`, `length` (code points), `isEmpty` (a string or a list), `contains` |
 | Lists | `count`, `sum` (0 for an empty list), `mean`, `min`, `max`, `stdev(list, dp, mode?)` (sample, n − 1), `rsd(list, dp, mode?)` (in percent), `any`, `all`, `first`, `includes`, `indexOf`, `concatLists(list, ...)`, `slice(list, start, count?)` |
 | Dates | `dateAdd(x, n, unit)`, `dateRange(from, to)` |
-| Display | `number`, `decimal(x, dp, mode?)`, `quantity(x, unit?)`, `money(x, currency)`, `date(x, style?)`, `dateTime(x, style?)` |
+| Display | `number`, `decimal(x, dp, mode?)`, `quantity(x, unit?)`, `money(x, currency, form?)`, `date(x, style?)`, `dateTime(x, style?)` |
 | Entry | `parseDecimal(text, dp?)` |
-| Text | `t(key, fallback, args?)` |
+| Text | `t(key, fallback, args?)` (`key` a literal, or `{"expr": e}` for a string, which the author API writes as `tAt`), `refusalText(refusal)` |
 
 - `format`'s placeholders are `{0}`, `{1}`, …; `{{` and `}}` are literal braces. An argument shows
   as text, a bool as `true`/`false`, a number or quantity as `number` and `quantity` show it, a
@@ -282,8 +284,12 @@ the `render::TranslationProvider`, the `UnitTable`, the display zone's offset an
 
 - `number(x)` shows an `int`, or a decimal at its own places; `decimal(x, dp)` at `dp` places;
   `quantity(x, unit?)` the magnitude and the unit's display text, converted first when a unit is
-  given; `money(x, currency)` at the currency's minor digits (0 for `JPY` and the like, 3 for `KWD`
-  and the like, otherwise 2) followed by the code. All go through `render::formatCanonicalNumber`.
+  given; `money(x, currency, form?)` at the currency's minor digits (0 for `JPY` and the like, 3 for `KWD`
+  and the like, otherwise 2), with the currency placed by `FormatContext::currency`: the locale's symbol (`€13,196.40`,
+  `13.196,40 €`) when `form` is `"symbol"`, the default, else the code. A context with no currency facts writes
+  `13196.40 EUR`. `number` and `quantity` take the separators `FormatContext::numeric` holds, which
+  `Session::setLocale` installs from the locale table. All go through `render::formatCanonicalNumber`. See
+  [`locale_table.md`](locale_table.md).
 - `date` and `dateTime` take a date, a timestamp or ISO-8601 date-time text, and format it in a
   style (`short`, `medium`, the default, or `long`) through the `DateFormatter`; without one they
   write `FormatContext::datePattern` or `dateTimePattern` when it is set, in every style alike, so
@@ -311,6 +317,14 @@ read in the pattern and then as ISO 8601 (`yyyy-MM-dd`, `yyyy-MM-dd HH:mm`, `yyy
 a full instant), so a pasted ISO date still works; text read with `xxx` takes its instant from the offset it names,
 so `24-Oct-2026 09:41 +02:00` is 07:41 UTC whatever the display zone.
 
+- **Under a locale scope.** Inside a `localeScope` ([`document_page.md`](document_page.md#the-locale-scope)) the context
+  an expression reads is the session's with the scope's locale, its row of the locale table (separators, sign, currency
+  placement) and the date patterns the application declared, else that row's; `t` resolves in the scope's locale. The
+  environment's `formatting()` answers it, so `number`, `decimal`, `quantity`, `money`, `date`, `dateTime`,
+  `dateRange`, `format` and a message's `:number` follow the scope with no change to the function. `parseDecimal` is
+  entry and always reads the session's facts, as does every parse of typed text. `{"env": "locale"}` stays the
+  session's. The units, the display zone and the `DateFormatter` are the session's.
+
 ## Messages
 
 `t(key, fallback, args)` asks the `TranslationProvider` for `(key, locale)`; the catalogue's
@@ -329,10 +343,23 @@ pattern.
 exact key before a plural category before `*`. A variable that is missing, `null` or of the wrong
 kind shows as `{$name}` and is returned as an error, which `t` reports.
 
+A `:number` operand is an `int`, a decimal, a quantity, or a **string holding a numeric literal**
+(`-?[0-9]+(\.[0-9]+)?`, at most 18 digits), which reads as the decimal it spells at the places it writes, as
+MessageFormat 2 specifies for a string operand. That is how an action refusal's string arguments format in the user's
+locale and select plural categories. A string that is not such a literal is a non-numeric operand: it shows as
+`{$name}` with an error, and matches no `.match` key but `*`. Without `:number` a string is text. There is no
+`:integer`.
+
 **Plural categories** (`pluralCategory`) are CLDR's, from the operands `n`, `i` and `v` (a
 decimal's places are its visible fraction digits): `en`, `de`, `nl`, `sv`, `it`, `es`, `fr`, `pt`,
 `pl`, `ru`, `uk`, `cs` and `ar` carry their rules; every other language selects only `other`. The
 language subtag decides, so `pl-PL` uses Polish.
+
+**Run-time keys and list arguments.** `t`'s key may be `{"expr": e}` for an expression `e` evaluating to a string, and
+its `args` may be `{"expr": e}` for an `e` evaluating to a list of `{name, value}` records, each becoming a named
+argument whose string value is formatted as text, or as a number under `:number`. `refusalText(refusal)` is the sentence for an action refusal: the
+catalogue's message for its code, else its class sentence (`a.b.generic`, then `a.generic`), else `This was refused.`.
+See [`refusals.md`](refusals.md).
 
 ## The environment
 

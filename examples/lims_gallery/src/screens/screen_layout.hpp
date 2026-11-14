@@ -29,22 +29,18 @@ inline void plainPageWhenCompact(ui::Scope& screen, ui::AnyHandle const& width) 
     screen.pageSurface(ui::cond(ui::eq(width, "compact"), ui::AnyHandle{"plainPage"}, ui::AnyHandle{nullptr}));
 }
 
-/// @brief The width class the screen lays out for: the client's `{"env": "widthClass"}`, and `expanded` where no
-///        client sets it.
+/// @brief The width class the screen lays out for: `morph::ui::author::widthClass`.
 /// @param screen The screen.
-/// @return The width class, a `let` named `widthClass`.
-[[nodiscard]] inline ui::AnyHandle widthClass(ui::Scope& screen) {
-    return screen.let("widthClass", ui::coalesce({ui::env("widthClass"), ui::AnyHandle{"expanded"}}));
-}
+/// @return The width class.
+[[nodiscard]] inline ui::AnyHandle widthClass(ui::Scope& screen) { return ui::widthClass(screen); }
 
-/// @brief The compact layout below 80 units, the expanded one otherwise: `medium` takes the expanded
-///        layout, as the designs draw only the two.
+/// @brief The compact layout below 80 units, the expanded one otherwise: `morph::ui::author::byWidth`.
 /// @param width    The width class.
 /// @param compact  The compact layout.
 /// @param expanded The expanded layout.
 /// @return The switch.
 [[nodiscard]] inline ui::Node byWidth(ui::AnyHandle const& width, ui::Nodes compact, ui::Nodes const& expanded) {
-    return ui::switchOn(width, {ui::Case{"compact", std::move(compact)}}, expanded);
+    return ui::byWidth(width, std::move(compact), expanded);
 }
 
 /// @brief An input with its caption drawn above it, as every design labels its fields.

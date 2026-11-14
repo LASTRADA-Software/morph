@@ -36,6 +36,7 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphInputBackground.qml
         qml/MorphButtonBackground.qml
         qml/MorphPlainContent.qml
+        qml/MorphPopover.qml
         qml/MorphWidget.qml
         qml/MorphField.qml
         qml/MorphRoots.qml
@@ -85,8 +86,11 @@ qt_add_qml_module(morph_qt_quick_qml
         qml/MorphCollapsible.qml
         qml/MorphSectionHeader.qml
         qml/MorphDropZone.qml
+        qml/MorphPage.qml
+        qml/MorphPageRegion.qml
         qml/MorphCheckIndicator.qml
         qml/MorphChevron.qml
+        qml/MorphCaret.qml
     OUTPUT_TARGETS morph_qt_quick_qml_output_targets
 )
 set(MORPH_QT_QUICK_QML_OUTPUT_TARGETS ${morph_qt_quick_qml_output_targets} PARENT_SCOPE)
@@ -107,6 +111,7 @@ add_library(morph_qt_quick STATIC
     keys.hpp
     kinds.hpp
     leaves.cpp
+    page.cpp
     relay.cpp
     relay.hpp
     scheduler.cpp
