@@ -88,6 +88,17 @@ constexpr std::string_view kNumber = R"({
     { "kind": "text", "testId": "verdict", "text": { "if": [ { "ref": "cap.reading.valid" }, "valid", "invalid" ] } } ] }
 })";
 
+// A plain Number field prefilled from a record, whose reading is a Decimal.
+constexpr std::string_view kNumberPrefill = R"({
+  "vocab": "ui/1", "id": "measured",
+  "models": { "sample": { "type": "Lims_SampleModel" } },
+  "queries": { "rec": { "model": "sample", "action": "Lims_ListResults", "body": { "obj": { "id": 1 } } } },
+  "view": { "kind": "column", "children": [
+    { "kind": "form", "id": "cap", "model": "sample", "action": "Lims_MeasureTemperature", "submit": "explicit",
+      "prefill": { "query": "rec" } },
+    { "kind": "text", "testId": "verdict", "text": { "if": [ { "ref": "cap.reading.valid" }, "valid", "invalid" ] } } ] }
+})";
+
 }  // namespace
 
 TEST_CASE("bound decimals: a text input follows the places its binding gives", "[ui][bound-decimals]") {
@@ -285,4 +296,26 @@ TEST_CASE("bound decimals: a plain Number accepts the places its binding gives, 
     h.backend.edit(input, "12");
     h.settle();
     CHECK(h.text("verdict") == "valid");
+}
+
+// Mutation: make the Number case of `decodeScalar` ignore an object value.
+TEST_CASE("bound decimals: a Decimal prefill loads into a plain Number field", "[ui][bound-decimals]") {
+    Harness h;
+    auto const screen = h.mount(kNumberPrefill);
+    CHECK(h.diagnostics.empty());
+    int const input = h.byTestId("TextInput", "field_reading");
+
+    h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":1,"reading":{"num":1234,"den":1000,"dp":3}})");
+    h.settle();
+    CHECK(h.backend.prop(input, "text") == "1.234");
+}
+
+TEST_CASE("bound decimals: a whole Decimal prefill loads into a plain Number field at its shown places",
+          "[ui][bound-decimals]") {
+    Harness h;
+    auto const screen = h.mount(kNumberPrefill);
+    int const input = h.byTestId("TextInput", "field_reading");
+    h.reply(h.dispatcher.last("Lims_ListResults"), R"({"sampleId":1,"reading":{"num":1000,"den":1,"dp":0}})");
+    h.settle();
+    CHECK(h.backend.prop(input, "text") == "1000.00");
 }
