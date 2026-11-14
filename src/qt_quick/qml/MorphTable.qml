@@ -102,6 +102,8 @@ MorphWidget {
     //
     // Each column's widths, read from the caches and the headers, never from the table's own width.
     function measure(): var {
+        // `advanceWidth` is a plain call, so the font is read here for the widths to follow a header font that changes.
+        void headerMetrics.font
         const pad = 2 * Theme.tableCellPaddingX
         const out = []
         for (let i = 0; i < root.columns.length; ++i) {
@@ -528,7 +530,7 @@ MorphWidget {
 
     FontMetrics {
         id: headerMetrics
-        font: Theme.smallStrongFont
+        font: Theme.tableHeaderFont
     }
 
     // The table's area, which scrolls sideways only while its columns are wider than the table: a table that fits
@@ -613,7 +615,7 @@ MorphWidget {
                         id: headerLabel
                         objectName: "header" + index
                         textFormat: Text.PlainText
-                        font: Theme.smallStrongFont
+                        font: Theme.tableHeaderFont
                         required property int index
                         required property var modelData
                         readonly property bool sorted: root.sortColumn === index

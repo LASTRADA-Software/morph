@@ -101,6 +101,9 @@ QtObject {
         capitalization: Font.AllUppercase,
         letterSpacing: 0.05 * smallPixels
     }) : captionFont
+    // A table's column header: the small strong font, or under `fieldCaptionCaps` the field caption's capitals, so a
+    // header and the captions over the fields read alike.
+    readonly property font tableHeaderFont: fieldCaptionCaps ? fieldCaptionFont : smallStrongFont
     // A figure that stands out, such as a KPI's number: the display size, strong.
     readonly property font displayFont: fontOf(displayPixels, strongWeight)
     // A record's identity, such as a head's title where the screen asks for it: the headline size, strong.

@@ -7,6 +7,7 @@
 #include <QAccessibleInterface>
 #include <QColor>
 #include <QFont>
+#include <QFontMetricsF>
 #include <QList>
 #include <QObject>
 #include <QPointF>
@@ -1208,6 +1209,67 @@ TEST_CASE("qt_quick table: an overline cell keeps its capitals and letter spacin
     CHECK(font.featureValue(QFont::Tag{"tnum"}) == 1);
     CHECK(font.capitalization() == QFont::AllUppercase);
     CHECK(font.letterSpacing() > 0.0);
+}
+
+namespace {
+
+/// The descendant item of @p item whose objectName is @p name, or null.
+QQuickItem* descendantNamed(QQuickItem const& item, QString const& name) {
+    QList<QQuickItem const*> pending{&item};
+    while (!pending.isEmpty()) {
+        QQuickItem const* const node = pending.takeLast();
+        for (QQuickItem* const child : node->childItems()) {
+            if (child->objectName() == name) {
+                return child;
+            }
+            pending.append(child);
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+// Mutation: draw the header in `Theme.smallStrongFont` whatever the token (no capitals), or size the columns from it
+// (the column is narrower than its capitals).
+TEST_CASE("qt_quick table: a column header follows field.caption.case and its column fits the capitals",
+          "[qt_quick]") {
+    Scene scene;
+    auto table = scene.backend().createTable(nullptr);
+    table->setColumns({{.label = "Sample"}, {.label = "Mixing plant and sampling point"}});
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), ui::themeValues()).empty());
+    scene.settle();
+    QQuickItem const& tableItem = Scene::itemOf(*table);
+    auto const headerOf = [&](char const* name) {
+        auto* const header = descendantNamed(tableItem, QString::fromLatin1(name));
+        REQUIRE(header != nullptr);
+        return header;
+    };
+    auto const plain = headerOf("header0")->property("font").value<QFont>();
+    CHECK(plain.capitalization() == QFont::MixedCase);
+    qreal const plainWidth = tableItem.property("widths").toList().at(1).toReal();
+
+    ui::ThemeValues values = ui::themeValues();
+    values.keywords.insert_or_assign("field.caption.case", "uppercase");
+    REQUIRE(morph::qt_quick::applyTheme(scene.engine(), values).empty());
+    scene.settle();
+    for (char const* const name : {"header0", "header1"}) {
+        QFont const font = headerOf(name)->property("font").value<QFont>();
+        CHECK(font.capitalization() == QFont::AllUppercase);
+        CHECK(font.letterSpacing() > 0.0);
+    }
+    QFont const font = headerOf("header1")->property("font").value<QFont>();
+    qreal const capitals = QFontMetricsF{font}.horizontalAdvance(QStringLiteral("MIXING PLANT AND SAMPLING POINT"));
+    CHECK(tableItem.property("widths").toList().at(1).toReal() >= capitals + columnPadding(scene));
+    CHECK(tableItem.property("widths").toList().at(1).toReal() > plainWidth);
+    // The header's text and accessible name stay as written.
+    CHECK(headerOf("header1")->property("text").toString() == QStringLiteral("Mixing plant and sampling point"));
+    bool const wasActive = QAccessible::isActive();
+    QAccessible::setActive(true);
+    QAccessibleInterface const* const node = QAccessible::queryAccessibleInterface(headerOf("header1"));
+    REQUIRE(node != nullptr);
+    CHECK(node->text(QAccessible::Name) == QStringLiteral("Mixing plant and sampling point"));
+    QAccessible::setActive(wasActive);
 }
 
 namespace {
