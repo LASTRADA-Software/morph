@@ -19,3 +19,21 @@
    obj:*morph_tests*
    fun:_dl_init
 }
+
+# A forked child inherits the parent's heap but only the forking thread. The
+# state block of a std::thread owned by an IoLoop that was running at the fork
+# is referenced only from that thread's stack, so in the child it is reported
+# as definitely lost although the parent frees it when the thread ends. The
+# registration-phase test forks from a process whose earlier tests may have
+# left a long-lived IoLoop running; nothing in the child can reach the block.
+# Frames are matched by mangled name. The three-frame stack is specific enough
+# that a real IoLoop leak, which keeps a running thread and so a reachable
+# block, is not masked.
+{
+   ioloop_thread_state_orphaned_by_fork
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:_Znwm
+   fun:_ZNSt6threadC*IoLoop*
+   fun:_ZN5morph4exec6IoLoopC*
+}
