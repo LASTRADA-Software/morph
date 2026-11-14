@@ -34,7 +34,11 @@ error. Issue #1118 records the measurements.
 - `morph::morph` becomes a compiled library. Its non-template UI code lives in `src/ui/*.cpp`.
 - Including `<morph/ui/interpreter.hpp>` alone peaks well under 1 GB in the front end, measured as above.
 - `test_lims_ignition_screen.cpp` peaks under 2 GB in a `clang-coverage` compile.
-- Every CI leg passes on GitHub-hosted runners, gcc-release included.
+- Every CI leg passes on GitHub-hosted runners, gcc-release included, with no cap on build parallelism beyond one
+  compile per CPU. Under `g++ -O3 -DNDEBUG` the UI test files peak at 4.7-5.7 GB each today
+  (`tests/test_ui_shell_parts.cpp` 5657 MB, `test_ui_workspace.cpp` 5598 MB, `test_ui_author.cpp` 5356 MB,
+  `test_ui_host.cpp` 5253 MB, `test_ui_interpreter_{commands,detail,control}.cpp` about 4675 MB). Four at once must fit
+  in 16 GB, so each must come down below about 3.5 GB.
 - `-DMORPH_BUILD_SHARED=ON` builds `morph` as a shared library that works on Linux and Windows (part B).
 - No behaviour changes. The public API, its headers and their include paths stay as they are.
 
