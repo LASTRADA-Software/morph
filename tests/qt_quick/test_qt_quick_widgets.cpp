@@ -2196,6 +2196,45 @@ TEST_CASE("qt_quick widgets: a date input with a pattern shows, reads and picks 
     CHECK(changes.back()->value->toIso8601() == "2026-10-26T10:00:00.000Z");
 }
 
+// Mutation: show the typed ISO text as it is (the field keeps ISO beside a pattern).
+TEST_CASE("qt_quick widgets: a date input with a pattern also reads ISO text and shows it in the pattern",
+          "[qt_quick]") {
+    CHECK(detail::parseDateTime(QStringLiteral("2026-11-13 15:05"), ui::DateMode::DateTime, 0, "dd.MM.yyyy HH:mm")
+              ->toIso8601() == "2026-11-13T15:05:00.000Z");
+    CHECK(detail::parseDateTime(QStringLiteral("13.11.2026 15:05"), ui::DateMode::DateTime, 0, "dd.MM.yyyy HH:mm")
+              ->toIso8601() == "2026-11-13T15:05:00.000Z");
+    CHECK(detail::parseDateTime(QStringLiteral("2026-11-13"), ui::DateMode::Date, 0, "dd.MM.yyyy")->toIso8601() ==
+          "2026-11-13T00:00:00.000Z");
+    CHECK_FALSE(detail::parseDateTime(QStringLiteral("13/11/2026"), ui::DateMode::Date, 0, "dd.MM.yyyy").has_value());
+    CHECK_FALSE(detail::parseDateTime(QStringLiteral("2026-13-45"), ui::DateMode::Date, 0, "dd.MM.yyyy").has_value());
+
+    using morph::time::DateTime;
+    using namespace std::chrono;
+    Scene scene;
+    auto const column = scene.backend().createStack(nullptr, ui::Axis::Vertical);
+    auto const input = scene.backend().createDateTimeInput(column.get(), ui::DateMode::DateTime, 0);
+    auto const other = scene.backend().createButton(column.get());
+    std::vector<std::optional<morph::time::Timestamp>> changes;
+    input->setOnChange([&changes](std::optional<morph::time::Timestamp> value) { changes.push_back(value); });
+    input->setPattern("dd.MM.yyyy HH:mm");
+    scene.settle();
+    scene.click(Scene::controlOf(*input));
+    scene.enter(QStringLiteral("2026-11-13 15:05"));
+    scene.click(Scene::itemOf(*other));
+    REQUIRE(changes.size() == 1);
+    REQUIRE(changes.back().has_value());
+    CHECK(changes.back()->value->toIso8601() == "2026-11-13T15:05:00.000Z");
+    CHECK(base(*input).shownText() == "13.11.2026 15:05");
+
+    // Text in neither form is refused: no change, and the field shows its value again.
+    scene.click(Scene::controlOf(*input));
+    scene.standardKey(QKeySequence::SelectAll);
+    scene.enter(QStringLiteral("13/11/2026 16:00"));
+    scene.click(Scene::itemOf(*other));
+    CHECK(changes.size() == 1);
+    CHECK(base(*input).shownText() == "13.11.2026 15:05");
+}
+
 namespace {
 
 // The items named @p name below @p root in the visual tree, in the order the model made them, left to right.
@@ -2632,45 +2671,6 @@ TEST_CASE(
     QAccessible::setActive(wasActive);
 }
 
-namespace {
-
-/// The first item named @p name under @p root, depth first; null when there is none.
-// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
-QQuickItem* firstNamed(QQuickItem const& root, QString const& name) {
-    for (QQuickItem* const child : root.childItems()) {
-        if (child->objectName() == name) {
-            return child;
-        }
-        if (QQuickItem* const found = firstNamed(*child, name)) {
-            return found;
-        }
-    }
-    return nullptr;
-}
-
-/// A theme property read as a number.
-qreal themeNumber(Scene& scene, char const* property) {
-    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
-    REQUIRE(theme != nullptr);
-    return theme->property(property).toReal();
-}
-
-}  // namespace
-
-// Mutation: keep the style's vertical padding around the box (+12 px), or keep the indicator at `unitHeight` on
-// compact.
-TEST_CASE("qt_quick widgets: a check box has no padding of its own, and its box is half the touch height on compact",
-          "[qt_quick]") {
-    Scene scene;
-    auto box = scene.backend().createCheckbox(nullptr);
-    box->setLabel("Agree");
-    scene.settle();
-    QQuickItem const& control = Scene::controlOf(*box);
-    QQuickItem const* const indicator = firstNamed(control, QStringLiteral("boxIndicator"));
-    REQUIRE(indicator != nullptr);
-    qreal const unit = themeNumber(scene, "unitHeight");
-    qreal const line = control.property("implicitContentHeight").toReal();
-    CHECK(control.height() == Catch::Approx(std::max(line, unit)).margin(0.5));
 // Mutation: draw `MorphField`'s caption in `Theme.captionFont` again (the input's caption stays mixed case), or the
 // label role in it (the label text does).
 TEST_CASE("qt_quick widgets: a field caption and a label text are small capitals under field.caption.case",
@@ -2718,6 +2718,45 @@ TEST_CASE("qt_quick widgets: a field caption and a label text are small capitals
     CHECK(inputCaption()->property("text").toString() == QStringLiteral("Sampled by"));
 }
 
+namespace {
+
+/// The first item named @p name under @p root, depth first; null when there is none.
+// NOLINTNEXTLINE(misc-no-recursion): an item tree, walked down.
+QQuickItem* firstNamed(QQuickItem const& root, QString const& name) {
+    for (QQuickItem* const child : root.childItems()) {
+        if (child->objectName() == name) {
+            return child;
+        }
+        if (QQuickItem* const found = firstNamed(*child, name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+/// A theme property read as a number.
+qreal themeNumber(Scene& scene, char const* property) {
+    auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));
+    REQUIRE(theme != nullptr);
+    return theme->property(property).toReal();
+}
+
+}  // namespace
+
+// Mutation: keep the style's vertical padding around the box (+12 px), or keep the indicator at `unitHeight` on
+// compact.
+TEST_CASE("qt_quick widgets: a check box has no padding of its own, and its box is half the touch height on compact",
+          "[qt_quick]") {
+    Scene scene;
+    auto box = scene.backend().createCheckbox(nullptr);
+    box->setLabel("Agree");
+    scene.settle();
+    QQuickItem const& control = Scene::controlOf(*box);
+    QQuickItem const* const indicator = firstNamed(control, QStringLiteral("boxIndicator"));
+    REQUIRE(indicator != nullptr);
+    qreal const unit = themeNumber(scene, "unitHeight");
+    qreal const line = control.property("implicitContentHeight").toReal();
+    CHECK(control.height() == Catch::Approx(std::max(line, unit)).margin(0.5));
     CHECK(indicator->height() == Catch::Approx(unit).margin(0.5));
 
     auto* const theme = scene.engine().singletonInstance<QObject*>(QStringLiteral("MorphUi"), QStringLiteral("Theme"));

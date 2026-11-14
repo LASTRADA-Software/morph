@@ -420,8 +420,10 @@ DateTimeImpl::DateTimeImpl(Context& context, ui::ContainerWidget* parent, ui::Da
             show(_shown, true);
             return;
         }
-        _shown = text;
-        show(text);
+        // With a pattern the instant is shown in it: `ui::parseDate` also reads ISO, and a pasted ISO date should not
+        // stay ISO beside a field that shows its value in the pattern.
+        _shown = _pattern.empty() ? text : formatDateTime(*parsed, _mode, _offsetMinutes, _pattern);
+        show(_shown);
         if (_onChange) {
             _onChange(morph::time::Timestamp{*parsed});
         }
