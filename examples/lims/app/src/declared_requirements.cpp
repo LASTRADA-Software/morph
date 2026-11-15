@@ -7,10 +7,23 @@
 #include <string_view>
 
 #include "lims/billing/authorization/billing_authorization.hpp"
+#include "lims/billing/models/billing_run_model.hpp"
+#include "lims/billing/models/invoice_edit_model.hpp"
+#include "lims/billing/models/invoice_model.hpp"
+#include "lims/billing/models/price_list_model.hpp"
 #include "lims/inventory/authorization/inventory_authorization.hpp"
+#include "lims/inventory/models/procurement_model.hpp"
+#include "lims/inventory/models/reservation_model.hpp"
+#include "lims/inventory/models/stock_model.hpp"
 #include "lims/lab/authorization/lab_authorization.hpp"
+#include "lims/lab/models/analysis_catalog_model.hpp"
+#include "lims/lab/models/ignition_model.hpp"
+#include "lims/lab/models/sample_model.hpp"
 #include "lims/ledger/authorization/ledger_authorization.hpp"
+#include "lims/ledger/models/ledger_model.hpp"
+#include "lims/ledger/models/ledger_report_model.hpp"
 #include "lims/org/authorization/org_authorization.hpp"
+#include "lims/org/models/org_model.hpp"
 
 namespace lims::app {
 
