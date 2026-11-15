@@ -1,0 +1,735 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#include <algorithm>
+#include <cctype>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <functional>
+#include <iterator>
+#include <map>
+#include <memory>
+#include <morph/attributes.hpp>
+#include <morph/forms/engine/field_model.hpp>
+#include <morph/ui/backend.hpp>
+#include <morph/ui/bundle.hpp>
+#include <morph/ui/document.hpp>
+#include <morph/ui/explorer.hpp>
+#include <morph/ui/host.hpp>
+#include <morph/ui/value.hpp>
+#include <optional>
+#include <ranges>
+#include <set>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <variant>
+#include <vector>
+
+namespace morph::ui::detail::explorer {
+namespace {
+
+/// @brief The scopes around a node, innermost last: the aliases in its reach.
+using ScopeChain = std::vector<ScopeDecl const*>;
+
+/// @brief The model type an alias binds, from the innermost scope that declares it.
+/// @param scopes The scopes around the use.
+/// @param alias  The alias.
+/// @return The type; empty when no scope declares the alias.
+std::string typeOf(ScopeChain const& scopes, std::string_view alias) {
+    for (ScopeDecl const* const scope : scopes | std::views::reverse) {
+        auto const found = std::ranges::find(scope->models, alias, &ModelDecl::name);
+        if (found != scope->models.end()) {
+            return found->type;
+        }
+    }
+    return {};
+}
+
+/// @brief Records one use, its model type the alias's, else the catalog's for the action.
+/// @param uses    Where it is recorded.
+/// @param scopes  The scopes around the use.
+/// @param catalog The facts a borrowed alias's type is read from.
+/// @param alias   The alias the use goes through.
+/// @param action  The action id.
+/// @param kind    What names it.
+/// @param pointer Its JSON Pointer.
+void addUse(std::vector<ActionUse>& uses, ScopeChain const& scopes, Catalog const& catalog, std::string_view alias,
+            std::string action, ActionUseKind kind, std::string pointer) {
+    std::string type = typeOf(scopes, alias);
+    // A borrowed alias has no type of its own in the document: the catalog says which model has the action.
+    if (type.empty() && catalog.action) {
+        if (std::optional<ActionInfo> const info = catalog.action(action)) {
+            type = info->modelType;
+        }
+    }
+    uses.push_back(ActionUse{
+        .actionId = std::move(action), .modelType = std::move(type), .kind = kind, .pointer = std::move(pointer)});
+}
+
+/// @brief Records the queries and mutations of the innermost scope.
+/// @param uses    Where they are recorded.
+/// @param scopes  The scopes, the one read last.
+/// @param catalog The facts a borrowed alias's type is read from.
+void scopeUses(std::vector<ActionUse>& uses, ScopeChain const& scopes, Catalog const& catalog) {
+    ScopeDecl const& scope = *scopes.back();
+    for (QueryDecl const& query : scope.queries) {
+        addUse(uses, scopes, catalog, query.model, query.action, ActionUseKind::Query, query.path);
+    }
+    for (MutationDecl const& mutation : scope.mutations) {
+        addUse(uses, scopes, catalog, mutation.model, mutation.action, ActionUseKind::Mutation, mutation.path);
+    }
+}
+
+/// @brief Records the uses of a node and everything under it, with the scope it creates.
+/// @param uses    Where they are recorded.
+/// @param scopes  The scopes around the node; restored on return.
+/// @param catalog The facts a borrowed alias's type is read from.
+/// @param node    The node.
+// NOLINTNEXTLINE(misc-no-recursion): a node's children are nodes.
+void nodeUses(std::vector<ActionUse>& uses, ScopeChain& scopes, Catalog const& catalog, DocNode const& node) {
+    if (node.scope) {
+        scopes.push_back(&*node.scope);
+        scopeUses(uses, scopes, catalog);
+    }
+    static constexpr std::array<std::pair<std::string_view, ActionUseKind>, 3> kNamed{
+        {{"form", ActionUseKind::Form}, {"collection", ActionUseKind::Collection}, {"wizard", ActionUseKind::Wizard}}};
+    for (auto const& [kind, use] : kNamed) {
+        if (node.kind == kind) {
+            addUse(uses, scopes, catalog, node.name("model"), std::string{node.name("action")}, use, node.path);
+        }
+    }
+    for (auto const& [key, nodes] : node.children) {
+        static_cast<void>(key);
+        for (DocNodePtr const& child : nodes) {
+            nodeUses(uses, scopes, catalog, *child);
+        }
+    }
+    for (auto const& [key, parts] : node.parts) {
+        static_cast<void>(key);
+        for (DocNodePtr const& part : parts) {
+            nodeUses(uses, scopes, catalog, *part);
+        }
+    }
+    if (node.scope) {
+        scopes.pop_back();
+    }
+}
+
+/// @brief Texts joined by a separator.
+/// @param parts     The texts.
+/// @param separator What goes between two.
+/// @return The joined text.
+std::string joined(std::vector<std::string> const& parts, std::string_view separator) {
+    std::string out;
+    for (std::string const& part : parts) {
+        out += out.empty() ? part : std::string{separator} + part;
+    }
+    return out;
+}
+
+/// @brief A field's type as the explorer lists it.
+/// @param field The field, as the forms engine reads it.
+/// @return The type.
+std::string typeText(forms::FieldSpec const& field) {
+    using forms::FieldKind;
+    if (field.kind == FieldKind::Enum) {
+        std::vector<std::string> labels;
+        labels.reserve(field.enumOptions.size());
+        for (forms::ChoiceOption const& option : field.enumOptions) {
+            labels.push_back(option.label);
+        }
+        return "one of: " + joined(labels, ", ");
+    }
+    if (field.kind == FieldKind::Quantity) {
+        std::string const text = "quantity in " + (field.unit.empty() ? field.unitAscii : field.unit);
+        std::vector<std::string> others;
+        for (std::size_t index = 1; index < field.units.size(); ++index) {
+            others.push_back(field.units.at(index).display);
+        }
+        return others.empty() ? text : text + " (or " + joined(others, ", ") + ")";
+    }
+    if (field.kind == FieldKind::Decimal && field.decimalPlaces) {
+        return "decimal, " + std::to_string(*field.decimalPlaces) + " places";
+    }
+    if (field.kind == FieldKind::Choice && field.choice) {
+        return "choice from " + field.choice->optionsAction;
+    }
+    if (field.kind == FieldKind::Array) {
+        return "list of " + field.itemType;
+    }
+    if (field.kind == FieldKind::ObjectArray) {
+        return "list of objects";
+    }
+    return std::string{forms::fieldKindName(field.kind)};
+}
+
+}  // namespace
+}  // namespace morph::ui::detail::explorer
+
+namespace morph::ui {
+
+std::vector<ActionUse> actionUses(Document const& document, Catalog const& catalog) {
+    std::vector<ActionUse> uses;
+    detail::explorer::ScopeChain scopes{&document.scope};
+    detail::explorer::scopeUses(uses, scopes, catalog);
+    if (document.view) {
+        detail::explorer::nodeUses(uses, scopes, catalog, *document.view);
+    }
+    return uses;
+}
+
+std::expected<std::vector<ActionField>, std::string> actionFields(std::string_view schemaJson) {
+    auto model = forms::FormModel::fromSchema("", schemaJson);
+    if (!model) {
+        std::string const& where = model.error().path;
+        return std::unexpected(where.empty() ? model.error().message : where + ": " + model.error().message);
+    }
+    std::vector<ActionField> fields;
+    for (forms::FieldSpec const& spec : model->fields()) {
+        ActionField field{.name = spec.name, .type = detail::explorer::typeText(spec), .required = spec.required};
+        if (auto const& minimum = spec.exactMinimum ? spec.exactMinimum : spec.minimum) {
+            field.rules.push_back("min " + *minimum);
+        }
+        if (auto const& maximum = spec.exactMaximum ? spec.exactMaximum : spec.maximum) {
+            field.rules.push_back("max " + *maximum);
+        }
+        if (spec.multipleOf) {
+            field.rules.push_back("multiple of " + *spec.multipleOf);
+        }
+        if (spec.readOnly) {
+            field.rules.emplace_back("read-only");
+        }
+        if (spec.hidden) {
+            field.rules.emplace_back("hidden");
+        }
+        for (forms::RuleExpr const& rule : model->rules()) {
+            if (rule.names(spec.name)) {
+                field.rules.emplace_back(rule.kindName());
+            }
+        }
+        fields.push_back(std::move(field));
+    }
+    return fields;
+}
+
+std::string tryItDocument(std::string_view actionId, std::string_view modelType, TryItKind kind) {
+    auto const quoted = [](std::string_view text) { return glz::write_json(std::string{text}).value_or("\"\""); };
+    std::string const action = quoted(actionId);
+    std::string node;
+    if (kind == TryItKind::Form) {
+        node = R"({"kind":"form","testId":"tryit","model":"target","action":)" + action +
+               R"(,"submit":"explicit",
+                     "onSuccess":[{"set":"reply","value":{"ref":"event"}},{"set":"failure","value":null}],
+                     "onError":[{"set":"failure","value":{"ref":"event"}},{"set":"reply","value":null}]},
+                   {"kind":"text","testId":"tryit_result","role":"success","text":{"ref":"reply"}},
+                   {"kind":"text","testId":"tryit_error","role":"error","text":{"if":[
+                     {"fn":"engaged","args":[{"ref":"failure"}]},
+                     {"fn":"format","args":["Failed: {0}",{"ref":"failure"}]},""]}})";
+    } else {
+        node = std::string{R"({"kind":")"} + (kind == TryItKind::Collection ? "collection" : "wizard") +
+               R"(","testId":"tryit","model":"target","action":)" + action + "}";
+    }
+    return R"({"vocab":"ui/1","id":)" + quoted(tryItScreenId(actionId)) + R"(,"title":)" +
+           quoted("Try " + std::string{actionId}) + R"(,
+      "models":{"target":{"type":)" +
+           quoted(modelType) + R"(,"instance":"private"}},
+      "state":{"reply":{"init":null},"failure":{"init":null}},
+      "view":{"kind":"column","gap":3,"children":[)" +
+           node + "]}}";
+}
+
+std::expected<std::map<std::string, std::string, std::less<>>, std::string> schemasOf(std::string_view document) {
+    auto parsed = parseJson(document);
+    if (!parsed) {
+        return std::unexpected(std::move(parsed.error()));
+    }
+    auto const* const actions = std::get_if<Json::object_t>(&parsed->data);
+    if (actions == nullptr) {
+        return std::unexpected(std::string{"the schemas document is not an object"});
+    }
+    std::map<std::string, std::string, std::less<>> schemas;
+    for (auto const& [action, schema] : *actions) {
+        schemas.emplace(action, glz::write_json(schema).value_or(std::string{}));
+    }
+    return schemas;
+}
+
+Catalog tryItCatalog(Catalog catalog, SchemasByModel const& schemas) {
+    auto const known = std::make_shared<std::map<std::string, std::pair<std::string, std::string>, std::less<>>>();
+    for (auto const& [type, document] : schemas) {
+        if (!document) {
+            continue;
+        }
+        if (auto read = schemasOf(*document)) {
+            for (auto& [action, schema] : *read) {
+                known->emplace(action, std::pair{type, std::move(schema)});
+            }
+        }
+    }
+    catalog.action = [inner = std::move(catalog.action),
+                      known](std::string_view actionId) -> std::optional<ActionInfo> {
+        if (inner) {
+            if (std::optional<ActionInfo> info = inner(actionId)) {
+                return info;
+            }
+        }
+        auto const found = known->find(actionId);
+        if (found == known->end()) {
+            return std::nullopt;
+        }
+        ActionInfo info;
+        info.modelType = found->second.first;
+        return info;
+    };
+    catalog.schema = [inner = std::move(catalog.schema),
+                      known](std::string_view actionId) -> std::optional<std::string> {
+        if (inner) {
+            if (std::optional<std::string> schema = inner(actionId)) {
+                return schema;
+            }
+        }
+        auto const found = known->find(actionId);
+        if (found == known->end()) {
+            return std::nullopt;
+        }
+        return found->second.second;
+    };
+    return catalog;
+}
+
+Explorer::Explorer(reactive::Runtime& runtime MORPH_LIFETIMEBOUND, IViewBackend& backend MORPH_LIFETIMEBOUND,
+                   ContainerWidget& page MORPH_LIFETIMEBOUND, ExplorerOptions options)
+    : _backend{&backend},
+      _options{std::move(options)},
+      _scope{runtime},
+      _title{_scope.computed([] { return std::string{"Explorer"}; })},
+      _dirty{_scope.computed([] { return false; })},
+      _identity{_scope.computed([] { return Value{}; })},
+      _root{backend.createSplitter(&page, Axis::Horizontal)},
+      _listScroll{backend.createScroll(_root.get(), Axis::Vertical)},
+      _list{backend.createStack(_listScroll.get(), Axis::Vertical)},
+      _detailScroll{backend.createScroll(_root.get(), Axis::Vertical)},
+      _detail{backend.createStack(_detailScroll.get(), Axis::Vertical)} {
+    if (!_options.facts.action && !_options.facts.model) {
+        _options.facts = _options.catalog.facts();
+    }
+    _permitted.insert(_options.catalog.permitted.begin(), _options.catalog.permitted.end());
+    for (auto const& [screenId, document] : _options.documents) {
+        for (ActionUse& use : actionUses(*document, _options.facts)) {
+            std::string action = use.actionId;
+            _uses[std::move(action)].emplace_back(screenId, std::move(use));
+        }
+    }
+    _root->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+    _root->setTestId("explorer");
+    _root->setSizes({kListWidth, kDetailWidth});
+    _listScroll->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+    _detailScroll->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
+    _list->setGap(2);
+    _list->setLayout({.width = Sizing::stretch(), .height = {}});
+    _detail->setGap(4);
+    _detail->setLayout({.width = Sizing::stretch(), .height = {}});
+    _detail->setTestId("explorer_detail");
+    listAll();
+    showNothingChosen();
+}
+
+void Explorer::requestClose(std::function<void(bool closed)> done) {
+    clearDetail();
+    if (done) {
+        done(true);
+    }
+}
+
+bool Explorer::select(std::string const& actionId) {
+    for (Model const& model : _models) {
+        if (std::ranges::contains(model.actions, actionId, &ActionEntry::id)) {
+            showAction(model, actionId);
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string Explorer::lower(std::string_view text) {
+    std::string out{text};
+    std::ranges::transform(
+        out, out.begin(), [](char byte) { return static_cast<char>(std::tolower(static_cast<unsigned char>(byte))); });
+    return out;
+}
+
+std::string Explorer::titleOf(CatalogEntry const& entry) {
+    if (std::string const* const text = std::get_if<std::string>(&entry.title.data)) {
+        return *text;
+    }
+    if (auto const* const object = std::get_if<Json::object_t>(&entry.title.data)) {
+        for (auto const& [key, value] : *object) {
+            std::string const* const text = std::get_if<std::string>(&value.data);
+            if (key == "fallback" && text != nullptr) {
+                return *text;
+            }
+        }
+    }
+    return entry.id;
+}
+
+std::set<std::string, std::less<>> Explorer::modelTypes() const {
+    std::set<std::string, std::less<>> types;
+    if (_options.catalog.models) {
+        for (auto const& [type, info] : *_options.catalog.models) {
+            static_cast<void>(info);
+            types.insert(type);
+        }
+    }
+    if (_options.catalog.actions) {
+        for (auto const& [action, info] : *_options.catalog.actions) {
+            static_cast<void>(action);
+            if (!info.modelType.empty()) {
+                types.insert(info.modelType);
+            }
+        }
+    }
+    for (auto const& [type, document] : _options.schemas) {
+        static_cast<void>(document);
+        types.insert(type);
+    }
+    return types;
+}
+
+std::unique_ptr<TextWidget> Explorer::text(ContainerWidget& parent, std::string_view content, TextRole role) const {
+    auto made = _backend->createText(&parent);
+    made->setText(content);
+    made->setRole(role);
+    return made;
+}
+
+void Explorer::listAll() {
+    _search = _backend->createTextInput(_list.get(), TextInputMode::SingleLine);
+    _search->setTestId("explorer_search");
+    _search->setPlaceholder("Search");
+    _search->setAccessibleName("Search screens and actions");
+    _search->setOnChange([this](std::string const& wanted) { filter(wanted); });
+    _screensHeading = text(*_list, {}, TextRole::Heading);
+    for (CatalogEntry const& entry : _options.catalog.entries) {
+        ScreenItem item{.title = titleOf(entry), .button = _backend->createButton(_list.get())};
+        item.button->setLabel(item.title);
+        item.button->setTestId("explorer_screen_" + entry.id);
+        item.button->setEnabled(entry.available || entry.isPublic);
+        item.button->setOnClick([this, screenId = entry.id] { open(screenId); });
+        _screens.push_back(std::move(item));
+    }
+    _screensHeading->setText("Screens (" + std::to_string(_screens.size()) + ")");
+    _modelsHeading = text(*_list, {}, TextRole::Heading);
+    for (std::string const& type : modelTypes()) {
+        Model model{.type = type,
+                    .refusal = {},
+                    .box = _backend->createCollapsible(_list.get()),
+                    .column = {},
+                    .note = {},
+                    .actions = {}};
+        model.box->setTitle(type);
+        model.box->setTestId("explorer_model_" + type);
+        model.column = _backend->createStack(model.box.get(), Axis::Vertical);
+        model.column->setGap(1);
+        auto const found = _options.schemas.find(type);
+        if (found == _options.schemas.end()) {
+            model.refusal = "not described: the schemas did not arrive";
+        } else if (!found->second) {
+            model.refusal = "not described: " + found->second.error();
+        } else if (auto read = schemasOf(*found->second)) {
+            for (auto& [action, schema] : *read) {
+                ActionEntry entry{.id = action, .schema = std::move(schema), .button = {}};
+                entry.button = _backend->createButton(model.column.get());
+                entry.button->setLabel(action);
+                entry.button->setTestId("explorer_action_" + action);
+                entry.button->setOnClick([this, id = action] { select(id); });
+                model.actions.push_back(std::move(entry));
+            }
+        } else {
+            model.refusal = "not described: " + read.error();
+        }
+        if (!model.refusal.empty()) {
+            model.note = text(*model.column, model.refusal, TextRole::Muted);
+        }
+        _models.push_back(std::move(model));
+    }
+    _modelsHeading->setText("Models (" + std::to_string(_models.size()) + ")");
+}
+
+void Explorer::filter(std::string const& wanted) {
+    std::string const needle = lower(wanted);
+    auto const matches = [&needle](std::string_view text) { return needle.empty() || lower(text).contains(needle); };
+    for (ScreenItem& item : _screens) {
+        item.button->setVisible(matches(item.title));
+    }
+    for (Model& model : _models) {
+        bool const typeMatches = matches(model.type);
+        bool any = false;
+        for (ActionEntry& action : model.actions) {
+            bool const shown = typeMatches || matches(action.id);
+            action.button->setVisible(shown);
+            any = any || shown;
+        }
+        model.box->setVisible(typeMatches || any);
+        if (!needle.empty() && any) {
+            model.box->setOpen(true);
+        }
+    }
+}
+
+void Explorer::open(std::string const& screenId) const {
+    if (_options.onOpen) {
+        _options.onOpen(screenId);
+    }
+}
+
+void Explorer::clearDetail() {
+    _tryIt.reset();
+    while (!_sections.empty()) {
+        _sections.pop_back();
+    }
+}
+
+void Explorer::showNothingChosen() {
+    clearDetail();
+    _selected.clear();
+    keep(text(*_detail, "Choose an action to see its facts, its fields, where it is used, and to try it.",
+              TextRole::Muted))
+        .setTestId("explorer_hint");
+}
+
+StackWidget& Explorer::section(std::string_view title, std::string const& testId) {
+    PanelWidget& panel = keep(_backend->createPanel(_detail.get()));
+    panel.setTitle(title);
+    panel.setTestId(testId);
+    StackWidget& column = keep(_backend->createStack(&panel, Axis::Vertical));
+    column.setGap(2);
+    return column;
+}
+
+void Explorer::grid(StackWidget& parent, int columns, std::vector<std::string> const& cells, bool headed) {
+    GridWidget& made = keep(_backend->createGrid(&parent));
+    made.setColumns(columns);
+    made.setGap(2);
+    made.setLayout({.width = Sizing::stretch(), .height = {}});
+    auto const width = static_cast<std::size_t>(columns);
+    for (std::size_t index = 0; index < cells.size(); ++index) {
+        bool const muted = headed ? index < width : index % width == 0;
+        keep(text(made, cells.at(index), muted ? TextRole::Muted : TextRole::Normal));
+    }
+}
+
+std::string_view Explorer::permission(std::string const& actionId) const {
+    if (_permitted.contains(actionId)) {
+        return "permitted";
+    }
+    // The catalog's `permitted` covers only actions a served document names.
+    bool const named = _options.catalog.actions && _options.catalog.actions->contains(actionId);
+    return named ? "not permitted" : "decided when it runs";
+}
+
+std::vector<std::string> Explorer::catalogFacts(std::string const& actionId) const {
+    if (!_options.catalog.actions || !_options.catalog.actions->contains(actionId)) {
+        return {};
+    }
+    ActionInfo const& info = _options.catalog.actions->at(actionId);
+    auto const listed = [](std::vector<std::string> const& names) {
+        return names.empty() ? std::string{"—"} : detail::explorer::joined(names, ", ");
+    };
+    std::vector<std::string> cells{"sends a credential",
+                                   info.credential ? "yes" : "no",
+                                   "server-calculated",
+                                   listed(info.calculatedFields),
+                                   "secret",
+                                   listed(info.secretFields)};
+    if (info.listFields) {
+        cells.insert(cells.end(), {"list fields", listed(*info.listFields)});
+    }
+    cells.insert(cells.end(), {"effects", effectsText(info)});
+    if (!info.records.empty()) {
+        cells.insert(cells.end(), {"records", recordsText(info)});
+    }
+    return cells;
+}
+
+std::string Explorer::effectsText(ActionInfo const& info) {
+    if (!info.effects) {
+        return "reads";
+    }
+    std::vector<std::string> effects;
+    for (ActionEffect const& effect : *info.effects) {
+        if (effect.kind == "changesInstance") {
+            effects.emplace_back("changes its instance");
+        } else if (effect.record) {
+            effects.push_back(effect.kind + " " + *effect.record);
+        } else {
+            effects.push_back(effect.kind);
+        }
+    }
+    return detail::explorer::joined(effects, ", ");
+}
+
+std::string Explorer::recordsText(ActionInfo const& info) {
+    std::vector<std::string> records;
+    for (ActionRecordInfo const& record : info.records) {
+        std::vector<std::string> paths;
+        paths.reserve(record.paths.size());
+        for (std::string const& path : record.paths) {
+            paths.push_back(path.empty() ? std::string{"the result"} : path);
+        }
+        std::string key{" keyless"};
+        if (auto const& field = record.keyField) {
+            key = " by " + *field;
+        }
+        records.push_back(record.record + key + " at " + detail::explorer::joined(paths, ", "));
+    }
+    return detail::explorer::joined(records, "; ");
+}
+
+std::vector<std::string> Explorer::payloadFacts(std::string const& schema) {
+    std::vector<std::string> cells;
+    auto parsed = parseJson(schema);
+    auto const* const object = parsed ? std::get_if<Json::object_t>(&parsed->data) : nullptr;
+    if (object == nullptr) {
+        return cells;
+    }
+    for (auto const& [key, value] : *object) {
+        if (key != "x-payloadFingerprint" && key != "x-payloadShape") {
+            continue;
+        }
+        std::string const* const plain = std::get_if<std::string>(&value.data);
+        cells.emplace_back(key == "x-payloadFingerprint" ? "payload fingerprint" : "payload shape");
+        cells.push_back(plain != nullptr ? *plain : glz::write_json(value).value_or(std::string{}));
+    }
+    return cells;
+}
+
+void Explorer::showFacts(Model const& model, ActionEntry const& action) {
+    std::vector<std::string> cells{"model", model.type};
+    std::ranges::move(catalogFacts(action.id), std::back_inserter(cells));
+    std::ranges::move(payloadFacts(action.schema), std::back_inserter(cells));
+    cells.insert(cells.end(), {"may run it", std::string{permission(action.id)}});
+    grid(section("Facts", "explorer_facts"), 2, cells, false);
+}
+
+bool Explorer::showFields(ActionEntry const& action) {
+    StackWidget& content = section("Fields", "explorer_fields");
+    auto const fields = actionFields(action.schema);
+    if (!fields) {
+        keep(text(content, "unreadable schema: " + fields.error(), TextRole::Error));
+        keep(text(content, action.schema.substr(0, kShownBytes), TextRole::Muted));
+        return false;
+    }
+    if (fields->empty()) {
+        keep(text(content, "No fields.", TextRole::Muted));
+        return true;
+    }
+    std::vector<std::string> cells{"name", "type", "required", "rules"};
+    for (ActionField const& field : *fields) {
+        cells.insert(cells.end(),
+                     {field.name, field.type, field.required ? "required" : "optional",
+                      field.rules.empty() ? std::string{"—"} : detail::explorer::joined(field.rules, ", ")});
+    }
+    grid(content, 4, cells, true);
+    return true;
+}
+
+void Explorer::showUses(std::string const& actionId) {
+    StackWidget& content = section("Used by", "explorer_uses");
+    auto const found = _uses.find(actionId);
+    if (found == _uses.end()) {
+        keep(text(content, "No loaded document names it.", TextRole::Muted));
+        return;
+    }
+    std::size_t index = 0;
+    for (auto const& [screenId, use] : found->second) {
+        StackWidget& row = keep(_backend->createStack(&content, Axis::Horizontal));
+        row.setGap(3);
+        keep(text(row, screenId + "  " + use.pointer + "  (" + std::string{actionUseKindName(use.kind)} + ")"))
+            .setLayout({.width = Sizing::stretch(), .height = {}});
+        // The app document is no screen to open.
+        if (screenId != "app") {
+            ButtonWidget& button = keep(_backend->createButton(&row));
+            button.setLabel("Open");
+            button.setTestId("explorer_open_" + std::to_string(index));
+            button.setOnClick([this, target = screenId] { open(target); });
+        }
+        ++index;
+    }
+}
+
+TryItKind Explorer::tryItKind(std::string const& actionId) const {
+    if (_options.catalog.views && _options.catalog.views->contains(actionId)) {
+        return TryItKind::Collection;
+    }
+    if (_options.catalog.wizards && _options.catalog.wizards->contains(actionId)) {
+        return TryItKind::Wizard;
+    }
+    return TryItKind::Form;
+}
+
+void Explorer::showTryIt(Model const& model, ActionEntry const& action, bool readable) {
+    StackWidget& content = section("Try it", "explorer_tryit");
+    auto const status = [this, &content](std::string const& reason) {
+        keep(text(content, reason, TextRole::Muted)).setTestId("explorer_tryit_status");
+    };
+    if (_options.host == nullptr || !_options.provide) {
+        status("Not offered here.");
+        return;
+    }
+    if (!readable) {
+        status("Not offered: the schema cannot be read.");
+        return;
+    }
+    if (permission(action.id) == "not permitted") {
+        status("not permitted");
+        return;
+    }
+    std::string const screenId = tryItScreenId(action.id);
+    auto loaded = loadDocumentText(tryItDocument(action.id, model.type, tryItKind(action.id)),
+                                   LoadOptions{.catalog = tryItCatalog(_options.facts, _options.schemas)});
+    if (!loaded) {
+        status("Cannot build it: " + loaded.error().message());
+        return;
+    }
+    _options.provide(screenId, std::make_shared<Document const>(std::move(*loaded)));
+    SlotWidget& slot = keep(_backend->createSlot(&content));
+    slot.setLayout({.width = Sizing::stretch(), .height = {}});
+    auto mounted = _options.host->mountInto(screenId, {}, slot);
+    if (!mounted) {
+        status("Cannot mount it: " + mounted.error().reason);
+        return;
+    }
+    _tryIt = std::move(*mounted);
+}
+
+void Explorer::showSchema(std::string const& actionId, ActionEntry const& action) {
+    CollapsibleWidget& box = keep(_backend->createCollapsible(_detail.get()));
+    box.setTitle("Schema JSON");
+    box.setTestId("explorer_schema");
+    StackWidget& column = keep(_backend->createStack(&box, Axis::Vertical));
+    column.setGap(2);
+    keep(text(column, action.schema, TextRole::Muted));
+    for (auto const* const documents : {&_options.catalog.views, &_options.catalog.wizards}) {
+        if (!*documents) {
+            continue;
+        }
+        if (auto const found = (*documents)->find(actionId); found != (*documents)->end()) {
+            keep(text(column, found->second, TextRole::Muted));
+        }
+    }
+}
+
+void Explorer::showAction(Model const& model, std::string const& actionId) {
+    clearDetail();
+    _selected = actionId;
+    auto const& action = *std::ranges::find(model.actions, actionId, &ActionEntry::id);
+    keep(text(*_detail, model.type + " / " + actionId, TextRole::Heading)).setTestId("explorer_title");
+    showFacts(model, action);
+    bool const readable = showFields(action);
+    showUses(actionId);
+    showTryIt(model, action, readable);
+    showSchema(actionId, action);
+}
+}  // namespace morph::ui
