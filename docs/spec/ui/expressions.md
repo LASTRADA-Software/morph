@@ -1,6 +1,6 @@
 # Expressions (`expr/1`) — design
 
-Design spec for the expression language of the UI document (`include/morph/ui/expression.hpp`) and
+Design spec for the expression language of the UI document (`include/morph/ui/expression.hpp`, implemented in `src/ui/expression.cpp`) and
 the MessageFormat 2 subset its `t` reads (`include/morph/ui/message.hpp`). Every bound property,
 query body, condition and command argument of a document is an expression: a JSON tree that
 `parseExpression` reads into an immutable `ui::Expr`, `checkExpression` checks against the

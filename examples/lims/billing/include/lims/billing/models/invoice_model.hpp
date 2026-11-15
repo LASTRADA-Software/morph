@@ -181,35 +181,35 @@ public:
 
 }  // namespace lims
 
-// The guard each registered action names must be complete here: the registration instantiates its execution.
+// Each action's declared rule must be visible wherever the action is executed: the guard the action names judges it.
 #include "lims/billing/authorization/billing_authorization.hpp"
 
-// The registration macros declare a non-const status object each.
+// The declaration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
-BRIDGE_REGISTER_MODEL(lims::InvoiceModel, "InvoiceModel")
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::RecordBillableLine, "RecordBillableLine")
+BRIDGE_DECLARE_MODEL(lims::InvoiceModel, "InvoiceModel")
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::RecordBillableLine, "RecordBillableLine")
 BRIDGE_REGISTER_EFFECTS(lims::RecordBillableLine, ::morph::effects::changes<lims::BillableLineView>)
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListBillableLines, "ListBillableLines", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::CreateInvoice, "CreateInvoice")
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::ListBillableLines, "ListBillableLines", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::CreateInvoice, "CreateInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::CreateInvoice, ::morph::effects::changes<lims::InvoiceView>,
                         ::morph::effects::changes<lims::BillableLineView>)
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::SubmitInvoice, "SubmitInvoice")
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::SubmitInvoice, "SubmitInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::SubmitInvoice, ::morph::effects::changes<lims::InvoiceView>)
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ApproveInvoice, "ApproveInvoice")
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::ApproveInvoice, "ApproveInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::ApproveInvoice, ::morph::effects::updates<lims::InvoiceView>)
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::PostInvoice, "PostInvoice")
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::PostInvoice, "PostInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::PostInvoice, ::morph::effects::updates<lims::InvoiceView>)
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListPendingApprovals, "ListPendingApprovals",
-                       ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::ListPendingApprovals, "ListPendingApprovals",
+                      ::morph::model::Loggable::No)
 // The shell's open-work counts and search over the invoices.
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::CountOpenInvoiceWork, "CountOpenInvoiceWork",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::CountPendingApprovals, "CountPendingApprovals",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::SearchInvoices, "SearchInvoices", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::GetInvoice, "GetInvoice", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::GetInvoiceLease, "GetInvoiceLease", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::InvoiceModel, lims::ListInvoices, "ListInvoices", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::CountOpenInvoiceWork, "CountOpenInvoiceWork",
+                      ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::CountPendingApprovals, "CountPendingApprovals",
+                      ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::SearchInvoices, "SearchInvoices", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::GetInvoice, "GetInvoice", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::GetInvoiceLease, "GetInvoiceLease", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::ListInvoices, "ListInvoices", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
 
 /// @brief Invoices keep no state between actions.

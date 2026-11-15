@@ -6,6 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <fstream>
@@ -20,11 +21,12 @@
 #include <morph/ui/theme.hpp>
 #include <morph/ui/view.hpp>
 #include <optional>
-#include <regex>
 #include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "ui_interpreter_support.hpp"
@@ -667,6 +669,36 @@ TEST_CASE("document page: the author API writes a sheet the loader reads back", 
 
 namespace {
 
+// One `role: "#digits"` line of a QML scheme: the role and its six or eight hex digits, or nothing for any other line.
+// Spelled out and not a std::regex: libstdc++'s executor trips GCC's -Walloc-zero, and warnings are errors.
+std::optional<std::pair<std::string, std::string>> colorEntry(std::string_view line) {
+    auto const isWord = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_'; };
+    auto const isHex = [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; };
+    std::size_t at = line.find_first_not_of(" \t");
+    if (at == std::string_view::npos) {
+        return std::nullopt;
+    }
+    std::size_t const roleBegin = at;
+    while (at < line.size() && isWord(line[at])) {
+        ++at;
+    }
+    if (at == roleBegin || !line.substr(at).starts_with(": \"#")) {
+        return std::nullopt;
+    }
+    std::size_t const roleEnd = at;
+    at += 4;
+    std::size_t const digitsBegin = at;
+    while (at < line.size() && isHex(line[at])) {
+        ++at;
+    }
+    std::size_t const count = at - digitsBegin;
+    if ((count != 6 && count != 8) || at >= line.size() || line[at] != '"') {
+        return std::nullopt;
+    }
+    return std::pair{std::string{line.substr(roleBegin, roleEnd - roleBegin)},
+                     std::string{line.substr(digitsBegin, count)}};
+}
+
 // The shipped paper surface: the roles `themeContrastProblems` reads, taken from `paperScheme` in Theme.qml itself.
 // A QML colour with eight digits is `#AARRGGBB`.
 ui::ThemeValues shippedPaper() {
@@ -681,18 +713,18 @@ ui::ThemeValues shippedPaper() {
     std::set<std::string> found;
     std::string line;
     while (std::getline(block, line)) {
-        std::smatch match;
-        if (!std::regex_search(line, match, std::regex{R"re(^\s*(\w+): "#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})")re"})) {
+        auto const entry = colorEntry(line);
+        if (!entry.has_value()) {
             continue;
         }
-        std::string const digits = match[2].str();
+        auto const& [role, digits] = *entry;
         auto const byte = [&digits](std::size_t at) {
             return static_cast<std::uint8_t>(std::stoul(digits.substr(at, 2), nullptr, 16));
         };
         ui::Rgba const color = digits.size() == 8 ? ui::Rgba{byte(2), byte(4), byte(6), byte(0)}
                                                   : ui::Rgba{byte(0), byte(2), byte(4), 255};
-        paper.colors.insert_or_assign("color." + match[1].str(), color);
-        found.insert(match[1].str());
+        paper.colors.insert_or_assign("color." + role, color);
+        found.insert(role);
     }
     for (char const* role :
          {"surface", "text", "muted", "selection", "selectionText", "track", "hover", "controlSurface"}) {

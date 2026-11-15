@@ -358,7 +358,7 @@ ids to `reloadDocuments` with the shown screen and reports each refusal as a pro
 nothing polls, and the digest is read once per connection, by the `open` that loaded the bundle.
 
 **In every build.** The reload is compiled into every client and runs only in development mode; nothing in the build
-turns it on or off. The library functions above are header-only and are emitted only where a client calls them.
+turns it on or off. The library functions above live in the `morph` library, and a client links them only where it calls them.
 
 ## Not yet
 - **Several vocabulary versions of one screen.** There is one vocabulary version, `ui/1`; the registry keeps one

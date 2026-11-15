@@ -68,23 +68,23 @@ public:
 
 }  // namespace lims
 
-// The guard each registered action names must be complete here: the registration instantiates its execution.
+// Each action's declared rule must be visible wherever the action is executed: the guard the action names judges it.
 #include "lims/billing/authorization/billing_authorization.hpp"
 
-// The registration macros declare a non-const status object each.
+// The declaration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
-BRIDGE_REGISTER_MODEL(lims::BillingRunModel, "BillingRunModel")
-BRIDGE_REGISTER_ACTION(lims::BillingRunModel, lims::StartBillingRun, "StartBillingRun")
+BRIDGE_DECLARE_MODEL(lims::BillingRunModel, "BillingRunModel")
+BRIDGE_DECLARE_ACTION(lims::BillingRunModel, lims::StartBillingRun, "StartBillingRun")
 BRIDGE_REGISTER_EFFECTS(lims::StartBillingRun, ::morph::effects::changes<lims::BillingRunView>,
                         ::morph::effects::changes<lims::InvoiceView>,
                         ::morph::effects::changes<lims::BillableLineView>)
-BRIDGE_REGISTER_ACTION(lims::BillingRunModel, lims::AdvanceBillingRun, "AdvanceBillingRun")
+BRIDGE_DECLARE_ACTION(lims::BillingRunModel, lims::AdvanceBillingRun, "AdvanceBillingRun")
 BRIDGE_REGISTER_EFFECTS(lims::AdvanceBillingRun, ::morph::effects::changes<lims::BillingRunView>,
                         ::morph::effects::changes<lims::InvoiceView>,
                         ::morph::effects::changes<lims::BillableLineView>)
-BRIDGE_REGISTER_ACTION(lims::BillingRunModel, lims::RunBillingSchedule, "RunBillingSchedule")
+BRIDGE_DECLARE_ACTION(lims::BillingRunModel, lims::RunBillingSchedule, "RunBillingSchedule")
 BRIDGE_REGISTER_EFFECTS(lims::RunBillingSchedule, ::morph::effects::changes<lims::BillingRunView>,
                         ::morph::effects::changes<lims::InvoiceView>,
                         ::morph::effects::changes<lims::BillableLineView>)
-BRIDGE_REGISTER_ACTION(lims::BillingRunModel, lims::ListBillingRuns, "ListBillingRuns", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::BillingRunModel, lims::ListBillingRuns, "ListBillingRuns", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

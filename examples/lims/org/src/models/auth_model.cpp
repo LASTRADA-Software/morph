@@ -77,3 +77,10 @@ std::shared_ptr<::morph::session::TokenIssuer> tokenIssuer() {
 }  // namespace auth
 
 }  // namespace lims
+
+// The registrars are compiled here, once, rather than in every translation unit that includes the header.
+// The registration macros declare a non-const status object each.
+// NOLINTBEGIN(misc-const-correctness)
+BRIDGE_REGISTER_MODEL_SOURCE(lims::LimsAuthModel)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LimsAuthModel, lims::LimsLogin)
+// NOLINTEND(misc-const-correctness)

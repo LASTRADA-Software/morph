@@ -431,3 +431,12 @@ AccountLedgerView LedgerReportModel::execute(const AccountLedger& action) {
 }
 
 }  // namespace lims
+
+// The registrars are compiled here, once, rather than in every translation unit that includes the header.
+// The registration macros declare a non-const status object each.
+// NOLINTBEGIN(misc-const-correctness)
+BRIDGE_REGISTER_MODEL_SOURCE(lims::LedgerReportModel)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerReportModel, lims::TrialBalance)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerReportModel, lims::AccountBalance)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerReportModel, lims::AccountLedger)
+// NOLINTEND(misc-const-correctness)

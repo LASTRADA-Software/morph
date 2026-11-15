@@ -162,25 +162,25 @@ public:
 
 }  // namespace lims
 
-// The guard each registered action names must be complete here: the registration instantiates its execution.
+// Each action's declared rule must be visible wherever the action is executed: the guard the action names judges it.
 #include "lims/billing/authorization/billing_authorization.hpp"
 
-// The registration macros declare a non-const status object each.
+// The declaration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
-BRIDGE_REGISTER_MODEL(lims::PriceListModel, "PriceListModel")
-BRIDGE_REGISTER_ACTION(lims::PriceListModel, lims::SetBillingSettings, "SetBillingSettings")
+BRIDGE_DECLARE_MODEL(lims::PriceListModel, "PriceListModel")
+BRIDGE_DECLARE_ACTION(lims::PriceListModel, lims::SetBillingSettings, "SetBillingSettings")
 BRIDGE_REGISTER_EFFECTS(lims::SetBillingSettings, ::morph::effects::changes<lims::BillingSettingsView>)
-BRIDGE_REGISTER_ACTION(lims::PriceListModel, lims::GetBillingSettings, "GetBillingSettings",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::PriceListModel, lims::RegisterBillingClient, "RegisterBillingClient")
+BRIDGE_DECLARE_ACTION(lims::PriceListModel, lims::GetBillingSettings, "GetBillingSettings",
+                      ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::PriceListModel, lims::RegisterBillingClient, "RegisterBillingClient")
 BRIDGE_REGISTER_EFFECTS(lims::RegisterBillingClient, ::morph::effects::changes<lims::BillingClientView>)
-BRIDGE_REGISTER_ACTION(lims::PriceListModel, lims::ListBillingClients, "ListBillingClients",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::PriceListModel, lims::CreatePriceList, "CreatePriceList")
+BRIDGE_DECLARE_ACTION(lims::PriceListModel, lims::ListBillingClients, "ListBillingClients",
+                      ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::PriceListModel, lims::CreatePriceList, "CreatePriceList")
 BRIDGE_REGISTER_EFFECTS(lims::CreatePriceList, ::morph::effects::changes<lims::PriceListView>)
-BRIDGE_REGISTER_ACTION(lims::PriceListModel, lims::SetPrice, "SetPrice")
+BRIDGE_DECLARE_ACTION(lims::PriceListModel, lims::SetPrice, "SetPrice")
 BRIDGE_REGISTER_EFFECTS(lims::SetPrice, ::morph::effects::changes<lims::PriceView>,
                         ::morph::effects::changes<lims::PriceListView>)
-BRIDGE_REGISTER_ACTION(lims::PriceListModel, lims::ListPriceLists, "ListPriceLists", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::PriceListModel, lims::QuotePrice, "QuotePrice", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::PriceListModel, lims::ListPriceLists, "ListPriceLists", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::PriceListModel, lims::QuotePrice, "QuotePrice", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

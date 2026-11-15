@@ -213,8 +213,3 @@ struct Authorization<ReserveForSample> {
     [[nodiscard]] static Scope scopeOf(ReserveForSample const& action) { return Scope{action.site}; }
 };
 }  // namespace lims
-
-// The models are included last, after every declaration their registrations need.
-#include "lims/inventory/models/procurement_model.hpp"
-#include "lims/inventory/models/reservation_model.hpp"
-#include "lims/inventory/models/stock_model.hpp"

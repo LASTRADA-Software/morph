@@ -1,7 +1,7 @@
 # The UI document — design
 
 Design spec for the UI document's C++ model and its load-time validation
-(`include/morph/ui/document.hpp`), and for the typed values every document expression evaluates to
+(`include/morph/ui/document.hpp`, loaded by `src/ui/document.cpp`), and for the typed values every document expression evaluates to
 (`include/morph/ui/value.hpp`). A server defines a screen as a JSON document (spec 5,
 `docs/superpowers/specs/2026-10-07-ui-document-design.md`); `ui::loadDocument` parses it into a
 `ui::Document` and refuses it, with the JSON Pointer and the reason, when it breaks a rule of
@@ -249,8 +249,8 @@ box, any layout key a sheet sizes itself without) are in [`document_page.md`](do
 A `DocNode` is a node or a structured part of one. Its properties stay keyed by their document
 keys — `props` (expressions), `events` (command lists, a custom node's events as `on.<event>`),
 `children` (node lists), `parts` (records such as columns and tabs), `names` (plain strings) and
-`keys` — so the interpreter reads a kind's properties by name. One table in `document.hpp`
-(`detail::kKinds`) says, per kind, which keys it has and what shape each takes; it is the only
+`keys` — so the interpreter reads a kind's properties by name. One table in `src/ui/document.cpp`
+(`kKinds`, reached through `detail::findKind`) says, per kind, which keys it has and what shape each takes; it is the only
 place a kind is described.
 
 **Every node** takes `id`, `visible`, `enabled` (conditions), `tooltip`, `sizing`, `span`,

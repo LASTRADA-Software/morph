@@ -91,6 +91,3 @@ struct Authorization<SetValueLimit> : CompanyRule<SetValueLimit, LimsRole::Super
 };
 
 }  // namespace lims
-
-// The model is included last, after every declaration its registration needs.
-#include "lims/org/models/org_model.hpp"

@@ -7,6 +7,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <morph/export.hpp>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -17,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "../core/bridge.hpp"
 #include "../core/executor.hpp"
 #include "../reactive/runtime.hpp"
 #include "../reactive/signal.hpp"
@@ -54,7 +56,7 @@ struct MountError {
 ///
 /// The head is data: the screen evaluates it and the shell draws it, so a host screen's handle can implement it too.
 /// The menu and tool members have defaults, for a head that has neither.
-class ScreenHead {
+class MORPH_API ScreenHead {
 public:
     ScreenHead() = default;
     ScreenHead(ScreenHead const&) = delete;
@@ -145,10 +147,7 @@ public:
     /// @param entryId The entry's id.
     /// @return Whether it ran: `false`, with a diagnostic, for an id the menu does not hold enabled and visible, and
     ///         `false` for a closed screen or a head without a menu.
-    virtual bool choose(std::string_view entryId) {
-        static_cast<void>(entryId);
-        return false;
-    }
+    virtual bool choose(std::string_view entryId);
 
     /// @brief The head's tools that are visible, in order: search fields and selects, each with its value.
     /// @return They, valid as long as the head; null for a head that has no tools, as a host screen's by default.
@@ -161,28 +160,21 @@ public:
     /// @param value  A search's text, or a select's key.
     /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold enabled and visible, and
     ///         `false` for a closed screen or a head without tools.
-    virtual bool edit(std::string_view toolId, Value const& value) {
-        static_cast<void>(toolId);
-        static_cast<void>(value);
-        return false;
-    }
+    virtual bool edit(std::string_view toolId, Value const& value);
 
     /// @brief Reports a user's submit of a search tool: runs its `onSubmit` with `event` its text, as a user event in
     ///        the screen scope, in one batch.
     /// @param toolId The tool's id.
     /// @return Whether it ran: `false`, with a diagnostic, for an id the head does not hold enabled and visible, or
     ///         holds as a select, and `false` for a closed screen or a head without tools.
-    virtual bool submit(std::string_view toolId) {
-        static_cast<void>(toolId);
-        return false;
-    }
+    virtual bool submit(std::string_view toolId);
 };
 
 /// @brief One mounted screen, as its host sees it.
 ///
 /// The host reads `title`, `dirty` and `identity` to show the tab and the unsaved indicator, and closes the screen
 /// through `requestClose`. It never destroys a handle whose close is pending, except after `forceClose`.
-class ScreenHandle {
+class MORPH_API ScreenHandle {
 public:
     ScreenHandle() = default;
     ScreenHandle(ScreenHandle const&) = delete;
@@ -233,11 +225,7 @@ public:
     /// called when the screen closes before the save has finished.
     /// @param done Called with whether the screen is clean.
     // NOLINTNEXTLINE(performance-unnecessary-value-param): the base only calls it; overrides keep it.
-    virtual void save(std::function<void(bool clean)> done) {
-        if (done) {
-            done(false);
-        }
-    }
+    virtual void save(std::function<void(bool clean)> done);
 };
 
 /// @brief What mounts screens for a host that owns its own shell; the workspace shell is one.
@@ -280,7 +268,7 @@ using HostScreenFactory = std::function<std::expected<std::unique_ptr<ScreenHand
 
 /// @brief The host screens an application registers by name: what a catalog entry's `host` names instead of a
 ///        document.
-class ScreenHostRegistry {
+class MORPH_API ScreenHostRegistry {
 public:
     /// @brief Registers a host screen, replacing one of the same name.
     /// @param name    The name a catalog entry's `host` gives.
@@ -292,10 +280,7 @@ public:
     /// @brief The factory registered under @p name.
     /// @param name The name.
     /// @return It, or null when none is registered.
-    [[nodiscard]] HostScreenFactory const* find(std::string_view name) const {
-        auto const found = _factories.find(name);
-        return found == _factories.end() ? nullptr : &found->second;
-    }
+    [[nodiscard]] HostScreenFactory const* find(std::string_view name) const;
 
 private:
     std::map<std::string, HostScreenFactory, std::less<>> _factories;
@@ -335,85 +320,10 @@ struct DocumentScreenHostOptions {
 
 namespace detail::host {
 
-/// The environment `identityOf` evaluates in: the params, and nothing else. Reading anything else marks it unknown.
-class ParamsEnv final : public Environment {
-public:
-    /// @brief An environment over @p params.
-    /// @param params The params; borrowed for the environment's lifetime.
-    explicit ParamsEnv(ParamMap const& params) : _params{&params} {}
-
-    [[nodiscard]] Value ref(std::string_view head, std::span<std::string const> path) const override {
-        auto const found = _params->find(head);
-        if (found == _params->end()) {
-            _unknown = true;
-            return Value{};
-        }
-        Value value = found->second;
-        for (std::string const& step : path) {
-            ValueRecord const* const record = value.asRecord();
-            if (record == nullptr || !record->contains(step)) {
-                return Value{};
-            }
-            value = record->at(step);
-        }
-        return value;
-    }
-
-    [[nodiscard]] Value row(std::span<std::string const> path) const override { return unknown(path); }
-
-    [[nodiscard]] Value control(ExprKind form, std::string_view name) const override {
-        static_cast<void>(form);
-        static_cast<void>(name);
-        _unknown = true;
-        return Value{};
-    }
-
-    [[nodiscard]] Value pref(std::string_view point, std::span<std::string const> path) const override {
-        static_cast<void>(point);
-        return unknown(path);
-    }
-
-    [[nodiscard]] Value client(ExprKind form, std::string_view name) const override {
-        static_cast<void>(form);
-        static_cast<void>(name);
-        _unknown = true;
-        return Value{};
-    }
-
-    [[nodiscard]] FormatContext const& formatting() const override { return _formatting; }
-
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): Environment's signature.
-    void report(std::string_view path, std::string_view reason) const override {
-        static_cast<void>(path);
-        static_cast<void>(reason);
-        _unknown = true;
-    }
-
-    /// @brief Whether the evaluation read anything but the params, or failed.
-    /// @return It.
-    [[nodiscard]] bool unknown() const noexcept { return _unknown; }
-
-private:
-    [[nodiscard]] Value unknown(std::span<std::string const> path) const {
-        static_cast<void>(path);
-        _unknown = true;
-        return Value{};
-    }
-
-    ParamMap const* _params;
-    FormatContext _formatting;
-    mutable bool _unknown = false;
-};
-
 /// @brief The text a title value shows.
 /// @param value The title's value.
 /// @return A string as is, `null` as empty, anything else as its canonical JSON.
-[[nodiscard]] inline std::string titleText(Value const& value) {
-    if (std::string const* const text = value.asString()) {
-        return *text;
-    }
-    return value.isNull() ? std::string{} : ::morph::ui::detail::canonicalJson(value);
-}
+[[nodiscard]] MORPH_API std::string titleText(Value const& value);
 
 }  // namespace detail::host
 
@@ -422,21 +332,13 @@ private:
 ///        those params would open.
 /// @param identity The identity value.
 /// @return Its JSON with record fields in name order, or `std::nullopt` for `null` (a screen without an identity).
-[[nodiscard]] inline std::optional<std::string> identityKey(Value const& identity) {
-    if (identity.isNull()) {
-        return std::nullopt;
-    }
-    return detail::canonicalJson(identity);
-}
+[[nodiscard]] MORPH_API std::optional<std::string> identityKey(Value const& identity);
 
 /// @brief Whether two identities name the same screen instance: their keys are equal, and neither is `null`.
 /// @param lhs One identity.
 /// @param rhs The other.
 /// @return True when both have a key and the keys are equal; `null` equals nothing, itself included.
-[[nodiscard]] inline bool sameIdentity(Value const& lhs, Value const& rhs) {
-    std::optional<std::string> const left = identityKey(lhs);
-    return left.has_value() && left == identityKey(rhs);
-}
+[[nodiscard]] MORPH_API bool sameIdentity(Value const& lhs, Value const& rhs);
 
 /// @brief The framework's `ScreenHost` over UI documents: it mounts them through an `Interpreter`, closes them by the
 ///        protocol of spec 6 §3, and hands a document's `navigate` to `onNavigate`, which the deriving host
@@ -444,7 +346,7 @@ private:
 ///
 /// It is the interpreter's `InterpreterHost` for `navigate`; every other command goes to the application's host, if
 /// one was given. Everything runs on the runtime's owner.
-class DocumentScreenHost : public ScreenHost, private InterpreterHost {
+class MORPH_API DocumentScreenHost : public ScreenHost, private InterpreterHost {
 public:
     /// @brief A host over @p session and @p dispatcher.
     /// @param session    The session the screens share. Borrowed: it outlives the host.
@@ -452,17 +354,7 @@ public:
     /// @param options    The documents, the backend, the close guard and the application's host.
     /// @throws std::invalid_argument without a document lookup or a backend.
     DocumentScreenHost(Session& session MORPH_LIFETIMEBOUND, Dispatcher& dispatcher MORPH_LIFETIMEBOUND,
-                       DocumentScreenHostOptions options)
-        : _options{std::move(options)},
-          _session{&session},
-          _dispatcher{&dispatcher},
-          _interpreter{
-              session, dispatcher,
-              InterpreterOptions{.host = static_cast<InterpreterHost*>(this), .diagnostics = _options.diagnostics}} {
-        if (!_options.documents || _options.backend == nullptr) {
-            throw std::invalid_argument("DocumentScreenHost: a document lookup and a backend are required");
-        }
-    }
+                       DocumentScreenHostOptions options);
 
     /// @brief Mounts a document screen.
     /// @param screenId The screen id.
@@ -494,35 +386,14 @@ public:
     /// @return The root, or why it was refused: no document, a document whose id is not `app`, or a second root on
     ///         the session.
     [[nodiscard]] std::expected<std::unique_ptr<AppRoot>, MountError> mountApp(
-        std::shared_ptr<Document const> document) {
-        if (!document) {
-            return std::unexpected(MountError{.screenId = "app", .reason = "no app document"});
-        }
-        std::string const documentId = document->id;
-        auto root = _interpreter.mountApp(std::move(document));
-        if (!root) {
-            return std::unexpected(mountErrorOf(documentId, root.error()));
-        }
-        return std::move(*root);
-    }
+        std::shared_ptr<Document const> document);
 
     /// @brief The identity a document screen would have with @p params: its `identity` evaluated over the params.
     /// @param screenId The screen id.
     /// @param params   The params.
     /// @return Its canonical text, or `std::nullopt` for an unknown screen, one without `identity`, or one whose
     ///         identity reads more than its params or is `null`.
-    [[nodiscard]] std::optional<std::string> identityOf(std::string_view screenId, ParamMap const& params) override {
-        std::shared_ptr<Document const> const document = _options.documents(screenId);
-        if (!document || !document->identity) {
-            return std::nullopt;
-        }
-        detail::host::ParamsEnv const env{params};
-        Value const identity = evaluate(*document->identity, env);
-        if (env.unknown()) {
-            return std::nullopt;
-        }
-        return identityKey(identity);
-    }
+    [[nodiscard]] std::optional<std::string> identityOf(std::string_view screenId, ParamMap const& params) override;
 
     /// @brief Starts the requests of a screen's `prefetch` queries before it mounts (spec 5 §5), so the screen mounts
     ///        on a warm cache: what a shell does when the pointer rests on an entry for a screen that is not open.
@@ -534,47 +405,14 @@ public:
     /// params, and an entry that is already fresh or in flight.
     /// @param screenId The screen id; an unknown one does nothing.
     /// @param params   The params it would mount with.
-    void prefetch(std::string_view screenId, ParamMap const& params) {
-        std::shared_ptr<Document const> const document = _options.documents(screenId);
-        if (!document) {
-            return;
-        }
-        for (std::string const& name : document->prefetch) {
-            auto const query = std::ranges::find(document->scope.queries, name, &QueryDecl::name);
-            if (query == document->scope.queries.end() || query->evaluate) {
-                continue;
-            }
-            auto const model = std::ranges::find(document->scope.models, query->model, &ModelDecl::name);
-            if (model == document->scope.models.end()) {
-                continue;
-            }
-            std::optional<Binding> const binding = bindingOf(*model, params);
-            if (!binding) {
-                continue;
-            }
-            detail::host::ParamsEnv const env{params};
-            Value const body = query->body ? evaluate(*query->body, env) : Value{ValueRecord{}};
-            if (env.unknown()) {
-                continue;
-            }
-            std::shared_ptr<ModelChannel> const channel =
-                _dispatcher->bind(model->type, binding->sharing, binding->instanceKey);
-            _session->prefetch(channel, binding->token, model->type, query->action, body);
-        }
-    }
+    void prefetch(std::string_view screenId, ParamMap const& params);
 
     /// @brief The route of a screen instance (spec 6 §20): `routeOf` over the screen's declared params.
     /// @param screenId The screen id.
     /// @param params   Its params.
     /// @return The route, or why it has none: an unknown screen, or a param with no route form.
     [[nodiscard]] std::expected<std::string, std::string> routeOf(std::string_view screenId,
-                                                                  ParamMap const& params) const {
-        std::shared_ptr<Document const> const document = _options.documents(screenId);
-        if (!document) {
-            return std::unexpected("unknown screen `" + std::string{screenId} + "`");
-        }
-        return ::morph::ui::routeOf(*document, params);
-    }
+                                                                  ParamMap const& params) const;
 
     /// @brief Reads a route back against the screen it names (`parseRoute` over this host's documents).
     /// @param route The route.
@@ -586,10 +424,7 @@ public:
     /// @brief A document asked to open another screen, with how (`as`). The default hands the screen and its params
     ///        to `onNavigate(screenId, params)`; a host that shows dialogs, drawers or windows overrides this one.
     /// @param request The request: screen, params, `as`.
-    virtual void onNavigate(NavigateRequest const& request) {
-        ValueRecord const* const params = request.params.asRecord();
-        onNavigate(request.screen, params == nullptr ? ParamMap{} : *params);
-    }
+    virtual void onNavigate(NavigateRequest const& request);
 
     using ScreenHost::onNavigate;
 
@@ -609,39 +444,13 @@ public:
     /// @return Nothing, or why the old screen was kept: a foreign or closed handle, a close or save in progress, or
     ///         the interpreter's refusal of the new document.
     [[nodiscard]] std::expected<void, MountError> remount(ScreenHandle& handle,
-                                                          std::shared_ptr<Document const> document) {
-        auto* const own = dynamic_cast<Handle*>(&handle);
-        if (own == nullptr || !document) {
-            return std::unexpected(MountError{.screenId = document ? document->id : std::string{},
-                                              .reason = "not a document screen of this host"});
-        }
-        return own->remount(_interpreter, std::move(document), *_options.backend);
-    }
+                                                          std::shared_ptr<Document const> document);
 
     /// @brief What a chat turn says about a screen this host mounted: its id and title, its params and identity, and
     ///        the aliases of its own scope that hold an instance. `TurnRequest::text` is left for the caller.
     /// @param handle A handle this host mounted.
     /// @return The context; nothing for a closed or foreign handle.
-    [[nodiscard]] static std::optional<chat::TurnRequest> chatContext(ScreenHandle& handle) {
-        auto const* const own = dynamic_cast<Handle const*>(&handle);
-        Screen const* const screen = own == nullptr ? nullptr : own->screen();
-        if (screen == nullptr) {
-            return std::nullopt;
-        }
-        chat::TurnRequest context;
-        context.screenId = screen->id();
-        context.title = handle.title().peek();
-        context.identity = identityKey(handle.identity().peek()).value_or(std::string{});
-        context.paramsJson = glz::write_json(valueToJson(Value{own->params()})).value_or(std::string{"{}"});
-        for (Screen::BoundAlias const& alias : screen->boundAliases()) {
-            context.models.push_back(chat::ModelRef{.path = alias.decl->path,
-                                                    .alias = alias.decl->name,
-                                                    .modelType = alias.decl->type,
-                                                    .instanceId = alias.facts.instanceId,
-                                                    .primary = alias.facts.primary});
-        }
-        return context;
-    }
+    [[nodiscard]] static std::optional<chat::TurnRequest> chatContext(ScreenHandle& handle);
 
     /// @brief The development inspector over a screen this host mounted (spec 6 §21): what a shell's inspector window
     ///        reads. It hands out no access to the screen beyond the inspector's own read-only view and its
@@ -649,31 +458,17 @@ public:
     /// @param handle A handle this host mounted.
     /// @return The inspector, valid until the screen closes or is remounted; nothing for a closed or foreign handle,
     ///         and nothing for a screen whose session has `DevelopmentTools::Off`.
-    [[nodiscard]] static std::optional<Inspector> inspector(ScreenHandle& handle) {
-        auto const* const own = dynamic_cast<Handle const*>(&handle);
-        Screen* const screen = own == nullptr ? nullptr : own->screen();
-        if (screen == nullptr) {
-            return std::nullopt;
-        }
-        return Inspector::over(*screen);
-    }
+    [[nodiscard]] static std::optional<Inspector> inspector(ScreenHandle& handle);
 
     /// @brief Cancels every call no mount has adopted: each one's `onCancel` runs, oldest first. What a shell does
     ///        when it closes every screen, so no call outlives the screens it was filed among and a later mount never
     ///        answers an opener that is gone.
-    void cancelUnclaimedCalls() {
-        for (std::shared_ptr<Call> const& call : std::exchange(_unclaimed, {})) {
-            call->answer(std::nullopt);
-        }
-    }
+    void cancelUnclaimedCalls();
 
     /// @brief The root widget of a handle this host mounted, which a host places in its own layout.
     /// @param handle A handle this host mounted.
     /// @return Its root widget, or `nullptr` for a closed or foreign handle.
-    [[nodiscard]] static Widget* rootOf(ScreenHandle const& handle) {
-        auto const* const own = dynamic_cast<Handle const*>(&handle);
-        return own == nullptr ? nullptr : own->root();
-    }
+    [[nodiscard]] static Widget* rootOf(ScreenHandle const& handle);
 
 protected:
     /// @brief Answers with a cancel the call of a navigation this host handled without mounting a document screen:
@@ -686,23 +481,7 @@ protected:
     /// those params, opened for any reason, would answer an opener that never opened it.
     /// @param screenId The screen the navigation named.
     /// @param params   Its params.
-    void settleCall(std::string_view screenId, ParamMap const& params) {
-        auto const found = std::ranges::find_if(_unclaimed, [&](std::shared_ptr<Call> const& call) {
-            return call->screen == screenId && call->params == params;
-        });
-        if (found == _unclaimed.end()) {
-            return;
-        }
-        std::shared_ptr<Call> const call = std::move(*found);
-        _unclaimed.erase(found);
-        if (_options.diagnostics) {
-            _options.diagnostics(Refusal{
-                .document = std::string{screenId},
-                .path = {},
-                .reason = "navigate to " + std::string{screenId} + " mounted no screen; its call was cancelled"});
-        }
-        call->answer(std::nullopt);
-    }
+    void settleCall(std::string_view screenId, ParamMap const& params);
 
 private:
     // How a prefetch reaches the instance the mounted screen's alias will bind.
@@ -713,94 +492,40 @@ private:
     };
 
     // The binding of @p model over @p params, or nothing for an instance the mounted screen will not share.
-    [[nodiscard]] std::optional<Binding> bindingOf(ModelDecl const& model, ParamMap const& params) const {
-        InstanceMode mode = model.instance;
-        if (mode == InstanceMode::Default) {
-            Catalog const& catalog = _session->options().catalog;
-            std::optional<ModelInfo> const info = catalog.model ? catalog.model(model.type) : std::nullopt;
-            mode = info && info->stateless ? InstanceMode::Shared : InstanceMode::Private;
-        }
-        if (mode == InstanceMode::Shared) {
-            return Binding{.token = "shared", .sharing = bridge::BindSharing::Private, .instanceKey = {}};
-        }
-        if (mode != InstanceMode::Keyed || !model.key) {
-            return std::nullopt;
-        }
-        detail::host::ParamsEnv const env{params};
-        std::string const key = detail::instanceKeyText(evaluate(*model.key, env));
-        if (env.unknown() || key.empty()) {
-            return std::nullopt;
-        }
-        return Binding{.token = "shared:" + key, .sharing = bridge::BindSharing::Shared, .instanceKey = key};
-    }
+    [[nodiscard]] std::optional<Binding> bindingOf(ModelDecl const& model, ParamMap const& params) const;
 
     // The mount itself, under @p parent or as a backend root.
     std::expected<std::unique_ptr<ScreenHandle>, MountError> mountAt(std::string_view screenId, ParamMap const& params,
-                                                                     ContainerWidget* parent) {
-        std::shared_ptr<Document const> document = _options.documents(screenId);
-        if (!document) {
-            return std::unexpected(MountError{.screenId = std::string{screenId}, .reason = "unknown screen"});
-        }
-        auto screen =
-            _interpreter.mount(std::move(document), params, *_options.backend, MountOptions{.parent = parent});
-        if (!screen) {
-            return std::unexpected(mountErrorOf(screenId, screen.error()));
-        }
-        auto handle = std::make_unique<Handle>(std::move(*screen), _options.guard, _options.saveFailed);
-        handle->placed(params, parent);
-        adoptCall(*handle, screenId, params);
-        return handle;
-    }
+                                                                     ContainerWidget* parent);
 
     // The interpreter's refusal of a mount, as the host reports it.
-    [[nodiscard]] static MountError mountErrorOf(std::string_view screenId, Refusal const& refusal) {
-        std::string reason = refusal.reason;
-        if (!refusal.path.empty()) {
-            reason = refusal.path + ": " + reason;
-        }
-        return MountError{.screenId = std::string{screenId}, .reason = std::move(reason)};
-    }
+    [[nodiscard]] static MountError mountErrorOf(std::string_view screenId, Refusal const& refusal);
 
     /// A screen opened to answer its opener (spec 6 §16): answered exactly once, by `return`, by `close: self`, or by
     /// the screen closing any other way, which is a cancel.
-    struct Call {
+    struct MORPH_API Call {
         std::string screen;
         ParamMap params;
         std::function<void(Value)> onResult;
         std::function<void()> onCancel;
         bool answered = false;
 
-        void answer(std::optional<Value> result) {
-            if (answered) {
-                return;
-            }
-            answered = true;
-            if (result) {
-                if (onResult) {
-                    onResult(std::move(*result));
-                }
-            } else if (onCancel) {
-                onCancel();
-            }
-        }
+        void answer(std::optional<Value> result);
     };
 
     /// The handle of a document screen. Its state is shared with the posts it makes, so a post that runs after the
     /// handle is gone finds the screen already closed.
-    class Handle final : public ScreenHandle, public ScreenHead {
+    // Both bases carry default bodies a host screen relies on, so neither is a pure interface; the handle is the
+    // screen as its host sees it and as its shell draws it at once.
+    // NOLINTNEXTLINE(misc-multiple-inheritance)
+    class MORPH_API Handle final : public ScreenHandle, public ScreenHead {
     public:
         Handle(std::unique_ptr<Screen> screen, CloseGuard guard, std::function<void(ScreenHandle&)> saveFailed)
             : _state{std::make_shared<State>(std::move(screen), std::move(guard), std::move(saveFailed))} {
             _state->self = this;
         }
 
-        ~Handle() override {
-            _state->self = nullptr;
-            try {
-                _state->finish(true);
-            } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor has no one to report to; the screen is gone.
-            }
-        }
+        ~Handle() override;
 
         Handle(Handle const&) = delete;
         Handle& operator=(Handle const&) = delete;
@@ -878,53 +603,19 @@ private:
         [[nodiscard]] ParamMap const& params() const { return _state->params; }
 
         /// Records what the screen was mounted with, so a remount mounts the same instance in the same place.
-        void placed(ParamMap params, ContainerWidget* parent) {
-            _state->params = std::move(params);
-            _state->parent = parent;
-        }
+        void placed(ParamMap params, ContainerWidget* parent);
 
         /// Mounts @p document with the screen's params, keeping its state by name and type, and replaces the
         /// screen with it; on a refusal the screen stays as it was.
         std::expected<void, MountError> remount(Interpreter& interpreter, std::shared_ptr<Document const> document,
-                                                IViewBackend& backend) {
-            State& state = *_state;
-            std::string const screenId = document->id;
-            if (!state.screen) {
-                return std::unexpected(MountError{.screenId = screenId, .reason = "the screen is closed"});
-            }
-            if (state.closing || state.saved.effect) {
-                return std::unexpected(MountError{.screenId = screenId, .reason = "the screen is closing or saving"});
-            }
-            auto next = interpreter.mount(std::move(document), state.params, backend,
-                                          MountOptions{.parent = state.parent, .keepStateOf = state.screen.get()});
-            if (!next) {
-                return std::unexpected(mountErrorOf(screenId, next.error()));
-            }
-            // The old screen goes after the new one has mounted, so its root widget is never missing in between;
-            // destroying it runs its `onUnmount`.
-            std::unique_ptr<Screen> const replaced = std::exchange(state.screen, std::move(*next));
-            state.runtime->batch([&state] { state.generation.set(state.generation.peek() + 1); });
-            return {};
-        }
+                                                IViewBackend& backend);
 
         /// The call this screen answers, if it was opened as one.
         void answers(std::shared_ptr<Call> call) { _state->call = std::move(call); }
 
         /// Closes the screen after its own `return` or `close: self` has answered: posted, since the command that
         /// asked for it is still running in the screen.
-        void closeItself(std::function<void(ScreenHandle&)> closed) {
-            std::weak_ptr<State> const weak = _state;
-            _state->runtime->owner().post([weak, closed = std::move(closed)] {
-                auto const held = weak.lock();
-                if (!held || !held->screen) {
-                    return;
-                }
-                held->finish(true);
-                if (held->self != nullptr && closed) {
-                    closed(*held->self);
-                }
-            });
-        }
+        void closeItself(std::function<void(ScreenHandle&)> closed);
 
         /// Whether this screen answers @p call and is still open.
         [[nodiscard]] bool answering(std::shared_ptr<Call> const& call) const {
@@ -932,7 +623,7 @@ private:
         }
 
     private:
-        struct State {
+        struct MORPH_API State {
             /// Whether the screen is mounted and its reads are current.
             [[nodiscard]] bool live() const { return !closed.get() && generation.get() >= 0; }
 
@@ -999,37 +690,7 @@ private:
             ~State() = default;
 
             /// Starts a close, or joins the one in progress.
-            static void request(std::shared_ptr<State> const& state, std::function<void(bool)> done) {
-                if (!state->screen) {
-                    state->post({std::move(done)}, true);
-                    return;
-                }
-                state->waiting.push_back(std::move(done));
-                if (state->closing) {
-                    return;
-                }
-                state->closing = true;
-                std::shared_ptr<bool const> const cancelled = state->screen->beginClose();
-                if (cancelled == nullptr) {
-                    bool const isDirty = state->screen->dirty();
-                    if (!isDirty) {
-                        state->finish(true);
-                    } else if (state->guard && state->self != nullptr) {
-                        std::weak_ptr<State> const weak = state;
-                        state->guard(*state->self, [weak](CloseChoice choice) {
-                            if (auto const held = weak.lock()) {
-                                choose(held, choice);
-                            }
-                        });
-                    } else {
-                        state->decide(false);
-                    }
-                    return;
-                }
-                // Closes once onClose and everything it started has ended, unless it ran cancelClose.
-                whenSettled(state, &State::settled,
-                            [cancelled](State& settledState) { settledState.decide(!*cancelled); });
-            }
+            static void request(std::shared_ptr<State> const& state, std::function<void(bool)> done);
 
             /// A wait for the screen to have nothing pending; the id tells a posted task whether it is still current.
             struct Watch {
@@ -1043,138 +704,25 @@ private:
             /// settled the work (a mutation's `onSuccess`) have run. @p slot holds the watch; resetting it, or closing
             /// the screen, cancels it.
             static void whenSettled(std::shared_ptr<State> const& state, Watch State::* slot,
-                                    std::function<void(State&)> then) {
-                std::weak_ptr<State> const weak = state;
-                std::uint64_t const watchId = ++state->watches;
-                Watch& watch = state.get()->*slot;
-                watch.id = watchId;
-                watch.effect =
-                    std::make_unique<reactive::Effect>(*state->runtime, [weak, slot, watchId, then = std::move(then)] {
-                        auto const held = weak.lock();
-                        if (!held || !held->screen || held->screen->pending()) {
-                            return;
-                        }
-                        held->runtime->owner().post([weak, slot, watchId, then] {
-                            auto const again = weak.lock();
-                            if (!again || !again->screen || (again.get()->*slot).id != watchId) {
-                                return;
-                            }
-                            again.get()->*slot = Watch{};
-                            then(*again);
-                        });
-                    });
-            }
+                                    std::function<void(State&)> then);
 
             /// Whether the screen is open and declares `onSave`.
             [[nodiscard]] bool canSave() const { return screen && screen->declares("onSave"); }
 
             /// Runs `onSave`, or joins the save in progress, and answers once nothing is pending.
-            static void save(std::shared_ptr<State> const& state, std::function<void(bool)> done) {
-                if (!state->canSave()) {
-                    if (done) {
-                        done(false);
-                    }
-                    return;
-                }
-                if (state->saved.effect) {
-                    state->saving.push_back(std::move(done));
-                    return;
-                }
-                state->screen->runLifecycle("onSave");
-                state->saving.push_back(std::move(done));
-                // Answered in the settled task itself rather than posted again, so an answer never reaches a handle
-                // that closed in between; an answer that closes the screen ends the answering.
-                whenSettled(state, &State::saved, [](State& savedState) {
-                    bool const clean = !savedState.screen->dirty();
-                    for (auto const& answer : std::exchange(savedState.saving, {})) {
-                        if (!savedState.screen) {
-                            return;
-                        }
-                        if (answer) {
-                            answer(clean);
-                        }
-                    }
-                });
-            }
+            static void save(std::shared_ptr<State> const& state, std::function<void(bool)> done);
 
             /// Carries out the guard's choice for the close in progress.
-            static void choose(std::shared_ptr<State> const& state, CloseChoice choice) {
-                if (!state->closing) {
-                    return;
-                }
-                if (choice != CloseChoice::Save || !state->canSave()) {
-                    state->decide(choice == CloseChoice::Discard);
-                    return;
-                }
-                std::weak_ptr<State> const weak = state;
-                save(state, [weak](bool clean) {
-                    auto const held = weak.lock();
-                    if (!held) {
-                        return;
-                    }
-                    if (!clean && held->saveFailed && held->self != nullptr) {
-                        held->saveFailed(*held->self);
-                    }
-                    held->decide(clean);
-                });
-            }
+            static void choose(std::shared_ptr<State> const& state, CloseChoice choice);
 
             /// Ends the close in progress: closes the screen or keeps it open, and answers every request.
-            void decide(bool close) {
-                if (!closing) {
-                    return;
-                }
-                if (close) {
-                    finish(true);
-                    return;
-                }
-                closing = false;
-                post(std::exchange(waiting, {}), false);
-            }
+            void decide(bool close);
 
             /// Closes the screen now, answering every pending request with `true`.
-            void finish(bool answer) {
-                settled = {};
-                saved = {};
-                saving.clear();  // a save outlived by its screen is never answered
-                closing = false;
-                if (call) {
-                    call->answer(std::nullopt);  // a no-op once `return` or `close: self` has answered
-                }
-                if (screen) {
-                    // The last values a host reads once the screen is gone, whether or not it read them before.
-                    lastTitle = detail::host::titleText(screen->title());
-                    lastIdentity = screen->identity();
-                    lastTitleSpans = screen->titleSpans();
-                    lastPageEdge = screen->pageEdge();
-                    lastHeadJoined = screen->headJoined();
-                    lastLeadPlacement = screen->leadPlacement();
-                    lastTitleRole = screen->titleRole();
-                    lastHeadSurface = screen->headSurface();
-                    lastPageSurface = screen->pageSurface();
-                    lastEyebrow = detail::host::titleText(screen->eyebrow());
-                    lastEyebrowSpans = screen->eyebrowSpans();
-                    lastSubtitle = detail::host::titleText(screen->subtitle());
-                    lastSubtitleSpans = screen->subtitleSpans();
-                    runtime->batch([this] { closed.set(true); });
-                    screen.reset();
-                }
-                post(std::exchange(waiting, {}), answer);
-            }
+            void finish(bool answer);
 
             /// Posts each answer to the owner, so none runs inside the document's own handler.
-            void post(std::vector<std::function<void(bool)>> answers, bool answer) const {
-                if (answers.empty()) {
-                    return;
-                }
-                runtime->owner().post([answers = std::move(answers), answer] {
-                    for (auto const& done : answers) {
-                        if (done) {
-                            done(answer);
-                        }
-                    }
-                });
-            }
+            void post(std::vector<std::function<void(bool)>> answers, bool answer) const;
 
             std::unique_ptr<Screen> screen;
             reactive::Runtime* runtime;
@@ -1235,89 +783,32 @@ private:
     // InterpreterHost: navigation is the host's; everything else is the application's.
 
     bool navigate(NavigateRequest const& request, std::function<void(Value)> onResult,
-                  std::function<void()> onCancel) override {
-        if (request.screen.empty()) {
-            return _options.application != nullptr &&
-                   _options.application->navigate(request, std::move(onResult), std::move(onCancel));
-        }
-        NavigateRequest forwarded = request;
-        forwarded.call = onResult || onCancel;
-        if (forwarded.call) {
-            ValueRecord const* const params = request.params.asRecord();
-            _unclaimed.push_back(std::make_shared<Call>(Call{.screen = request.screen,
-                                                             .params = params == nullptr ? ParamMap{} : *params,
-                                                             .onResult = std::move(onResult),
-                                                             .onCancel = std::move(onCancel),
-                                                             .answered = false}));
-        }
-        onNavigate(forwarded);
-        return true;
-    }
+                  std::function<void()> onCancel) override;
 
-    bool closeSelf(std::string const& screen, std::optional<Value> result) override {
-        // The innermost open call of that screen answers; a screen opened without one is the application's.
-        for (OpenCall const& open : std::views::reverse(_open)) {
-            std::shared_ptr<Call> const call = open.call.lock();
-            if (call == nullptr || call->screen != screen || call->answered || open.handle == nullptr ||
-                !open.handle->answering(call)) {
-                continue;
-            }
-            call->answer(std::move(result));
-            open.handle->closeItself([this](ScreenHandle& closed) { onScreenClosed(closed); });
-            return true;
-        }
-        return _options.application != nullptr && _options.application->closeSelf(screen, std::move(result));
-    }
+    bool closeSelf(std::string const& screen, std::optional<Value> result) override;
 
     /// Ties a mounted screen to the call that opened it: the oldest unclaimed call of that screen and params.
-    void adoptCall(Handle& handle, std::string_view screenId, ParamMap const& params) {
-        std::erase_if(_open, [](OpenCall const& open) { return open.call.expired(); });
-        auto const found = std::ranges::find_if(_unclaimed, [&](std::shared_ptr<Call> const& call) {
-            return call->screen == screenId && call->params == params;
-        });
-        if (found == _unclaimed.end()) {
-            return;
-        }
-        std::shared_ptr<Call> const call = std::move(*found);
-        _unclaimed.erase(found);
-        handle.answers(call);
-        _open.push_back(OpenCall{.call = call, .handle = &handle});
-    }
+    void adoptCall(Handle& handle, std::string_view screenId, ParamMap const& params);
     bool hostCommand(std::string const& name, Value const& args) override {
         return _options.application != nullptr && _options.application->hostCommand(name, args);
     }
     bool switchBackend(std::string const& name, std::function<void(std::expected<void, std::string>)> done) override {
         return _options.application != nullptr && _options.application->switchBackend(name, std::move(done));
     }
-    void resetPrefs(std::string const& screen, std::string const& point) override {
-        if (_options.application != nullptr) {
-            _options.application->resetPrefs(screen, point);
-        }
-    }
-    void setLocale(std::string const& locale) override {
-        if (_options.application != nullptr) {
-            _options.application->setLocale(locale);
-        }
-    }
+    void resetPrefs(std::string const& screen, std::string const& point) override;
+    void setLocale(std::string const& locale) override;
     bool notify(std::string const& text, std::string const& role) override {
         return _options.application != nullptr && _options.application->notify(text, role);
     }
     bool signIn(Value const& reply) override {
         return _options.application != nullptr && _options.application->signIn(reply);
     }
-    void signOut() override {
-        if (_options.application != nullptr) {
-            _options.application->signOut();
-        }
-    }
+    void signOut() override;
     bool setAppValue(std::string const& name, Value const& value) override {
         return _options.application != nullptr && _options.application->setAppValue(name, value);
     }
     bool uploadFor(UploadRequest const& request, std::function<void(Value)> progress,
-                   std::function<void(std::expected<Value, std::string>)> done) override {
-        return _options.application != nullptr &&
-               _options.application->uploadFor(request, std::move(progress), std::move(done));
-    }
+                   std::function<void(std::expected<Value, std::string>)> done) override;
     bool download(Value const& file, std::string const& option, Value const& name,
                   std::function<void(std::expected<Value, std::string>)> done) override {
         return _options.application != nullptr && _options.application->download(file, option, name, std::move(done));
@@ -1330,16 +821,8 @@ private:
                   std::function<void(std::expected<Value, std::string>)> done) override {
         return _options.application != nullptr && _options.application->saveFile(file, option, std::move(done));
     }
-    void preferenceChanged(std::string const& screen, std::string const& point, Value const& value) override {
-        if (_options.application != nullptr) {
-            _options.application->preferenceChanged(screen, point, value);
-        }
-    }
-    void permissionsStale() override {
-        if (_options.application != nullptr) {
-            _options.application->permissionsStale();
-        }
-    }
+    void preferenceChanged(std::string const& screen, std::string const& point, Value const& value) override;
+    void permissionsStale() override;
 
     /// A call a mounted screen answers, newest last.
     struct OpenCall {

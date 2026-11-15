@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <memory>
+#include <morph/export.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -46,19 +47,12 @@ public:
 /// @brief The URL fragment that holds a route.
 /// @param route The route.
 /// @return `#/` followed by the route.
-[[nodiscard]] inline std::string fragmentOf(std::string_view route) {
-    std::string fragment{"#/"};
-    fragment += route;
-    return fragment;
-}
+[[nodiscard]] MORPH_API std::string fragmentOf(std::string_view route);
 
 /// @brief The route a URL fragment holds.
 /// @param fragment The fragment, with its `#`.
 /// @return The route after `#/`, or empty for a fragment of any other form.
-[[nodiscard]] inline std::string routeOfFragment(std::string_view fragment) {
-    constexpr std::string_view prefix{"#/"};
-    return fragment.starts_with(prefix) ? std::string{fragment.substr(prefix.size())} : std::string{};
-}
+[[nodiscard]] MORPH_API std::string routeOfFragment(std::string_view fragment);
 
 /// @brief Keeps the route of the screen a shell shows in a history, and opens the route of an entry the user moves
 ///        to (spec 3 §10).

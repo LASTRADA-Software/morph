@@ -47,10 +47,10 @@ public:
 
 }  // namespace lims
 
-// The registration macros declare a non-const status object each.
+// The declaration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
-BRIDGE_REGISTER_MODEL(lims::LedgerReportModel, "LedgerReportModel")
-BRIDGE_REGISTER_ACTION(lims::LedgerReportModel, lims::TrialBalance, "TrialBalance", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::LedgerReportModel, lims::AccountBalance, "AccountBalance", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::LedgerReportModel, lims::AccountLedger, "AccountLedger", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_MODEL(lims::LedgerReportModel, "LedgerReportModel")
+BRIDGE_DECLARE_ACTION(lims::LedgerReportModel, lims::TrialBalance, "TrialBalance", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerReportModel, lims::AccountBalance, "AccountBalance", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerReportModel, lims::AccountLedger, "AccountLedger", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)

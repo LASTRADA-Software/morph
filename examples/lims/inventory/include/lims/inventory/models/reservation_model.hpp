@@ -66,16 +66,16 @@ private:
 
 }  // namespace lims
 
-// The guard each registered action names must be complete here: the registration instantiates its execution.
+// Each action's declared rule must be visible wherever the action is executed: the guard the action names judges it.
 #include "lims/inventory/authorization/inventory_authorization.hpp"
 
-// The registration macros declare a non-const status object each.
+// The declaration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
-BRIDGE_REGISTER_MODEL(lims::ReservationModel, "ReservationModel")
-BRIDGE_REGISTER_ACTION(lims::ReservationModel, lims::ReserveForSample, "ReserveForSample")
+BRIDGE_DECLARE_MODEL(lims::ReservationModel, "ReservationModel")
+BRIDGE_DECLARE_ACTION(lims::ReservationModel, lims::ReserveForSample, "ReserveForSample")
 BRIDGE_REGISTER_EFFECTS(lims::ReserveForSample, ::morph::effects::changes<lims::ReservationView>,
                         ::morph::effects::changes<lims::LotStockView>)
-BRIDGE_REGISTER_ACTION(lims::ReservationModel, lims::ReleaseReservation, "ReleaseReservation")
+BRIDGE_DECLARE_ACTION(lims::ReservationModel, lims::ReleaseReservation, "ReleaseReservation")
 BRIDGE_REGISTER_EFFECTS(lims::ReleaseReservation, ::morph::effects::changes<lims::ReservationView>,
                         ::morph::effects::changes<lims::LotStockView>)
 // NOLINTEND(misc-const-correctness)

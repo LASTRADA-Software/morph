@@ -39,8 +39,8 @@ void setTokenIssuer(std::shared_ptr<::morph::session::TokenIssuer> issuer);
 // Prefixed: the generic client links every example application, and each has its own sign-in. The registration
 // macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
-BRIDGE_REGISTER_MODEL(lims::LimsAuthModel, "LimsAuth")
+BRIDGE_DECLARE_MODEL(lims::LimsAuthModel, "LimsAuth")
 // Signing in changes no row a screen shows: the screen that runs it signs the session in, which reloads the catalog.
-BRIDGE_REGISTER_ACTION(lims::LimsAuthModel, lims::LimsLogin, "LimsLogin", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LimsAuthModel, lims::LimsLogin, "LimsLogin", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_EFFECTS(lims::LimsLogin, ::morph::effects::none)
 // NOLINTEND(misc-const-correctness)

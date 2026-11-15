@@ -167,6 +167,3 @@ struct Authorization<VerifyResult> {
 };
 
 }  // namespace lims
-
-// The models are included last, after every declaration their registrations need.
-#include "lims/lab/models/sample_model.hpp"

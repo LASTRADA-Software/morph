@@ -586,3 +586,17 @@ std::optional<PriceQuoteView> PriceListModel::priceOn(CompanyId company, ClientI
 }
 
 }  // namespace lims
+
+// The registrars are compiled here, once, rather than in every translation unit that includes the header.
+// The registration macros declare a non-const status object each.
+// NOLINTBEGIN(misc-const-correctness)
+BRIDGE_REGISTER_MODEL_SOURCE(lims::PriceListModel)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::PriceListModel, lims::SetBillingSettings)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::PriceListModel, lims::GetBillingSettings)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::PriceListModel, lims::RegisterBillingClient)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::PriceListModel, lims::ListBillingClients)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::PriceListModel, lims::CreatePriceList)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::PriceListModel, lims::SetPrice)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::PriceListModel, lims::ListPriceLists)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::PriceListModel, lims::QuotePrice)
+// NOLINTEND(misc-const-correctness)

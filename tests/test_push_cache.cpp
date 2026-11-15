@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
+#include <morph/core/backend.hpp>
 #include <morph/ui/service_client.hpp>
 #include <string>
 #include <vector>

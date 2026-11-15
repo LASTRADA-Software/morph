@@ -205,6 +205,7 @@ add_executable(morph_tests
     test_ui_structure.cpp
     test_ui_foreach.cpp
     test_ui_table.cpp
+    bench_interpreter.cpp
     bench_mount.cpp
     test_ui_frontend.cpp
     test_ui_conformance.cpp
@@ -510,10 +511,10 @@ endif()
 #
 # NOTE (deviation from the plan): try_compile()'s LINK_LIBRARIES only accepts
 # system libraries and *Imported* targets from the calling project (see the
-# try_compile() docs) — `morph` is a plain (non-imported) INTERFACE library
+# try_compile() docs) — `morph` is a plain (non-imported) library
 # defined in this same project, so `LINK_LIBRARIES morph::morph` fails with
-# "the target was not found" (confirmed experimentally). Since morph and glaze
-# are both header-only for this probe's purposes, we instead read their
+# "the target was not found" (confirmed experimentally). Since the probe only
+# includes headers from morph and glaze, we instead read their
 # INTERFACE_INCLUDE_DIRECTORIES via get_target_property() — which works for
 # any target, imported or not, because it queries the calling project's own
 # configure state rather than the try_compile scratch project — and forward

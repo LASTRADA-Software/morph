@@ -109,7 +109,7 @@ option(MORPH_REQUIRE_VETTED_HMAC
 # -- so it stays emitted regardless. See docs/spec/core/registry.md,
 # "MORPH_CLIENT_ONLY".
 #
-# On the INTERFACE of the morph target, not per-consumer: the macro changes
+# PUBLIC on the morph target, not per-consumer: the macro changes
 # which registrars a model header emits, so two translation units disagreeing
 # about it would violate ODR. Off by default: the standard build is unaffected.
 #
@@ -244,8 +244,8 @@ endif()
 # because CPM passes OPTIONS as normal variables, which a -D on the command
 # line cannot override.
 #
-# The define and the link are INTERFACE: morph is header-only, so the macros
-# expand in the consumer's own translation units, and every one of them has
+# The define and the link are PUBLIC: the macros expand in the consumer's own
+# translation units as well as in the library's, and every one of them has
 # to agree on MORPH_TRACY_ENABLED (see profiler.hpp on why that is an ODR
 # matter).
 option(MORPH_ENABLE_TRACY "Instrument morph's hot paths with Tracy profiler zones (fetches Tracy if not installed)" OFF)
@@ -315,9 +315,8 @@ endif()
 # morph uses there. SYSTEM, so morph's warning set does not apply to
 # core-cpp's headers.
 #
-# morph stays a header-only INTERFACE target, but core::base, core::net and
-# core::platform are static libraries, so every consumer of morph now builds
-# them -- or links an installed core-cpp's.
+# core::base, core::net and core::platform are static libraries, so every
+# consumer of morph builds them -- or links an installed core-cpp's.
 #
 # Found first, as glaze is, and fetched only when no installed core-cpp
 # satisfies the bound. MORPH_CORE_CPP_VERSION is that bound, stated once
@@ -407,38 +406,85 @@ if(NOT WIN32 AND NOT EMSCRIPTEN)
     find_package(Threads REQUIRED)
 endif()
 
-# ── Header-only library target ───────────────────────────────────────────────
-add_library(morph INTERFACE)
+# ── Library target ───────────────────────────────────────────────────────────
+# A static library: the templates and the macro-sensitive core headers stay in
+# headers, and what does not depend on a consumer's configuration is compiled
+# once, in src/ui.
+include(GenerateExportHeader)
+add_library(morph STATIC
+    src/ui/document.cpp
+    src/ui/expression.cpp
+    src/ui/interpreter.cpp
+    src/ui/library.cpp
+    src/ui/service.cpp
+    src/ui/host.cpp
+    src/ui/backend.cpp
+    src/ui/explorer.cpp
+    src/ui/navigator.cpp
+    src/ui/chat_service.cpp
+    src/ui/service_client.cpp
+    src/ui/theme.cpp
+    src/ui/shell_frame.cpp
+    src/ui/shell_parts_model.cpp
+    src/ui/workspace.cpp
+)
 add_library(morph::morph ALIAS morph)
 
-target_include_directories(morph INTERFACE
+target_include_directories(morph PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(morph INTERFACE glaze::glaze core::base core::async core::net)
+target_link_libraries(morph PUBLIC glaze::glaze core::base core::async core::net)
+target_compile_features(morph PUBLIC cxx_std_23)
 if(NOT EMSCRIPTEN)
-    target_link_libraries(morph INTERFACE core::platform)
+    target_link_libraries(morph PUBLIC core::platform)
 endif()
 if(NOT WIN32 AND NOT EMSCRIPTEN)
-    target_link_libraries(morph INTERFACE Threads::Threads)
+    target_link_libraries(morph PUBLIC Threads::Threads)
 endif()
 if(MORPH_REQUIRE_VETTED_HMAC)
-    target_compile_definitions(morph INTERFACE MORPH_REQUIRE_VETTED_HMAC)
+    target_compile_definitions(morph PUBLIC MORPH_REQUIRE_VETTED_HMAC)
 endif()
 if(MORPH_CLIENT_ONLY)
-    target_compile_definitions(morph INTERFACE MORPH_CLIENT_ONLY)
+    target_compile_definitions(morph PUBLIC MORPH_CLIENT_ONLY)
 endif()
 if(MORPH_ENABLE_TRACY)
-    target_compile_definitions(morph INTERFACE MORPH_TRACY_ENABLED)
-    target_link_libraries(morph INTERFACE Tracy::TracyClient)
+    target_compile_definitions(morph PUBLIC MORPH_TRACY_ENABLED)
+    target_link_libraries(morph PUBLIC Tracy::TracyClient)
 endif()
+
+# MORPH_API marks what a consumer calls into the compiled library. A static
+# build defines MORPH_STATIC_DEFINE for the library and its consumers, which
+# makes the macro empty.
+generate_export_header(morph
+    BASE_NAME MORPH
+    EXPORT_MACRO_NAME MORPH_API
+    EXPORT_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/generated/morph/export.hpp"
+)
+target_compile_definitions(morph PUBLIC MORPH_STATIC_DEFINE)
+apply_warnings(morph)
+# Every consumer of this archive carries an AF_SANITIZER block of its own, which is what makes instrumenting a static
+# library safe: the link options are PRIVATE and do not propagate out of a static library.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph ${AF_SANITIZER})
+endif()
+if(AF_COVERAGE)
+    apply_coverage(morph)
+endif()
+
+target_sources(morph
+    PUBLIC
+    FILE_SET morph_generated_headers TYPE HEADERS
+    BASE_DIRS ${CMAKE_CURRENT_BINARY_DIR}/generated
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/generated/morph/export.hpp
+)
 
 set_target_properties(morph PROPERTIES
     VERIFY_INTERFACE_HEADER_SETS ON
 )
 
 target_sources(morph
-    INTERFACE
+    PUBLIC
     FILE_SET HEADERS
     BASE_DIRS include
     FILES
@@ -625,7 +671,7 @@ target_sources(morph
 # *public* header generated from the prefix: a public header that needs an
 # uninstalled detail/ header fails to compile there, whatever this list says.
 target_sources(morph
-    INTERFACE
+    PUBLIC
     FILE_SET morph_detail_headers TYPE HEADERS
     BASE_DIRS include
     FILES
@@ -1263,6 +1309,8 @@ if(MORPH_INSTALL)
         EXPORT morphTargets
         FILE_SET HEADERS DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
         FILE_SET morph_detail_headers DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+        FILE_SET morph_generated_headers DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     )
 
     # Optional components ship only when this configuration actually created
@@ -1375,24 +1423,14 @@ if(MORPH_INSTALL)
     # SameMajorVersion follows docs/spec/VERSIONING.md, which is what decides
     # this: there, minor releases are "additive and source-compatible" and
     # only a major breaks the stable surface, so an install of 0.2 does
-    # satisfy a consumer asking for 0.1. ARCH_INDEPENDENT only while every
-    # installed component is header-only: without it CMake rejects an install
-    # made on a differently-sized-void* machine, which is exactly right once a
-    # compiled archive (morph_qt_impl, morph::tui,
-    # morph::qt_quick) is in the package.
-    set(_morph_arch_independent ARCH_INDEPENDENT)
-    if(TARGET morph_qt_impl
-       OR "tui" IN_LIST MORPH_INSTALLED_COMPONENTS OR "qt_quick" IN_LIST MORPH_INSTALLED_COMPONENTS
-       OR "client" IN_LIST MORPH_INSTALLED_COMPONENTS)
-        set(_morph_arch_independent "")
-    endif()
+    # satisfy a consumer asking for 0.1. Not ARCH_INDEPENDENT: the package
+    # holds a compiled archive (morph::morph), which is built for one
+    # pointer size.
     write_basic_package_version_file(
         "${CMAKE_CURRENT_BINARY_DIR}/morphConfigVersion.cmake"
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion
-        ${_morph_arch_independent}
     )
-    unset(_morph_arch_independent)
 
     install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/morphConfig.cmake"

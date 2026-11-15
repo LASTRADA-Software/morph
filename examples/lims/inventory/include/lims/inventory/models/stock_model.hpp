@@ -177,34 +177,34 @@ public:
 
 }  // namespace lims
 
-// The guard each registered action names must be complete here: the registration instantiates its execution.
+// Each action's declared rule must be visible wherever the action is executed: the guard the action names judges it.
 #include "lims/inventory/authorization/inventory_authorization.hpp"
 
-// The registration macros declare a non-const status object each.
+// The declaration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
-BRIDGE_REGISTER_MODEL(lims::StockModel, "StockModel")
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::SetInventorySettings, "SetInventorySettings")
+BRIDGE_DECLARE_MODEL(lims::StockModel, "StockModel")
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::SetInventorySettings, "SetInventorySettings")
 BRIDGE_REGISTER_EFFECTS(lims::SetInventorySettings, ::morph::effects::changes<lims::InventorySettingsView>)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::GetInventorySettings, "GetInventorySettings",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::CreateItem, "CreateItem")
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::GetInventorySettings, "GetInventorySettings",
+                      ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::CreateItem, "CreateItem")
 BRIDGE_REGISTER_EFFECTS(lims::CreateItem, ::morph::effects::changes<lims::ItemView>)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::ListItems, "ListItems", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::CreateLocation, "CreateLocation")
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::ListItems, "ListItems", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::CreateLocation, "CreateLocation")
 BRIDGE_REGISTER_EFFECTS(lims::CreateLocation, ::morph::effects::changes<lims::LocationView>)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::ListLocations, "ListLocations", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::RecordOpeningLot, "RecordOpeningLot")
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::ListLocations, "ListLocations", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::RecordOpeningLot, "RecordOpeningLot")
 BRIDGE_REGISTER_EFFECTS(lims::RecordOpeningLot, ::morph::effects::changes<lims::LotStockView>,
                         ::morph::effects::changes<lims::StockMovementView>)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::StockOnHand, "StockOnHand", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::SearchStock, "SearchStock", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::ListStockMovements, "ListStockMovements", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::SetRecipe, "SetRecipe")
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::StockOnHand, "StockOnHand", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::SearchStock, "SearchStock", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::ListStockMovements, "ListStockMovements", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::SetRecipe, "SetRecipe")
 BRIDGE_REGISTER_EFFECTS(lims::SetRecipe, ::morph::effects::changes<lims::RecipeView>)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::ListRecipes, "ListRecipes", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::GetSampleReservation, "GetSampleReservation",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::StockModel, lims::RecordConsumption, "RecordConsumption")
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::ListRecipes, "ListRecipes", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::GetSampleReservation, "GetSampleReservation",
+                      ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::StockModel, lims::RecordConsumption, "RecordConsumption")
 BRIDGE_REGISTER_EFFECTS(lims::RecordConsumption, ::morph::effects::changes<lims::ConsumptionView>,
                         ::morph::effects::changes<lims::LotStockView>,
                         ::morph::effects::changes<lims::StockMovementView>)

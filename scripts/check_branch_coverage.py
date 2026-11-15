@@ -189,15 +189,29 @@ def parse_lcov(path, repo_root):
     return files
 
 
+# The compiled half of morph::ui lives in src/ui and is scored with the headers under include/morph/ui, under the same
+# floor: moving code from a header to a translation unit must not move it out of the gate.
+COMPILED_UI_PREFIX = "src/ui/"
+
+
+def subsystem_of(path):
+    """The FLOORS key a source path is scored under, or None when the gate does not score it."""
+    if path.startswith(COMPILED_UI_PREFIX):
+        return "include/morph/ui"
+    if not path.startswith("include/morph/"):
+        return None
+    parts = path.split("/")
+    return "/".join(parts[:3]) if len(parts) > 3 else TOP_LEVEL_BUCKET
+
+
 def summarise(files):
     """subsystem -> [arms, taken, partial lines], plus per-file partial counts."""
     subsystems = collections.defaultdict(lambda: [0, 0, 0])
     per_file = collections.Counter()
     for path, lines in files.items():
-        if not path.startswith("include/morph/"):
+        subsystem = subsystem_of(path)
+        if subsystem is None:
             continue
-        parts = path.split("/")
-        subsystem = "/".join(parts[:3]) if len(parts) > 3 else TOP_LEVEL_BUCKET
         bucket = subsystems[subsystem]
         for record in lines.values():
             bucket[0] += len(record["arms"])
@@ -437,7 +451,7 @@ def partial_line_set(files):
     """{(path, line)} for every line that ran and left an arm untaken."""
     partials = set()
     for path, lines in files.items():
-        if not path.startswith("include/morph/"):
+        if subsystem_of(path) is None:
             continue
         for number, record in lines.items():
             if record["hits"] > 0 and record["arms"] and not all(record["arms"]):
@@ -720,6 +734,20 @@ def self_test():
         fail("a subsystem with no floor was accepted", output)
     else:
         note("ok: a subsystem with no floor of its own is rejected")
+
+    # 4b. A compiled source under src/ui is scored under include/morph/ui's floor: a
+    #     below-floor src/ui file fails the gate even though every header is fine, and
+    #     a covered one is accepted. Without the prefix the file is not in any bucket.
+    sunk_ui = {"src/ui/sunk.cpp": [(n, 1, [True, False]) for n in range(10, 400)]}
+    code, output = run(_every_subsystem(sunk_ui))
+    if code == 0 or "include/morph/ui branch coverage" not in output:
+        fail("a below-floor src/ui source was not scored under include/morph/ui", output)
+    else:
+        note("ok: src/ui sources are scored under the include/morph/ui floor")
+    if subsystem_of("src/ui/interpreter.cpp") != "include/morph/ui" or subsystem_of("src/tui/x.cpp") is not None:
+        fail("subsystem_of maps src/ui wrongly, or scores src/tui")
+    else:
+        note("ok: subsystem_of maps src/ui and nothing else under src/")
 
     # 5. A partial line is a line that RAN with an untaken arm -- not a line that
     #    never ran. Conflating the two would let this gate report partials where

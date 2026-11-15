@@ -152,7 +152,7 @@ if [ "$skip_header_set_verification" -eq 0 ]; then
     fi
 fi
 
-# morph is header-only, but morph::morph links core-cpp's static modules, and
+# morph::morph is a static library that links core-cpp's static modules, and
 # morph's install installs them with core-cpp's package. They have to be built
 # first: installing an unbuilt tree fails with "file INSTALL cannot find".
 run_step "the library did not build" \
@@ -268,6 +268,38 @@ int main() {
     morph::ui::ValueRecord reply;
     reply.insert_or_assign("principal", morph::ui::Value{std::string{"ada"}});
     if (!morph::client::defaultSignIn(morph::ui::Value{reply}).has_value()) {
+        return 1;
+    }
+    // A call into morph::morph's own archive, so the consumer links compiled morph code rather than only its headers.
+    if (morph::ui::routeOfFragment(morph::ui::fragmentOf("orders/42")) != "orders/42") {
+        return 1;
+    }
+    // A call into the interpreter's compiled half.
+    if (morph::ui::detail::base64Size("AQID") != 3) {
+        return 1;
+    }
+    // Calls into the document loader's and the expression language's compiled halves.
+    auto const loaded =
+        morph::ui::loadDocumentText(R"({"vocab": "ui/1", "id": "t", "view": {"kind": "text", "text": "x"}})");
+    if (!loaded.has_value() || loaded->view->kind != "text") {
+        return 1;
+    }
+    auto const json = morph::ui::parseJson(R"({"fn": "add", "args": [1, 2]})");
+    auto const expr = json ? morph::ui::parseExpression(*json) : std::unexpected(morph::ui::Refusal{});
+    morph::ui::StaticEnvironment const env;
+    if (!expr.has_value()) {
+        return 1;
+    }
+    auto const sum = morph::ui::evaluate(**expr, env);
+    if (sum.asInt() == nullptr || *sum.asInt() != 3) {
+        return 1;
+    }
+    // Calls into the UI service's compiled half: a registry refuses a file of an unknown kind, and builds a bundle.
+    morph::ui::UiRegistry registry{morph::ui::ApplicationInfo{.id = "check", .version = "1"}};
+    if (registry.addFile(morph::ui::BundleFile{.kind = "bogus", .id = "x", .bytes = "", .isPublic = false}).has_value()) {
+        return 1;
+    }
+    if (!registry.build().has_value()) {
         return 1;
     }
     std::printf("morph %d.%d.%d consumed from the install prefix\n", MORPH_VERSION_MAJOR,

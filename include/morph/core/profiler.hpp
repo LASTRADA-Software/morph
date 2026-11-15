@@ -30,8 +30,8 @@
 /// zones would then close out of order with the open one.
 ///
 /// @par Every translation unit must agree
-/// morph is header-only, so these macros change the bodies of inline
-/// functions. A program in which one translation unit sees
+/// The macros change the bodies of inline functions, and most of morph is
+/// templates and inline functions in headers. A program in which one translation unit sees
 /// `MORPH_TRACY_ENABLED` and another does not holds two different definitions
 /// of the same inline function, which is an ODR violation: the linker keeps
 /// one of them, silently. CMake consumers get agreement by construction,

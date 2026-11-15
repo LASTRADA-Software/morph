@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/ui/mount.hpp>
 #include <optional>
 #include <string>
 #include <string_view>

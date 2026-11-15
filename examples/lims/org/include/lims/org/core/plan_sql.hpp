@@ -5,11 +5,14 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlStatement.hpp>
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <glaze/glaze.hpp>
 #include <map>
 #include <morph/table/query.hpp>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -58,6 +61,9 @@ struct Translation {
     std::string order;
     /// @brief The values of the `?` markers in `where`, in the order the markers appear.
     std::vector<Lightweight::SqlVariant> params;
+    /// @brief The text expressions `where` and `order` compare by the collator's fold. `fetch` computes the fold of
+    ///        the one at index `i` as the column `detail::foldedName(i)`, which is what `where` and `order` name.
+    std::vector<std::string> folded;
 };
 
 /// @brief The ids a page holds and the size of the filtered view.
@@ -86,6 +92,88 @@ namespace detail {
     return out;
 }
 
+/// @brief The default collator's fold, as `replace` calls over SQLite's `lower`.
+///
+/// The collator lowers ASCII `A`-`Z` and Latin-1 `À`-`Þ` except `×`, and copies every other byte. SQLite's `lower`
+/// lowers ASCII only, and each Latin-1 letter is a two-byte UTF-8 sequence `C3 80` to `C3 9E`, which one `replace`
+/// each lowers. A SQLite built with ICU lowers more than the collator does; the conformance run in the tests is what
+/// notices that.
+/// @return The capital's bytes and the small letter's bytes, one pair per `replace`.
+[[nodiscard]] inline std::vector<std::pair<std::string, std::string>> const& foldPairs() {
+    static std::vector<std::pair<std::string, std::string>> const pairs = [] {
+        std::vector<std::pair<std::string, std::string>> out;
+        for (int second = 0x80; second <= 0x9E; ++second) {
+            if (second == 0x97) {
+                continue;
+            }
+            out.emplace_back(std::string{'\xC3', static_cast<char>(second)},
+                             std::string{'\xC3', static_cast<char>(second + 0x20)});
+        }
+        return out;
+    }();
+    return pairs;
+}
+
+/// @brief The most `replace` calls one stage of the fold nests.
+///
+/// SQLite before 3.46 parses with a fixed stack of 100 entries and a nested call takes three or four of them, so the
+/// thirty calls of the fold do not parse as one expression there; written in stages of ten, each stage nests eleven.
+inline constexpr std::size_t kFoldStep = 10;
+
+/// @brief The number of stages the fold is written in.
+/// @return The count.
+[[nodiscard]] inline std::size_t foldStages() { return (foldPairs().size() + kFoldStep - 1) / kFoldStep; }
+
+/// @brief The column one stage of the fold computes for one folded expression.
+/// @param index The expression's index in `Translation::folded`.
+/// @param stage The stage.
+/// @return The column name.
+[[nodiscard]] inline std::string foldColumn(std::size_t index, std::size_t stage) {
+    return "fold" + std::to_string(index) + "_" + std::to_string(stage);
+}
+
+/// @brief The column holding the whole fold of one folded expression: its column in the last stage.
+/// @param index The expression's index in `Translation::folded`.
+/// @return The column name.
+[[nodiscard]] inline std::string foldedName(std::size_t index) { return foldColumn(index, foldStages() - 1); }
+
+/// @brief The `WITH` clause that adds the fold of each of @p folded to the rows of @p table, as `foldedName(i)`.
+/// @param table The table.
+/// @param folded The text expressions over the table's columns.
+/// @param source Receives the name of the last stage, which the statement reads instead of @p table.
+/// @return The clause, ending with a space.
+[[nodiscard]] inline std::string foldClause(std::string_view table, std::vector<std::string> const& folded,
+                                            std::string& source) {
+    auto const& pairs = foldPairs();
+    std::string clause = "WITH ";
+    std::string previous{table};
+    for (std::size_t stage = 0; stage < foldStages(); ++stage) {
+        std::string const name = "fold_stage" + std::to_string(stage);
+        clause += (stage == 0 ? "" : ", ") + name + " AS (SELECT *";
+        std::size_t index = 0;
+        for (std::string const& expression : folded) {
+            std::string expr = stage == 0 ? "lower(" + expression + ")" : foldColumn(index, stage - 1);
+            for (auto const& [capital, lowered] :
+                 pairs | std::views::drop(stage * kFoldStep) | std::views::take(kFoldStep)) {
+                std::string wrapped = "replace(";
+                wrapped += expr;
+                wrapped += ", ";
+                wrapped += literal(capital);
+                wrapped += ", ";
+                wrapped += literal(lowered);
+                wrapped += ')';
+                expr = std::move(wrapped);
+            }
+            clause += ", " + expr + " AS " + foldColumn(index, stage);
+            ++index;
+        }
+        clause += " FROM " + previous + ")";
+        previous = name;
+    }
+    source = previous;
+    return clause + " ";
+}
+
 /// @brief Collects the operands of a statement as it is written: each call returns the `?` marker and keeps the value.
 ///
 /// The markers appear in the statement in the order the calls are made, so a caller sequences the calls in the order
@@ -112,30 +200,26 @@ public:
     /// @return They, in marker order.
     [[nodiscard]] std::vector<Lightweight::SqlVariant> take() { return std::move(_values); }
 
+    /// @brief Adds a text expression to compare by the collator's fold.
+    /// @param expr The text expression.
+    /// @return The name of the column `fetch` computes the fold into.
+    [[nodiscard]] std::string folded(std::string const& expr) {
+        auto const found = std::ranges::find(_folded, expr);
+        auto const index = static_cast<std::size_t>(found - _folded.begin());
+        if (found == _folded.end()) {
+            _folded.push_back(expr);
+        }
+        return foldedName(index);
+    }
+
+    /// @brief Hands over the expressions added by `folded`.
+    /// @return They, in the order of their column indices.
+    [[nodiscard]] std::vector<std::string> takeFolded() { return std::move(_folded); }
+
 private:
     std::vector<Lightweight::SqlVariant> _values;
+    std::vector<std::string> _folded;
 };
-
-/// @brief The default collator's fold, as an SQL expression over text.
-///
-/// The collator lowers ASCII `A`-`Z` and Latin-1 `À`-`Þ` except `×`, and copies every other byte. SQLite's `lower`
-/// lowers ASCII only, and each Latin-1 letter is a two-byte UTF-8 sequence `C3 80` to `C3 9E`, which `replace`
-/// lowers one at a time. A SQLite built with ICU lowers more than the collator does; the conformance run in the
-/// tests is what notices that.
-/// @param expr The text expression.
-/// @return The folded expression; `NULL` for `NULL`.
-[[nodiscard]] inline std::string fold(std::string const& expr) {
-    std::string out = "lower(" + expr + ")";
-    for (int second = 0x80; second <= 0x9E; ++second) {
-        if (second == 0x97) {
-            continue;
-        }
-        std::string const upper{'\xC3', static_cast<char>(second)};
-        std::string const lowered{'\xC3', static_cast<char>(second + 0x20)};
-        out = "replace(" + out + ", " + literal(upper) + ", " + literal(lowered) + ")";
-    }
-    return out;
-}
 
 /// @brief Floor of @p numerator over @p denominator.
 /// @param numerator The numerator.
@@ -213,7 +297,7 @@ private:
         // Every non-empty cell contains, starts with and ends with the empty text; none equals it.
         return condition.op == Op::Eq ? std::string{"0"} : "(" + column.expr + " IS NOT NULL)";
     }
-    std::string const cell = condition.caseSensitive ? column.expr : fold(column.expr);
+    std::string const cell = condition.caseSensitive ? column.expr : binds.folded(column.expr);
     switch (condition.op) {
         case Op::Eq:
             return "(" + cell + " = " + binds.text(*needle) + ")";
@@ -511,13 +595,14 @@ template <typename Enum>
         }
         Column const& column = found->second;
         std::string const value =
-            column.kind == ::morph::table::ColumnKind::Text ? detail::fold(column.expr) : column.expr;
+            column.kind == ::morph::table::ColumnKind::Text ? binds.folded(column.expr) : column.expr;
         // Empty cells come last in either direction, then the value.
         out.order += "(" + column.expr + " IS NULL), " + value +
                      (key.dir == ::morph::table::SortDirection::Ascending ? " ASC, " : " DESC, ");
     }
     out.order += std::string{rowKey} + " ASC";
     out.params = binds.take();
+    out.folded = binds.takeFolded();
     return out;
 }
 
@@ -536,13 +621,15 @@ template <typename Enum>
 [[nodiscard]] inline Fetched fetch(Lightweight::DataMapper& mapper, std::string_view table, std::string_view rowKey,
                                    std::string_view scope, Translation const& translation,
                                    ::morph::table::QueryPlan const& plan) {
-    std::string const from =
-        " FROM " + std::string{table} + " WHERE (" + std::string{scope} + ") AND " + translation.where;
+    std::string source{table};
+    std::string const with =
+        translation.folded.empty() ? std::string{} : detail::foldClause(table, translation.folded, source);
+    std::string const from = " FROM " + source + " WHERE (" + std::string{scope} + ") AND " + translation.where;
     Fetched out;
     try {
         {
             Lightweight::SqlStatement counting{mapper.Connection()};
-            counting.Prepare("SELECT COUNT(*)" + from);
+            counting.Prepare(with + "SELECT COUNT(*)" + from);
             auto cursor = counting.ExecuteWithVariants(translation.params);
             if (cursor.FetchRow()) {
                 out.total = cursor.GetColumn<std::int64_t>(1);
@@ -552,7 +639,7 @@ template <typename Enum>
             return out;
         }
         Lightweight::SqlStatement paging{mapper.Connection()};
-        paging.Prepare("SELECT " + std::string{rowKey} + from + " " + translation.order + " LIMIT " +
+        paging.Prepare(with + "SELECT " + std::string{rowKey} + from + " " + translation.order + " LIMIT " +
                        std::to_string(plan.limit) + " OFFSET " + std::to_string(plan.offset));
         auto cursor = paging.ExecuteWithVariants(translation.params);
         while (cursor.FetchRow()) {

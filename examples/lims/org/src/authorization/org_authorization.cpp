@@ -4,6 +4,7 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 
 #include "lims/org/db/org_entity.hpp"
+#include "lims/org/models/org_model.hpp"
 
 namespace lims {
 
