@@ -475,3 +475,23 @@ SearchHits<LotStockView> StockModel::execute(const SearchStock& action) {
 }
 
 }  // namespace lims
+
+// The registrars are compiled here, once, rather than in every translation unit that includes the header.
+// The registration macros declare a non-const status object each.
+// NOLINTBEGIN(misc-const-correctness)
+BRIDGE_REGISTER_MODEL_SOURCE(lims::StockModel)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::SetInventorySettings)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::GetInventorySettings)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::CreateItem)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::ListItems)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::CreateLocation)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::ListLocations)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::RecordOpeningLot)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::StockOnHand)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::SearchStock)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::ListStockMovements)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::SetRecipe)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::ListRecipes)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::GetSampleReservation)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::StockModel, lims::RecordConsumption)
+// NOLINTEND(misc-const-correctness)

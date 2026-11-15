@@ -191,44 +191,42 @@ public:
 
 }  // namespace lims
 
-// The guard each registered action names must be complete here: the registration instantiates its execution.
+// Each action's declared rule must be visible wherever the action is executed: the guard the action names judges it.
 #include "lims/inventory/authorization/inventory_authorization.hpp"
 
-// The registration macros declare a non-const status object each.
+// The declaration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
-BRIDGE_REGISTER_MODEL(lims::ProcurementModel, "ProcurementModel")
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::CreateRequisition, "CreateRequisition")
+BRIDGE_DECLARE_MODEL(lims::ProcurementModel, "ProcurementModel")
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::CreateRequisition, "CreateRequisition")
 BRIDGE_REGISTER_EFFECTS(lims::CreateRequisition, ::morph::effects::changes<lims::RequisitionView>)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::AddRequisitionLine, "AddRequisitionLine")
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::AddRequisitionLine, "AddRequisitionLine")
 BRIDGE_REGISTER_EFFECTS(lims::AddRequisitionLine, ::morph::effects::updates<lims::RequisitionView>)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::SubmitRequisition, "SubmitRequisition")
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::SubmitRequisition, "SubmitRequisition")
 BRIDGE_REGISTER_EFFECTS(lims::SubmitRequisition, ::morph::effects::changes<lims::RequisitionView>)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ApproveRequisition, "ApproveRequisition")
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::ApproveRequisition, "ApproveRequisition")
 BRIDGE_REGISTER_EFFECTS(lims::ApproveRequisition, ::morph::effects::changes<lims::RequisitionView>)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::GetRequisition, "GetRequisition", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListRequisitions, "ListRequisitions",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListPendingRequisitions, "ListPendingRequisitions",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::CountPendingRequisitions, "CountPendingRequisitions",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::CreateSupplier, "CreateSupplier")
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::GetRequisition, "GetRequisition", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::ListRequisitions, "ListRequisitions", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::ListPendingRequisitions, "ListPendingRequisitions",
+                      ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::CountPendingRequisitions, "CountPendingRequisitions",
+                      ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::CreateSupplier, "CreateSupplier")
 BRIDGE_REGISTER_EFFECTS(lims::CreateSupplier, ::morph::effects::changes<lims::SupplierView>)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListSuppliers, "ListSuppliers", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::CreatePurchaseOrder, "CreatePurchaseOrder")
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::ListSuppliers, "ListSuppliers", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::CreatePurchaseOrder, "CreatePurchaseOrder")
 BRIDGE_REGISTER_EFFECTS(lims::CreatePurchaseOrder, ::morph::effects::changes<lims::PurchaseOrderView>,
                         ::morph::effects::changes<lims::RequisitionView>)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::GetPurchaseOrder, "GetPurchaseOrder",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListPurchaseOrders, "ListPurchaseOrders",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ReceiveGoods, "ReceiveGoods")
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::GetPurchaseOrder, "GetPurchaseOrder", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::ListPurchaseOrders, "ListPurchaseOrders",
+                      ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::ReceiveGoods, "ReceiveGoods")
 BRIDGE_REGISTER_EFFECTS(lims::ReceiveGoods, ::morph::effects::changes<lims::ReceiptView>,
                         ::morph::effects::changes<lims::LotStockView>,
                         ::morph::effects::changes<lims::StockMovementView>,
                         ::morph::effects::changes<lims::PurchaseOrderView>)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::GetReceipt, "GetReceipt", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::ListReceipts, "ListReceipts", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::GetReceipt, "GetReceipt", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::ListReceipts, "ListReceipts", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
 
 /// @brief Procurement keeps no state between actions.
