@@ -50,11 +50,11 @@ void attachIgnitionLog(std::shared_ptr<::morph::journal::IActionLog> log);
 
 }  // namespace lims
 
-BRIDGE_REGISTER_MODEL(lims::IgnitionModel, "IgnitionModel")
-BRIDGE_REGISTER_ACTION(lims::IgnitionModel, lims::ListIgnitionTests, "ListIgnitionTests", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::IgnitionModel, lims::AddIgnitionTest, "AddIgnitionTest")
+BRIDGE_DECLARE_MODEL(lims::IgnitionModel, "IgnitionModel")
+BRIDGE_DECLARE_ACTION(lims::IgnitionModel, lims::ListIgnitionTests, "ListIgnitionTests", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::IgnitionModel, lims::AddIgnitionTest, "AddIgnitionTest")
 BRIDGE_REGISTER_EFFECTS(lims::AddIgnitionTest, ::morph::effects::changes<lims::IgnitionTestView>)
-BRIDGE_REGISTER_ACTION(lims::IgnitionModel, lims::RecordIgnitionValues, "RecordIgnitionValues")
+BRIDGE_DECLARE_ACTION(lims::IgnitionModel, lims::RecordIgnitionValues, "RecordIgnitionValues")
 BRIDGE_REGISTER_EFFECTS(lims::RecordIgnitionValues, ::morph::effects::updates<lims::IgnitionTestView>)
-BRIDGE_REGISTER_ACTION(lims::IgnitionModel, lims::DeleteIgnitionTest, "DeleteIgnitionTest")
+BRIDGE_DECLARE_ACTION(lims::IgnitionModel, lims::DeleteIgnitionTest, "DeleteIgnitionTest")
 BRIDGE_REGISTER_EFFECTS(lims::DeleteIgnitionTest, ::morph::effects::changes<lims::IgnitionTestView>)

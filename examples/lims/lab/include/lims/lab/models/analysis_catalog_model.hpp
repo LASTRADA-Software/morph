@@ -64,13 +64,13 @@ private:
 
 }  // namespace lims
 
-BRIDGE_REGISTER_MODEL(lims::AnalysisCatalogModel, "AnalysisCatalogModel")
-BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::DefineAnalysis, "DefineAnalysis")
+BRIDGE_DECLARE_MODEL(lims::AnalysisCatalogModel, "AnalysisCatalogModel")
+BRIDGE_DECLARE_ACTION(lims::AnalysisCatalogModel, lims::DefineAnalysis, "DefineAnalysis")
 BRIDGE_REGISTER_EFFECTS(lims::DefineAnalysis, ::morph::effects::changes<lims::AnalysisVersionView>)
-BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::ReviseAnalysis, "ReviseAnalysis")
+BRIDGE_DECLARE_ACTION(lims::AnalysisCatalogModel, lims::ReviseAnalysis, "ReviseAnalysis")
 BRIDGE_REGISTER_EFFECTS(lims::ReviseAnalysis, ::morph::effects::changes<lims::AnalysisVersionView>)
-BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::ListAnalyses, "ListAnalyses", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::GetAnalysisVersion, "GetAnalysisVersion",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::GetAnalysisSchema, "GetAnalysisSchema",
-                       ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::AnalysisCatalogModel, lims::ListAnalyses, "ListAnalyses", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::AnalysisCatalogModel, lims::GetAnalysisVersion, "GetAnalysisVersion",
+                      ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::AnalysisCatalogModel, lims::GetAnalysisSchema, "GetAnalysisSchema",
+                      ::morph::model::Loggable::No)

@@ -257,3 +257,14 @@ void AnalysisCatalogModel::attachActionLog(std::shared_ptr<::morph::journal::IAc
 }
 
 }  // namespace lims
+
+// The registrars are compiled here, once, rather than in every translation unit that includes the header.
+// The registration macros declare a non-const status object each.
+// NOLINTBEGIN(misc-const-correctness)
+BRIDGE_REGISTER_MODEL_SOURCE(lims::AnalysisCatalogModel)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::AnalysisCatalogModel, lims::DefineAnalysis)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::AnalysisCatalogModel, lims::ReviseAnalysis)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::AnalysisCatalogModel, lims::ListAnalyses)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::AnalysisCatalogModel, lims::GetAnalysisVersion)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::AnalysisCatalogModel, lims::GetAnalysisSchema)
+// NOLINTEND(misc-const-correctness)

@@ -118,3 +118,13 @@ void attachIgnitionLog(std::shared_ptr<::morph::journal::IActionLog> log) {
 }
 
 }  // namespace lims
+
+// The registrars are compiled here, once, rather than in every translation unit that includes the header.
+// The registration macros declare a non-const status object each.
+// NOLINTBEGIN(misc-const-correctness)
+BRIDGE_REGISTER_MODEL_SOURCE(lims::IgnitionModel)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::IgnitionModel, lims::ListIgnitionTests)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::IgnitionModel, lims::AddIgnitionTest)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::IgnitionModel, lims::RecordIgnitionValues)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::IgnitionModel, lims::DeleteIgnitionTest)
+// NOLINTEND(misc-const-correctness)
