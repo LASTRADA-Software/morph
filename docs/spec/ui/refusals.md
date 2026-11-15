@@ -9,7 +9,7 @@ application's, in its catalogues.
 |---|---|
 | `include/morph/core/action_refusal.hpp` | `morph::model::RefusalArg`, `morph::model::ActionRefusal` |
 | `include/morph/core/wire.hpp` | the `err` envelope's `refusal` member (`wire::RefusalBody`), `wire::executeFailure` |
-| `include/morph/ui/expression.hpp` | the `refusal` form, `t` with a key expression, the `refusalText` function |
+| `include/morph/ui/expression.hpp`, `src/ui/expression.cpp` | the `refusal` form, `t` with a key expression, the `refusalText` function |
 | `include/morph/ui/author.hpp` | `refusal()` on query and mutation handles, `tAt`, `refusalText` |
 
 ## Contents

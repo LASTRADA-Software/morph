@@ -1,7 +1,7 @@
 # The UI document — design
 
 Design spec for the UI document's C++ model and its load-time validation
-(`include/morph/ui/document.hpp`), and for the typed values every document expression evaluates to
+(`include/morph/ui/document.hpp`, loaded by `src/ui/document.cpp`), and for the typed values every document expression evaluates to
 (`include/morph/ui/value.hpp`). A server defines a screen as a JSON document (spec 5,
 `docs/superpowers/specs/2026-10-07-ui-document-design.md`); `ui::loadDocument` parses it into a
 `ui::Document` and refuses it, with the JSON Pointer and the reason, when it breaks a rule of
