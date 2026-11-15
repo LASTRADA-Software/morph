@@ -213,25 +213,25 @@ HeadParts Workspace::headPartsForActive() const {
     }
     Text eyebrow{.text = std::string{},
                  .role = TextRole::Muted,
-                 .field = {},
+                 .field = {},    // NOLINT(readability-trailing-comma)
                  .common = {}};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     eyebrow.common.testId = "head_eyebrow";
     eyebrow.common.visible = false;
     Row lead{.children = {},
              .gap = 0,
-             .common = {},
+             .common = {},           // NOLINT(readability-trailing-comma)
              .tone = std::nullopt};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     lead.common.testId = "head_lead";
     lead.common.visible = false;
     Row trail{.children = {},
               .gap = 0,
-              .common = {},
+              .common = {},           // NOLINT(readability-trailing-comma)
               .tone = std::nullopt};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     trail.common.testId = "head_trail";
     trail.common.visible = false;
     Row inlineLead{.children = {},
                    .gap = 0,
-                   .common = {},
+                   .common = {},           // NOLINT(readability-trailing-comma)
                    .tone = std::nullopt};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     inlineLead.common.testId = "head_lead_inline";
     inlineLead.common.visible = false;
@@ -641,7 +641,7 @@ Text Workspace::buildHeadEyebrow(WorkspaceTabId tab) const {
     };
     Text text{.text = Prop<std::string>{plain},
               .role = TextRole::Muted,
-              .field = {},
+              .field = {},    // NOLINT(readability-trailing-comma)
               .common = {}};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     text.spans = Prop<std::vector<TextSpan>>{[this, tab] { return eyebrowRunsOf(tab); }};
     text.common.testId = "head_eyebrow";
@@ -745,7 +745,7 @@ Row Workspace::buildHeadLead(WorkspaceTabId tab, LeadPlacement place) const {
     };
     Row row{.children = {},
             .gap = 1,
-            .common = {},
+            .common = {},           // NOLINT(readability-trailing-comma)
             .tone = std::nullopt};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     row.wrap = true;
     row.align = Align::Center;
@@ -771,7 +771,7 @@ Row Workspace::buildHeadLead(WorkspaceTabId tab, LeadPlacement place) const {
     };
     Text text{.text = Prop<std::string>{subtitle},
               .role = TextRole::Muted,
-              .field = {},
+              .field = {},    // NOLINT(readability-trailing-comma)
               .common = {}};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     text.spans = Prop<std::vector<TextSpan>>{spans};
     text.common.testId = "head_subtitle" + suffix;
@@ -791,12 +791,12 @@ Row Workspace::buildHeadLead(WorkspaceTabId tab, LeadPlacement place) const {
                 .tone = Prop<Tone>{[&placed] { return placed.get().badge.tone; }},
                 .text = Prop<std::string>{[&placed] { return placed.get().badge.text; }},
                 .icon = placed.peek().badge.icon,
-                .common = {},
+                .common = {},  // NOLINT(readability-trailing-comma)
             };
             badge.common.testId = "head_status" + suffix + "_" + std::to_string(placed.peek().index);
             return ui::badge(std::move(badge));
         },
-        Axis::Horizontal, 1, {}, true));
+        Axis::Horizontal, 1, {}, true));  // NOLINT(readability-trailing-comma)
     return row;
 }
 
@@ -884,7 +884,7 @@ ActionBar Workspace::buildHeadTrail(WorkspaceTabId tab) const {
 Node Workspace::headRow(WorkspaceTabId tab) const {
     Row row{.children = {},
             .gap = 2,
-            .common = {},
+            .common = {},           // NOLINT(readability-trailing-comma)
             .tone = std::nullopt};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     row.children.push_back(ui::row(buildHeadLead(tab, LeadPlacement::Below)));
     row.children.push_back(ui::actionBar(buildHeadTrail(tab)));

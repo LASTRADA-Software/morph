@@ -270,6 +270,7 @@ Navigator::Menu Navigator::menu() const {
     return out;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one block per module and per group within it.
 void Navigator::moduleMenu(Menu& out) const {
     for (Module const& module : _modules) {
         MenuEntry submenu;
@@ -296,8 +297,8 @@ void Navigator::moduleMenu(Menu& out) const {
         }
         if (module.entries > 1) {
             submenu.label = moduleLabel(module);
-            if (module.shown) {
-                submenu.label += " · " + module.shown->text;
+            if (auto const& shown = module.shown) {
+                submenu.label += " · " + shown->text;
             }
             if (module.failed) {
                 submenu.label += " · !";
@@ -509,23 +510,23 @@ void Navigator::arrange() {
     }
     _moduleMajor = moduleMajor;
     // After the search field and the pins.
-    std::size_t at = 2;
+    std::size_t slot = 2;
     if (moduleMajor) {
         for (Module& module : _modules) {
-            _root->moveChild(*module.row, at++);
+            _root->moveChild(*module.row, slot++);
             for (Group& group : _groups) {
                 if (group.module == module.module) {
-                    _root->moveChild(*group.section, at++);
+                    _root->moveChild(*group.section, slot++);
                 }
             }
         }
         return;
     }
     for (Module& module : _modules) {
-        _root->moveChild(*module.row, at++);
+        _root->moveChild(*module.row, slot++);
     }
     for (Group const* const group : listed) {
-        _root->moveChild(*group->section, at++);
+        _root->moveChild(*group->section, slot++);
     }
 }
 

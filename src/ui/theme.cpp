@@ -869,6 +869,8 @@ std::optional<double> weightOf(Json const& value) {
     return std::nullopt;
 }
 
+// NOLINTBEGIN(misc-no-recursion,bugprone-easily-swappable-parameters): groups nest, bounded by kMaxJsonDepth; the
+// group's path, then the type it passes down.
 std::optional<std::string> readGroup(Json::object_t const& group, std::string const& prefix,
                                      std::string const& inherited, TokenSet& out) {
     // NOLINTEND(misc-no-recursion,bugprone-easily-swappable-parameters)
@@ -999,6 +1001,7 @@ std::expected<ThemeIndex, std::string> parseThemeIndex(std::string_view text) {
     return index;
 }
 
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): variant, density, surface: the order they layer in.
 std::expected<TokenSet, std::string> resolveTheme(ThemeIndex const& index, TokenFileLookup const& files,
                                                   std::string_view variant, std::string_view density,
                                                   std::string_view surface) {
