@@ -598,11 +598,13 @@ ui::Node expandedConditions(Study const& study) {
                   {.padding = 2})
             .testId("conditions-card");
     auto const aside = ui::panel({summary(study)}, {.title = "Summary", .padding = 3})
-                           // 26 % of the row, at most 33 units: 250 px on the 1000 px page. No floor: on the 785 px
-                           // page the share is wide enough for the longest value segment beside the 13-unit caption
-                           // column, so none breaks; the conditions' labels wrap between words there.
+                           // 26 % of the row, at least 36 and at most 38 units: 250 px on the 1000 px page. The
+                           // floor keeps the longest value beside the 13-unit caption column whole in a font
+                           // wider than the default, where 26 % of the 785 px page is too narrow; the conditions'
+                           // labels wrap between words there.
                            .sizing(ui::percent(26))
-                           .maxWidth(33)
+                           .minWidth(36)
+                           .maxWidth(38)
                            .a11y("Summary")
                            .testId("summary-panel");
     return ui::row(
