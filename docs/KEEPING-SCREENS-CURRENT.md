@@ -142,6 +142,30 @@ BRIDGE_ADD_EFFECTS(lims::PostInvoice, ::morph::effects::changes<lims::JournalEnt
 - Put it in a translation unit that is always linked into the server, such as the one that wires the modules together.
   A static library's object that nothing references is dropped, and its addition with it.
 
+### Facts that change with time alone
+
+A list filtered by a deadline changes when the clock passes the deadline, though no action runs. The model says when,
+and the server tells the watchers at that instant.
+
+```cpp
+// A registered read beside the others: the next instant, after now, at which a requisition's scope moves.
+struct NextRequisitionDeadline {};
+std::optional<morph::time::DateTime> ProcurementModel::execute(NextRequisitionDeadline const&);
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::NextRequisitionDeadline, "NextRequisitionDeadline")
+BRIDGE_REGISTER_CHANGES_AT(lims::ProcurementModel, lims::NextRequisitionDeadline, lims::RequisitionView)
+```
+
+- The action reports a fact and nothing else. It arms no timer and posts no work; the server owns the clock.
+- It must return `std::optional<morph::time::DateTime>`: an instant strictly after the model's own now, or `nullopt`
+  when nothing is pending. It declares no effects, takes no fields, and reads from the same clock the server uses
+  (`ServerConfig::clock`).
+- At that instant the server marks every listed record, and every record derived from it, as changed, as if an
+  action declaring `changes<R>` had run, and then asks for the following instant. It asks again after any action
+  whose effects name one of the records, since the next instant may have moved.
+- A reporter that is not a registered action, that declares effects, or that names an unregistered record is
+  refused with the other registry problems.
+- In a local-mode client there is no server, so nothing is told at the instant: use `refreshEvery` there.
+
 ## Records
 
 ```cpp

@@ -1785,6 +1785,18 @@ for every action, which records its result holds.
   composers are unioned. Like `BRIDGE_REGISTER_EFFECTS`, it asserts the
   registration latch, defines no specialisation and compiles out under
   `MORPH_CLIENT_ONLY`.
+- **Time-derived facts.** `BRIDGE_REGISTER_CHANGES_AT(Model, A, records...)` registers action `A`
+  of `Model` as the reporter of an instant: the next moment at which the listed records change by
+  the passage of time alone, with no action behind it (an approval that escalates at a deadline).
+  `A`'s result must be `std::optional<morph::time::DateTime>`, checked at compile time; the
+  instant is strictly after the model's own now, and `nullopt` means nothing is pending. The
+  registrar stores `{actionId, modelId, record types}` in
+  `detail::mutableChangeTimesRegistry()` beside the effects, lazily matched like them, and
+  compiles out under `MORPH_CLIENT_ONLY`. The model only reports a fact: it arms no timer and
+  posts no work, and does not know the server exists. Resolution refuses, with the other
+  problems, a reporter that is no registered action, one that also declares effects (it reads,
+  and the server runs it unprompted), one naming no record, and one naming a record that is not
+  registered. `Resolved::changeTimes` lists the reporters and `effects::changeTimesOf()` reads them.
 - **Idempotent per action.** Each action id keeps its distinct declarations;
   one equal to a stored one, in any order, is not added again. Two distinct
   declarations are a conflict, recorded rather than thrown so the registrar
