@@ -418,6 +418,7 @@ add_library(morph STATIC
     src/ui/library.cpp
     src/ui/service.cpp
     src/ui/host.cpp
+    src/ui/backend.cpp
     src/ui/service_client.cpp
     src/ui/shell_frame.cpp
     src/ui/shell_parts_model.cpp
