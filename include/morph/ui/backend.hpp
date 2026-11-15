@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <morph/export.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -743,7 +744,7 @@ enum class RowClick : std::uint8_t {
 /// move the current row without selecting, and Enter activates it. A report says which kind of change it was: a
 /// click, a Shift-click, a Shift+arrow and every `Single` change `Replace`; a Ctrl-click, Space and Ctrl+A `Extend`.
 /// A range runs over the keys in row order, rows the backend has not realized included.
-class TableWidget : public ContainerWidget {
+class MORPH_API TableWidget : public ContainerWidget {
 public:
     /// @brief Sets the column headers and widths.
     /// @param columns The columns, in order.
@@ -837,11 +838,7 @@ public:
     /// @param first The view index of the first realized row.
     /// @param count How many rows are realized, starting at `first`.
     /// @param total How many rows the table's data has, realized or not.
-    virtual void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) {
-        static_cast<void>(first);
-        static_cast<void>(count);
-        static_cast<void>(total);
-    }
+    virtual void setRealizedWindow(std::size_t first, std::size_t count, std::size_t total);
 
     /// @brief Sets what the backend calls when the user scrolls, asking the mount to realize roughly this range of
     ///        rows next. A backend that never virtualizes leaves this empty; the mount then never dewindows a row.
@@ -1254,7 +1251,7 @@ struct CustomRequest {
 
 /// @brief Makes widgets. Each factory appends the new widget to @p parent, or makes a root when it is null, and never
 ///        returns null, except `createCustom`, whose null shows a custom node's fallback.
-class IViewBackend {
+class MORPH_API IViewBackend {
 public:
     IViewBackend() = default;
     virtual ~IViewBackend() = default;
@@ -1458,11 +1455,7 @@ public:
     /// @param request The component, the props the document declares and the host component's lowest version.
     /// @return The component, or null to show the fallback.
     [[nodiscard]] virtual std::unique_ptr<CustomWidget> createCustom(ContainerWidget* parent,
-                                                                     CustomRequest const& request) {
-        static_cast<void>(parent);
-        static_cast<void>(request);
-        return nullptr;
-    }
+                                                                     CustomRequest const& request);
 
     /// @brief The width class of the surface this backend draws on, now: `compact`, `medium` or `expanded`
     ///        (`widthClassOf`), what `{"env": "widthClass"}` reads.
@@ -1485,14 +1478,6 @@ inline constexpr int kExpandedWidthUnits = 108;
 ///        it, so a document's breakpoints sit at the same number of its own units on every frontend.
 /// @param units The width, in units: a terminal's columns, or a window's width over its unit width.
 /// @return The class: `compact`, `medium` or `expanded`.
-[[nodiscard]] inline std::string widthClassOf(double units) {
-    if (units < 80.0) {
-        return "compact";
-    }
-    if (units < static_cast<double>(kExpandedWidthUnits)) {
-        return "medium";
-    }
-    return "expanded";
-}
+[[nodiscard]] MORPH_API std::string widthClassOf(double units);
 
 }  // namespace morph::ui
