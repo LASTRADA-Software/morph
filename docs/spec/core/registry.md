@@ -1793,10 +1793,10 @@ for every action, which records its result holds.
   registrar stores `{actionId, modelId, record types}` in
   `detail::mutableChangeTimesRegistry()` beside the effects, lazily matched like them, and
   compiles out under `MORPH_CLIENT_ONLY`. The model only reports a fact: it arms no timer and
-  posts no work, and does not know the server exists. Resolution refuses, with the other
-  problems, a reporter that is no registered action, one that also declares effects (it reads,
-  and the server runs it unprompted), one naming no record, and one naming a record that is not
-  registered. `Resolved::changeTimes` lists the reporters and `effects::changeTimesOf()` reads them.
+  posts no work, and does not know the server exists. Naming no record is a compile error.
+  Resolution refuses, with the other problems, a reporter that is no registered action, one
+  that also declares effects (it reads, and the server runs it unprompted), and one naming a
+  record that is not registered. `Resolved::changeTimes` lists the reporters and `effects::changeTimesOf()` reads them.
 - **Idempotent per action.** Each action id keeps its distinct declarations;
   one equal to a stored one, in any order, is not added again. Two distinct
   declarations are a conflict, recorded rather than thrown so the registrar

@@ -30,6 +30,7 @@
 #include "../core/backend.hpp"
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
+#include "../util/datetime.hpp"
 #include "changes.hpp"
 #include "completion.hpp"
 #include "connection_writer.hpp"
@@ -356,6 +357,20 @@ struct ServerConfig {
     /// queued. Zero sends each fan-out's event at once, unmerged. Negative is
     /// refused by the constructor.
     std::chrono::milliseconds coalesceWindow{50};
+
+    /// @brief The server's "now", read when it waits for an instant a model reported
+    ///        (`BRIDGE_REGISTER_CHANGES_AT`). Empty: `morph::time::DateTime::now()`.
+    ///
+    /// A test supplies a clock it advances by hand, so a deadline passes without a sleep. The model reports its
+    /// instants from the same clock.
+    std::function<::morph::time::DateTime()> clock;
+
+    /// @brief The longest the server sleeps before reading `clock` again while it waits for a reported instant.
+    ///
+    /// A system clock can be set and an injected one is advanced by a test, neither of which a sleep notices, so
+    /// the instant is judged by reading `clock`, never by the length of the sleep. Not positive is refused by the
+    /// constructor.
+    std::chrono::milliseconds clockRecheck{1000};
 };
 
 /// @brief Server-side message handler that owns model instances and dispatches actions.
@@ -831,6 +846,7 @@ public:
     void fanOut(::morph::effects::Changes changes, ConnectionId caller, std::string_view callerPrincipal) {
         assert(_strand.runningHere() && "RemoteServer::fanOut runs on the server strand");
         noteOwner("RemoteServer::fanOut");
+        askTimeFactsNamedIn(changes);
         std::map<ConnectionId, ::morph::wire::ChangesBody> bodies;
         for (auto const& change : changes.records) {
             for (ConnectionId const cid : _watches.watchersOf(change.record)) {
@@ -983,10 +999,175 @@ private:
         if (config.coalesceWindow.count() < 0) {
             throw std::invalid_argument("ServerConfig: coalesceWindow must not be negative");
         }
+        if (config.clockRecheck.count() <= 0) {
+            throw std::invalid_argument("ServerConfig: clockRecheck must be positive");
+        }
         if (std::ranges::find(config.services, nullptr) != config.services.end()) {
             throw std::invalid_argument("ServerConfig: services must not hold a null entry");
         }
         return config;
+    }
+
+    /// One reporter of a time-derived fact, and what the server knows of it. Server strand state.
+    struct TimeFact {
+        ::morph::effects::ChangeTimeSource source;
+        /// The instant the model last reported; empty while none is pending or an ask is in flight.
+        std::optional<::morph::time::DateTime> next;
+        /// The instant most recently fanned out; a report at or before it is the model's own clock running ahead
+        /// of the server's, and is ignored, so one instant never fires twice.
+        std::optional<::morph::time::DateTime> fired;
+        /// An ask is running on a model strand.
+        bool asking{false};
+        /// A change arrived while an ask ran, whose answer may predate it.
+        bool askAgain{false};
+        /// The timer armed for `next`, and the number its wake-up carries.
+        ::morph::async::detail::TimeoutScheduler::Handle timer{0};
+        std::uint64_t wake{0};
+    };
+
+    /// @brief The server's "now".
+    /// @return `ServerConfig::clock`, or the system clock when none is configured.
+    [[nodiscard]] ::morph::time::DateTime now() const {
+        return _config.clock ? _config.clock() : ::morph::time::DateTime::now();
+    }
+
+    /// @brief Begins asking every reporter for its instant, once, on the first envelope the server handles.
+    ///
+    /// Not in the constructor: asking runs model code, and a task needs the server held by a `shared_ptr`.
+    /// On the server strand.
+    void startTimeFacts() {
+        if (_timeFactsStarted) {
+            return;
+        }
+        _timeFactsStarted = true;
+        for (auto const& source : ::morph::effects::detail::resolved().changeTimes) {
+            _timeFacts.push_back(TimeFact{.source = source});
+        }
+        for (std::size_t index = 0; index < _timeFacts.size(); ++index) {
+            askTimeFact(index);
+        }
+    }
+
+    /// @brief Asks again every reporter that names a record @p changes holds: its next instant may have moved.
+    /// @param changes What is about to be fanned out. On the server strand.
+    void askTimeFactsNamedIn(::morph::effects::Changes const& changes) {
+        for (std::size_t index = 0; index < _timeFacts.size(); ++index) {
+            auto const& named = _timeFacts[index].source.records;
+            bool const touched =
+                std::ranges::any_of(changes.records, [&](::morph::effects::RecordChange const& change) {
+                    return std::ranges::find(named, change.record) != named.end();
+                });
+            if (touched) {
+                askTimeFact(index);
+            }
+        }
+    }
+
+    /// @brief Runs reporter @p index on a fresh instance of its model and takes its answer back to the strand.
+    ///
+    /// One ask runs at a time; a request made during one is remembered and asks once more when it ends. The ask
+    /// runs on a model strand, never the server's, so a model that reads a database does not hold up the server.
+    /// @param index The reporter's place in `_timeFacts`. On the server strand.
+    void askTimeFact(std::size_t index) {
+        TimeFact& fact = _timeFacts[index];
+        if (fact.asking) {
+            fact.askAgain = true;
+            return;
+        }
+        fact.asking = true;
+        fact.next.reset();
+        _strands->post(nextOpaqueId(), [self = shared_from_this(), index, source = fact.source] {
+            std::optional<::morph::time::DateTime> reported;
+            try {
+                auto holder = self->_registry.create(source.model);
+                std::string const result = self->_dispatcher.dispatch(source.model, source.action, *holder, "{}");
+                if (auto const error = glz::read_json(reported, result)) {
+                    reported.reset();
+                    ::morph::log::logError("[timeFacts] {} answered {}: not an instant", source.action, result);
+                }
+            } catch (const std::exception& exc) {
+                ::morph::log::logError("[timeFacts] {} not answered: {}", source.action, exc.what());
+            } catch (...) {
+                ::morph::log::logError("[timeFacts] {} not answered: unknown exception", source.action);
+            }
+            self->_strand.postTask([self, index, reported] { self->timeFactAnswered(index, reported); });
+        });
+    }
+
+    /// @brief Takes reporter @p index's answer and waits for its instant.
+    /// @param index The reporter's place in `_timeFacts`.
+    /// @param reported The instant, or empty when none is pending or the ask failed. On the server strand.
+    void timeFactAnswered(std::size_t index, std::optional<::morph::time::DateTime> reported) {
+        noteOwner("RemoteServer::timeFactAnswered");
+        TimeFact& fact = _timeFacts[index];
+        fact.asking = false;
+        if (reported && fact.fired && *reported <= *fact.fired) {
+            ::morph::log::logWarn("[timeFacts] {} reported an instant it already reported; ignored",
+                                  fact.source.action);
+            reported.reset();
+        }
+        fact.next = reported;
+        if (fact.askAgain) {
+            fact.askAgain = false;
+            askTimeFact(index);
+            return;
+        }
+        waitForTimeFact(index);
+    }
+
+    /// @brief Sleeps until reporter @p index's instant, or `clockRecheck`, whichever is sooner, then reads the clock.
+    /// @param index The reporter's place in `_timeFacts`. On the server strand.
+    void waitForTimeFact(std::size_t index) {
+        TimeFact& fact = _timeFacts[index];
+        if (fact.timer != 0 && _strandTimer) {
+            _strandTimer->cancel(fact.timer);
+        }
+        fact.timer = 0;
+        if (!fact.next || fact.asking) {
+            return;
+        }
+        auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(fact.next->value - now().value);
+        if (remaining.count() <= 0) {
+            fireTimeFact(index);
+            return;
+        }
+        if (!_strandTimer) {
+            _strandTimer = std::make_unique<::morph::async::detail::TimeoutScheduler>();
+        }
+        std::uint64_t const wake = ++fact.wake;
+        fact.timer =
+            _strandTimer->schedule(std::min(remaining, _config.clockRecheck), [weak = weak_from_this(), index, wake] {
+                if (auto self = weak.lock()) {
+                    self->_strand.postTask([self, index, wake] { self->timeFactWoke(index, wake); });
+                }
+            });
+    }
+
+    /// @brief Reads the clock after a sleep, and fires the instant if it has come, or waits on.
+    /// @param index The reporter's place in `_timeFacts`.
+    /// @param wake The number the wait carried; a later wait has superseded a different one.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a place, then a number; swapped, nothing matches and the wake is dropped.
+    void timeFactWoke(std::size_t index, std::uint64_t wake) {
+        noteOwner("RemoteServer::timeFactWoke");
+        if (_timeFacts[index].wake != wake) {
+            return;
+        }
+        _timeFacts[index].timer = 0;
+        waitForTimeFact(index);
+    }
+
+    /// @brief Fans out the change reporter @p index's instant makes, through the path an action's effects take.
+    ///
+    /// The instant is consumed first. The fan-out names the reporter's records, so it asks for the following
+    /// instant by itself.
+    /// @param index The reporter's place in `_timeFacts`. On the server strand.
+    void fireTimeFact(std::size_t index) {
+        TimeFact& fact = _timeFacts[index];
+        fact.fired = fact.next;
+        fact.next.reset();
+        auto changes =
+            ::morph::effects::detail::wholeTypeChanges(::morph::effects::detail::resolved(), fact.source.records);
+        fanOut(std::move(changes), 0, std::string_view{});
     }
 
     /// @brief Hands each service this server, the first time any of them is about to answer. On the server strand.
@@ -2162,6 +2343,7 @@ private:
             reply(::morph::wire::encode(::morph::wire::makeErr("server shutting down", env.callId)));
             return;
         }
+        startTimeFacts();
         try {
             if (env.kind == "register") {
                 MORPH_ZONE("RemoteServer::register");
@@ -2898,6 +3080,9 @@ private:
     // Numbers each coalescing window, so a window's late close cannot send a
     // queue a later window holds.
     std::uint64_t _nextWindow{0};
+    // The reporters of time-derived facts; filled by the first envelope handled.
+    std::vector<TimeFact> _timeFacts;
+    bool _timeFactsStarted{false};
 
     // Drawn off the strand by openConnection(), which answers at once.
     std::atomic<uint64_t> _nextConnectionId{0};

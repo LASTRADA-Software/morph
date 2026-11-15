@@ -1185,10 +1185,12 @@ with lab's verification but the declared authorization (`lims::Authorization`, `
 instance, but escalation is not scheduled work: it is a deadline the rule reads when an approver acts or lists, so
 nothing has to start at the deadline or resume after a restart. Measured in the same file with the clock before and
 after the deadline. The one consequence is an effects question, not a scheduling one, measured in
-`screens/tests/test_lims_approval_inbox.cpp`: a site approver's inbox, mounted before the deadline, still lists the
-invoice after it, and shows the escalation only when it asks again. What the test measures is that the open inbox is
-not told: it is checked after the harness advances past the deadline. The cause is inferred, not measured: no action
-ran, so no effect was declared or fanned out. Hypothesis 4 therefore has one instance in this design, the billing run
+`screens/tests/test_lims_approval_inbox.cpp`: a site approver's inbox, mounted before the deadline, must drop the
+invoice when the deadline passes. No action runs at that instant, so no effect fans out; the model reports the instant
+instead. `NextApprovalDeadline` answers the earliest deadline still ahead and is registered with
+`BRIDGE_REGISTER_CHANGES_AT` for `InvoiceView`; the server owns the clock, tells every watcher of the record when the
+clock reaches the instant, and asks again. The test moves the clock without sleeping and asserts that the open inbox
+shows "0 pending". Hypothesis 4 therefore has one instance in this design, the billing run
 (decision 34), and the design's row says so. Part C's requisition escalation is expected to take this shape.
 
 ### 36. Billing's approval pairs and the approver's value limit are declared, and checked in the model (hypothesis 6, second instance)
@@ -1492,10 +1494,10 @@ submitted on one rig is approved on another a day later in `Local`, `LocalSingle
 and the limit hold. The lifecycle needed no state outside the row, and shares no code with invoice approval but the
 declared authorization: each lifecycle wrote its own transition helper, pending list and escalation predicate
 (`requisitions.cpp`, 320 lines; `invoice_approval.cpp`, 250). Escalation is again a deadline the rule reads, not
-scheduled work (decision 35); and again an approver's open inbox is not told when the deadline passes. That is
-measured on a site approver's watching connection, with a requisition raised after the deadline in the same case as
-the control that the connection hears a change of the record. It is the same gap in a second module, so it is filed
-against `include/morph`; Part D Task 20 builds the deadline effect.
+scheduled work (decision 35); and again an approver's open inbox had to be told when the deadline passes. That is
+measured on a site approver's watching connection: `NextRequisitionDeadline` reports the instant, and the connection
+hears a change of `Inventory_Requisition` when the clock reaches it. It is the same gap in a second module, which is
+why the framework took it: the model reports the instant and the server owns the timer.
 
 **Declared authorization, third module.** The rule is declared once beside each action
 (`inventory_authorization.hpp`) and the framework's guard runs it; no handler makes the first authorization call.

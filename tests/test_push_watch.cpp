@@ -146,6 +146,50 @@ inline std::binary_semaphore& fanGate() {
     return gate;
 }
 
+/// A row that expires by the clock alone.
+struct TimedRow {
+    std::int64_t id{};
+};
+
+struct TimedRowList {
+    std::vector<TimedRow> rows;
+};
+
+/// Reports the next instant a timed row expires.
+struct NextTimedExpiry {};
+
+/// Changes which instant is next, as an action that adds a row with an earlier expiry would.
+struct SetTimedExpiry {
+    std::int64_t atMs{};
+};
+
+/// The instant `NextTimedExpiry` reports in epoch milliseconds; zero reports none.
+inline std::atomic<std::int64_t>& timedNextMs() {
+    static std::atomic<std::int64_t> value{0};
+    return value;
+}
+
+/// The server's clock in these cases, in epoch milliseconds; the tests advance it without sleeping.
+inline std::atomic<std::int64_t>& timedClockMs() {
+    static std::atomic<std::int64_t> value{0};
+    return value;
+}
+
+struct TimedModel {
+    std::optional<::morph::time::DateTime> execute(NextTimedExpiry const& /*action*/) {
+        auto const next = timedNextMs().load();
+        if (next == 0) {
+            return std::nullopt;
+        }
+        return ::morph::time::DateTime{
+            std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{next}}};
+    }
+    TimedRowList execute(SetTimedExpiry const& action) {
+        timedNextMs().store(action.atMs);
+        return {};
+    }
+};
+
 struct FanModel {
     int touched = 0;
     FanRowList execute(EditFanRow const& action) { return {.rows = {{.id = action.id, .name = "edited"}}}; }
@@ -193,6 +237,13 @@ BRIDGE_REGISTER_ACTION(FanModel, EditFanPrivate, "T_FanEditPrivate")
 BRIDGE_REGISTER_EFFECTS(EditFanPrivate, morph::effects::updates<FanPrivate>)
 BRIDGE_REGISTER_ACTION(FanModel, GatedTouchFan, "T_FanGatedTouch")
 BRIDGE_REGISTER_EFFECTS(GatedTouchFan, morph::effects::changesInstance)
+
+BRIDGE_REGISTER_RECORD(TimedRow, "T_TimedRow")
+BRIDGE_REGISTER_MODEL(TimedModel, "T_TimedModel")
+BRIDGE_REGISTER_ACTION(TimedModel, NextTimedExpiry, "T_TimedNext")
+BRIDGE_REGISTER_CHANGES_AT(TimedModel, NextTimedExpiry, TimedRow)
+BRIDGE_REGISTER_ACTION(TimedModel, SetTimedExpiry, "T_TimedSet")
+BRIDGE_REGISTER_EFFECTS(SetTimedExpiry, morph::effects::changes<TimedRow>)
 
 namespace {
 
@@ -859,10 +910,14 @@ struct FanRig {
     /// before its strand task ends; the coalescing cases pass their own.
     explicit FanRig(std::chrono::milliseconds executeTimeout = std::chrono::milliseconds{0},
                     std::shared_ptr<::morph::session::IAuthorizer> authorizer = nullptr,
-                    std::chrono::milliseconds coalesceWindow = std::chrono::milliseconds{0}) {
+                    std::chrono::milliseconds coalesceWindow = std::chrono::milliseconds{0},
+                    std::function<void(::morph::backend::ServerConfig&)> const& configure = {}) {
         ::morph::backend::ServerConfig config;
         config.limits.executeTimeout = executeTimeout;
         config.coalesceWindow = coalesceWindow;
+        if (configure) {
+            configure(config);
+        }
         config.services.push_back(std::make_shared<FanHello>());
         server = authorizer ? std::make_shared<RemoteServer>(pool, std::move(authorizer), std::move(config))
                             : std::make_shared<RemoteServer>(pool, std::move(config));
@@ -1803,4 +1858,140 @@ TEST_CASE("changes_after_a_discarded_queue_are_sent", "[push][watch]") {
             });
         },
         ::morph::testing::WaitBudget{std::chrono::milliseconds{5000}}));
+}
+
+// ── Time-derived facts: a record that changes by the clock alone ─────────────
+
+namespace {
+
+using std::chrono::milliseconds;
+
+/// A server whose clock the test sets and whose recheck is short, so the clock is read soon after it moves.
+struct TimedRig : FanRig {
+    TimedRig()
+        : FanRig{milliseconds{0}, nullptr, milliseconds{0}, [](::morph::backend::ServerConfig& config) {
+                     config.clock = [] {
+                         return ::morph::time::DateTime{
+                             std::chrono::sys_time<milliseconds>{milliseconds{timedClockMs().load()}}};
+                     };
+                     config.clockRecheck = milliseconds{5};
+                 }} {
+        timedClockMs().store(1000);
+        timedNextMs().store(0);
+    }
+
+    /// Whether @p cid is told, within a bound, that `T_TimedRow` changed as a whole type.
+    bool toldOfRow(ConnectionId cid, std::size_t atLeast = 1) {
+        auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+        while (std::chrono::steady_clock::now() < deadline) {
+            flush();
+            if (wire(cid).changes().size() >= atLeast) {
+                return true;
+            }
+            std::this_thread::sleep_for(milliseconds{2});
+        }
+        return false;
+    }
+
+    /// Whether @p cid is told nothing in a short while.
+    bool toldNothing(ConnectionId cid) {
+        std::this_thread::sleep_for(milliseconds{60});
+        flush();
+        return wire(cid).changes().empty();
+    }
+};
+
+}  // namespace
+
+TEST_CASE("a_watcher_is_told_when_the_clock_passes_a_reported_instant", "[push][watch][time]") {
+    TimedRig rig;
+    timedNextMs().store(5000);
+    auto const cid = rig.connect();
+    rig.watch(cid, records({"T_TimedRow"}));
+    // The first envelope handled, the watch above, asked for the instant.
+    CHECK(rig.toldNothing(cid));
+
+    timedClockMs().store(4999);
+    CHECK(rig.toldNothing(cid));
+
+    timedClockMs().store(5000);
+    REQUIRE(rig.toldOfRow(cid));
+    auto const bodies = rig.wire(cid).changes();
+    REQUIRE(bodies.size() == 1U);
+    REQUIRE(bodies.front().records.size() == 1U);
+    CHECK(bodies.front().records.front().record == "T_TimedRow");
+    CHECK_FALSE(bodies.front().records.front().keys.has_value());
+}
+
+TEST_CASE("an_instant_that_has_come_is_told_once", "[push][watch][time]") {
+    TimedRig rig;
+    timedNextMs().store(5000);
+    auto const cid = rig.connect();
+    rig.watch(cid, records({"T_TimedRow"}));
+    timedClockMs().store(5000);
+    REQUIRE(rig.toldOfRow(cid));
+
+    // The model still reports the instant that has come, as one whose clock runs ahead of the server's would: the
+    // server asked again after firing, and does not tell the same instant twice.
+    std::this_thread::sleep_for(milliseconds{60});
+    rig.flush();
+    CHECK(rig.wire(cid).changes().size() == 1U);
+}
+
+TEST_CASE("an_action_on_the_record_moves_the_awaited_instant", "[push][watch][time]") {
+    TimedRig rig;
+    timedNextMs().store(9000);
+    auto const cid = rig.connect();
+    auto const other = rig.connect();
+    rig.watch(cid, records({"T_TimedRow"}));
+    auto const timed = [&] {
+        auto env = ::morph::wire::makeRegister("T_TimedModel");
+        auto const reply = ::morph::wire::decode(rig.server->handleInline(::morph::wire::encode(env), other));
+        REQUIRE(reply.kind == "ok");
+        return reply.modelId;
+    }();
+    auto const run = [&](std::int64_t atMs) {
+        ::morph::wire::Envelope env;
+        env.kind = "execute";
+        env.callId = 3;
+        env.modelId = timed;
+        env.modelType = "T_TimedModel";
+        env.actionType = "T_TimedSet";
+        env.body = glz::write_json(SetTimedExpiry{.atMs = atMs}).value_or(std::string{});
+        auto waiter = std::make_shared<::morph::testing::WaitReply>();
+        rig.server->handle(::morph::wire::encode(env), [waiter](std::string const& msg) { (*waiter)(msg); }, other);
+        REQUIRE(waiter->await());
+        REQUIRE(waiter->env.kind == "ok");
+    };
+
+    run(2000);  // earlier than the instant the server was waiting for
+    REQUIRE(rig.toldOfRow(cid, 1));
+    std::size_t const afterAction = rig.wire(cid).changes().size();
+
+    timedClockMs().store(2000);
+    REQUIRE(rig.toldOfRow(cid, afterAction + 1));
+}
+
+TEST_CASE("no_pending_instant_tells_nothing", "[push][watch][time]") {
+    TimedRig rig;
+    auto const cid = rig.connect();
+    rig.watch(cid, records({"T_TimedRow"}));
+    timedClockMs().store(1'000'000);
+    CHECK(rig.toldNothing(cid));
+}
+
+TEST_CASE("a_non_positive_clock_recheck_is_refused", "[push][watch][time]") {
+    ::morph::exec::ThreadPoolExecutor pool{1};
+    ::morph::backend::ServerConfig config;
+    config.clockRecheck = milliseconds{0};
+    CHECK_THROWS_AS(std::make_shared<RemoteServer>(pool, std::move(config)), std::invalid_argument);
+}
+
+TEST_CASE("the_process_registry_lists_the_reporter", "[push][watch][time]") {
+    auto const sources = ::morph::effects::changeTimesOf();
+    auto const found =
+        std::ranges::find(sources, std::string{"T_TimedNext"}, &::morph::effects::ChangeTimeSource::action);
+    REQUIRE(found != sources.end());
+    CHECK(found->model == "T_TimedModel");
+    CHECK(found->records == std::vector<std::string>{"T_TimedRow"});
 }

@@ -1,23 +1,30 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // What an approver's inbox is told. Escalation is a deadline the approval rule reads, and no action runs when it
-// passes, so nothing tells the inbox. A submission is an action, and its declared effect decides whether an open
-// inbox learns of the invoice it gained.
+// passes, so the model reports the instant and the server tells the inbox. A submission is an action, and its declared
+// effect decides whether an open inbox learns of the invoice it gained.
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <memory>
+#include <morph/session/session_auth.hpp>
 #include <optional>
 #include <string>
 #include <testkit/screen_harness.hpp>
 
 #include "approval_inbox_world.hpp"
 #include "clock.hpp"
+#include "lims/app/lims_authorizer.hpp"
+#include "lims/org/models/org_model.hpp"
+#include "lims_screens.hpp"
 
 namespace {
 
 using lims::inboxtest::at;
 using lims::inboxtest::inboxBundle;
 using lims::inboxtest::kInbox;
+using lims::inboxtest::kSignIn;
+using lims::inboxtest::signInBundle;
 using lims::inboxtest::World;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
@@ -25,35 +32,33 @@ using morph::ladder::ScopedClockOverride;
 
 }  // namespace
 
-// The expected outcome: past the deadline, paula's inbox still lists the invoice she can no longer approve, until it
-// asks again. The check sees a refresh the harness's manual scheduler can fire, such as a poll; a refresh driven by a
-// real timer is outside the window. Mutations: judge the approval scope at the site whatever the time (the control,
-// the refetch showing "0 pending", fails); poll the inbox every second (the check that nothing told the inbox
-// fails).
-TEST_CASE("approval inbox: a site approver's inbox is not told when an approval's deadline passes",
+// Past the deadline, paula's inbox is told and drops the invoice she can no longer approve. The server learns the
+// instant from `NextApprovalDeadline`, owns the clock, and tells every watcher of the invoice record when the clock
+// reaches it; nothing polls and the harness's manual scheduler is never advanced. The screen runs behind a server that
+// authenticates, so paula signs in. Mutations: judge the approval scope at the site whatever the time (the count
+// never reads "1 pending" before the deadline's refetch shows "0 pending", so the control after the wait fails); drop
+// the server's fan-out at the reported instant (the count stays "1 pending").
+TEST_CASE("approval inbox: a site approver's inbox is told when an approval's deadline passes",
           "[lims-screens][billing][h4]") {
     World const world;
     world.draftInvoice();
     world.submitInvoice();
     std::optional<ScopedClockOverride> clock;
     clock.emplace(at(2026, 11, 12, 8));
-    ScreenHarness harness{morph::client::LocalApp{.name = "lims-approval-inbox", .bundle = &inboxBundle, .setUp = {}},
-                          std::string{kInbox},
-                          RigMode::Local,
-                          {},
-                          morph::client::LocalSetup{.db = {}, .user = "paula"}};
+    morph::client::LocalApp app{.name = "lims-approval-inbox", .bundle = &signInBundle, .setUp = {}};
+    app.setUp = [](morph::client::LocalSetup const& setup) { lims::screens::prepareLocal(setup.user); };
+    app.serverAuthorizer = [] {
+        return std::make_shared<lims::auth::LimsAuthorizer>(
+            "lims-local-development", morph::session::hmacSha256,
+            [](std::string_view principal) { return lims::OrgModel::rolesAnywhere(principal); });
+    };
+    ScreenHarness harness{app, std::string{kSignIn}, RigMode::Simulated};
+    harness.edit("username", "paula");
+    harness.click("signIn");
     REQUIRE(harness.waitForText("pendingCount", "1 pending"));
 
     clock.reset();
-    clock.emplace(at(2026, 11, 12, 10));        // the deadline was 09:00
-    harness.advance(std::chrono::minutes{10});  // the harness's scheduler is manual: a poll fires only here
-    bool const told =
-        harness.waitFor([&harness] { return harness.text("pendingCount") == std::optional<std::string>{"0 pending"}; },
-                        std::chrono::milliseconds{1500});
-    CHECK_FALSE(told);
-
-    // The control: asked again, the same panel shows the escalation, so the panel can show it.
-    harness.click("refresh");
+    clock.emplace(at(2026, 11, 12, 10));  // the deadline was 09:00
     CHECK(harness.waitForText("pendingCount", "0 pending"));
     CHECK(harness.problems().empty());
 }

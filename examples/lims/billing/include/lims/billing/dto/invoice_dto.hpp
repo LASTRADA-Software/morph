@@ -141,6 +141,14 @@ struct PostInvoice {
     static constexpr bool explicitSubmit = true;
 };
 
+/// @brief Reports the next instant at which a submitted invoice's approval escalates from its site to its company,
+///        for the server to tell the screens that list invoices by that scope.
+struct NextApprovalDeadline {
+    /// @brief Whether the query is well-formed.
+    /// @return Always `true`: it names nothing.
+    [[nodiscard]] bool validate() const noexcept { return true; }
+};
+
 /// @brief Lists the submitted invoices the caller could approve now.
 struct ListPendingApprovals {
     /// @brief Whether the query is well-formed.

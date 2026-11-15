@@ -250,6 +250,19 @@ inline void addUpdatesChange(Resolved const& resolved, std::string_view actionId
     return changes;
 }
 
+/// @brief The whole-type changes of @p records, and of every record derived from them.
+/// @param resolved The resolved registries.
+/// @param records The changed records' wire names.
+/// @return The changes.
+[[nodiscard]] inline Changes wholeTypeChanges(Resolved const& resolved, std::vector<std::string> const& records) {
+    Changes changes;
+    for (auto const& record : records) {
+        addRecordChange(changes, record, std::nullopt);
+        addDerivedChanges(resolved, record, changes);
+    }
+    return changes;
+}
+
 }  // namespace detail
 
 /// @brief The changes a successful execute made, from the action's declared effects and its result.

@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "../util/datetime.hpp"
 #include "detail/result_walker.hpp"
 #include "records.hpp"
 #include "registry.hpp"
@@ -124,6 +125,22 @@ struct ActionRecord {
     friend bool operator==(ActionRecord const& lhs, ActionRecord const& rhs) = default;
 };
 
+/// @brief An action that reports when records change by the passage of time alone.
+struct ChangeTimeSource {
+    /// The reporting action's id.
+    std::string action;
+    /// The type id of the model the action belongs to; a fresh instance of it answers.
+    std::string model;
+    /// The wire names of the records that change at the reported instant.
+    std::vector<std::string> records;
+
+    /// @brief Memberwise equality.
+    /// @param lhs One source.
+    /// @param rhs The other.
+    /// @return True when action, model and records match.
+    friend bool operator==(ChangeTimeSource const& lhs, ChangeTimeSource const& rhs) = default;
+};
+
 namespace detail {
 
 /// @brief One effect as a registrar records it: the record still a type, not yet a name.
@@ -147,6 +164,22 @@ using EffectsMap = std::map<std::string, std::vector<std::vector<DeclaredEffect>
 ///
 /// Apart from `EffectsMap`: an addition is never in conflict with a base declaration, it is unioned with it.
 using AddedEffectsMap = std::map<std::string, std::vector<DeclaredEffect>, std::less<>>;
+
+/// @brief One time-derived fact as a registrar records it: the records still types, not yet names.
+struct DeclaredChangeTime {
+    /// The reporting action's id.
+    std::string action;
+    /// The model's type id.
+    std::string model;
+    /// The record types.
+    std::vector<std::type_index> records;
+
+    /// @brief Memberwise equality.
+    /// @param lhs One declaration.
+    /// @param rhs The other.
+    /// @return True when action, model and records match.
+    friend bool operator==(DeclaredChangeTime const& lhs, DeclaredChangeTime const& rhs) = default;
+};
 
 /// @brief Maps an effect tag type to its `DeclaredEffect`.
 /// @tparam E An effect tag.
@@ -249,6 +282,46 @@ inline bool registerEffectsOnce() noexcept {
     return true;
 }
 
+/// @brief The process-level list of time-derived facts, appended to by static registrars.
+/// @return The mutable list.
+inline std::vector<DeclaredChangeTime>& mutableChangeTimesRegistry() {
+    static std::vector<DeclaredChangeTime> entries;
+    return entries;
+}
+
+/// @brief Adds a time-derived fact, unless an equal one is already there.
+/// @param list The registry to add to.
+/// @param declared The fact.
+inline void addChangeTime(std::vector<DeclaredChangeTime>& list, DeclaredChangeTime declared) {
+    if (std::ranges::find(list, declared) == list.end()) {
+        list.push_back(std::move(declared));
+    }
+}
+
+/// @brief Static-init helper for `BRIDGE_REGISTER_CHANGES_AT`.
+/// @tparam Model The model the action belongs to.
+/// @tparam Action The reporting action; its result must be `std::optional<morph::time::DateTime>`.
+/// @tparam Records The record types that change at the reported instant.
+/// @return Always true, so the result can initialise a namespace-scope variable.
+template <typename Model, typename Action, typename... Records>
+inline bool registerChangeTimeOnce() noexcept {
+    static_assert(sizeof...(Records) > 0, "BRIDGE_REGISTER_CHANGES_AT: name at least one record");
+    static_assert(
+        std::is_same_v<typename ::morph::model::ActionTraits<Action>::Result, std::optional<::morph::time::DateTime>>,
+        "BRIDGE_REGISTER_CHANGES_AT: the action must return std::optional<morph::time::DateTime>");
+    // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
+    assert(!::morph::model::registrationPhaseClosed() &&
+           "registerChangeTimeOnce: registration after the registration phase closed. The process-level "
+           "registries are unsynchronised and are read-only once dispatch begins -- registering now "
+           "races their internals against concurrent lookups. Load and register plugin modules before "
+           "the first dispatch.");
+    addChangeTime(mutableChangeTimesRegistry(),
+                  DeclaredChangeTime{.action = std::string{::morph::model::ActionTraits<Action>::typeId()},
+                                     .model = std::string{::morph::model::ModelTraits<Model>::typeId()},
+                                     .records = {std::type_index{typeid(Records)}...}});
+    return true;
+}
+
 /// @brief The process-level registry of added effects, appended to by static registrars.
 /// @return The mutable map.
 inline AddedEffectsMap& mutableAddedEffectsRegistry() {
@@ -286,6 +359,8 @@ struct Resolved {
     std::map<std::string, std::vector<ActionRecord>, std::less<>> actionRecords;
     /// @brief The ids of the actions holding each record, by record name, in id order.
     std::map<std::string, std::vector<std::string>, std::less<>> holding;
+    /// @brief The actions that report when records change by time alone, in registration order.
+    std::vector<ChangeTimeSource> changeTimes;
 
     /// @brief See `morph::effects::effectsOf`.
     /// @param actionId The action's id.
@@ -394,12 +469,14 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 /// @param declared Every action's effects declarations, by action id.
 /// @param slotConflicts Action ids registered by more than one action type.
 /// @param added Every action's added effects, by action id.
+/// @param changeTimes Every time-derived fact.
 /// @return The resolved registries.
 /// @throws morph::model::EffectsRegistrationError listing every problem, when there is one.
 [[nodiscard]] inline Resolved resolve(std::vector<record::RecordInfo> records,
                                       model::detail::ActionResultSlotMap const& resultSlots,
                                       EffectsMap const& declared, std::vector<std::string> const& slotConflicts,
-                                      AddedEffectsMap const& added) {
+                                      AddedEffectsMap const& added,
+                                      std::vector<DeclaredChangeTime> const& changeTimes) {
     std::vector<std::string> problems;
 
     // An identical registration, as a record registered in a header gives once per translation unit, is
@@ -555,6 +632,29 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
         resolved.effects.emplace(actionId, std::move(effects));
     }
 
+    for (auto const& fact : changeTimes) {
+        if (!resultSlots.contains(fact.action)) {
+            problems.push_back("`" + fact.action +
+                               "` reports when records change by time, but is not a registered action");
+            continue;
+        }
+        if (resolved.effects.contains(fact.action)) {
+            problems.push_back("`" + fact.action +
+                               "` reports when records change by time, so it reads, and it also declares effects");
+        }
+        ChangeTimeSource source{.action = fact.action, .model = fact.model, .records = {}};
+        for (auto const& type : fact.records) {
+            auto const found = indexOf.find(type);
+            if (found == indexOf.end()) {
+                problems.push_back("`" + fact.action + "` reports when " + type.name() +
+                                   " changes by time, which is not a registered record");
+                continue;
+            }
+            source.records.push_back(records[found->second].name);
+        }
+        resolved.changeTimes.push_back(std::move(source));
+    }
+
     if (!problems.empty()) {
         throw model::EffectsRegistrationError(std::move(problems));
     }
@@ -568,14 +668,16 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 /// @param declared The effects declarations, by action id.
 /// @param slotConflicts Action ids registered by more than one action type.
 /// @param added The added effects, by action id.
+/// @param changeTimes The time-derived facts.
 /// @return The resolved registries.
 /// @throws morph::model::EffectsRegistrationError listing every problem, when there is one.
 [[nodiscard]] inline Resolved resolveForTesting(std::vector<record::RecordInfo> records,
                                                 model::detail::ActionResultSlotMap const& resultSlots,
                                                 EffectsMap const& declared,
                                                 std::vector<std::string> const& slotConflicts = {},
-                                                AddedEffectsMap const& added = {}) {
-    return resolve(std::move(records), resultSlots, declared, slotConflicts, added);
+                                                AddedEffectsMap const& added = {},
+                                                std::vector<DeclaredChangeTime> const& changeTimes = {}) {
+    return resolve(std::move(records), resultSlots, declared, slotConflicts, added, changeTimes);
 }
 
 /// @brief The process registries, matched and validated on the first call.
@@ -598,7 +700,7 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
         try {
             state.value.emplace(resolve(record::detail::recordRegistry(), model::detail::actionResultSlots(),
                                         mutableEffectsRegistry(), model::detail::actionResultConflicts(),
-                                        mutableAddedEffectsRegistry()));
+                                        mutableAddedEffectsRegistry(), mutableChangeTimesRegistry()));
         } catch (model::EffectsRegistrationError const& error) {
             state.error.emplace(error);
         }
@@ -618,6 +720,11 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 [[nodiscard]] inline std::optional<std::vector<Effect>> effectsOf(std::string_view actionId) {
     return detail::resolved().effectsOf(actionId);
 }
+
+/// @brief The actions that report when records change by time alone, with the records each names.
+/// @return One entry per reporter, in registration order.
+/// @throws morph::model::EffectsRegistrationError when the registered configuration is invalid.
+[[nodiscard]] inline std::vector<ChangeTimeSource> changeTimesOf() { return detail::resolved().changeTimes; }
 
 /// @brief The records an action's result holds, with the paths to each.
 ///
@@ -668,6 +775,29 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
     namespace {                                                                       \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_effects_reg_, __COUNTER__) = \
         morph::effects::detail::registerEffectsOnce<A, __VA_ARGS__>();                \
+    }
+#endif
+
+/// @def BRIDGE_REGISTER_CHANGES_AT
+/// @brief Registers action @p A of model @p M as the reporter of the next instant at which the listed records
+///        change by the passage of time alone, with no action behind it.
+///
+/// @p A returns `std::optional<morph::time::DateTime>`: the next such instant, strictly after the model's own
+/// now, or `nullopt` when none is pending. It is a read: it declares no effects and takes no fields. The server
+/// asks it, owns the clock, and at that instant marks the records changed as an action's `changes<R>` would, then
+/// asks again; the model arms no timer and posts no work. A reporter that is not a registered action, that also
+/// declares effects, or that names an unregistered record is refused on the first read. Repeating the same
+/// registration is a no-op. Expands to nothing under `MORPH_CLIENT_ONLY`.
+/// @param M The model type.
+/// @param A The reporting action type.
+/// @param ... The record types.
+#ifdef MORPH_CLIENT_ONLY
+#define BRIDGE_REGISTER_CHANGES_AT(M, A, ...)
+#else
+#define BRIDGE_REGISTER_CHANGES_AT(M, A, ...)                                             \
+    namespace {                                                                           \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_change_time_reg_, __COUNTER__) = \
+        morph::effects::detail::registerChangeTimeOnce<M, A, __VA_ARGS__>();              \
     }
 #endif
 

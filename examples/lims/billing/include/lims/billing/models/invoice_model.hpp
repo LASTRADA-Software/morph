@@ -7,6 +7,8 @@
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/ui/author.hpp>
+#include <morph/util/datetime.hpp>
+#include <optional>
 
 #include "lims/billing/dto/invoice_dto.hpp"
 #include "lims/billing/dto/lease_dto.hpp"
@@ -120,6 +122,13 @@ public:
     /// @throws EmptyPrincipalError if no principal is authenticated.
     ::core::async::Task<InvoiceView> execute(PostInvoice action);
 
+    /// @brief The next instant, after now, at which a submitted invoice's approval moves from its site to its
+    ///        company: the earliest deadline still ahead. The invoices an approver may approve change at that
+    ///        instant with no action behind it.
+    /// @param action Carries nothing.
+    /// @return The instant, or nothing when no submitted invoice has a deadline ahead.
+    std::optional<::morph::time::DateTime> execute(const NextApprovalDeadline& action);
+
     /// @brief Lists the submitted invoices the caller could approve now, judged by the rule `ApproveInvoice` is.
     /// @param action The query.
     /// @return The invoices by id.
@@ -201,6 +210,9 @@ BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::PostInvoice, "PostInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::PostInvoice, ::morph::effects::updates<lims::InvoiceView>)
 BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::ListPendingApprovals, "ListPendingApprovals",
                       ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::NextApprovalDeadline, "NextApprovalDeadline",
+                      ::morph::model::Loggable::No)
+BRIDGE_REGISTER_CHANGES_AT(lims::InvoiceModel, lims::NextApprovalDeadline, lims::InvoiceView)
 // The shell's open-work counts and search over the invoices.
 BRIDGE_DECLARE_ACTION(lims::InvoiceModel, lims::CountOpenInvoiceWork, "CountOpenInvoiceWork",
                       ::morph::model::Loggable::No)
