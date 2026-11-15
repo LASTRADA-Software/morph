@@ -902,8 +902,9 @@ not list queries, and an action that changes a record is authorized by its decla
 **Finding: a shared module's action cannot declare effects on another module's records.** Assigning or revoking a
 role changes which samples a principal sees, so `AssignRole` changes the rows `ListSamples` answers. But `AssignRole`
 belongs to `org`, which cannot name lab's `SampleView`, and a second `BRIDGE_REGISTER_EFFECTS` for the same action
-from `app` is refused as "declares different effects in two registrations". So a screen listing samples does not
-refresh when its viewer's roles change; it refreshes on the next sample change or reload. Registering `SampleView` as
+from `app` is refused as "declares different effects in two registrations". `BRIDGE_ADD_EFFECTS` from `app` is the
+way to declare it (decision 39). Until it does, a screen listing samples does not refresh when its viewer's roles
+change; it refreshes on the next sample change or reload. Registering `SampleView` as
 derived from the role-assignment record would give the same refresh, but the registry refuses a derived record that has
 a key (`include/morph/core/effects.hpp`, the "is derived from other records but has a key" check), and `SampleView`
 has one. Inferred from reading `include/morph/core/effects.hpp` (`addEffects`, the two-declarations check, and the
@@ -1300,13 +1301,13 @@ empty for such a caller, which cannot mislead, since recording the posting refus
 
 Two causes, measured apart in `tests/test_cross_module_effects.cpp` and by the `lims.cross_module_effects.*` probes.
 
-**(i) An action cannot declare an effect on another module's record — confirmed.** `PostInvoice` posting in one
-shared transaction (decision 38) writes the ledger's `Ledger_Entry` inside billing's action; an accountant watching
-`Ledger_Entry` is not told, while the ledger's own `CreateDraftEntry` on the same connection is heard. Billing cannot
-name the ledger's record (it does not include the ledger), and the composing code, which sees both, cannot add the
-declaration: a second `BRIDGE_REGISTER_EFFECTS` for `PostInvoice` makes the effects configuration refuse to resolve,
-"action `PostInvoice` declares different effects in two registrations" (the `refused` probe prints it; the `control`
-probe, without the second registration, resolves).
+**(i) An action cannot declare an effect on another module's record, so the composing code adds it.** `PostInvoice`
+posting in one shared transaction (decision 38) writes the ledger's `Ledger_Entry` inside billing's action. Billing
+cannot name the ledger's record (it does not include the ledger), and a second `BRIDGE_REGISTER_EFFECTS` is refused.
+The app, which includes both, states it with `BRIDGE_ADD_EFFECTS` in `app/src/ledger_wiring.cpp`; the addition is
+unioned with billing's own `updates<InvoiceView>`, and an accountant watching `Ledger_Entry` hears the posting. The
+`accepted` probe checks that the union holds both effects, the `control` probe that the configuration resolves without
+the addition.
 
 **(ii) A write outside any action derives no changes — confirmed, and not a gap.** `RecordBillableLine` run in process
 outside any dispatch writes the line and no watcher of `Billing_Line` is told; the same write dispatched through the
@@ -1317,8 +1318,7 @@ events client is heard. Changes are derived from executed actions by design: the
 The measured miss exists only in the shared-transaction mode. The shipped server posts dispatched, and there the
 ledger's half runs as the ledger's own `RecordPosting`, which a watching accountant hears (decision 38's test). The
 shared transaction is itself the workaround for hypothesis 1's missing seam — two modules' actions as one fact, each
-keeping its effects — and if that seam lands this instance goes with it. The instance no other seam fixes is decision
-26's, still inferred: org's `AssignRole` changes which samples lab's list returns, a change of visibility rather than a
+keeping its effects — and if that seam lands this instance goes with it. Decision 26's case, still inferred: org's `AssignRole` changes which samples lab's list returns, a change of visibility rather than a
 write, which neither dispatching nor a multi-action seam would make lab's screen hear. The one existing mechanism that
 carries a change from one record to another, `record::derivedFrom`, is refused on a keyed record, and both
 `Ledger_Entry` and `SampleView` are keyed. So cause (i) is filed against `include/morph` as a missing seam: a way for
