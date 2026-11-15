@@ -117,6 +117,30 @@ Rules of thumb:
 - **`updates<R>` and `changes<R>` together mean the whole type**: the change is reported without keys.
 - Declare each action's effects in **one** place. A header included by several translation units is still one
   declaration; a second, different declaration for the same action is refused.
+- **A write that lands in another module's record** is declared by the code that composes the two modules, with
+  `BRIDGE_ADD_EFFECTS` (below). The action's own module cannot name that record, and a second
+  `BRIDGE_REGISTER_EFFECTS` is refused.
+
+### Effects the composing code adds
+
+An action sometimes changes a record of a module it must not include: a billing action that posts a ledger entry in
+its own transaction, or an organisation action that changes which samples a lab screen lists. The module cannot write
+that effect, and the application that links both can.
+
+```cpp
+// app/src/ledger_wiring.cpp, which includes both modules
+BRIDGE_ADD_EFFECTS(lims::PostInvoice, ::morph::effects::changes<lims::JournalEntryView>)
+```
+
+- The addition is **unioned** with the action's own `BRIDGE_REGISTER_EFFECTS`; it can never remove an effect, and
+  `none` is not accepted in it. An action with no declaration of its own has the additions alone.
+- Two different `BRIDGE_REGISTER_EFFECTS` for one action are still refused. An addition is the only second source.
+- It takes any of `updates<R>`, `changes<R>` and `changesInstance`, and `R` must be a registered record. An addition
+  for an action nobody registered, or for an unregistered record, is refused when the registries are first read, with
+  the other problems, and never ignored.
+- It expands to nothing under `MORPH_CLIENT_ONLY`.
+- Put it in a translation unit that is always linked into the server, such as the one that wires the modules together.
+  A static library's object that nothing references is dropped, and its addition with it.
 
 ## Records
 
@@ -216,7 +240,8 @@ Work through it every time you add an action or change what one does. A coding a
    every action's effects.
 5. **Would a key alone leak something to another user?** Add `privateKeys` to the record.
 6. **Write `BRIDGE_REGISTER_EFFECTS` (`<morph/core/effects.hpp>`) directly under the action's
-   `BRIDGE_REGISTER_ACTION`.**
+   `BRIDGE_REGISTER_ACTION`.** A record the action's module cannot include is added by the composing code with
+   `BRIDGE_ADD_EFFECTS`.
 7. **Remove any refresh the screens did by hand**: an `onSuccess` refetch that the effects now cover.
 8. **Build and run the screen tests.** A bad declaration fails when the server starts. Check that the bundle loads
    with no warnings ([Testing](#testing)).
