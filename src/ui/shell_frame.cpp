@@ -682,12 +682,14 @@ void ShellFrame::showParts() {
                 : nullptr;
         std::string const label = chosen == nullptr ? std::string{} : chosen->label;
         std::string const detail = chosen == nullptr ? std::string{} : chosen->detail;
-        _context->setTrigger(MenuTrigger{.label = label.empty() ? labels.scope : label,
-                                         .icon = {},
-                                         .emphasis = ButtonEmphasis::Normal,
-                                         .detail = detail,
-                                         .avatar = {},
-                                         .caret = MenuCaret::UpDown});
+        _context->setTrigger(MenuTrigger{
+            .label = label.empty() ? labels.scope : label,
+            .icon = {},
+            .emphasis = ButtonEmphasis::Normal,
+            .detail = detail,
+            .avatar = {},
+            .caret = MenuCaret::UpDown,
+        });
         _context->setEnabled(_parts.context.enabled);
         _context->setAccessibleName(labels.scope + ": " + label + (detail.empty() ? "" : ", " + detail));
     }
@@ -730,12 +732,14 @@ void ShellFrame::showParts() {
     _principalMenu->setVisible(person.shown && !_compact);
     if (person.shown) {
         _principalMenu->setItems(principalEntries());
-        _principalMenu->setTrigger(MenuTrigger{.label = person.name,
-                                               .icon = {},
-                                               .emphasis = ButtonEmphasis::Ghost,
-                                               .detail = person.subtitle,
-                                               .avatar = person.initials,
-                                               .caret = MenuCaret::Down});
+        _principalMenu->setTrigger(MenuTrigger{
+            .label = person.name,
+            .icon = {},
+            .emphasis = ButtonEmphasis::Ghost,
+            .detail = person.subtitle,
+            .avatar = person.initials,
+            .caret = MenuCaret::Down,
+        });
         _principalMenu->setAccessibleName(labels.signedInAs + " " + person.name);
     }
     // The help button.
@@ -856,7 +860,7 @@ MenuEntry ShellFrame::principalMenuEntry() {
 
 void ShellFrame::answerConfirm(bool yes) {
     _confirm->setOpen(false);
-    if (auto done = std::exchange(_confirmDone, {})) {
+    if (auto const done = std::exchange(_confirmDone, {})) {
         done(yes);
     }
 }

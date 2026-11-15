@@ -213,7 +213,7 @@ std::expected<void, Refusal> UiRegistry::setShellParts(ShellParts parts, Catalog
     Catalog previousCatalog = _catalog;
     std::optional<ShellParts> previous = std::exchange(_shellParts, std::move(parts));
     _catalog = withReads(_baseCatalog, std::move(reads));
-    std::expected<void, Refusal> outcome = [&]() -> std::expected<void, Refusal> {
+    std::expected<void, Refusal> outcome = [&] -> std::expected<void, Refusal> {
         if (auto named = checkShellNames()) {
             return std::unexpected(std::move(*named));
         }
@@ -272,13 +272,18 @@ std::expected<void, Refusal> UiRegistry::addScreenImpl(CatalogEntry entry, std::
     }
     logWarnings(*loaded);
     DocumentActions const named{*loaded};
-    Screen screen{.served = ServedScreen{.entry = std::move(entry),
-                                         .hash = contentHash(text),
-                                         .topQueries = named.topQueries(),
-                                         .actions = named.actions(),
-                                         .modelTypes = named.modelTypes()},
-                  .text = std::move(text),
-                  .components = {}};
+    Screen screen{
+        .served =
+            ServedScreen{
+                .entry = std::move(entry),
+                .hash = contentHash(text),
+                .topQueries = named.topQueries(),
+                .actions = named.actions(),
+                .modelTypes = named.modelTypes(),
+            },
+        .text = std::move(text),
+        .components = {},
+    };
     for (auto const& [name, component] : loaded->components) {
         static_cast<void>(name);
         if (!component.qml.empty()) {
@@ -300,7 +305,8 @@ std::expected<void, Refusal> UiRegistry::addEntryImpl(CatalogEntry entry) {
         .served =
             ServedScreen{.entry = std::move(entry), .hash = {}, .topQueries = {}, .actions = {}, .modelTypes = {}},
         .text = {},
-        .components = {}});
+        .components = {},
+    });
     return {};
 }
 
@@ -371,11 +377,13 @@ std::optional<Refusal> UiRegistry::checkThemes() const {
             bool const held = std::ranges::any_of(
                 _files, [&fileId](BundleFile const& file) { return file.kind == kIconFile && file.id == fileId; });
             if (!held) {
-                return Refusal{.document = indexId,
-                               .path = {},
-                               .reason = std::format("the theme index names the icon `{}` as `{}`, which is not "
-                                                     "an icon file of the bundle",
-                                                     name, fileId)};
+                return Refusal{
+                    .document = indexId,
+                    .path = {},
+                    .reason = std::format("the theme index names the icon `{}` as `{}`, which is not "
+                                          "an icon file of the bundle",
+                                          name, fileId),
+                };
             }
         }
     }
@@ -441,12 +449,14 @@ std::expected<void, Refusal> UiRegistry::addTheme(BundleFile const& file) {
 }
 
 std::expected<void, Refusal> UiRegistry::applyShellParts(bool replace) {
-    auto found = std::ranges::find_if(_files, [](BundleFile const& file) { return file.kind == kAppFile; });
+    auto const found = std::ranges::find_if(_files, [](BundleFile const& file) { return file.kind == kAppFile; });
     if (found == _files.end()) {
-        BundleFile file{.kind = std::string{kAppFile},
-                        .id = std::string{kAppFile},
-                        .bytes = R"({"vocab":"ui/1","id":"app"})",
-                        .isPublic = true};
+        BundleFile file{
+            .kind = std::string{kAppFile},
+            .id = std::string{kAppFile},
+            .bytes = R"({"vocab":"ui/1","id":"app"})",
+            .isPublic = true,
+        };
         auto patched = withShellParts(std::move(file), false);
         if (!patched) {
             return std::unexpected(std::move(patched.error()));
@@ -472,6 +482,7 @@ std::expected<void, Refusal> UiRegistry::applyShellParts(bool replace) {
 std::expected<BundleFile, Refusal> UiRegistry::withShellParts(BundleFile file, bool replace) const {
     auto document = parseJson(file.bytes);
     auto* const object = document ? std::get_if<Json::object_t>(&document->data) : nullptr;
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): every caller holds `_shellParts`.
     auto shell = parseJson(glz::write_json(*_shellParts).value_or("{}"));
     if (object == nullptr || !shell) {
         return refuse(file.id, "the app document is a JSON object");
@@ -519,14 +530,14 @@ Catalog UiRegistry::withReads(Catalog base, Catalog reads) {
     if (reads.model) {
         base.model = [first = std::move(base.model),
                       second = std::move(reads.model)](std::string_view typeId) -> std::optional<ModelInfo> {
-            auto found = first ? first(typeId) : std::nullopt;
+            auto const found = first ? first(typeId) : std::nullopt;
             return found ? found : second(typeId);
         };
     }
     if (reads.action) {
         base.action = [first = std::move(base.action),
                        second = std::move(reads.action)](std::string_view actionId) -> std::optional<ActionInfo> {
-            auto found = first ? first(actionId) : std::nullopt;
+            auto const found = first ? first(actionId) : std::nullopt;
             return found ? found : second(actionId);
         };
     }
@@ -542,13 +553,16 @@ std::optional<Refusal> UiRegistry::checkShellNames() const {
                    return screen.served.entry.module == module;
                });
     };
-    auto const hasScreen = [this](std::string const& id) {
-        return std::ranges::any_of(_screens, [&id](Screen const& screen) { return screen.served.entry.id == id; });
+    auto const hasScreen = [this](std::string const& screenId) {
+        return std::ranges::any_of(_screens,
+                                   [&screenId](Screen const& screen) { return screen.served.entry.id == screenId; });
     };
     auto const unknown = [](std::string path, std::string const& kind, std::string const& name) {
-        return Refusal{.document = std::string{kAppFile},
-                       .path = std::move(path),
-                       .reason = "the shell names the " + kind + " `" + name + "`, which no screen registered has"};
+        return Refusal{
+            .document = std::string{kAppFile},
+            .path = std::move(path),
+            .reason = "the shell names the " + kind + " `" + name + "`, which no screen registered has",
+        };
     };
     for (std::size_t index = 0; index < _shellParts->modules.size(); ++index) {
         if (auto const& module = _shellParts->modules.at(index).module; !hasModule(module)) {
@@ -582,9 +596,11 @@ std::optional<Refusal> UiRegistry::checkBuildable() const {
     for (Screen const& screen : _screens) {
         for (auto const& [path, hash] : screen.components) {
             if (!componentHashes.contains(hash)) {
-                return Refusal{.document = screen.served.entry.id,
-                               .path = path,
-                               .reason = "the delivered component is not in the bundle"};
+                return Refusal{
+                    .document = screen.served.entry.id,
+                    .path = path,
+                    .reason = "the delivered component is not in the bundle",
+                };
             }
         }
     }
@@ -592,7 +608,8 @@ std::optional<Refusal> UiRegistry::checkBuildable() const {
         return Refusal{
             .document = {},
             .path = {},
-            .reason = "the bundle holds more than " + std::to_string(kMaxBundleFiles) + " files or entries"};
+            .reason = "the bundle holds more than " + std::to_string(kMaxBundleFiles) + " files or entries",
+        };
     }
     std::vector<std::string> const vocabularies{_vocabularies.begin(), _vocabularies.end()};
     if (auto reason = detail::checkNames(vocabularies, kMaxListItems, "the vocabularies", "a vocabulary")) {
@@ -603,10 +620,15 @@ std::optional<Refusal> UiRegistry::checkBuildable() const {
 
 void UiRegistry::serveFiles(ServedBundle& bundle) const {
     Manifest manifest{.application = _application.id, .version = _application.version, .files = {}};
-    auto serve = [&bundle, &manifest](BundleFile const& file, std::optional<std::size_t> screen) {
+    auto const serve = [&bundle, &manifest](BundleFile const& file, std::optional<std::size_t> screen) {
         std::string const hash = contentHash(file.bytes);
         manifest.files.push_back(ManifestFile{
-            .id = file.id, .kind = file.kind, .hash = hash, .size = file.bytes.size(), .isPublic = file.isPublic});
+            .id = file.id,
+            .kind = file.kind,
+            .hash = hash,
+            .size = file.bytes.size(),
+            .isPublic = file.isPublic,
+        });
         ServedFile& served = bundle.files.try_emplace(hash).first->second;
         served.bytes = file.bytes;
         served.holders.push_back(
@@ -614,11 +636,14 @@ void UiRegistry::serveFiles(ServedBundle& bundle) const {
     };
     for (Screen const& screen : _screens) {
         if (!screen.served.hash.empty()) {
-            serve(BundleFile{.kind = std::string{kScreenFile},
-                             .id = screen.served.entry.id,
-                             .bytes = screen.text,
-                             .isPublic = screen.served.entry.isPublic},
-                  bundle.screens.size());
+            serve(
+                BundleFile{
+                    .kind = std::string{kScreenFile},
+                    .id = screen.served.entry.id,
+                    .bytes = screen.text,
+                    .isPublic = screen.served.entry.isPublic,
+                },
+                bundle.screens.size());
         }
         bundle.screens.push_back(screen.served);
     }
@@ -630,11 +655,18 @@ void UiRegistry::serveFiles(ServedBundle& bundle) const {
     });
     bundle.manifest = manifestText(manifest);
     bundle.digest = contentHash(bundle.manifest);
-    bundle.files.insert_or_assign(
-        bundle.digest,
-        ServedFile{.bytes = bundle.manifest,
-                   .holders = {ServedFile::Holder{
-                       .kind = "manifest", .id = _application.id, .isPublic = true, .screen = std::nullopt}}});
+    bundle.files.insert_or_assign(bundle.digest, ServedFile{
+                                                     .bytes = bundle.manifest,
+                                                     .holders =
+                                                         {
+                                                             ServedFile::Holder{
+                                                                 .kind = "manifest",
+                                                                 .id = _application.id,
+                                                                 .isPublic = true,
+                                                                 .screen = std::nullopt,
+                                                             },
+                                                         },
+                                                 });
 }
 
 void UiRegistry::addFacts(ServedBundle& bundle) const {
@@ -723,9 +755,11 @@ UiService::Answer UiService::helloAnswer(::morph::wire::Envelope const& request,
                                          ::morph::backend::ConnectionFacts& facts) const {
     std::string const application = _bundle->application.id;
     if (!gate(authorizer, request, kHelloAction)) {
-        return Answer{.encoded = err(request, std::string{::morph::wire::kUnauthorizedMessage}),
-                      .subject = application,
-                      .outcome = "refused: unauthorized"};
+        return Answer{
+            .encoded = err(request, std::string{::morph::wire::kUnauthorizedMessage}),
+            .subject = application,
+            .outcome = "refused: unauthorized",
+        };
     }
     auto client = parseHelloRequest(request.body);
     if (!client) {
@@ -745,13 +779,17 @@ UiService::Answer UiService::helloAnswer(::morph::wire::Envelope const& request,
     if (client->events) {
         facts.events = true;
     }
-    return Answer{.encoded = ok(request, detail::writeMessage(HelloReply{.application = _bundle->application.id,
-                                                                         .version = _bundle->application.version,
-                                                                         .vocabularies = _bundle->vocabularies,
-                                                                         .digest = _bundle->digest,
-                                                                         .events = client->events})),
-                  .subject = application,
-                  .outcome = "ok, digest " + _bundle->digest};
+    return Answer{
+        .encoded = ok(request, detail::writeMessage(HelloReply{
+                                   .application = _bundle->application.id,
+                                   .version = _bundle->application.version,
+                                   .vocabularies = _bundle->vocabularies,
+                                   .digest = _bundle->digest,
+                                   .events = client->events,
+                               })),
+        .subject = application,
+        .outcome = "ok, digest " + _bundle->digest,
+    };
 }
 
 std::string UiService::evaluate(::morph::wire::Envelope const& request,
@@ -836,9 +874,11 @@ UiService::Answer UiService::catalogAnswer(::morph::wire::Envelope const& reques
                                            ::morph::session::IAuthorizer const& authorizer) const {
     std::string const application = _bundle->application.id;
     if (!gate(authorizer, request, kCatalogAction)) {
-        return Answer{.encoded = err(request, std::string{::morph::wire::kUnauthorizedMessage}),
-                      .subject = application,
-                      .outcome = "refused: unauthorized"};
+        return Answer{
+            .encoded = err(request, std::string{::morph::wire::kUnauthorizedMessage}),
+            .subject = application,
+            .outcome = "refused: unauthorized",
+        };
     }
     CatalogReply reply;
     Fetchable const fetchable = listEntries(reply, request.session, authorizer);
@@ -877,9 +917,11 @@ UiService::Answer UiService::catalogAnswer(::morph::wire::Envelope const& reques
     };
     documents(_bundle->views, reply.views);
     documents(_bundle->wizards, reply.wizards);
-    return Answer{.encoded = ok(request, detail::writeMessage(reply)),
-                  .subject = application,
-                  .outcome = std::format("ok, {} entries", reply.entries.size())};
+    return Answer{
+        .encoded = ok(request, detail::writeMessage(reply)),
+        .subject = application,
+        .outcome = std::format("ok, {} entries", reply.entries.size()),
+    };
 }
 
 UiService::Fetchable UiService::listEntries(CatalogReply& reply, ::morph::session::Context const& session,
@@ -930,15 +972,19 @@ UiService::Answer UiService::fetchAnswer(::morph::wire::Envelope const& request,
     if (isPublic) {
         return gate(authorizer, request, kHelloAction)
                    ? Answer{.encoded = ok(request, found->second.bytes), .subject = hash, .outcome = "ok"}
-                   : Answer{.encoded = err(request, std::string{::morph::wire::kUnauthorizedMessage}),
-                            .subject = hash,
-                            .outcome = "refused: unauthorized"};
+                   : Answer{
+                         .encoded = err(request, std::string{::morph::wire::kUnauthorizedMessage}),
+                         .subject = hash,
+                         .outcome = "refused: unauthorized",
+                     };
     }
     // The fetch gate comes before the lookup's answer, so a caller it refuses cannot learn which hashes exist.
     if (!gate(authorizer, request, kFetchAction)) {
-        return Answer{.encoded = err(request, std::string{::morph::wire::kUnauthorizedMessage}),
-                      .subject = hash,
-                      .outcome = "refused: unauthorized"};
+        return Answer{
+            .encoded = err(request, std::string{::morph::wire::kUnauthorizedMessage}),
+            .subject = hash,
+            .outcome = "refused: unauthorized",
+        };
     }
     if (found == _bundle->files.end()) {
         return Answer{.encoded = err(request, "not found"), .subject = hash, .outcome = "refused: not found"};
@@ -947,9 +993,11 @@ UiService::Answer UiService::fetchAnswer(::morph::wire::Envelope const& request,
         return !holder.screen || screenAdmits(_bundle->screens.at(*holder.screen), request.session, authorizer);
     });
     return admitted ? Answer{.encoded = ok(request, found->second.bytes), .subject = hash, .outcome = "ok"}
-                    : Answer{.encoded = err(request, std::string{::morph::wire::kUnauthorizedMessage}),
-                             .subject = hash,
-                             .outcome = "refused: unauthorized"};
+                    : Answer{
+                          .encoded = err(request, std::string{::morph::wire::kUnauthorizedMessage}),
+                          .subject = hash,
+                          .outcome = "refused: unauthorized",
+                      };
 }
 
 bool UiService::screenAdmits(ServedScreen const& screen, ::morph::session::Context const& session,

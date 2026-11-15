@@ -7,13 +7,13 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <morph/attributes.hpp>
 #include <morph/core/completion.hpp>
 #include <morph/core/envelope_transport.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
-#include <morph/attributes.hpp>
 #include <morph/ui/bundle.hpp>
 #include <morph/ui/file_store.hpp>
 #include <morph/ui/frontend.hpp>
@@ -141,15 +141,17 @@ void UiClient::poll(::morph::session::Context session, std::string knownDigest, 
 std::expected<LoadedBundle, ConnectError> UiClient::openOffline(std::string_view application) const {
     auto const digest = _shared->cache.store().lastDigest(application);
     if (!digest) {
-        return std::unexpected(
-            ConnectError{.kind = ConnectError::Kind::Unreachable,
-                         .message = "no verified bundle of `" + std::string{application} + "` is cached"});
+        return std::unexpected(ConnectError{
+            .kind = ConnectError::Kind::Unreachable,
+            .message = "no verified bundle of `" + std::string{application} + "` is cached",
+        });
     }
     auto const text = _shared->cache.get(*digest);
     if (!text) {
         return std::unexpected(ConnectError{
             .kind = ConnectError::Kind::Unreachable,
-            .message = "the cached manifest of `" + std::string{application} + "` is gone or does not verify"});
+            .message = "the cached manifest of `" + std::string{application} + "` is gone or does not verify",
+        });
     }
     auto manifest = parseManifest(*text);
     if (!manifest) {
@@ -261,14 +263,16 @@ std::expected<std::string, ConnectError> UiClient::verified(ExchangeReply reply,
         return body;
     }
     if (body->size() > kMaxFileBytes) {
-        return std::unexpected(
-            ConnectError{.kind = ConnectError::Kind::Unverified,
-                         .message = expected.what + " is larger than " + std::to_string(kMaxFileBytes) + " bytes"});
+        return std::unexpected(ConnectError{
+            .kind = ConnectError::Kind::Unverified,
+            .message = expected.what + " is larger than " + std::to_string(kMaxFileBytes) + " bytes",
+        });
     }
     if (std::string const actual = contentHash(*body); actual != expected.hash) {
-        return std::unexpected(ConnectError{.kind = ConnectError::Kind::Unverified,
-                                            .message = expected.what + " does not match its hash (expected " +
-                                                       expected.hash + ", got " + actual + ")"});
+        return std::unexpected(ConnectError{
+            .kind = ConnectError::Kind::Unverified,
+            .message = expected.what + " does not match its hash (expected " + expected.hash + ", got " + actual + ")",
+        });
     }
     return body;
 }
@@ -444,7 +448,7 @@ evaluatorOver(Exchange exchange, ::morph::session::Context session, ::morph::exe
     return [exchange = std::move(exchange), session = std::move(session), cbExec](
                std::string const& typeId, std::string const& actionId, std::string const& bodyJson) {
         auto [completion, promise] = ::morph::async::Completion<std::string>::makeSettleable(cbExec);
-        auto settle = std::make_shared<decltype(promise)>(std::move(promise));
+        auto const settle = std::make_shared<decltype(promise)>(std::move(promise));
         ::morph::wire::Envelope request;
         request.kind = std::string{kEvaluateKind};
         request.session = session;
@@ -468,7 +472,7 @@ std::function<::morph::async::Completion<std::string>(std::string const&, std::s
     return [exchange = std::move(exchange), currentSession = std::move(currentSession), cbExec](
                std::string const& kind, std::string const& bodyJson) {
         auto [completion, promise] = ::morph::async::Completion<std::string>::makeSettleable(cbExec);
-        auto settle = std::make_shared<decltype(promise)>(std::move(promise));
+        auto const settle = std::make_shared<decltype(promise)>(std::move(promise));
         ::morph::wire::Envelope request;
         request.kind = kind;
         request.session = currentSession ? currentSession() : ::morph::session::Context{};
@@ -496,11 +500,13 @@ FileTransfer::FileTransfer(Exchange exchange, ::morph::session::Context session)
 void FileTransfer::upload(FileInfo info, std::string bytes, std::string model, std::string action,
                           std::function<void(double)> progress,
                           std::function<void(std::expected<std::string, std::string>)> done) const {
-    auto const run = std::make_shared<Upload>(Upload{.shared = _shared,
-                                                     .bytes = std::move(bytes),
-                                                     .upload = {},
-                                                     .progress = std::move(progress),
-                                                     .done = std::move(done)});
+    auto const run = std::make_shared<Upload>(Upload{
+        .shared = _shared,
+        .bytes = std::move(bytes),
+        .upload = {},
+        .progress = std::move(progress),
+        .done = std::move(done),
+    });
     FileRequest begin;
     begin.op = "begin";
     begin.name = std::move(info.name);
@@ -520,11 +526,13 @@ void FileTransfer::upload(FileInfo info, std::string bytes, std::string model, s
 
 void FileTransfer::download(std::string ref, std::function<void(double)> progress,
                             std::function<void(std::expected<DownloadedFile, std::string>)> done) const {
-    auto const run = std::make_shared<Download>(Download{.shared = _shared,
-                                                         .ref = std::move(ref),
-                                                         .file = {},
-                                                         .progress = std::move(progress),
-                                                         .done = std::move(done)});
+    auto const run = std::make_shared<Download>(Download{
+        .shared = _shared,
+        .ref = std::move(ref),
+        .file = {},  // NOLINT(readability-trailing-comma): the last designator is empty braces.
+        .progress = std::move(progress),
+        .done = std::move(done),
+    });
     readChunk(run);
 }
 

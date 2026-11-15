@@ -204,27 +204,43 @@ HeadParts Workspace::headPartsForActive() const {
         // of its own: with one, a lead's natural width would never be less than it.
         Row lead = buildHeadLead(*tab, LeadPlacement::Below);
         lead.common.layout.minWidth.reset();
-        return HeadParts{.eyebrow = ui::text(buildHeadEyebrow(*tab)),
-                         .lead = ui::row(std::move(lead)),
-                         .trail = ui::actionBar(buildHeadTrail(*tab)),
-                         .inlineLead = ui::row(buildHeadLead(*tab, LeadPlacement::Inline))};
+        return HeadParts{
+            .eyebrow = ui::text(buildHeadEyebrow(*tab)),
+            .lead = ui::row(std::move(lead)),
+            .trail = ui::actionBar(buildHeadTrail(*tab)),
+            .inlineLead = ui::row(buildHeadLead(*tab, LeadPlacement::Inline)),
+        };
     }
-    Text eyebrow{.text = std::string{}, .role = TextRole::Muted, .field = {}, .common = {}};
+    Text eyebrow{.text = std::string{},
+                 .role = TextRole::Muted,
+                 .field = {},
+                 .common = {}};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     eyebrow.common.testId = "head_eyebrow";
     eyebrow.common.visible = false;
-    Row lead{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
+    Row lead{.children = {},
+             .gap = 0,
+             .common = {},
+             .tone = std::nullopt};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     lead.common.testId = "head_lead";
     lead.common.visible = false;
-    Row trail{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
+    Row trail{.children = {},
+              .gap = 0,
+              .common = {},
+              .tone = std::nullopt};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     trail.common.testId = "head_trail";
     trail.common.visible = false;
-    Row inlineLead{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
+    Row inlineLead{.children = {},
+                   .gap = 0,
+                   .common = {},
+                   .tone = std::nullopt};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     inlineLead.common.testId = "head_lead_inline";
     inlineLead.common.visible = false;
-    return HeadParts{.eyebrow = ui::text(std::move(eyebrow)),
-                     .lead = ui::row(std::move(lead)),
-                     .trail = ui::row(std::move(trail)),
-                     .inlineLead = ui::row(std::move(inlineLead))};
+    return HeadParts{
+        .eyebrow = ui::text(std::move(eyebrow)),
+        .lead = ui::row(std::move(lead)),
+        .trail = ui::row(std::move(trail)),
+        .inlineLead = ui::row(std::move(inlineLead)),
+    };
 }
 
 LeadPlacement Workspace::activeLeadPlacement() const {
@@ -321,9 +337,11 @@ std::vector<WorkspaceTab> Workspace::tabs() const {
     std::vector<WorkspaceTab> out;
     for (WorkspaceTabId const tab : _model->order()) {
         ScreenHandle const& handle = *_model->handleOf(tab);
-        out.push_back(WorkspaceTab{.screenId = std::string{screenOf(tab)},
-                                   .identity = handle.identity().peek(),
-                                   .caption = captionOf(handle)});
+        out.push_back(WorkspaceTab{
+            .screenId = std::string{screenOf(tab)},
+            .identity = handle.identity().peek(),
+            .caption = captionOf(handle),
+        });
     }
     return out;
 }
@@ -377,11 +395,13 @@ void Workspace::showOverlay(Overlay& overlay, ContainerWidget& footer) {
                 overlay.reported = true;
                 _runtime->untracked([this, &overlay] {
                     if (_diagnostics) {
-                        _diagnostics(Refusal{.document = overlay.screenId,
-                                             .path = {},
-                                             .reason = "a dialog or drawer does not show the head menu or tools "
-                                                       "of " +
-                                                       overlay.screenId});
+                        _diagnostics(Refusal{
+                            .document = overlay.screenId,
+                            .path = {},
+                            .reason = "a dialog or drawer does not show the head menu or tools "
+                                      "of " +
+                                      overlay.screenId,
+                        });
                     }
                 });
             }
@@ -418,10 +438,12 @@ Node Workspace::overlayActions(ScreenHead& head) {
     bar.children.push_back(ui::forEach<HeadAction>(
         [&head] { return head.actions().get(); }, [](HeadAction const& action) { return Key{action.id}; },
         [&head](reactive::Signal<HeadAction> const& action) {
-            Button button{.label = Prop<std::string>{[&action] { return action.get().label; }},
-                          .emphasis = action.peek().emphasis,
-                          .onClick = [&head, actionId = action.peek().id] { head.run(actionId); },
-                          .common = {}};
+            Button button{
+                .label = Prop<std::string>{[&action] { return action.get().label; }},
+                .emphasis = action.peek().emphasis,
+                .onClick = [&head, actionId = action.peek().id] { head.run(actionId); },
+                .common = {},  // NOLINT(readability-trailing-comma): the last designator is empty braces.
+            };
             button.common.testId = "overlay_action_" + action.peek().id;
             button.common.enabled = Prop<bool>{[&action] { return action.get().enabled; }};
             return ui::button(std::move(button));
@@ -443,6 +465,7 @@ void Workspace::closeOverlays() {
     }
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): menu entries nest, and the walk follows them.
 std::string Workspace::shapeOf(std::vector<HeadMenuEntry> const& entries) {
     std::string shape;
     for (HeadMenuEntry const& entry : entries) {
@@ -471,6 +494,7 @@ HeadMenuEntry const* Workspace::entryAt(std::vector<HeadMenuEntry> const& entrie
     return entry;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion): menu entries nest, and the walk follows them.
 std::vector<MenuItem> Workspace::headMenuItems(WorkspaceTabId tab, reactive::Signal<ShapedMenu> const& menu,
                                                std::vector<HeadMenuEntry> const& level,
                                                std::vector<std::size_t> const& outer) const {
@@ -554,8 +578,10 @@ std::expected<std::unique_ptr<ScreenHandle>, MountError> Workspace::mountPage(Wo
     } else {
         HostScreenFactory const* const factory = _hosts == nullptr ? nullptr : _hosts->find(facts.host);
         if (factory == nullptr) {
-            return std::unexpected(MountError{.screenId = std::string{screenId},
-                                              .reason = "no host screen `" + facts.host + "` is registered"});
+            return std::unexpected(MountError{
+                .screenId = std::string{screenId},
+                .reason = "no host screen `" + facts.host + "` is registered",
+            });
         }
         handle = (*factory)(params, *page->slot);
     }
@@ -613,7 +639,10 @@ Text Workspace::buildHeadEyebrow(WorkspaceTabId tab) const {
         reactive::Computed<std::string> const* const eyebrow = head == nullptr ? nullptr : head->eyebrow();
         return eyebrow == nullptr ? std::string{} : eyebrow->get();
     };
-    Text text{.text = Prop<std::string>{plain}, .role = TextRole::Muted, .field = {}, .common = {}};
+    Text text{.text = Prop<std::string>{plain},
+              .role = TextRole::Muted,
+              .field = {},
+              .common = {}};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     text.spans = Prop<std::vector<TextSpan>>{[this, tab] { return eyebrowRunsOf(tab); }};
     text.common.testId = "head_eyebrow";
     text.common.visible = Prop<bool>{[this, tab] { return eyebrowHasContent(tab); }};
@@ -696,6 +725,7 @@ Node Workspace::headTool(WorkspaceTabId tab, reactive::Signal<HeadTool> const& t
     return ui::textInput(std::move(input));
 }
 
+// NOLINTNEXTLINE(modernize-use-string-view): the declaration returns std::string.
 std::string Workspace::idSuffix(LeadPlacement place) {
     if (place == LeadPlacement::Inline) {
         return "_inline";
@@ -713,7 +743,10 @@ Row Workspace::buildHeadLead(WorkspaceTabId tab, LeadPlacement place) const {
         ScreenHead const* const head = headOf(tab);
         return head == nullptr ? std::vector<HeadBadge>{} : head->status().get();
     };
-    Row row{.children = {}, .gap = 1, .common = {}, .tone = std::nullopt};
+    Row row{.children = {},
+            .gap = 1,
+            .common = {},
+            .tone = std::nullopt};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     row.wrap = true;
     row.align = Align::Center;
     row.common.testId = "head_lead" + suffix;
@@ -736,7 +769,10 @@ Row Workspace::buildHeadLead(WorkspaceTabId tab, LeadPlacement place) const {
         }
         return runs;
     };
-    Text text{.text = Prop<std::string>{subtitle}, .role = TextRole::Muted, .field = {}, .common = {}};
+    Text text{.text = Prop<std::string>{subtitle},
+              .role = TextRole::Muted,
+              .field = {},
+              .common = {}};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     text.spans = Prop<std::vector<TextSpan>>{spans};
     text.common.testId = "head_subtitle" + suffix;
     text.common.visible = Prop<bool>{[spans] { return !spans().empty(); }};
@@ -751,10 +787,12 @@ Row Workspace::buildHeadLead(WorkspaceTabId tab, LeadPlacement place) const {
         },
         [](PlacedBadge const& placed) { return Key{static_cast<std::int64_t>(placed.index)}; },
         [suffix](reactive::Signal<PlacedBadge> const& placed) {
-            Badge badge{.tone = Prop<Tone>{[&placed] { return placed.get().badge.tone; }},
-                        .text = Prop<std::string>{[&placed] { return placed.get().badge.text; }},
-                        .icon = placed.peek().badge.icon,
-                        .common = {}};
+            Badge badge{
+                .tone = Prop<Tone>{[&placed] { return placed.get().badge.tone; }},
+                .text = Prop<std::string>{[&placed] { return placed.get().badge.text; }},
+                .icon = placed.peek().badge.icon,
+                .common = {},
+            };
             badge.common.testId = "head_status" + suffix + "_" + std::to_string(placed.peek().index);
             return ui::badge(std::move(badge));
         },
@@ -781,20 +819,22 @@ ActionBar Workspace::buildHeadTrail(WorkspaceTabId tab) const {
     row.children.push_back(ui::forEach<HeadAction>(
         actions, [](HeadAction const& action) { return Key{action.id}; },
         [this, tab](reactive::Signal<HeadAction> const& action) {
-            Button button{.label = Prop<std::string>{[&action] {
-                              HeadAction const& current = action.get();
-                              return current.iconOnly ? std::string{} : current.label;
-                          }},
-                          .emphasis = action.peek().emphasis,
-                          .onClick =
-                              [this, tab, actionId = action.peek().id] {
-                                  ScreenHandle* const handle = _model->handleOf(tab);
-                                  if (ScreenHead* const head = handle == nullptr ? nullptr : handle->head()) {
-                                      head->run(actionId);
-                                  }
-                              },
-                          .common = {},
-                          .icon = action.peek().icon};
+            Button button{
+                .label = Prop<std::string>{[&action] {
+                    HeadAction const& current = action.get();
+                    return current.iconOnly ? std::string{} : current.label;
+                }},
+                .emphasis = action.peek().emphasis,
+                .onClick =
+                    [this, tab, actionId = action.peek().id] {
+                        ScreenHandle* const handle = _model->handleOf(tab);
+                        if (ScreenHead* const head = handle == nullptr ? nullptr : handle->head()) {
+                            head->run(actionId);
+                        }
+                    },
+                .common = {},  // NOLINT(readability-trailing-comma): the last designator is empty braces.
+                .icon = action.peek().icon,
+            };
             button.common.testId = "head_action_" + action.peek().id;
             // An icon-only button is named and titled by its label, which it does not draw.
             auto const labelWhenIconOnly = [&action] {
@@ -818,12 +858,14 @@ ActionBar Workspace::buildHeadTrail(WorkspaceTabId tab) const {
         },
         [](ShapedMenu const& menu) { return Key{menu.shape}; },
         [this, tab](reactive::Signal<ShapedMenu> const& menu) {
-            Menu spec{.items = headMenuItems(tab, menu, menu.peek().entries, {}),
-                      .common = {},
-                      .style = MenuStyle::Button,
-                      .label = {},
-                      .icon = "more",
-                      .emphasis = ButtonEmphasis::Normal};
+            Menu spec{
+                .items = headMenuItems(tab, menu, menu.peek().entries, {}),
+                .common = {},  // NOLINT(readability-trailing-comma): the last designator is empty braces.
+                .style = MenuStyle::Button,
+                .label = {},
+                .icon = "more",
+                .emphasis = ButtonEmphasis::Normal,
+            };
             // The trigger draws the icon alone; its name is the head's `menuLabel`.
             Prop<std::string> const name{[this, tab] {
                 ScreenHead const* const head = headOf(tab);
@@ -840,7 +882,10 @@ ActionBar Workspace::buildHeadTrail(WorkspaceTabId tab) const {
 }
 
 Node Workspace::headRow(WorkspaceTabId tab) const {
-    Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
+    Row row{.children = {},
+            .gap = 2,
+            .common = {},
+            .tone = std::nullopt};  // NOLINT(readability-trailing-comma): the last designator is empty braces.
     row.children.push_back(ui::row(buildHeadLead(tab, LeadPlacement::Below)));
     row.children.push_back(ui::actionBar(buildHeadTrail(tab)));
     row.common.testId = "head";
