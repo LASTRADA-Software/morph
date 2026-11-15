@@ -20,8 +20,6 @@
 #include <variant>
 #include <vector>
 
-#include "bundle.hpp"
-#include "control_shape.hpp"
 #include "value.hpp"
 
 /// @file
