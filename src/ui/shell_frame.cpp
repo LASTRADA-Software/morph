@@ -313,7 +313,7 @@ void ShellFrame::setSearchText(std::string_view text) {
 }
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters,readability-identifier-length): the message, yes, then no.
-void ShellFrame::confirm(std::string_view message, std::string_view yes, std::string_view no,
+void ShellFrame::confirm(std::string_view message, std::string_view yes, std::string_view noLabel,
                          std::function<void(bool)> done) {
     if (_confirm == nullptr) {
         _confirm = _backend.createDialog(_main.get());
@@ -329,7 +329,7 @@ void ShellFrame::confirm(std::string_view message, std::string_view yes, std::st
     }
     _confirm->setTitle(message);
     _confirmYes->setLabel(yes);
-    _confirmNo->setLabel(no);
+    _confirmNo->setLabel(noLabel);
     _confirmDone = std::move(done);
     _confirm->setOpen(true);
 }

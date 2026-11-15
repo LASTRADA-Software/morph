@@ -132,7 +132,7 @@ inline constexpr double kPixelsPerRem = 16.0;
 /// @brief A channel from 0 to 1, as 8 bits.
 /// @param value The channel.
 /// @return It, or nothing outside 0 to 1.
-[[nodiscard]] MORPH_API std::optional<std::uint8_t> channelOf(double const value);
+[[nodiscard]] MORPH_API std::optional<std::uint8_t> channelOf(double value);
 
 /// @brief The member name that holds a group's own token.
 inline constexpr std::string_view kRootMember = "$root";

@@ -239,9 +239,10 @@ public:
     ///        the cancel button answer no.
     /// @param message The question.
     /// @param yes     The confirming button's caption.
-    /// @param no      The cancelling button's caption.
+    /// @param noLabel The cancelling button's caption.
     /// @param done    Called with whether the person confirmed.
-    void confirm(std::string_view message, std::string_view yes, std::string_view no, std::function<void(bool)> done);
+    void confirm(std::string_view message, std::string_view yes, std::string_view noLabel,
+                 std::function<void(bool)> done);
 
     /// @brief Shows a passive, transient message over the frame's main content area. Made the first time it is
     ///        asked for; a later call replaces its text and tone and restarts its dismiss interval, whether or not

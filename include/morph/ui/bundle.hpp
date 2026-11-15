@@ -334,7 +334,6 @@ struct FetchRequest {
     std::string hash;
 };
 
-
 /// @brief A model's `schemas` document: `{actionType: schema}`, or why the server would not describe the model.
 using ModelSchemas = std::expected<std::string, std::string>;
 

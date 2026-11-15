@@ -515,6 +515,9 @@ private:
 
     /// The handle of a document screen. Its state is shared with the posts it makes, so a post that runs after the
     /// handle is gone finds the screen already closed.
+    // Both bases carry default bodies a host screen relies on, so neither is a pure interface; the handle is the
+    // screen as its host sees it and as its shell draws it at once.
+    // NOLINTNEXTLINE(misc-multiple-inheritance)
     class MORPH_API Handle final : public ScreenHandle, public ScreenHead {
     public:
         Handle(std::unique_ptr<Screen> screen, CloseGuard guard, std::function<void(ScreenHandle&)> saveFailed)

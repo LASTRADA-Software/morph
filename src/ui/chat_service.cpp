@@ -2,7 +2,8 @@
 
 #if defined(__GNUC__) && !defined(__clang__)
 // GCC 16 at -O3 reports a memcpy of 2^63 bytes from the std::string copy inside `readMessage`'s refusal path once it
-// inlines into a turn's callbacks. The length is a std::string's, bounded by max_size(); the report is a false positive.
+// inlines into a turn's callbacks. The length is a std::string's, bounded by max_size(); the report is a false
+// positive.
 #pragma GCC diagnostic ignored "-Wrestrict"
 #endif
 
