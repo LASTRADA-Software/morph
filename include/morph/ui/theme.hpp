@@ -175,8 +175,6 @@ namespace detail {
 /// @return Why it is not one, or nothing.
 [[nodiscard]] MORPH_API std::optional<std::string> checkShadow(Json const& value);
 
-MORPH_API std::optional<double> weightOf(Json const& value);
-
 /// @brief Reads the tokens of one group into @p out.
 /// @param group     The group's members.
 /// @param prefix    The group's path, with a trailing `.`; empty at the top.
