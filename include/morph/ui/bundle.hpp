@@ -334,6 +334,13 @@ struct FetchRequest {
     std::string hash;
 };
 
+
+/// @brief A model's `schemas` document: `{actionType: schema}`, or why the server would not describe the model.
+using ModelSchemas = std::expected<std::string, std::string>;
+
+/// @brief The schemas documents of the models, by model type.
+using SchemasByModel = std::map<std::string, ModelSchemas, std::less<>>;
+
 }  // namespace morph::ui
 
 /// @brief The wire form of a manifest file: `isPublic` travels as `public`.

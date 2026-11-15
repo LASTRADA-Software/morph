@@ -124,12 +124,6 @@ enum class TryItKind : std::uint8_t {
 [[nodiscard]] MORPH_API std::string tryItDocument(std::string_view actionId, std::string_view modelType,
                                                   TryItKind kind);
 
-/// @brief A model's `schemas` document: `{actionType: schema}`, or why the server would not describe the model.
-using ModelSchemas = std::expected<std::string, std::string>;
-
-/// @brief The schemas documents of the models, by model type.
-using SchemasByModel = std::map<std::string, ModelSchemas, std::less<>>;
-
 /// @brief The actions a model's `schemas` document lists, with each one's schema.
 /// @param document The document's JSON text.
 /// @return The schemas by action id, or why the document cannot be read.

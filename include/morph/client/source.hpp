@@ -19,7 +19,6 @@
 #include "../session/session.hpp"
 #include "../ui/catalogue.hpp"
 #include "../ui/document.hpp"
-#include "../ui/explorer.hpp"
 #include "../ui/frontend.hpp"
 #include "../ui/interpreter.hpp"
 #include "../ui/queueing_dispatcher.hpp"
