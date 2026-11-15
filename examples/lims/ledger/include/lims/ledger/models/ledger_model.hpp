@@ -266,42 +266,42 @@ public:
 
 }  // namespace lims
 
-// The guard each registered action names must be complete here: the registration instantiates its execution.
+// Each action's declared rule must be visible wherever the action is executed: the guard the action names judges it.
 #include "lims/ledger/authorization/ledger_authorization.hpp"
 
-// The registration macros declare a non-const status object each.
+// The declaration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
-BRIDGE_REGISTER_MODEL(lims::LedgerModel, "LedgerModel")
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::CreateAccount, "CreateAccount")
+BRIDGE_DECLARE_MODEL(lims::LedgerModel, "LedgerModel")
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::CreateAccount, "CreateAccount")
 BRIDGE_REGISTER_EFFECTS(lims::CreateAccount, ::morph::effects::changes<lims::AccountView>)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListAccounts, "ListLedgerAccounts", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::ListAccounts, "ListLedgerAccounts", ::morph::model::Loggable::No)
 // The shell's open-work count and search over the ledger.
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::CountClosingPeriods, "CountClosingPeriods",
-                       ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::SearchAccounts, "SearchAccounts", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::OpenPeriod, "OpenPeriod")
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::CountClosingPeriods, "CountClosingPeriods",
+                      ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::SearchAccounts, "SearchAccounts", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::OpenPeriod, "OpenPeriod")
 BRIDGE_REGISTER_EFFECTS(lims::OpenPeriod, ::morph::effects::changes<lims::PeriodView>)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListPeriods, "ListPeriods", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::BeginClosePeriod, "BeginClosePeriod")
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::ListPeriods, "ListPeriods", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::BeginClosePeriod, "BeginClosePeriod")
 BRIDGE_REGISTER_EFFECTS(lims::BeginClosePeriod, ::morph::effects::updates<lims::PeriodView>)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::CreateDraftEntry, "CreateDraftEntry")
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::CreateDraftEntry, "CreateDraftEntry")
 BRIDGE_REGISTER_EFFECTS(lims::CreateDraftEntry, ::morph::effects::changes<lims::JournalEntryView>)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::PostEntry, "PostEntry")
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::PostEntry, "PostEntry")
 BRIDGE_REGISTER_EFFECTS(lims::PostEntry, ::morph::effects::updates<lims::JournalEntryView>)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ReverseEntry, "ReverseEntry")
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::ReverseEntry, "ReverseEntry")
 BRIDGE_REGISTER_EFFECTS(lims::ReverseEntry, ::morph::effects::changes<lims::JournalEntryView>)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ClosePeriod, "ClosePeriod")
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::ClosePeriod, "ClosePeriod")
 BRIDGE_REGISTER_EFFECTS(lims::ClosePeriod, ::morph::effects::updates<lims::PeriodView>)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::SetExchangeRate, "SetExchangeRate")
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::SetExchangeRate, "SetExchangeRate")
 BRIDGE_REGISTER_EFFECTS(lims::SetExchangeRate, ::morph::effects::changes<lims::ExchangeRateView>)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListExchangeRates, "ListExchangeRates", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::GetEntry, "GetEntry", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListEntries, "ListEntries", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::ListEntriesPage, "ListEntriesPage", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::RecordPosting, "RecordPosting")
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::ListExchangeRates, "ListExchangeRates", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::GetEntry, "GetEntry", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::ListEntries, "ListEntries", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::ListEntriesPage, "ListEntriesPage", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::RecordPosting, "RecordPosting")
 BRIDGE_REGISTER_EFFECTS(lims::RecordPosting, ::morph::effects::changes<lims::JournalEntryView>)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::FindPosting, "FindPosting", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::LedgerModel, lims::GetRateOn, "GetRateOn", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::FindPosting, "FindPosting", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::LedgerModel, lims::GetRateOn, "GetRateOn", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
 
 /// @brief The ledger keeps no state between actions.

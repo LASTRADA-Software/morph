@@ -242,3 +242,28 @@ PeriodView LedgerModel::execute(const BeginClosePeriod& action) {
 }
 
 }  // namespace lims
+
+// The registrars are compiled here, once, rather than in every translation unit that includes the header.
+// The registration macros declare a non-const status object each.
+// NOLINTBEGIN(misc-const-correctness)
+BRIDGE_REGISTER_MODEL_SOURCE(lims::LedgerModel)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::CreateAccount)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::ListAccounts)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::CountClosingPeriods)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::SearchAccounts)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::OpenPeriod)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::ListPeriods)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::BeginClosePeriod)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::CreateDraftEntry)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::PostEntry)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::ReverseEntry)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::ClosePeriod)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::SetExchangeRate)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::ListExchangeRates)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::GetEntry)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::ListEntries)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::ListEntriesPage)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::RecordPosting)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::FindPosting)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::LedgerModel, lims::GetRateOn)
+// NOLINTEND(misc-const-correctness)

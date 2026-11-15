@@ -91,6 +91,3 @@ struct Authorization<RecordPosting> {
 };
 
 }  // namespace lims
-
-// The models are included last, after every declaration their registrations need.
-#include "lims/ledger/models/ledger_model.hpp"
