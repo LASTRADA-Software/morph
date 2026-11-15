@@ -88,10 +88,12 @@ public:
           _model{std::move(model)},
           _choices{std::move(choices)},
           _options{std::move(options)},
-          _values{.locale = _options.locale,
-                  .displayOffsetMinutes = _options.displayOffsetMinutes,
-                  .translations = _options.translations,
-                  .bcp47 = _options.bcp47},
+          _values{
+              .locale = _options.locale,
+              .displayOffsetMinutes = _options.displayOffsetMinutes,
+              .translations = _options.translations,
+              .bcp47 = _options.bcp47,
+          },
           _format{runtime, std::uint64_t{0}} {}
 
     /// @brief The runtime.

@@ -1052,7 +1052,7 @@ private:
     /// @param changes What is about to be fanned out. On the server strand.
     void askTimeFactsNamedIn(::morph::effects::Changes const& changes) {
         for (std::size_t index = 0; index < _timeFacts.size(); ++index) {
-            auto const& named = _timeFacts[index].source.records;
+            auto const& named = _timeFacts.at(index).source.records;
             bool const touched =
                 std::ranges::any_of(changes.records, [&](::morph::effects::RecordChange const& change) {
                     return std::ranges::find(named, change.record) != named.end();
@@ -1069,7 +1069,7 @@ private:
     /// runs on a model strand, never the server's, so a model that reads a database does not hold up the server.
     /// @param index The reporter's place in `_timeFacts`. On the server strand.
     void askTimeFact(std::size_t index) {
-        TimeFact& fact = _timeFacts[index];
+        TimeFact& fact = _timeFacts.at(index);
         if (fact.asking) {
             fact.askAgain = true;
             return;
@@ -1099,7 +1099,7 @@ private:
     /// @param reported The instant, or empty when none is pending or the ask failed. On the server strand.
     void timeFactAnswered(std::size_t index, std::optional<::morph::time::DateTime> reported) {
         noteOwner("RemoteServer::timeFactAnswered");
-        TimeFact& fact = _timeFacts[index];
+        TimeFact& fact = _timeFacts.at(index);
         fact.asking = false;
         if (reported && fact.fired && *reported <= *fact.fired) {
             ::morph::log::logWarn("[timeFacts] {} reported an instant it already reported; ignored",
@@ -1118,7 +1118,7 @@ private:
     /// @brief Sleeps until reporter @p index's instant, or `clockRecheck`, whichever is sooner, then reads the clock.
     /// @param index The reporter's place in `_timeFacts`. On the server strand.
     void waitForTimeFact(std::size_t index) {
-        TimeFact& fact = _timeFacts[index];
+        TimeFact& fact = _timeFacts.at(index);
         if (fact.timer != 0 && _strandTimer) {
             _strandTimer->cancel(fact.timer);
         }
@@ -1137,7 +1137,7 @@ private:
         std::uint64_t const wake = ++fact.wake;
         fact.timer =
             _strandTimer->schedule(std::min(remaining, _config.clockRecheck), [weak = weak_from_this(), index, wake] {
-                if (auto self = weak.lock()) {
+                if (auto const self = weak.lock()) {
                     self->_strand.postTask([self, index, wake] { self->timeFactWoke(index, wake); });
                 }
             });
@@ -1149,10 +1149,10 @@ private:
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a place, then a number; swapped, nothing matches and the wake is dropped.
     void timeFactWoke(std::size_t index, std::uint64_t wake) {
         noteOwner("RemoteServer::timeFactWoke");
-        if (_timeFacts[index].wake != wake) {
+        if (_timeFacts.at(index).wake != wake) {
             return;
         }
-        _timeFacts[index].timer = 0;
+        _timeFacts.at(index).timer = 0;
         waitForTimeFact(index);
     }
 
@@ -1162,7 +1162,7 @@ private:
     /// instant by itself.
     /// @param index The reporter's place in `_timeFacts`. On the server strand.
     void fireTimeFact(std::size_t index) {
-        TimeFact& fact = _timeFacts[index];
+        TimeFact& fact = _timeFacts.at(index);
         fact.fired = fact.next;
         fact.next.reset();
         auto changes =

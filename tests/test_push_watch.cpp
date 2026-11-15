@@ -1945,7 +1945,7 @@ TEST_CASE("an_action_on_the_record_moves_the_awaited_instant", "[push][watch][ti
     auto const other = rig.connect();
     rig.watch(cid, records({"T_TimedRow"}));
     auto const timed = [&] {
-        auto env = ::morph::wire::makeRegister("T_TimedModel");
+        auto const env = ::morph::wire::makeRegister("T_TimedModel");
         auto const reply = ::morph::wire::decode(rig.server->handleInline(::morph::wire::encode(env), other));
         REQUIRE(reply.kind == "ok");
         return reply.modelId;
@@ -1958,7 +1958,7 @@ TEST_CASE("an_action_on_the_record_moves_the_awaited_instant", "[push][watch][ti
         env.modelType = "T_TimedModel";
         env.actionType = "T_TimedSet";
         env.body = glz::write_json(SetTimedExpiry{.atMs = atMs}).value_or(std::string{});
-        auto waiter = std::make_shared<::morph::testing::WaitReply>();
+        auto const waiter = std::make_shared<::morph::testing::WaitReply>();
         rig.server->handle(::morph::wire::encode(env), [waiter](std::string const& msg) { (*waiter)(msg); }, other);
         REQUIRE(waiter->await());
         REQUIRE(waiter->env.kind == "ok");

@@ -245,14 +245,15 @@ inline void addEffects(EffectsMap& map, std::string_view actionId, std::vector<D
 /// @param map The registry to add to.
 /// @param actionId The action's id.
 /// @param added The effects.
-inline void addAddedEffects(AddedEffectsMap& map, std::string_view actionId, std::vector<DeclaredEffect> added) {
+inline void addAddedEffects(AddedEffectsMap& map, std::string_view actionId,
+                            std::vector<DeclaredEffect> const& added) {
     auto entry = map.find(actionId);
     if (entry == map.end()) {
         entry = map.emplace(std::string{actionId}, std::vector<DeclaredEffect>{}).first;
     }
-    for (auto& effect : added) {
+    for (auto const& effect : added) {
         if (std::ranges::find(entry->second, effect) == entry->second.end()) {
-            entry->second.push_back(std::move(effect));
+            entry->second.push_back(effect);
         }
     }
 }
@@ -316,9 +317,11 @@ inline bool registerChangeTimeOnce() noexcept {
            "races their internals against concurrent lookups. Load and register plugin modules before "
            "the first dispatch.");
     addChangeTime(mutableChangeTimesRegistry(),
-                  DeclaredChangeTime{.action = std::string{::morph::model::ActionTraits<Action>::typeId()},
-                                     .model = std::string{::morph::model::ModelTraits<Model>::typeId()},
-                                     .records = {std::type_index{typeid(Records)}...}});
+                  DeclaredChangeTime{
+                      .action = std::string{::morph::model::ActionTraits<Action>::typeId()},
+                      .model = std::string{::morph::model::ModelTraits<Model>::typeId()},
+                      .records = {std::type_index{typeid(Records)}...},
+                  });
     return true;
 }
 
@@ -650,7 +653,7 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
                                    " changes by time, which is not a registered record");
                 continue;
             }
-            source.records.push_back(records[found->second].name);
+            source.records.push_back(records.at(found->second).name);
         }
         resolved.changeTimes.push_back(std::move(source));
     }
@@ -794,6 +797,7 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 #ifdef MORPH_CLIENT_ONLY
 #define BRIDGE_REGISTER_CHANGES_AT(M, A, ...)
 #else
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage): a registration macro is the public API.
 #define BRIDGE_REGISTER_CHANGES_AT(M, A, ...)                                             \
     namespace {                                                                           \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_change_time_reg_, __COUNTER__) = \
@@ -816,6 +820,7 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 #ifdef MORPH_CLIENT_ONLY
 #define BRIDGE_ADD_EFFECTS(A, ...)
 #else
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage): a registration macro is the public API.
 #define BRIDGE_ADD_EFFECTS(A, ...)                                                          \
     namespace {                                                                             \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_added_effects_reg_, __COUNTER__) = \
