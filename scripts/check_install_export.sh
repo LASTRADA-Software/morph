@@ -294,6 +294,14 @@ int main() {
     if (sum.asInt() == nullptr || *sum.asInt() != 3) {
         return 1;
     }
+    // Calls into the UI service's compiled half: a registry refuses a file of an unknown kind, and builds a bundle.
+    morph::ui::UiRegistry registry{morph::ui::ApplicationInfo{.id = "check", .version = "1"}};
+    if (registry.addFile(morph::ui::BundleFile{.kind = "bogus", .id = "x", .bytes = "", .isPublic = false}).has_value()) {
+        return 1;
+    }
+    if (!registry.build().has_value()) {
+        return 1;
+    }
     std::printf("morph %d.%d.%d consumed from the install prefix\n", MORPH_VERSION_MAJOR,
                 MORPH_VERSION_MINOR, MORPH_VERSION_PATCH);
     return 0;
