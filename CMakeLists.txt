@@ -412,6 +412,7 @@ endif()
 # once, in src/ui.
 include(GenerateExportHeader)
 add_library(morph STATIC
+    src/ui/document.cpp
     src/ui/interpreter.cpp
     src/ui/library.cpp
 )
