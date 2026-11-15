@@ -44,11 +44,16 @@ struct ListLate {
     int limit{};
 };
 
+struct PostItems {
+    int limit{};
+};
+
 struct EffectsModel {
     ItemList execute(EditItem const& /*action*/) { return {}; }
     ItemList execute(LoadItems const& /*action*/) { return {}; }
     ItemList execute(OpenItems const& /*action*/) { return {}; }
     push_records_late::LateList execute(ListLate const& /*action*/) { return {}; }
+    ItemList execute(PostItems const& /*action*/) { return {}; }
 };
 
 }  // namespace push_effects_test
@@ -67,6 +72,13 @@ BRIDGE_REGISTER_ACTION(EffectsModel, LoadItems, "T_EffectsLoad")
 BRIDGE_REGISTER_EFFECTS(LoadItems, effects::changesInstance)
 BRIDGE_REGISTER_ACTION(EffectsModel, OpenItems, "T_EffectsOpen")
 BRIDGE_REGISTER_EFFECTS(OpenItems, effects::none)
+
+// An action whose own declaration is one effect, and which the composing code adds a second to. The addition is
+// stated twice, as two composing translation units would.
+BRIDGE_REGISTER_ACTION(EffectsModel, PostItems, "T_EffectsPost")
+BRIDGE_REGISTER_EFFECTS(PostItems, effects::changesInstance)
+BRIDGE_ADD_EFFECTS(PostItems, effects::changes<Item>)
+BRIDGE_ADD_EFFECTS(PostItems, effects::changes<Item>)
 
 // The record this action holds and its effects name is registered in push_records_late.cpp, whose
 // static initialisers run after this file's.
@@ -95,6 +107,7 @@ struct VActionA {};
 struct VActionB {};
 
 using morph::effects::Kind;
+using morph::effects::detail::AddedEffectsMap;
 using morph::effects::detail::DeclaredEffect;
 using morph::effects::detail::EffectsMap;
 using morph::model::detail::ActionResult;
@@ -155,6 +168,8 @@ TEST_CASE("effects_declared_are_read_back", "[push][records]") {
             std::vector<effects::Effect>{{effects::Kind::Updates, "T_EItem"}, {effects::Kind::Changes, "T_EItem"}});
     REQUIRE(effects::effectsOf("T_EffectsLoad") == std::vector<effects::Effect>{{effects::Kind::ChangesInstance, ""}});
     REQUIRE(effects::effectsOf("T_EffectsOpen") == std::vector<effects::Effect>{{effects::Kind::None, ""}});
+    REQUIRE(effects::effectsOf("T_EffectsPost") ==
+            std::vector<effects::Effect>{{effects::Kind::ChangesInstance, ""}, {effects::Kind::Changes, "T_EItem"}});
     REQUIRE(effects::recordsOf("T_EffectsEdit") == std::vector<effects::ActionRecord>{{"T_EItem", "id", {"items"}}});
 }
 
@@ -232,6 +247,110 @@ TEST_CASE("effects_conflict_throws", "[push][records]") {
     auto const message = refusal({record("V_Row", typeid(VRow))}, {}, declared);
     REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("`A_Conflicted`"));
     REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("different effects"));
+}
+
+// ── Effects added by the composing code ──────────────────────────────────────
+
+TEST_CASE("an_addition_is_unioned_with_the_base_declaration", "[push][records][added]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Post", result({{.type = typeid(VList), .path = ""}}));
+    EffectsMap declared;
+    morph::effects::detail::addEffects(declared, "A_Post", {changesOf(typeid(VRow))});
+    AddedEffectsMap added;
+    morph::effects::detail::addAddedEffects(added, "A_Post", {changesOf(typeid(VOther))});
+    // The same addition again adds nothing.
+    morph::effects::detail::addAddedEffects(added, "A_Post", {changesOf(typeid(VOther))});
+    REQUIRE(added.at("A_Post").size() == 1);
+
+    auto const resolved = morph::effects::detail::resolveForTesting(
+        {record("V_Row", typeid(VRow)), record("V_Other", typeid(VOther))}, slots, declared, {}, added);
+    REQUIRE(resolved.effectsOf("A_Post") ==
+            std::vector<morph::effects::Effect>{{Kind::Changes, "V_Row"}, {Kind::Changes, "V_Other"}});
+}
+
+TEST_CASE("an_addition_naming_a_base_effect_does_not_repeat_it", "[push][records][added]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Post", result({{.type = typeid(VList), .path = ""}}));
+    EffectsMap declared;
+    morph::effects::detail::addEffects(declared, "A_Post", {changesOf(typeid(VRow))});
+    AddedEffectsMap added;
+    morph::effects::detail::addAddedEffects(added, "A_Post", {changesOf(typeid(VRow))});
+    auto const resolved =
+        morph::effects::detail::resolveForTesting({record("V_Row", typeid(VRow))}, slots, declared, {}, added);
+    REQUIRE(resolved.effectsOf("A_Post") == std::vector<morph::effects::Effect>{{Kind::Changes, "V_Row"}});
+}
+
+TEST_CASE("an_addition_alone_declares_an_action_with_no_base", "[push][records][added]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Assign", result({{.type = typeid(VList), .path = ""}}));
+    AddedEffectsMap added;
+    morph::effects::detail::addAddedEffects(added, "A_Assign", {changesOf(typeid(VRow))});
+    auto const resolved =
+        morph::effects::detail::resolveForTesting({record("V_Row", typeid(VRow))}, slots, {}, {}, added);
+    REQUIRE(resolved.effectsOf("A_Assign") == std::vector<morph::effects::Effect>{{Kind::Changes, "V_Row"}});
+}
+
+TEST_CASE("an_addition_replaces_only_a_base_none", "[push][records][added]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Quiet", result({{.type = typeid(VList), .path = ""}}));
+    EffectsMap declared;
+    morph::effects::detail::addEffects(declared, "A_Quiet", {DeclaredEffect{.kind = Kind::None, .record = {}}});
+    AddedEffectsMap added;
+    morph::effects::detail::addAddedEffects(added, "A_Quiet", {changesOf(typeid(VRow))});
+    auto const resolved =
+        morph::effects::detail::resolveForTesting({record("V_Row", typeid(VRow))}, slots, declared, {}, added);
+    REQUIRE(resolved.effectsOf("A_Quiet") == std::vector<morph::effects::Effect>{{Kind::Changes, "V_Row"}});
+}
+
+TEST_CASE("two_different_base_declarations_are_refused_whatever_is_added", "[push][records][added]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Both", result({{.type = typeid(VList), .path = ""}}));
+    EffectsMap declared;
+    morph::effects::detail::addEffects(declared, "A_Both", {changesOf(typeid(VRow))});
+    morph::effects::detail::addEffects(declared, "A_Both", {changesOf(typeid(VOther))});
+    AddedEffectsMap added;
+    morph::effects::detail::addAddedEffects(added, "A_Both", {changesOf(typeid(VRow))});
+    std::string message;
+    try {
+        static_cast<void>(morph::effects::detail::resolveForTesting(
+            {record("V_Row", typeid(VRow)), record("V_Other", typeid(VOther))}, slots, declared, {}, added));
+    } catch (morph::model::EffectsRegistrationError const& error) {
+        message = error.what();
+    }
+    REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("`A_Both` declares different effects"));
+}
+
+TEST_CASE("an_addition_for_an_unknown_action_or_record_is_refused", "[push][records][added]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Known", result({{.type = typeid(VList), .path = ""}}));
+    AddedEffectsMap added;
+    morph::effects::detail::addAddedEffects(added, "A_Missing", {changesOf(typeid(VRow))});
+    morph::effects::detail::addAddedEffects(added, "A_Known", {changesOf(typeid(VOther))});
+    std::string message;
+    try {
+        static_cast<void>(
+            morph::effects::detail::resolveForTesting({record("V_Row", typeid(VRow))}, slots, {}, {}, added));
+    } catch (morph::model::EffectsRegistrationError const& error) {
+        message = error.what();
+    }
+    REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("`A_Missing`, which is not a registered action"));
+    REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("`A_Known` declares changes<"));
+    REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("which is not a registered record"));
+}
+
+TEST_CASE("an_added_updates_must_be_held_by_the_result", "[push][records][added]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Counts", result({{.type = typeid(VList), .path = ""}}));
+    AddedEffectsMap added;
+    morph::effects::detail::addAddedEffects(added, "A_Counts", {updatesOf(typeid(VRow))});
+    std::string message;
+    try {
+        static_cast<void>(
+            morph::effects::detail::resolveForTesting({record("V_Row", typeid(VRow))}, slots, {}, {}, added));
+    } catch (morph::model::EffectsRegistrationError const& error) {
+        message = error.what();
+    }
+    REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("result holds no `V_Row`"));
 }
 
 TEST_CASE("action_id_held_by_two_action_types_throws", "[push][records]") {

@@ -143,6 +143,11 @@ struct DeclaredEffect {
 /// @brief Every distinct effects declaration, by action id. More than one for an id is a conflict.
 using EffectsMap = std::map<std::string, std::vector<std::vector<DeclaredEffect>>, std::less<>>;
 
+/// @brief The effects added to each action by the code that composes its module with others, by action id.
+///
+/// Apart from `EffectsMap`: an addition is never in conflict with a base declaration, it is unioned with it.
+using AddedEffectsMap = std::map<std::string, std::vector<DeclaredEffect>, std::less<>>;
+
 /// @brief Maps an effect tag type to its `DeclaredEffect`.
 /// @tparam E An effect tag.
 template <typename E>
@@ -203,6 +208,22 @@ inline void addEffects(EffectsMap& map, std::string_view actionId, std::vector<D
     }
 }
 
+/// @brief Adds effects to an action's additions, skipping any already there.
+/// @param map The registry to add to.
+/// @param actionId The action's id.
+/// @param added The effects.
+inline void addAddedEffects(AddedEffectsMap& map, std::string_view actionId, std::vector<DeclaredEffect> added) {
+    auto entry = map.find(actionId);
+    if (entry == map.end()) {
+        entry = map.emplace(std::string{actionId}, std::vector<DeclaredEffect>{}).first;
+    }
+    for (auto& effect : added) {
+        if (std::ranges::find(entry->second, effect) == entry->second.end()) {
+            entry->second.push_back(std::move(effect));
+        }
+    }
+}
+
 /// @brief The process-level effects registry, appended to by static registrars.
 /// @return The mutable map.
 inline EffectsMap& mutableEffectsRegistry() {
@@ -225,6 +246,33 @@ inline bool registerEffectsOnce() noexcept {
            "the first dispatch.");
     addEffects(mutableEffectsRegistry(), ::morph::model::ActionTraits<Action>::typeId(),
                std::vector<DeclaredEffect>{EffectOf<E>::value()...});
+    return true;
+}
+
+/// @brief The process-level registry of added effects, appended to by static registrars.
+/// @return The mutable map.
+inline AddedEffectsMap& mutableAddedEffectsRegistry() {
+    static AddedEffectsMap entries;
+    return entries;
+}
+
+/// @brief Static-init helper for `BRIDGE_ADD_EFFECTS`.
+/// @tparam Action The action type; `ActionTraits<Action>` must be visible.
+/// @tparam E The effect tags.
+/// @return Always true, so the result can initialise a namespace-scope variable.
+template <typename Action, typename... E>
+inline bool registerAddedEffectsOnce() noexcept {
+    static_assert(sizeof...(E) > 0, "BRIDGE_ADD_EFFECTS: add at least one effect");
+    static_assert((!std::is_same_v<E, none> && ...),
+                  "BRIDGE_ADD_EFFECTS: an addition adds an effect, and none is the absence of one");
+    // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
+    assert(!::morph::model::registrationPhaseClosed() &&
+           "registerAddedEffectsOnce: registration after the registration phase closed. The process-level "
+           "registries are unsynchronised and are read-only once dispatch begins -- registering now "
+           "races their internals against concurrent lookups. Load and register plugin modules before "
+           "the first dispatch.");
+    addAddedEffects(mutableAddedEffectsRegistry(), ::morph::model::ActionTraits<Action>::typeId(),
+                    std::vector<DeclaredEffect>{EffectOf<E>::value()...});
     return true;
 }
 
@@ -345,11 +393,13 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 /// @param resultSlots Every action's result slots, by action id.
 /// @param declared Every action's effects declarations, by action id.
 /// @param slotConflicts Action ids registered by more than one action type.
+/// @param added Every action's added effects, by action id.
 /// @return The resolved registries.
 /// @throws morph::model::EffectsRegistrationError listing every problem, when there is one.
 [[nodiscard]] inline Resolved resolve(std::vector<record::RecordInfo> records,
                                       model::detail::ActionResultSlotMap const& resultSlots,
-                                      EffectsMap const& declared, std::vector<std::string> const& slotConflicts) {
+                                      EffectsMap const& declared, std::vector<std::string> const& slotConflicts,
+                                      AddedEffectsMap const& added) {
     std::vector<std::string> problems;
 
     // An identical registration, as a record registered in a header gives once per translation unit, is
@@ -437,16 +487,42 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
         }
     }
 
-    for (auto const& [actionId, declarations] : declared) {
-        if (declarations.size() > 1) {
+    // Every action with a base declaration or an addition. An addition for an id no action registered is refused.
+    std::map<std::string, int, std::less<>> actionIds;
+    for (auto const& entry : declared) {
+        actionIds.emplace(entry.first, 0);
+    }
+    for (auto const& entry : added) {
+        actionIds.emplace(entry.first, 0);
+        if (!resultSlots.contains(entry.first)) {
+            problems.push_back("effects are added to action `" + entry.first + "`, which is not a registered action");
+        }
+    }
+    for (auto const& idEntry : actionIds) {
+        std::string const& actionId = idEntry.first;
+        auto const base = declared.find(actionId);
+        if (base != declared.end() && base->second.size() > 1) {
             problems.push_back("action `" + actionId + "` declares different effects in two registrations");
             continue;
         }
-        auto const& declaration = declarations.front();
-        if (declaration.size() > 1 &&
-            std::ranges::any_of(declaration, [](DeclaredEffect const& effect) { return effect.kind == Kind::None; })) {
-            problems.push_back("action `" + actionId + "` declares none together with other effects");
-            continue;
+        std::vector<DeclaredEffect> declaration;
+        if (base != declared.end()) {
+            declaration = base->second.front();
+            if (declaration.size() > 1 && std::ranges::any_of(declaration, [](DeclaredEffect const& effect) {
+                    return effect.kind == Kind::None;
+                })) {
+                problems.push_back("action `" + actionId + "` declares none together with other effects");
+                continue;
+            }
+        }
+        // An addition changes something, so a base `none` does not stand beside it; no other base effect is dropped.
+        if (auto const addition = added.find(actionId); addition != added.end()) {
+            std::erase_if(declaration, [](DeclaredEffect const& effect) { return effect.kind == Kind::None; });
+            for (auto const& effect : addition->second) {
+                if (std::ranges::find(declaration, effect) == declaration.end()) {
+                    declaration.push_back(effect);
+                }
+            }
         }
         std::vector<Effect> effects;
         for (auto const& effect : declaration) {
@@ -491,13 +567,15 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 /// @param resultSlots The action result slots, by action id.
 /// @param declared The effects declarations, by action id.
 /// @param slotConflicts Action ids registered by more than one action type.
+/// @param added The added effects, by action id.
 /// @return The resolved registries.
 /// @throws morph::model::EffectsRegistrationError listing every problem, when there is one.
 [[nodiscard]] inline Resolved resolveForTesting(std::vector<record::RecordInfo> records,
                                                 model::detail::ActionResultSlotMap const& resultSlots,
                                                 EffectsMap const& declared,
-                                                std::vector<std::string> const& slotConflicts = {}) {
-    return resolve(std::move(records), resultSlots, declared, slotConflicts);
+                                                std::vector<std::string> const& slotConflicts = {},
+                                                AddedEffectsMap const& added = {}) {
+    return resolve(std::move(records), resultSlots, declared, slotConflicts, added);
 }
 
 /// @brief The process registries, matched and validated on the first call.
@@ -519,7 +597,8 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
     std::call_once(state.once, [] {
         try {
             state.value.emplace(resolve(record::detail::recordRegistry(), model::detail::actionResultSlots(),
-                                        mutableEffectsRegistry(), model::detail::actionResultConflicts()));
+                                        mutableEffectsRegistry(), model::detail::actionResultConflicts(),
+                                        mutableAddedEffectsRegistry()));
         } catch (model::EffectsRegistrationError const& error) {
             state.error.emplace(error);
         }
@@ -589,6 +668,28 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
     namespace {                                                                       \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_effects_reg_, __COUNTER__) = \
         morph::effects::detail::registerEffectsOnce<A, __VA_ARGS__>();                \
+    }
+#endif
+
+/// @def BRIDGE_ADD_EFFECTS
+/// @brief Adds effects to action @p A from the code that composes its module with the module that owns the
+///        record: any of `morph::effects::updates<R>`, `changes<R>` and `changesInstance`.
+///
+/// The action's own module cannot name a record of a module it does not include, and a second
+/// `BRIDGE_REGISTER_EFFECTS` for the action is refused, so the composing code, which includes both, adds the
+/// effect here. The addition is unioned with the action's own declaration and never removes an effect; `none` is
+/// refused at compile time. An addition for an action nobody registered, or for a record nobody registered, is
+/// refused on the first read, never ignored. Repeating an addition is a no-op. Place it in a translation unit
+/// that is always linked into the server. Expands to nothing under `MORPH_CLIENT_ONLY`.
+/// @param A The action type.
+/// @param ... The effects to add.
+#ifdef MORPH_CLIENT_ONLY
+#define BRIDGE_ADD_EFFECTS(A, ...)
+#else
+#define BRIDGE_ADD_EFFECTS(A, ...)                                                          \
+    namespace {                                                                             \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_added_effects_reg_, __COUNTER__) = \
+        morph::effects::detail::registerAddedEffectsOnce<A, __VA_ARGS__>();                 \
     }
 #endif
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-anonymous-namespace-in-header,cert-dcl59-cpp)

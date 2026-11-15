@@ -263,8 +263,9 @@ TEST_CASE("Hypothesis 1: in one shared transaction, a failure between the halves
 }
 
 // What each way keeps of the ledger's own action: its authorization, its effect on a watching connection, its journal
-// entry. The control is billing's own effect, which both keep. Mutation: declare RecordPosting with no effect (the
-// dispatched case's Ledger_Entry check fails).
+// entry. The control is billing's own effect, which both keep. The ledger's effect reaches a watcher in both ways: the
+// dispatched one runs the ledger's action, and the shared transaction's is declared by the app that composes billing
+// and the ledger. Mutation: declare RecordPosting with no effect (the dispatched case's Ledger_Entry check fails).
 TEST_CASE("Hypothesis 1: what the shared transaction gives up of the ledger's action",
           "[lims][billing][posting][h1]") {
     auto const mode = GENERATE(PostingMode::Dispatched, PostingMode::SharedTransaction);
@@ -304,7 +305,7 @@ TEST_CASE("Hypothesis 1: what the shared transaction gives up of the ledger's ac
     CHECK(ServerConnection::eventually([&] { return clerk->heardOf("Billing_Invoice"); }));
     bool const ledgerHeard = ServerConnection::eventually([&] { return accountant->heardOf("Ledger_Entry"); },
                                                           std::chrono::milliseconds{1500});
-    CHECK(ledgerHeard == dispatched);
+    CHECK(ledgerHeard);
     CHECK(journal->holds("InvoiceModel", "PostInvoice"));
     CHECK(journal->holds("LedgerModel", "RecordPosting") == dispatched);
 }
