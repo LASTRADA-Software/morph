@@ -119,6 +119,7 @@ bool ScreenHead::submit(std::string_view toolId) {
     return false;
 }
 
+// NOLINTNEXTLINE(performance-unnecessary-value-param): the signature is the virtual's.
 void ScreenHandle::save(std::function<void(bool clean)> done) {
     if (done) {
         done(false);
@@ -237,8 +238,10 @@ std::expected<void, MountError> DocumentScreenHost::remount(ScreenHandle& handle
                                                             std::shared_ptr<Document const> document) {
     auto* const own = dynamic_cast<Handle*>(&handle);
     if (own == nullptr || !document) {
-        return std::unexpected(MountError{.screenId = document ? document->id : std::string{},
-                                          .reason = "not a document screen of this host"});
+        return std::unexpected(MountError{
+            .screenId = document ? document->id : std::string{},
+            .reason = "not a document screen of this host",
+        });
     }
     return own->remount(_interpreter, std::move(document), *_options.backend);
 }
@@ -255,11 +258,13 @@ std::optional<chat::TurnRequest> DocumentScreenHost::chatContext(ScreenHandle& h
     context.identity = identityKey(handle.identity().peek()).value_or(std::string{});
     context.paramsJson = glz::write_json(valueToJson(Value{own->params()})).value_or(std::string{"{}"});
     for (Screen::BoundAlias const& alias : screen->boundAliases()) {
-        context.models.push_back(chat::ModelRef{.path = alias.decl->path,
-                                                .alias = alias.decl->name,
-                                                .modelType = alias.decl->type,
-                                                .instanceId = alias.facts.instanceId,
-                                                .primary = alias.facts.primary});
+        context.models.push_back(chat::ModelRef{
+            .path = alias.decl->path,
+            .alias = alias.decl->name,
+            .modelType = alias.decl->type,
+            .instanceId = alias.facts.instanceId,
+            .primary = alias.facts.primary,
+        });
     }
     return context;
 }
@@ -294,10 +299,11 @@ void DocumentScreenHost::settleCall(std::string_view screenId, ParamMap const& p
     std::shared_ptr<Call> const call = std::move(*found);
     _unclaimed.erase(found);
     if (_options.diagnostics) {
-        _options.diagnostics(
-            Refusal{.document = std::string{screenId},
-                    .path = {},
-                    .reason = "navigate to " + std::string{screenId} + " mounted no screen; its call was cancelled"});
+        _options.diagnostics(Refusal{
+            .document = std::string{screenId},
+            .path = {},
+            .reason = "navigate to " + std::string{screenId} + " mounted no screen; its call was cancelled",
+        });
     }
     call->answer(std::nullopt);
 }
@@ -579,11 +585,13 @@ bool DocumentScreenHost::navigate(NavigateRequest const& request, std::function<
     forwarded.call = onResult || onCancel;
     if (forwarded.call) {
         ValueRecord const* const params = request.params.asRecord();
-        _unclaimed.push_back(std::make_shared<Call>(Call{.screen = request.screen,
-                                                         .params = params == nullptr ? ParamMap{} : *params,
-                                                         .onResult = std::move(onResult),
-                                                         .onCancel = std::move(onCancel),
-                                                         .answered = false}));
+        _unclaimed.push_back(std::make_shared<Call>(Call{
+            .screen = request.screen,
+            .params = params == nullptr ? ParamMap{} : *params,
+            .onResult = std::move(onResult),
+            .onCancel = std::move(onCancel),
+            .answered = false,
+        }));
     }
     onNavigate(forwarded);
     return true;
