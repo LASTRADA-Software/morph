@@ -1092,6 +1092,30 @@ TEST_CASE("interpreter control: a text's align reaches the backend only when the
     CHECK_FALSE(h.backend.hasProp(h.byTestId("Text", "none"), "align"));
 }
 
+// Mutation: leave any of `headNote`, `footerNote`, `closeButton` out of the dialog or drawer lowering (its property is
+// never sent), or bind the drawer's from the dialog's keys.
+TEST_CASE("interpreter control: a dialog's and a drawer's notes and close control are sent", "[ui][interpreter]") {
+    Harness h;
+    auto const screen = h.mount(R"({
+      "vocab": "ui/1", "id": "notes",
+      "state": { "shown": { "init": true } },
+      "view": { "kind": "column", "children": [
+        { "kind": "dialog", "id": "a", "testId": "a", "title": "Edit", "open": true, "headNote": "3 of 9",
+          "footerNote": "Saved just now", "dismissLabel": "Done", "closeButton": { "ref": "shown" }, "children": [] },
+        { "kind": "drawer", "id": "b", "testId": "b", "title": "Filters", "open": true, "headNote": "beta",
+          "footerNote": "Unsaved", "closeButton": true, "dismissLabel": "Hide", "children": [] } ] } })");
+    int const dialog = h.byTestId("Dialog", "a");
+    CHECK(h.backend.prop(dialog, "headNote") == "3 of 9");
+    CHECK(h.backend.prop(dialog, "footerNote") == "Saved just now");
+    CHECK(h.backend.prop(dialog, "closeButton") == "true");
+    CHECK(h.backend.prop(dialog, "dismissLabel") == "Done");
+    int const drawer = h.byTestId("Drawer", "b");
+    CHECK(h.backend.prop(drawer, "headNote") == "beta");
+    CHECK(h.backend.prop(drawer, "footerNote") == "Unsaved");
+    CHECK(h.backend.prop(drawer, "closeButton") == "true");
+    CHECK(h.backend.prop(drawer, "dismissLabel") == "Hide");
+}
+
 // Mutation: leave the mount's setSheet out for a bound `sheet` (no `sheet` property at all).
 TEST_CASE("interpreter control: a dialog's sheet follows the width class, and its dismiss label is sent",
           "[ui][interpreter]") {

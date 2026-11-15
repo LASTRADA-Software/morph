@@ -7138,6 +7138,10 @@ Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementSt
             .child = std::move(body),
             .onDismiss = std::move(onDismiss),
             .side = side && textOf(once(ctx, side), ctx.scope->formatting()) == "start" ? Side::Start : Side::End,
+            .headNote = bindProp<std::string>(ctx, node.prop("headNote"), std::string{}, stringOf),
+            .footerNote = bindProp<std::string>(ctx, node.prop("footerNote"), std::string{}, stringOf),
+            .closeButton = bindProp<bool>(ctx, node.prop("closeButton"), false, boolOf),
+            .dismissLabel = bindProp<std::string>(ctx, node.prop("dismissLabel"), std::string{"Close"}, stringOf),
         };
         if (ExprPtr const spans = node.prop("descriptionSpans")) {
             spec.descriptionSpans = spansProp(ctx, spans);
@@ -7154,6 +7158,9 @@ Node ScreenCore::lowerDialog(DocNode const& node, LowerCtx const& ctx, ElementSt
         .common = {},  // NOLINT(readability-trailing-comma): the comma ends the designator, not the empty braces.
         .sheet = bindProp<bool>(ctx, node.prop("sheet"), false, boolOf),
         .dismissLabel = bindProp<std::string>(ctx, node.prop("dismissLabel"), std::string{"Close"}, stringOf),
+        .headNote = bindProp<std::string>(ctx, node.prop("headNote"), std::string{}, stringOf),
+        .footerNote = bindProp<std::string>(ctx, node.prop("footerNote"), std::string{}, stringOf),
+        .closeButton = bindProp<bool>(ctx, node.prop("closeButton"), false, boolOf),
     };
     if (ExprPtr const spans = node.prop("descriptionSpans")) {
         spec.descriptionSpans = spansProp(ctx, spans);

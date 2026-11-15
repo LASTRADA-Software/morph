@@ -18,6 +18,14 @@ MorphWidget {
     // 0 start, 1 end; fixed at creation.
     property int side: 0
     property bool programmatic: false
+    // The label of the head's dismiss control, shown by `closeButton`.
+    property string dismissLabel: "Close"
+    // A muted note trailing on the title's row.
+    property string headNote: ""
+    // A muted note leading in the footer's row.
+    property string footerNote: ""
+    // Whether the title's row holds a dismiss control.
+    property bool closeButton: false
     readonly property Item content: column
     // Where C++ puts the drawer's footer, under the content: a restyle lays it out where it wants.
     readonly property Item footer: footerArea
@@ -123,13 +131,63 @@ MorphWidget {
             Accessible.name: root.accessibleName
             Accessible.description: root.description
 
-            Label {
-                textFormat: Text.PlainText
-                id: titleLabel
-                font: Theme.headingFont
-                color: Theme.cardScheme.text
-                visible: root.title !== ""
-                text: root.title
+            // The title, with the head note trailing, muted, and the close control after it.
+            RowLayout {
+                id: titleRow
+                objectName: "titleRow"
+                visible: (root.title !== "" || root.headNote !== "" || root.closeButton)
+                Layout.fillWidth: true
+                spacing: Theme.spaceOf(2)
+
+                Label {
+                    textFormat: Text.PlainText
+                    id: titleLabel
+                    Layout.fillWidth: true
+                    font: Theme.headingFont
+                    color: Theme.cardScheme.text
+                    elide: Text.ElideRight
+                    visible: root.title !== ""
+                    text: root.title
+                }
+
+                Label {
+                    id: headNoteLabel
+                    objectName: "headNote"
+                    textFormat: Text.PlainText
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    Layout.fillWidth: root.title === ""
+                    horizontalAlignment: Text.AlignRight
+                    font: Theme.bodyFont
+                    color: Theme.cardScheme.muted
+                    elide: Text.ElideRight
+                    visible: root.headNote !== ""
+                    text: root.headNote
+                }
+
+                Button {
+                    id: headClose
+                    objectName: "headClose"
+                    visible: root.closeButton
+                    flat: true
+                    text: root.dismissLabel
+                    font: Theme.bodyFont
+                    leftPadding: Theme.spaceOf(1)
+                    rightPadding: Theme.spaceOf(1)
+                    palette.buttonText: Theme.cardScheme.accent
+                    contentItem: MorphPlainContent {
+                        control: headClose
+                        color: headClose.palette.buttonText
+                    }
+                    background: MorphButtonBackground {
+                        scheme: Theme.cardScheme
+                        ghost: true
+                        hovered: headClose.hovered
+                        pressed: headClose.down
+                        focused: headClose.visualFocus
+                    }
+                    Accessible.name: root.dismissLabel
+                    onClicked: drawer.close()
+                }
             }
 
             Label {
@@ -169,7 +227,7 @@ MorphWidget {
                 id: scroll
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.maximumHeight: Math.max(0, drawer.height - titleLabel.height - footerArea.height -
+                Layout.maximumHeight: Math.max(0, drawer.height - (titleRow.visible ? titleRow.height : 0) - footerArea.height -
                                (footerRule.visible ? footerRule.height + contentColumn.spacing + 2 * contentColumn.ruleMargin : 0) -
                                                contentColumn.spacing * 2 - (headRule.visible ? 2 * contentColumn.ruleMargin : 0) -
                                                (root.description === "" ? 0 : descriptionLabel.height +
@@ -204,6 +262,8 @@ MorphWidget {
             ColumnLayout {
                 id: footerArea
                 Layout.fillWidth: true
+                // The footer reads the note from the area it sits in.
+                property string footerNote: root.footerNote
                 visible: {
                     for (let i = 0; i < footerArea.children.length; ++i) {
                         if ((footerArea.children[i] as MorphFooter)?.holding)

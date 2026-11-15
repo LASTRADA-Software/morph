@@ -4536,8 +4536,16 @@ struct DialogOptions {
     /// @brief A dialog's condition for being drawn as a sheet that fills the window, such as
     ///        `eq(env("widthClass"), "compact")`; a drawer takes none.
     AnyHandle sheet;
-    /// @brief The label of a sheet's dismiss control; absent is "Close". Only with `sheet`.
+    /// @brief The label of the dismiss control of a sheet or of `closeButton`; absent is "Close". Only with one of
+    ///        them.
     AnyHandle dismissLabel;
+    /// @brief A short muted note on the title's row, against the trailing edge.
+    AnyHandle headNote;
+    /// @brief A short muted note leading in the footer's row, opposite the actions.
+    AnyHandle footerNote;
+    /// @brief A condition: while true a dismiss control, labelled `dismissLabel`, is drawn on the title's row. A
+    ///        sheet's head holds one already, so it adds nothing while `sheet` holds.
+    AnyHandle closeButton;
 };
 
 namespace detail {
@@ -4572,6 +4580,9 @@ namespace detail {
     return node.put("side", options.side)
         .put("sheet", options.sheet)
         .put("dismissLabel", options.dismissLabel)
+        .put("headNote", options.headNote)
+        .put("footerNote", options.footerNote)
+        .put("closeButton", options.closeButton)
         .scope(scope)
         .put("children", children)
         .put("default", options.defaultAction)
