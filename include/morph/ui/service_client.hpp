@@ -8,6 +8,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <morph/export.hpp>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -80,65 +81,37 @@ public:
 };
 
 /// @brief An `IBundleStore` in memory: it lasts as long as the process. Safe to call from any thread.
-class MemoryBundleStore final : public IBundleStore {
+class MORPH_API MemoryBundleStore final : public IBundleStore {
 public:
     /// @brief Reads a file.
     /// @param hash The file's content hash.
     /// @return Its bytes, or nothing.
-    [[nodiscard]] std::optional<std::string> get(std::string_view hash) const override {
-        std::scoped_lock const lock{_mutex};
-        auto const found = _files.find(hash);
-        if (found == _files.end()) {
-            return std::nullopt;
-        }
-        return found->second;
-    }
+    [[nodiscard]] std::optional<std::string> get(std::string_view hash) const override;
 
     /// @brief Keeps a file.
     /// @param hash  The file's content hash.
     /// @param bytes The file.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the key, then the value.
-    void put(std::string const& hash, std::string bytes) override {
-        std::scoped_lock const lock{_mutex};
-        _files.insert_or_assign(hash, std::move(bytes));
-    }
+    void put(std::string const& hash, std::string bytes) override;
 
     /// @brief Drops a file.
     /// @param hash The file's content hash.
-    void remove(std::string_view hash) override {
-        std::scoped_lock const lock{_mutex};
-        if (auto const found = _files.find(hash); found != _files.end()) {
-            _files.erase(found);
-        }
-    }
+    void remove(std::string_view hash) override;
 
     /// @brief The digest of an application's last verified bundle.
     /// @param application The application's id.
     /// @return The digest, or nothing.
-    [[nodiscard]] std::optional<std::string> lastDigest(std::string_view application) const override {
-        std::scoped_lock const lock{_mutex};
-        auto const found = _digests.find(application);
-        if (found == _digests.end()) {
-            return std::nullopt;
-        }
-        return found->second;
-    }
+    [[nodiscard]] std::optional<std::string> lastDigest(std::string_view application) const override;
 
     /// @brief Records an application's last verified bundle.
     /// @param application The application's id.
     /// @param digest      The manifest's content hash.
     // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the key, then the value.
-    void setLastDigest(std::string const& application, std::string digest) override {
-        std::scoped_lock const lock{_mutex};
-        _digests.insert_or_assign(application, std::move(digest));
-    }
+    void setLastDigest(std::string const& application, std::string digest) override;
 
     /// @brief How many files the store holds.
     /// @return The count.
-    [[nodiscard]] std::size_t size() const {
-        std::scoped_lock const lock{_mutex};
-        return _files.size();
-    }
+    [[nodiscard]] std::size_t size() const;
 
 private:
     mutable std::mutex _mutex;
@@ -147,38 +120,22 @@ private:
 };
 
 /// @brief A content-addressed cache that hands out only bytes that hash to the hash they are asked for.
-class VerifiedCache {
+class MORPH_API VerifiedCache {
 public:
     /// @brief A cache over @p store.
     /// @param store The store; shared with the caller.
     /// @throws std::invalid_argument if @p store is null.
-    explicit VerifiedCache(std::shared_ptr<IBundleStore> store) : _store{std::move(store)} {
-        if (!_store) {
-            throw std::invalid_argument("VerifiedCache: the store is null");
-        }
-    }
+    explicit VerifiedCache(std::shared_ptr<IBundleStore> store);
 
     /// @brief Reads a file, verified. A stored file that does not hash to @p hash is dropped and reads as a miss.
     /// @param hash The content hash.
     /// @return The bytes, or nothing.
-    [[nodiscard]] std::optional<std::string> get(std::string const& hash) {
-        auto bytes = _store->get(hash);
-        if (bytes && contentHash(*bytes) != hash) {
-            ::morph::log::logWarn("[ui-cache] dropped {}: the stored bytes do not hash to it", hash);
-            _store->remove(hash);
-            return std::nullopt;
-        }
-        return bytes;
-    }
+    [[nodiscard]] std::optional<std::string> get(std::string const& hash);
 
     /// @brief Keeps a file under its content hash.
     /// @param bytes The bytes.
     /// @return The hash they are kept under.
-    std::string put(std::string bytes) {
-        std::string hash = contentHash(bytes);
-        _store->put(hash, std::move(bytes));
-        return hash;
-    }
+    std::string put(std::string bytes);
 
     /// @brief The store.
     /// @return It.
@@ -220,25 +177,8 @@ using Exchange = std::function<void(::morph::wire::Envelope request, std::functi
 ///                sent through the exchange, so a caller that may destroy it first guards the exchange itself.
 /// @param cbExec  The executor replies are delivered on: the interpreter runtime's owner. Borrowed.
 /// @return The exchange.
-[[nodiscard]] inline Exchange exchangeOver(::morph::backend::IEnvelopeTransport& backend MORPH_LIFETIMEBOUND,
-                                           ::morph::exec::IExecutor& cbExec MORPH_LIFETIMEBOUND) {
-    return [transport = &backend, owner = &cbExec](::morph::wire::Envelope request,
-                                                   std::function<void(ExchangeReply reply)> done) {
-        auto const answer = std::make_shared<std::function<void(ExchangeReply reply)>>(std::move(done));
-        transport->request(std::move(request), *owner)
-            .thenDetached([answer](::morph::wire::Envelope const& reply) { (*answer)(reply); })
-            .onErrorDetached([answer](std::exception_ptr const& failure) {
-                std::string message = "the request was not delivered";
-                try {
-                    std::rethrow_exception(failure);
-                } catch (std::exception const& error) {
-                    message = error.what();
-                } catch (...) {  // NOLINT(bugprone-empty-catch): the default message stands for a non-std failure
-                }
-                (*answer)(std::unexpected(std::move(message)));
-            });
-    };
-}
+[[nodiscard]] MORPH_API Exchange exchangeOver(::morph::backend::IEnvelopeTransport& backend MORPH_LIFETIMEBOUND,
+                                              ::morph::exec::IExecutor& cbExec MORPH_LIFETIMEBOUND);
 
 /// @brief Opens an application's bundle through the UI service, verifying everything it fetches.
 ///
@@ -247,19 +187,14 @@ using Exchange = std::function<void(::morph::wire::Envelope request, std::functi
 /// use that the cache does not hold, all at once, verifying each. A file that does not hash to its manifest entry,
 /// or a manifest that does not hash to the digest, refuses the whole bundle (`Unverified`). An unchanged manifest
 /// fetches nothing.
-class UiClient {
+class MORPH_API UiClient {
 public:
     /// @brief A client.
     /// @param exchange The transport.
     /// @param client   What the client speaks and carries, sent with `ui-hello`.
     /// @param store    Where verified files are kept.
     /// @throws std::invalid_argument if @p exchange is empty or @p store is null.
-    UiClient(Exchange exchange, HelloRequest client, std::shared_ptr<IBundleStore> store)
-        : _shared{std::make_shared<Shared>(std::move(exchange), std::move(client), VerifiedCache{std::move(store)})} {
-        if (!_shared->exchange) {
-            throw std::invalid_argument("UiClient: the exchange is empty");
-        }
-    }
+    UiClient(Exchange exchange, HelloRequest client, std::shared_ptr<IBundleStore> store);
 
     /// @brief What `open` delivers.
     using Done = std::function<void(std::expected<LoadedBundle, ConnectError>)>;
@@ -268,10 +203,7 @@ public:
     ///        synchronous exchange calls it before `open` returns.
     /// @param session The session every request carries: the principal's token, or none before sign-in.
     /// @param done    Called with the bundle, or why there is none.
-    void open(::morph::session::Context session, Done done) const {
-        auto const run = std::make_shared<Run>(_shared, std::move(session), std::move(done));
-        sendHello(run);
-    }
+    void open(::morph::session::Context session, Done done) const;
 
     /// @brief What `poll` delivers: the changed bundle, nothing when the digest is the one already held, or why
     ///        there is none.
@@ -284,55 +216,13 @@ public:
     /// @param knownDigest The digest of the bundle the client has, as `HelloReply::digest` spells it.
     /// @param done        Called with the changed bundle, with nothing when the digest is unchanged, or with why the
     ///                    poll failed.
-    void poll(::morph::session::Context session, std::string knownDigest, PollDone done) const {
-        auto const answer = std::make_shared<PollDone>(std::move(done));
-        auto const run = std::make_shared<Run>(_shared, std::move(session),
-                                               [answer](std::expected<LoadedBundle, ConnectError> opened) {
-                                                   if (!opened) {
-                                                       (*answer)(std::unexpected(std::move(opened.error())));
-                                                       return;
-                                                   }
-                                                   (*answer)(std::optional<LoadedBundle>{std::move(*opened)});
-                                               });
-        run->knownDigest = std::move(knownDigest);
-        run->unchanged = [answer] { (*answer)(std::optional<LoadedBundle>{}); };
-        sendHello(run);
-    }
+    void poll(::morph::session::Context session, std::string knownDigest, PollDone done) const;
 
     /// @brief Rebuilds the last bundle this store verified for @p application, without a connection. Files the
     ///        store no longer holds, or that no longer verify, are left out; the catalog is empty.
     /// @param application The application's id.
     /// @return The bundle, or `Unreachable` when no verified manifest is cached.
-    [[nodiscard]] std::expected<LoadedBundle, ConnectError> openOffline(std::string_view application) const {
-        auto const digest = _shared->cache.store().lastDigest(application);
-        if (!digest) {
-            return std::unexpected(
-                ConnectError{.kind = ConnectError::Kind::Unreachable,
-                             .message = "no verified bundle of `" + std::string{application} + "` is cached"});
-        }
-        auto const text = _shared->cache.get(*digest);
-        if (!text) {
-            return std::unexpected(ConnectError{
-                .kind = ConnectError::Kind::Unreachable,
-                .message = "the cached manifest of `" + std::string{application} + "` is gone or does not verify"});
-        }
-        auto manifest = parseManifest(*text);
-        if (!manifest) {
-            return std::unexpected(ConnectError{.kind = ConnectError::Kind::Unsupported, .message = manifest.error()});
-        }
-        LoadedBundle loaded;
-        loaded.manifest = std::move(*manifest);
-        for (ManifestFile const& file : loaded.manifest.files) {
-            if (!usable(_shared->client, file.kind)) {
-                continue;
-            }
-            if (auto bytes = _shared->cache.get(file.hash)) {
-                loaded.files.emplace(file.hash, std::move(*bytes));
-            }
-        }
-        assemble(loaded, *digest);
-        return loaded;
-    }
+    [[nodiscard]] std::expected<LoadedBundle, ConnectError> openOffline(std::string_view application) const;
 
 private:
     /// @brief What the client and every run share; a run holds it, so a run outlives the client that started it.
@@ -372,85 +262,25 @@ private:
     };
 
     /// @brief Whether a client fetches files of @p kind: every kind it knows, components only when it loads them.
-    [[nodiscard]] static bool usable(HelloRequest const& client, std::string_view kind) {
-        if (kind == kComponentFile) {
-            return client.components;
-        }
-        return kind == kScreenFile || kind == kAppFile || kind == kThemeFile || kind == kMessagesFile ||
-               kind == kIconFile;
-    }
+    [[nodiscard]] static bool usable(HelloRequest const& client, std::string_view kind);
 
     /// @brief Fills the bundle the shell reads from the verified files.
-    static void assemble(LoadedBundle& loaded, std::string const& digest) {
-        loaded.bundle.applicationId = loaded.manifest.application;
-        loaded.bundle.manifestDigest = digest.substr(kHashPrefix.size());
-        for (ManifestFile const& file : loaded.manifest.files) {
-            if (file.kind != kScreenFile && file.kind != kAppFile && file.kind != kThemeFile) {
-                continue;
-            }
-            if (auto const found = loaded.files.find(file.hash); found != loaded.files.end()) {
-                auto& into = file.kind == kThemeFile ? loaded.bundle.themes : loaded.bundle.documents;
-                into.insert_or_assign(file.id, found->second);
-            }
-        }
-        // The icon set the theme index names, each icon's SVG by its name; a build refuses an index naming a file
-        // the bundle lacks.
-        for (auto const& [fileId, text] : loaded.bundle.themes) {
-            static_cast<void>(fileId);
-            if (!isThemeIndex(text)) {
-                continue;
-            }
-            auto const index = parseThemeIndex(text);
-            if (!index) {
-                continue;
-            }
-            for (auto const& [name, iconId] : index->icons) {
-                auto const file = std::ranges::find_if(loaded.manifest.files, [&iconId](ManifestFile const& listed) {
-                    return listed.kind == kIconFile && listed.id == iconId;
-                });
-                if (file == loaded.manifest.files.end()) {
-                    continue;
-                }
-                if (auto const found = loaded.files.find(file->hash); found != loaded.files.end()) {
-                    loaded.bundle.icons.insert_or_assign(name, found->second);
-                }
-            }
-        }
-    }
+    static void assemble(LoadedBundle& loaded, std::string const& digest);
 
     /// @brief A request of @p kind carrying the run's session.
-    [[nodiscard]] static ::morph::wire::Envelope requestOf(std::shared_ptr<Run> const& run, std::string_view kind) {
-        ::morph::wire::Envelope request;
-        request.kind = std::string{kind};
-        request.session = run->session;
-        return request;
-    }
+    [[nodiscard]] static ::morph::wire::Envelope requestOf(std::shared_ptr<Run> const& run, std::string_view kind);
 
     /// @brief Sends the `ui-hello`.
-    static void sendHello(std::shared_ptr<Run> const& run) {
-        ::morph::wire::Envelope request = requestOf(run, kHelloKind);
-        request.body = detail::writeMessage(run->shared->client);
-        run->shared->exchange(std::move(request), [run](ExchangeReply reply) { onHello(run, std::move(reply)); });
-    }
+    static void sendHello(std::shared_ptr<Run> const& run);
 
     /// @brief Sends the `ui-catalog`.
-    static void sendCatalog(std::shared_ptr<Run> const& run) {
-        run->shared->exchange(requestOf(run, kCatalogKind),
-                              [run](ExchangeReply reply) { onCatalog(run, std::move(reply)); });
-    }
+    static void sendCatalog(std::shared_ptr<Run> const& run);
 
     /// @brief Sends a `ui-fetch` for @p hash.
     static void fetch(std::shared_ptr<Run> const& run, std::string const& hash,
-                      std::function<void(ExchangeReply)> then) {
-        ::morph::wire::Envelope request = requestOf(run, kFetchKind);
-        request.body = detail::writeMessage(FetchRequest{.hash = hash});
-        run->shared->exchange(std::move(request), std::move(then));
-    }
+                      std::function<void(ExchangeReply)> then);
 
-    static void fail(std::shared_ptr<Run> const& run, ConnectError error) {
-        ::morph::log::logWarn("[ui-fetch] {}", error.message);
-        run->done(std::unexpected(std::move(error)));
-    }
+    static void fail(std::shared_ptr<Run> const& run, ConnectError error);
 
     static void fail(std::shared_ptr<Run> const& run, ConnectError::Kind kind, std::string message) {
         fail(run, ConnectError{.kind = kind, .message = std::move(message)});
@@ -458,183 +288,25 @@ private:
 
     /// @brief The reply to a request, or the error it carries: a transport failure is `Unreachable`, an `err` is
     ///        `Refused` with the server's message.
-    [[nodiscard]] static std::expected<std::string, ConnectError> bodyOf(ExchangeReply reply) {
-        if (!reply) {
-            return std::unexpected(ConnectError{.kind = ConnectError::Kind::Unreachable, .message = reply.error()});
-        }
-        if (reply->kind != "ok") {
-            return std::unexpected(
-                ConnectError{.kind = ConnectError::Kind::Refused, .message = std::move(reply->message)});
-        }
-        return std::move(reply->body);
-    }
+    [[nodiscard]] static std::expected<std::string, ConnectError> bodyOf(ExchangeReply reply);
 
     /// @brief A fetched file, verified against its hash, or why it is refused.
     [[nodiscard]] static std::expected<std::string, ConnectError> verified(ExchangeReply reply,
-                                                                           Expected const& expected) {
-        auto body = bodyOf(std::move(reply));
-        if (!body) {
-            body.error().message = expected.what + ": " + body.error().message;
-            return body;
-        }
-        if (body->size() > kMaxFileBytes) {
-            return std::unexpected(ConnectError{
-                .kind = ConnectError::Kind::Unverified,
-                .message = expected.what + " is larger than " + std::to_string(kMaxFileBytes) + " bytes"});
-        }
-        if (std::string const actual = contentHash(*body); actual != expected.hash) {
-            return std::unexpected(ConnectError{.kind = ConnectError::Kind::Unverified,
-                                                .message = expected.what + " does not match its hash (expected " +
-                                                           expected.hash + ", got " + actual + ")"});
-        }
-        return body;
-    }
+                                                                           Expected const& expected);
 
-    static void onHello(std::shared_ptr<Run> const& run, ExchangeReply reply) {
-        auto body = bodyOf(std::move(reply));
-        if (!body) {
-            ConnectError error = std::move(body.error());
-            if (error.message == "unknown envelope kind: " + std::string{kHelloKind}) {
-                error.kind = ConnectError::Kind::NoUiService;
-                error.message = "the server serves no UI";
-            } else if (error.message.starts_with("missing vocabulary: ")) {
-                error.kind = ConnectError::Kind::Unsupported;
-            }
-            fail(run, std::move(error));
-            return;
-        }
-        auto hello = parseHelloReply(*body);
-        if (!hello) {
-            fail(run, ConnectError::Kind::Unsupported, std::move(hello.error()));
-            return;
-        }
-        HelloRequest const& client = run->shared->client;
-        for (std::string const& vocabulary : hello->vocabularies) {
-            if (std::ranges::find(client.vocabularies, vocabulary) == client.vocabularies.end()) {
-                fail(run, ConnectError::Kind::Unsupported,
-                     "the application needs the vocabulary " + vocabulary + ", which this client does not speak");
-                return;
-            }
-        }
-        if (run->unchanged && hello->digest == run->knownDigest) {
-            ::morph::log::logDebug("[ui-fetch] polling `{}`: digest {}, known {}, manifest unchanged",
-                                   hello->application, hello->digest, run->knownDigest);
-            run->unchanged();
-            return;
-        }
-        ::morph::log::logDebug("[ui-fetch] {} `{}`: digest {}, known {}, manifest {}",
-                               run->unchanged ? "polling" : "opening", hello->application, hello->digest,
-                               run->knownDigest.empty() ? std::string{"<none>"} : run->knownDigest,
-                               hello->digest == run->knownDigest ? "unchanged" : "changed");
-        run->loaded.hello = std::move(*hello);
-        std::string const& digest = run->loaded.hello.digest;
-        if (auto cached = run->shared->cache.get(digest)) {
-            onManifest(run, std::move(*cached));
-            return;
-        }
-        fetch(run, digest, [run](ExchangeReply fetched) {
-            auto text =
-                verified(std::move(fetched), Expected{.hash = run->loaded.hello.digest, .what = "the manifest"});
-            if (!text) {
-                fail(run, std::move(text.error()));
-                return;
-            }
-            onManifest(run, std::move(*text));
-        });
-    }
+    static void onHello(std::shared_ptr<Run> const& run, ExchangeReply reply);
 
-    static void onManifest(std::shared_ptr<Run> const& run, std::string text) {
-        auto manifest = parseManifest(text);
-        if (!manifest) {
-            fail(run, ConnectError::Kind::Unsupported, std::move(manifest.error()));
-            return;
-        }
-        static_cast<void>(run->shared->cache.put(std::move(text)));
-        run->loaded.manifest = std::move(*manifest);
-        sendCatalog(run);
-    }
+    static void onManifest(std::shared_ptr<Run> const& run, std::string text);
 
-    static void onCatalog(std::shared_ptr<Run> const& run, ExchangeReply reply) {
-        auto body = bodyOf(std::move(reply));
-        if (!body) {
-            fail(run, std::move(body.error()));
-            return;
-        }
-        auto catalog = parseCatalogReply(*body);
-        if (!catalog) {
-            fail(run, ConnectError::Kind::Unsupported, std::move(catalog.error()));
-            return;
-        }
-        run->loaded.catalog = std::move(*catalog);
-        std::vector<Expected> missing;
-        for (ManifestFile const& file : run->loaded.manifest.files) {
-            if (!wanted(run->shared->client, run->loaded.catalog, file)) {
-                continue;
-            }
-            if (auto cached = run->shared->cache.get(file.hash)) {
-                run->loaded.files.insert_or_assign(file.hash, std::move(*cached));
-            } else {
-                Expected expected{.hash = file.hash, .what = "the " + file.kind + " `" + file.id + "`"};
-                ::morph::log::logDebug("[ui-fetch] fetching {} ({})", expected.hash, expected.what);
-                missing.push_back(std::move(expected));
-            }
-        }
-        // One count for each fetch and one for this loop, so a synchronous exchange that answers every fetch
-        // before the next is sent cannot settle the run early.
-        run->pending = missing.size() + 1;
-        for (Expected& expected : missing) {
-            std::string const hash = expected.hash;
-            fetch(run, hash, [run, expected = std::move(expected)](ExchangeReply fetched) {
-                auto bytes = verified(std::move(fetched), expected);
-                {
-                    std::scoped_lock const lock{run->mutex};
-                    if (!bytes) {
-                        if (!run->failure) {
-                            run->failure = std::move(bytes.error());
-                        }
-                    } else {
-                        static_cast<void>(run->shared->cache.put(*bytes));
-                        run->loaded.files.insert_or_assign(expected.hash, std::move(*bytes));
-                    }
-                }
-                settle(run);
-            });
-        }
-        settle(run);
-    }
+    static void onCatalog(std::shared_ptr<Run> const& run, ExchangeReply reply);
 
     /// @brief Whether the run fetches @p file: a kind the client uses, and for a screen, one the catalog lists as
     ///        available or public, which is what the server serves this principal.
     [[nodiscard]] static bool wanted(HelloRequest const& client, CatalogReply const& catalog,
-                                     ManifestFile const& file) {
-        if (!usable(client, file.kind)) {
-            return false;
-        }
-        if (file.kind != kScreenFile) {
-            return true;
-        }
-        return std::ranges::any_of(catalog.entries, [&file](CatalogEntry const& entry) {
-            return entry.id == file.id && (entry.available || entry.isPublic);
-        });
-    }
+                                     ManifestFile const& file);
 
     /// @brief Counts one fetch, or the loop that sent them, as settled; the last delivers the run.
-    static void settle(std::shared_ptr<Run> const& run) {
-        {
-            std::scoped_lock const lock{run->mutex};
-            if (--run->pending != 0) {
-                return;
-            }
-        }
-        // Past the last count nothing else touches the run, so it is read without the lock.
-        if (run->failure) {
-            fail(run, std::move(*run->failure));
-            return;
-        }
-        assemble(run->loaded, run->loaded.hello.digest);
-        run->shared->cache.store().setLastDigest(run->loaded.hello.application, run->loaded.hello.digest);
-        run->done(std::move(run->loaded));
-    }
+    static void settle(std::shared_ptr<Run> const& run);
 
     std::shared_ptr<Shared> _shared;
 };
@@ -646,30 +318,7 @@ private:
 /// @param reply The reply, or why the transport could not deliver it.
 /// @return The value as JSON text, or why there is none: the transport's reason, the server's `err` message, or why
 ///         the reply body was refused.
-[[nodiscard]] inline std::expected<std::string, std::string> evaluationValue(ExchangeReply reply) {
-    if (!reply) {
-        return std::unexpected(std::move(reply.error()));
-    }
-    if (reply->kind != "ok") {
-        return std::unexpected(std::move(reply->message));
-    }
-    auto evaluated = parseEvaluateReply(reply->body);
-    if (!evaluated) {
-        return std::unexpected(std::move(evaluated.error()));
-    }
-    Json::object_t errors;
-    for (auto const& [field, message] : evaluated->errors) {
-        errors.insert_or_assign(field, Json(message));
-    }
-    auto& members = evaluated->body.get<Json::object_t>();
-    members.insert_or_assign("errors", Json(std::move(errors)));
-    members.insert_or_assign("ready", Json(evaluated->ready));
-    auto text = glz::write_json(evaluated->body);
-    if (!text) {
-        return std::unexpected("the ui-evaluate reply's body cannot be written");
-    }
-    return std::move(*text);
-}
+[[nodiscard]] MORPH_API std::expected<std::string, std::string> evaluationValue(ExchangeReply reply);
 
 /// @brief An evaluator over the UI service: each evaluation is one `ui-evaluate` request through @p exchange, and
 ///        resolves with `evaluationValue` of its reply. What `BridgeDispatcher` takes as its `Evaluator`.
@@ -677,30 +326,9 @@ private:
 /// @param session  The session every request carries.
 /// @param cbExec   The executor the completion is delivered on: the interpreter runtime's owner. Borrowed.
 /// @return The evaluator: the model's type id, the action id and its JSON body in, the query's value out.
-[[nodiscard]] inline std::function<::morph::async::Completion<std::string>(std::string const&, std::string const&,
-                                                                           std::string const&)>
-evaluatorOver(Exchange exchange, ::morph::session::Context session, ::morph::exec::IExecutor* cbExec) {
-    return [exchange = std::move(exchange), session = std::move(session), cbExec](
-               std::string const& typeId, std::string const& actionId, std::string const& bodyJson) {
-        auto [completion, promise] = ::morph::async::Completion<std::string>::makeSettleable(cbExec);
-        auto settle = std::make_shared<decltype(promise)>(std::move(promise));
-        ::morph::wire::Envelope request;
-        request.kind = std::string{kEvaluateKind};
-        request.session = session;
-        request.modelType = typeId;
-        request.actionType = actionId;
-        request.body = bodyJson;
-        exchange(std::move(request), [settle](ExchangeReply reply) {
-            auto value = evaluationValue(std::move(reply));
-            if (value) {
-                settle->resolve(std::move(*value));
-            } else {
-                settle->reject(std::make_exception_ptr(std::runtime_error{value.error()}));
-            }
-        });
-        return std::move(completion);
-    };
-}
+[[nodiscard]] MORPH_API
+    std::function<::morph::async::Completion<std::string>(std::string const&, std::string const&, std::string const&)>
+    evaluatorOver(Exchange exchange, ::morph::session::Context session, ::morph::exec::IExecutor* cbExec);
 
 /// @brief A watcher over the server (spec 8 §7): each `watch` or `unwatch` is one request of that kind through
 ///        @p exchange, carrying the session @p currentSession returns when it is sent. What `SessionOptions::watcher`
@@ -713,29 +341,9 @@ evaluatorOver(Exchange exchange, ::morph::session::Context session, ::morph::exe
 /// @param cbExec         The executor the completion is delivered on: the interpreter runtime's owner. Borrowed.
 /// @return The watcher: the kind and the `WatchBody` JSON in; the reply body out, or the transport's or the
 ///         server's reason as the failure.
-[[nodiscard]] inline std::function<::morph::async::Completion<std::string>(std::string const&, std::string const&)>
+[[nodiscard]] MORPH_API std::function<::morph::async::Completion<std::string>(std::string const&, std::string const&)>
 watcherOver(Exchange exchange, std::function<::morph::session::Context()> currentSession,
-            ::morph::exec::IExecutor* cbExec) {
-    return [exchange = std::move(exchange), currentSession = std::move(currentSession), cbExec](
-               std::string const& kind, std::string const& bodyJson) {
-        auto [completion, promise] = ::morph::async::Completion<std::string>::makeSettleable(cbExec);
-        auto settle = std::make_shared<decltype(promise)>(std::move(promise));
-        ::morph::wire::Envelope request;
-        request.kind = kind;
-        request.session = currentSession ? currentSession() : ::morph::session::Context{};
-        request.body = bodyJson;
-        exchange(std::move(request), [settle](ExchangeReply reply) {
-            if (!reply) {
-                settle->reject(std::make_exception_ptr(std::runtime_error{reply.error()}));
-            } else if (reply->kind != "ok") {
-                settle->reject(std::make_exception_ptr(std::runtime_error{reply->message}));
-            } else {
-                settle->resolve(std::move(reply->body));
-            }
-        });
-        return std::move(completion);
-    };
-}
+            ::morph::exec::IExecutor* cbExec);
 
 /// @brief A file a download brought back.
 struct DownloadedFile {
@@ -752,18 +360,13 @@ struct DownloadedFile {
 ///
 /// What it moves is bytes: reading the file the user picked is the platform's, and an application's
 /// `InterpreterHost::upload` reads it and hands the bytes here.
-class FileTransfer {
+class MORPH_API FileTransfer {
 public:
     /// @brief A transfer over @p exchange, its requests carrying @p session.
     /// @param exchange The transport.
     /// @param session  The session every request carries.
     /// @throws std::invalid_argument for an empty @p exchange.
-    FileTransfer(Exchange exchange, ::morph::session::Context session)
-        : _shared{std::make_shared<Shared>(Shared{.exchange = std::move(exchange), .session = std::move(session)})} {
-        if (!_shared->exchange) {
-            throw std::invalid_argument("FileTransfer: the exchange is empty");
-        }
-    }
+    FileTransfer(Exchange exchange, ::morph::session::Context session);
 
     /// @brief Uploads a file, authorised as the mutation that will reference it.
     /// @param info     Its name, type and size; `size` is taken from @p bytes.
@@ -774,42 +377,14 @@ public:
     /// @param done     Called once with the file's reference, or why the upload failed.
     void upload(FileInfo info, std::string bytes, std::string model, std::string action,
                 std::function<void(double)> progress,
-                std::function<void(std::expected<std::string, std::string>)> done) const {
-        auto const run = std::make_shared<Upload>(Upload{.shared = _shared,
-                                                         .bytes = std::move(bytes),
-                                                         .upload = {},
-                                                         .progress = std::move(progress),
-                                                         .done = std::move(done)});
-        FileRequest begin;
-        begin.op = "begin";
-        begin.name = std::move(info.name);
-        begin.type = std::move(info.type);
-        begin.size = run->bytes.size();
-        begin.model = std::move(model);
-        begin.action = std::move(action);
-        send(*_shared, begin, [run](std::expected<FileReply, std::string> reply) {
-            if (!reply || !reply->upload) {
-                run->fail(reply ? std::string{"the ui-file begin reply has no upload id"} : std::move(reply.error()));
-                return;
-            }
-            run->upload = std::move(*reply->upload);
-            sendChunk(run, 0);
-        });
-    }
+                std::function<void(std::expected<std::string, std::string>)> done) const;
 
     /// @brief Downloads a file by its reference.
     /// @param ref      The reference a reply carried.
     /// @param progress Called with 0 to 1 after each chunk; may be empty.
     /// @param done     Called once with the file, or why the download failed.
     void download(std::string ref, std::function<void(double)> progress,
-                  std::function<void(std::expected<DownloadedFile, std::string>)> done) const {
-        auto const run = std::make_shared<Download>(Download{.shared = _shared,
-                                                             .ref = std::move(ref),
-                                                             .file = {},
-                                                             .progress = std::move(progress),
-                                                             .done = std::move(done)});
-        readChunk(run);
-    }
+                  std::function<void(std::expected<DownloadedFile, std::string>)> done) const;
 
 private:
     struct Shared {
@@ -817,18 +392,14 @@ private:
         ::morph::session::Context session;
     };
 
-    struct Upload {
+    struct MORPH_API Upload {
         std::shared_ptr<Shared> shared;
         std::string bytes;
         std::string upload;
         std::function<void(double)> progress;
         std::function<void(std::expected<std::string, std::string>)> done;
 
-        void fail(std::string reason) const {
-            if (done) {
-                done(std::unexpected(std::move(reason)));
-            }
-        }
+        void fail(std::string reason) const;
     };
 
     struct Download {
@@ -841,94 +412,13 @@ private:
 
     /// Sends one `ui-file` request and hands its reply body, or why there is none, to @p then.
     static void send(Shared const& shared, FileRequest const& request,
-                     std::function<void(std::expected<FileReply, std::string>)> then) {
-        ::morph::wire::Envelope envelope;
-        envelope.kind = std::string{kFileKind};
-        envelope.session = shared.session;
-        envelope.body = detail::writeMessage(request);
-        shared.exchange(std::move(envelope), [then = std::move(then)](ExchangeReply reply) {
-            if (!reply) {
-                then(std::unexpected(std::move(reply.error())));
-                return;
-            }
-            if (reply->kind != "ok") {
-                then(std::unexpected(std::move(reply->message)));
-                return;
-            }
-            then(parseFileReply(reply->body));
-        });
-    }
+                     std::function<void(std::expected<FileReply, std::string>)> then);
 
     /// Sends the chunk at @p offset, then the next, then `end`.
-    static void sendChunk(std::shared_ptr<Upload> const& run, std::size_t offset) {
-        if (offset >= run->bytes.size()) {
-            FileRequest end;
-            end.op = "end";
-            end.upload = run->upload;
-            send(*run->shared, end, [run](std::expected<FileReply, std::string> reply) {
-                if (!reply || !reply->ref) {
-                    run->fail(reply ? std::string{"the ui-file end reply has no reference"}
-                                    : std::move(reply.error()));
-                    return;
-                }
-                if (run->done) {
-                    run->done(std::move(*reply->ref));
-                }
-            });
-            return;
-        }
-        FileRequest chunk;
-        chunk.op = "chunk";
-        chunk.upload = run->upload;
-        chunk.offset = offset;
-        std::string_view const all{run->bytes};
-        chunk.data = ::morph::session::detail::base64UrlEncode(all.substr(offset, kMaxFileChunkBytes));
-        send(*run->shared, chunk, [run](std::expected<FileReply, std::string> reply) {
-            if (!reply || !reply->received) {
-                run->fail(reply ? std::string{"the ui-file chunk reply has no count"} : std::move(reply.error()));
-                return;
-            }
-            if (run->progress) {
-                run->progress(static_cast<double>(*reply->received) / static_cast<double>(run->bytes.size()));
-            }
-            sendChunk(run, *reply->received);
-        });
-    }
+    static void sendChunk(std::shared_ptr<Upload> const& run, std::size_t offset);
 
     /// Reads the next chunk, until the whole file has arrived.
-    static void readChunk(std::shared_ptr<Download> const& run) {
-        FileRequest read;
-        read.op = "read";
-        read.ref = run->ref;
-        read.offset = run->file.bytes.size();
-        send(*run->shared, read, [run](std::expected<FileReply, std::string> reply) {
-            std::optional<std::string> bytes;
-            if (reply && reply->data && reply->total) {
-                bytes = ::morph::session::detail::base64UrlDecode(*reply->data);
-            }
-            if (!bytes) {
-                if (run->done) {
-                    run->done(std::unexpected(reply ? std::string{"the ui-file read reply is malformed"}
-                                                    : std::move(reply.error())));
-                }
-                return;
-            }
-            run->file.bytes += *bytes;
-            run->file.name = reply->name.value_or("");
-            run->file.type = reply->type.value_or("");
-            std::size_t const total = *reply->total;
-            if (run->progress && total > 0) {
-                run->progress(static_cast<double>(run->file.bytes.size()) / static_cast<double>(total));
-            }
-            if (run->file.bytes.size() >= total || bytes->empty()) {
-                if (run->done) {
-                    run->done(std::move(run->file));
-                }
-                return;
-            }
-            readChunk(run);
-        });
-    }
+    static void readChunk(std::shared_ptr<Download> const& run);
 
     std::shared_ptr<Shared> _shared;
 };
