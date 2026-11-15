@@ -414,6 +414,7 @@ include(GenerateExportHeader)
 add_library(morph STATIC
     src/ui/interpreter.cpp
     src/ui/library.cpp
+    src/ui/service.cpp
 )
 add_library(morph::morph ALIAS morph)
 
