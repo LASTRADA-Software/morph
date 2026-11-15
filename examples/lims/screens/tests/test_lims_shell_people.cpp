@@ -34,12 +34,9 @@
 
 namespace {
 
-namespace ui = morph::ui::author;
 using lims::shelltest::kProbeHome;
 using lims::shelltest::kProbeLogin;
-using lims::shelltest::kScoped;
 using lims::shelltest::modulesBundle;
-using lims::shelltest::scopedBundle;
 using lims::shelltest::seedPeople;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
@@ -115,6 +112,26 @@ std::vector<std::string> searchHeadings(ScreenHarness& harness) {
     return headings;
 }
 
+/// @brief The position of the "German" entry in the menu's entries, which print as a bracketed, comma-separated list.
+/// @param items The menu's entries as the backend prints them.
+/// @return The entry's index.
+std::size_t germanEntryIndex(std::string const& items) {
+    std::size_t index = 0;
+    std::size_t start = 1;
+    for (; start < items.size(); ++index) {
+        std::size_t end = start;
+        while (end < items.size() && items.at(end) != ',' && items.at(end) != ']') {
+            end += items.at(end) == '\\' ? 2U : 1U;
+        }
+        if (items.compare(start, 6, "German") == 0) {
+            break;
+        }
+        start = end + 1;
+    }
+    REQUIRE(start < items.size());
+    return index;
+}
+
 /// @brief Signs @p login in against a server that authorizes as lims does, waits until the shell has drawn the
 ///        switcher, the person's menu and the search's answer (each a fact that exists only once its read was
 ///        answered), and returns what the shell reported and drew.
@@ -156,19 +173,7 @@ Shown signedIn(std::string const& login, bool expectHits, bool german = false) {
         auto const menu = harness.backend().find("Menu", "testId", "shell_principal_menu");
         REQUIRE(menu.has_value());
         std::string const items = entriesOf("shell_principal_menu");
-        std::size_t index = 0;
-        std::size_t at = 1;
-        for (; at < items.size(); ++index) {
-            std::size_t end = at;
-            while (end < items.size() && items.at(end) != ',' && items.at(end) != ']') {
-                end += items.at(end) == '\\' ? 2U : 1U;
-            }
-            if (items.compare(at, 6, "German") == 0) {
-                break;
-            }
-            at = end + 1;
-        }
-        REQUIRE(at < items.size());
+        std::size_t const index = germanEntryIndex(items);
         harness.backend().chooseMenuEntry(*menu, {index});
         static_cast<void>(harness.waitFor([&] { return entriesOf("shell_context").contains("Standort"); }));
     }
@@ -221,7 +226,7 @@ Shown signedIn(std::string const& login, bool expectHits, bool german = false) {
 // switcher line is not "EUR · 2 sites").
 TEST_CASE("lims shell: the scenario's analyst and accountant are drawn their scopes, their name and the search",
           "[lims-screens][shell][auth]") {
-    morph::ladder::testkit::DbFixture fixture;
+    morph::ladder::testkit::DbFixture const fixture;
     seedPeople();
 
     auto const julia = signedIn("julia", true);
@@ -272,7 +277,7 @@ TEST_CASE("lims shell: the scenario's analyst and accountant are drawn their sco
 // the German word for a site. Mutations: the model sends the English words as plain text (the line stays "EUR · 2
 // sites"); the German catalogue lacks the keys (the line is the English fallback).
 TEST_CASE("lims shell: a German session reads the switcher's second line in German", "[lims-screens][shell][auth]") {
-    morph::ladder::testkit::DbFixture fixture;
+    morph::ladder::testkit::DbFixture const fixture;
     seedPeople();
 
     auto const julia = signedIn("julia", true, true);
@@ -289,7 +294,7 @@ TEST_CASE("lims shell: a German session reads the switcher's second line in Germ
 // (the problems are not empty).
 TEST_CASE("lims shell: a person with no role is drawn the shell without the modules the catalog hides from them",
           "[lims-screens][shell][auth]") {
-    morph::ladder::testkit::DbFixture fixture;
+    morph::ladder::testkit::DbFixture const fixture;
     seedPeople();
     auto const shown = signedIn("tobias", false);
     for (std::string const& problem : shown.afterSignIn) {

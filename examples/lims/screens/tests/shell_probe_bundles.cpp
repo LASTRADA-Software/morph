@@ -33,10 +33,10 @@ namespace ui = morph::ui::author;
 namespace kit = lims::screens::kit;
 
 std::expected<void, morph::ui::Refusal> list(morph::ui::UiRegistry& served, ui::RegisteredScreen const& registered,
-                                             std::string_view id, std::string module, bool isPublic) {
+                                             std::string_view screenId, std::string module, bool isPublic) {
     morph::ui::CatalogEntry entry;
-    entry.id = std::string{id};
-    entry.title = std::string{id};
+    entry.id = std::string{screenId};
+    entry.title = std::string{screenId};
     entry.module = std::move(module);
     entry.isPublic = isPublic;
     return served.addScreen(std::move(entry), registered.text);
@@ -64,12 +64,20 @@ ui::Screen loginProbe() {
     return ui::screen(std::string{kProbeLogin}, [](ui::Scope& screen) {
         auto const auth = screen.model<lims::LimsAuthModel>("auth", {.instance = ui::Instance::Private});
         auto const username = ui::element("username");
-        auto const login = screen.mutation<lims::LimsLogin>(
-            "login", auth,
-            {.body = {{&lims::LimsLogin::username, username.value()}},
-             .onSuccess = {ui::signIn(ui::MutationRef{"login"}), ui::navigate(std::string{kProbeHome})}});
-        return ui::column({ui::textInput({.label = "Username"}).id(username).testId("username"),
-                           ui::button({.label = "Sign in", .onClick = ui::run(login)}).testId("signIn")});
+        auto const login =
+            screen.mutation<lims::LimsLogin>("login", auth,
+                                             {
+                                                 .body = {{&lims::LimsLogin::username, username.value()}},
+                                                 .onSuccess =
+                                                     {
+                                                         ui::signIn(ui::MutationRef{"login"}),
+                                                         ui::navigate(std::string{kProbeHome}),
+                                                     },
+                                             });
+        return ui::column({
+            ui::textInput({.label = "Username"}).id(username).testId("username"),
+            ui::button({.label = "Sign in", .onClick = ui::run(login)}).testId("signIn"),
+        });
     });
 }
 
@@ -79,11 +87,11 @@ ui::Screen loginProbe() {
 /// @tparam Read The read; it takes the company.
 /// @tparam WriteModel The model that runs the action.
 /// @tparam Write The action that needs a role.
-/// @param id The screen's id.
+/// @param screenId The screen's id.
 /// @return The screen.
 template <typename ReadModel, typename Read, typename WriteModel, typename Write>
-ui::Screen moduleProbe(std::string_view id) {
-    return ui::screen(std::string{id}, [](ui::Scope& screen) {
+ui::Screen moduleProbe(std::string_view screenId) {
+    return ui::screen(std::string{screenId}, [](ui::Scope& screen) {
         auto const reads = screen.model<ReadModel>("reads");
         auto const writes = screen.model<WriteModel>("writes");
         static_cast<void>(screen.query<Read>("read", reads, {{&Read::company, ui::env("context")}}));
@@ -93,10 +101,10 @@ ui::Screen moduleProbe(std::string_view id) {
 }
 
 /// @brief A screen that needs no role: the first a signed-in person lands on.
-/// @param id The screen's id.
+/// @param screenId The screen's id.
 /// @return The screen.
-ui::Screen homeProbe(std::string_view id) {
-    return ui::screen(std::string{id}, [](ui::Scope& screen) {
+ui::Screen homeProbe(std::string_view screenId) {
+    return ui::screen(std::string{screenId}, [](ui::Scope& screen) {
         auto const org = screen.model<lims::OrgModel>("org");
         static_cast<void>(screen.query<lims::ListMyScopes>("scopes", org));
         return ui::text({.text = "home"}).testId("home");
@@ -113,11 +121,22 @@ ui::Screen accountsProbe(bool contextBound) {
         auto const company = contextBound ? ui::env("context") : ui::AnyHandle{1};
         auto const accounts =
             screen.query<lims::ListAccounts>("accounts", ledger, {{&lims::ListAccounts::company, company}});
-        return ui::column(
-            {ui::text({.text = ui::format("{0} accounts",
-                                          {ui::count(accounts.value().at(&lims::ListAccountsResult::accounts))})})
-                 .testId("accountCount"),
-             ui::text({.text = ui::coalesce({ui::env("context"), ui::AnyHandle{"none"}})}).testId("context")});
+        return ui::column({
+            ui::text({
+                         .text = ui::format("{0} accounts",
+                                            {
+                                                ui::count(accounts.value().at(&lims::ListAccountsResult::accounts)),
+                                            }),
+                     })
+                .testId("accountCount"),
+            ui::text({
+                         .text = ui::coalesce({
+                             ui::env("context"),
+                             ui::AnyHandle{"none"},
+                         }),
+                     })
+                .testId("context"),
+        });
     });
 }
 }  // namespace
@@ -128,33 +147,64 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
     ui::ScreenRegistry registry;
     struct Entry {
         ui::Screen screen;
-        std::string_view id;
+        std::string_view screenId;
         std::string module;
         bool isPublic;
     };
     std::vector<Entry> entries;
-    entries.push_back({loginProbe(), kProbeLogin, "", true});
-    entries.push_back({homeProbe(kProbeHome), kProbeHome, "shell", false});
-    entries.push_back(
-        {moduleProbe<lims::SampleDirectoryModel, lims::CountSamplesToVerify, lims::SampleModel, lims::RegisterSample>(
-             "test.lab"),
-         "test.lab", "lab", false});
-    entries.push_back(
-        {moduleProbe<lims::InvoiceModel, lims::CountOpenInvoiceWork, lims::InvoiceModel, lims::CreateInvoice>(
-             "test.billing"),
-         "test.billing", "billing", false});
-    entries.push_back(
-        {moduleProbe<lims::LedgerModel, lims::CountClosingPeriods, lims::LedgerModel, lims::CreateAccount>(
-             "lims.ledger.accounts"),
-         "lims.ledger.accounts", "ledger", false});
-    entries.push_back(
-        {moduleProbe<lims::StockModel, lims::ListItems, lims::StockModel, lims::CreateItem>("test.inventory"),
-         "test.inventory", "inventory", false});
-    entries.push_back(
-        {moduleProbe<lims::InvoiceModel, lims::CountPendingApprovals, lims::InvoiceModel, lims::ApproveInvoice>(
-             "lims.approvals"),
-         "lims.approvals", "shell", false});
-    entries.push_back({lims::screens::aboutScreen(), lims::screens::kAbout, "shell", false});
+    entries.push_back({
+        .screen = loginProbe(),
+        .screenId = kProbeLogin,
+        .module = "",
+        .isPublic = true,
+    });
+    entries.push_back({
+        .screen = homeProbe(kProbeHome),
+        .screenId = kProbeHome,
+        .module = "shell",
+        .isPublic = false,
+    });
+    entries.push_back({
+        .screen = moduleProbe<lims::SampleDirectoryModel, lims::CountSamplesToVerify, lims::SampleModel,
+                              lims::RegisterSample>("test.lab"),
+        .screenId = "test.lab",
+        .module = "lab",
+        .isPublic = false,
+    });
+    entries.push_back({
+        .screen = moduleProbe<lims::InvoiceModel, lims::CountOpenInvoiceWork, lims::InvoiceModel, lims::CreateInvoice>(
+            "test.billing"),
+        .screenId = "test.billing",
+        .module = "billing",
+        .isPublic = false,
+    });
+    entries.push_back({
+        .screen = moduleProbe<lims::LedgerModel, lims::CountClosingPeriods, lims::LedgerModel, lims::CreateAccount>(
+            "lims.ledger.accounts"),
+        .screenId = "lims.ledger.accounts",
+        .module = "ledger",
+        .isPublic = false,
+    });
+    entries.push_back({
+        .screen = moduleProbe<lims::StockModel, lims::ListItems, lims::StockModel, lims::CreateItem>("test.inventory"),
+        .screenId = "test.inventory",
+        .module = "inventory",
+        .isPublic = false,
+    });
+    entries.push_back({
+        .screen =
+            moduleProbe<lims::InvoiceModel, lims::CountPendingApprovals, lims::InvoiceModel, lims::ApproveInvoice>(
+                "lims.approvals"),
+        .screenId = "lims.approvals",
+        .module = "shell",
+        .isPublic = false,
+    });
+    entries.push_back({
+        .screen = lims::screens::aboutScreen(),
+        .screenId = lims::screens::kAbout,
+        .module = "shell",
+        .isPublic = false,
+    });
     std::vector<ui::RegisteredScreen const*> registered;
     for (Entry const& entry : entries) {
         auto added = registry.add(entry.screen);
@@ -167,12 +217,15 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
                                  registry.catalog()};
     for (std::size_t index = 0; index < entries.size(); ++index) {
         Entry const& entry = entries.at(index);
-        if (auto added = list(served, *registered.at(index), entry.id, entry.module, entry.isPublic); !added) {
+        if (auto added = list(served, *registered.at(index), entry.screenId, entry.module, entry.isPublic); !added) {
             return std::unexpected(std::move(added.error()));
         }
     }
     return finish(served, lims::screens::ShellAvailability{
-                              .modules = {"lab", "billing", "ledger", "inventory"}, .approvals = true, .about = true});
+                              .modules = {"lab", "billing", "ledger", "inventory"},
+                              .approvals = true,
+                              .about = true,
+                          });
 }
 
 /// @brief A bundle of the one probe screen, with the shell declared over the ledger.

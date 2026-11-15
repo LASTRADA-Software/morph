@@ -53,8 +53,8 @@ ParamMap sampleParams(std::int64_t sampleId) { return ParamMap{{"sampleId", Valu
 // principal.
 TEST_CASE("lims screens: the local bootstrap appointment is a dispatched, journalled AssignRole",
           "[lims-screens][audit]") {
-    morph::ladder::testkit::DbFixture fixture;
-    auto log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
+    morph::ladder::testkit::DbFixture const fixture;
+    auto const log = std::make_shared<morph::journal::InMemoryActionLog>(morph::ladder::testkit::storageOwner());
     morph::journal::ScopedActionLog const scoped{log};
     lims::screens::prepareLocal("newcomer");
     morph::ladder::testkit::storageOwner().drain();
@@ -69,7 +69,7 @@ TEST_CASE("lims screens: the local bootstrap appointment is a dispatched, journa
 
 // Mutation: drop the first-supervisor appointment from prepareLocal (the registration is refused for want of a role).
 TEST_CASE("lims screens: a fresh local user registers a sample with no other setup", "[lims-screens]") {
-    morph::ladder::testkit::DbFixture fixture;
+    morph::ladder::testkit::DbFixture const fixture;
     LocalApp app = limsApp();
     app.setUp = [](LocalSetup const& setup) { lims::screens::prepareLocal(setup.user); };
     ScreenHarness harness{
@@ -102,7 +102,7 @@ TEST_CASE("lims screens: a fresh local user registers a sample with no other set
 
 // Mutation: show nothing for a refused open (the error text stays empty).
 TEST_CASE("lims screens: a model's refusal reaches the screen as its own message", "[lims-screens]") {
-    lims::test::LabFixture fixture;
+    lims::test::LabFixture const fixture;
     ScreenHarness harness{limsApp(), std::string{lims::screens::kLifecycle}, RigMode::Local, sampleParams(424242),
                           LocalSetup{.db = {}, .user = "tech"}};
     REQUIRE(harness.waitFor([&harness] {
@@ -114,7 +114,7 @@ TEST_CASE("lims screens: a model's refusal reaches the screen as its own message
 
 // Mutation: list a result's value as a double (12.5, not 12.500).
 TEST_CASE("lims screens: a captured result is listed with its exact decimal", "[lims-screens]") {
-    lims::test::LabFixture fixture;
+    lims::test::LabFixture const fixture;
     std::int64_t sampleId = 0;
     {
         lims::test::ScopedPrincipal const principal{"tech"};
@@ -124,13 +124,17 @@ TEST_CASE("lims screens: a captured result is listed with its exact decimal", "[
         lims::SampleModel model;
         auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
         auto const sample = model.execute(lims::RegisterSample{
-            .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-2"});
+            .siteId = lims::test::seededSite(),
+            .clientId = client.clientId,
+            .reference = "WW-2",
+        });
         model.execute(lims::ReceiveSample{});
         model.execute(lims::StartWork{});
         model.execute(lims::CaptureConcentration{
             .analysisVersionId = nitrate.versionId,
             .value = lims::Concentration{morph::math::Rational{morph::math::Numerator{25}, morph::math::Denominator{2},
-                                                               morph::math::DecimalPlaces{3}}}});
+                                                               morph::math::DecimalPlaces{3}}},
+        });
         sampleId = *sample.id;
     }
     ScreenHarness harness{limsApp(), std::string{lims::screens::kResults}, RigMode::Local, sampleParams(sampleId),
@@ -154,7 +158,7 @@ TEST_CASE("lims screens: a captured result is listed with its exact decimal", "[
 // Mutation: keep the login screen non-public (nothing is listed before sign-in), or skip the token (registration's
 // calls are refused).
 TEST_CASE("lims screens: signing in to a server opens sample registration", "[lims-screens]") {
-    lims::test::LabFixture fixture;
+    lims::test::LabFixture const fixture;
     LocalApp app = limsApp();
     app.setUp = [](LocalSetup const& setup) { lims::screens::prepareLocal(setup.user); };
     // The secret prepareLocal's issuer signs with, which the simulated server verifies, with lims' own role lookup.
@@ -179,14 +183,17 @@ TEST_CASE("lims screens: signing in to a server opens sample registration", "[li
 // Mutations: keep the model's product out of the computed field (the preview stays empty), or ignore the dilution in
 // it (the diluted reading previews undiluted).
 TEST_CASE("lims screens: the results screen previews the reported concentration while it is typed", "[lims-screens]") {
-    lims::test::LabFixture fixture;
+    lims::test::LabFixture const fixture;
     std::int64_t sampleId = 0;
     {
         lims::test::ScopedPrincipal const principal{"tech"};
         lims::SampleModel model;
         auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
         auto const sample = model.execute(lims::RegisterSample{
-            .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-3"});
+            .siteId = lims::test::seededSite(),
+            .clientId = client.clientId,
+            .reference = "WW-3",
+        });
         model.execute(lims::ReceiveSample{});
         model.execute(lims::StartWork{});
         sampleId = *sample.id;
@@ -230,7 +237,7 @@ TEST_CASE("lims screens: the results screen previews the reported concentration 
 // Mutation: drop `changes<ResultView>` from `CaptureConcentration`'s effects (the row keeps 12.500, since nothing else
 // refetches the list after a row's capture).
 TEST_CASE("lims screens: a row's re-capture shows its new value through the capture's effects", "[lims-screens]") {
-    lims::test::LabFixture fixture;
+    lims::test::LabFixture const fixture;
     std::int64_t sampleId = 0;
     {
         lims::test::ScopedPrincipal const principal{"tech"};
@@ -240,7 +247,10 @@ TEST_CASE("lims screens: a row's re-capture shows its new value through the capt
         lims::SampleModel model;
         auto const client = model.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
         auto const sample = model.execute(lims::RegisterSample{
-            .siteId = lims::test::seededSite(), .clientId = client.clientId, .reference = "WW-4"});
+            .siteId = lims::test::seededSite(),
+            .clientId = client.clientId,
+            .reference = "WW-4",
+        });
         model.execute(lims::ReceiveSample{});
         model.execute(lims::StartWork{});
         model.execute(lims::CaptureConcentration{

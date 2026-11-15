@@ -14,20 +14,24 @@ namespace lims::shelltest {
 void seedPeople() {
     {
         lims::screens::ScenarioClient anna{"anna"};
-        static_cast<void>(anna.call<lims::OrgModel>(lims::AssignRole{.principal = "anna",
-                                                                     .role = lims::LimsRole::Supervisor,
-                                                                     .company = lims::OrgModel::seededCompany(),
-                                                                     .site = {}}));
+        static_cast<void>(anna.call<lims::OrgModel>(lims::AssignRole{
+            .principal = "anna",
+            .role = lims::LimsRole::Supervisor,
+            .company = lims::OrgModel::seededCompany(),
+            .site = {},
+        }));
     }
     lims::screens::seedOrgScenario();
     // One account in the first company julia sees, so a search for "a" finds a hit the ledger's source answers.
     lims::screens::ScenarioClient julia{"julia"};
     auto const scopes = julia.call<lims::OrgModel>(lims::ListMyScopes{});
     REQUIRE_FALSE(scopes.scopes.empty());
-    static_cast<void>(julia.call<lims::LedgerModel>(lims::CreateAccount{.company = scopes.scopes.front().company,
-                                                                        .code = "1200",
-                                                                        .name = "Accounts receivable",
-                                                                        .type = lims::AccountType::Asset}));
+    static_cast<void>(julia.call<lims::LedgerModel>(lims::CreateAccount{
+        .company = scopes.scopes.front().company,
+        .code = "1200",
+        .name = "Accounts receivable",
+        .type = lims::AccountType::Asset,
+    }));
 }
 
 }  // namespace lims::shelltest

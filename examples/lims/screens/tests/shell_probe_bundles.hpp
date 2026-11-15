@@ -27,13 +27,13 @@ inline constexpr std::string_view kScoped = "test.scoped";
 /// @brief Adds a registered screen to @p served as an entry of @p module.
 /// @param served The bundle under construction.
 /// @param registered The screen as the registry holds it.
-/// @param id The screen's id.
+/// @param screenId The screen's id.
 /// @param module The navigator's module.
 /// @param isPublic Whether it opens before sign-in.
 /// @return Nothing, or the refusal.
 std::expected<void, morph::ui::Refusal> list(morph::ui::UiRegistry& served,
                                              morph::ui::author::RegisteredScreen const& registered,
-                                             std::string_view id, std::string module, bool isPublic = false);
+                                             std::string_view screenId, std::string module, bool isPublic = false);
 
 /// @brief The bundle's tail every probe shares: the application document, lims's two catalogues and the shell's parts.
 /// @param served The bundle under construction.

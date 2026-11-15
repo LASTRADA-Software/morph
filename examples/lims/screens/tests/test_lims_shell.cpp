@@ -37,10 +37,7 @@
 namespace {
 
 namespace ui = morph::ui::author;
-using lims::shelltest::kProbeHome;
-using lims::shelltest::kProbeLogin;
 using lims::shelltest::kScoped;
-using lims::shelltest::modulesBundle;
 using lims::shelltest::scopedBundle;
 using morph::examples::testing::RigMode;
 using morph::examples::testing::ScreenHarness;
