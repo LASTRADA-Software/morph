@@ -35,4 +35,4 @@ std::string widthClassOf(double units) {
     }
     return "expanded";
 }
-};  // namespace morph::ui
+}  // namespace morph::ui
