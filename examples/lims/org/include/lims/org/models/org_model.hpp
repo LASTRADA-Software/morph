@@ -215,36 +215,36 @@ private:
 
 }  // namespace lims
 
-// The guard each registered action names must be complete here: the registration instantiates its execution.
+// Each action's declared rule must be visible wherever the action is executed: the guard the action names judges it.
 #include "lims/org/authorization/org_authorization.hpp"
 
-// The registration macros declare a non-const status object each.
+// The declaration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
-BRIDGE_REGISTER_MODEL(lims::OrgModel, "OrgModel")
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::CreateCompany, "CreateCompany")
+BRIDGE_DECLARE_MODEL(lims::OrgModel, "OrgModel")
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::CreateCompany, "CreateCompany")
 BRIDGE_REGISTER_EFFECTS(lims::CreateCompany, ::morph::effects::changes<lims::CompanyView>,
                         ::morph::effects::changes<lims::RoleAssignmentView>, ::morph::effects::changes<lims::UserView>)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListCompanies, "ListCompanies", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::CreateSite, "CreateSite")
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::ListCompanies, "ListCompanies", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::CreateSite, "CreateSite")
 BRIDGE_REGISTER_EFFECTS(lims::CreateSite, ::morph::effects::changes<lims::SiteView>)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListSites, "ListSites", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::AssignRole, "AssignRole")
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::ListSites, "ListSites", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::AssignRole, "AssignRole")
 BRIDGE_REGISTER_EFFECTS(lims::AssignRole, ::morph::effects::changes<lims::RoleAssignmentView>,
                         ::morph::effects::changes<lims::UserView>, ::morph::effects::changes<lims::CompanyView>,
                         ::morph::effects::changes<lims::SiteView>)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::RevokeRole, "RevokeRole")
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::RevokeRole, "RevokeRole")
 BRIDGE_REGISTER_EFFECTS(lims::RevokeRole, ::morph::effects::changes<lims::RoleAssignmentView>,
                         ::morph::effects::changes<lims::UserView>, ::morph::effects::changes<lims::CompanyView>,
                         ::morph::effects::changes<lims::SiteView>)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListRoleAssignments, "ListRoleAssignments", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListUsers, "ListUsers", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::SetDisplayName, "SetDisplayName")
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::ListRoleAssignments, "ListRoleAssignments", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::ListUsers, "ListUsers", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::SetDisplayName, "SetDisplayName")
 BRIDGE_REGISTER_EFFECTS(lims::SetDisplayName, ::morph::effects::changes<lims::UserView>)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::GetSignedInUser, "GetSignedInUser", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListMyScopes, "ListMyScopes", ::morph::model::Loggable::No)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::SetValueLimit, "SetValueLimit")
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::GetSignedInUser, "GetSignedInUser", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::ListMyScopes, "ListMyScopes", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::SetValueLimit, "SetValueLimit")
 BRIDGE_REGISTER_EFFECTS(lims::SetValueLimit, ::morph::effects::changes<lims::ValueLimitView>)
-BRIDGE_REGISTER_ACTION(lims::OrgModel, lims::ListValueLimits, "ListValueLimits", ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::OrgModel, lims::ListValueLimits, "ListValueLimits", ::morph::model::Loggable::No)
 // NOLINTEND(misc-const-correctness)
 
 /// @brief The organisation keeps no state between actions.
