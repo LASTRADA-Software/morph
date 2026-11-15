@@ -39,6 +39,8 @@
 
 #include "lims/app/declared_requirements.hpp"
 #include "lims/app/lims_authorizer.hpp"
+#include "lims/billing/authorization/billing_authorization.hpp"
+#include "lims/inventory/authorization/inventory_authorization.hpp"
 #include "lims/lab/authorization/lab_authorization.hpp"
 #include "lims/lab/db/lims_entity.hpp"
 #include "lims/lab/models/analysis_catalog_model.hpp"
@@ -46,6 +48,7 @@
 #include "lims/lab/models/sample_model.hpp"
 #include "lims/ledger/authorization/ledger_authorization.hpp"
 #include "lims/org/authorization/declared.hpp"
+#include "lims/org/authorization/org_authorization.hpp"
 #include "lims/org/core/errors.hpp"
 #include "lims/org/db/org_entity.hpp"
 #include "lims/org/models/org_model.hpp"
