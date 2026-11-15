@@ -18,17 +18,10 @@
 #include <utility>
 #include <vector>
 
-#include "../core/logger.hpp"
 #include "../core/remote.hpp"
-#include "../core/wire.hpp"
-#include "../session/session.hpp"
 #include "bundle.hpp"
-#include "catalogue.hpp"
-#include "document.hpp"
 #include "file_store.hpp"
-#include "shell_parts.hpp"
 #include "theme.hpp"
-#include "value.hpp"
 
 /// @file
 /// @brief The server side of the UI service (spec 5 §12, §12b, §13): `UiRegistry` collects an application's screens
