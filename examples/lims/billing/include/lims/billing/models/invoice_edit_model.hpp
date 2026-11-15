@@ -83,19 +83,19 @@ private:
 
 }  // namespace lims
 
-// The guard each registered action names must be complete here: the registration instantiates its execution.
+// Each action's declared rule must be visible wherever the action is executed: the guard the action names judges it.
 #include "lims/billing/authorization/billing_authorization.hpp"
 
-// The registration macros declare a non-const status object each.
+// The declaration macros declare a non-const status object each.
 // NOLINTBEGIN(misc-const-correctness)
-BRIDGE_REGISTER_MODEL(lims::InvoiceEditModel, "InvoiceEditModel")
-BRIDGE_REGISTER_ACTION(lims::InvoiceEditModel, lims::LeaseInvoice, "LeaseInvoice")
+BRIDGE_DECLARE_MODEL(lims::InvoiceEditModel, "InvoiceEditModel")
+BRIDGE_DECLARE_ACTION(lims::InvoiceEditModel, lims::LeaseInvoice, "LeaseInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::LeaseInvoice, ::morph::effects::changes<lims::InvoiceLeaseView>)
-BRIDGE_REGISTER_ACTION(lims::InvoiceEditModel, lims::ReleaseInvoice, "ReleaseInvoice")
+BRIDGE_DECLARE_ACTION(lims::InvoiceEditModel, lims::ReleaseInvoice, "ReleaseInvoice")
 BRIDGE_REGISTER_EFFECTS(lims::ReleaseInvoice, ::morph::effects::changes<lims::InvoiceLeaseView>)
-BRIDGE_REGISTER_ACTION(lims::InvoiceEditModel, lims::RemoveInvoiceLine, "RemoveInvoiceLine")
+BRIDGE_DECLARE_ACTION(lims::InvoiceEditModel, lims::RemoveInvoiceLine, "RemoveInvoiceLine")
 BRIDGE_REGISTER_EFFECTS(lims::RemoveInvoiceLine, ::morph::effects::updates<lims::InvoiceView>,
                         ::morph::effects::changes<lims::BillableLineView>)
-BRIDGE_REGISTER_ACTION(lims::InvoiceEditModel, lims::SetInvoiceReference, "SetInvoiceReference")
+BRIDGE_DECLARE_ACTION(lims::InvoiceEditModel, lims::SetInvoiceReference, "SetInvoiceReference")
 BRIDGE_REGISTER_EFFECTS(lims::SetInvoiceReference, ::morph::effects::updates<lims::InvoiceView>)
 // NOLINTEND(misc-const-correctness)

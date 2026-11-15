@@ -324,3 +324,13 @@ InvoiceView InvoiceEditModel::execute(const SetInvoiceReference& action) {
 }
 
 }  // namespace lims
+
+// The registrars are compiled here, once, rather than in every translation unit that includes the header.
+// The registration macros declare a non-const status object each.
+// NOLINTBEGIN(misc-const-correctness)
+BRIDGE_REGISTER_MODEL_SOURCE(lims::InvoiceEditModel)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceEditModel, lims::LeaseInvoice)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceEditModel, lims::ReleaseInvoice)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceEditModel, lims::RemoveInvoiceLine)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceEditModel, lims::SetInvoiceReference)
+// NOLINTEND(misc-const-correctness)

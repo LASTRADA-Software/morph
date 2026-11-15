@@ -348,3 +348,22 @@ SearchHits<InvoiceView> InvoiceModel::execute(const SearchInvoices& action) {
 }
 
 }  // namespace lims
+
+// The registrars are compiled here, once, rather than in every translation unit that includes the header.
+// The registration macros declare a non-const status object each.
+// NOLINTBEGIN(misc-const-correctness)
+BRIDGE_REGISTER_MODEL_SOURCE(lims::InvoiceModel)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::RecordBillableLine)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::ListBillableLines)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::CreateInvoice)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::SubmitInvoice)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::ApproveInvoice)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::PostInvoice)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::ListPendingApprovals)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::CountOpenInvoiceWork)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::CountPendingApprovals)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::SearchInvoices)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::GetInvoice)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::GetInvoiceLease)
+BRIDGE_REGISTER_ACTION_SOURCE(lims::InvoiceModel, lims::ListInvoices)
+// NOLINTEND(misc-const-correctness)

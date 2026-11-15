@@ -182,9 +182,3 @@ struct Authorization<RecordBillableLine> {
 };
 
 }  // namespace lims
-
-// The models are included last, after every declaration their registrations need.
-#include "lims/billing/models/billing_run_model.hpp"
-#include "lims/billing/models/invoice_edit_model.hpp"
-#include "lims/billing/models/invoice_model.hpp"
-#include "lims/billing/models/price_list_model.hpp"
