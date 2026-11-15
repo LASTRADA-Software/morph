@@ -572,7 +572,7 @@ ui::Node worklistTable(Console const& console, ui::AnyHandle const& rows, std::s
         {.name = "test", .label = "Test", .width = ui::content(), .wrap = false},
         {.name = "priority",
          .label = "Priority",
-         .width = ui::fixed(7),
+         .width = ui::content(),
          .cell = layout::priorityTag(ui::row("priority"))},
         {.name = "due", .label = "Due", .width = ui::fixed(12), .cell = dueCell(), .wrap = false},
         {.name = "status",
