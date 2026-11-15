@@ -419,6 +419,7 @@ add_library(morph STATIC
     src/ui/service.cpp
     src/ui/host.cpp
     src/ui/service_client.cpp
+    src/ui/workspace.cpp
 )
 add_library(morph::morph ALIAS morph)
 

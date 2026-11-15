@@ -9,6 +9,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <morph/export.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -82,7 +83,7 @@ struct HeadParts {
 /// and takes Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+W, which documents may not declare. A screen a document navigates to as
 /// a dialog or a drawer is shown over the tabs (`openOverlay`). Neither copyable nor movable; owned by the owner
 /// thread of its runtime.
-class Workspace {
+class MORPH_API Workspace {
 public:
     /// @brief The shell, its tab bar appended to @p parent.
     /// @param runtime The runtime the screens' reactive nodes belong to. Borrowed.
@@ -94,55 +95,11 @@ public:
     ///        `headPartsForActive()` itself, so a shell with its own top bar shows the head once.
     Workspace(reactive::Runtime& runtime MORPH_LIFETIMEBOUND, IViewBackend& backend MORPH_LIFETIMEBOUND,
               DocumentScreenHost& host MORPH_LIFETIMEBOUND, WorkspaceOptions options = {},
-              ContainerWidget* parent = nullptr, HeadPlacement headPlacement = HeadPlacement::InPage)
-        : _runtime{&runtime},
-          _backend{&backend},
-          _host{&host},
-          _parent{parent},
-          _bar{backend.createTabs(parent)},
-          _hosts{options.hosts},
-          _screens{options.screens},
-          _onChanged{std::move(options.onChanged)},
-          _diagnostics{options.diagnostics},
-          _headPlacement{headPlacement} {
-        // The bar and each page fill what they are given, so a screen whose root stretches fills the page.
-        _bar->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
-        _bar->setTabs({});
-        _bar->setSelected(kNone);
-        _bar->setOnSelect([this](std::size_t index) {
-            std::vector<WorkspaceTabId> const order = _model->order();
-            if (index < order.size()) {
-                _model->activate(order.at(index));
-            }
-        });
-        _bar->setKeys({"Ctrl+Tab", "Ctrl+Shift+Tab", "Ctrl+W"}, [this](std::string const& chord) {
-            if (chord == "Ctrl+Tab") {
-                next();
-            } else if (chord == "Ctrl+Shift+Tab") {
-                previous();
-            } else if (std::optional<std::size_t> const shown = active()) {
-                close(*shown, {});
-            }
-        });
-        WorkspaceModelOptions modelOptions{std::move(options), {}, {}};
-        modelOptions.onChanged = [this] { showTabs(); };
-        modelOptions.mountPage = [this](WorkspaceTabId tab, std::string_view screenId, ParamMap const& params) {
-            return mountPage(tab, screenId, params);
-        };
-        modelOptions.unmountPage = [this](WorkspaceTabId tab) {
-            std::erase(_shownOrder, tab);
-            _pages.erase(tab.value);
-        };
-        _model = std::make_unique<WorkspaceModel>(runtime, host, std::move(modelOptions));
-    }
+              ContainerWidget* parent = nullptr, HeadPlacement headPlacement = HeadPlacement::InPage);
 
     /// @brief Closes every overlay without asking, newest first, then unmounts every tab's screen the same way, then
     ///        the pages: a callee goes before the opener its call answers.
-    ~Workspace() {
-        *_alive = false;
-        closeOverlays();
-        _model.reset();
-    }
+    ~Workspace();
 
     Workspace(Workspace const&) = delete;
     Workspace& operator=(Workspace const&) = delete;
@@ -161,13 +118,7 @@ public:
     /// @param screenId The screen id.
     /// @param params   Its params.
     /// @return The tab's index, or why the screen could not be mounted; a refused mount opens nothing.
-    std::expected<std::size_t, MountError> open(std::string_view screenId, ParamMap const& params) {
-        auto opened = _model->open(screenId, params);
-        if (!opened) {
-            return std::unexpected(std::move(opened.error()));
-        }
-        return indexOf(*opened);
-    }
+    std::expected<std::size_t, MountError> open(std::string_view screenId, ParamMap const& params);
 
     /// @brief Opens a screen as `open` does, and says whether it mounted one (`WorkspaceModel::openTab`): what a host
     ///        needs to settle the call of a navigation that only focused a tab.
@@ -189,80 +140,21 @@ public:
     /// itself goes through `screenClosed`. An overlay adds no tab, no record entry and no route.
     /// @param request The navigation: a screen, its params, and `as` either `dialog` or `drawer`.
     /// @return Nothing, or why nothing was shown: an `as` that is not an overlay, a host screen, or a refused mount.
-    std::expected<void, MountError> openOverlay(NavigateRequest const& request) {
-        if (request.as != "dialog" && request.as != "drawer") {
-            return std::unexpected(MountError{.screenId = request.screen,
-                                              .reason = "`as: " + request.as + "` is not a dialog or a drawer"});
-        }
-        if (_screens && !_screens(request.screen).host.empty()) {
-            return std::unexpected(
-                MountError{.screenId = request.screen, .reason = "a host screen opens as a tab, not an overlay"});
-        }
-        ValueRecord const* const record = request.params.asRecord();
-        ParamMap const params = record == nullptr ? ParamMap{} : *record;
-        auto overlay = std::make_unique<Overlay>();
-        overlay->id = ++_lastOverlay;
-        overlay->screenId = request.screen;
-        ContainerWidget* content = nullptr;
-        ContainerWidget* footer = nullptr;
-        if (request.as == "drawer") {
-            overlay->drawer = _backend->createDrawer(_parent, Side::End);
-            content = overlay->drawer.get();
-            footer = &overlay->drawer->footer();
-        } else {
-            overlay->dialog = _backend->createDialog(_parent);
-            content = overlay->dialog.get();
-            footer = &overlay->dialog->footer();
-        }
-        auto handle = _host->mountInto(request.screen, params, *content);
-        if (!handle) {
-            return std::unexpected(std::move(handle.error()));
-        }
-        overlay->handle = std::move(*handle);
-        showOverlay(*overlay, *footer);
-        _overlays.push_back(std::move(overlay));
-        return {};
-    }
+    std::expected<void, MountError> openOverlay(NavigateRequest const& request);
 
     /// @brief A screen the workspace shows closed itself, by `return` or `close: self`: its overlay goes, or its tab
     ///        does. What a host's `DocumentScreenHost::onScreenClosed` forwards here.
     /// @param screen The closed screen's handle; one the workspace does not show does nothing.
-    void screenClosed(ScreenHandle const& screen) {
-        auto const overlay = std::ranges::find_if(
-            _overlays, [&screen](std::unique_ptr<Overlay> const& open) { return open->handle.get() == &screen; });
-        if (overlay != _overlays.end()) {
-            _overlays.erase(overlay);
-            return;
-        }
-        for (WorkspaceTabId const tab : _model->order()) {
-            if (_model->handleOf(tab) == &screen) {
-                // The screen is closed, so its close answers at once and the tab goes.
-                _model->close(tab, {});
-                return;
-            }
-        }
-    }
+    void screenClosed(ScreenHandle const& screen);
 
     /// @brief The screens shown over the tabs, oldest first.
     /// @return Each overlay's screen id.
-    [[nodiscard]] std::vector<std::string> overlays() const {
-        std::vector<std::string> out;
-        out.reserve(_overlays.size());
-        for (auto const& overlay : _overlays) {
-            out.push_back(overlay->screenId);
-        }
-        return out;
-    }
+    [[nodiscard]] std::vector<std::string> overlays() const;
 
     /// @brief Tells the workspace the window's width class changed, as the backend's `setOnWidthClass` listener
     ///        reports it: each open dialog overlay is a sheet while it is `compact`.
     /// @param widthClass The class.
-    void setWidthClass(std::string_view widthClass) {
-        bool const sheet = widthClass == "compact";
-        for (auto const& overlay : _overlays) {
-            showSheet(*overlay, sheet);
-        }
-    }
+    void setWidthClass(std::string_view widthClass);
 
     /// @brief Opens the start screens (`WorkspaceModel::start`).
     /// @param how The start screen, the fallback and the record.
@@ -279,11 +171,7 @@ public:
 
     /// @brief Shows a tab and makes it the most recently used.
     /// @param index The tab; past the last one does nothing.
-    void activate(std::size_t index) {
-        if (std::optional<WorkspaceTabId> const tab = tabAt(index)) {
-            _model->activate(*tab);
-        }
-    }
+    void activate(std::size_t index);
 
     /// @brief Shows the next tab in most-recently-used order (Ctrl+Tab). Repeated calls walk the order as it was at
     ///        the first of them; any other activation starts a new walk.
@@ -295,28 +183,12 @@ public:
     /// @brief Closes a tab through its screen's close protocol.
     /// @param index The tab.
     /// @param done  Called once with whether it closed; may be empty.
-    void close(std::size_t index, std::function<void(bool)> done) {
-        std::optional<WorkspaceTabId> const tab = tabAt(index);
-        if (!tab) {
-            if (done) {
-                done(false);
-            }
-            return;
-        }
-        _model->close(*tab, std::move(done));
-    }
+    void close(std::size_t index, std::function<void(bool)> done);
 
     /// @brief Closes every tab but one, one at a time, stopping at the first veto.
     /// @param index The tab kept; past the last one closes every tab.
     /// @param done  Called once with whether every other tab closed; may be empty.
-    void closeOthers(std::size_t index, std::function<void(bool)> done) {
-        std::optional<WorkspaceTabId> const tab = tabAt(index);
-        if (!tab) {
-            _model->closeAll(std::move(done));
-            return;
-        }
-        _model->closeOthers(*tab, std::move(done));
-    }
+    void closeOthers(std::size_t index, std::function<void(bool)> done);
 
     /// @brief Closes every tab, one at a time, stopping at the first veto.
     /// @param done Called once with whether every tab closed; may be empty.
@@ -336,83 +208,33 @@ public:
 
     /// @brief The active tab's index.
     /// @return It, or `std::nullopt` while no tab is open.
-    [[nodiscard]] std::optional<std::size_t> active() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().peek();
-        if (!tab) {
-            return std::nullopt;
-        }
-        return indexOf(*tab);
-    }
+    [[nodiscard]] std::optional<std::size_t> active() const;
 
     /// @brief The screen handle of a tab: what a client remounts for development reload and inspects.
     /// @param index The tab's index.
     /// @return Its handle, valid while the tab is open; null past the end.
-    [[nodiscard]] ScreenHandle* handleOf(std::size_t index) const noexcept {
-        std::optional<WorkspaceTabId> const tab = tabAt(index);
-        return tab ? _model->handleOf(*tab) : nullptr;
-    }
+    [[nodiscard]] ScreenHandle* handleOf(std::size_t index) const noexcept;
 
     /// @brief The active tab's screen handle.
     /// @return It, or null while no tab is open.
-    [[nodiscard]] ScreenHandle* activeHandle() const {
-        std::optional<std::size_t> const shown = active();
-        return shown ? handleOf(*shown) : nullptr;
-    }
+    [[nodiscard]] ScreenHandle* activeHandle() const;
 
     /// @brief The active tab's head as two parts, the same reactive content `headRow` builds for the in-page
     ///        rendering, for a host that mounts them elsewhere (a shell's own top bar, say). Neither is null: with no
     ///        active tab each is an invisible, empty container rather than a null `Node`, since a caller mounting them
     ///        may not expect to handle one.
     /// @return The lead and the trail, reactive to the active tab changing and to its head's own content changing.
-    [[nodiscard]] HeadParts headPartsForActive() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().peek();
-        if (tab) {
-            // A host places the lead beside the title and gives it the minimum width it wants, so the lead has none
-            // of its own: with one, a lead's natural width would never be less than it.
-            Row lead = buildHeadLead(*tab, LeadPlacement::Below);
-            lead.common.layout.minWidth.reset();
-            return HeadParts{.eyebrow = ui::text(buildHeadEyebrow(*tab)),
-                             .lead = ui::row(std::move(lead)),
-                             .trail = ui::actionBar(buildHeadTrail(*tab)),
-                             .inlineLead = ui::row(buildHeadLead(*tab, LeadPlacement::Inline))};
-        }
-        Text eyebrow{.text = std::string{}, .role = TextRole::Muted, .field = {}, .common = {}};
-        eyebrow.common.testId = "head_eyebrow";
-        eyebrow.common.visible = false;
-        Row lead{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
-        lead.common.testId = "head_lead";
-        lead.common.visible = false;
-        Row trail{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
-        trail.common.testId = "head_trail";
-        trail.common.visible = false;
-        Row inlineLead{.children = {}, .gap = 0, .common = {}, .tone = std::nullopt};
-        inlineLead.common.testId = "head_lead_inline";
-        inlineLead.common.visible = false;
-        return HeadParts{.eyebrow = ui::text(std::move(eyebrow)),
-                         .lead = ui::row(std::move(lead)),
-                         .trail = ui::row(std::move(trail)),
-                         .inlineLead = ui::row(std::move(inlineLead))};
-    }
+    [[nodiscard]] HeadParts headPartsForActive() const;
 
     /// @brief Where the active tab's head puts its lead. A tracked read.
     /// @return The place; `Below` with no active tab. With the head in the page (`HeadPlacement::InPage`) the tab
     ///         bar carries the title, so `Inline` reads as `Below` there.
-    [[nodiscard]] LeadPlacement activeLeadPlacement() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().get();
-        return tab ? leadPlacementOf(*tab) : LeadPlacement::Below;
-    }
+    [[nodiscard]] LeadPlacement activeLeadPlacement() const;
 
     /// @brief Whether the active tab's head is a single line: it has no eyebrow, and its lead is not drawn under the
     ///        title (it has none, or it sits inline or at the end). A tracked read.
     /// @return Whether the head is one line; `true` with no active tab.
-    [[nodiscard]] bool activeHeadOneLine() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().get();
-        if (!tab) {
-            return true;
-        }
-        bool const leadUnderTitle = leadHasContent(*tab) && leadPlacementOf(*tab) == LeadPlacement::Below;
-        return !(eyebrowHasContent(*tab) || leadUnderTitle);
-    }
+    [[nodiscard]] bool activeHeadOneLine() const;
 
     /// @brief What ends the active tab's head trail, so a compact top bar can stand the line's end the right distance
     ///        from the window's edge. A tracked read.
@@ -420,126 +242,59 @@ public:
     ///         trigger is an icon button, or a last action that is icon-only or ghost is `Unframed`; any other last
     ///         action is `Framed`; with no action and no menu, a head tool is `Framed`; an empty trail, and no active
     ///         tab, is `None`.
-    [[nodiscard]] HeadTrailEnd activeHeadTrailEnd() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().get();
-        if (!tab) {
-            return HeadTrailEnd::None;
-        }
-        if (!headMenuOf(*tab).empty()) {
-            return HeadTrailEnd::Unframed;
-        }
-        ScreenHead const* const head = headOf(*tab);
-        if (head == nullptr) {
-            return HeadTrailEnd::None;
-        }
-        std::vector<HeadAction> const actions = head->actions().get();
-        if (!actions.empty()) {
-            return actions.back().iconOnly || actions.back().emphasis == ButtonEmphasis::Ghost ? HeadTrailEnd::Unframed
-                                                                                               : HeadTrailEnd::Framed;
-        }
-        return headToolsOf(*tab).empty() ? HeadTrailEnd::None : HeadTrailEnd::Framed;
-    }
+    [[nodiscard]] HeadTrailEnd activeHeadTrailEnd() const;
 
     /// @brief Whether the active tab's page continues the head's block: the screen's shown root says so
     ///        (`ScreenHead::headJoined`) and the page is not inset, which two tabs or more force. A tracked read.
     /// @return Whether the head is joined to the page.
-    [[nodiscard]] bool activeHeadJoined() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().get();
-        if (!tab || activePageInset()) {
-            return false;
-        }
-        ScreenHead const* const head = headOf(*tab);
-        reactive::Computed<bool> const* const joined = head == nullptr ? nullptr : head->headJoined();
-        return joined != nullptr && joined->get();
-    }
+    [[nodiscard]] bool activeHeadJoined() const;
 
     /// @brief The text role the active screen asks for its head's title. A tracked read.
     /// @return `Heading`, or `Headline` where the screen asks for it; `Heading` with no active tab.
-    [[nodiscard]] TextRole activeTitleRole() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().get();
-        ScreenHead const* const head = tab ? headOf(*tab) : nullptr;
-        reactive::Computed<TextRole> const* const role = head == nullptr ? nullptr : head->titleRole();
-        return role == nullptr ? TextRole::Heading : role->get();
-    }
+    [[nodiscard]] TextRole activeTitleRole() const;
 
     /// @brief The surface the active screen asks the shell to draw its top bar on. A tracked read.
     /// @return The surface's name; empty with no active tab and while the screen names none.
-    [[nodiscard]] std::string activeHeadSurface() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().get();
-        ScreenHead const* const head = tab ? headOf(*tab) : nullptr;
-        reactive::Computed<std::string> const* const surface = head == nullptr ? nullptr : head->headSurface();
-        return surface == nullptr ? std::string{} : surface->get();
-    }
+    [[nodiscard]] std::string activeHeadSurface() const;
 
     /// @brief The surface the active screen asks the shell to draw the page area on. A tracked read.
     /// @return The surface's name; empty with no active tab and while the screen names none.
-    [[nodiscard]] std::string activePageSurface() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().get();
-        ScreenHead const* const head = tab ? headOf(*tab) : nullptr;
-        reactive::Computed<std::string> const* const surface = head == nullptr ? nullptr : head->pageSurface();
-        return surface == nullptr ? std::string{} : surface->get();
-    }
+    [[nodiscard]] std::string activePageSurface() const;
 
     /// @brief The active tab's title as runs, which a shell that knows them draws in place of the tab's caption. A
     ///        tracked read.
     /// @return The runs; empty with no active tab, or while the active screen gives none.
-    [[nodiscard]] std::vector<TextSpan> activeTitleSpans() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().get();
-        return tab ? titleSpansOf(headOf(*tab)) : std::vector<TextSpan>{};
-    }
+    [[nodiscard]] std::vector<TextSpan> activeTitleSpans() const;
 
     /// @brief Whether the shell insets the page around the active tab's screen. A tracked read. The page is inset with
     ///        no active tab and while the workspace's tab strip shows (two tabs or more), since the strip is a child
     ///        of the page and would otherwise touch the window's edges; with one tab it is inset unless the screen's
     ///        shown root lays itself at the page's edges (`ScreenHead::pageEdge`).
     /// @return Whether the page is inset.
-    [[nodiscard]] bool activePageInset() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().get();
-        if (!tab || _model->tabs().get().size() > 1) {
-            return true;
-        }
-        ScreenHead const* const head = headOf(*tab);
-        reactive::Computed<bool> const* const edge = head == nullptr ? nullptr : head->pageEdge();
-        return edge == nullptr || !edge->get();
-    }
+    [[nodiscard]] bool activePageInset() const;
 
     /// @brief Whether the active tab's head shows anything: an eyebrow, a subtitle, a badge, a tool, an action or a
     ///        menu entry. A tracked read, so a
     ///        shell that shows the head on a line of its own follows a tab switch and a head's own changes; the head
     ///        row's own visibility is the same rule.
     /// @return Whether there is an active tab whose head has content.
-    [[nodiscard]] bool activeHeadShown() const {
-        std::optional<WorkspaceTabId> const tab = _model->active().get();
-        return tab.has_value() && headHasContent(*tab);
-    }
+    [[nodiscard]] bool activeHeadShown() const;
 
     /// @brief Closes every overlay, then every tab, without asking, newest first: what signing out does, since no
     ///        close guard may keep a screen of the principal who is leaving. A callee goes before the opener its call
     ///        answers, so the opener's `onCancel` runs in a live scope; then every call no mount adopted is cancelled.
-    void forceCloseAll() {
-        closeOverlays();
-        _model->forceCloseAll();
-    }
+    void forceCloseAll();
 
     /// @brief The open tabs, in order.
     /// @return Each tab's screen, identity and caption.
-    [[nodiscard]] std::vector<WorkspaceTab> tabs() const {
-        std::vector<WorkspaceTab> out;
-        for (WorkspaceTabId const tab : _model->order()) {
-            ScreenHandle const& handle = *_model->handleOf(tab);
-            out.push_back(WorkspaceTab{.screenId = std::string{screenOf(tab)},
-                                       .identity = handle.identity().peek(),
-                                       .caption = captionOf(handle)});
-        }
-        return out;
-    }
+    [[nodiscard]] std::vector<WorkspaceTab> tabs() const;
 
 private:
     static constexpr std::size_t kNone = static_cast<std::size_t>(-1);
 
     // A tab's page: the slot of the bar it shows in, the head row above its screen, and the screen's id. The model
     // destroys the screen's handle before it lets the page go.
-    struct Page {
+    struct MORPH_API Page {
         std::string screenId;
         std::unique_ptr<SlotWidget> slot;
         // The head row reads the handle through the model, which answers null once the handle is gone.
@@ -550,15 +305,12 @@ private:
         Page& operator=(Page const&) = delete;
         Page(Page&&) = delete;
         Page& operator=(Page&&) = delete;
-        ~Page() {
-            head.reset();
-            slot.reset();
-        }
+        ~Page();
     };
 
     // A screen shown over the tabs: its dialog or drawer, its handle, the footer of its head's actions and the scope
     // of the effects that follow it, destroyed in the reverse order, so the handle goes before its container.
-    struct Overlay {
+    struct MORPH_API Overlay {
         std::uint64_t id = 0;
         std::string screenId;
         std::unique_ptr<DialogWidget> dialog;
@@ -574,125 +326,29 @@ private:
         Overlay& operator=(Overlay const&) = delete;
         Overlay(Overlay&&) = delete;
         Overlay& operator=(Overlay&&) = delete;
-        ~Overlay() {
-            scope.reset();
-            footer.reset();
-            handle.reset();
-            drawer.reset();
-            dialog.reset();
-        }
+        ~Overlay();
 
-        void setOpen(bool open) const {
-            if (dialog) {
-                dialog->setOpen(open);
-            } else {
-                drawer->setOpen(open);
-            }
-        }
+        void setOpen(bool open) const;
     };
 
     // Draws a dialog overlay as a sheet, or as a centred dialog again; a drawer has no sheet.
-    static void showSheet(Overlay& overlay, bool sheet) {
-        if (overlay.dialog && sheet != overlay.sheet) {
-            overlay.sheet = sheet;
-            overlay.dialog->setSheet(sheet);
-        }
-    }
+    static void showSheet(Overlay& overlay, bool sheet);
 
     // Titles a mounted overlay, puts its head's actions in its footer, opens it and makes a dismissal ask its screen.
-    void showOverlay(Overlay& overlay, ContainerWidget& footer) {
-        ScreenHandle const* const handle = overlay.handle.get();
-        ScreenHead* const head = overlay.handle->head();
-        overlay.scope = std::make_unique<reactive::Scope>(*_runtime);
-        overlay.scope->effect([&overlay, handle] {
-            std::string const title = handle->title().get();
-            if (overlay.dialog) {
-                overlay.dialog->setTitle(title);
-            } else {
-                overlay.drawer->setTitle(title);
-            }
-        });
-        if (head != nullptr) {
-            overlay.footer.emplace(*_runtime, *_backend, overlayActions(*head), &footer);
-            overlay.scope->effect([this, &overlay, head] {
-                bool const menu = head->menu() != nullptr && !head->menu()->get().empty();
-                bool const tools = head->tools() != nullptr && !head->tools()->get().empty();
-                if ((menu || tools) && !overlay.reported) {
-                    overlay.reported = true;
-                    _runtime->untracked([this, &overlay] {
-                        if (_diagnostics) {
-                            _diagnostics(Refusal{.document = overlay.screenId,
-                                                 .path = {},
-                                                 .reason = "a dialog or drawer does not show the head menu or tools "
-                                                           "of " +
-                                                           overlay.screenId});
-                        }
-                    });
-                }
-            });
-        }
-        showSheet(overlay, _backend->widthClass() == "compact");
-        std::uint64_t const overlayId = overlay.id;
-        auto const dismissed = [this, overlayId] {
-            Overlay const* const shown = overlayOf(overlayId);
-            if (shown == nullptr) {
-                return;
-            }
-            // The dismissal closed the widget. It is opened again at once, so the screen stays reachable while its
-            // close protocol runs, and goes only when the screen closed: a dirty screen without a guard stays.
-            shown->setOpen(true);
-            shown->handle->requestClose([this, alive = std::weak_ptr<bool>{_alive}, overlayId](bool closed) {
-                if (auto const live = alive.lock(); live != nullptr && *live && closed) {
-                    removeOverlay(overlayId);
-                }
-            });
-        };
-        if (overlay.dialog) {
-            overlay.dialog->setOnDismiss(dismissed);
-        } else {
-            overlay.drawer->setOnDismiss(dismissed);
-        }
-        overlay.setOpen(true);
-    }
+    void showOverlay(Overlay& overlay, ContainerWidget& footer);
 
     // The footer of an overlay: a button per visible head action, each running the action by its id. It is an action
     // bar, so its buttons are the theme's action gap apart, as the same actions are in a head.
-    [[nodiscard]] static Node overlayActions(ScreenHead& head) {
-        ActionBar bar;
-        bar.common.testId = "overlay_actions";
-        bar.common.visible = Prop<bool>{[&head] { return !head.actions().get().empty(); }};
-        bar.children.push_back(ui::forEach<HeadAction>(
-            [&head] { return head.actions().get(); }, [](HeadAction const& action) { return Key{action.id}; },
-            [&head](reactive::Signal<HeadAction> const& action) {
-                Button button{.label = Prop<std::string>{[&action] { return action.get().label; }},
-                              .emphasis = action.peek().emphasis,
-                              .onClick = [&head, actionId = action.peek().id] { head.run(actionId); },
-                              .common = {}};
-                button.common.testId = "overlay_action_" + action.peek().id;
-                button.common.enabled = Prop<bool>{[&action] { return action.get().enabled; }};
-                return ui::button(std::move(button));
-            },
-            Axis::Horizontal, 2));
-        return ui::actionBar(std::move(bar));
-    }
+    [[nodiscard]] static Node overlayActions(ScreenHead& head);
 
-    [[nodiscard]] Overlay const* overlayOf(std::uint64_t overlayId) const {
-        auto const found = std::ranges::find(_overlays, overlayId, [](auto const& open) { return open->id; });
-        return found == _overlays.end() ? nullptr : found->get();
-    }
+    [[nodiscard]] Overlay const* overlayOf(std::uint64_t overlayId) const;
 
     void removeOverlay(std::uint64_t overlayId) {
         std::erase_if(_overlays, [overlayId](std::unique_ptr<Overlay> const& open) { return open->id == overlayId; });
     }
 
     // Closes every overlay without asking, newest first; each one's close answers its call with a cancel.
-    void closeOverlays() {
-        while (!_overlays.empty()) {
-            std::unique_ptr<Overlay> const last = std::move(_overlays.back());
-            _overlays.pop_back();
-            last->handle->forceClose();
-        }
-    }
+    void closeOverlays();
 
     // A badge of the head row, by its place among the visible badges.
     struct PlacedBadge {
@@ -710,163 +366,43 @@ private:
     };
 
     // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
-    [[nodiscard]] static std::string shapeOf(std::vector<HeadMenuEntry> const& entries) {
-        std::string shape;
-        for (HeadMenuEntry const& entry : entries) {
-            if (entry.separator) {
-                shape += '|';
-            } else if (!entry.items.empty()) {
-                shape += '(' + shapeOf(entry.items) + ')';
-            } else {
-                shape += entry.id + ';';
-            }
-        }
-        return shape;
-    }
+    [[nodiscard]] static std::string shapeOf(std::vector<HeadMenuEntry> const& entries);
 
     // The entry at @p path through @p entries; null past the end, which a binding reads only in the moment before
     // the menu is drawn again for a new shape.
     [[nodiscard]] static HeadMenuEntry const* entryAt(std::vector<HeadMenuEntry> const& entries,
-                                                      std::vector<std::size_t> const& path) {
-        std::vector<HeadMenuEntry> const* level = &entries;
-        HeadMenuEntry const* entry = nullptr;
-        for (std::size_t const index : path) {
-            if (index >= level->size()) {
-                return nullptr;
-            }
-            entry = &level->at(index);
-            level = &entry->items;
-        }
-        return entry;
-    }
+                                                      std::vector<std::size_t> const& path);
 
     // The menu items of one level of the head menu: each bound to its entry by its place, which the shape keeps, and
     // each chosen by its id, so the screen refuses an entry hidden since by name rather than running its neighbour.
     // NOLINTNEXTLINE(misc-no-recursion): a submenu is a menu one level down.
     [[nodiscard]] std::vector<MenuItem> headMenuItems(WorkspaceTabId tab, reactive::Signal<ShapedMenu> const& menu,
                                                       std::vector<HeadMenuEntry> const& level,
-                                                      std::vector<std::size_t> const& outer) const {
-        std::vector<MenuItem> items;
-        for (std::size_t index = 0; index < level.size(); ++index) {
-            HeadMenuEntry const& entry = level.at(index);
-            MenuItem item;
-            if (entry.separator) {
-                item.separator = true;
-                items.push_back(std::move(item));
-                continue;
-            }
-            std::vector<std::size_t> path = outer;
-            path.push_back(index);
-            auto const read = [&menu, path](auto field, auto const& fallback) {
-                return [&menu, path, field, fallback] {
-                    HeadMenuEntry const* const shown = entryAt(menu.get().entries, path);
-                    return shown == nullptr ? fallback : std::invoke(field, *shown);
-                };
-            };
-            item.label = Prop<std::string>{read(&HeadMenuEntry::label, std::string{})};
-            item.description = Prop<std::string>{read(&HeadMenuEntry::description, std::string{})};
-            item.enabled = Prop<bool>{read(&HeadMenuEntry::enabled, false)};
-            item.checked = Prop<std::optional<bool>>{read(&HeadMenuEntry::checked, std::optional<bool>{})};
-            item.icon = entry.icon;
-            item.keys = entry.keys;
-            if (entry.items.empty()) {
-                item.onSelect = [this, tab, entryId = entry.id] {
-                    ScreenHandle* const handle = _model->handleOf(tab);
-                    if (ScreenHead* const head = handle == nullptr ? nullptr : handle->head()) {
-                        head->choose(entryId);
-                    }
-                };
-            } else {
-                item.items = headMenuItems(tab, menu, entry.items, path);
-            }
-            items.push_back(std::move(item));
-        }
-        return items;
-    }
+                                                      std::vector<std::size_t> const& outer) const;
 
-    [[nodiscard]] std::optional<WorkspaceTabId> tabAt(std::size_t index) const {
-        std::vector<WorkspaceTabId> const order = _model->order();
-        return index < order.size() ? std::optional<WorkspaceTabId>{order.at(index)} : std::nullopt;
-    }
+    [[nodiscard]] std::optional<WorkspaceTabId> tabAt(std::size_t index) const;
 
-    [[nodiscard]] std::size_t indexOf(WorkspaceTabId tab) const {
-        std::vector<WorkspaceTabId> const order = _model->order();
-        auto const found = std::ranges::find(order, tab);
-        return found == order.end() ? kNone : static_cast<std::size_t>(found - order.begin());
-    }
+    [[nodiscard]] std::size_t indexOf(WorkspaceTabId tab) const;
 
-    [[nodiscard]] std::string_view screenOf(WorkspaceTabId tab) const {
-        auto const found = _pages.find(tab.value);
-        return found == _pages.end() ? std::string_view{} : std::string_view{found->second->screenId};
-    }
+    [[nodiscard]] std::string_view screenOf(WorkspaceTabId tab) const;
 
-    [[nodiscard]] static std::string captionOf(ScreenHandle const& handle) {
-        std::string caption = handle.title().peek();
-        if (handle.dirty().peek()) {
-            caption += " •";
-        }
-        return caption;
-    }
+    [[nodiscard]] static std::string captionOf(ScreenHandle const& handle);
 
     // The model's mountPage: a page slot at the end of the bar, the screen mounted into it, a host screen from the
     // registry and a document screen from the document host, then the head row above it. The page goes with a
     // refused mount.
     std::expected<std::unique_ptr<ScreenHandle>, MountError> mountPage(WorkspaceTabId tab, std::string_view screenId,
-                                                                       ParamMap const& params) {
-        auto page = std::make_unique<Page>();
-        page->screenId = std::string{screenId};
-        page->slot = _backend->createSlot(_bar.get());
-        page->slot->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
-        // A screen whose root keeps its content height scrolls inside the page instead of being cut at the window's
-        // edge; one whose root stretches fills the page and lays itself out.
-        page->slot->setScrollable(true);
-        page->slot->setVisible(false);
-        std::expected<std::unique_ptr<ScreenHandle>, MountError> handle;
-        WorkspaceScreen const facts = _screens ? _screens(screenId) : WorkspaceScreen{};
-        if (facts.host.empty()) {
-            handle = _host->mountInto(screenId, params, *page->slot);
-        } else {
-            HostScreenFactory const* const factory = _hosts == nullptr ? nullptr : _hosts->find(facts.host);
-            if (factory == nullptr) {
-                return std::unexpected(MountError{.screenId = std::string{screenId},
-                                                  .reason = "no host screen `" + facts.host + "` is registered"});
-            }
-            handle = (*factory)(params, *page->slot);
-        }
-        if (!handle) {
-            return handle;
-        }
-        if (_headPlacement == HeadPlacement::InPage && (*handle)->head() != nullptr) {
-            // Mounted after the screen, since it reads the handle, and moved above it.
-            page->head.emplace(*_runtime, *_backend, headRow(tab), page->slot.get());
-            page->slot->moveChild(page->head->root(), 0);
-        }
-        _pages.insert_or_assign(tab.value, std::move(page));
-        _shownOrder.push_back(tab);
-        return handle;
-    }
+                                                                       ParamMap const& params);
 
     // The head of a tab's screen, while the tab is open. A tracked read of the model's tabs, so a binding made while
     // the model is still opening the tab reads the head once it holds it.
-    [[nodiscard]] ScreenHead* headOf(WorkspaceTabId tab) const {
-        static_cast<void>(_model->tabs().get());
-        ScreenHandle* const handle = _model->handleOf(tab);
-        return handle == nullptr ? nullptr : handle->head();
-    }
+    [[nodiscard]] ScreenHead* headOf(WorkspaceTabId tab) const;
 
     // The visible entries of a tab's head menu; a tracked read.
-    [[nodiscard]] std::vector<HeadMenuEntry> headMenuOf(WorkspaceTabId tab) const {
-        ScreenHead const* const head = headOf(tab);
-        reactive::Computed<std::vector<HeadMenuEntry>> const* const menu = head == nullptr ? nullptr : head->menu();
-        return menu == nullptr ? std::vector<HeadMenuEntry>{} : menu->get();
-    }
+    [[nodiscard]] std::vector<HeadMenuEntry> headMenuOf(WorkspaceTabId tab) const;
 
     // The visible tools of a tab's head; a tracked read.
-    [[nodiscard]] std::vector<HeadTool> headToolsOf(WorkspaceTabId tab) const {
-        ScreenHead const* const head = headOf(tab);
-        reactive::Computed<std::vector<HeadTool>> const* const tools = head == nullptr ? nullptr : head->tools();
-        return tools == nullptr ? std::vector<HeadTool>{} : tools->get();
-    }
+    [[nodiscard]] std::vector<HeadTool> headToolsOf(WorkspaceTabId tab) const;
 
     // Whether a tab's head has a subtitle, a badge, a tool, an action or a menu entry; a tracked read.
     [[nodiscard]] bool headHasContent(WorkspaceTabId tab) const {
@@ -877,131 +413,34 @@ private:
     [[nodiscard]] bool eyebrowHasContent(WorkspaceTabId tab) const { return !eyebrowRunsOf(tab).empty(); }
 
     // The head's eyebrow runs when the screen gives them, else its plain eyebrow as one run; a tracked read.
-    [[nodiscard]] std::vector<TextSpan> eyebrowRunsOf(WorkspaceTabId tab) const {
-        ScreenHead const* const head = headOf(tab);
-        if (head == nullptr) {
-            return {};
-        }
-        reactive::Computed<std::vector<TextSpan>> const* const spans = head->eyebrowSpans();
-        std::vector<TextSpan> runs = spans == nullptr ? std::vector<TextSpan>{} : spans->get();
-        if (runs.empty()) {
-            reactive::Computed<std::string> const* const plain = head->eyebrow();
-            std::string line = plain == nullptr ? std::string{} : plain->get();
-            if (!line.empty()) {
-                runs.push_back(TextSpan{.text = std::move(line)});
-            }
-        }
-        return runs;
-    }
+    [[nodiscard]] std::vector<TextSpan> eyebrowRunsOf(WorkspaceTabId tab) const;
 
     // The head's eyebrow as a muted text, hidden while there is none.
-    [[nodiscard]] Text buildHeadEyebrow(WorkspaceTabId tab) const {
-        auto const plain = [this, tab] {
-            ScreenHead const* const head = headOf(tab);
-            reactive::Computed<std::string> const* const eyebrow = head == nullptr ? nullptr : head->eyebrow();
-            return eyebrow == nullptr ? std::string{} : eyebrow->get();
-        };
-        Text text{.text = Prop<std::string>{plain}, .role = TextRole::Muted, .field = {}, .common = {}};
-        text.spans = Prop<std::vector<TextSpan>>{[this, tab] { return eyebrowRunsOf(tab); }};
-        text.common.testId = "head_eyebrow";
-        text.common.visible = Prop<bool>{[this, tab] { return eyebrowHasContent(tab); }};
-        return text;
-    }
+    [[nodiscard]] Text buildHeadEyebrow(WorkspaceTabId tab) const;
 
     // Whether the head has a subtitle or a badge.
-    [[nodiscard]] bool leadHasContent(WorkspaceTabId tab) const {
-        ScreenHead const* const head = headOf(tab);
-        return head != nullptr &&
-               (!head->subtitle().get().empty() || !subtitleSpansOf(head).empty() || !head->status().get().empty());
-    }
+    [[nodiscard]] bool leadHasContent(WorkspaceTabId tab) const;
 
     // The head's title runs; a tracked read, empty for a head that has none.
-    [[nodiscard]] static std::vector<TextSpan> titleSpansOf(ScreenHead const* head) {
-        reactive::Computed<std::vector<TextSpan>> const* const spans = head == nullptr ? nullptr : head->titleSpans();
-        return spans == nullptr ? std::vector<TextSpan>{} : spans->get();
-    }
+    [[nodiscard]] static std::vector<TextSpan> titleSpansOf(ScreenHead const* head);
 
     // The head's subtitle runs; a tracked read, empty for a head that has none.
-    [[nodiscard]] static std::vector<TextSpan> subtitleSpansOf(ScreenHead const* head) {
-        reactive::Computed<std::vector<TextSpan>> const* const spans =
-            head == nullptr ? nullptr : head->subtitleSpans();
-        return spans == nullptr ? std::vector<TextSpan>{} : spans->get();
-    }
+    [[nodiscard]] static std::vector<TextSpan> subtitleSpansOf(ScreenHead const* head);
 
     // Whether the head has a tool, an action or a menu entry.
     // An `end` lead counts: it sits in the trail.
-    [[nodiscard]] bool trailHasContent(WorkspaceTabId tab) const {
-        ScreenHead const* const head = headOf(tab);
-        return head != nullptr &&
-               (!headToolsOf(tab).empty() || !head->actions().get().empty() || !headMenuOf(tab).empty() ||
-                (leadPlacementOf(tab) == LeadPlacement::End && leadHasContent(tab)));
-    }
+    [[nodiscard]] bool trailHasContent(WorkspaceTabId tab) const;
 
     // Where a tab's head puts its lead; a tracked read. In the page there is no title line to follow, so `Inline`
     // draws as `Below`.
-    [[nodiscard]] LeadPlacement leadPlacementOf(WorkspaceTabId tab) const {
-        ScreenHead const* const head = headOf(tab);
-        reactive::Computed<LeadPlacement> const* const placement = head == nullptr ? nullptr : head->leadPlacement();
-        LeadPlacement const place = placement == nullptr ? LeadPlacement::Below : placement->get();
-        return place == LeadPlacement::Inline && _headPlacement == HeadPlacement::InPage ? LeadPlacement::Below
-                                                                                         : place;
-    }
+    [[nodiscard]] LeadPlacement leadPlacementOf(WorkspaceTabId tab) const;
 
     // A tool of the head row: a search field or a select bound to the tool's value, its label the accessible name and
     // no caption, reporting each edit to the head, which runs the document's commands.
-    [[nodiscard]] Node headTool(WorkspaceTabId tab, reactive::Signal<HeadTool> const& tool) const {
-        std::string const toolId = tool.peek().id;
-        auto const report = [this, tab, toolId](Value const& value) {
-            ScreenHandle* const handle = _model->handleOf(tab);
-            if (ScreenHead* const head = handle == nullptr ? nullptr : handle->head()) {
-                head->edit(toolId, value);
-            }
-        };
-        Common common;
-        common.testId = "head_tool_" + toolId;
-        common.enabled = Prop<bool>{[&tool] { return tool.get().enabled; }};
-        common.a11y.name = Prop<std::string>{[&tool] { return tool.get().label; }};
-        if (int const width = tool.peek().width; width > 0) {
-            common.layout.width = Sizing::fixed(width);
-        }
-        if (tool.peek().kind == HeadToolKind::Select) {
-            Select select;
-            select.options = Prop<std::vector<SelectOption>>{[&tool] { return tool.get().options; }};
-            select.selected = Prop<std::optional<Key>>{[&tool] { return tool.get().selected; }};
-            select.onSelect = [report](Key const& key) { report(detail::valueOfKey(key)); };
-            select.label = Prop<std::string>{[&tool] { return tool.get().label; }};
-            select.common = std::move(common);
-            return ui::select(std::move(select));
-        }
-        TextInput input;
-        input.value = Prop<std::string>{[&tool] { return tool.get().value; }};
-        input.placeholder = Prop<std::string>{[&tool] { return tool.get().placeholder; }};
-        input.label = Prop<std::string>{[&tool] { return tool.get().label; }};
-        input.onChange = [report](std::string text) { report(Value{std::move(text)}); };
-        // A submit of text the tool does not show yet reports it as an edit first, so `onSubmit` reads what was
-        // submitted.
-        input.onSubmit = [this, tab, toolId, &tool](std::string const& text) {
-            ScreenHandle* const handle = _model->handleOf(tab);
-            ScreenHead* const head = handle == nullptr ? nullptr : handle->head();
-            if (head == nullptr) {
-                return;
-            }
-            if (text != tool.peek().value) {
-                head->edit(toolId, Value{text});
-            }
-            head->submit(toolId);
-        };
-        input.common = std::move(common);
-        return ui::textInput(std::move(input));
-    }
+    [[nodiscard]] Node headTool(WorkspaceTabId tab, reactive::Signal<HeadTool> const& tool) const;
 
     // The test-id suffix of the lead built for @p place: none for the copy under the title.
-    [[nodiscard]] static std::string idSuffix(LeadPlacement place) {
-        if (place == LeadPlacement::Inline) {
-            return "_inline";
-        }
-        return place == LeadPlacement::End ? "_end" : "";
-    }
+    [[nodiscard]] static std::string idSuffix(LeadPlacement place);
 
     // The head's lead, built but not yet wrapped into an immutable Node: the subtitle (muted) and the badges on one
     // wrapping line, so they sit side by side while they fit and wrap under one another where they do not; the badges'
@@ -1012,202 +451,20 @@ private:
     // from its minimum. The `Inline` copy stretches with none, so it fills what the title's line gives it and its
     // subtitle wraps there, while the frame's slot, still content-sized, holds the spare width. The `End` copy is
     // content-sized, in the trail.
-    [[nodiscard]] Row buildHeadLead(WorkspaceTabId tab, LeadPlacement place) const {
-        std::string const suffix = idSuffix(place);
-        auto const subtitle = [this, tab] {
-            ScreenHead const* const head = headOf(tab);
-            return head == nullptr ? std::string{} : head->subtitle().get();
-        };
-        auto const status = [this, tab] {
-            ScreenHead const* const head = headOf(tab);
-            return head == nullptr ? std::vector<HeadBadge>{} : head->status().get();
-        };
-        Row row{.children = {}, .gap = 1, .common = {}, .tone = std::nullopt};
-        row.wrap = true;
-        row.align = Align::Center;
-        row.common.testId = "head_lead" + suffix;
-        if (place == LeadPlacement::Below) {
-            row.common.layout.width = Sizing::stretch();
-            row.common.layout.minWidth = kHeadLeadMinimum;
-        } else if (place == LeadPlacement::Inline) {
-            row.common.layout.width = Sizing::stretch();
-        }
-        row.common.visible =
-            Prop<bool>{[this, tab, place] { return leadHasContent(tab) && leadPlacementOf(tab) == place; }};
-        // The runs when the screen gives them, else its plain subtitle as one run, so the text is bound to one thing.
-        auto const spans = [this, tab, subtitle] {
-            std::vector<TextSpan> runs = subtitleSpansOf(headOf(tab));
-            if (runs.empty()) {
-                std::string plain = subtitle();
-                if (!plain.empty()) {
-                    runs.push_back(TextSpan{.text = std::move(plain)});
-                }
-            }
-            return runs;
-        };
-        Text text{.text = Prop<std::string>{subtitle}, .role = TextRole::Muted, .field = {}, .common = {}};
-        text.spans = Prop<std::vector<TextSpan>>{spans};
-        text.common.testId = "head_subtitle" + suffix;
-        text.common.visible = Prop<bool>{[spans] { return !spans().empty(); }};
-        row.children.push_back(ui::text(std::move(text)));
-        row.children.push_back(ui::forEach<PlacedBadge>(
-            [status] {
-                std::vector<PlacedBadge> placed;
-                for (HeadBadge const& badge : status()) {
-                    placed.push_back(PlacedBadge{.index = placed.size(), .badge = badge});
-                }
-                return placed;
-            },
-            [](PlacedBadge const& placed) { return Key{static_cast<std::int64_t>(placed.index)}; },
-            [suffix](reactive::Signal<PlacedBadge> const& placed) {
-                Badge badge{.tone = Prop<Tone>{[&placed] { return placed.get().badge.tone; }},
-                            .text = Prop<std::string>{[&placed] { return placed.get().badge.text; }},
-                            .icon = placed.peek().badge.icon,
-                            .common = {}};
-                badge.common.testId = "head_status" + suffix + "_" + std::to_string(placed.peek().index);
-                return ui::badge(std::move(badge));
-            },
-            Axis::Horizontal, 1, {}, true));
-        return row;
-    }
+    [[nodiscard]] Row buildHeadLead(WorkspaceTabId tab, LeadPlacement place) const;
 
     // The head's trail: the tools, the actions as buttons and the head's own menu behind one icon button, in one row.
     // It is a row of actions: its parts are the theme's action gap apart, and it wraps, so a part with nothing in it
     // takes none. Hidden while the head has none of them.
-    [[nodiscard]] ActionBar buildHeadTrail(WorkspaceTabId tab) const {
-        auto const actions = [this, tab] {
-            ScreenHead const* const head = headOf(tab);
-            return head == nullptr ? std::vector<HeadAction>{} : head->actions().get();
-        };
-        ActionBar row;
-        // Wrapping, so a part with nothing in it (no tools, no menu) takes no gap: a non-wrapping row would leave one
-        // after the last action, short of the edge by a step.
-        row.wrap = true;
-        row.common.testId = "head_trail";
-        row.common.visible = Prop<bool>{[this, tab] { return trailHasContent(tab); }};
-        row.align = Align::Center;
-        row.children.push_back(ui::forEach<HeadTool>(
-            [this, tab] { return headToolsOf(tab); }, [](HeadTool const& tool) { return Key{tool.id}; },
-            [this, tab](reactive::Signal<HeadTool> const& tool) { return headTool(tab, tool); }, Axis::Horizontal, 1));
-        row.children.push_back(ui::row(buildHeadLead(tab, LeadPlacement::End)));
-        row.children.push_back(ui::forEach<HeadAction>(
-            actions, [](HeadAction const& action) { return Key{action.id}; },
-            [this, tab](reactive::Signal<HeadAction> const& action) {
-                Button button{.label = Prop<std::string>{[&action] {
-                                  HeadAction const& current = action.get();
-                                  return current.iconOnly ? std::string{} : current.label;
-                              }},
-                              .emphasis = action.peek().emphasis,
-                              .onClick =
-                                  [this, tab, actionId = action.peek().id] {
-                                      ScreenHandle* const handle = _model->handleOf(tab);
-                                      if (ScreenHead* const head = handle == nullptr ? nullptr : handle->head()) {
-                                          head->run(actionId);
-                                      }
-                                  },
-                              .common = {},
-                              .icon = action.peek().icon};
-                button.common.testId = "head_action_" + action.peek().id;
-                // An icon-only button is named and titled by its label, which it does not draw.
-                auto const labelWhenIconOnly = [&action] {
-                    HeadAction const& current = action.get();
-                    return current.iconOnly ? current.label : std::string{};
-                };
-                button.common.a11y.name = Prop<std::string>{labelWhenIconOnly};
-                button.common.tooltip = Prop<std::string>{labelWhenIconOnly};
-                button.common.enabled = Prop<bool>{[&action] { return action.get().enabled; }};
-                return ui::button(std::move(button));
-            },
-            Axis::Horizontal, 1));
-        row.children.push_back(ui::forEach<ShapedMenu>(
-            [this, tab] {
-                std::vector<HeadMenuEntry> entries = headMenuOf(tab);
-                if (entries.empty()) {
-                    return std::vector<ShapedMenu>{};
-                }
-                std::string shape = shapeOf(entries);
-                return std::vector<ShapedMenu>{ShapedMenu{.shape = std::move(shape), .entries = std::move(entries)}};
-            },
-            [](ShapedMenu const& menu) { return Key{menu.shape}; },
-            [this, tab](reactive::Signal<ShapedMenu> const& menu) {
-                Menu spec{.items = headMenuItems(tab, menu, menu.peek().entries, {}),
-                          .common = {},
-                          .style = MenuStyle::Button,
-                          .label = {},
-                          .icon = "more",
-                          .emphasis = ButtonEmphasis::Normal};
-                // The trigger draws the icon alone; its name is the head's `menuLabel`.
-                Prop<std::string> const name{[this, tab] {
-                    ScreenHead const* const head = headOf(tab);
-                    reactive::Computed<std::string> const* const label = head == nullptr ? nullptr : head->menuLabel();
-                    return label == nullptr ? std::string{"More actions"} : label->get();
-                }};
-                spec.common.a11y.name = name;
-                spec.common.tooltip = name;
-                spec.common.testId = "head_menu";
-                return ui::menu(std::move(spec));
-            },
-            Axis::Horizontal, 1));
-        return row;
-    }
+    [[nodiscard]] ActionBar buildHeadTrail(WorkspaceTabId tab) const;
 
     // The head above a tab's screen: the eyebrow, then the row of the lead and the trail on one wrapping line, the
     // trail at the trailing edge, dropping to a line of its own where it does not fit beside the lead's minimum.
     // Hidden while the head has no content, so a screen without a head looks as it would without it.
-    [[nodiscard]] Node headRow(WorkspaceTabId tab) const {
-        Row row{.children = {}, .gap = 2, .common = {}, .tone = std::nullopt};
-        row.children.push_back(ui::row(buildHeadLead(tab, LeadPlacement::Below)));
-        row.children.push_back(ui::actionBar(buildHeadTrail(tab)));
-        row.common.testId = "head";
-        row.common.layout.width = Sizing::stretch();
-        row.common.visible = Prop<bool>{[this, tab] { return leadHasContent(tab) || trailHasContent(tab); }};
-        row.align = Align::Start;
-        row.justify = Justify::End;
-        row.wrap = true;
-        Column block{.children = {}, .gap = 1, .common = {}};
-        block.children.push_back(ui::text(buildHeadEyebrow(tab)));
-        block.children.push_back(ui::row(std::move(row)));
-        block.common.testId = "head_block";
-        block.common.layout.width = Sizing::stretch();
-        block.common.visible = Prop<bool>{[this, tab] { return headHasContent(tab); }};
-        return ui::column(std::move(block));
-    }
+    [[nodiscard]] Node headRow(WorkspaceTabId tab) const;
 
     // The model changed: the bar shows its tabs in order, with their captions, and the active tab's page.
-    void showTabs() {
-        if (_model == nullptr) {
-            return;
-        }
-        std::vector<WorkspaceTabId> const order = _model->order();
-        std::optional<WorkspaceTabId> const shown = _model->active().peek();
-        std::vector<std::string> captions;
-        captions.reserve(order.size());
-        for (std::size_t index = 0; index < order.size(); ++index) {
-            auto const found = _pages.find(order.at(index).value);
-            if (found == _pages.end()) {
-                continue;
-            }
-            Page& page = *found->second;
-            // A tab the model moved (a reuseEmpty replacement) moves its page in the bar too; `_shownOrder` is the
-            // bar's own order of the pages.
-            if (index >= _shownOrder.size() || _shownOrder.at(index) != order.at(index)) {
-                std::erase(_shownOrder, order.at(index));
-                _shownOrder.insert(
-                    _shownOrder.begin() + static_cast<std::ptrdiff_t>(std::min(index, _shownOrder.size())),
-                    order.at(index));
-                _bar->moveChild(*page.slot, index);
-            }
-            page.slot->setVisible(shown == order.at(index));
-            captions.push_back(captionOf(*_model->handleOf(order.at(index))));
-        }
-        _bar->setTabs(captions);
-        _bar->setSelected(shown ? indexOf(*shown) : kNone);
-        // One tab needs no strip to choose it by; the chords still work with the strip hidden.
-        _bar->setBarShown(captions.size() > 1);
-        if (_onChanged) {
-            _onChanged();
-        }
-    }
+    void showTabs();
 
     reactive::Runtime* _runtime;
     IViewBackend* _backend;
