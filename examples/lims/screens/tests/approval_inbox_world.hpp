@@ -47,10 +47,10 @@ public:
 
     /// @brief Grants @p principal the billing clerk role in the seeded company.
     /// @param principal The principal.
-    void grantBillingClerk(std::string const& principal) const;
+    static void grantBillingClerk(std::string const& principal);
 
     /// @brief Inserts a second invoice, submitted by bea and not by an action, so that no open inbox is told of it.
-    void insertSubmittedInvoiceWithoutAnAction() const;
+    static void insertSubmittedInvoiceWithoutAnAction();
 
 private:
     struct Impl;

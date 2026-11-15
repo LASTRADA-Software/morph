@@ -161,7 +161,7 @@ Shown signedIn(std::string const& login, bool expectHits, bool german = false) {
         for (; at < items.size(); ++index) {
             std::size_t end = at;
             while (end < items.size() && items.at(end) != ',' && items.at(end) != ']') {
-                end += items.at(end) == '\\' ? 2 : 1;
+                end += items.at(end) == '\\' ? 2U : 1U;
             }
             if (items.compare(at, 6, "German") == 0) {
                 break;

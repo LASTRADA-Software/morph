@@ -67,7 +67,7 @@ TEST_CASE("approval inbox: a site approver's inbox is not told when an approval'
 TEST_CASE("approval inbox: submitting an invoice refreshes an inbox that did not hold it", "[lims-screens][billing]") {
     World const world;
     world.draftInvoice();
-    world.grantBillingClerk("carl");
+    World::grantBillingClerk("carl");
     ScopedClockOverride const clock{at(2026, 11, 10, 9)};
     ScreenHarness harness{morph::client::LocalApp{.name = "lims-approval-inbox", .bundle = &inboxBundle, .setUp = {}},
                           std::string{kInbox},
@@ -77,7 +77,7 @@ TEST_CASE("approval inbox: submitting an invoice refreshes an inbox that did not
     REQUIRE(harness.waitForText("pendingCount", "0 pending"));
 
     // Another invoice, submitted by bea, which carl could approve; no action ran, so his inbox does not show it.
-    world.insertSubmittedInvoiceWithoutAnAction();
+    World::insertSubmittedInvoiceWithoutAnAction();
     REQUIRE_FALSE(
         harness.waitFor([&harness] { return harness.text("pendingCount") == std::optional<std::string>{"1 pending"}; },
                         std::chrono::milliseconds{300}));

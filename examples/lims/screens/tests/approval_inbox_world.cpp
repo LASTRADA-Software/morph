@@ -28,11 +28,12 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
         auto const pending = screen.query<lims::ListPendingApprovals>("pending", invoices);
         auto const rows = pending.value().at(&lims::ListInvoicesResult::invoices);
         auto const submit = screen.mutation<lims::SubmitInvoice>("submit", invoices);
-        return ui::column(
-            {ui::text({.text = ui::format("{0} pending", {ui::count(rows)})}).testId("pendingCount"),
-             ui::button({.label = "Refresh", .onClick = ui::refetch(pending)}).testId("refresh"),
-             ui::button({.label = "Submit", .onClick = ui::run(submit, {{&lims::SubmitInvoice::invoiceId, 1}})})
-                 .testId("submit")});
+        return ui::column({
+            ui::text({.text = ui::format("{0} pending", {ui::count(rows)})}).testId("pendingCount"),
+            ui::button({.label = "Refresh", .onClick = ui::refetch(pending)}).testId("refresh"),
+            ui::button({.label = "Submit", .onClick = ui::run(submit, {{&lims::SubmitInvoice::invoiceId, 1}})})
+                .testId("submit"),
+        });
     }));
     if (!registered) {
         return std::unexpected(registered.error());
@@ -64,11 +65,11 @@ void World::draftInvoice() const {
 
 void World::submitInvoice() const { lims::test::submit(*_impl->invoice); }
 
-void World::grantBillingClerk(std::string const& principal) const {
+void World::grantBillingClerk(std::string const& principal) {
     lims::test::grant(principal, lims::LimsRole::BillingClerk);
 }
 
-void World::insertSubmittedInvoiceWithoutAnAction() const {
+void World::insertSubmittedInvoiceWithoutAnAction() {
     Lightweight::SqlStatement statement;
     for (char const* sql : {
              "CREATE TEMP TABLE other AS SELECT * FROM billing_invoices WHERE id = 1",
