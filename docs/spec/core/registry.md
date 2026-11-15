@@ -1773,6 +1773,18 @@ for every action, which records its result holds.
   two such halves). It belongs beside the action's registration, in a header
   or a source file: each translation unit that sees it registers the same
   declaration, which is one.
+- **Additions from the composing code.** `BRIDGE_ADD_EFFECTS(A, effects...)`
+  stores `{Kind, std::type_index?}` per effect under the action's id in
+  `detail::mutableAddedEffectsRegistry()`, apart from the base declarations.
+  It is for code that links two modules and so can name a record the action's
+  own module cannot: a write that crosses a module boundary is declared by the
+  composer, not by either side. The effects are `updates<R>`, `changes<R>` and
+  `changesInstance`; `none` is refused at compile time, since an addition adds
+  and `none` adds nothing. Repeating an addition, in any order and from any
+  number of translation units, is a no-op, and additions from several
+  composers are unioned. Like `BRIDGE_REGISTER_EFFECTS`, it asserts the
+  registration latch, defines no specialisation and compiles out under
+  `MORPH_CLIENT_ONLY`.
 - **Idempotent per action.** Each action id keeps its distinct declarations;
   one equal to a stored one, in any order, is not added again. Two distinct
   declarations are a conflict, recorded rather than thrown so the registrar
@@ -1786,6 +1798,14 @@ for every action, which records its result holds.
   latch in a debug build. Resolution cannot run at the latch:
   `closeRegistrationPhase()` is `noexcept`, and a release build closes it only
   when the application asks.
+- **The union.** An action's effects are its base declaration unioned with
+  its additions. An addition never removes an effect: a base `none` is dropped
+  when an addition exists, because the action then changes something, but no
+  base `updates`, `changes` or `changesInstance` is ever lost. An action with
+  additions and no base declaration has the additions alone. Two *different
+  base* declarations are still a conflict; additions never make or hide one.
+  Every addition passes the same checks as a base effect (see Validation), so
+  an `updates<R>` addition needs a keyed `R` that the action's result holds.
 - **Matching.** For each action, its result slots are taken in path order, and a
   slot is kept when its type is a registered record and no kept slot's path
   contains it (a path contains itself and every path below it; `""` contains
@@ -1799,6 +1819,9 @@ for every action, which records its result holds.
   - an action with two different effects declarations. A declaration is a
     set, so a repeated effect counts once and order does not matter;
   - `none` together with any other effect in one declaration;
+  - an addition for an action id that no action registered: it would declare
+    effects for nothing, so a misspelt or removed action is refused rather than
+    ignored. The record of an addition is checked as a base effect's is;
   - `updates<R>` or `changes<R>` where `R` is not a registered record;
   - `updates<R>` where `R` has no key, or where the action's `recordsOf` does
     not name `R`;
@@ -1830,6 +1853,6 @@ for every action, which records its result holds.
   `changesInstance` and `none`. `recordNamed(name)` points into the resolved
   copy of the record registry, valid for the life of the process.
 - **Testing.** `detail::resolveForTesting(records, slots, effects,
-  slotConflicts)` runs the same resolution over registries a test builds, so an
+  slotConflicts, additions)` runs the same resolution over registries a test builds, so an
   invalid configuration can be exercised without making the process registry
   invalid for the rest of the suite.
