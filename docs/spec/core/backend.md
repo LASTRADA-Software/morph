@@ -783,6 +783,8 @@ changes it.
 | `payloadCompleteness` | `Lenient` | See [`PayloadCompleteness`](#payloadcompleteness--enforcing-the-action-evolution-policy). |
 | `services` | empty | `IEnvelopeService` extensions; see [Envelope services](#envelope-services). A null entry makes the constructor throw `std::invalid_argument`. |
 | `coalesceWindow` | `50 ms` | How long a connection's changes are merged before one `changes` event is sent; see [Coalescing](#coalescing). |
+| `clock` | the system clock | The server's "now", read by [time-derived fan-out](#time-derived-fan-out). A test supplies one it advances by hand. |
+| `clockRecheck` | `1 s` | The longest the server sleeps before reading `clock` again; see [time-derived fan-out](#time-derived-fan-out). Not positive is refused by the constructor. |
 
 ```cpp
 using LogProvider = std::function<std::shared_ptr<morph::journal::IActionLog>(
@@ -1324,6 +1326,32 @@ through `dispatchExecute`.
     second plus one per 256 keys (or topics) the connection is sent.
     A burst of one hundred writes to one type reaches each watching
     connection as one event, so one refetch per showing query.
+- <a id="time-derived-fan-out"></a>**Time-derived fan-out.** Some records change
+  with no action behind them: an approval's scope moves from a site to its company at a
+  deadline. A model reports such a fact through an action registered with
+  `BRIDGE_REGISTER_CHANGES_AT` (see [registry.md, "Effects"](registry.md#effects)), and the
+  server, which owns the clock, does the rest through the same `fanOut` an action's effects
+  take:
+  - *Asking.* The first envelope the server handles, and every later fan-out that names one of a
+    reporter's records, schedules one ask for that reporter: a fresh instance of its model is made
+    through the `ModelRegistryFactory`, the action is dispatched on it with an empty payload on
+    a model strand (never the server strand, whose tasks must not block), and the instance is
+    dropped. An ask in flight is not repeated; a change that arrives during it asks once more
+    when it ends, because the answer may predate the change. An ask that throws is logged and
+    leaves the reporter with no instant until a later change asks again.
+  - *Waiting.* The server keeps the instant it was told and sleeps on its strand timer for
+    `min(instant - clock(), clockRecheck)`. It never trusts the elapsed sleep: after each wake it
+    reads `clock` again, because a system clock can be set and an injected one is advanced by a
+    test without any sleep. The instant has come when `clock() >= instant`.
+  - *Firing.* The server fans out a whole-type `changes` for each listed record, and every
+    record derived from it, as `fanOut(changes, 0, "")`: no caller, so no connection is exempt
+    and a `privateKeys` record reaches every watcher without its keys. Re-authorisation and
+    coalescing apply as to any fan-out. It then asks again for the following instant.
+  - *What the model must do.* Report an instant strictly after its own now, from the same
+    clock the server is configured with, so a reported instant that has come is never reported
+    again. The model is not told when it fires, and nothing in it is scheduled.
+  - A record changed by time alone and by an action declares the action's effects as usual;
+    the two paths meet in `fanOut`.
 - **The registries are read at construction.** Every `RemoteServer`
   constructor reads the record and effects registries once, so a process whose
   declarations are invalid fails with `EffectsRegistrationError` when the server
@@ -2471,6 +2499,8 @@ server: each call is a loop task, so the loop serialises them.
 | `payloadCompleteness` | `PayloadCompleteness`; default `Lenient`. |
 | `services` | `std::vector<std::shared_ptr<IEnvelopeService>>`: extensions consulted, in order, for a kind the server does not answer itself; a null entry throws `std::invalid_argument`. See [Envelope services](#envelope-services). |
 | `coalesceWindow` | `std::chrono::milliseconds`, default `50 ms`: how long a connection's changes are merged before one `changes` event is sent; zero sends each fan-out at once; negative throws `std::invalid_argument`. See [Coalescing](#coalescing). |
+| `clock` | `std::function<morph::time::DateTime()>`, default empty (the system clock): the server's "now" for [time-derived fan-out](#time-derived-fan-out). |
+| `clockRecheck` | `std::chrono::milliseconds`, default `1 s`: the longest sleep before `clock` is read again; not positive throws `std::invalid_argument`. |
 
 ### `SimulatedRemoteBackend`
 
