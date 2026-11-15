@@ -190,11 +190,17 @@ it. A view mounted on it is destroyed first.
   engagement, and its members' and rows') as `prefill`, `reset` or `assign` last left it, and as it was built.
   `refill(bodyJson)` loads like `prefill`, except that a top-level field whose snapshot differs (the user changed
   it since) keeps what was entered. It is for a later value of the record already being edited; `prefill` is for
-  another record. A successful submission of an explicit form ends the edit of every field still holding what it
-  sent, so the record's later values reach those; a field changed while the submission was in flight, or one whose
-  submission failed, stays an edit. An automatic form's submission does not end an edit: it goes out while the person
-  may still be typing, and loading the record's form of a number (`1.000` for a typed `1`) would change the text
-  under their cursor.
+  another record. A successful submission, automatic or explicit, ends the edit of every field still holding what it
+  sent, so the record's later values reach those; a field changed after the submission was sent, or one whose
+  submission failed, stays an edit. An automatic form submits while the person may still be typing, which two rules
+  make safe. First, the record's form of the value just sent does not load: a saved scalar takes the record's value
+  only when it would encode differently from the draft, so a typed `1` stays `1` when the record answers `1.000`
+  (the comparison is the encoded body entry, not the text). Second, the snapshot a success is judged against is the
+  one taken when that submission went out, so text typed while it was in flight is never mistaken for it, even when a
+  following submission starts in the same turn as the reply. The engine has no focus, so "still typing" is "changed
+  since the last send", which is exactly what the snapshots record. An automatic form's object and collection do not
+  end their edit on a save: their members and rows cannot be compared with the record without rebuilding them under
+  the cursor, so they own what was entered until the form is rebuilt or loaded with `prefill`. A member the record leaves out loads blank into a field that is no longer an edit, as it does in `prefill`.
 - **Formatting follows the screen.** `setFormat(locale, datePattern, dateTimePattern)` on a `FormSession` (and so on a
   `WizardSession`'s steps and a `CollectionSession`'s editor) replaces the number locale and the date patterns of a
   built form. The number locale is read by every field's encoding, so each re-encodes its draft at once and the body

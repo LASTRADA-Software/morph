@@ -478,6 +478,34 @@ public:
         return out;
     }
 
+    /// @brief Whether loading @p value would leave what the field encodes unchanged: a scalar whose draft decodes
+    ///        from the wire value to the same body entry as the current draft, such as `1` and the record's `1.000`.
+    ///        An Object, a collection and a truncated field never match (their rows and members would be rebuilt
+    ///        rather than compared). Untracked.
+    /// @param value The wire value, or null for blank.
+    /// @return `true` when the current draft already encodes as @p value does.
+    [[nodiscard]] bool encodesLike(detail::engine::Json const* value) const {
+        if (_spec->truncated || _spec->kind == FieldKind::Object || _spec->kind == FieldKind::ObjectArray) {
+            return false;
+        }
+        bool const present = value != nullptr && !value->is_null();
+        std::string draft = present ? decodeScalar(*_spec, *value, _core->values(), _places.peek()) : std::string{};
+        std::size_t const unit = _spec->entryUnit;
+        if (unit != 0 && unit < _spec->units.size() && !draft.empty()) {
+            draft = convertDraft(draft, _spec->units.front(), _spec->units.at(unit), _core->values().locale)
+                        .value_or(std::string{});
+        }
+        Encoding const incoming = encodeScalar(*_spec, draft, unit, _core->values(), _places.peek());
+        Encoding const& current = _encoded.peek();
+        if (incoming.has_value() != current.has_value()) {
+            return false;
+        }
+        if (!incoming.has_value()) {
+            return true;
+        }
+        return incoming->has_value() && current->has_value() && (*incoming)->json == (*current)->json;
+    }
+
     /// @brief Replaces the draft with a wire value as the user's own edit, in one batch: a `load` the session does
     ///        not mark programmatic, so the field counts as changed and is validated as an edit is.
     /// @param value The wire value; null is blank.
@@ -862,7 +890,10 @@ public:
         }
         markLoaded();
         _autoSubmit = std::make_unique<reactive::Effect>(runtime, [this] { autoSubmit(); });
-        _acceptSent = std::make_unique<reactive::Effect>(runtime, [this] { acceptSent(); });
+        _acceptSent = std::make_unique<reactive::Effect>(runtime, [this, &runtime] {
+            static_cast<void>(_mutation.successCount());
+            runtime.untracked([&] { acceptSent(); });
+        });
     }
 
     ~FormSession() = default;
@@ -1013,11 +1044,12 @@ public:
 
     /// @brief Loads a stored payload like `prefill`, except that a top-level field the user changed since the form
     ///        was last loaded keeps what they entered: a later value of the record being edited, such as its first
-    ///        value arriving after the user started typing, or a refetch, does not discard the edit. An explicit
-    ///        form's successful submission ends the edit of every field still holding what it sent, so the record's
-    ///        later values reach those. An automatic form's does not: it submits while the person may still be
-    ///        typing, and loading the record's form of a number would change the text under their cursor. Nothing
-    ///        is submitted. Text that is not a JSON object changes nothing.
+    ///        value arriving after the user started typing, or a refetch, does not discard the edit. A successful
+    ///        submission ends the edit of every field still holding what it sent, so the record's later values reach
+    ///        those. An automatic form submits while the person may still be typing, so there a saved scalar takes a
+    ///        record value only when it encodes differently from the draft: the record's form of the same value
+    ///        (`1.000` for a typed `1`) leaves the text alone. A saved object or collection of an automatic form
+    ///        stays an edit. Nothing is submitted. Text that is not a JSON object changes nothing.
     /// @param bodyJson The payload.
     void refill(std::string_view bodyJson) {
         auto const dom = detail::engine::parseJson(bodyJson);
@@ -1028,10 +1060,18 @@ public:
         runtime().batch([&] {
             for (std::size_t index = 0; index < _fields.size(); ++index) {
                 FieldState& field = *_fields.at(index);
-                if (field.snapshot() == _loaded.at(index)) {
-                    field.load(detail::engine::member(*dom, field.spec().name));
-                    loaded.push_back(index);
+                if (field.snapshot() != _loaded.at(index)) {
+                    continue;
                 }
+                detail::engine::Json const* const incoming = detail::engine::member(*dom, field.spec().name);
+                // An automatic form's saved field is a finished edit only while the record differs from what the
+                // person typed: the record's form of the same value (`1.000` for `1`) is left out, so a refill
+                // never rewrites text the person may still be typing.
+                if (submitMode() == SubmitMode::Automatic && field.encodesLike(incoming)) {
+                    continue;
+                }
+                field.load(incoming);
+                loaded.push_back(index);
             }
             _core->markProgrammatic();
         });
@@ -1127,13 +1167,12 @@ private:
     // Only while nothing is in flight: the submission is Exclusive, so a run made during one is refused and what it
     // would have sent was never saved.
     void rememberSent() {
-        if (_core->model().submitMode() != SubmitMode::Explicit) {
-            return;
-        }
         runtime().untracked([&] {
             if (_mutation.pending()) {
                 return;
             }
+            // A success the accept effect has not yet seen belongs to the snapshots about to be replaced.
+            acceptSent();
             _sent.clear();
             for (auto const& field : _fields) {
                 _sent.push_back(field->snapshot());
@@ -1141,20 +1180,30 @@ private:
         });
     }
 
+    // An explicit form ends the edit of what it saved. An automatic one does so only for a scalar: its refill compares
+    // the record's value with the draft, which a collection's rows and an object's members do not allow, and
+    // rebuilding them would replace the row the person is typing in.
+    [[nodiscard]] bool endsEditOnSave(FieldState const& field) const {
+        if (_core->model().submitMode() == SubmitMode::Explicit) {
+            return true;
+        }
+        FieldSpec const& spec = field.spec();
+        return !spec.truncated && spec.kind != FieldKind::Object && spec.kind != FieldKind::ObjectArray;
+    }
+
+    // Ends the edit of what the last success sent. Runs untracked: the accept effect and the next send both call it.
     void acceptSent() {
         std::uint64_t const successes = _mutation.successCount();
         if (successes == _acceptedSuccesses) {
             return;
         }
         _acceptedSuccesses = successes;
-        runtime().untracked([&] {
-            for (std::size_t index = 0; index < _sent.size(); ++index) {
-                if (_fields.at(index)->snapshot() == _sent.at(index)) {
-                    _loaded.at(index) = _sent.at(index);
-                }
+        for (std::size_t index = 0; index < _sent.size(); ++index) {
+            if (_fields.at(index)->snapshot() == _sent.at(index) && endsEditOnSave(*_fields.at(index))) {
+                _loaded.at(index) = _sent.at(index);
             }
-            _sent.clear();
-        });
+        }
+        _sent.clear();
     }
 
     void markLoaded() {
@@ -1213,6 +1262,7 @@ private:
             return;
         }
         _lastSubmitted = body;
+        rememberSent();
         std::string const toSend = *body;
         runtime().untracked([&] {
             if (_mutation.run(toSend)) {
