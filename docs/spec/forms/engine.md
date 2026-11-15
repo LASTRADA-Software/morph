@@ -195,6 +195,13 @@ it. A view mounted on it is destroyed first.
   submission failed, stays an edit. An automatic form's submission does not end an edit: it goes out while the person
   may still be typing, and loading the record's form of a number (`1.000` for a typed `1`) would change the text
   under their cursor.
+- **Formatting follows the screen.** `setFormat(locale, datePattern, dateTimePattern)` on a `FormSession` (and so on a
+  `WizardSession`'s steps and a `CollectionSession`'s editor) replaces the number locale and the date patterns of a
+  built form. The number locale is read by every field's encoding, so each re-encodes its draft at once and the body
+  follows; the drafts keep the text as typed, so `1,5` typed under a comma locale reads as an error once the locale
+  switches to a point. The date inputs' `pattern` is read tracked and follows. The screen's interpreter keeps an effect per
+  form, collection and wizard that applies the session's current formatting, and holds the facts it applied, because the
+  number locale is a set of views into them. The display zone and the translations are read once, at build.
 - **Choice options** are a `reactive::Query<std::string, std::string>` per Choice, keyed on the options request:
   `{}` for an independent Choice, `{"parent": <literal>, …}` once every parent encodes, idle while one does not.
   A parent change refetches, and a reply for a superseded request is dropped. A selection the answered options no
@@ -257,7 +264,7 @@ before it.
 | Quantity | `TextInput` showing its unit, as a Decimal's (one unit); with alternatives, a `TextInput` with no unit and a unit `Select` beside it; switching converts the draft exactly |
 | Boolean | `Checkbox` labelled with the field |
 | Enum, Choice | `Select` (dropdown, or radio for `x-widget: radio`) keyed by each option's JSON literal; a Choice adds a `Busy` while its options load |
-| DateTime, EpochDateTime; Date, EpochDate | `DateTimeInput` (date-time in the display zone; date); the input shows and reads `FormSessionOptions::datePattern` or `dateTimePattern` while they are set (`ScreenCore::engineOptions` fills them from the session's formatting), and the draft text stays ISO |
+| DateTime, EpochDateTime; Date, EpochDate | `DateTimeInput` (date-time in the display zone; date); the input shows and reads `FormSessionOptions::datePattern` or `dateTimePattern` while they are set (`ScreenCore::engineOptions` fills them from the session's formatting), and the draft text stays ISO; the input follows `FormSession::setFormat`, which the screen calls whenever its formatting changes |
 | Slider | `Slider` over `x-min`..`x-max` by `x-step` |
 | Array | `TextInput`, comma-separated |
 | Object | `Panel` of its members' cells |

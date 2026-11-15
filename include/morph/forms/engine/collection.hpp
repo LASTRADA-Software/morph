@@ -491,6 +491,17 @@ public:
     /// @return The editor, or null when the view has no row action or its schema is unknown or malformed.
     [[nodiscard]] FormSession* editor() const noexcept { return _editor.get(); }
 
+    /// @brief Replaces the number locale and the date patterns the editor reads (`FormSession::setFormat`); nothing
+    ///        when the collection has no editor.
+    /// @param locale          The number format. Its views must outlive the session or the next call.
+    /// @param datePattern     The date pattern; empty keeps ISO.
+    /// @param dateTimePattern The date-time pattern; empty keeps ISO.
+    void setFormat(render::NumericLocale locale, std::string datePattern, std::string dateTimePattern) {
+        if (_editor) {
+            _editor->setFormat(locale, std::move(datePattern), std::move(dateTimePattern));
+        }
+    }
+
     /// @brief Whether an action is in flight. Tracked.
     /// @return `true` while one is.
     [[nodiscard]] bool actionPending() const { return _actions.pending(); }

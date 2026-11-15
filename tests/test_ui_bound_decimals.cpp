@@ -337,3 +337,24 @@ TEST_CASE("a form's date fields carry the session's date patterns", "[ui][form-d
     CHECK(h.backend.prop(h.byTestId("DateTimeInput", "field_day"), "pattern") == "dd.MM.yyyy");
     CHECK(h.backend.prop(h.byTestId("DateTimeInput", "field_at"), "pattern") == "dd.MM.yyyy HH:mm");
 }
+
+// Mutation: build the form's options once and never rebuild the form when the formatting changes -> the pattern
+// stays at what it was at mount.
+TEST_CASE("a mounted form's date fields follow a later change of the session's date patterns", "[ui][form-dates]") {
+    constexpr std::string_view kSchedule = R"({
+      "vocab": "ui/1", "id": "schedule",
+      "models": { "sample": { "type": "Lims_SampleModel" } },
+      "view": { "kind": "form", "id": "sched", "model": "sample", "action": "Lims_ScheduleSample",
+                "submit": "explicit" }
+    })";
+    Harness h;
+    h.session.setDatePatterns("dd.MM.yyyy", "dd.MM.yyyy HH:mm");
+    auto const screen = h.mount(kSchedule);
+    REQUIRE(h.diagnostics.empty());
+    REQUIRE(h.backend.prop(h.byTestId("DateTimeInput", "field_day"), "pattern") == "dd.MM.yyyy");
+
+    h.session.setDatePatterns("MM/dd/yyyy", "MM/dd/yyyy hh:mm a");
+    h.settle();
+    CHECK(h.backend.prop(h.byTestId("DateTimeInput", "field_day"), "pattern") == "MM/dd/yyyy");
+    CHECK(h.backend.prop(h.byTestId("DateTimeInput", "field_at"), "pattern") == "MM/dd/yyyy hh:mm a");
+}

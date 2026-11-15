@@ -91,7 +91,8 @@ public:
           _values{.locale = _options.locale,
                   .displayOffsetMinutes = _options.displayOffsetMinutes,
                   .translations = _options.translations,
-                  .bcp47 = _options.bcp47} {}
+                  .bcp47 = _options.bcp47},
+          _format{runtime, std::uint64_t{0}} {}
 
     /// @brief The runtime.
     /// @return The runtime passed at construction.
@@ -105,9 +106,34 @@ public:
     /// @return The options.
     [[nodiscard]] FormSessionOptions const& options() const noexcept { return _options; }
 
-    /// @brief The options a value conversion reads.
+    /// @brief The options a value conversion reads. Tracked: a change of the number format (`setFormat`) reruns what
+    ///        read them.
     /// @return The value context.
-    [[nodiscard]] ValueContext const& values() const noexcept { return _values; }
+    [[nodiscard]] ValueContext const& values() const {
+        static_cast<void>(_format.get());
+        return _values;
+    }
+
+    /// @brief The pattern a date or date-time input shows and reads. Tracked.
+    /// @param date `true` for the date pattern, `false` for the date-time pattern.
+    /// @return The pattern; empty keeps ISO.
+    [[nodiscard]] std::string const& pattern(bool date) const {
+        static_cast<void>(_format.get());
+        return date ? _options.datePattern : _options.dateTimePattern;
+    }
+
+    /// @brief Replaces the number locale and the date patterns every field reads. Drafts keep their text; the
+    ///        fields check it again against the new format.
+    /// @param locale          The number format. Its views must outlive the session or the next call.
+    /// @param datePattern     The date pattern.
+    /// @param dateTimePattern The date-time pattern.
+    void setFormat(render::NumericLocale locale, std::string datePattern, std::string dateTimePattern) {
+        _options.locale = locale;
+        _options.datePattern = std::move(datePattern);
+        _options.dateTimePattern = std::move(dateTimePattern);
+        _values.locale = locale;
+        _format.set(_format.peek() + 1);
+    }
 
     /// @brief The Choice fetcher.
     /// @return The fetcher; may be empty.
@@ -143,6 +169,7 @@ private:
     ChoiceFetcher _choices;
     FormSessionOptions _options;
     ValueContext _values;
+    reactive::Signal<std::uint64_t> _format;
     std::function<void()> _programmatic;
     std::vector<std::unique_ptr<FieldState>> const* _fields = nullptr;
 };
@@ -859,6 +886,20 @@ public:
     /// @brief The session options.
     /// @return The options.
     [[nodiscard]] FormSessionOptions const& options() const noexcept { return _core->options(); }
+
+    /// @brief Replaces the number locale and the date patterns the form reads, so a mounted form follows a change
+    ///        of the session's formatting. Drafts keep their text and are checked again against the new format.
+    /// @param locale          The number format. Its views must outlive the session or the next call.
+    /// @param datePattern     The date pattern; empty keeps ISO.
+    /// @param dateTimePattern The date-time pattern; empty keeps ISO.
+    void setFormat(render::NumericLocale locale, std::string datePattern, std::string dateTimePattern) {
+        _core->setFormat(locale, std::move(datePattern), std::move(dateTimePattern));
+    }
+
+    /// @brief The pattern the form's date or date-time inputs show. Tracked.
+    /// @param date `true` for the date pattern, `false` for the date-time pattern.
+    /// @return The pattern; empty keeps ISO.
+    [[nodiscard]] std::string const& pattern(bool date) const { return _core->pattern(date); }
 
     /// @brief The top-level fields, in `x-order`.
     /// @return The fields.

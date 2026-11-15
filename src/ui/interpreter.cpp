@@ -6598,6 +6598,7 @@ void ScreenCore::wireForm(ElementState& element) {
     }
     element.form = std::make_unique<forms::FormSession>(runtime(), *std::move(model), aliasSubmits(alias->model),
                                                         aliasCalls(alias->model), engineOptions());
+    followFormatting(element, scope);
     // An overlay's `decimals` follows its expression: the field keeps the draft as typed and checks it again against
     // the places the expression gives now.
     for (DocNodePtr const& record : node.partList("fields")) {
@@ -6916,12 +6917,37 @@ forms::FormSessionOptions ScreenCore::engineOptions() const {
     return options;
 }
 
+// Keeps a form's, collection's or wizard's number locale and date patterns at the session's current formatting. The
+// engine's number locale holds views into the facts it was given, so the effect also holds the facts it last applied.
+void ScreenCore::followFormatting(ElementState& element, RtScope& scope) {
+    auto const held = std::make_shared<std::shared_ptr<FormatContext const>>();
+    forms::FormSession* const form = element.form.get();
+    forms::CollectionSession* const collection = element.collection.get();
+    forms::WizardSession* const wizard = element.wizard.get();
+    scope.nodes.effect([this, held, form, collection, wizard] {
+        std::shared_ptr<FormatContext const> const format = session.formattingHandle();
+        runtime().untracked([&] {
+            render::NumericLocale const locale = withoutGrouping(format->numeric);
+            if (form != nullptr) {
+                form->setFormat(locale, format->datePattern, format->dateTimePattern);
+            }
+            if (collection != nullptr) {
+                collection->setFormat(locale, format->datePattern, format->dateTimePattern);
+            }
+            if (wizard != nullptr) {
+                wizard->setFormat(locale, format->datePattern, format->dateTimePattern);
+            }
+            *held = format;
+        });
+    });
+}
+
 // Builds a collection's or wizard's session when its element is declared. The node's `action` is the collection's
 // query or the wizard's first step; the catalog answers the document for it, and every call (the query, the actions,
 // every step's submission) goes through the node's model alias.
 void ScreenCore::wireComposite(ElementState& element) {
     DocNode const& node = *element.node;
-    RtScope const& scope = *element.scope;
+    RtScope& scope = *element.scope;
     bool const collection = node.kind == "collection";
     std::string const action{node.name("action")};
     Catalog const& catalog = session.options().catalog;
@@ -6954,6 +6980,7 @@ void ScreenCore::wireComposite(ElementState& element) {
         element.collection = std::make_unique<forms::CollectionSession>(runtime(), *std::move(model), schemas,
                                                                         aliasSubmits(alias->model, std::move(query)),
                                                                         call, engineOptions());
+        followFormatting(element, scope);
         return;
     }
     // The wizard's id, the stem of its translation keys, is the action it starts with.
@@ -6971,6 +6998,7 @@ void ScreenCore::wireComposite(ElementState& element) {
     try {
         element.wizard = std::make_unique<forms::WizardSession>(runtime(), *std::move(model), schemas,
                                                                 aliasSubmits(alias->model), call, engineOptions());
+        followFormatting(element, scope);
     } catch (std::invalid_argument const& error) {
         report(node.path, error.what());
     }

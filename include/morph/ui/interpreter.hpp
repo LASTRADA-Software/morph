@@ -682,6 +682,11 @@ public:
     /// @return They.
     [[nodiscard]] FormatContext const& formatting() const { return *_format.get(); }
 
+    /// @brief The formatting facts as a shared handle, for what holds views into them past a later change. A tracked
+    ///        read.
+    /// @return They.
+    [[nodiscard]] std::shared_ptr<FormatContext const> formattingHandle() const { return _format.get(); }
+
     /// @brief The formatting facts, read without tracking: what a value set once at mount reads.
     /// @return They.
     [[nodiscard]] FormatContext const& formattingNow() const { return *_format.peek(); }
@@ -2152,6 +2157,7 @@ private:
     [[nodiscard]] FormSubmitter aliasCalls(ModelAlias* alias);
     [[nodiscard]] FormSubmitter aliasSubmits(ModelAlias* alias, std::string read = {});
     [[nodiscard]] forms::FormSessionOptions engineOptions() const;
+    void followFormatting(ElementState& element, RtScope& scope);
     void wireComposite(ElementState& element);
     Node lowerComposite(DocNode const& node, LowerCtx const& ctx, ElementState* element);
     void presentForm(DocNode const& node, LowerCtx const& ctx, forms::FormViewOptions& options);

@@ -259,6 +259,16 @@ public:
         return found == _resolved.end() ? std::nullopt : std::optional<std::string>{found->second};
     }
 
+    /// @brief Replaces the number locale and the date patterns every step reads (`FormSession::setFormat`).
+    /// @param locale          The number format. Its views must outlive the session or the next call.
+    /// @param datePattern     The date pattern; empty keeps ISO.
+    /// @param dateTimePattern The date-time pattern; empty keeps ISO.
+    void setFormat(render::NumericLocale locale, std::string const& datePattern, std::string const& dateTimePattern) {
+        for (auto const& step : _steps) {
+            step->setFormat(locale, datePattern, dateTimePattern);
+        }
+    }
+
     /// @brief The wizard's title, resolved through the translations (`<id>.title`).
     /// @return The title.
     [[nodiscard]] std::string title() const {

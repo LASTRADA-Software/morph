@@ -316,6 +316,26 @@ TEST_CASE("FormSession: a stored payload round-trips, absent members start blank
     CHECK(shifted->body()->contains(R"("takenAt":"2026-07-20T09:00:00Z")"));
 }
 
+// Mutation: leave the locale out of `SessionCore::setFormat` -> the body keeps reading the old decimal separator.
+TEST_CASE("FormSession: setFormat moves the number locale and the date patterns of a built form",
+          "[forms-engine][session]") {
+    constexpr std::string_view kSchema = R"({"$defs":{"double":{"type":"number"}},"properties":{
+      "reading":{"$ref":"#/$defs/double","x-order":0},
+      "day":{"type":"string","format":"date","x-order":1}},"required":["reading"],"x-submitMode":"explicit"})";
+    Harness harness;
+    auto const form = harness.session("TestAction", kSchema);
+    harness.type(*form, "reading", "1,5");
+    CHECK_FALSE(form->ready());
+    CHECK(form->pattern(true).empty());
+
+    form->setFormat({.decimalSeparator = ",", .groupSeparator = "."}, "dd.MM.yyyy", "dd.MM.yyyy HH:mm");
+    harness.settle();
+    CHECK(form->ready());
+    CHECK(form->body() == R"({"reading":1.5})");
+    CHECK(form->pattern(true) == "dd.MM.yyyy");
+    CHECK(form->pattern(false) == "dd.MM.yyyy HH:mm");
+}
+
 TEST_CASE("FormSession: x-blankAs empty submits \"\" once the field was filled, and only then",
           "[forms-engine][session]") {
     constexpr std::string_view kEdit = R"({"type":"object","properties":{
