@@ -52,6 +52,6 @@ var ui_2backend_8hpp =
       [ "Toggle", "d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2aa8875bbe4272c0bdd786cfaaedf77921", null ],
       [ "Range", "d0/dc2/ui_2backend_8hpp.html#a42ee56ec5cb1813818e8b2acefe407f2a87ba2ecc8b6915e8bd6f5089918229fd", null ]
     ] ],
-    [ "morph::ui::widthClassOf", "d0/dc2/ui_2backend_8hpp.html#a14b0ac907b260865f8f1be0b88c444ad", null ],
+    [ "morph::ui::widthClassOf", "d0/dc2/ui_2backend_8hpp.html#a89aa196c5dae970e88e32ce861f11346", null ],
     [ "morph::ui::kExpandedWidthUnits", "d0/dc2/ui_2backend_8hpp.html#a8fac25a5ffe5feb09b970bba606e05ab", null ]
 ];

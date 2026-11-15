@@ -4,5 +4,5 @@ var searchData=
   ['membervalue_1',['MemberValue',['../da/ded/classmorph_1_1forms_1_1Form.html#a386c7aa8c8751e17563ffacdadf1e4ca',1,'morph::forms::Form']]],
   ['menu_2',['menu',['../d8/d09/structmorph_1_1app_1_1App.html#a3cfd6ea9820e803dd79ab633d9eefea8',1,'morph::app::App']]],
   ['migration_3',['Migration',['../dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html#a554f4b39d861af89bcbcffaf2a5f0aa7',1,'morph::journal::PayloadMigrationRegistry']]],
-  ['modelschemas_4',['ModelSchemas',['../d9/da5/explorer_8hpp.html#aeea66fab5e4e1dd398f5b1ccce7be4de',1,'morph::ui']]]
+  ['modelschemas_4',['ModelSchemas',['../d0/dab/bundle_8hpp.html#aeea66fab5e4e1dd398f5b1ccce7be4de',1,'morph::ui']]]
 ];

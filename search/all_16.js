@@ -20,7 +20,7 @@ var searchData=
   ['valueof_17',['ValueOf',['../df/dd4/structmorph_1_1ui_1_1author_1_1detail_1_1ValueOf.html',1,'morph::ui::author::detail']]],
   ['valueof_18',['valueOf',['../d4/d2f/route_8hpp.html#ab5ee7fd42cf24bd205faf3d0ba3a97bb',1,'morph::ui::detail::route']]],
   ['valueof_3c_20handle_3c_20t_20_3e_20_3e_19',['ValueOf&lt; Handle&lt; T &gt; &gt;',['../d7/dec/structmorph_1_1ui_1_1author_1_1detail_1_1ValueOf_3_01Handle_3_01T_01_4_01_4.html',1,'morph::ui::author::detail']]],
-  ['valueofkey_20',['valueOfKey',['../db/d42/interpreter_8hpp.html#a3e869cdf54e49db43c646498a052bafe',1,'morph::ui::detail']]],
+  ['valueofkey_20',['valueOfKey',['../db/d42/interpreter_8hpp.html#a5be30831da0b69cdcd8e43d917cfef37',1,'morph::ui::detail']]],
   ['valuepoint_21',['valuePoint',['../d4/de9/classmorph_1_1ui_1_1author_1_1Scope.html#a22b7935ce74b74fce9bcead6d4a9d73f',1,'morph::ui::author::Scope']]],
   ['valuerecord_22',['ValueRecord',['../d6/dda/value_8hpp.html#ade1dc8b22e49b1bbed77487cdc498767',1,'morph::ui']]],
   ['values_23',['values',['../d2/de5/structmorph_1_1table_1_1detail_1_1RawEntry.html#addd7f22f878f163593ea5d0d326c3477',1,'morph::table::detail::RawEntry::values'],['../da/daa/structmorph_1_1ui_1_1ChartTicks.html#acdc23fcac38b5ae21069719381c693fa',1,'morph::ui::ChartTicks::values'],['../df/d3b/structmorph_1_1ui_1_1detail_1_1KindSpec.html#ab8aabf210b40432308eed62659edbb9f',1,'morph::ui::detail::KindSpec::values'],['../d3/dd9/structmorph_1_1ui_1_1PrefValues.html#aa0dab09e1c527ca1396227ee4fc3e78b',1,'morph::ui::PrefValues::values']]],
@@ -74,7 +74,6 @@ var searchData=
   ['visibleverdict_71',['visibleVerdict',['../d8/d26/rules_8hpp.html#ac0c0cfe2025c131629b1d392cc7aadc2',1,'morph::forms']]],
   ['visiblewhen_72',['VisibleWhen',['../d8/d10/structmorph_1_1forms_1_1VisibleWhen.html',1,'morph::forms::VisibleWhen&lt; V, A, Cond &gt;'],['../d8/d29/classmorph_1_1forms_1_1RuleExpr.html#a587e8884bfb601bb0fce194508197f79ac466cc39b9102b48474e59155142691c',1,'morph::forms::RuleExpr::VisibleWhen']]],
   ['visiblewhen_73',['visibleWhen',['../d4/d11/forms_8hpp.html#a70452f0c1618273f2b12f28b77387052',1,'morph::forms']]],
-  ['visit_74',['visit',['../dd/dbb/structmorph_1_1ui_1_1detail_1_1NameEntry.html#a30fdd0b75a558e367ca1f6cd8a0da99f',1,'morph::ui::detail::NameEntry']]],
-  ['vocab_75',['vocab',['../d4/d02/structmorph_1_1ui_1_1Document.html#a4b3839578f92208a5b9cc2b415e7813d',1,'morph::ui::Document']]],
-  ['vocabularies_76',['vocabularies',['../db/dbe/structmorph_1_1ui_1_1HelloRequest.html#a489e9e5f3b24b3d272b3cbd6439961cf',1,'morph::ui::HelloRequest::vocabularies'],['../d3/d85/structmorph_1_1ui_1_1HelloReply.html#a39310d6f991686c0e865c7dd9992fc6e',1,'morph::ui::HelloReply::vocabularies'],['../de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a25b7305d9f22e2efd0a91ac030998b53',1,'morph::ui::ServedBundle::vocabularies']]]
+  ['vocab_74',['vocab',['../d4/d02/structmorph_1_1ui_1_1Document.html#a4b3839578f92208a5b9cc2b415e7813d',1,'morph::ui::Document']]],
+  ['vocabularies_75',['vocabularies',['../db/dbe/structmorph_1_1ui_1_1HelloRequest.html#a489e9e5f3b24b3d272b3cbd6439961cf',1,'morph::ui::HelloRequest::vocabularies'],['../d3/d85/structmorph_1_1ui_1_1HelloReply.html#a39310d6f991686c0e865c7dd9992fc6e',1,'morph::ui::HelloReply::vocabularies'],['../de/d9f/structmorph_1_1ui_1_1ServedBundle.html#a25b7305d9f22e2efd0a91ac030998b53',1,'morph::ui::ServedBundle::vocabularies']]]
 ];

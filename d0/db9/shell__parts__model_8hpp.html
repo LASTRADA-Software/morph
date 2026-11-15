@@ -129,6 +129,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/db9/shell__
 <code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;set&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
@@ -155,12 +156,10 @@ Classes</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:a4c364bd3b4746e910ceee2deb609ab40" id="r_a4c364bd3b4746e910ceee2deb609ab40"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a4c364bd3b4746e910ceee2deb609ab40">morph::ui::builtinShellText</a> (std::string_view key, std::string_view locale)</td></tr>
-<tr class="memdesc:a4c364bd3b4746e910ceee2deb609ab40"><td class="mdescLeft">&#160;</td><td class="mdescRight">The texts the shell draws that no application declares, in English and German, by catalogue key.  <br /></td></tr>
-<tr class="memitem:a90ac78a69347514c4daa3ac6dec13afc" id="r_a90ac78a69347514c4daa3ac6dec13afc"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a90ac78a69347514c4daa3ac6dec13afc">morph::ui::shellText</a> (std::string_view key, <a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;format)</td></tr>
-<tr class="memdesc:a90ac78a69347514c4daa3ac6dec13afc"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">morph.shell.*</span> text: the bundle's catalogue wins, then the built-in English or German.  <br /></td></tr>
-<tr class="memitem:a24b7b966ea6556b67d7388daf0724bf9" id="r_a24b7b966ea6556b67d7388daf0724bf9"><td class="memItemLeft"><a class="el" href="../../d9/d1c/structmorph_1_1ui_1_1ShellLabels.html">ShellLabels</a>&#160;</td><td class="memItemRight"><a class="el" href="#a24b7b966ea6556b67d7388daf0724bf9">morph::ui::shellLabels</a> (<a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;format)</td></tr>
-<tr class="memdesc:a24b7b966ea6556b67d7388daf0724bf9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The frame's texts in the session's locale.  <br /></td></tr>
+<tr class="memitem:ad18b4f22945082014de9fcdc823d1cad" id="r_ad18b4f22945082014de9fcdc823d1cad"><td class="memItemLeft">MORPH_API std::string&#160;</td><td class="memItemRight"><a class="el" href="#ad18b4f22945082014de9fcdc823d1cad">morph::ui::shellText</a> (std::string_view key, <a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;format)</td></tr>
+<tr class="memdesc:ad18b4f22945082014de9fcdc823d1cad"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">morph.shell.*</span> text: the bundle's catalogue wins, then the built-in English or German.  <br /></td></tr>
+<tr class="memitem:a056eb0ab534ab88f36f3846048988310" id="r_a056eb0ab534ab88f36f3846048988310"><td class="memItemLeft">MORPH_API <a class="el" href="../../d9/d1c/structmorph_1_1ui_1_1ShellLabels.html">ShellLabels</a>&#160;</td><td class="memItemRight"><a class="el" href="#a056eb0ab534ab88f36f3846048988310">morph::ui::shellLabels</a> (<a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;format)</td></tr>
+<tr class="memdesc:a056eb0ab534ab88f36f3846048988310"><td class="mdescLeft">&#160;</td><td class="mdescRight">The frame's texts in the session's locale.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt"><a class="el" href="../../d5/d0e/classmorph_1_1ui_1_1ShellPartsModel.html" title="The declared parts of a shell, read from the app root.">morph::ui::ShellPartsModel</a></span>: reads an application's declared shell parts from the app root's queries and answers what a <span class="tt">ShellFrame</span> draws, holds the chosen scope, and handles the <span class="tt">setContext</span> command. </p>
@@ -168,8 +167,8 @@ Functions</h2></td></tr>
 
 <p class="definition">Definition in file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
-<a id="a4c364bd3b4746e910ceee2deb609ab40" name="a4c364bd3b4746e910ceee2deb609ab40"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4c364bd3b4746e910ceee2deb609ab40">&#9670;&#160;</a></span>builtinShellText()</h2>
+<a id="ad18b4f22945082014de9fcdc823d1cad" name="ad18b4f22945082014de9fcdc823d1cad"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad18b4f22945082014de9fcdc823d1cad">&#9670;&#160;</a></span>shellText()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -178,48 +177,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::ui::builtinShellText </td>
-          <td>(</td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>key</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>locale</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The texts the shell draws that no application declares, in English and German, by catalogue key. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">key</td><td>A <span class="tt">morph.shell.*</span> key. </td></tr>
-    <tr><td class="paramname">locale</td><td>The session's locale; only its language matters. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The text; the key when it names none. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00034">34</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a90ac78a69347514c4daa3ac6dec13afc" name="a90ac78a69347514c4daa3ac6dec13afc"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a90ac78a69347514c4daa3ac6dec13afc">&#9670;&#160;</a></span>shellText()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::string morph::ui::shellText </td>
+          <td class="memname">MORPH_API std::string morph::ui::shellText </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>key</em></span>, </td>
         </tr>
@@ -231,7 +189,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -246,12 +204,10 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a24b7b966ea6556b67d7388daf0724bf9" name="a24b7b966ea6556b67d7388daf0724bf9"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a24b7b966ea6556b67d7388daf0724bf9">&#9670;&#160;</a></span>shellLabels()</h2>
+<a id="a056eb0ab534ab88f36f3846048988310" name="a056eb0ab534ab88f36f3846048988310"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a056eb0ab534ab88f36f3846048988310">&#9670;&#160;</a></span>shellLabels()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -260,7 +216,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">ShellLabels morph::ui::shellLabels </td>
+          <td class="memname">MORPH_API ShellLabels morph::ui::shellLabels </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">FormatContext</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>format</em></span></td><td>)</td>
           <td></td>
@@ -268,7 +224,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -281,8 +237,6 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The labels. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>

@@ -129,6 +129,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d78/host_8h
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;ranges&gt;</code><br />
 <code>#include &lt;span&gt;</code><br />
@@ -138,6 +139,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d78/host_8h
 <code>#include &lt;type_traits&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
+<code>#include &quot;../core/bridge.hpp&quot;</code><br />
 <code>#include &quot;../core/executor.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d0/df9/runtime_8hpp_source.html">../reactive/runtime.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/d5f/signal_8hpp_source.html">../reactive/signal.hpp</a>&quot;</code><br />
@@ -165,8 +167,6 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The host screens an application registers by name: what a catalog entry's <span class="tt">host</span> names instead of a document.  <a href="../../db/d4c/classmorph_1_1ui_1_1ScreenHostRegistry.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ADocumentScreenHostOptions" id="r_morph_3A_3Aui_3A_3ADocumentScreenHostOptions"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../da/df6/structmorph_1_1ui_1_1DocumentScreenHostOptions.html">morph::ui::DocumentScreenHostOptions</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">How a <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html" title="The framework&#39;s ScreenHost over UI documents: it mounts them through an Interpreter,...">DocumentScreenHost</a></span> finds documents and mounts them.  <a href="../../da/df6/structmorph_1_1ui_1_1DocumentScreenHostOptions.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3Ahost_3A_3AParamsEnv" id="r_morph_3A_3Aui_3A_3Adetail_3A_3Ahost_3A_3AParamsEnv"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d47/classmorph_1_1ui_1_1detail_1_1host_1_1ParamsEnv.html">morph::ui::detail::host::ParamsEnv</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The environment <span class="tt">identityOf</span> evaluates in: the params, and nothing else. Reading anything else marks it unknown.  <a href="../../d9/d47/classmorph_1_1ui_1_1detail_1_1host_1_1ParamsEnv.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ADocumentScreenHost" id="r_morph_3A_3Aui_3A_3ADocumentScreenHost"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html">morph::ui::DocumentScreenHost</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The framework's <span class="tt"><a class="el" href="../../de/d1a/classmorph_1_1ui_1_1ScreenHost.html" title="What mounts screens for a host that owns its own shell; the workspace shell is one.">ScreenHost</a></span> over UI documents: it mounts them through an <span class="tt"><a class="el" href="../../da/d2a/classmorph_1_1ui_1_1Interpreter.html" title="Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher.">Interpreter</a></span>, closes them by the protocol of spec 6 §3, and hands a document's <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#a6b76ddb0f199f53e12cf5d785e89862d" title="Opens another screen.">navigate</a></span> to <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ad8dd83c3ddbad125e85d47671bdc29b6" title="A document asked to open another screen, with how (as). The default hands the screen and its params t...">onNavigate</a></span>, which the deriving host implements.  <a href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ADocumentScreenHost_3A_3AHandle_3A_3AState_3A_3AWatch" id="r_morph_3A_3Aui_3A_3ADocumentScreenHost_3A_3AHandle_3A_3AState_3A_3AWatch"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/d92/structmorph_1_1ui_1_1DocumentScreenHost_1_1Handle_1_1State_1_1Watch.html">morph::ui::DocumentScreenHost::Handle::State::Watch</a></td></tr>
@@ -191,12 +191,12 @@ Enumerations</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:a87488fb0c3e567c87cac07595d30aaba" id="r_a87488fb0c3e567c87cac07595d30aaba"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a87488fb0c3e567c87cac07595d30aaba">morph::ui::detail::host::titleText</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
-<tr class="memdesc:a87488fb0c3e567c87cac07595d30aaba"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text a title value shows.  <br /></td></tr>
-<tr class="memitem:a1797e5a4ca4bcb8d5c4303ec012a8cf0" id="r_a1797e5a4ca4bcb8d5c4303ec012a8cf0"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1797e5a4ca4bcb8d5c4303ec012a8cf0">morph::ui::identityKey</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;identity)</td></tr>
-<tr class="memdesc:a1797e5a4ca4bcb8d5c4303ec012a8cf0"><td class="mdescLeft">&#160;</td><td class="mdescRight">The canonical text of a screen's identity: what <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a84f98bff016d156a4ae2c320b6a30ab2" title="The identity a document screen would have with params: its identity evaluated over the params.">DocumentScreenHost::identityOf</a></span> answers, so <span class="tt">identityOf(id, params) == <a class="el" href="#a1797e5a4ca4bcb8d5c4303ec012a8cf0" title="The canonical text of a screen&#39;s identity: what DocumentScreenHost::identityOf answers,...">identityKey</a>(handle.identity().peek())</span> says whether a mounted screen is the one those params would open.  <br /></td></tr>
-<tr class="memitem:ab8960b5c048d4e03b196f9eac9a243bb" id="r_ab8960b5c048d4e03b196f9eac9a243bb"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ab8960b5c048d4e03b196f9eac9a243bb">morph::ui::sameIdentity</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;lhs, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;rhs)</td></tr>
-<tr class="memdesc:ab8960b5c048d4e03b196f9eac9a243bb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether two identities name the same screen instance: their keys are equal, and neither is <span class="tt">null</span>.  <br /></td></tr>
+<tr class="memitem:a32f703bac8a7c81a7dae71c26ce0b779" id="r_a32f703bac8a7c81a7dae71c26ce0b779"><td class="memItemLeft">MORPH_API std::string&#160;</td><td class="memItemRight"><a class="el" href="#a32f703bac8a7c81a7dae71c26ce0b779">morph::ui::detail::host::titleText</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
+<tr class="memdesc:a32f703bac8a7c81a7dae71c26ce0b779"><td class="mdescLeft">&#160;</td><td class="mdescRight">The text a title value shows.  <br /></td></tr>
+<tr class="memitem:ae039bd1b0db75f60a0c9fda0fc0bd085" id="r_ae039bd1b0db75f60a0c9fda0fc0bd085"><td class="memItemLeft">MORPH_API std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae039bd1b0db75f60a0c9fda0fc0bd085">morph::ui::identityKey</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;identity)</td></tr>
+<tr class="memdesc:ae039bd1b0db75f60a0c9fda0fc0bd085"><td class="mdescLeft">&#160;</td><td class="mdescRight">The canonical text of a screen's identity: what <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a84f98bff016d156a4ae2c320b6a30ab2" title="The identity a document screen would have with params: its identity evaluated over the params.">DocumentScreenHost::identityOf</a></span> answers, so <span class="tt">identityOf(id, params) == <a class="el" href="#ae039bd1b0db75f60a0c9fda0fc0bd085" title="The canonical text of a screen&#39;s identity: what DocumentScreenHost::identityOf answers,...">identityKey</a>(handle.identity().peek())</span> says whether a mounted screen is the one those params would open.  <br /></td></tr>
+<tr class="memitem:a3c1c3dcf594607d3803ddd9217290f2a" id="r_a3c1c3dcf594607d3803ddd9217290f2a"><td class="memItemLeft">MORPH_API bool&#160;</td><td class="memItemRight"><a class="el" href="#a3c1c3dcf594607d3803ddd9217290f2a">morph::ui::sameIdentity</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;lhs, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;rhs)</td></tr>
+<tr class="memdesc:a3c1c3dcf594607d3803ddd9217290f2a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether two identities name the same screen instance: their keys are equal, and neither is <span class="tt">null</span>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The host contract (spec 6 §4): how a host mounts UI documents and closes them, whether it owns its own shell or is the framework's workspace shell, and <span class="tt">DocumentScreenHost</span>, the framework's host over documents. </p>
@@ -218,7 +218,7 @@ Functions</h2></td></tr>
 
 <p>A screen's params, by name. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,14 +235,14 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 <b>Initial value:</b><div class="fragment"><div class="line">std::function&lt;std::expected&lt;std::unique_ptr&lt;ScreenHandle&gt;, <a class="code hl_struct" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a>&gt;(</div>
 <div class="line">   <a class="code hl_typedef" href="#a5b073a0b5244977f291a4f30780868df">ParamMap</a> <span class="keyword">const</span>&amp; params, <a class="code hl_class" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a>&amp; <a class="code hl_function" href="../../d8/d11/view_8hpp.html#ab05064de236d0c6922c839b56c701b96">page</a>)&gt;</div>
-<div class="ttc" id="aclassmorph_1_1ui_1_1ContainerWidget_html"><div class="ttname"><a href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">morph::ui::ContainerWidget</a></div><div class="ttdoc">A widget with children. A factory given this container appends the new widget as its last child.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dc2/ui_2backend_8hpp_source.html#l00104">backend.hpp:104</a></div></div>
-<div class="ttc" id="ahost_8hpp_html_a5b073a0b5244977f291a4f30780868df"><div class="ttname"><a href="#a5b073a0b5244977f291a4f30780868df">morph::ui::ParamMap</a></div><div class="ttdeci">ValueRecord ParamMap</div><div class="ttdoc">A screen&#39;s params, by name.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00040">host.hpp:40</a></div></div>
-<div class="ttc" id="astructmorph_1_1ui_1_1MountError_html"><div class="ttname"><a href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">morph::ui::MountError</a></div><div class="ttdoc">Why a screen could not be mounted.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00043">host.hpp:43</a></div></div>
+<div class="ttc" id="aclassmorph_1_1ui_1_1ContainerWidget_html"><div class="ttname"><a href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">morph::ui::ContainerWidget</a></div><div class="ttdoc">A widget with children. A factory given this container appends the new widget as its last child.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dc2/ui_2backend_8hpp_source.html#l00105">backend.hpp:105</a></div></div>
+<div class="ttc" id="ahost_8hpp_html_a5b073a0b5244977f291a4f30780868df"><div class="ttname"><a href="#a5b073a0b5244977f291a4f30780868df">morph::ui::ParamMap</a></div><div class="ttdeci">ValueRecord ParamMap</div><div class="ttdoc">A screen&#39;s params, by name.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00042">host.hpp:42</a></div></div>
+<div class="ttc" id="astructmorph_1_1ui_1_1MountError_html"><div class="ttname"><a href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">morph::ui::MountError</a></div><div class="ttdoc">Why a screen could not be mounted.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/d78/host_8hpp_source.html#l00045">host.hpp:45</a></div></div>
 <div class="ttc" id="aview_8hpp_html_ab05064de236d0c6922c839b56c701b96"><div class="ttname"><a href="../../d8/d11/view_8hpp.html#ab05064de236d0c6922c839b56c701b96">morph::ui::page</a></div><div class="ttdeci">Node page(Page spec)</div><div class="ttdoc">A page node.</div><div class="ttdef"><b>Definition</b> <a href="../../d8/d11/view_8hpp_source.html#l01911">view.hpp:1911</a></div></div>
 </div><!-- fragment -->
 <p>Makes a host screen (spec 6 §15): the application's native screen, mounted into a shell's page with <code class="param">params</code>. It returns the screen's handle, whose <span class="tt">title</span>, <span class="tt">dirty</span>, <span class="tt">identity</span> and close protocol the shell reads as it does a document screen's, or why it could not be mounted. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00266">266</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -261,7 +261,7 @@ Functions</h2></td></tr>
 <p>What decides a close the document does not decide itself: a dirty screen that declares no <span class="tt">onClose</span>. </p>
 <p>It asks the user, typically with a dialog, and calls <span class="tt">choose</span> once. It offers <em>save and close</em> only when <span class="tt">screen.canSave()</span>; <span class="tt">Save</span> on a screen that cannot save keeps it open. The handle carries the choice out, so <span class="tt">choose</span> may be called after the handle is gone, and then does nothing. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00316">316</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00301">301</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
@@ -296,13 +296,13 @@ Functions</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00290">290</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
-<a id="a87488fb0c3e567c87cac07595d30aaba" name="a87488fb0c3e567c87cac07595d30aaba"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a87488fb0c3e567c87cac07595d30aaba">&#9670;&#160;</a></span>titleText()</h2>
+<a id="a32f703bac8a7c81a7dae71c26ce0b779" name="a32f703bac8a7c81a7dae71c26ce0b779"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a32f703bac8a7c81a7dae71c26ce0b779">&#9670;&#160;</a></span>titleText()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -311,7 +311,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::ui::detail::host::titleText </td>
+          <td class="memname">MORPH_API std::string morph::ui::detail::host::titleText </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
           <td></td>
@@ -319,7 +319,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -333,12 +333,10 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A string as is, <span class="tt">null</span> as empty, anything else as its canonical JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00411">411</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a1797e5a4ca4bcb8d5c4303ec012a8cf0" name="a1797e5a4ca4bcb8d5c4303ec012a8cf0"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1797e5a4ca4bcb8d5c4303ec012a8cf0">&#9670;&#160;</a></span>identityKey()</h2>
+<a id="ae039bd1b0db75f60a0c9fda0fc0bd085" name="ae039bd1b0db75f60a0c9fda0fc0bd085"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae039bd1b0db75f60a0c9fda0fc0bd085">&#9670;&#160;</a></span>identityKey()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -347,7 +345,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::identityKey </td>
+          <td class="memname">MORPH_API std::optional&lt; std::string &gt; morph::ui::identityKey </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>identity</em></span></td><td>)</td>
           <td></td>
@@ -355,7 +353,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -369,12 +367,10 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its JSON with record fields in name order, or <span class="tt">std::nullopt</span> for <span class="tt">null</span> (a screen without an identity). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00425">425</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
-
 </div>
 </div>
-<a id="ab8960b5c048d4e03b196f9eac9a243bb" name="ab8960b5c048d4e03b196f9eac9a243bb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ab8960b5c048d4e03b196f9eac9a243bb">&#9670;&#160;</a></span>sameIdentity()</h2>
+<a id="a3c1c3dcf594607d3803ddd9217290f2a" name="a3c1c3dcf594607d3803ddd9217290f2a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3c1c3dcf594607d3803ddd9217290f2a">&#9670;&#160;</a></span>sameIdentity()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -383,7 +379,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">bool morph::ui::sameIdentity </td>
+          <td class="memname">MORPH_API bool morph::ui::sameIdentity </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>lhs</em></span>, </td>
         </tr>
@@ -395,7 +391,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -409,8 +405,6 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>True when both have a key and the keys are equal; <span class="tt">null</span> equals nothing, itself included. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dd/d78/host_8hpp_source.html#l00436">436</a> of file <a class="el" href="../../dd/d78/host_8hpp_source.html">host.hpp</a>.</p>
 
 </div>
 </div>

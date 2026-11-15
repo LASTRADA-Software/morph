@@ -10,6 +10,8 @@ var bundle_8hpp =
     [ "morph::ui::CatalogEntry", "d7/d47/structmorph_1_1ui_1_1CatalogEntry.html", "d7/d47/structmorph_1_1ui_1_1CatalogEntry" ],
     [ "morph::ui::CatalogReply", "de/df1/structmorph_1_1ui_1_1CatalogReply.html", "de/df1/structmorph_1_1ui_1_1CatalogReply" ],
     [ "morph::ui::FetchRequest", "dc/da0/structmorph_1_1ui_1_1FetchRequest.html", "dc/da0/structmorph_1_1ui_1_1FetchRequest" ],
+    [ "morph::ui::ModelSchemas", "d0/dab/bundle_8hpp.html#aeea66fab5e4e1dd398f5b1ccce7be4de", null ],
+    [ "morph::ui::SchemasByModel", "d0/dab/bundle_8hpp.html#a1a29de123e21fc804c77937bcb84f2d9", null ],
     [ "morph::ui::contentHash", "d0/dab/bundle_8hpp.html#adfb6354c46423a24584a795148d84a03", null ],
     [ "morph::ui::isContentHash", "d0/dab/bundle_8hpp.html#a0cc5b9e555c3d996f74102fa3c926e7a", null ],
     [ "morph::ui::detail::mustUnderstand", "d0/dab/bundle_8hpp.html#a6ee99c2d7378ecff58bf4154d7b824cd", null ],

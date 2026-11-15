@@ -130,8 +130,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d77/classmo
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a340308fb37647b78ee0d5d12b133566e" id="r_a340308fb37647b78ee0d5d12b133566e"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a340308fb37647b78ee0d5d12b133566e">Workspace</a> (<a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html">reactive::Runtime</a> &amp;runtime, <a class="el" href="../../df/dae/classmorph_1_1ui_1_1IViewBackend.html">IViewBackend</a> &amp;backend, <a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html">DocumentScreenHost</a> &amp;host, <a class="el" href="../../de/dca/structmorph_1_1ui_1_1WorkspaceOptions.html">WorkspaceOptions</a> options={}, <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> *parent=nullptr, <a class="el" href="../../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ec">HeadPlacement</a> headPlacement=<a class="el" href="../../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50">HeadPlacement::InPage</a>)</td></tr>
 <tr class="memdesc:a340308fb37647b78ee0d5d12b133566e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The shell, its tab bar appended to <code class="param">parent</code>.  <br /></td></tr>
-<tr class="memitem:a5d77ac885f19e43986785df74f8bf255" id="r_a5d77ac885f19e43986785df74f8bf255"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a5d77ac885f19e43986785df74f8bf255">~Workspace</a> ()</td></tr>
-<tr class="memdesc:a5d77ac885f19e43986785df74f8bf255"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every overlay without asking, newest first, then unmounts every tab's screen the same way, then the pages: a callee goes before the opener its call answers.  <br /></td></tr>
+<tr class="memitem:a5d77ac885f19e43986785df74f8bf255" id="r_a5d77ac885f19e43986785df74f8bf255"><td class="memItemLeft"><a id="a5d77ac885f19e43986785df74f8bf255" name="a5d77ac885f19e43986785df74f8bf255"></a>
+&#160;</td><td class="memItemRight"><b>~Workspace</b> ()</td></tr>
+<tr class="memdesc:a5d77ac885f19e43986785df74f8bf255"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every overlay without asking, newest first, then unmounts every tab's screen the same way, then the pages: a callee goes before the opener its call answers. <br /></td></tr>
 <tr class="memitem:a11259d56e201b21163b10858807e351b" id="r_a11259d56e201b21163b10858807e351b"><td class="memItemLeft"><a id="a11259d56e201b21163b10858807e351b" name="a11259d56e201b21163b10858807e351b"></a>
 &#160;</td><td class="memItemRight"><b>Workspace</b> (Workspace const &amp;)=delete</td></tr>
 <tr class="memitem:a6865f2f2516c004839e6f19da91d7d61" id="r_a6865f2f2516c004839e6f19da91d7d61"><td class="memItemLeft"><a id="a6865f2f2516c004839e6f19da91d7d61" name="a6865f2f2516c004839e6f19da91d7d61"></a>
@@ -208,8 +209,9 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a0f7474361f23708eed40b3aa3fbcc2aa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the shell insets the page around the active tab's screen. A tracked read. The page is inset with no active tab and while the workspace's tab strip shows (two tabs or more), since the strip is a child of the page and would otherwise touch the window's edges; with one tab it is inset unless the screen's shown root lays itself at the page's edges (<span class="tt"><a class="el" href="../../d6/db2/classmorph_1_1ui_1_1ScreenHead.html#ad053fc7b5b04a0b063331335cfde4b30" title="Whether the screen&#39;s shown root lays itself at the page&#39;s edges, so a shell leaves the page uninset a...">ScreenHead::pageEdge</a></span>).  <br /></td></tr>
 <tr class="memitem:ab99b069a9f7529bf38938eb9041ee057" id="r_ab99b069a9f7529bf38938eb9041ee057"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ab99b069a9f7529bf38938eb9041ee057">activeHeadShown</a> () const</td></tr>
 <tr class="memdesc:ab99b069a9f7529bf38938eb9041ee057"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the active tab's head shows anything: an eyebrow, a subtitle, a badge, a tool, an action or a menu entry. A tracked read, so a shell that shows the head on a line of its own follows a tab switch and a head's own changes; the head row's own visibility is the same rule.  <br /></td></tr>
-<tr class="memitem:a2de906de11c865c7a7cc724bb7235b05" id="r_a2de906de11c865c7a7cc724bb7235b05"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2de906de11c865c7a7cc724bb7235b05">forceCloseAll</a> ()</td></tr>
-<tr class="memdesc:a2de906de11c865c7a7cc724bb7235b05"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every overlay, then every tab, without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. A callee goes before the opener its call answers, so the opener's <span class="tt">onCancel</span> runs in a live scope; then every call no mount adopted is cancelled.  <br /></td></tr>
+<tr class="memitem:a2de906de11c865c7a7cc724bb7235b05" id="r_a2de906de11c865c7a7cc724bb7235b05"><td class="memItemLeft"><a id="a2de906de11c865c7a7cc724bb7235b05" name="a2de906de11c865c7a7cc724bb7235b05"></a>
+void&#160;</td><td class="memItemRight"><b>forceCloseAll</b> ()</td></tr>
+<tr class="memdesc:a2de906de11c865c7a7cc724bb7235b05"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes every overlay, then every tab, without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. A callee goes before the opener its call answers, so the opener's <span class="tt">onCancel</span> runs in a live scope; then every call no mount adopted is cancelled. <br /></td></tr>
 <tr class="memitem:a8f8c64f7fbce706b574150d9c7cf216c" id="r_a8f8c64f7fbce706b574150d9c7cf216c"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/dfd/structmorph_1_1ui_1_1WorkspaceTab.html">WorkspaceTab</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8f8c64f7fbce706b574150d9c7cf216c">tabs</a> () const</td></tr>
 <tr class="memdesc:a8f8c64f7fbce706b574150d9c7cf216c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The open tabs, in order.  <br /></td></tr>
 </table>
@@ -217,16 +219,13 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p><a class="el" href="../../d0/d49/structmorph_1_1ui_1_1Tabs.html" title="A tab bar over pages.">Tabs</a> over screens: a tab bar over a <span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html" title="The workspace&#39;s tabs with no widgets: which screens are open, in which order, which is active,...">WorkspaceModel</a></span>, one screen instance per tab, mounted into the tab's page through <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>, with the screen's head row above it or, when the placement is <span class="tt">External</span>, mounted by the host instead. </p>
 <p>The model holds the tab logic: tabs keep the order they were opened in, opening a screen whose identity an open tab already has focuses that tab, a singleton screen has one tab, and closing runs each screen's close protocol (spec 6 §3), one tab at a time, a walk over several tabs stopping at the first veto. The bar shows the model's tabs and takes Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+W, which documents may not declare. A screen a document navigates to as a dialog or a drawer is shown over the tabs (<span class="tt"><a class="el" href="#aa573ab184c041849706ff9b28260a0ad" title="Shows a document screen over the tabs, as a dialog (as: dialog) or a drawer on the end side (as: draw...">openOverlay</a></span>). Neither copyable nor movable; owned by the owner thread of its runtime. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a340308fb37647b78ee0d5d12b133566e" name="a340308fb37647b78ee0d5d12b133566e"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a340308fb37647b78ee0d5d12b133566e">&#9670;&#160;</a></span>Workspace()</h2>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">morph::ui::Workspace::Workspace </td>
@@ -259,11 +258,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype"><a class="el" href="../../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ec">HeadPlacement</a></td>          <td class="paramname"><span class="paramname"><em>headPlacement</em></span><span class="paramdefsep"> = </span><span class="paramdefval"><a class="el" href="../../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50">HeadPlacement::InPage</a></span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>The shell, its tab bar appended to <code class="param">parent</code>. </p>
@@ -278,37 +272,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a5d77ac885f19e43986785df74f8bf255" name="a5d77ac885f19e43986785df74f8bf255"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5d77ac885f19e43986785df74f8bf255">&#9670;&#160;</a></span>~Workspace()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">morph::ui::Workspace::~Workspace </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Closes every overlay without asking, newest first, then unmounts every tab's screen the same way, then the pages: a callee goes before the opener its call answers. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -339,7 +302,7 @@ Public Member Functions</h2></td></tr>
 <p>The tab bar: the shell's root widget, which the host places. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -369,7 +332,7 @@ Public Member Functions</h2></td></tr>
 <p>The tab logic the bar shows, for an application that reads or drives it by tab id. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, valid as long as the shell. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00158">158</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -378,9 +341,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">std::expected&lt; std::size_t, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt; morph::ui::Workspace::open </td>
@@ -393,11 +353,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype"><a class="el" href="../../dd/d78/host_8hpp.html#a5b073a0b5244977f291a4f30780868df">ParamMap</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>params</em></span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Opens a screen, or focuses the tab that already shows it (<span class="tt"><a class="el" href="../../d0/df9/classmorph_1_1ui_1_1WorkspaceModel.html#a8889b38f2ec5e8f4c535cc2731441925" title="Opens a screen, or focuses the tab that already shows it; the tab opened or focused is the active one...">WorkspaceModel::open</a></span>). </p>
@@ -409,8 +364,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The tab's index, or why the screen could not be mounted; a refused mount opens nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00164">164</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -451,7 +404,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The tab and whether a screen was mounted for it, or why the screen could not be mounted. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00177">177</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00128">128</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -460,9 +413,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">std::expected&lt; void, <a class="el" href="../../d6/dc8/structmorph_1_1ui_1_1MountError.html">MountError</a> &gt; morph::ui::Workspace::openOverlay </td>
@@ -471,11 +421,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Shows a document screen over the tabs, as a dialog (<span class="tt">as: <a class="el" href="../../d8/d11/view_8hpp.html#ae7cf72ab608a903203628d39bf74cd1b" title="A modal overlay.">dialog</a></span>) or a drawer on the end side (<span class="tt">as: <a class="el" href="../../d8/d11/view_8hpp.html#ac32bc9fa7f17605e28fdaf77a96f3870" title="A panel that slides in from one edge.">drawer</a></span>), mounted with <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#ae18b34d901128c1151b06b5a1c5708ae" title="Mounts a screen as mount does, with its root widget appended to parent instead of made a backend root...">DocumentScreenHost::mountInto</a></span>, so the mount adopts the navigation's call. </p>
@@ -487,8 +432,6 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or why nothing was shown: an <span class="tt">as</span> that is not an overlay, a host screen, or a refused mount. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00192">192</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
-
 </div>
 </div>
 <a id="a743f6e9f8c00082f7da4847f32be84f9" name="a743f6e9f8c00082f7da4847f32be84f9"></a>
@@ -496,9 +439,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::Workspace::screenClosed </td>
@@ -507,11 +447,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>A screen the workspace shows closed itself, by <span class="tt">return</span> or <span class="tt"><a class="el" href="#a587dff86a721be64596642d75484ef13" title="Closes a tab through its screen&#39;s close protocol.">close</a>: self</span>: its overlay goes, or its tab does. What a host's <span class="tt"><a class="el" href="../../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a1863293949cffb6da4e6e5181c787342" title="A screen this host mounted closed itself, by return or close: self (spec 6 §16). Called after the scr...">DocumentScreenHost::onScreenClosed</a></span> forwards here. </p>
@@ -521,8 +456,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00230">230</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -544,15 +477,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The screens shown over the tabs, oldest first. </p>
 <dl class="section return"><dt>Returns</dt><dd>Each overlay's screen id. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -561,9 +492,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::Workspace::setWidthClass </td>
@@ -572,11 +500,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Tells the workspace the window's width class changed, as the backend's <span class="tt">setOnWidthClass</span> listener reports it: each open dialog overlay is a sheet while it is <span class="tt">compact</span>. </p>
@@ -586,8 +509,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -623,7 +544,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The number of tabs opened. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00270">270</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -652,7 +573,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Writes the record now, cancelling a pending debounced write: what sign-out does before the session is cleared. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -682,7 +603,7 @@ Public Member Functions</h2></td></tr>
 <p>The record as it would be written now: the routes of the open tabs, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>The routes. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00170">170</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -691,9 +612,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::Workspace::activate </td>
@@ -702,11 +620,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Shows a tab and makes it the most recently used. </p>
@@ -716,8 +629,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -746,7 +657,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Shows the next tab in most-recently-used order (Ctrl+Tab). Repeated calls walk the order as it was at the first of them; any other activation starts a new walk. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00290">290</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00178">178</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -775,7 +686,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Shows the previous tab in most-recently-used order (Ctrl+Shift+Tab). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00181">181</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -784,9 +695,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::Workspace::close </td>
@@ -799,11 +707,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype">std::function&lt; void(bool)&gt;</td>          <td class="paramname"><span class="paramname"><em>done</em></span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Closes a tab through its screen's close protocol. </p>
@@ -815,8 +718,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
-
 </div>
 </div>
 <a id="ae540962c958ef12c5d0a0e79be608b57" name="ae540962c958ef12c5d0a0e79be608b57"></a>
@@ -824,9 +725,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::Workspace::closeOthers </td>
@@ -839,11 +737,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype">std::function&lt; void(bool)&gt;</td>          <td class="paramname"><span class="paramname"><em>done</em></span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Closes every tab but one, one at a time, stopping at the first veto. </p>
@@ -854,8 +747,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -890,7 +781,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00323">323</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -925,7 +816,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00327">327</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -955,7 +846,7 @@ Public Member Functions</h2></td></tr>
 <p>How many open tabs hold unsaved changes. </p>
 <dl class="section return"><dt>Returns</dt><dd>The count. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -984,7 +875,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Closes the tabs that hold unsaved changes without asking: what a change of scope does once the person agreed to discard the work. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00335">335</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00207">207</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1006,15 +897,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The active tab's index. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">std::nullopt</span> while no tab is open. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1036,7 +925,7 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1049,8 +938,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its handle, valid while the tab is open; null past the end. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1072,15 +959,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The active tab's screen handle. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or null while no tab is open. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00357">357</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1102,15 +987,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The active tab's head as two parts, the same reactive content <span class="tt">headRow</span> builds for the in-page rendering, for a host that mounts them elsewhere (a shell's own top bar, say). Neither is null: with no active tab each is an invisible, empty container rather than a null <span class="tt"><a class="el" href="../../d8/d11/view_8hpp.html#abe522dc03ec89569730174a647f1da39" title="A view-tree node: immutable, shared data.">Node</a></span>, since a caller mounting them may not expect to handle one. </p>
 <dl class="section return"><dt>Returns</dt><dd>The lead and the trail, reactive to the active tab changing and to its head's own content changing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00367">367</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1132,15 +1015,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Where the active tab's head puts its lead. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The place; <span class="tt">Below</span> with no active tab. With the head in the page (<span class="tt"><a class="el" href="../../dc/de1/workspace_8hpp.html#ac588613cfacc29776a836250b58694ecad2462560e9e13100f0435d16817bdc50" title="Above each page, inside the workspace.">HeadPlacement::InPage</a></span>) the tab bar carries the title, so <span class="tt">Inline</span> reads as <span class="tt">Below</span> there. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00400">400</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1162,15 +1043,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Whether the active tab's head is a single line: it has no eyebrow, and its lead is not drawn under the title (it has none, or it sits inline or at the end). A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether the head is one line; <span class="tt">true</span> with no active tab. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00408">408</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1192,15 +1071,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>What ends the active tab's head trail, so a compact top bar can stand the line's end the right distance from the window's edge. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The last element of the trail, in its order (tools, actions, then the head menu): a head menu, whose trigger is an icon button, or a last action that is icon-only or ghost is <span class="tt">Unframed</span>; any other last action is <span class="tt">Framed</span>; with no action and no menu, a head tool is <span class="tt">Framed</span>; an empty trail, and no active tab, is <span class="tt">None</span>. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00423">423</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1222,15 +1099,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Whether the active tab's page continues the head's block: the screen's shown root says so (<span class="tt"><a class="el" href="../../d6/db2/classmorph_1_1ui_1_1ScreenHead.html#ae2f47e76dd10f477481e0a60ef0d24e1" title="Whether the screen&#39;s shown root continues the head&#39;s block (the document&#39;s headJoined on the root,...">ScreenHead::headJoined</a></span>) and the page is not inset, which two tabs or more force. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether the head is joined to the page. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00446">446</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1252,15 +1127,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The text role the active screen asks for its head's title. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">Heading</span>, or <span class="tt">Headline</span> where the screen asks for it; <span class="tt">Heading</span> with no active tab. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00458">458</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1282,15 +1155,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The surface the active screen asks the shell to draw its top bar on. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The surface's name; empty with no active tab and while the screen names none. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00467">467</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1312,15 +1183,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The surface the active screen asks the shell to draw the page area on. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The surface's name; empty with no active tab and while the screen names none. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00476">476</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1342,15 +1211,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The active tab's title as runs, which a shell that knows them draws in place of the tab's caption. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The runs; empty with no active tab, or while the active screen gives none. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00486">486</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1372,15 +1239,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Whether the shell insets the page around the active tab's screen. A tracked read. The page is inset with no active tab and while the workspace's tab strip shows (two tabs or more), since the strip is a child of the page and would otherwise touch the window's edges; with one tab it is inset unless the screen's shown root lays itself at the page's edges (<span class="tt"><a class="el" href="../../d6/db2/classmorph_1_1ui_1_1ScreenHead.html#ad053fc7b5b04a0b063331335cfde4b30" title="Whether the screen&#39;s shown root lays itself at the page&#39;s edges, so a shell leaves the page uninset a...">ScreenHead::pageEdge</a></span>). </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether the page is inset. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00496">496</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1402,44 +1267,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Whether the active tab's head shows anything: an eyebrow, a subtitle, a badge, a tool, an action or a menu entry. A tracked read, so a shell that shows the head on a line of its own follows a tab switch and a head's own changes; the head row's own visibility is the same rule. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether there is an active tab whose head has content. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a2de906de11c865c7a7cc724bb7235b05" name="a2de906de11c865c7a7cc724bb7235b05"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2de906de11c865c7a7cc724bb7235b05">&#9670;&#160;</a></span>forceCloseAll()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::ui::Workspace::forceCloseAll </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Closes every overlay, then every tab, without asking, newest first: what signing out does, since no close guard may keep a screen of the principal who is leaving. A callee goes before the opener its call answers, so the opener's <span class="tt">onCancel</span> runs in a live scope; then every call no mount adopted is cancelled. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00519">519</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>
@@ -1461,15 +1295,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The open tabs, in order. </p>
 <dl class="section return"><dt>Returns</dt><dd>Each tab's screen, identity and caption. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de1/workspace_8hpp_source.html#l00526">526</a> of file <a class="el" href="../../dc/de1/workspace_8hpp_source.html">workspace.hpp</a>.</p>
 
 </div>
 </div>

@@ -130,6 +130,17 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('da/d7a/structm
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a2863b8eda54d714a0bba9197c3c86071" id="r_a2863b8eda54d714a0bba9197c3c86071"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a2863b8eda54d714a0bba9197c3c86071">ElementState</a> (<a class="el" href="../../d5/dc1/classmorph_1_1reactive_1_1Runtime.html">reactive::Runtime</a> &amp;runtime)</td></tr>
 <tr class="memdesc:a2863b8eda54d714a0bba9197c3c86071"><td class="mdescLeft">&#160;</td><td class="mdescRight">The element's state before any user action.  <br /></td></tr>
+<tr class="memitem:a1ad3f062f9dc86030b5c08011e94bb4f" id="r_a1ad3f062f9dc86030b5c08011e94bb4f"><td class="memItemLeft"><a id="a1ad3f062f9dc86030b5c08011e94bb4f" name="a1ad3f062f9dc86030b5c08011e94bb4f"></a>
+&#160;</td><td class="memItemRight"><b>~ElementState</b> ()</td></tr>
+<tr class="memdesc:a1ad3f062f9dc86030b5c08011e94bb4f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys the element's state, and the sessions it owns. <br /></td></tr>
+<tr class="memitem:af36a5eb0242b2fe4366bafb5fb688c12" id="r_af36a5eb0242b2fe4366bafb5fb688c12"><td class="memItemLeft"><a id="af36a5eb0242b2fe4366bafb5fb688c12" name="af36a5eb0242b2fe4366bafb5fb688c12"></a>
+&#160;</td><td class="memItemRight"><b>ElementState</b> (ElementState const &amp;)=delete</td></tr>
+<tr class="memitem:ac44103f230de78e8b417526244ec3995" id="r_ac44103f230de78e8b417526244ec3995"><td class="memItemLeft"><a id="ac44103f230de78e8b417526244ec3995" name="ac44103f230de78e8b417526244ec3995"></a>
+<a class="el" href="#a2863b8eda54d714a0bba9197c3c86071">ElementState</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a2863b8eda54d714a0bba9197c3c86071">ElementState</a> const &amp;)=delete</td></tr>
+<tr class="memitem:ad1d9efacb7c6a9bb82ec275d22af48a8" id="r_ad1d9efacb7c6a9bb82ec275d22af48a8"><td class="memItemLeft"><a id="ad1d9efacb7c6a9bb82ec275d22af48a8" name="ad1d9efacb7c6a9bb82ec275d22af48a8"></a>
+&#160;</td><td class="memItemRight"><b>ElementState</b> (ElementState &amp;&amp;)=delete</td></tr>
+<tr class="memitem:ab843ecbd853c074b93920dc6b7784fdd" id="r_ab843ecbd853c074b93920dc6b7784fdd"><td class="memItemLeft"><a id="ab843ecbd853c074b93920dc6b7784fdd" name="ab843ecbd853c074b93920dc6b7784fdd"></a>
+<a class="el" href="#a2863b8eda54d714a0bba9197c3c86071">ElementState</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a2863b8eda54d714a0bba9197c3c86071">ElementState</a> &amp;&amp;)=delete</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
@@ -183,7 +194,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>An element's live values (spec 5 §6). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01730">1730</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01143">1143</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a2863b8eda54d714a0bba9197c3c86071" name="a2863b8eda54d714a0bba9197c3c86071"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2863b8eda54d714a0bba9197c3c86071">&#9670;&#160;</a></span>ElementState()</h2>
@@ -203,7 +214,7 @@ Public Attributes</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel explicit">explicit</span></span>  </td>
+<span class="mlabels"><span class="mlabel explicit">explicit</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -215,8 +226,6 @@ Public Attributes</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01733">1733</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +244,7 @@ Public Attributes</h2></td></tr>
 
 <p>The node. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01748">1748</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01156">1156</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -253,7 +262,7 @@ Public Attributes</h2></td></tr>
 
 <p>The scope that declares it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01750">1750</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01158">1158</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +280,7 @@ Public Attributes</h2></td></tr>
 
 <p>What the user is editing: a text input's text, a checkbox's state, a select's key, a slider's number, a date-time input's timestamp. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01753">1753</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01161">1161</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -289,7 +298,7 @@ Public Attributes</h2></td></tr>
 
 <p>The committed value of an input whose value no expression binds. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01755">1755</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01163">1163</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -307,7 +316,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether the user changed the draft since it last followed the bound value. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01757">1757</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01165">1165</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -325,7 +334,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether it has been committed at least once (Enter or focus leaving after an edit). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01759">1759</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01167">1167</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -343,7 +352,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether it has keyboard focus. The view tree reports no focus, so it stays false. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01761">1761</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01169">1169</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -361,7 +370,7 @@ Public Attributes</h2></td></tr>
 
 <p>A dialog's or drawer's <span class="tt"><a class="el" href="#ad87d042dadc9f727e9062b781851b562" title="A dialog&#39;s or drawer&#39;s open, set by open and close.">open</a></span>, set by <span class="tt"><a class="el" href="#ad87d042dadc9f727e9062b781851b562" title="A dialog&#39;s or drawer&#39;s open, set by open and close.">open</a></span> and <span class="tt">close</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01763">1763</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01171">1171</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -379,7 +388,7 @@ Public Attributes</h2></td></tr>
 
 <p>A dialog's or drawer's <span class="tt"><a class="el" href="#aa017ba064313e52ec7940afaaf67d9d9" title="A dialog&#39;s or drawer&#39;s submitted.">submitted</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01765">1765</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01173">1173</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -397,7 +406,7 @@ Public Attributes</h2></td></tr>
 
 <p>A table's selected keys. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01767">1767</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01175">1175</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -415,7 +424,7 @@ Public Attributes</h2></td></tr>
 
 <p>A table's own sort, a list of keys, while no <span class="tt"><a class="el" href="#a2f093daf50a0f2ee699368319ae7c7cf" title="A table&#39;s own sort, a list of keys, while no sort key binds one.">sort</a></span> key binds one. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01769">1769</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01177">1177</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -433,7 +442,7 @@ Public Attributes</h2></td></tr>
 
 <p>A table's last activated key. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01771">1771</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01179">1179</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -451,7 +460,7 @@ Public Attributes</h2></td></tr>
 
 <p>Bumped when a check targeting it comes or goes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01773">1773</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01181">1181</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -469,7 +478,7 @@ Public Attributes</h2></td></tr>
 
 <p>A dialog's or drawer's scope while its content is mounted. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01775">1775</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01183">1183</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -487,7 +496,7 @@ Public Attributes</h2></td></tr>
 
 <p>The checks targeting it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01777">1777</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01185">1185</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -505,7 +514,7 @@ Public Attributes</h2></td></tr>
 
 <p>The value an expression binds (<span class="tt">value</span>, <span class="tt">checked</span>, <span class="tt">selected</span>, a table's <span class="tt"><a class="el" href="#af6a1d021de4e988a2f469e4f9c8252bd" title="A table&#39;s selected keys.">selection</a></span>); <span class="tt">nullptr</span> when the element is uncontrolled. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01780">1780</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01188">1188</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -523,7 +532,7 @@ Public Attributes</h2></td></tr>
 
 <p>What is wrong now, as a list of strings: <span class="tt">required</span> unmet, the node's <span class="tt"><a class="el" href="#a9bcceb3094a1cdd51b8e99a5982e3180" title="What is wrong now, as a list of strings: required unmet, the node&#39;s errors, the reply&#39;s field errors ...">errors</a></span>, the reply's field errors and the failing checks' messages. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01783">1783</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01191">1191</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -541,7 +550,7 @@ Public Attributes</h2></td></tr>
 
 <p>A table's rows or a select's options, for its counts and <span class="tt">selectedOption</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01785">1785</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01193">1193</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -559,7 +568,7 @@ Public Attributes</h2></td></tr>
 
 <p>A table's bound <span class="tt"><a class="el" href="#a2f093daf50a0f2ee699368319ae7c7cf" title="A table&#39;s own sort, a list of keys, while no sort key binds one.">sort</a></span>; <span class="tt">nullptr</span> while the table holds its own. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01787">1787</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01195">1195</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -577,7 +586,7 @@ Public Attributes</h2></td></tr>
 
 <p>A table's rows as it shows them, made beside <span class="tt"><a class="el" href="#a1e5d0c426d2c18cfb40a25d020127438" title="A table&#39;s rows or a select&#39;s options, for its counts and selectedOption.">rows</a></span> so that every reader of the table's element values, the table's own lowering included, sees one order; <span class="tt">nullptr</span> for a table without <span class="tt"><a class="el" href="#a1e5d0c426d2c18cfb40a25d020127438" title="A table&#39;s rows or a select&#39;s options, for its counts and selectedOption.">rows</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01790">1790</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01198">1198</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -595,7 +604,7 @@ Public Attributes</h2></td></tr>
 
 <p>A <span class="tt"><a class="el" href="#a71536346fc591492bee40816ec25796a" title="A form&#39;s session (spec 2), made when the element is wired; null when its schema is unknown.">form</a></span>'s session (spec 2), made when the element is wired; null when its schema is unknown. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01792">1792</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01200">1200</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -613,7 +622,7 @@ Public Attributes</h2></td></tr>
 
 <p>A <span class="tt"><a class="el" href="#a2386249559cbedb11911818a512e2c09" title="A collection&#39;s session (spec 2), made when the element is wired; null when its view document is unkno...">collection</a></span>'s session (spec 2), made when the element is wired; null when its view document is unknown or does not build. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01795">1795</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01203">1203</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -631,7 +640,7 @@ Public Attributes</h2></td></tr>
 
 <p>A <span class="tt"><a class="el" href="#a61861dd646bf624c7790632dcccdd9f5" title="A wizard&#39;s session (spec 2), made when the element is wired; null when its wizard document or a step&#39;...">wizard</a></span>'s session (spec 2), made when the element is wired; null when its wizard document or a step's schema is unknown or does not build. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01798">1798</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01206">1206</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

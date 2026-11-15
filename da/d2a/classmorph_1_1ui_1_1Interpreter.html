@@ -138,7 +138,7 @@ Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Mounts UI documents (spec 5): one per client process or window, over a session and a dispatcher. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03945">3945</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02704">2704</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="abe6bbc68d74b6be35040b4b331978187" name="abe6bbc68d74b6be35040b4b331978187"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abe6bbc68d74b6be35040b4b331978187">&#9670;&#160;</a></span>Interpreter()</h2>
@@ -182,7 +182,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l03951">3951</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02710">2710</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -219,13 +219,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Mounts a screen. </p>
-<p>The document has loaded (<span class="tt"><a class="el" href="../../dd/d39/document_8hpp.html#a79167372e38f780fc1fa45f373e5709a" title="Parses a UI document and runs its load-time validation (spec 5 §3).">loadDocument</a></span>); what mounting adds is what only the opener knows: the params, and the models a <span class="tt">{"from": alias}</span> instance borrows. A param that is missing and not optional, a param of the wrong type, a borrowed model the opener did not lend and a document without a view are refused. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>The document has loaded (<span class="tt"><a class="el" href="../../dd/d39/document_8hpp.html#ad7dcdfd8c1f620ee9e35f6741b497aad" title="Parses a UI document and runs its load-time validation (spec 5 §3).">loadDocument</a></span>); what mounting adds is what only the opener knows: the params, and the models a <span class="tt">{"from": alias}</span> instance borrows. A param that is missing and not optional, a param of the wrong type, a borrowed model the opener did not lend and a document without a view are refused. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">doc</td><td>The document. </td></tr>
     <tr><td class="paramname">params</td><td>The params, by name; names the document does not declare are ignored. </td></tr>
@@ -235,8 +235,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The screen, or the refusal. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l10941">10941</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -258,7 +256,7 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -271,8 +269,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The root, or the refusal. Keep it as long as the session's screens may read <span class="tt">app.*</span>. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l11024">11024</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

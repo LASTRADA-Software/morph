@@ -139,16 +139,13 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>The client of the file side channel (<span class="tt">files/1</span>, spec 6 §18): uploads and downloads through <span class="tt">ui-file</span>, one chunk of at most <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#a0212bed079eaa7757c1a4965685710fd" title="The most file bytes one ui-file chunk carries, before base64url.">kMaxFileChunkBytes</a></span> in flight at a time, reporting progress after each. </p>
 <p>What it moves is bytes: reading the file the user picked is the platform's, and an application's <span class="tt"><a class="el" href="../../dd/ddb/classmorph_1_1ui_1_1InterpreterHost.html#ab78043816cfecddb91537d09372ebf48" title="Sends a file through the server&#39;s file side channel (files/1).">InterpreterHost::upload</a></span> reads it and hands the bytes here. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00755">755</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00363">363</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a8bae4bc3f42a17f957e7700d76ac53a7" name="a8bae4bc3f42a17f957e7700d76ac53a7"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8bae4bc3f42a17f957e7700d76ac53a7">&#9670;&#160;</a></span>FileTransfer()</h2>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">morph::ui::FileTransfer::FileTransfer </td>
@@ -161,11 +158,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a></td>          <td class="paramname"><span class="paramname"><em>session</em></span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>A transfer over <code class="param">exchange</code>, its requests carrying <code class="param">session</code>. </p>
@@ -183,8 +175,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00761">761</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
-
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
@@ -193,9 +183,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::FileTransfer::upload </td>
@@ -228,11 +215,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype">std::function&lt; void(std::expected&lt; std::string, std::string &gt;)&gt;</td>          <td class="paramname"><span class="paramname"><em>done</em></span>&#160;) const</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Uploads a file, authorised as the mutation that will reference it. </p>
@@ -248,8 +230,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00775">775</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
-
 </div>
 </div>
 <a id="a205aa615074bb10f4b828d2e4ad0f2e8" name="a205aa615074bb10f4b828d2e4ad0f2e8"></a>
@@ -257,9 +237,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::FileTransfer::download </td>
@@ -277,11 +254,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype">std::function&lt; void(std::expected&lt; <a class="el" href="../../d5/d44/structmorph_1_1ui_1_1DownloadedFile.html">DownloadedFile</a>, std::string &gt;)&gt;</td>          <td class="paramname"><span class="paramname"><em>done</em></span>&#160;) const</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Downloads a file by its reference. </p>
@@ -293,8 +265,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00804">804</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>

@@ -133,6 +133,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/df6/ui_2the
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;initializer_list&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
+<code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;set&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
@@ -140,8 +141,6 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/df6/ui_2the
 <code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;variant&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
-<code>#include &quot;<a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>&quot;</code><br />
-<code>#include &quot;<a class="el" href="../../d9/d6d/control__shape_8hpp_source.html">control_shape.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">value.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d9/df6/ui_2theme_8hpp_source.html">Go to the source code of this file.</a></p>
@@ -154,8 +153,6 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A colour, 8 bits per channel.  <a href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AThemeIndex" id="r_morph_3A_3Aui_3A_3AThemeIndex"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">morph::ui::ThemeIndex</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The index of a theme: which token files make up each variant.  <a href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AAliasResolver" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AAliasResolver"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver.html">morph::ui::detail::AliasResolver</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves tokens' aliases, depth first, each token once.  <a href="../../d7/dda/classmorph_1_1ui_1_1detail_1_1AliasResolver.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AKeywordSpec" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AKeywordSpec"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/dd1/structmorph_1_1ui_1_1detail_1_1KeywordSpec.html">morph::ui::detail::KeywordSpec</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A keyword token of the set: its path and the names it may take, default first.  <a href="../../de/dd1/structmorph_1_1ui_1_1detail_1_1KeywordSpec.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AThemeShadowSpec" id="r_morph_3A_3Aui_3A_3AThemeShadowSpec"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../df/d3e/structmorph_1_1ui_1_1ThemeShadowSpec.html">morph::ui::ThemeShadowSpec</a></td></tr>
@@ -194,114 +191,66 @@ Enumerations</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:a2101cc098937825c1d1c65660ad82e8a" id="r_a2101cc098937825c1d1c65660ad82e8a"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a2101cc098937825c1d1c65660ad82e8a">morph::ui::isIconName</a> (std::string_view name)</td></tr>
-<tr class="memdesc:a2101cc098937825c1d1c65660ad82e8a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <code class="param">name</code> is an icon name: <span class="tt">[a-z][a-z0-9.-]{0,63}</span>.  <br /></td></tr>
-<tr class="memitem:a3f7f31cbdb5006e2f3a283bb0160b8d2" id="r_a3f7f31cbdb5006e2f3a283bb0160b8d2"><td class="memItemLeft">std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a3f7f31cbdb5006e2f3a283bb0160b8d2">morph::ui::iconGlyph</a> (std::string_view name)</td></tr>
-<tr class="memdesc:a3f7f31cbdb5006e2f3a283bb0160b8d2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The glyph a text renderer draws for a framework icon name.  <br /></td></tr>
-<tr class="memitem:aec47f25e43b0bc87bfd37dfcf698dfeb" id="r_aec47f25e43b0bc87bfd37dfcf698dfeb"><td class="memItemLeft">std::optional&lt; double &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aec47f25e43b0bc87bfd37dfcf698dfeb">morph::ui::detail::numberOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
-<tr class="memdesc:aec47f25e43b0bc87bfd37dfcf698dfeb"><td class="mdescLeft">&#160;</td><td class="mdescRight">A number of a JSON value.  <br /></td></tr>
-<tr class="memitem:a34f90eeeddc346416f3c3282e77379fb" id="r_a34f90eeeddc346416f3c3282e77379fb"><td class="memItemLeft"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const *&#160;</td><td class="memItemRight"><a class="el" href="#a34f90eeeddc346416f3c3282e77379fb">morph::ui::detail::memberOf</a> (Json::object_t const &amp;object, std::string_view name)</td></tr>
-<tr class="memdesc:a34f90eeeddc346416f3c3282e77379fb"><td class="mdescLeft">&#160;</td><td class="mdescRight">A member of a JSON object.  <br /></td></tr>
-<tr class="memitem:a97b893ef7d67a880ededa79d501ff3e9" id="r_a97b893ef7d67a880ededa79d501ff3e9"><td class="memItemLeft">std::optional&lt; double &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a97b893ef7d67a880ededa79d501ff3e9">morph::ui::detail::pixelsOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
-<tr class="memdesc:a97b893ef7d67a880ededa79d501ff3e9"><td class="mdescLeft">&#160;</td><td class="mdescRight">A DTCG <span class="tt">dimension</span> value in px.  <br /></td></tr>
-<tr class="memitem:a7b840b1aa200b73a882cbb9fed43d468" id="r_a7b840b1aa200b73a882cbb9fed43d468"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7b840b1aa200b73a882cbb9fed43d468">morph::ui::detail::hexColor</a> (std::string_view text)</td></tr>
-<tr class="memdesc:a7b840b1aa200b73a882cbb9fed43d468"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads <span class="tt">#rgb</span>, <span class="tt">#rrggbb</span> or <span class="tt">#rrggbbaa</span>.  <br /></td></tr>
-<tr class="memitem:a8af205857a803edce0af06eba1e1cb78" id="r_a8af205857a803edce0af06eba1e1cb78"><td class="memItemLeft">std::optional&lt; std::uint8_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8af205857a803edce0af06eba1e1cb78">morph::ui::detail::channelOf</a> (double const value)</td></tr>
-<tr class="memdesc:a8af205857a803edce0af06eba1e1cb78"><td class="mdescLeft">&#160;</td><td class="mdescRight">A channel from 0 to 1, as 8 bits.  <br /></td></tr>
-<tr class="memitem:a0659229401e535e2442c94879f312896" id="r_a0659229401e535e2442c94879f312896"><td class="memItemLeft">std::optional&lt; std::string_view &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0659229401e535e2442c94879f312896">morph::ui::detail::aliasOf</a> (std::string_view text)</td></tr>
-<tr class="memdesc:a0659229401e535e2442c94879f312896"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a string is an alias, <span class="tt">{a.b}</span>.  <br /></td></tr>
-<tr class="memitem:a4b507ea6bdcfded23b19ecbbaeac252c" id="r_a4b507ea6bdcfded23b19ecbbaeac252c"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a4b507ea6bdcfded23b19ecbbaeac252c">morph::ui::detail::holdsAlias</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
-<tr class="memdesc:a4b507ea6bdcfded23b19ecbbaeac252c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a value holds an alias anywhere.  <br /></td></tr>
-<tr class="memitem:af6b1e21bba74c7156a99e56a03f53ba3" id="r_af6b1e21bba74c7156a99e56a03f53ba3"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af6b1e21bba74c7156a99e56a03f53ba3">morph::ui::detail::checkTokenValue</a> (std::string_view type, <a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;value)</td></tr>
-<tr class="memdesc:af6b1e21bba74c7156a99e56a03f53ba3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a resolved value has its type's shape.  <br /></td></tr>
-<tr class="memitem:a93eb91ae910694309f7ac47801f2b58a" id="r_a93eb91ae910694309f7ac47801f2b58a"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a93eb91ae910694309f7ac47801f2b58a">morph::ui::colorOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
-<tr class="memdesc:a93eb91ae910694309f7ac47801f2b58a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a colour value: <span class="tt">#rgb</span>, <span class="tt">#rrggbb</span>, <span class="tt">#rrggbbaa</span>, or the DTCG 2025.10 object, by its <span class="tt">hex</span> or by its <span class="tt">srgb</span> <span class="tt">components</span> (0 to 1) and <span class="tt">alpha</span>.  <br /></td></tr>
-<tr class="memitem:a83658358197fafb8d34c9c6c7aa03403" id="r_a83658358197fafb8d34c9c6c7aa03403"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a83658358197fafb8d34c9c6c7aa03403">morph::ui::detail::checkMeasure</a> (std::string_view type, <a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;value)</td></tr>
-<tr class="memdesc:a83658358197fafb8d34c9c6c7aa03403"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks a <span class="tt">dimension</span> or a <span class="tt">duration</span>: an object of a number <span class="tt">value</span> and a known <span class="tt">unit</span>.  <br /></td></tr>
-<tr class="memitem:aa57255ca6f8ccd9380aebf86555c97cb" id="r_aa57255ca6f8ccd9380aebf86555c97cb"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa57255ca6f8ccd9380aebf86555c97cb">morph::ui::detail::checkFontFamily</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;value)</td></tr>
-<tr class="memdesc:aa57255ca6f8ccd9380aebf86555c97cb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks a <span class="tt">fontFamily</span>: a name, or a non-empty list of names.  <br /></td></tr>
-<tr class="memitem:ae95a2b52dc7e98979ca94c4bc6fb49cc" id="r_ae95a2b52dc7e98979ca94c4bc6fb49cc"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae95a2b52dc7e98979ca94c4bc6fb49cc">morph::ui::detail::checkFontWeight</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;value)</td></tr>
-<tr class="memdesc:ae95a2b52dc7e98979ca94c4bc6fb49cc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks a <span class="tt">fontWeight</span>: 1 to 1000, or a DTCG weight name.  <br /></td></tr>
-<tr class="memitem:aa1534aeda87dc1b43c5d7f8b2b1b145b" id="r_aa1534aeda87dc1b43c5d7f8b2b1b145b"><td class="memItemLeft">std::optional&lt; double &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa1534aeda87dc1b43c5d7f8b2b1b145b">morph::ui::detail::weightOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;value)</td></tr>
-<tr class="memdesc:aa1534aeda87dc1b43c5d7f8b2b1b145b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The numeric weight of a checked <span class="tt">fontWeight</span> value.  <br /></td></tr>
-<tr class="memitem:ae31511a172e1a962b11870c8baa8c544" id="r_ae31511a172e1a962b11870c8baa8c544"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae31511a172e1a962b11870c8baa8c544">morph::ui::detail::checkShadow</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;value)</td></tr>
-<tr class="memdesc:ae31511a172e1a962b11870c8baa8c544"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks a <span class="tt">shadow</span>: an object of a <span class="tt">color</span> and the dimensions <span class="tt">offsetX</span>, <span class="tt">offsetY</span>, <span class="tt">blur</span> and <span class="tt">spread</span>, or a non-empty list of them.  <br /></td></tr>
-<tr class="memitem:a6b028815c6b756867a1f7fde67e9edd1" id="r_a6b028815c6b756867a1f7fde67e9edd1"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a6b028815c6b756867a1f7fde67e9edd1">morph::ui::detail::joined</a> (std::initializer_list&lt; std::string_view &gt; parts)</td></tr>
-<tr class="memdesc:a6b028815c6b756867a1f7fde67e9edd1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Joins text, for a refusal built inside a loop.  <br /></td></tr>
-<tr class="memitem:a0ab2da9e954e7116716b490d9f9ac35c" id="r_a0ab2da9e954e7116716b490d9f9ac35c"><td class="memItemLeft">std::expected&lt; std::string, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0ab2da9e954e7116716b490d9f9ac35c">morph::ui::detail::declaredType</a> (Json::object_t const &amp;object, std::string_view where, std::string const &amp;inherited)</td></tr>
-<tr class="memdesc:a0ab2da9e954e7116716b490d9f9ac35c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">$type</span> an object declares, or the one it inherits.  <br /></td></tr>
-<tr class="memitem:a8b25bd3c5e88d8160805768367c26911" id="r_a8b25bd3c5e88d8160805768367c26911"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8b25bd3c5e88d8160805768367c26911">morph::ui::detail::readToken</a> (std::string const &amp;path, Json::object_t const &amp;object, <a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;value, std::string const &amp;type, <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> &amp;out)</td></tr>
-<tr class="memdesc:a8b25bd3c5e88d8160805768367c26911"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads one token into <code class="param">out</code>.  <br /></td></tr>
-<tr class="memitem:a7f81bd5730e6c0f4d80245d4d28c5b5a" id="r_a7f81bd5730e6c0f4d80245d4d28c5b5a"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7f81bd5730e6c0f4d80245d4d28c5b5a">morph::ui::detail::checkMemberName</a> (std::string const &amp;prefix, std::string const &amp;name)</td></tr>
-<tr class="memdesc:a7f81bd5730e6c0f4d80245d4d28c5b5a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Refuses a member name a token file may not have.  <br /></td></tr>
-<tr class="memitem:a2925d9f7294b783bef252fb285105aba" id="r_a2925d9f7294b783bef252fb285105aba"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2925d9f7294b783bef252fb285105aba">morph::ui::detail::readRoot</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;member, std::string const &amp;prefix, std::string const &amp;inherited, <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> &amp;out)</td></tr>
-<tr class="memdesc:a2925d9f7294b783bef252fb285105aba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a group's <span class="tt">$root</span> token: the token at the group's own path.  <br /></td></tr>
-<tr class="memitem:a7a1012270f80b37fa2404850af04a6e8" id="r_a7a1012270f80b37fa2404850af04a6e8"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7a1012270f80b37fa2404850af04a6e8">morph::ui::detail::readGroup</a> (Json::object_t const &amp;group, std::string const &amp;prefix, std::string const &amp;inherited, <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> &amp;out)</td></tr>
-<tr class="memdesc:a7a1012270f80b37fa2404850af04a6e8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads the tokens of one group into <code class="param">out</code>.  <br /></td></tr>
-<tr class="memitem:ac11accc0e12e465ea51ee2000dbb20e3" id="r_ac11accc0e12e465ea51ee2000dbb20e3"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac11accc0e12e465ea51ee2000dbb20e3">morph::ui::detail::readThemeMap</a> (Json::object_t const &amp;index, std::string_view key, std::map&lt; std::string, std::string, std::less&lt;&gt; &gt; &amp;out)</td></tr>
-<tr class="memdesc:ac11accc0e12e465ea51ee2000dbb20e3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a map of name to file id from a theme index.  <br /></td></tr>
-<tr class="memitem:a0f16f22b738401f67762796675079021" id="r_a0f16f22b738401f67762796675079021"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0f16f22b738401f67762796675079021">morph::ui::detail::readIcons</a> (Json::object_t const &amp;index, std::map&lt; std::string, std::string, std::less&lt;&gt; &gt; &amp;out)</td></tr>
-<tr class="memdesc:a0f16f22b738401f67762796675079021"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a theme index's <span class="tt">icons</span>: an object of icon name (<span class="tt"><a class="el" href="#a2101cc098937825c1d1c65660ad82e8a" title="Whether name is an icon name: [a-z][a-z0-9.-]{0,63}.">isIconName</a></span>) to icon file id, at most <span class="tt"><a class="el" href="#a924af3fbed9de8c7b9862c703533fde9" title="The most names a theme index&#39;s icon set may hold.">kMaxThemeIcons</a></span> names.  <br /></td></tr>
-<tr class="memitem:a34c53e9088bed9e87763083bb600fa17" id="r_a34c53e9088bed9e87763083bb600fa17"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a34c53e9088bed9e87763083bb600fa17">morph::ui::isThemeIndex</a> (std::string_view text)</td></tr>
-<tr class="memdesc:a34c53e9088bed9e87763083bb600fa17"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a theme file is a theme index rather than a token file: its top level has a string <span class="tt">vocab</span>.  <br /></td></tr>
-<tr class="memitem:a687d392bf2a97ad1d3a33f97bf55d31a" id="r_a687d392bf2a97ad1d3a33f97bf55d31a"><td class="memItemLeft">std::expected&lt; <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a687d392bf2a97ad1d3a33f97bf55d31a">morph::ui::parseTokens</a> (std::string_view text)</td></tr>
-<tr class="memdesc:a687d392bf2a97ad1d3a33f97bf55d31a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses a DTCG 2025.10 token file.  <br /></td></tr>
-<tr class="memitem:a4748ec0fb1656d605446863afeaebfae" id="r_a4748ec0fb1656d605446863afeaebfae"><td class="memItemLeft">std::expected&lt; <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4748ec0fb1656d605446863afeaebfae">morph::ui::resolveTokens</a> (std::vector&lt; <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const * &gt; const &amp;layers)</td></tr>
-<tr class="memdesc:a4748ec0fb1656d605446863afeaebfae"><td class="mdescLeft">&#160;</td><td class="mdescRight">Layers token files, later ones winning per path, and resolves every alias.  <br /></td></tr>
-<tr class="memitem:ac675e3e977612d26632df96f9a69c2d3" id="r_ac675e3e977612d26632df96f9a69c2d3"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac675e3e977612d26632df96f9a69c2d3">morph::ui::parseThemeIndex</a> (std::string_view text)</td></tr>
-<tr class="memdesc:ac675e3e977612d26632df96f9a69c2d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses a theme index: <span class="tt">{"vocab": "ui-theme/1", "base": id, "dark": id, …, "density": {...},
+<tr class="memitem:abb7f899d13b4a19c51a76a2ed72b85d1" id="r_abb7f899d13b4a19c51a76a2ed72b85d1"><td class="memItemLeft">MORPH_API bool&#160;</td><td class="memItemRight"><a class="el" href="#abb7f899d13b4a19c51a76a2ed72b85d1">morph::ui::isIconName</a> (std::string_view name)</td></tr>
+<tr class="memdesc:abb7f899d13b4a19c51a76a2ed72b85d1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <code class="param">name</code> is an icon name: <span class="tt">[a-z][a-z0-9.-]{0,63}</span>.  <br /></td></tr>
+<tr class="memitem:a1e3aee58a5eb0f86b7d14f726df4f104" id="r_a1e3aee58a5eb0f86b7d14f726df4f104"><td class="memItemLeft">MORPH_API std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a1e3aee58a5eb0f86b7d14f726df4f104">morph::ui::iconGlyph</a> (std::string_view name)</td></tr>
+<tr class="memdesc:a1e3aee58a5eb0f86b7d14f726df4f104"><td class="mdescLeft">&#160;</td><td class="mdescRight">The glyph a text renderer draws for a framework icon name.  <br /></td></tr>
+<tr class="memitem:a45cff2720dd5d81e644026d01e3afe54" id="r_a45cff2720dd5d81e644026d01e3afe54"><td class="memItemLeft">MORPH_API std::optional&lt; double &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a45cff2720dd5d81e644026d01e3afe54">morph::ui::detail::numberOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
+<tr class="memdesc:a45cff2720dd5d81e644026d01e3afe54"><td class="mdescLeft">&#160;</td><td class="mdescRight">A number of a JSON value.  <br /></td></tr>
+<tr class="memitem:a4aef43601b038f3ae7bfb2f903ed2598" id="r_a4aef43601b038f3ae7bfb2f903ed2598"><td class="memItemLeft">MORPH_API std::optional&lt; double &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4aef43601b038f3ae7bfb2f903ed2598">morph::ui::detail::pixelsOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
+<tr class="memdesc:a4aef43601b038f3ae7bfb2f903ed2598"><td class="mdescLeft">&#160;</td><td class="mdescRight">A DTCG <span class="tt">dimension</span> value in px.  <br /></td></tr>
+<tr class="memitem:a4db6cd4b3e84f1055d53f91fd73a6de7" id="r_a4db6cd4b3e84f1055d53f91fd73a6de7"><td class="memItemLeft">MORPH_API std::optional&lt; <a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4db6cd4b3e84f1055d53f91fd73a6de7">morph::ui::detail::hexColor</a> (std::string_view text)</td></tr>
+<tr class="memdesc:a4db6cd4b3e84f1055d53f91fd73a6de7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads <span class="tt">#rgb</span>, <span class="tt">#rrggbb</span> or <span class="tt">#rrggbbaa</span>.  <br /></td></tr>
+<tr class="memitem:a0f467d41bc3b7d4da6454bef154b5230" id="r_a0f467d41bc3b7d4da6454bef154b5230"><td class="memItemLeft">MORPH_API std::optional&lt; std::uint8_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0f467d41bc3b7d4da6454bef154b5230">morph::ui::detail::channelOf</a> (double value)</td></tr>
+<tr class="memdesc:a0f467d41bc3b7d4da6454bef154b5230"><td class="mdescLeft">&#160;</td><td class="mdescRight">A channel from 0 to 1, as 8 bits.  <br /></td></tr>
+<tr class="memitem:a4f17093fef1b08a95d85661f3260e662" id="r_a4f17093fef1b08a95d85661f3260e662"><td class="memItemLeft">MORPH_API std::optional&lt; std::string_view &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4f17093fef1b08a95d85661f3260e662">morph::ui::detail::aliasOf</a> (std::string_view text)</td></tr>
+<tr class="memdesc:a4f17093fef1b08a95d85661f3260e662"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a string is an alias, <span class="tt">{a.b}</span>.  <br /></td></tr>
+<tr class="memitem:ae6e53851b37b68ba7f510441bda67416" id="r_ae6e53851b37b68ba7f510441bda67416"><td class="memItemLeft">MORPH_API std::optional&lt; <a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae6e53851b37b68ba7f510441bda67416">morph::ui::colorOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
+<tr class="memdesc:ae6e53851b37b68ba7f510441bda67416"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a colour value: <span class="tt">#rgb</span>, <span class="tt">#rrggbb</span>, <span class="tt">#rrggbbaa</span>, or the DTCG 2025.10 object, by its <span class="tt">hex</span> or by its <span class="tt">srgb</span> <span class="tt">components</span> (0 to 1) and <span class="tt">alpha</span>.  <br /></td></tr>
+<tr class="memitem:a77e006716652c49506497acc3c453873" id="r_a77e006716652c49506497acc3c453873"><td class="memItemLeft">MORPH_API std::optional&lt; double &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a77e006716652c49506497acc3c453873">morph::ui::detail::weightOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;value)</td></tr>
+<tr class="memdesc:a77e006716652c49506497acc3c453873"><td class="mdescLeft">&#160;</td><td class="mdescRight">The numeric weight of a checked <span class="tt">fontWeight</span> value.  <br /></td></tr>
+<tr class="memitem:a046a47ca24d68879a557e15699f04e37" id="r_a046a47ca24d68879a557e15699f04e37"><td class="memItemLeft">MORPH_API std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a046a47ca24d68879a557e15699f04e37">morph::ui::detail::checkShadow</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;value)</td></tr>
+<tr class="memdesc:a046a47ca24d68879a557e15699f04e37"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks a <span class="tt">shadow</span>: an object of a <span class="tt">color</span> and the dimensions <span class="tt">offsetX</span>, <span class="tt">offsetY</span>, <span class="tt">blur</span> and <span class="tt">spread</span>, or a non-empty list of them.  <br /></td></tr>
+<tr class="memitem:a72ea4e47c3117a0ada513ba671f22f41" id="r_a72ea4e47c3117a0ada513ba671f22f41"><td class="memItemLeft">MORPH_API std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a72ea4e47c3117a0ada513ba671f22f41">morph::ui::detail::readGroup</a> (Json::object_t const &amp;group, std::string const &amp;prefix, std::string const &amp;inherited, <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> &amp;out)</td></tr>
+<tr class="memdesc:a72ea4e47c3117a0ada513ba671f22f41"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads the tokens of one group into <code class="param">out</code>.  <br /></td></tr>
+<tr class="memitem:aab1bbc144cc7bd83a599b53ac0a07c8e" id="r_aab1bbc144cc7bd83a599b53ac0a07c8e"><td class="memItemLeft">MORPH_API bool&#160;</td><td class="memItemRight"><a class="el" href="#aab1bbc144cc7bd83a599b53ac0a07c8e">morph::ui::isThemeIndex</a> (std::string_view text)</td></tr>
+<tr class="memdesc:aab1bbc144cc7bd83a599b53ac0a07c8e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a theme file is a theme index rather than a token file: its top level has a string <span class="tt">vocab</span>.  <br /></td></tr>
+<tr class="memitem:ad8bc90744352f997e6d008a299ad3668" id="r_ad8bc90744352f997e6d008a299ad3668"><td class="memItemLeft">MORPH_API std::expected&lt; <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad8bc90744352f997e6d008a299ad3668">morph::ui::parseTokens</a> (std::string_view text)</td></tr>
+<tr class="memdesc:ad8bc90744352f997e6d008a299ad3668"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses a DTCG 2025.10 token file.  <br /></td></tr>
+<tr class="memitem:a06ffc0f7794843942f90634dc8d8446a" id="r_a06ffc0f7794843942f90634dc8d8446a"><td class="memItemLeft">MORPH_API std::expected&lt; <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a06ffc0f7794843942f90634dc8d8446a">morph::ui::resolveTokens</a> (std::vector&lt; <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const * &gt; const &amp;layers)</td></tr>
+<tr class="memdesc:a06ffc0f7794843942f90634dc8d8446a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Layers token files, later ones winning per path, and resolves every alias.  <br /></td></tr>
+<tr class="memitem:aba646304f727a9c6ed249b3796f41b7a" id="r_aba646304f727a9c6ed249b3796f41b7a"><td class="memItemLeft">MORPH_API std::expected&lt; <a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aba646304f727a9c6ed249b3796f41b7a">morph::ui::parseThemeIndex</a> (std::string_view text)</td></tr>
+<tr class="memdesc:aba646304f727a9c6ed249b3796f41b7a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses a theme index: <span class="tt">{"vocab": "ui-theme/1", "base": id, "dark": id, …, "density": {...},
        "surfaces": {...}, "icons": {...}}</span>.  <br /></td></tr>
-<tr class="memitem:aecf98c587d900ce47c54af5ce01b802b" id="r_aecf98c587d900ce47c54af5ce01b802b"><td class="memItemLeft">std::expected&lt; <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aecf98c587d900ce47c54af5ce01b802b">morph::ui::resolveTheme</a> (<a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;index, <a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;files, std::string_view variant, std::string_view density, std::string_view surface)</td></tr>
-<tr class="memdesc:aecf98c587d900ce47c54af5ce01b802b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves one combination of a theme: <span class="tt">base</span>, then the variant, the density and the surface, each optional.  <br /></td></tr>
-<tr class="memitem:adaa7441d8c8a17d0cd7f34424c5c9438" id="r_adaa7441d8c8a17d0cd7f34424c5c9438"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#adaa7441d8c8a17d0cd7f34424c5c9438">morph::ui::detail::isKeywordName</a> (std::string_view path, std::string_view name)</td></tr>
-<tr class="memdesc:adaa7441d8c8a17d0cd7f34424c5c9438"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <code class="param">name</code> is one of the names of the keyword at <code class="param">path</code>.  <br /></td></tr>
-<tr class="memitem:a1603c92551ba5ec8424400b7a0bc464f" id="r_a1603c92551ba5ec8424400b7a0bc464f"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1603c92551ba5ec8424400b7a0bc464f">morph::ui::detail::keywordProblem</a> (<a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;resolved)</td></tr>
-<tr class="memdesc:a1603c92551ba5ec8424400b7a0bc464f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Why a resolved theme names a keyword that is not drawn.  <br /></td></tr>
-<tr class="memitem:a2f68a257f83b64dbffd393d4c725f03c" id="r_a2f68a257f83b64dbffd393d4c725f03c"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2f68a257f83b64dbffd393d4c725f03c">morph::ui::detail::dimensionProblem</a> (<a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;resolved)</td></tr>
-<tr class="memdesc:a2f68a257f83b64dbffd393d4c725f03c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Why a resolved theme gives a dimension a negative length where the set takes none.  <br /></td></tr>
-<tr class="memitem:ae05b7a265d88b7dedd4c791a96b2fbd8" id="r_ae05b7a265d88b7dedd4c791a96b2fbd8"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae05b7a265d88b7dedd4c791a96b2fbd8">morph::ui::detail::strokeProblem</a> (<a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;resolved)</td></tr>
-<tr class="memdesc:ae05b7a265d88b7dedd4c791a96b2fbd8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Why a resolved theme strokes an outline in a style that is not drawn.  <br /></td></tr>
-<tr class="memitem:ac267f830e61cefab7fbdd61da70a46ba" id="r_ac267f830e61cefab7fbdd61da70a46ba"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ac267f830e61cefab7fbdd61da70a46ba">morph::ui::detail::combinationLabel</a> (std::string const &amp;variant, std::string const &amp;density, std::string const &amp;surface)</td></tr>
-<tr class="memdesc:ac267f830e61cefab7fbdd61da70a46ba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Names one combination of a theme's variant, density and surface.  <br /></td></tr>
-<tr class="memitem:a06e38b5ae1a0cce574c9d9f933ff3849" id="r_a06e38b5ae1a0cce574c9d9f933ff3849"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a06e38b5ae1a0cce574c9d9f933ff3849">morph::ui::detail::combinationProblem</a> (<a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;index, <a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;files, std::string const &amp;variant, std::string const &amp;density, std::string const &amp;surface)</td></tr>
-<tr class="memdesc:a06e38b5ae1a0cce574c9d9f933ff3849"><td class="mdescLeft">&#160;</td><td class="mdescRight">Why one combination of a theme is refused.  <br /></td></tr>
-<tr class="memitem:a1d8c7bd7c8f889237b229fd99be0803f" id="r_a1d8c7bd7c8f889237b229fd99be0803f"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1d8c7bd7c8f889237b229fd99be0803f">morph::ui::checkTheme</a> (<a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;index, <a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;files)</td></tr>
-<tr class="memdesc:a1d8c7bd7c8f889237b229fd99be0803f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks that every combination of a theme resolves: each variant (or none), density (or none) and surface (or none) over <span class="tt">base</span>, and that none strokes an outline in a style that is not drawn.  <br /></td></tr>
-<tr class="memitem:a611d0794e635d2198e6adc50077e1011" id="r_a611d0794e635d2198e6adc50077e1011"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d0/d3b/structmorph_1_1ui_1_1ThemeShadow.html">ThemeShadow</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a611d0794e635d2198e6adc50077e1011">morph::ui::detail::shadowOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
-<tr class="memdesc:a611d0794e635d2198e6adc50077e1011"><td class="mdescLeft">&#160;</td><td class="mdescRight">A checked <span class="tt">shadow</span> value as a <span class="tt"><a class="el" href="../../d0/d3b/structmorph_1_1ui_1_1ThemeShadow.html" title="A shadow of the set, resolved.">ThemeShadow</a></span>; of a list of layers, the first.  <br /></td></tr>
-<tr class="memitem:a6cf38ccd6dc3e718b48556e64644d174" id="r_a6cf38ccd6dc3e718b48556e64644d174"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6cf38ccd6dc3e718b48556e64644d174">morph::ui::detail::familiesOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
-<tr class="memdesc:a6cf38ccd6dc3e718b48556e64644d174"><td class="mdescLeft">&#160;</td><td class="mdescRight">A checked <span class="tt">fontFamily</span> value as its names, in order: one name, or a list of them.  <br /></td></tr>
-<tr class="memitem:ae83d1df86659355c9ff3db305591b24f" id="r_ae83d1df86659355c9ff3db305591b24f"><td class="memItemLeft"><a class="el" href="../../d8/dc6/structmorph_1_1ui_1_1Token.html">Token</a> const *&#160;</td><td class="memItemRight"><a class="el" href="#ae83d1df86659355c9ff3db305591b24f">morph::ui::detail::tokenAt</a> (<a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;resolved, std::string_view path)</td></tr>
-<tr class="memdesc:ae83d1df86659355c9ff3db305591b24f"><td class="mdescLeft">&#160;</td><td class="mdescRight">A resolved theme's token at a path.  <br /></td></tr>
-<tr class="memitem:a6076315178f982b00acbebb1ffa0592b" id="r_a6076315178f982b00acbebb1ffa0592b"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6076315178f982b00acbebb1ffa0592b">morph::ui::detail::familyValue</a> (<a class="el" href="../../dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html">ThemeTokenSpec</a> const &amp;spec, <a class="el" href="../../d8/dc6/structmorph_1_1ui_1_1Token.html">Token</a> const *found)</td></tr>
-<tr class="memdesc:a6076315178f982b00acbebb1ffa0592b"><td class="mdescLeft">&#160;</td><td class="mdescRight">A <span class="tt">font.family</span> token's value: the theme's names when it has the token as a <span class="tt">fontFamily</span>, else the default.  <br /></td></tr>
+<tr class="memitem:a1f01c88c614b698af9208c6197d0a611" id="r_a1f01c88c614b698af9208c6197d0a611"><td class="memItemLeft">MORPH_API std::expected&lt; <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1f01c88c614b698af9208c6197d0a611">morph::ui::resolveTheme</a> (<a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;index, <a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;files, std::string_view variant, std::string_view density, std::string_view surface)</td></tr>
+<tr class="memdesc:a1f01c88c614b698af9208c6197d0a611"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves one combination of a theme: <span class="tt">base</span>, then the variant, the density and the surface, each optional.  <br /></td></tr>
+<tr class="memitem:a8f7a464b2f76b86e541112e0855a12e7" id="r_a8f7a464b2f76b86e541112e0855a12e7"><td class="memItemLeft">MORPH_API std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8f7a464b2f76b86e541112e0855a12e7">morph::ui::detail::keywordProblem</a> (<a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;resolved)</td></tr>
+<tr class="memdesc:a8f7a464b2f76b86e541112e0855a12e7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Why a resolved theme names a keyword that is not drawn.  <br /></td></tr>
+<tr class="memitem:a5600ed36fe207a12294566e2e39b839e" id="r_a5600ed36fe207a12294566e2e39b839e"><td class="memItemLeft">MORPH_API std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5600ed36fe207a12294566e2e39b839e">morph::ui::detail::dimensionProblem</a> (<a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;resolved)</td></tr>
+<tr class="memdesc:a5600ed36fe207a12294566e2e39b839e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Why a resolved theme gives a dimension a negative length where the set takes none.  <br /></td></tr>
+<tr class="memitem:af16d3c9ee1a98aec7b9b9526e4561d14" id="r_af16d3c9ee1a98aec7b9b9526e4561d14"><td class="memItemLeft">MORPH_API std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af16d3c9ee1a98aec7b9b9526e4561d14">morph::ui::detail::strokeProblem</a> (<a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;resolved)</td></tr>
+<tr class="memdesc:af16d3c9ee1a98aec7b9b9526e4561d14"><td class="mdescLeft">&#160;</td><td class="mdescRight">Why a resolved theme strokes an outline in a style that is not drawn.  <br /></td></tr>
+<tr class="memitem:a1ce7229fb6a77b547ff1dea086de7e8d" id="r_a1ce7229fb6a77b547ff1dea086de7e8d"><td class="memItemLeft">MORPH_API std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1ce7229fb6a77b547ff1dea086de7e8d">morph::ui::checkTheme</a> (<a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;index, <a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;files)</td></tr>
+<tr class="memdesc:a1ce7229fb6a77b547ff1dea086de7e8d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks that every combination of a theme resolves: each variant (or none), density (or none) and surface (or none) over <span class="tt">base</span>, and that none strokes an outline in a style that is not drawn.  <br /></td></tr>
+<tr class="memitem:a6376db23503b2f2d137616684104a163" id="r_a6376db23503b2f2d137616684104a163"><td class="memItemLeft">MORPH_API std::optional&lt; <a class="el" href="../../d0/d3b/structmorph_1_1ui_1_1ThemeShadow.html">ThemeShadow</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6376db23503b2f2d137616684104a163">morph::ui::detail::shadowOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
+<tr class="memdesc:a6376db23503b2f2d137616684104a163"><td class="mdescLeft">&#160;</td><td class="mdescRight">A checked <span class="tt">shadow</span> value as a <span class="tt"><a class="el" href="../../d0/d3b/structmorph_1_1ui_1_1ThemeShadow.html" title="A shadow of the set, resolved.">ThemeShadow</a></span>; of a list of layers, the first.  <br /></td></tr>
+<tr class="memitem:a7ace6bb3d2c9cebf39f1a5aece740f70" id="r_a7ace6bb3d2c9cebf39f1a5aece740f70"><td class="memItemLeft">MORPH_API std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7ace6bb3d2c9cebf39f1a5aece740f70">morph::ui::detail::familiesOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json)</td></tr>
+<tr class="memdesc:a7ace6bb3d2c9cebf39f1a5aece740f70"><td class="mdescLeft">&#160;</td><td class="mdescRight">A checked <span class="tt">fontFamily</span> value as its names, in order: one name, or a list of them.  <br /></td></tr>
 <tr class="memitem:aa852435732f9e10032d5df2e22874868" id="r_aa852435732f9e10032d5df2e22874868"><td class="memTemplParams" colspan="2">template&lt;typename Read&gt; </td></tr>
 <tr class="memitem:aa852435732f9e10032d5df2e22874868 template"><td class="memItemLeft">auto&#160;</td><td class="memItemRight"><a class="el" href="#aa852435732f9e10032d5df2e22874868">morph::ui::detail::typedValue</a> (<a class="el" href="../../d8/dc6/structmorph_1_1ui_1_1Token.html">Token</a> const *token, std::string_view type, Read read) -&gt; decltype(read(token-&gt;value))</td></tr>
 <tr class="memdesc:aa852435732f9e10032d5df2e22874868"><td class="mdescLeft">&#160;</td><td class="mdescRight">What <code class="param">read</code> makes of a token's value, when the token is there and has the given type.  <br /></td></tr>
-<tr class="memitem:a061475ff7b218f369cb30708c88ddce6" id="r_a061475ff7b218f369cb30708c88ddce6"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a061475ff7b218f369cb30708c88ddce6">morph::ui::detail::tokenString</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;value)</td></tr>
-<tr class="memdesc:a061475ff7b218f369cb30708c88ddce6"><td class="mdescLeft">&#160;</td><td class="mdescRight">A name the token holds, when it is a string.  <br /></td></tr>
-<tr class="memitem:ae3b9df3c59ff9df05d04b2b47dd3f56a" id="r_ae3b9df3c59ff9df05d04b2b47dd3f56a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae3b9df3c59ff9df05d04b2b47dd3f56a">morph::ui::detail::fillValue</a> (<a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ThemeValues</a> &amp;values, <a class="el" href="../../dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html">ThemeTokenSpec</a> const &amp;spec, <a class="el" href="../../d8/dc6/structmorph_1_1ui_1_1Token.html">Token</a> const *token)</td></tr>
-<tr class="memdesc:ae3b9df3c59ff9df05d04b2b47dd3f56a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads one token of the set into <code class="param">values:</code> the theme's value when it has the set's type, else the default.  <br /></td></tr>
-<tr class="memitem:a584b26c30b180905a58dac3480f3602e" id="r_a584b26c30b180905a58dac3480f3602e"><td class="memItemLeft"><a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ThemeValues</a>&#160;</td><td class="memItemRight"><a class="el" href="#a584b26c30b180905a58dac3480f3602e">morph::ui::themeValues</a> (<a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;resolved={})</td></tr>
-<tr class="memdesc:a584b26c30b180905a58dac3480f3602e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fills the closed <span class="tt">ui-theme/1</span> set from a resolved theme.  <br /></td></tr>
-<tr class="memitem:a81f99eb565dfcd6431ce002a78d2052a" id="r_a81f99eb565dfcd6431ce002a78d2052a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a81f99eb565dfcd6431ce002a78d2052a">morph::ui::detail::forEachAlias</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;value, std::function&lt; void(std::string_view)&gt; const &amp;reach)</td></tr>
-<tr class="memdesc:a81f99eb565dfcd6431ce002a78d2052a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Calls <code class="param">reach</code> with the path of every alias inside a value.  <br /></td></tr>
-<tr class="memitem:a961a2d2fe4c7aa5b772ed70ea2034aa8" id="r_a961a2d2fe4c7aa5b772ed70ea2034aa8"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a961a2d2fe4c7aa5b772ed70ea2034aa8">morph::ui::detail::themeFileIds</a> (<a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;index)</td></tr>
-<tr class="memdesc:a961a2d2fe4c7aa5b772ed70ea2034aa8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The ids of the files a theme index names, the base first, each once.  <br /></td></tr>
-<tr class="memitem:a88b58b8d707ff2ef54073358c2cb3d41" id="r_a88b58b8d707ff2ef54073358c2cb3d41"><td class="memItemLeft">std::set&lt; std::string, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a88b58b8d707ff2ef54073358c2cb3d41">morph::ui::detail::readTokenPaths</a> (std::vector&lt; std::string &gt; const &amp;fileIds, <a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;files)</td></tr>
-<tr class="memdesc:a88b58b8d707ff2ef54073358c2cb3d41"><td class="mdescLeft">&#160;</td><td class="mdescRight">The paths a theme reads: those of the set, and everything they reach through aliases in any file.  <br /></td></tr>
-<tr class="memitem:a062efe9c1d9c7b7371fa6b0ed888305a" id="r_a062efe9c1d9c7b7371fa6b0ed888305a"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d9/d8a/structmorph_1_1ui_1_1UnreadThemeToken.html">UnreadThemeToken</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a062efe9c1d9c7b7371fa6b0ed888305a">morph::ui::unreadThemeTokens</a> (<a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;index, <a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;files)</td></tr>
-<tr class="memdesc:a062efe9c1d9c7b7371fa6b0ed888305a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The tokens of a theme's files that nothing reads: neither a path of <span class="tt"><a class="el" href="#acb50e94599da4541dc77d37098af3d57" title="The closed ui-theme/1 token set, with the MorphUi defaults: the colour roles, the opacity and the spa...">kThemeTokens</a></span> nor reachable from one through aliases, a plain alias or one inside a composite value, followed transitively.  <br /></td></tr>
-<tr class="memitem:ac2704dd3b0b1c02a67e9554d508b2c8e" id="r_ac2704dd3b0b1c02a67e9554d508b2c8e"><td class="memItemLeft"><a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a>&#160;</td><td class="memItemRight"><a class="el" href="#ac2704dd3b0b1c02a67e9554d508b2c8e">morph::ui::detail::over</a> (<a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> top, <a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> under)</td></tr>
-<tr class="memdesc:ac2704dd3b0b1c02a67e9554d508b2c8e"><td class="mdescLeft">&#160;</td><td class="mdescRight"><code class="param">top</code> drawn over the opaque colour <code class="param">under</code>.  <br /></td></tr>
-<tr class="memitem:a8268d8b35ea8fba3eded61f9a3ce0df4" id="r_a8268d8b35ea8fba3eded61f9a3ce0df4"><td class="memItemLeft">double&#160;</td><td class="memItemRight"><a class="el" href="#a8268d8b35ea8fba3eded61f9a3ce0df4">morph::ui::detail::luminance</a> (<a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> color)</td></tr>
-<tr class="memdesc:a8268d8b35ea8fba3eded61f9a3ce0df4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The WCAG 2 relative luminance of an opaque colour.  <br /></td></tr>
-<tr class="memitem:a2e17e727ba6a6574e052d4873cc6964c" id="r_a2e17e727ba6a6574e052d4873cc6964c"><td class="memItemLeft">double&#160;</td><td class="memItemRight"><a class="el" href="#a2e17e727ba6a6574e052d4873cc6964c">morph::ui::detail::contrastRatio</a> (<a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> first, <a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> second)</td></tr>
-<tr class="memdesc:a2e17e727ba6a6574e052d4873cc6964c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The WCAG 2 contrast ratio of two opaque colours.  <br /></td></tr>
-<tr class="memitem:a812c642374dd38b8a088912c74421214" id="r_a812c642374dd38b8a088912c74421214"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a812c642374dd38b8a088912c74421214">morph::ui::themeContrastProblems</a> (<a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ThemeValues</a> const &amp;values)</td></tr>
-<tr class="memdesc:a812c642374dd38b8a088912c74421214"><td class="mdescLeft">&#160;</td><td class="mdescRight">The fills text lies on, and the text colours that must stay readable on them.  <br /></td></tr>
-<tr class="memitem:a930463fd47416d33f7b87c306effac3a" id="r_a930463fd47416d33f7b87c306effac3a"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a930463fd47416d33f7b87c306effac3a">morph::ui::themeProblems</a> (<a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;index, <a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;files)</td></tr>
-<tr class="memdesc:a930463fd47416d33f7b87c306effac3a"><td class="mdescLeft">&#160;</td><td class="mdescRight">What is wrong with a theme that does not refuse it: its unread tokens, and the text colours that cannot be read on a fill (<span class="tt"><a class="el" href="#a812c642374dd38b8a088912c74421214" title="The fills text lies on, and the text colours that must stay readable on them.">themeContrastProblems</a></span>), for the base and for each surface.  <br /></td></tr>
+<tr class="memitem:a54dabca67a4754aaf3aeeb6d2a75c264" id="r_a54dabca67a4754aaf3aeeb6d2a75c264"><td class="memItemLeft">MORPH_API <a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ThemeValues</a>&#160;</td><td class="memItemRight"><a class="el" href="#a54dabca67a4754aaf3aeeb6d2a75c264">morph::ui::themeValues</a> (<a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;resolved={})</td></tr>
+<tr class="memdesc:a54dabca67a4754aaf3aeeb6d2a75c264"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fills the closed <span class="tt">ui-theme/1</span> set from a resolved theme.  <br /></td></tr>
+<tr class="memitem:a2cd897b0d548d7d366753a9d375884d7" id="r_a2cd897b0d548d7d366753a9d375884d7"><td class="memItemLeft">MORPH_API std::vector&lt; <a class="el" href="../../d9/d8a/structmorph_1_1ui_1_1UnreadThemeToken.html">UnreadThemeToken</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2cd897b0d548d7d366753a9d375884d7">morph::ui::unreadThemeTokens</a> (<a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;index, <a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;files)</td></tr>
+<tr class="memdesc:a2cd897b0d548d7d366753a9d375884d7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The tokens of a theme's files that nothing reads: neither a path of <span class="tt"><a class="el" href="#acb50e94599da4541dc77d37098af3d57" title="The closed ui-theme/1 token set, with the MorphUi defaults: the colour roles, the opacity and the spa...">kThemeTokens</a></span> nor reachable from one through aliases, a plain alias or one inside a composite value, followed transitively.  <br /></td></tr>
+<tr class="memitem:adb209e933aee63599e4fc3047aacd309" id="r_adb209e933aee63599e4fc3047aacd309"><td class="memItemLeft">MORPH_API double&#160;</td><td class="memItemRight"><a class="el" href="#adb209e933aee63599e4fc3047aacd309">morph::ui::detail::luminance</a> (<a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> color)</td></tr>
+<tr class="memdesc:adb209e933aee63599e4fc3047aacd309"><td class="mdescLeft">&#160;</td><td class="mdescRight">The WCAG 2 relative luminance of an opaque colour.  <br /></td></tr>
+<tr class="memitem:a65bf302578ee760b20e4493e85534aa6" id="r_a65bf302578ee760b20e4493e85534aa6"><td class="memItemLeft">MORPH_API double&#160;</td><td class="memItemRight"><a class="el" href="#a65bf302578ee760b20e4493e85534aa6">morph::ui::detail::contrastRatio</a> (<a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> first, <a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a> second)</td></tr>
+<tr class="memdesc:a65bf302578ee760b20e4493e85534aa6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The WCAG 2 contrast ratio of two opaque colours.  <br /></td></tr>
+<tr class="memitem:af1cdf5b3b94fe6b56f24ed94cef28c4a" id="r_af1cdf5b3b94fe6b56f24ed94cef28c4a"><td class="memItemLeft">MORPH_API std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#af1cdf5b3b94fe6b56f24ed94cef28c4a">morph::ui::themeContrastProblems</a> (<a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ThemeValues</a> const &amp;values)</td></tr>
+<tr class="memdesc:af1cdf5b3b94fe6b56f24ed94cef28c4a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The fills text lies on, and the text colours that must stay readable on them.  <br /></td></tr>
+<tr class="memitem:aecbbe2d991aa86e91ed4572e451f8836" id="r_aecbbe2d991aa86e91ed4572e451f8836"><td class="memItemLeft">MORPH_API std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aecbbe2d991aa86e91ed4572e451f8836">morph::ui::themeProblems</a> (<a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;index, <a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;files)</td></tr>
+<tr class="memdesc:aecbbe2d991aa86e91ed4572e451f8836"><td class="mdescLeft">&#160;</td><td class="mdescRight">What is wrong with a theme that does not refuse it: its unread tokens, and the text colours that cannot be read on a fill (<span class="tt"><a class="el" href="#af1cdf5b3b94fe6b56f24ed94cef28c4a" title="The fills text lies on, and the text colours that must stay readable on them.">themeContrastProblems</a></span>), for the base and for each surface.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
@@ -356,7 +305,7 @@ Variables</h2></td></tr>
 
 <p>Tokens by their dotted path, such as <span class="tt">color.accent</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00107">107</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00076">76</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -374,7 +323,7 @@ Variables</h2></td></tr>
 
 <p>Finds a token file of the bundle by id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00926">926</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00230">230</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -419,13 +368,13 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01153">1153</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00303">303</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
-<a id="a2101cc098937825c1d1c65660ad82e8a" name="a2101cc098937825c1d1c65660ad82e8a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2101cc098937825c1d1c65660ad82e8a">&#9670;&#160;</a></span>isIconName()</h2>
+<a id="abb7f899d13b4a19c51a76a2ed72b85d1" name="abb7f899d13b4a19c51a76a2ed72b85d1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abb7f899d13b4a19c51a76a2ed72b85d1">&#9670;&#160;</a></span>isIconName()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -434,7 +383,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">bool morph::ui::isIconName </td>
+          <td class="memname">MORPH_API bool morph::ui::isIconName </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span></td><td>)</td>
           <td></td>
@@ -442,7 +391,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -456,12 +405,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a3f7f31cbdb5006e2f3a283bb0160b8d2" name="a3f7f31cbdb5006e2f3a283bb0160b8d2"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a3f7f31cbdb5006e2f3a283bb0160b8d2">&#9670;&#160;</a></span>iconGlyph()</h2>
+<a id="a1e3aee58a5eb0f86b7d14f726df4f104" name="a1e3aee58a5eb0f86b7d14f726df4f104"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1e3aee58a5eb0f86b7d14f726df4f104">&#9670;&#160;</a></span>iconGlyph()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -470,7 +417,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string_view morph::ui::iconGlyph </td>
+          <td class="memname">MORPH_API std::string_view morph::ui::iconGlyph </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span></td><td>)</td>
           <td></td>
@@ -478,7 +425,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -492,12 +439,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The glyph, or empty for a name that has none (<span class="tt">empty</span>, which a text renderer draws as nothing). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="aec47f25e43b0bc87bfd37dfcf698dfeb" name="aec47f25e43b0bc87bfd37dfcf698dfeb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aec47f25e43b0bc87bfd37dfcf698dfeb">&#9670;&#160;</a></span>numberOf()</h2>
+<a id="a45cff2720dd5d81e644026d01e3afe54" name="a45cff2720dd5d81e644026d01e3afe54"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a45cff2720dd5d81e644026d01e3afe54">&#9670;&#160;</a></span>numberOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -506,7 +451,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; double &gt; morph::ui::detail::numberOf </td>
+          <td class="memname">MORPH_API std::optional&lt; double &gt; morph::ui::detail::numberOf </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>json</em></span></td><td>)</td>
           <td></td>
@@ -514,7 +459,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -528,12 +473,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It, or nothing when it is not a number. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a34f90eeeddc346416f3c3282e77379fb" name="a34f90eeeddc346416f3c3282e77379fb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a34f90eeeddc346416f3c3282e77379fb">&#9670;&#160;</a></span>memberOf()</h2>
+<a id="a4aef43601b038f3ae7bfb2f903ed2598" name="a4aef43601b038f3ae7bfb2f903ed2598"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4aef43601b038f3ae7bfb2f903ed2598">&#9670;&#160;</a></span>pixelsOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -542,48 +485,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">Json const  * morph::ui::detail::memberOf </td>
-          <td>(</td>
-          <td class="paramtype">Json::object_t const &amp;</td>          <td class="paramname"><span class="paramname"><em>object</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>A member of a JSON object. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">object</td><td>The object. </td></tr>
-    <tr><td class="paramname">name</td><td>The member. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>It, or null. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00179">179</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a97b893ef7d67a880ededa79d501ff3e9" name="a97b893ef7d67a880ededa79d501ff3e9"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a97b893ef7d67a880ededa79d501ff3e9">&#9670;&#160;</a></span>pixelsOf()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; double &gt; morph::ui::detail::pixelsOf </td>
+          <td class="memname">MORPH_API std::optional&lt; double &gt; morph::ui::detail::pixelsOf </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>json</em></span></td><td>)</td>
           <td></td>
@@ -591,7 +493,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -605,12 +507,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its length in px, or nothing when it is not a dimension. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00190">190</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a7b840b1aa200b73a882cbb9fed43d468" name="a7b840b1aa200b73a882cbb9fed43d468"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7b840b1aa200b73a882cbb9fed43d468">&#9670;&#160;</a></span>hexColor()</h2>
+<a id="a4db6cd4b3e84f1055d53f91fd73a6de7" name="a4db6cd4b3e84f1055d53f91fd73a6de7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4db6cd4b3e84f1055d53f91fd73a6de7">&#9670;&#160;</a></span>hexColor()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -619,7 +519,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; Rgba &gt; morph::ui::detail::hexColor </td>
+          <td class="memname">MORPH_API std::optional&lt; Rgba &gt; morph::ui::detail::hexColor </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
           <td></td>
@@ -627,7 +527,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -641,12 +541,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The colour, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00214">214</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a8af205857a803edce0af06eba1e1cb78" name="a8af205857a803edce0af06eba1e1cb78"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a8af205857a803edce0af06eba1e1cb78">&#9670;&#160;</a></span>channelOf()</h2>
+<a id="a0f467d41bc3b7d4da6454bef154b5230" name="a0f467d41bc3b7d4da6454bef154b5230"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0f467d41bc3b7d4da6454bef154b5230">&#9670;&#160;</a></span>channelOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -655,15 +553,15 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; std::uint8_t &gt; morph::ui::detail::channelOf </td>
+          <td class="memname">MORPH_API std::optional&lt; std::uint8_t &gt; morph::ui::detail::channelOf </td>
           <td>(</td>
-          <td class="paramtype">double const</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
+          <td class="paramtype">double</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -677,12 +575,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It, or nothing outside 0 to 1. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00252">252</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a0659229401e535e2442c94879f312896" name="a0659229401e535e2442c94879f312896"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0659229401e535e2442c94879f312896">&#9670;&#160;</a></span>aliasOf()</h2>
+<a id="a4f17093fef1b08a95d85661f3260e662" name="a4f17093fef1b08a95d85661f3260e662"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4f17093fef1b08a95d85661f3260e662">&#9670;&#160;</a></span>aliasOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -691,7 +587,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; std::string_view &gt; morph::ui::detail::aliasOf </td>
+          <td class="memname">MORPH_API std::optional&lt; std::string_view &gt; morph::ui::detail::aliasOf </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
           <td></td>
@@ -699,7 +595,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -713,12 +609,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The path it names, or nothing. A trailing <span class="tt">.$root</span> is dropped: <span class="tt">{color.ok.$root}</span> names <span class="tt">color.ok</span>, the group's own token. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00266">266</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a4b507ea6bdcfded23b19ecbbaeac252c" name="a4b507ea6bdcfded23b19ecbbaeac252c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4b507ea6bdcfded23b19ecbbaeac252c">&#9670;&#160;</a></span>holdsAlias()</h2>
+<a id="ae6e53851b37b68ba7f510441bda67416" name="ae6e53851b37b68ba7f510441bda67416"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae6e53851b37b68ba7f510441bda67416">&#9670;&#160;</a></span>colorOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -727,7 +621,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">bool morph::ui::detail::holdsAlias </td>
+          <td class="memname">MORPH_API std::optional&lt; Rgba &gt; morph::ui::colorOf </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>json</em></span></td><td>)</td>
           <td></td>
@@ -735,84 +629,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Whether a value holds an alias anywhere. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">json</td><td>The value. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Whether it does. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="af6b1e21bba74c7156a99e56a03f53ba3" name="af6b1e21bba74c7156a99e56a03f53ba3"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af6b1e21bba74c7156a99e56a03f53ba3">&#9670;&#160;</a></span>checkTokenValue()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::checkTokenValue </td>
-          <td>(</td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>type</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Whether a resolved value has its type's shape. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">type</td><td>The <span class="tt">$type</span>. </td></tr>
-    <tr><td class="paramname">value</td><td>The value, with no alias left. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Why it does not, or nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00469">469</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a93eb91ae910694309f7ac47801f2b58a" name="a93eb91ae910694309f7ac47801f2b58a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a93eb91ae910694309f7ac47801f2b58a">&#9670;&#160;</a></span>colorOf()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; Rgba &gt; morph::ui::colorOf </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>json</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -826,12 +643,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The colour, or nothing when it is none of those. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00327">327</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a83658358197fafb8d34c9c6c7aa03403" name="a83658358197fafb8d34c9c6c7aa03403"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a83658358197fafb8d34c9c6c7aa03403">&#9670;&#160;</a></span>checkMeasure()</h2>
+<a id="a77e006716652c49506497acc3c453873" name="a77e006716652c49506497acc3c453873"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a77e006716652c49506497acc3c453873">&#9670;&#160;</a></span>weightOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -840,48 +655,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::checkMeasure </td>
-          <td>(</td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>type</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Checks a <span class="tt">dimension</span> or a <span class="tt">duration</span>: an object of a number <span class="tt">value</span> and a known <span class="tt">unit</span>. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">type</td><td><span class="tt">dimension</span> or <span class="tt">duration</span>. </td></tr>
-    <tr><td class="paramname">value</td><td>The value. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Why it is not one, or nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00376">376</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="aa57255ca6f8ccd9380aebf86555c97cb" name="aa57255ca6f8ccd9380aebf86555c97cb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa57255ca6f8ccd9380aebf86555c97cb">&#9670;&#160;</a></span>checkFontFamily()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::checkFontFamily </td>
+          <td class="memname">MORPH_API std::optional&lt; double &gt; morph::ui::detail::weightOf </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
           <td></td>
@@ -889,79 +663,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Checks a <span class="tt">fontFamily</span>: a name, or a non-empty list of names. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">value</td><td>The value. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Why it is not one, or nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00395">395</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="ae95a2b52dc7e98979ca94c4bc6fb49cc" name="ae95a2b52dc7e98979ca94c4bc6fb49cc"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae95a2b52dc7e98979ca94c4bc6fb49cc">&#9670;&#160;</a></span>checkFontWeight()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::checkFontWeight </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Checks a <span class="tt">fontWeight</span>: 1 to 1000, or a DTCG weight name. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">value</td><td>The value. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Why it is not one, or nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00409">409</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="aa1534aeda87dc1b43c5d7f8b2b1b145b" name="aa1534aeda87dc1b43c5d7f8b2b1b145b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa1534aeda87dc1b43c5d7f8b2b1b145b">&#9670;&#160;</a></span>weightOf()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; double &gt; morph::ui::detail::weightOf </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -975,12 +677,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The weight, or nothing when it is neither. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00455">455</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="ae31511a172e1a962b11870c8baa8c544" name="ae31511a172e1a962b11870c8baa8c544"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae31511a172e1a962b11870c8baa8c544">&#9670;&#160;</a></span>checkShadow()</h2>
+<a id="a046a47ca24d68879a557e15699f04e37" name="a046a47ca24d68879a557e15699f04e37"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a046a47ca24d68879a557e15699f04e37">&#9670;&#160;</a></span>checkShadow()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -989,7 +689,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::checkShadow </td>
+          <td class="memname">MORPH_API std::optional&lt; std::string &gt; morph::ui::detail::checkShadow </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
           <td></td>
@@ -997,7 +697,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1011,12 +711,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why it is not one, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00429">429</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a6b028815c6b756867a1f7fde67e9edd1" name="a6b028815c6b756867a1f7fde67e9edd1"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6b028815c6b756867a1f7fde67e9edd1">&#9670;&#160;</a></span>joined()</h2>
+<a id="a72ea4e47c3117a0ada513ba671f22f41" name="a72ea4e47c3117a0ada513ba671f22f41"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a72ea4e47c3117a0ada513ba671f22f41">&#9670;&#160;</a></span>readGroup()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1025,243 +723,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::ui::detail::joined </td>
-          <td>(</td>
-          <td class="paramtype">std::initializer_list&lt; std::string_view &gt;</td>          <td class="paramname"><span class="paramname"><em>parts</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Joins text, for a refusal built inside a loop. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">parts</td><td>The pieces. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Them, in order. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00494">494</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a0ab2da9e954e7116716b490d9f9ac35c" name="a0ab2da9e954e7116716b490d9f9ac35c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0ab2da9e954e7116716b490d9f9ac35c">&#9670;&#160;</a></span>declaredType()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::expected&lt; std::string, std::string &gt; morph::ui::detail::declaredType </td>
-          <td>(</td>
-          <td class="paramtype">Json::object_t const &amp;</td>          <td class="paramname"><span class="paramname"><em>object</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>where</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>inherited</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The <span class="tt">$type</span> an object declares, or the one it inherits. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">object</td><td>The group's or token's members. </td></tr>
-    <tr><td class="paramname">where</td><td>Its path with a trailing <span class="tt">.</span>, for the refusal. </td></tr>
-    <tr><td class="paramname">inherited</td><td>The nearest enclosing <span class="tt">$type</span>. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The type, or why the declaration is refused. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00508">508</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a8b25bd3c5e88d8160805768367c26911" name="a8b25bd3c5e88d8160805768367c26911"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a8b25bd3c5e88d8160805768367c26911">&#9670;&#160;</a></span>readToken()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::readToken </td>
-          <td>(</td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>path</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">Json::object_t const &amp;</td>          <td class="paramname"><span class="paramname"><em>object</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>type</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>out</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Reads one token into <code class="param">out</code>. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">path</td><td>The token's path. </td></tr>
-    <tr><td class="paramname">object</td><td>The token's members. </td></tr>
-    <tr><td class="paramname">value</td><td>Its <span class="tt">$value</span>. </td></tr>
-    <tr><td class="paramname">type</td><td>The type it inherits. </td></tr>
-    <tr><td class="paramname">out</td><td>Where it goes. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Why the file is refused, or nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00529">529</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a7f81bd5730e6c0f4d80245d4d28c5b5a" name="a7f81bd5730e6c0f4d80245d4d28c5b5a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7f81bd5730e6c0f4d80245d4d28c5b5a">&#9670;&#160;</a></span>checkMemberName()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::checkMemberName </td>
-          <td>(</td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>prefix</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>name</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Refuses a member name a token file may not have. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">prefix</td><td>The group's path, with a trailing <span class="tt">.</span>. </td></tr>
-    <tr><td class="paramname">name</td><td>The member's name. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Why it is refused, or nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00568">568</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a2925d9f7294b783bef252fb285105aba" name="a2925d9f7294b783bef252fb285105aba"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2925d9f7294b783bef252fb285105aba">&#9670;&#160;</a></span>readRoot()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::readRoot </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>member</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>prefix</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>inherited</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>out</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Reads a group's <span class="tt">$root</span> token: the token at the group's own path. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">member</td><td>The <span class="tt">$root</span> member. </td></tr>
-    <tr><td class="paramname">prefix</td><td>The group's path, with a trailing <span class="tt">.</span>; empty at the top, where there is no path to name. </td></tr>
-    <tr><td class="paramname">inherited</td><td>The group's <span class="tt">$type</span>. </td></tr>
-    <tr><td class="paramname">out</td><td>Where the token goes. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Why the file is refused, or nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00585">585</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a7a1012270f80b37fa2404850af04a6e8" name="a7a1012270f80b37fa2404850af04a6e8"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7a1012270f80b37fa2404850af04a6e8">&#9670;&#160;</a></span>readGroup()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::readGroup </td>
+          <td class="memname">MORPH_API std::optional&lt; std::string &gt; morph::ui::detail::readGroup </td>
           <td>(</td>
           <td class="paramtype">Json::object_t const &amp;</td>          <td class="paramname"><span class="paramname"><em>group</em></span>, </td>
         </tr>
@@ -1283,7 +745,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1300,12 +762,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the file is refused, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00607">607</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="ac11accc0e12e465ea51ee2000dbb20e3" name="ac11accc0e12e465ea51ee2000dbb20e3"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac11accc0e12e465ea51ee2000dbb20e3">&#9670;&#160;</a></span>readThemeMap()</h2>
+<a id="aab1bbc144cc7bd83a599b53ac0a07c8e" name="aab1bbc144cc7bd83a599b53ac0a07c8e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aab1bbc144cc7bd83a599b53ac0a07c8e">&#9670;&#160;</a></span>isThemeIndex()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1314,95 +774,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::readThemeMap </td>
-          <td>(</td>
-          <td class="paramtype">Json::object_t const &amp;</td>          <td class="paramname"><span class="paramname"><em>index</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>key</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::map&lt; std::string, std::string, std::less&lt;&gt; &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>out</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Reads a map of name to file id from a theme index. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">index</td><td>The index's members. </td></tr>
-    <tr><td class="paramname">key</td><td><span class="tt">density</span> or <span class="tt">surfaces</span>. </td></tr>
-    <tr><td class="paramname">out</td><td>Where the entries go. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Why the index is refused, or nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00755">755</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a0f16f22b738401f67762796675079021" name="a0f16f22b738401f67762796675079021"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0f16f22b738401f67762796675079021">&#9670;&#160;</a></span>readIcons()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::readIcons </td>
-          <td>(</td>
-          <td class="paramtype">Json::object_t const &amp;</td>          <td class="paramname"><span class="paramname"><em>index</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::map&lt; std::string, std::string, std::less&lt;&gt; &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>out</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Reads a theme index's <span class="tt">icons</span>: an object of icon name (<span class="tt">isIconName</span>) to icon file id, at most <span class="tt">kMaxThemeIcons</span> names. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">index</td><td>The index. </td></tr>
-    <tr><td class="paramname">out</td><td>Where the set is read into. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Why it is refused, or nothing; nothing for an index without <span class="tt">icons</span>. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00780">780</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a34c53e9088bed9e87763083bb600fa17" name="a34c53e9088bed9e87763083bb600fa17"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a34c53e9088bed9e87763083bb600fa17">&#9670;&#160;</a></span>isThemeIndex()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">bool morph::ui::isThemeIndex </td>
+          <td class="memname">MORPH_API bool morph::ui::isThemeIndex </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
           <td></td>
@@ -1410,7 +782,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1424,12 +796,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it is an index; text that is not a JSON object is not. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00811">811</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a687d392bf2a97ad1d3a33f97bf55d31a" name="a687d392bf2a97ad1d3a33f97bf55d31a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a687d392bf2a97ad1d3a33f97bf55d31a">&#9670;&#160;</a></span>parseTokens()</h2>
+<a id="ad8bc90744352f997e6d008a299ad3668" name="ad8bc90744352f997e6d008a299ad3668"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad8bc90744352f997e6d008a299ad3668">&#9670;&#160;</a></span>parseTokens()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1438,7 +808,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::expected&lt; TokenSet, std::string &gt; morph::ui::parseTokens </td>
+          <td class="memname">MORPH_API std::expected&lt; TokenSet, std::string &gt; morph::ui::parseTokens </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
           <td></td>
@@ -1446,7 +816,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1460,12 +830,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The tokens by path, aliases unresolved, or why the file is refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00832">832</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a4748ec0fb1656d605446863afeaebfae" name="a4748ec0fb1656d605446863afeaebfae"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4748ec0fb1656d605446863afeaebfae">&#9670;&#160;</a></span>resolveTokens()</h2>
+<a id="a06ffc0f7794843942f90634dc8d8446a" name="a06ffc0f7794843942f90634dc8d8446a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a06ffc0f7794843942f90634dc8d8446a">&#9670;&#160;</a></span>resolveTokens()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1474,7 +842,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::expected&lt; TokenSet, std::string &gt; morph::ui::resolveTokens </td>
+          <td class="memname">MORPH_API std::expected&lt; TokenSet, std::string &gt; morph::ui::resolveTokens </td>
           <td>(</td>
           <td class="paramtype">std::vector&lt; <a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const * &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>layers</em></span></td><td>)</td>
           <td></td>
@@ -1482,7 +850,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1496,12 +864,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The resolved tokens, or why the combination is refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00854">854</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="ac675e3e977612d26632df96f9a69c2d3" name="ac675e3e977612d26632df96f9a69c2d3"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac675e3e977612d26632df96f9a69c2d3">&#9670;&#160;</a></span>parseThemeIndex()</h2>
+<a id="aba646304f727a9c6ed249b3796f41b7a" name="aba646304f727a9c6ed249b3796f41b7a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aba646304f727a9c6ed249b3796f41b7a">&#9670;&#160;</a></span>parseThemeIndex()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1510,7 +876,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::expected&lt; ThemeIndex, std::string &gt; morph::ui::parseThemeIndex </td>
+          <td class="memname">MORPH_API std::expected&lt; ThemeIndex, std::string &gt; morph::ui::parseThemeIndex </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
           <td></td>
@@ -1518,7 +884,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1533,12 +899,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The index, or why it is refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00873">873</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="aecf98c587d900ce47c54af5ce01b802b" name="aecf98c587d900ce47c54af5ce01b802b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aecf98c587d900ce47c54af5ce01b802b">&#9670;&#160;</a></span>resolveTheme()</h2>
+<a id="a1f01c88c614b698af9208c6197d0a611" name="a1f01c88c614b698af9208c6197d0a611"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1f01c88c614b698af9208c6197d0a611">&#9670;&#160;</a></span>resolveTheme()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1547,7 +911,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::expected&lt; TokenSet, std::string &gt; morph::ui::resolveTheme </td>
+          <td class="memname">MORPH_API std::expected&lt; TokenSet, std::string &gt; morph::ui::resolveTheme </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>index</em></span>, </td>
         </tr>
@@ -1574,7 +938,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1592,12 +956,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The resolved tokens, or why they are refused: a name the index does not list, a file the bundle lacks, or <span class="tt">resolveTokens</span>' refusals. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00937">937</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="adaa7441d8c8a17d0cd7f34424c5c9438" name="adaa7441d8c8a17d0cd7f34424c5c9438"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#adaa7441d8c8a17d0cd7f34424c5c9438">&#9670;&#160;</a></span>isKeywordName()</h2>
+<a id="a8f7a464b2f76b86e541112e0855a12e7" name="a8f7a464b2f76b86e541112e0855a12e7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8f7a464b2f76b86e541112e0855a12e7">&#9670;&#160;</a></span>keywordProblem()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1606,48 +968,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">bool morph::ui::detail::isKeywordName </td>
-          <td>(</td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>path</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Whether <code class="param">name</code> is one of the names of the keyword at <code class="param">path</code>. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">path</td><td>The keyword's path. </td></tr>
-    <tr><td class="paramname">name</td><td>The name. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Whether the keyword takes it. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01010">1010</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a1603c92551ba5ec8424400b7a0bc464f" name="a1603c92551ba5ec8424400b7a0bc464f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1603c92551ba5ec8424400b7a0bc464f">&#9670;&#160;</a></span>keywordProblem()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::keywordProblem </td>
+          <td class="memname">MORPH_API std::optional&lt; std::string &gt; morph::ui::detail::keywordProblem </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>resolved</em></span></td><td>)</td>
           <td></td>
@@ -1655,7 +976,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1669,12 +990,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reason, such as <span class="tt">shape.iconOnly: only default and square are drawn</span>, or nothing when every keyword the theme gives is one its spec lists. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01020">1020</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a2f68a257f83b64dbffd393d4c725f03c" name="a2f68a257f83b64dbffd393d4c725f03c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2f68a257f83b64dbffd393d4c725f03c">&#9670;&#160;</a></span>dimensionProblem()</h2>
+<a id="a5600ed36fe207a12294566e2e39b839e" name="a5600ed36fe207a12294566e2e39b839e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5600ed36fe207a12294566e2e39b839e">&#9670;&#160;</a></span>dimensionProblem()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1683,7 +1002,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::dimensionProblem </td>
+          <td class="memname">MORPH_API std::optional&lt; std::string &gt; morph::ui::detail::dimensionProblem </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>resolved</em></span></td><td>)</td>
           <td></td>
@@ -1691,7 +1010,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1705,12 +1024,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reason, such as <span class="tt">input.paddingX: must not be negative</span>, or nothing when no such dimension is negative. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01038">1038</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="ae05b7a265d88b7dedd4c791a96b2fbd8" name="ae05b7a265d88b7dedd4c791a96b2fbd8"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae05b7a265d88b7dedd4c791a96b2fbd8">&#9670;&#160;</a></span>strokeProblem()</h2>
+<a id="af16d3c9ee1a98aec7b9b9526e4561d14" name="af16d3c9ee1a98aec7b9b9526e4561d14"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af16d3c9ee1a98aec7b9b9526e4561d14">&#9670;&#160;</a></span>strokeProblem()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1719,7 +1036,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::strokeProblem </td>
+          <td class="memname">MORPH_API std::optional&lt; std::string &gt; morph::ui::detail::strokeProblem </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>resolved</em></span></td><td>)</td>
           <td></td>
@@ -1727,7 +1044,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1741,12 +1058,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reason, or nothing when every stroke style of the set is <span class="tt">solid</span> or <span class="tt">dashed</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01055">1055</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="ac267f830e61cefab7fbdd61da70a46ba" name="ac267f830e61cefab7fbdd61da70a46ba"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac267f830e61cefab7fbdd61da70a46ba">&#9670;&#160;</a></span>combinationLabel()</h2>
+<a id="a1ce7229fb6a77b547ff1dea086de7e8d" name="a1ce7229fb6a77b547ff1dea086de7e8d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1ce7229fb6a77b547ff1dea086de7e8d">&#9670;&#160;</a></span>checkTheme()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1755,113 +1070,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::ui::detail::combinationLabel </td>
-          <td>(</td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>variant</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>density</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>surface</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Names one combination of a theme's variant, density and surface. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">variant</td><td>The variant, or empty for none. </td></tr>
-    <tr><td class="paramname">density</td><td>The density, or empty for none. </td></tr>
-    <tr><td class="paramname">surface</td><td>The surface, or empty for none. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">base</span>, then each given layer. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01079">1079</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a06e38b5ae1a0cce574c9d9f933ff3849" name="a06e38b5ae1a0cce574c9d9f933ff3849"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a06e38b5ae1a0cce574c9d9f933ff3849">&#9670;&#160;</a></span>combinationProblem()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::combinationProblem </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>index</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>files</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>variant</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>density</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>surface</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Why one combination of a theme is refused. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">index</td><td>The theme index. </td></tr>
-    <tr><td class="paramname">files</td><td>The bundle's token files. </td></tr>
-    <tr><td class="paramname">variant</td><td>The variant, or empty for none. </td></tr>
-    <tr><td class="paramname">density</td><td>The density, or empty for none. </td></tr>
-    <tr><td class="paramname">surface</td><td>The surface, or empty for none. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The reason, naming the combination, or nothing when it resolves and draws. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01102">1102</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a1d8c7bd7c8f889237b229fd99be0803f" name="a1d8c7bd7c8f889237b229fd99be0803f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1d8c7bd7c8f889237b229fd99be0803f">&#9670;&#160;</a></span>checkTheme()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::checkTheme </td>
+          <td class="memname">MORPH_API std::optional&lt; std::string &gt; morph::ui::checkTheme </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>index</em></span>, </td>
         </tr>
@@ -1873,7 +1082,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1888,12 +1097,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Why the theme is refused, naming the combination, or nothing. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01130">1130</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a611d0794e635d2198e6adc50077e1011" name="a611d0794e635d2198e6adc50077e1011"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a611d0794e635d2198e6adc50077e1011">&#9670;&#160;</a></span>shadowOf()</h2>
+<a id="a6376db23503b2f2d137616684104a163" name="a6376db23503b2f2d137616684104a163"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6376db23503b2f2d137616684104a163">&#9670;&#160;</a></span>shadowOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1902,7 +1109,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; ThemeShadow &gt; morph::ui::detail::shadowOf </td>
+          <td class="memname">MORPH_API std::optional&lt; ThemeShadow &gt; morph::ui::detail::shadowOf </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>json</em></span></td><td>)</td>
           <td></td>
@@ -1910,7 +1117,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1924,12 +1131,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It, or nothing when it is not a shadow. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01434">1434</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a6cf38ccd6dc3e718b48556e64644d174" name="a6cf38ccd6dc3e718b48556e64644d174"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6cf38ccd6dc3e718b48556e64644d174">&#9670;&#160;</a></span>familiesOf()</h2>
+<a id="a7ace6bb3d2c9cebf39f1a5aece740f70" name="a7ace6bb3d2c9cebf39f1a5aece740f70"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7ace6bb3d2c9cebf39f1a5aece740f70">&#9670;&#160;</a></span>familiesOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1938,7 +1143,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::vector&lt; std::string &gt; morph::ui::detail::familiesOf </td>
+          <td class="memname">MORPH_API std::vector&lt; std::string &gt; morph::ui::detail::familiesOf </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>json</em></span></td><td>)</td>
           <td></td>
@@ -1946,7 +1151,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1959,90 +1164,6 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The names; empty when it is neither. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01465">1465</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="ae83d1df86659355c9ff3db305591b24f" name="ae83d1df86659355c9ff3db305591b24f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae83d1df86659355c9ff3db305591b24f">&#9670;&#160;</a></span>tokenAt()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">Token const  * morph::ui::detail::tokenAt </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>resolved</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>path</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>A resolved theme's token at a path. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">resolved</td><td>The resolved tokens. </td></tr>
-    <tr><td class="paramname">path</td><td>The token's path. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>It, or null when the theme does not have it. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01487">1487</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a6076315178f982b00acbebb1ffa0592b" name="a6076315178f982b00acbebb1ffa0592b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6076315178f982b00acbebb1ffa0592b">&#9670;&#160;</a></span>familyValue()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::vector&lt; std::string &gt; morph::ui::detail::familyValue </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html">ThemeTokenSpec</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>spec</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../d8/dc6/structmorph_1_1ui_1_1Token.html">Token</a> const *</td>          <td class="paramname"><span class="paramname"><em>found</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>A <span class="tt">font.family</span> token's value: the theme's names when it has the token as a <span class="tt">fontFamily</span>, else the default. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">spec</td><td>The token of the set. </td></tr>
-    <tr><td class="paramname">found</td><td>The theme's token at that path, or null. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The names, in order; empty for none. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01496">1496</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2097,12 +1218,12 @@ template&lt;typename Read&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>What <code class="param">read</code> returns, or its empty value when the token is absent or of another type. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01518">1518</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00604">604</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a061475ff7b218f369cb30708c88ddce6" name="a061475ff7b218f369cb30708c88ddce6"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a061475ff7b218f369cb30708c88ddce6">&#9670;&#160;</a></span>tokenString()</h2>
+<a id="a54dabca67a4754aaf3aeeb6d2a75c264" name="a54dabca67a4754aaf3aeeb6d2a75c264"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a54dabca67a4754aaf3aeeb6d2a75c264">&#9670;&#160;</a></span>themeValues()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2111,89 +1232,7 @@ template&lt;typename Read&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::tokenString </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>A name the token holds, when it is a string. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">value</td><td>The token's value. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The string, or nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01528">1528</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="ae3b9df3c59ff9df05d04b2b47dd3f56a" name="ae3b9df3c59ff9df05d04b2b47dd3f56a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae3b9df3c59ff9df05d04b2b47dd3f56a">&#9670;&#160;</a></span>fillValue()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::ui::detail::fillValue </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ThemeValues</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>values</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../dc/dca/structmorph_1_1ui_1_1ThemeTokenSpec.html">ThemeTokenSpec</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>spec</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../d8/dc6/structmorph_1_1ui_1_1Token.html">Token</a> const *</td>          <td class="paramname"><span class="paramname"><em>token</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Reads one token of the set into <code class="param">values:</code> the theme's value when it has the set's type, else the default. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">values</td><td>Receives the value. </td></tr>
-    <tr><td class="paramname">spec</td><td>The token of the set. </td></tr>
-    <tr><td class="paramname">token</td><td>The theme's token at the spec's path, or <span class="tt">nullptr</span>. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01539">1539</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a584b26c30b180905a58dac3480f3602e" name="a584b26c30b180905a58dac3480f3602e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a584b26c30b180905a58dac3480f3602e">&#9670;&#160;</a></span>themeValues()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">ThemeValues morph::ui::themeValues </td>
+          <td class="memname">MORPH_API ThemeValues morph::ui::themeValues </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="#a078e0deb3d43df9e845ab42446c3aa55">TokenSet</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>resolved</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span></td><td>)</td>
           <td></td>
@@ -2201,7 +1240,7 @@ template&lt;typename Read&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -2215,12 +1254,10 @@ template&lt;typename Read&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Every path of the set with its value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01613">1613</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a81f99eb565dfcd6431ce002a78d2052a" name="a81f99eb565dfcd6431ce002a78d2052a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a81f99eb565dfcd6431ce002a78d2052a">&#9670;&#160;</a></span>forEachAlias()</h2>
+<a id="a2cd897b0d548d7d366753a9d375884d7" name="a2cd897b0d548d7d366753a9d375884d7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2cd897b0d548d7d366753a9d375884d7">&#9670;&#160;</a></span>unreadThemeTokens()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2229,124 +1266,7 @@ template&lt;typename Read&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void morph::ui::detail::forEachAlias </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::function&lt; void(std::string_view)&gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>reach</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Calls <code class="param">reach</code> with the path of every alias inside a value. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">value</td><td>The value. </td></tr>
-    <tr><td class="paramname">reach</td><td>The callback. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01631">1631</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a961a2d2fe4c7aa5b772ed70ea2034aa8" name="a961a2d2fe4c7aa5b772ed70ea2034aa8"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a961a2d2fe4c7aa5b772ed70ea2034aa8">&#9670;&#160;</a></span>themeFileIds()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::vector&lt; std::string &gt; morph::ui::detail::themeFileIds </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>index</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The ids of the files a theme index names, the base first, each once. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">index</td><td>The theme index. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The ids. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01655">1655</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a88b58b8d707ff2ef54073358c2cb3d41" name="a88b58b8d707ff2ef54073358c2cb3d41"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a88b58b8d707ff2ef54073358c2cb3d41">&#9670;&#160;</a></span>readTokenPaths()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::set&lt; std::string, std::less&lt;&gt; &gt; morph::ui::detail::readTokenPaths </td>
-          <td>(</td>
-          <td class="paramtype">std::vector&lt; std::string &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>fileIds</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="#a9299a4c42ca59f4c30d103086a7f99e8">TokenFileLookup</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>files</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The paths a theme reads: those of the set, and everything they reach through aliases in any file. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">fileIds</td><td>The ids of the theme's files. </td></tr>
-    <tr><td class="paramname">files</td><td>The bundle's token files. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The paths. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01672">1672</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a062efe9c1d9c7b7371fa6b0ed888305a" name="a062efe9c1d9c7b7371fa6b0ed888305a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a062efe9c1d9c7b7371fa6b0ed888305a">&#9670;&#160;</a></span>unreadThemeTokens()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::vector&lt; UnreadThemeToken &gt; morph::ui::unreadThemeTokens </td>
+          <td class="memname">MORPH_API std::vector&lt; UnreadThemeToken &gt; morph::ui::unreadThemeTokens </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>index</em></span>, </td>
         </tr>
@@ -2358,7 +1278,7 @@ template&lt;typename Read&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -2373,12 +1293,10 @@ template&lt;typename Read&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The unread tokens, in file order, then by path. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01735">1735</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="ac2704dd3b0b1c02a67e9554d508b2c8e" name="ac2704dd3b0b1c02a67e9554d508b2c8e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac2704dd3b0b1c02a67e9554d508b2c8e">&#9670;&#160;</a></span>over()</h2>
+<a id="adb209e933aee63599e4fc3047aacd309" name="adb209e933aee63599e4fc3047aacd309"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adb209e933aee63599e4fc3047aacd309">&#9670;&#160;</a></span>luminance()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2387,48 +1305,7 @@ template&lt;typename Read&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">Rgba morph::ui::detail::over </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a></td>          <td class="paramname"><span class="paramname"><em>top</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a></td>          <td class="paramname"><span class="paramname"><em>under</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p><code class="param">top</code> drawn over the opaque colour <code class="param">under</code>. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">top</td><td>The colour, which may be translucent. </td></tr>
-    <tr><td class="paramname">under</td><td>The colour beneath it. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The opaque colour that results. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01765">1765</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a8268d8b35ea8fba3eded61f9a3ce0df4" name="a8268d8b35ea8fba3eded61f9a3ce0df4"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a8268d8b35ea8fba3eded61f9a3ce0df4">&#9670;&#160;</a></span>luminance()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">double morph::ui::detail::luminance </td>
+          <td class="memname">MORPH_API double morph::ui::detail::luminance </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a></td>          <td class="paramname"><span class="paramname"><em>color</em></span></td><td>)</td>
           <td></td>
@@ -2436,7 +1313,7 @@ template&lt;typename Read&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -2450,12 +1327,10 @@ template&lt;typename Read&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>It, from 0 to 1. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01775">1775</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a2e17e727ba6a6574e052d4873cc6964c" name="a2e17e727ba6a6574e052d4873cc6964c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2e17e727ba6a6574e052d4873cc6964c">&#9670;&#160;</a></span>contrastRatio()</h2>
+<a id="a65bf302578ee760b20e4493e85534aa6" name="a65bf302578ee760b20e4493e85534aa6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a65bf302578ee760b20e4493e85534aa6">&#9670;&#160;</a></span>contrastRatio()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2464,7 +1339,7 @@ template&lt;typename Read&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">double morph::ui::detail::contrastRatio </td>
+          <td class="memname">MORPH_API double morph::ui::detail::contrastRatio </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d9/d7c/structmorph_1_1ui_1_1Rgba.html">Rgba</a></td>          <td class="paramname"><span class="paramname"><em>first</em></span>, </td>
         </tr>
@@ -2476,7 +1351,7 @@ template&lt;typename Read&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -2491,12 +1366,10 @@ template&lt;typename Read&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The ratio, 1 to 21. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01787">1787</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a812c642374dd38b8a088912c74421214" name="a812c642374dd38b8a088912c74421214"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a812c642374dd38b8a088912c74421214">&#9670;&#160;</a></span>themeContrastProblems()</h2>
+<a id="af1cdf5b3b94fe6b56f24ed94cef28c4a" name="af1cdf5b3b94fe6b56f24ed94cef28c4a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af1cdf5b3b94fe6b56f24ed94cef28c4a">&#9670;&#160;</a></span>themeContrastProblems()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2505,7 +1378,7 @@ template&lt;typename Read&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::vector&lt; std::string &gt; morph::ui::themeContrastProblems </td>
+          <td class="memname">MORPH_API std::vector&lt; std::string &gt; morph::ui::themeContrastProblems </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../da/d96/structmorph_1_1ui_1_1ThemeValues.html">ThemeValues</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>values</em></span></td><td>)</td>
           <td></td>
@@ -2513,7 +1386,7 @@ template&lt;typename Read&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -2528,12 +1401,10 @@ template&lt;typename Read&gt; </div>
 <dl class="section return"><dt>Returns</dt><dd>One sentence per text colour and fill that fall short, such as <span class="tt">color.hover: color.text is 1.50:1 on it,
         below 4.5:1</span>; empty when every pair holds. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01804">1804</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a930463fd47416d33f7b87c306effac3a" name="a930463fd47416d33f7b87c306effac3a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a930463fd47416d33f7b87c306effac3a">&#9670;&#160;</a></span>themeProblems()</h2>
+<a id="aecbbe2d991aa86e91ed4572e451f8836" name="aecbbe2d991aa86e91ed4572e451f8836"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aecbbe2d991aa86e91ed4572e451f8836">&#9670;&#160;</a></span>themeProblems()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2542,7 +1413,7 @@ template&lt;typename Read&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::vector&lt; std::string &gt; morph::ui::themeProblems </td>
+          <td class="memname">MORPH_API std::vector&lt; std::string &gt; morph::ui::themeProblems </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d9/dcc/structmorph_1_1ui_1_1ThemeIndex.html">ThemeIndex</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>index</em></span>, </td>
         </tr>
@@ -2554,7 +1425,7 @@ template&lt;typename Read&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -2568,8 +1439,6 @@ template&lt;typename Read&gt; </div>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The sentences, each starting with the token file or the <span class="tt">base</span> or <span class="tt">surface &lt;name&gt;</span> it concerns; empty for a theme that is all read and legible. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01848">1848</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2596,7 +1465,7 @@ template&lt;typename Read&gt; </div>
 
 <p>The vocabulary of a theme index. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00035">35</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2622,7 +1491,7 @@ template&lt;typename Read&gt; </div>
 
 <p>The most tokens one token file may hold. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2648,7 +1517,7 @@ template&lt;typename Read&gt; </div>
 
 <p>The most variants, densities or surfaces a theme index may list, each. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2674,7 +1543,7 @@ template&lt;typename Read&gt; </div>
 
 <p>The most names a theme index's icon set may hold. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2703,7 +1572,7 @@ template&lt;typename Read&gt; </div>
 </div><!-- fragment -->
 <p>The icon names the built-in components draw: an empty state without an icon of its own, a banner's tone, a chevron that opens and closes, a select's drop-down indicator, a close button, a date input's calendar, an overflow menu's trigger, and the compact shell's navigation menu. A bundle's icon set replaces any of them by name. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2729,7 +1598,7 @@ template&lt;typename Read&gt; </div>
 
 <p>The longest chain of aliases a token may resolve through. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2755,7 +1624,7 @@ template&lt;typename Read&gt; </div>
 
 <p>How many px a <span class="tt">rem</span> is: the default root font size, which the renderers do not change. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00185">185</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2781,7 +1650,7 @@ template&lt;typename Read&gt; </div>
 
 <p>The member name that holds a group's own token. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2810,7 +1679,7 @@ template&lt;typename Read&gt; </div>
 </div><!-- fragment -->
 <p>The types the client checks; a token of another <span class="tt">$type</span> the client still knows is accepted unchecked. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00147">147</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2840,7 +1709,7 @@ template&lt;typename Read&gt; </div>
 </div><!-- fragment -->
 <p>The named font weights of DTCG. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00310">310</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2866,7 +1735,7 @@ template&lt;typename Read&gt; </div>
 
 <p>The paths of the set read as a stroke style. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00982">982</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00251">251</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2899,7 +1768,7 @@ template&lt;typename Read&gt; </div>
 </div><!-- fragment -->
 <p>The keyword tokens of the set. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00993">993</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00262">262</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2928,7 +1797,7 @@ template&lt;typename Read&gt; </div>
 </div><!-- fragment -->
 <p>The dimension tokens of the set that may not be negative: an inset has no meaning below zero. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01002">1002</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00271">271</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2954,7 +1823,7 @@ template&lt;typename Read&gt; </div>
 
 <p>The closed <span class="tt">ui-theme/1</span> token set, with the <span class="tt">MorphUi</span> defaults: the colour roles, the opacity and the spacing scale (<span class="tt">space.0</span> to <span class="tt">space.5</span>, one per spacing step) the built-in components read, and the semantic sets (<span class="tt">ok</span>, <span class="tt">warn</span>, <span class="tt">err</span>, <span class="tt">info</span> with <span class="tt">bg</span>, <span class="tt">border</span> and <span class="tt">dot</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01201">1201</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00351">351</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>
@@ -2982,7 +1851,7 @@ template&lt;typename Read&gt; </div>
 </div><!-- fragment -->
 <p>The <span class="tt">$type</span>s the set's kinds are read as. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l01624">1624</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html#l00624">624</a> of file <a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>.</p>
 
 </div>
 </div>

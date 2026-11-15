@@ -190,14 +190,15 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:aef5be164a203e8d67d0219bc442fec20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs what the frame draws of the application's declared parts ([<span class="tt"><a class="el" href="../../d6/d2a/structmorph_1_1ui_1_1ShellPartsView.html" title="Everything a frame draws of the declared parts.">ShellPartsView</a></span>]): the scope switcher at the sidebar's top, and in the top bar the search with its results panel, the inbox button and the person's menu. Compact, the switcher, the module rows and the person's menu are entries of the navigation menu, and the search is a button that opens a full-window overlay. A frame with no parts draws none of them.  <br /></td></tr>
 <tr class="memitem:a436d1cb2053cfce52f1080737fa8c513" id="r_a436d1cb2053cfce52f1080737fa8c513"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a436d1cb2053cfce52f1080737fa8c513">setPartsHandlers</a> (<a class="el" href="../../d6/d2a/structmorph_1_1ui_1_1ShellPartsHandlers.html">ShellPartsHandlers</a> handlers)</td></tr>
 <tr class="memdesc:a436d1cb2053cfce52f1080737fa8c513"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what the frame reports of the parts.  <br /></td></tr>
-<tr class="memitem:ab98e0c6cd613e0d91678455f1882147a" id="r_ab98e0c6cd613e0d91678455f1882147a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ab98e0c6cd613e0d91678455f1882147a">focusSearch</a> ()</td></tr>
-<tr class="memdesc:ab98e0c6cd613e0d91678455f1882147a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves keyboard focus to the search field, as Ctrl K does; compact, opens the search overlay.  <br /></td></tr>
+<tr class="memitem:ab98e0c6cd613e0d91678455f1882147a" id="r_ab98e0c6cd613e0d91678455f1882147a"><td class="memItemLeft"><a id="ab98e0c6cd613e0d91678455f1882147a" name="ab98e0c6cd613e0d91678455f1882147a"></a>
+void&#160;</td><td class="memItemRight"><b>focusSearch</b> ()</td></tr>
+<tr class="memdesc:ab98e0c6cd613e0d91678455f1882147a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves keyboard focus to the search field, as Ctrl K does; compact, opens the search overlay. <br /></td></tr>
 <tr class="memitem:a7027cf2c10b23841418e407eeea50de0" id="r_a7027cf2c10b23841418e407eeea50de0"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a7027cf2c10b23841418e407eeea50de0">setSearchText</a> (std::string_view text)</td></tr>
 <tr class="memdesc:a7027cf2c10b23841418e407eeea50de0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Puts <code class="param">text</code> in the search field, as typing it would, without reporting it: a client that restores a search, or a test, drives the panel with it.  <br /></td></tr>
 <tr class="memitem:ad93e706a7f912d90cc912e6f3561772d" id="r_ad93e706a7f912d90cc912e6f3561772d"><td class="memItemLeft"><a class="el" href="../../d9/d1c/structmorph_1_1ui_1_1ShellLabels.html">ShellLabels</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ad93e706a7f912d90cc912e6f3561772d">labels</a> () const noexcept</td></tr>
 <tr class="memdesc:ad93e706a7f912d90cc912e6f3561772d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The texts the frame wrote for the navigation menu, so the client can name the module rows with the same words.  <br /></td></tr>
-<tr class="memitem:a500d922bc29a1711aca84a8843aa0a28" id="r_a500d922bc29a1711aca84a8843aa0a28"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a500d922bc29a1711aca84a8843aa0a28">confirm</a> (std::string_view message, std::string_view yes, std::string_view no, std::function&lt; void(bool)&gt; done)</td></tr>
-<tr class="memdesc:a500d922bc29a1711aca84a8843aa0a28"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks a yes-or-no question in a dialog over the frame and calls <code class="param">done</code> with the answer, once. Escape and the cancel button answer no.  <br /></td></tr>
+<tr class="memitem:aec9dc6d7031f47a392e3ddafe656f988" id="r_aec9dc6d7031f47a392e3ddafe656f988"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aec9dc6d7031f47a392e3ddafe656f988">confirm</a> (std::string_view message, std::string_view yes, std::string_view noLabel, std::function&lt; void(bool)&gt; done)</td></tr>
+<tr class="memdesc:aec9dc6d7031f47a392e3ddafe656f988"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks a yes-or-no question in a dialog over the frame and calls <code class="param">done</code> with the answer, once. Escape and the cancel button answer no.  <br /></td></tr>
 <tr class="memitem:a55cbb1a55d1a868699f768dbbe70153c" id="r_a55cbb1a55d1a868699f768dbbe70153c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a55cbb1a55d1a868699f768dbbe70153c">showToast</a> (std::string_view text, <a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a> tone)</td></tr>
 <tr class="memdesc:a55cbb1a55d1a868699f768dbbe70153c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a passive, transient message over the frame's main content area. Made the first time it is asked for; a later call replaces its text and tone and restarts its dismiss interval, whether or not it is still showing.  <br /></td></tr>
 </table>
@@ -205,16 +206,13 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>The frame around a client's screens. </p>
 <p>A row filling the window: the sidebar (surface <span class="tt">sidebar</span>, <span class="tt"><a class="el" href="../../db/d4f/shell__frame_8hpp.html#af30fd407fc56d3ebb11309ba2e1c7cd5" title="The frame&#39;s width for the sidebar, in units.">kShellSidebarWidth</a></span> units wide), holding the application's name and a <span class="tt"><a class="el" href="../../d6/d15/classmorph_1_1ui_1_1Navigator.html" title="The catalog as a list a person opens screens from, with a title search and pinned shortcuts.">Navigator</a></span>, and the main column holding the top bar (surface <span class="tt">toolbar</span>) above the page (surface <span class="tt"><a class="el" href="#a9b2a9f0ffca9203de6da44a84bb5fbe4" title="The container the client places the workspace in.">page</a></span>), where the client places the workspace. The top bar is one line that wraps only when it is out of room: the shown screen's title with the active head's lead (subtitle and badges) under it, and the head's trail (tools and actions, then the principal while it sits in the head) at the trailing edge, dropping to a line of its own where it does not fit. The principal and a sign-out button sit at the sidebar's foot. Signed out, the sidebar and the top bar are hidden and the page is all there is. Compact (<span class="tt">setCompact(true)</span>), the sidebar is hidden and the top bar starts with a navigation menu over the navigator's entries, ending with the principal's sign-out entry, so the page has nearly the whole window. Neither copyable nor movable; owned by the owner thread of its backend. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a8e5ef822f08f6b883b6c7007482e1bef" name="a8e5ef822f08f6b883b6c7007482e1bef"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8e5ef822f08f6b883b6c7007482e1bef">&#9670;&#160;</a></span>ShellFrame()</h2>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">morph::ui::ShellFrame::ShellFrame </td>
@@ -232,11 +230,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype"><a class="el" href="../../da/d44/structmorph_1_1ui_1_1ShellFrameOptions.html">ShellFrameOptions</a></td>          <td class="paramname"><span class="paramname"><em>options</em></span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>The frame, appended to <code class="param">parent</code>. </p>
@@ -248,8 +241,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -280,7 +271,7 @@ Public Member Functions</h2></td></tr>
 <p>The container the client places the workspace in. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00088">88</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -310,7 +301,7 @@ Public Member Functions</h2></td></tr>
 <p>The container a client mounts a chat panel into, at the window's trailing edge. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00262">262</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -319,9 +310,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setChatShown </td>
@@ -330,11 +318,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Says whether there is a chat to show. It stays hidden signed out and while compact whatever this says: a compact window has no width to spare for a column beside the page. </p>
@@ -344,8 +327,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00267">267</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -375,7 +356,7 @@ Public Member Functions</h2></td></tr>
 <p>The navigator in the sidebar. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -405,7 +386,7 @@ Public Member Functions</h2></td></tr>
 <p>The container a client mounts the active head's eyebrow into: at the top of the lead block, above the title, shown only while <span class="tt">setHeadShown(true)</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00279">279</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00106">106</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -435,7 +416,7 @@ Public Member Functions</h2></td></tr>
 <p>The container a client mounts the active head's lead into: under the title, in the top bar's first line, shown only while <span class="tt">setHeadShown(true)</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00284">284</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -465,7 +446,7 @@ Public Member Functions</h2></td></tr>
 <p>The container a client mounts the active head's inline lead into: on the title's line, right after the title, shown only while <span class="tt">setLeadInline(true)</span> and <span class="tt">setHeadShown(true)</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -495,7 +476,7 @@ Public Member Functions</h2></td></tr>
 <p>The container a client mounts the active head's trail into: at the trailing edge of the top bar's line, followed by the principal while it sits in the head, as one wrapping row that drops under the title where it does not fit beside it. Shown only while <span class="tt">setHeadShown(true)</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00295">295</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00122">122</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -504,9 +485,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setHeadShown </td>
@@ -515,11 +493,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Shows or hides the three head slots. The frame cannot tell whether what is mounted there shows anything, so the client says; a new frame starts with them hidden. </p>
@@ -529,8 +502,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00300">300</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -565,7 +536,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00132">132</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -574,9 +545,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setLeadInline </td>
@@ -585,11 +553,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Shows the head's lead on the title's line (<span class="tt"><a class="el" href="#a26c993a4284501df5247324fec9712f8" title="The container a client mounts the active head&#39;s inline lead into: on the title&#39;s line,...">headInlineSlot()</a></span>), or hides that slot. The slot is a content-sized item of a wrapping line inside the lead block, which always stretches from <span class="tt"><a class="el" href="../../db/d4f/shell__frame_8hpp.html#a35000947d720281d2f0dc83b0bc30c32" title="The narrowest the top bar&#39;s title and head lead are given before the head&#39;s trail wraps to a line of ...">kShellHeadLeadMinimum</a></span> units: the lead follows the title while both fit the block, and wraps to a line under the title when they do not, before the head's trail wraps. The spare width lies after the lead, before the trail. </p>
@@ -600,8 +563,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00320">320</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-
 </div>
 </div>
 <a id="a0cacf2499f705313b85096f3878eda52" name="a0cacf2499f705313b85096f3878eda52"></a>
@@ -609,9 +570,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setHeadOneLine </td>
@@ -620,11 +578,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Aligns the top line's items across it while the head is a single line (no eyebrow, nothing under the title), so a title alone is level with the trail's buttons; a taller head aligns the items' tops, so the trail's top is the eyebrow's. </p>
@@ -635,8 +588,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00329">329</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-
 </div>
 </div>
 <a id="a55bdcab5c1861834116e1ebc3db76f79" name="a55bdcab5c1861834116e1ebc3db76f79"></a>
@@ -644,9 +595,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setHeadJoined </td>
@@ -655,11 +603,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Tells the frame that the shown page continues the head's block, so the top bar is drawn on the <span class="tt">toolbarJoined</span> surface, whatever surface the screen asks for. </p>
@@ -670,8 +613,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-
 </div>
 </div>
 <a id="a297125db5fa2ac6946db964d6905f692" name="a297125db5fa2ac6946db964d6905f692"></a>
@@ -679,9 +620,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setHeadSurface </td>
@@ -690,11 +628,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Sets the surface the shown screen asks the top bar to be drawn on. </p>
@@ -704,8 +637,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00347">347</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -740,7 +671,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00355">355</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00161">161</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -749,9 +680,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setPrincipalInHead </td>
@@ -760,11 +688,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Moves the principal from the sidebar's foot to the end of the head's trail, centred on its actions. Compact, the head draws none and the navigation menu's sign-out entry stays described by the principal. </p>
@@ -775,8 +698,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00361">361</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-
 </div>
 </div>
 <a id="aa1f13b96ae72bd2dbf8d51995d38ff64" name="aa1f13b96ae72bd2dbf8d51995d38ff64"></a>
@@ -784,9 +705,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setTitle </td>
@@ -795,11 +713,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Shows the shown screen's title in the top bar. </p>
@@ -810,8 +723,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00368">368</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-
 </div>
 </div>
 <a id="a28163e2cba0a37cd0229985e26d1f2c0" name="a28163e2cba0a37cd0229985e26d1f2c0"></a>
@@ -819,9 +730,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setPageInset </td>
@@ -830,11 +738,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Insets the page's content by the page's step, or lets it fill the page to its edges. A hidden spacer takes no gap, so hiding the three inset spacers leaves the content at the page's own edges: for a screen that insets itself. A new frame insets. </p>
@@ -845,8 +748,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00377">377</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-
 </div>
 </div>
 <a id="a95fbefbcbe124a03f17529293d283ae7" name="a95fbefbcbe124a03f17529293d283ae7"></a>
@@ -854,9 +755,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setTitleSpans </td>
@@ -865,11 +763,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Shows the shown screen's title as runs in the top bar, in place of the plain title: an identifier in the monospace face beside plain words. The title's role gives every run its size and weight. </p>
@@ -880,8 +773,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00386">386</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-
 </div>
 </div>
 <a id="a8e9b26e548b154db33cdd2262809685c" name="a8e9b26e548b154db33cdd2262809685c"></a>
@@ -889,9 +780,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setPrincipal </td>
@@ -900,11 +788,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Shows who is signed in, at the sidebar's foot and as the compact menu's sign-out entry's description. </p>
@@ -915,8 +798,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00393">393</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-
 </div>
 </div>
 <a id="aa275361a61234fe80afea160268a99c0" name="aa275361a61234fe80afea160268a99c0"></a>
@@ -924,9 +805,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::showSignedIn </td>
@@ -935,11 +813,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Shows or hides the sidebar and the top bar: signed out, the page is all there is. </p>
@@ -950,8 +823,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00403">403</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-
 </div>
 </div>
 <a id="ae28d0f478b89a683b1af07f33b1cd8ef" name="ae28d0f478b89a683b1af07f33b1cd8ef"></a>
@@ -959,9 +830,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setCompact </td>
@@ -970,11 +838,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Takes the frame's compact form, or its full one again. Compact, the sidebar, with the principal and the sign-out button at its foot, is hidden, and the top bar starts with the navigation menu (<span class="tt">shell_nav_menu</span>, the framework icon <span class="tt">nav.menu</span>, named "Navigation"), which lists the navigator's entries (<span class="tt"><a class="el" href="../../d6/d15/classmorph_1_1ui_1_1Navigator.html#a10e07a0ec8d68e3dcc6dfd400975c2c3" title="The navigator as the entries of a menu: the pins first, then a separator, then each group as a submen...">Navigator::menuEntries</a></span>) and opens the one chosen, as the navigator does; with a sign-out handler it ends with a separator and a "Sign out" entry described by the principal, which signs out. A new frame is not compact. </p>
@@ -985,8 +848,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00415">415</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-
 </div>
 </div>
 <a id="a6cef3347aaf5625ae6bc16958fa6de4c" name="a6cef3347aaf5625ae6bc16958fa6de4c"></a>
@@ -994,9 +855,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setTrailEnd </td>
@@ -1005,11 +863,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Tells the frame what ends the head's trail. Compact, the line's ends are padded by step 1, which is the whole inset a button that pads itself needs; anything else that ends the line (text, a badge, a select or a button that draws a frame) stands step 4 from the edge, the page's gutter, so the frame adds step 3 after the trail. A trail that ends in a framed button or a tool also takes the larger vertical padding of the bar. The expanded line's own end pad is that gutter already. </p>
@@ -1019,8 +872,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00432">432</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -1050,7 +901,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the frame has its compact form. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00440">440</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -1059,9 +910,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setParts </td>
@@ -1070,11 +918,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Installs what the frame draws of the application's declared parts ([<span class="tt"><a class="el" href="../../d6/d2a/structmorph_1_1ui_1_1ShellPartsView.html" title="Everything a frame draws of the declared parts.">ShellPartsView</a></span>]): the scope switcher at the sidebar's top, and in the top bar the search with its results panel, the inbox button and the person's menu. Compact, the switcher, the module rows and the person's menu are entries of the navigation menu, and the search is a button that opens a full-window overlay. A frame with no parts draws none of them. </p>
@@ -1084,8 +927,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00448">448</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -1120,36 +961,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00462">462</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
-
-</div>
-</div>
-<a id="ab98e0c6cd613e0d91678455f1882147a" name="ab98e0c6cd613e0d91678455f1882147a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ab98e0c6cd613e0d91678455f1882147a">&#9670;&#160;</a></span>focusSearch()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::ui::ShellFrame::focusSearch </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Moves keyboard focus to the search field, as Ctrl K does; compact, opens the search overlay. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00465">465</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -1158,9 +970,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::setSearchText </td>
@@ -1169,11 +978,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Puts <code class="param">text</code> in the search field, as typing it would, without reporting it: a client that restores a search, or a test, drives the panel with it. </p>
@@ -1183,8 +987,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00480">480</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -1214,18 +1016,15 @@ Public Member Functions</h2></td></tr>
 <p>The texts the frame wrote for the navigation menu, so the client can name the module rows with the same words. </p>
 <dl class="section return"><dt>Returns</dt><dd>The current labels. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00491">491</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a500d922bc29a1711aca84a8843aa0a28" name="a500d922bc29a1711aca84a8843aa0a28"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a500d922bc29a1711aca84a8843aa0a28">&#9670;&#160;</a></span>confirm()</h2>
+<a id="aec9dc6d7031f47a392e3ddafe656f988" name="aec9dc6d7031f47a392e3ddafe656f988"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aec9dc6d7031f47a392e3ddafe656f988">&#9670;&#160;</a></span>confirm()</h2>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::confirm </td>
@@ -1240,7 +1039,7 @@ Public Member Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>no</em></span>, </td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>noLabel</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
@@ -1248,11 +1047,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype">std::function&lt; void(bool)&gt;</td>          <td class="paramname"><span class="paramname"><em>done</em></span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Asks a yes-or-no question in a dialog over the frame and calls <code class="param">done</code> with the answer, once. Escape and the cancel button answer no. </p>
@@ -1260,13 +1054,11 @@ Public Member Functions</h2></td></tr>
   <table class="params">
     <tr><td class="paramname">message</td><td>The question. </td></tr>
     <tr><td class="paramname">yes</td><td>The confirming button's caption. </td></tr>
-    <tr><td class="paramname">no</td><td>The cancelling button's caption. </td></tr>
+    <tr><td class="paramname">noLabel</td><td>The cancelling button's caption. </td></tr>
     <tr><td class="paramname">done</td><td>Called with whether the person confirmed. </td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00499">499</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>
@@ -1275,9 +1067,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellFrame::showToast </td>
@@ -1290,11 +1079,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype"><a class="el" href="../../d8/d11/view_8hpp.html#a04ef0c7765638a62e529da8ba75fdf4a">Tone</a></td>          <td class="paramname"><span class="paramname"><em>tone</em></span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Shows a passive, transient message over the frame's main content area. Made the first time it is asked for; a later call replaces its text and tone and restarts its dismiss interval, whether or not it is still showing. </p>
@@ -1305,8 +1089,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html#l00524">524</a> of file <a class="el" href="../../db/d4f/shell__frame_8hpp_source.html">shell_frame.hpp</a>.</p>
 
 </div>
 </div>

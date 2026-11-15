@@ -145,8 +145,9 @@ Public Member Functions</h2></td></tr>
 &#160;</td><td class="memItemRight"><b>ShellPartsModel</b> (ShellPartsModel &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a11a041b951188b6e2189c30c4dca68f1" id="r_a11a041b951188b6e2189c30c4dca68f1"><td class="memItemLeft"><a id="a11a041b951188b6e2189c30c4dca68f1" name="a11a041b951188b6e2189c30c4dca68f1"></a>
 <a class="el" href="#a75f0c4c0257c535157203fe581387eda">ShellPartsModel</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a75f0c4c0257c535157203fe581387eda">ShellPartsModel</a> &amp;&amp;)=delete</td></tr>
-<tr class="memitem:aabd94063fc2c71e99cf3cd39c9c8f6c9" id="r_aabd94063fc2c71e99cf3cd39c9c8f6c9"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#aabd94063fc2c71e99cf3cd39c9c8f6c9">~ShellPartsModel</a> ()</td></tr>
-<tr class="memdesc:aabd94063fc2c71e99cf3cd39c9c8f6c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Takes the handler and the scope off the session.  <br /></td></tr>
+<tr class="memitem:aabd94063fc2c71e99cf3cd39c9c8f6c9" id="r_aabd94063fc2c71e99cf3cd39c9c8f6c9"><td class="memItemLeft"><a id="aabd94063fc2c71e99cf3cd39c9c8f6c9" name="aabd94063fc2c71e99cf3cd39c9c8f6c9"></a>
+&#160;</td><td class="memItemRight"><b>~ShellPartsModel</b> ()</td></tr>
+<tr class="memdesc:aabd94063fc2c71e99cf3cd39c9c8f6c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Takes the handler and the scope off the session. <br /></td></tr>
 <tr class="memitem:ab8889458fe4c4830f5d0145d9105cf2d" id="r_ab8889458fe4c4830f5d0145d9105cf2d"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ab8889458fe4c4830f5d0145d9105cf2d">contextReady</a> () const</td></tr>
 <tr class="memdesc:ab8889458fe4c4830f5d0145d9105cf2d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the switcher has answered or failed, or none is declared: the start screen may mount. A tracked read.  <br /></td></tr>
 <tr class="memitem:a55fe8a61345cdf10da60202bfcf0b502" id="r_a55fe8a61345cdf10da60202bfcf0b502"><td class="memItemLeft"><a class="el" href="../../d6/d2a/structmorph_1_1ui_1_1ShellPartsView.html">ShellPartsView</a>&#160;</td><td class="memItemRight"><a class="el" href="#a55fe8a61345cdf10da60202bfcf0b502">view</a> () const</td></tr>
@@ -182,16 +183,13 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>The declared parts of a shell, read from the app root. </p>
 <p>Neither copyable nor movable; used on the owner thread of its session. It borrows the session, the app root and the parts, and must go before any of them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a75f0c4c0257c535157203fe581387eda" name="a75f0c4c0257c535157203fe581387eda"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a75f0c4c0257c535157203fe581387eda">&#9670;&#160;</a></span>ShellPartsModel()</h2>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">morph::ui::ShellPartsModel::ShellPartsModel </td>
@@ -214,11 +212,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype"><a class="el" href="../../d2/d76/structmorph_1_1ui_1_1ShellModelOptions.html">ShellModelOptions</a></td>          <td class="paramname"><span class="paramname"><em>options</em></span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>The model; it installs the <span class="tt">setContext</span> handler and starts following the switcher. </p>
@@ -231,37 +224,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
-
-</div>
-</div>
-<a id="aabd94063fc2c71e99cf3cd39c9c8f6c9" name="aabd94063fc2c71e99cf3cd39c9c8f6c9"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aabd94063fc2c71e99cf3cd39c9c8f6c9">&#9670;&#160;</a></span>~ShellPartsModel()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">morph::ui::ShellPartsModel::~ShellPartsModel </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Takes the handler and the scope off the session. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00177">177</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -292,7 +254,7 @@ Public Member Functions</h2></td></tr>
 <p>Whether the switcher has answered or failed, or none is declared: the start screen may mount. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether it is ready. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00187">187</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -314,15 +276,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>What the frame draws. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The view. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -357,7 +317,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00207">207</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00102">102</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -379,15 +339,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Every declared module's count. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The counts, in declaration order; a denied one, and one of a module the catalog does not list, left out. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -396,9 +354,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellPartsModel::chooseContext </td>
@@ -407,11 +362,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Chooses an option of the switcher, as the person does: the same checks as the command's. </p>
@@ -422,8 +372,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
-
 </div>
 </div>
 <a id="aac43276f5baa47f8a90ea28dc825cf08" name="aac43276f5baa47f8a90ea28dc825cf08"></a>
@@ -431,9 +379,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">bool morph::ui::ShellPartsModel::requestContext </td>
@@ -442,11 +387,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>The <span class="tt">setContext</span> command: changes the scope to <code class="param">value</code> if it is one of the options, asking once first when open tabs hold unsaved changes. </p>
@@ -458,8 +398,6 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether the request was accepted: the value is an option's. The switch itself may wait for the answer. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00256">256</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
-
 </div>
 </div>
 <a id="ab485da65c61018256842320d256818b7" name="ab485da65c61018256842320d256818b7"></a>
@@ -467,9 +405,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellPartsModel::setSearchText </td>
@@ -478,11 +413,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Sets the search field's text; the sources are asked after their pause. </p>
@@ -492,8 +422,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -519,7 +447,7 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -533,8 +461,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The target; empty for a place that is not drawn. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00302">302</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -556,15 +482,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Every drawn hit's target in order, at most <span class="tt"><a class="el" href="../../d6/da7/shell__parts_8hpp.html#a9d9acf1f76b846b5fe7475f50bb06500" title="The most tabs a Shift Enter in the search opens.">kSearchOpenAllLimit</a></span>. Not a tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>The targets. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -594,7 +518,7 @@ Public Member Functions</h2></td></tr>
 <p>The screen the inbox button opens. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; empty with no inbox. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00326">326</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -616,15 +540,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The screen the help button opens. </p>
 <dl class="section return"><dt>Returns</dt><dd>It with its params; empty when the button runs an action, or none is declared. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00330">330</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -633,9 +555,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">bool morph::ui::ShellPartsModel::runHelp </td>
@@ -644,17 +563,10 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Runs the action the help button names. A failure is reported once, as any part's. </p>
 <dl class="section return"><dt>Returns</dt><dd>Whether an action was run: one is declared. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -663,9 +575,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellPartsModel::chooseLocale </td>
@@ -674,11 +583,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Chooses a language from the person's menu. </p>
@@ -689,8 +593,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00352">352</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
-
 </div>
 </div>
 <a id="a4e43d2dbedfc2db2fd58106b2bea49e8" name="a4e43d2dbedfc2db2fd58106b2bea49e8"></a>
@@ -698,9 +600,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">void morph::ui::ShellPartsModel::chooseFormat </td>
@@ -709,11 +608,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Chooses the number, money and date format from the person's menu. </p>
@@ -723,8 +617,6 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00361">361</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>
@@ -754,7 +646,7 @@ Public Member Functions</h2></td></tr>
 <p>The language the session is in. </p>
 <dl class="section return"><dt>Returns</dt><dd>Its tag. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00369">369</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html#l00173">173</a> of file <a class="el" href="../../d0/db9/shell__parts__model_8hpp_source.html">shell_parts_model.hpp</a>.</p>
 
 </div>
 </div>

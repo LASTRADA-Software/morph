@@ -32,7 +32,5 @@ var searchData=
   ['exactlyoneof_29',['ExactlyOneOf',['../d9/d06/structmorph_1_1forms_1_1ExactlyOneOf.html',1,'morph::forms']]],
   ['explorer_30',['Explorer',['../d9/df4/classmorph_1_1ui_1_1Explorer.html',1,'morph::ui']]],
   ['exploreroptions_31',['ExplorerOptions',['../db/d26/structmorph_1_1ui_1_1ExplorerOptions.html',1,'morph::ui']]],
-  ['expr_32',['Expr',['../d0/df6/structmorph_1_1ui_1_1Expr.html',1,'morph::ui']]],
-  ['exprchecker_33',['ExprChecker',['../d5/d9c/classmorph_1_1ui_1_1detail_1_1ExprChecker.html',1,'morph::ui::detail']]],
-  ['exprparser_34',['ExprParser',['../d1/d2b/classmorph_1_1ui_1_1detail_1_1ExprParser.html',1,'morph::ui::detail']]]
+  ['expr_32',['Expr',['../d0/df6/structmorph_1_1ui_1_1Expr.html',1,'morph::ui']]]
 ];

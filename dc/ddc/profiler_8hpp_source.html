@@ -152,8 +152,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/ddc/profile
 <div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">/// zones would then close out of order with the open one.</span></div>
 <div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">///</span></div>
 <div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment">/// @par Every translation unit must agree</span></div>
-<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">/// morph is header-only, so these macros change the bodies of inline</span></div>
-<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="comment">/// functions. A program in which one translation unit sees</span></div>
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">/// The macros change the bodies of inline functions, and most of morph is</span></div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="comment">/// templates and inline functions in headers. A program in which one translation unit sees</span></div>
 <div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span><span class="comment">/// `MORPH_TRACY_ENABLED` and another does not holds two different definitions</span></div>
 <div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span><span class="comment">/// of the same inline function, which is an ODR violation: the linker keeps</span></div>
 <div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span><span class="comment">/// one of them, silently. CMake consumers get agreement by construction,</span></div>

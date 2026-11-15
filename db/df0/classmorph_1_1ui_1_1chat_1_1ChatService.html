@@ -139,8 +139,9 @@ Inheritance diagram for morph::ui::chat::ChatService:</div>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:ad17b93d0bfb46ff39d41b30f7a2349bf" id="r_ad17b93d0bfb46ff39d41b30f7a2349bf"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ad17b93d0bfb46ff39d41b30f7a2349bf">ChatService</a> (<a class="el" href="../../d3/d4e/structmorph_1_1ui_1_1chat_1_1ChatOptions.html">ChatOptions</a> options)</td></tr>
 <tr class="memdesc:ad17b93d0bfb46ff39d41b30f7a2349bf"><td class="mdescLeft">&#160;</td><td class="mdescRight">A service over <code class="param">options</code>.  <br /></td></tr>
-<tr class="memitem:a0f56ef9fa798b06f2f4bd1bd50eeaea8" id="r_a0f56ef9fa798b06f2f4bd1bd50eeaea8"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a0f56ef9fa798b06f2f4bd1bd50eeaea8">~ChatService</a> () override</td></tr>
-<tr class="memdesc:a0f56ef9fa798b06f2f4bd1bd50eeaea8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stops every running turn. A provider call answering later reaches nothing.  <br /></td></tr>
+<tr class="memitem:a0f56ef9fa798b06f2f4bd1bd50eeaea8" id="r_a0f56ef9fa798b06f2f4bd1bd50eeaea8"><td class="memItemLeft"><a id="a0f56ef9fa798b06f2f4bd1bd50eeaea8" name="a0f56ef9fa798b06f2f4bd1bd50eeaea8"></a>
+&#160;</td><td class="memItemRight"><b>~ChatService</b> () override</td></tr>
+<tr class="memdesc:a0f56ef9fa798b06f2f4bd1bd50eeaea8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stops every running turn. A provider call answering later reaches nothing. <br /></td></tr>
 <tr class="memitem:ab5103a49472d27e0ca06b6e6468efbdb" id="r_ab5103a49472d27e0ca06b6e6468efbdb"><td class="memItemLeft"><a id="ab5103a49472d27e0ca06b6e6468efbdb" name="ab5103a49472d27e0ca06b6e6468efbdb"></a>
 &#160;</td><td class="memItemRight"><b>ChatService</b> (ChatService const &amp;)=delete</td></tr>
 <tr class="memitem:a1be56e67eb3ff174b208ecf611616700" id="r_a1be56e67eb3ff174b208ecf611616700"><td class="memItemLeft"><a id="a1be56e67eb3ff174b208ecf611616700" name="a1be56e67eb3ff174b208ecf611616700"></a>
@@ -173,7 +174,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 <div class="textblock"><p>Answers the chat kinds, and runs each turn's loop on the worker: read what the screen offers, ask the provider, run the tools it calls, and repeat until it has no more. </p>
 <p>Each tool call is an execute carrying the client's session, so it passes every check the GUI's own calls pass. It runs unscoped and names the instance the client's context gave, so it reaches the screen's own instance and leaves the connection's principal baseline alone. A running action therefore cannot be interrupted: cancelling a turn stops it between actions. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ad17b93d0bfb46ff39d41b30f7a2349bf" name="ad17b93d0bfb46ff39d41b30f7a2349bf"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad17b93d0bfb46ff39d41b30f7a2349bf">&#9670;&#160;</a></span>ChatService()</h2>
@@ -193,7 +194,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel explicit">explicit</span></span>  </td>
+<span class="mlabels"><span class="mlabel explicit">explicit</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -211,37 +212,6 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a0f56ef9fa798b06f2f4bd1bd50eeaea8" name="a0f56ef9fa798b06f2f4bd1bd50eeaea8"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0f56ef9fa798b06f2f4bd1bd50eeaea8">&#9670;&#160;</a></span>~ChatService()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">morph::ui::chat::ChatService::~ChatService </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Stops every running turn. A provider call answering later reaches nothing. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -264,7 +234,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -279,8 +249,6 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> for the chat kinds, when there is a provider. </dd></dl>
 
 <p>Implements <a class="el" href="../../d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html#a508eee14a840935f84eb6ab6ef91fece">morph::backend::IEnvelopeService</a>.</p>
-
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -306,7 +274,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -322,8 +290,6 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 <dl class="section return"><dt>Returns</dt><dd>The encoded reply. </dd></dl>
 
 <p>Implements <a class="el" href="../../d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html#a8824ddf6059dffcbe63219f81da70c7c">morph::backend::IEnvelopeService</a>.</p>
-
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00127">127</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -354,7 +320,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -371,8 +337,6 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 <dl class="section return"><dt>Returns</dt><dd>The encoded reply. </dd></dl>
 
 <p>Reimplemented from <a class="el" href="../../d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html#abfc8dd71a442686b61b259d60e17a08b">morph::backend::IEnvelopeService</a>.</p>
-
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -394,7 +358,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+<span class="mlabels"><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -408,8 +372,6 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 </dl>
 
 <p>Reimplemented from <a class="el" href="../../d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html#a984597cfd2794a8b09e0d2d1e7d5f43f">morph::backend::IEnvelopeService</a>.</p>
-
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00160">160</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -431,7 +393,7 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+<span class="mlabels"><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -445,8 +407,6 @@ IEnvelopeService &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (IEnv
 </dl>
 
 <p>Reimplemented from <a class="el" href="../../d6/de2/classmorph_1_1backend_1_1IEnvelopeService.html#adbc00f199a316ff624128834ff68508d">morph::backend::IEnvelopeService</a>.</p>
-
-<p class="definition">Definition at line <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html#l00172">172</a> of file <a class="el" href="../../d7/db0/chat_2service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

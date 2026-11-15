@@ -124,37 +124,27 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d0e/express
 <p>The <span class="tt">expr/1</span> expression language of the UI document: parsing a JSON expression into an <span class="tt">Expr</span> tree, checking it against the names a document declares, and evaluating it.  
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;algorithm&gt;</code><br />
-<code>#include &lt;array&gt;</code><br />
-<code>#include &lt;charconv&gt;</code><br />
 <code>#include &lt;chrono&gt;</code><br />
 <code>#include &lt;compare&gt;</code><br />
 <code>#include &lt;cstddef&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;expected&gt;</code><br />
-<code>#include &lt;format&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
-<code>#include &lt;iterator&gt;</code><br />
-<code>#include &lt;limits&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
-<code>#include &lt;numeric&gt;</code><br />
+<code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
-<code>#include &lt;ranges&gt;</code><br />
 <code>#include &lt;set&gt;</code><br />
 <code>#include &lt;span&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
-<code>#include &lt;system_error&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
 <code>#include &quot;<a class="el" href="../../d8/d22/render_2i18n_8hpp_source.html">../render/i18n.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d8/d3a/locale__format_8hpp_source.html">../render/locale_format.hpp</a>&quot;</code><br />
-<code>#include &quot;<a class="el" href="../../dd/d57/data__source_8hpp_source.html">../table/data_source.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d7/d4a/datetime_8hpp_source.html">../util/datetime.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d1/de8/rational_8hpp_source.html">../util/rational.hpp</a>&quot;</code><br />
-<code>#include &quot;<a class="el" href="../../d3/d89/date__pattern_8hpp_source.html">date_pattern.hpp</a>&quot;</code><br />
 <code>#include &quot;locale_table.hpp&quot;</code><br />
-<code>#include &quot;<a class="el" href="../../d5/d8c/message_8hpp_source.html">message.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">value.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d8/d0e/expression_8hpp_source.html">Go to the source code of this file.</a></p>
@@ -163,18 +153,10 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/d0e/express
 Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AExpr" id="r_morph_3A_3Aui_3A_3AExpr"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d0/df6/structmorph_1_1ui_1_1Expr.html">morph::ui::Expr</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One node of a parsed expression. Immutable once parsed; shared between the document and its readers.  <a href="../../d0/df6/structmorph_1_1ui_1_1Expr.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AFunctionSpec" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AFunctionSpec"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html">morph::ui::detail::FunctionSpec</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The signature of a library function.  <a href="../../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AExprParser" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AExprParser"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d1/d2b/classmorph_1_1ui_1_1detail_1_1ExprParser.html">morph::ui::detail::ExprParser</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads one JSON expression tree into <span class="tt"><a class="el" href="../../d0/df6/structmorph_1_1ui_1_1Expr.html" title="One node of a parsed expression. Immutable once parsed; shared between the document and its readers.">Expr</a></span> nodes, counting them against the size bound.  <a href="../../d1/d2b/classmorph_1_1ui_1_1detail_1_1ExprParser.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AExprParser_3A_3AFormKeys" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AExprParser_3A_3AFormKeys"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d8/ddc/structmorph_1_1ui_1_1detail_1_1ExprParser_1_1FormKeys.html">morph::ui::detail::ExprParser::FormKeys</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The keys a form may carry beside its own.  <a href="../../d8/ddc/structmorph_1_1ui_1_1detail_1_1ExprParser_1_1FormKeys.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ANameResolver" id="r_morph_3A_3Aui_3A_3ANameResolver"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d9/df3/classmorph_1_1ui_1_1NameResolver.html">morph::ui::NameResolver</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What an expression's names resolve to, for <span class="tt"><a class="el" href="#a577e77efde565302952c148e229f531d" title="Checks an expression against the names a document declares.">checkExpression</a></span>: the document's scopes implement it.  <a href="../../d9/df3/classmorph_1_1ui_1_1NameResolver.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">What an expression's names resolve to, for <span class="tt"><a class="el" href="#a7eab9ad1ffb69ee0880cc9a034e51977" title="Checks an expression against the names a document declares.">checkExpression</a></span>: the document's scopes implement it.  <a href="../../d9/df3/classmorph_1_1ui_1_1NameResolver.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3APermissiveResolver" id="r_morph_3A_3Aui_3A_3APermissiveResolver"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d5/d72/classmorph_1_1ui_1_1PermissiveResolver.html">morph::ui::PermissiveResolver</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A resolver that accepts every name as <span class="tt">any</span>: for an expression checked outside a document.  <a href="../../d5/d72/classmorph_1_1ui_1_1PermissiveResolver.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AExprChecker" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AExprChecker"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d5/d9c/classmorph_1_1ui_1_1detail_1_1ExprChecker.html">morph::ui::detail::ExprChecker</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Walks an expression once, resolving names and checking the statically known types.  <a href="../../d5/d9c/classmorph_1_1ui_1_1detail_1_1ExprChecker.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AUnitInfo" id="r_morph_3A_3Aui_3A_3AUnitInfo"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d42/structmorph_1_1ui_1_1UnitInfo.html">morph::ui::UnitInfo</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One unit of the server's unit systems, as <span class="tt">x-unitAlternatives</span> declares it.  <a href="../../d6/d42/structmorph_1_1ui_1_1UnitInfo.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AFormatContext" id="r_morph_3A_3Aui_3A_3AFormatContext"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/d4c/structmorph_1_1ui_1_1FormatContext.html">morph::ui::FormatContext</a></td></tr>
@@ -185,10 +167,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A value as the date functions read it.  <a href="../../d7/d2a/structmorph_1_1ui_1_1DateValue.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3ANumber" id="r_morph_3A_3Aui_3A_3Adetail_3A_3ANumber"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dc/d71/structmorph_1_1ui_1_1detail_1_1Number.html">morph::ui::detail::Number</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A number taken apart for arithmetic: its exact value, whether it is an <span class="tt">int</span>, and its unit.  <a href="../../dc/d71/structmorph_1_1ui_1_1detail_1_1Number.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AMoments" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AMoments"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/d3c/structmorph_1_1ui_1_1detail_1_1Moments.html">morph::ui::detail::Moments</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A sample's exact moments over one denominator: the elements as integers <span class="tt">X = x * D</span>, their sum and the sum of their squares, in 128 bits.  <a href="../../de/d3c/structmorph_1_1ui_1_1detail_1_1Moments.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3AEvaluator" id="r_morph_3A_3Aui_3A_3Adetail_3A_3AEvaluator"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d5e/classmorph_1_1ui_1_1detail_1_1Evaluator.html">morph::ui::detail::Evaluator</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates expressions against an environment, with the comprehension variables in scope.  <a href="../../d6/d5e/classmorph_1_1ui_1_1detail_1_1Evaluator.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates expressions against an environment: the part of the evaluator that other code drives directly, such as grouping and ordering a table's rows. <span class="tt"><a class="el" href="#a44b6b7bce3881e4c19594de28faba604" title="Evaluates an expression.">evaluate</a></span> is the entry point for one expression.  <a href="../../d6/d5e/classmorph_1_1ui_1_1detail_1_1Evaluator.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AStaticEnvironment" id="r_morph_3A_3Aui_3A_3AStaticEnvironment"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../db/d16/classmorph_1_1ui_1_1StaticEnvironment.html">morph::ui::StaticEnvironment</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">An environment that holds its values: for tests, and for evaluating outside a mounted screen.  <a href="../../db/d16/classmorph_1_1ui_1_1StaticEnvironment.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
@@ -196,14 +176,10 @@ Classes</h2></td></tr>
 Typedefs</h2></td></tr>
 <tr class="memitem:afd2a5cd1f335b4767cfc15f779a912d5" id="r_afd2a5cd1f335b4767cfc15f779a912d5"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#afd2a5cd1f335b4767cfc15f779a912d5">morph::ui::ExprPtr</a> = std::shared_ptr&lt;<a class="el" href="../../d0/df6/structmorph_1_1ui_1_1Expr.html">Expr</a> const&gt;</td></tr>
 <tr class="memdesc:afd2a5cd1f335b4767cfc15f779a912d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">A shared, immutable expression node.  <br /></td></tr>
-<tr class="memitem:a607768174eec9fdaf043171aeba4ae8e" id="r_a607768174eec9fdaf043171aeba4ae8e"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a607768174eec9fdaf043171aeba4ae8e">morph::ui::detail::KindSet</a> = std::uint16_t</td></tr>
-<tr class="memdesc:a607768174eec9fdaf043171aeba4ae8e"><td class="mdescLeft">&#160;</td><td class="mdescRight">A set of type kinds, as bits.  <br /></td></tr>
 <tr class="memitem:a1b716e9b0352b72447f08451f3ecc33c" id="r_a1b716e9b0352b72447f08451f3ecc33c"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a1b716e9b0352b72447f08451f3ecc33c">morph::ui::UnitTable</a> = std::map&lt;std::string, <a class="el" href="../../d6/d42/structmorph_1_1ui_1_1UnitInfo.html">UnitInfo</a>, std::less&lt;&gt;&gt;</td></tr>
 <tr class="memdesc:a1b716e9b0352b72447f08451f3ecc33c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The units a client knows, by id. A unit missing from the table is its own canonical unit.  <br /></td></tr>
 <tr class="memitem:afa35c32fdc39deb537f63073f3b37627" id="r_afa35c32fdc39deb537f63073f3b37627"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#afa35c32fdc39deb537f63073f3b37627">morph::ui::DateFormatter</a> = std::function&lt;std::string(<a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html">time::DateTime</a> local, std::string_view style, bool withTime)&gt;</td></tr>
 <tr class="memdesc:afa35c32fdc39deb537f63073f3b37627"><td class="mdescLeft">&#160;</td><td class="mdescRight">Formats a date for display: the instant already shifted to the display zone, the style (<span class="tt">short</span>, <span class="tt">medium</span> or <span class="tt">long</span>), and whether to show the time.  <br /></td></tr>
-<tr class="memitem:a803180715404af97f33afee483e3e069" id="r_a803180715404af97f33afee483e3e069"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a803180715404af97f33afee483e3e069">morph::ui::detail::SampleReading</a> = std::expected&lt;std::optional&lt;<a class="el" href="../../de/d3c/structmorph_1_1ui_1_1detail_1_1Moments.html">Moments</a>&gt;, std::string&gt;</td></tr>
-<tr class="memdesc:a803180715404af97f33afee483e3e069"><td class="mdescLeft">&#160;</td><td class="mdescRight">A sample read for <span class="tt">stdev</span> and <span class="tt">rsd</span>: its moments, <span class="tt">null</span> without a report, or the reason to report.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
 Enumerations</h2></td></tr>
@@ -322,82 +298,35 @@ Functions</h2></td></tr>
 <tr class="memdesc:aaed706df776396b7be2ad677471bf4f0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a string is a document name: <span class="tt">[A-Za-z_][A-Za-z0-9_]*</span>.  <br /></td></tr>
 <tr class="memitem:a1dc0fbd206d7aa5cbdb5c8c776c11315" id="r_a1dc0fbd206d7aa5cbdb5c8c776c11315"><td class="memItemLeft">constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a1dc0fbd206d7aa5cbdb5c8c776c11315">morph::ui::bindsElement</a> (<a class="el" href="#aea78ed2130ba9860f8c92a691d34f663">ExprKind</a> kind) noexcept</td></tr>
 <tr class="memdesc:a1dc0fbd206d7aa5cbdb5c8c776c11315"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a form names each element of its list with <span class="tt">as</span>, for its second operand alone.  <br /></td></tr>
-<tr class="memitem:a85c6d59707d42b1cf48512ed573cbd07" id="r_a85c6d59707d42b1cf48512ed573cbd07"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a85c6d59707d42b1cf48512ed573cbd07">morph::ui::runRecord</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> key, <a class="el" href="../../d6/dda/value_8hpp.html#a5bc161239292773472a840de4f8ffe7e">ValueList</a> items)</td></tr>
-<tr class="memdesc:a85c6d59707d42b1cf48512ed573cbd07"><td class="mdescLeft">&#160;</td><td class="mdescRight">One run of adjacent elements of a list that share a value, as <span class="tt">runs</span> and a table's group heading read it: <span class="tt">{"key": &lt;the shared value&gt;, "count": n, "first": &lt;element&gt;, "last": &lt;element&gt;, "items": [...]}</span>.  <br /></td></tr>
-<tr class="memitem:aee7de3e89ec2578bacebb5772b15c2ab" id="r_aee7de3e89ec2578bacebb5772b15c2ab"><td class="memItemLeft">constexpr <a class="el" href="#a607768174eec9fdaf043171aeba4ae8e">KindSet</a>&#160;</td><td class="memItemRight"><a class="el" href="#aee7de3e89ec2578bacebb5772b15c2ab">morph::ui::detail::kindBit</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349">TypeKind</a> kind) noexcept</td></tr>
-<tr class="memdesc:aee7de3e89ec2578bacebb5772b15c2ab"><td class="mdescLeft">&#160;</td><td class="mdescRight">The bit of one kind.  <br /></td></tr>
-<tr class="memitem:a2c948f05e9ae69b903d2a1faf1527bec" id="r_a2c948f05e9ae69b903d2a1faf1527bec"><td class="memItemLeft">constexpr <a class="el" href="../../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html">FunctionSpec</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a2c948f05e9ae69b903d2a1faf1527bec">morph::ui::detail::functionSpec</a> (<a class="el" href="#acdf25e669057d3af5e395c162caedc32">FunctionId</a> function)</td></tr>
-<tr class="memdesc:a2c948f05e9ae69b903d2a1faf1527bec"><td class="mdescLeft">&#160;</td><td class="mdescRight">The signature of a function.  <br /></td></tr>
-<tr class="memitem:a39838f0b02e08a511f584c02f5236d0d" id="r_a39838f0b02e08a511f584c02f5236d0d"><td class="memItemLeft">constexpr std::optional&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a39838f0b02e08a511f584c02f5236d0d">morph::ui::detail::modeArgument</a> (<a class="el" href="#acdf25e669057d3af5e395c162caedc32">FunctionId</a> function) noexcept</td></tr>
-<tr class="memdesc:a39838f0b02e08a511f584c02f5236d0d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The position of a function's optional rounding mode, <span class="tt">"halfEven"</span> or <span class="tt">"halfUp"</span>.  <br /></td></tr>
-<tr class="memitem:a8309cfc6e15cd7ca3be3337aec1665bb" id="r_a8309cfc6e15cd7ca3be3337aec1665bb"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6a">math::RoundingMode</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8309cfc6e15cd7ca3be3337aec1665bb">morph::ui::detail::roundingMode</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;mode)</td></tr>
-<tr class="memdesc:a8309cfc6e15cd7ca3be3337aec1665bb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a rounding mode: <span class="tt">"halfEven"</span>, ties to the even neighbour, or <span class="tt">"halfUp"</span>, ties away from zero.  <br /></td></tr>
-<tr class="memitem:aa43c7d0dc8fdbe598512991b6383097c" id="r_aa43c7d0dc8fdbe598512991b6383097c"><td class="memTemplParams" colspan="2">template&lt;std::size_t N&gt; </td></tr>
-<tr class="memitem:aa43c7d0dc8fdbe598512991b6383097c template"><td class="memItemLeft">constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#aa43c7d0dc8fdbe598512991b6383097c">morph::ui::detail::oneOf</a> (std::array&lt; std::string_view, N &gt; const &amp;names, std::string_view name) noexcept</td></tr>
-<tr class="memdesc:aa43c7d0dc8fdbe598512991b6383097c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a name is one of a closed set.  <br /></td></tr>
-<tr class="memitem:a59b452b85e8fc9985ac0d103b048dd11" id="r_a59b452b85e8fc9985ac0d103b048dd11"><td class="memItemLeft">std::expected&lt; std::vector&lt; std::string &gt;, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a59b452b85e8fc9985ac0d103b048dd11">morph::ui::detail::splitPath</a> (std::string_view text)</td></tr>
-<tr class="memdesc:a59b452b85e8fc9985ac0d103b048dd11"><td class="mdescLeft">&#160;</td><td class="mdescRight">Splits <span class="tt">head.a.b</span> into its segments.  <br /></td></tr>
-<tr class="memitem:a2df0ed027f18432f71838ac91380ec9a" id="r_a2df0ed027f18432f71838ac91380ec9a"><td class="memItemLeft">std::expected&lt; <a class="el" href="#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2df0ed027f18432f71838ac91380ec9a">morph::ui::parseExpression</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json, std::string const &amp;path=&quot;&quot;)</td></tr>
-<tr class="memdesc:a2df0ed027f18432f71838ac91380ec9a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses one expression.  <br /></td></tr>
-<tr class="memitem:a61514f777fb960c40880693da7689afb" id="r_a61514f777fb960c40880693da7689afb"><td class="memItemLeft">std::vector&lt; std::string_view &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a61514f777fb960c40880693da7689afb">morph::ui::functionNames</a> ()</td></tr>
-<tr class="memdesc:a61514f777fb960c40880693da7689afb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The names of the <span class="tt">expr/1</span> library, in <span class="tt"><a class="el" href="#acdf25e669057d3af5e395c162caedc32" title="The functions of the expr/1 library.">FunctionId</a></span> order.  <br /></td></tr>
-<tr class="memitem:ae2ba06141133aff6c7a012173174f403" id="r_ae2ba06141133aff6c7a012173174f403"><td class="memItemLeft"><a class="el" href="../../df/d58/structmorph_1_1ui_1_1Type.html">Type</a>&#160;</td><td class="memItemRight"><a class="el" href="#ae2ba06141133aff6c7a012173174f403">morph::ui::detail::typeOfValue</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
-<tr class="memdesc:ae2ba06141133aff6c7a012173174f403"><td class="mdescLeft">&#160;</td><td class="mdescRight">The static type of a literal.  <br /></td></tr>
-<tr class="memitem:a3bd16d187223dc35cc160c792e2b5445" id="r_a3bd16d187223dc35cc160c792e2b5445"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../df/d58/structmorph_1_1ui_1_1Type.html">Type</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a3bd16d187223dc35cc160c792e2b5445">morph::ui::detail::typeAlong</a> (<a class="el" href="../../df/d58/structmorph_1_1ui_1_1Type.html">Type</a> const &amp;type, std::string_view head, std::span&lt; std::string const &gt; path)</td></tr>
-<tr class="memdesc:a3bd16d187223dc35cc160c792e2b5445"><td class="mdescLeft">&#160;</td><td class="mdescRight">The type a field path reads from a value of a known type.  <br /></td></tr>
-<tr class="memitem:a577e77efde565302952c148e229f531d" id="r_a577e77efde565302952c148e229f531d"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../df/d58/structmorph_1_1ui_1_1Type.html">Type</a>, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a577e77efde565302952c148e229f531d">morph::ui::checkExpression</a> (<a class="el" href="../../d0/df6/structmorph_1_1ui_1_1Expr.html">Expr</a> const &amp;expr, <a class="el" href="../../d9/df3/classmorph_1_1ui_1_1NameResolver.html">NameResolver</a> const &amp;resolver)</td></tr>
-<tr class="memdesc:a577e77efde565302952c148e229f531d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks an expression against the names a document declares.  <br /></td></tr>
-<tr class="memitem:af2e14516ecce42073431b9c98a357c68" id="r_af2e14516ecce42073431b9c98a357c68"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#af2e14516ecce42073431b9c98a357c68">morph::ui::walk</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value, std::span&lt; std::string const &gt; path)</td></tr>
-<tr class="memdesc:af2e14516ecce42073431b9c98a357c68"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a path out of a value: a record's field by name, a list's element by index.  <br /></td></tr>
-<tr class="memitem:a89f0ac8cca369fba55b123f0d68a8f0e" id="r_a89f0ac8cca369fba55b123f0d68a8f0e"><td class="memItemLeft"><a class="el" href="../../d7/d2a/structmorph_1_1ui_1_1DateValue.html">DateValue</a>&#160;</td><td class="memItemRight"><a class="el" href="#a89f0ac8cca369fba55b123f0d68a8f0e">morph::ui::readDateValue</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
-<tr class="memdesc:a89f0ac8cca369fba55b123f0d68a8f0e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a value as a date, an instant or nothing: the one reading the date functions and a date input share.  <br /></td></tr>
-<tr class="memitem:a6f0c8e26df5bfe212235524c7cb65acd" id="r_a6f0c8e26df5bfe212235524c7cb65acd"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../dc/d71/structmorph_1_1ui_1_1detail_1_1Number.html">Number</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6f0c8e26df5bfe212235524c7cb65acd">morph::ui::detail::numeric</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
-<tr class="memdesc:a6f0c8e26df5bfe212235524c7cb65acd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Takes a numeric value apart.  <br /></td></tr>
-<tr class="memitem:af4d4ef368938a7871ebf67c23a12fca7" id="r_af4d4ef368938a7871ebf67c23a12fca7"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#af4d4ef368938a7871ebf67c23a12fca7">morph::ui::detail::makeNumber</a> (<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> const &amp;value, bool integer, std::string const *unit)</td></tr>
-<tr class="memdesc:af4d4ef368938a7871ebf67c23a12fca7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds a numeric value.  <br /></td></tr>
-<tr class="memitem:a13b1b74e7b6b85521fb8f847a779defa" id="r_a13b1b74e7b6b85521fb8f847a779defa"><td class="memItemLeft">std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a13b1b74e7b6b85521fb8f847a779defa">morph::ui::detail::convertUnit</a> (<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> const &amp;value, std::string_view from, std::string_view target, <a class="el" href="#a1b716e9b0352b72447f08451f3ecc33c">UnitTable</a> const &amp;units)</td></tr>
-<tr class="memdesc:a13b1b74e7b6b85521fb8f847a779defa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts an exact value between two units of one dimension.  <br /></td></tr>
-<tr class="memitem:a180e3a07dd8279e4c8b1784d514abd9f" id="r_a180e3a07dd8279e4c8b1784d514abd9f"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a180e3a07dd8279e4c8b1784d514abd9f">morph::ui::detail::unitDisplay</a> (std::string const &amp;unit, <a class="el" href="#a1b716e9b0352b72447f08451f3ecc33c">UnitTable</a> const &amp;units)</td></tr>
-<tr class="memdesc:a180e3a07dd8279e4c8b1784d514abd9f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The display text of a unit.  <br /></td></tr>
-<tr class="memitem:af385e1bc5838efb359221fceff1919d9" id="r_af385e1bc5838efb359221fceff1919d9"><td class="memItemLeft">std::uint32_t&#160;</td><td class="memItemRight"><a class="el" href="#af385e1bc5838efb359221fceff1919d9">morph::ui::detail::currencyDigits</a> (std::string_view currency)</td></tr>
-<tr class="memdesc:af385e1bc5838efb359221fceff1919d9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The fraction digits a currency shows (ISO 4217's minor unit).  <br /></td></tr>
-<tr class="memitem:a48a1cc359b801f5ad973f8f8844300f1" id="r_a48a1cc359b801f5ad973f8f8844300f1"><td class="memItemLeft">std::chrono::year_month_day&#160;</td><td class="memItemRight"><a class="el" href="#a48a1cc359b801f5ad973f8f8844300f1">morph::ui::detail::addMonths</a> (std::chrono::year_month_day const &amp;date, std::int64_t months)</td></tr>
-<tr class="memdesc:a48a1cc359b801f5ad973f8f8844300f1"><td class="mdescLeft">&#160;</td><td class="mdescRight">A calendar day moved by whole months, its day of the month clamped to the target month's last day.  <br /></td></tr>
-<tr class="memitem:a1998a78285d5a19ef23acdc54424023c" id="r_a1998a78285d5a19ef23acdc54424023c"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a1998a78285d5a19ef23acdc54424023c">morph::ui::detail::inIsoRange</a> (std::chrono::year_month_day const &amp;date)</td></tr>
-<tr class="memdesc:a1998a78285d5a19ef23acdc54424023c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a calendar day lies in years 1 to 9999, the years ISO text can write.  <br /></td></tr>
-<tr class="memitem:a829b66b228c2f3833f1a49af9a1bf6a2" id="r_a829b66b228c2f3833f1a49af9a1bf6a2"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a829b66b228c2f3833f1a49af9a1bf6a2">morph::ui::detail::isoDate</a> (std::chrono::year_month_day const &amp;date)</td></tr>
-<tr class="memdesc:a829b66b228c2f3833f1a49af9a1bf6a2"><td class="mdescLeft">&#160;</td><td class="mdescRight">A calendar day as ISO text.  <br /></td></tr>
-<tr class="memitem:ad28338c35f7f093975baa3c67938ff47" id="r_ad28338c35f7f093975baa3c67938ff47"><td class="memItemLeft">std::optional&lt; std::uint64_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad28338c35f7f093975baa3c67938ff47">morph::ui::detail::commonDenominator</a> (std::vector&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt; const &amp;values)</td></tr>
-<tr class="memdesc:ad28338c35f7f093975baa3c67938ff47"><td class="mdescLeft">&#160;</td><td class="mdescRight">The least common multiple of exact values' denominators, over which each value is an integer.  <br /></td></tr>
-<tr class="memitem:aaa46d23d40d1b13f54f80c36f580bde8" id="r_aaa46d23d40d1b13f54f80c36f580bde8"><td class="memItemLeft"><a class="el" href="#a803180715404af97f33afee483e3e069">SampleReading</a>&#160;</td><td class="memItemRight"><a class="el" href="#aaa46d23d40d1b13f54f80c36f580bde8">morph::ui::detail::momentsOf</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a5bc161239292773472a840de4f8ffe7e">ValueList</a> const &amp;items, <a class="el" href="#a1b716e9b0352b72447f08451f3ecc33c">UnitTable</a> const &amp;units)</td></tr>
-<tr class="memdesc:aaa46d23d40d1b13f54f80c36f580bde8"><td class="mdescLeft">&#160;</td><td class="mdescRight">The exact moments of a sample of numbers, or of quantities converted to the first element's unit.  <br /></td></tr>
-<tr class="memitem:ae1f73a4f9f451e9f2793b6ad9ccb05d4" id="r_ae1f73a4f9f451e9f2793b6ad9ccb05d4"><td class="memItemLeft">std::expected&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae1f73a4f9f451e9f2793b6ad9ccb05d4">morph::ui::detail::spreadOf</a> (<a class="el" href="../../de/d3c/structmorph_1_1ui_1_1detail_1_1Moments.html">Moments</a> const &amp;moments, bool relative, std::uint32_t places, <a class="el" href="../../d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6a">math::RoundingMode</a> mode)</td></tr>
-<tr class="memdesc:ae1f73a4f9f451e9f2793b6ad9ccb05d4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The standard deviation or the RSD of a sample, correctly rounded at <code class="param">places</code>.  <br /></td></tr>
-<tr class="memitem:a5a3fbb8f3f65cb7c1fe710274f13c612" id="r_a5a3fbb8f3f65cb7c1fe710274f13c612"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a5a3fbb8f3f65cb7c1fe710274f13c612">morph::ui::evaluate</a> (<a class="el" href="../../d0/df6/structmorph_1_1ui_1_1Expr.html">Expr</a> const &amp;expr, <a class="el" href="../../dc/d40/classmorph_1_1ui_1_1Environment.html">Environment</a> const &amp;env)</td></tr>
-<tr class="memdesc:a5a3fbb8f3f65cb7c1fe710274f13c612"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates an expression.  <br /></td></tr>
+<tr class="memitem:a32fd6995b934609a367e17b5da1b3968" id="r_a32fd6995b934609a367e17b5da1b3968"><td class="memItemLeft">MORPH_API <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a32fd6995b934609a367e17b5da1b3968">morph::ui::runRecord</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> key, <a class="el" href="../../d6/dda/value_8hpp.html#a5bc161239292773472a840de4f8ffe7e">ValueList</a> items)</td></tr>
+<tr class="memdesc:a32fd6995b934609a367e17b5da1b3968"><td class="mdescLeft">&#160;</td><td class="mdescRight">One run of adjacent elements of a list that share a value, as <span class="tt">runs</span> and a table's group heading read it: <span class="tt">{"key": &lt;the shared value&gt;, "count": n, "first": &lt;element&gt;, "last": &lt;element&gt;, "items": [...]}</span>.  <br /></td></tr>
+<tr class="memitem:a15bb614900f1053aa46a20778cf18a13" id="r_a15bb614900f1053aa46a20778cf18a13"><td class="memItemLeft">MORPH_API std::expected&lt; std::vector&lt; std::string &gt;, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a15bb614900f1053aa46a20778cf18a13">morph::ui::detail::splitPath</a> (std::string_view text)</td></tr>
+<tr class="memdesc:a15bb614900f1053aa46a20778cf18a13"><td class="mdescLeft">&#160;</td><td class="mdescRight">Splits <span class="tt">head.a.b</span> into its segments.  <br /></td></tr>
+<tr class="memitem:a64ab66516f4068e19c8955db2cdba35a" id="r_a64ab66516f4068e19c8955db2cdba35a"><td class="memItemLeft">MORPH_API std::expected&lt; <a class="el" href="#afd2a5cd1f335b4767cfc15f779a912d5">ExprPtr</a>, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a64ab66516f4068e19c8955db2cdba35a">morph::ui::parseExpression</a> (<a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;json, std::string const &amp;path=&quot;&quot;)</td></tr>
+<tr class="memdesc:a64ab66516f4068e19c8955db2cdba35a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Parses one expression.  <br /></td></tr>
+<tr class="memitem:a44616384989459c972ca98a28328346c" id="r_a44616384989459c972ca98a28328346c"><td class="memItemLeft">MORPH_API std::vector&lt; std::string_view &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a44616384989459c972ca98a28328346c">morph::ui::functionNames</a> ()</td></tr>
+<tr class="memdesc:a44616384989459c972ca98a28328346c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The names of the <span class="tt">expr/1</span> library, in <span class="tt"><a class="el" href="#acdf25e669057d3af5e395c162caedc32" title="The functions of the expr/1 library.">FunctionId</a></span> order.  <br /></td></tr>
+<tr class="memitem:ab6c3c70c366d52d57f7391af27a2d7ee" id="r_ab6c3c70c366d52d57f7391af27a2d7ee"><td class="memItemLeft">MORPH_API std::expected&lt; <a class="el" href="../../df/d58/structmorph_1_1ui_1_1Type.html">Type</a>, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ab6c3c70c366d52d57f7391af27a2d7ee">morph::ui::detail::typeAlong</a> (<a class="el" href="../../df/d58/structmorph_1_1ui_1_1Type.html">Type</a> const &amp;type, std::string_view head, std::span&lt; std::string const &gt; path)</td></tr>
+<tr class="memdesc:ab6c3c70c366d52d57f7391af27a2d7ee"><td class="mdescLeft">&#160;</td><td class="mdescRight">The type a field path reads from a value of a known type.  <br /></td></tr>
+<tr class="memitem:a7eab9ad1ffb69ee0880cc9a034e51977" id="r_a7eab9ad1ffb69ee0880cc9a034e51977"><td class="memItemLeft">MORPH_API std::expected&lt; <a class="el" href="../../df/d58/structmorph_1_1ui_1_1Type.html">Type</a>, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7eab9ad1ffb69ee0880cc9a034e51977">morph::ui::checkExpression</a> (<a class="el" href="../../d0/df6/structmorph_1_1ui_1_1Expr.html">Expr</a> const &amp;expr, <a class="el" href="../../d9/df3/classmorph_1_1ui_1_1NameResolver.html">NameResolver</a> const &amp;resolver)</td></tr>
+<tr class="memdesc:a7eab9ad1ffb69ee0880cc9a034e51977"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks an expression against the names a document declares.  <br /></td></tr>
+<tr class="memitem:ae3771e33bd02a9e1322f05589e8cf442" id="r_ae3771e33bd02a9e1322f05589e8cf442"><td class="memItemLeft">MORPH_API <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#ae3771e33bd02a9e1322f05589e8cf442">morph::ui::walk</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value, std::span&lt; std::string const &gt; path)</td></tr>
+<tr class="memdesc:ae3771e33bd02a9e1322f05589e8cf442"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a path out of a value: a record's field by name, a list's element by index.  <br /></td></tr>
+<tr class="memitem:af2be1db045edea37fd07e36cc8b72704" id="r_af2be1db045edea37fd07e36cc8b72704"><td class="memItemLeft">MORPH_API <a class="el" href="../../d7/d2a/structmorph_1_1ui_1_1DateValue.html">DateValue</a>&#160;</td><td class="memItemRight"><a class="el" href="#af2be1db045edea37fd07e36cc8b72704">morph::ui::readDateValue</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
+<tr class="memdesc:af2be1db045edea37fd07e36cc8b72704"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reads a value as a date, an instant or nothing: the one reading the date functions and a date input share.  <br /></td></tr>
+<tr class="memitem:a94955ba2948b5dc503bb12e2a22f6f6b" id="r_a94955ba2948b5dc503bb12e2a22f6f6b"><td class="memItemLeft">MORPH_API std::optional&lt; <a class="el" href="../../dc/d71/structmorph_1_1ui_1_1detail_1_1Number.html">Number</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a94955ba2948b5dc503bb12e2a22f6f6b">morph::ui::detail::numeric</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;value)</td></tr>
+<tr class="memdesc:a94955ba2948b5dc503bb12e2a22f6f6b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Takes a numeric value apart.  <br /></td></tr>
+<tr class="memitem:a1519db0d8803f509f6d8425da2bc2ada" id="r_a1519db0d8803f509f6d8425da2bc2ada"><td class="memItemLeft">MORPH_API std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1519db0d8803f509f6d8425da2bc2ada">morph::ui::detail::convertUnit</a> (<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> const &amp;value, std::string_view from, std::string_view target, <a class="el" href="#a1b716e9b0352b72447f08451f3ecc33c">UnitTable</a> const &amp;units)</td></tr>
+<tr class="memdesc:a1519db0d8803f509f6d8425da2bc2ada"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts an exact value between two units of one dimension.  <br /></td></tr>
+<tr class="memitem:a2acbb450108370d526ab2bdaea80b4f3" id="r_a2acbb450108370d526ab2bdaea80b4f3"><td class="memItemLeft">MORPH_API std::string&#160;</td><td class="memItemRight"><a class="el" href="#a2acbb450108370d526ab2bdaea80b4f3">morph::ui::detail::unitDisplay</a> (std::string const &amp;unit, <a class="el" href="#a1b716e9b0352b72447f08451f3ecc33c">UnitTable</a> const &amp;units)</td></tr>
+<tr class="memdesc:a2acbb450108370d526ab2bdaea80b4f3"><td class="mdescLeft">&#160;</td><td class="mdescRight">The display text of a unit.  <br /></td></tr>
+<tr class="memitem:a44b6b7bce3881e4c19594de28faba604" id="r_a44b6b7bce3881e4c19594de28faba604"><td class="memItemLeft">MORPH_API <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a44b6b7bce3881e4c19594de28faba604">morph::ui::evaluate</a> (<a class="el" href="../../d0/df6/structmorph_1_1ui_1_1Expr.html">Expr</a> const &amp;expr, <a class="el" href="../../dc/d40/classmorph_1_1ui_1_1Environment.html">Environment</a> const &amp;env)</td></tr>
+<tr class="memdesc:a44b6b7bce3881e4c19594de28faba604"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates an expression.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
 <tr class="memitem:aeca143432acc810f13e46e50cd41bf53" id="r_aeca143432acc810f13e46e50cd41bf53"><td class="memItemLeft">constexpr std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#aeca143432acc810f13e46e50cd41bf53">morph::ui::kMaxExpressionNodes</a> = 256</td></tr>
 <tr class="memdesc:aeca143432acc810f13e46e50cd41bf53"><td class="mdescLeft">&#160;</td><td class="mdescRight">The most nodes one expression may have; a document with a larger expression is refused at load.  <br /></td></tr>
-<tr class="memitem:adfd6fb089175637ecf4324dfe2b43509" id="r_adfd6fb089175637ecf4324dfe2b43509"><td class="memItemLeft">constexpr <a class="el" href="#a607768174eec9fdaf043171aeba4ae8e">KindSet</a>&#160;</td><td class="memItemRight"><a class="el" href="#adfd6fb089175637ecf4324dfe2b43509">morph::ui::detail::kAllKinds</a> = 0xFFFF</td></tr>
-<tr class="memdesc:adfd6fb089175637ecf4324dfe2b43509"><td class="mdescLeft">&#160;</td><td class="mdescRight">Every kind.  <br /></td></tr>
-<tr class="memitem:a904a78e57c1d4f5b33790ba34d0addad" id="r_a904a78e57c1d4f5b33790ba34d0addad"><td class="memItemLeft">constexpr <a class="el" href="#a607768174eec9fdaf043171aeba4ae8e">KindSet</a>&#160;</td><td class="memItemRight"><a class="el" href="#a904a78e57c1d4f5b33790ba34d0addad">morph::ui::detail::kNumeric</a> = <a class="el" href="#aee7de3e89ec2578bacebb5772b15c2ab">kindBit</a>(<a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349a1686a6c336b71b36d77354cea19a8b52">TypeKind::Int</a>) | <a class="el" href="#aee7de3e89ec2578bacebb5772b15c2ab">kindBit</a>(<a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349a937504f318f04eaf0f1d701df4c4d7f3">TypeKind::Decimal</a>) | <a class="el" href="#aee7de3e89ec2578bacebb5772b15c2ab">kindBit</a>(<a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349a694e8d1f2ee056f98ee488bdc4982d73">TypeKind::Quantity</a>)</td></tr>
-<tr class="memdesc:a904a78e57c1d4f5b33790ba34d0addad"><td class="mdescLeft">&#160;</td><td class="mdescRight">The numbers.  <br /></td></tr>
-<tr class="memitem:a36510bc5882d9dbd986570731bef4ea7" id="r_a36510bc5882d9dbd986570731bef4ea7"><td class="memItemLeft">constexpr <a class="el" href="#a607768174eec9fdaf043171aeba4ae8e">KindSet</a>&#160;</td><td class="memItemRight"><a class="el" href="#a36510bc5882d9dbd986570731bef4ea7">morph::ui::detail::kOrdered</a> = <a class="el" href="#a904a78e57c1d4f5b33790ba34d0addad">kNumeric</a> | <a class="el" href="#aee7de3e89ec2578bacebb5772b15c2ab">kindBit</a>(<a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349aa3d5de3eac8bb00ae86fd1a1005f1500">TypeKind::Timestamp</a>) | <a class="el" href="#aee7de3e89ec2578bacebb5772b15c2ab">kindBit</a>(<a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349a27118326006d3829667a400ad23d5d98">TypeKind::String</a>)</td></tr>
-<tr class="memdesc:a36510bc5882d9dbd986570731bef4ea7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The ordered kinds.  <br /></td></tr>
-<tr class="memitem:a0659e39ea364472b4b958f7135a12766" id="r_a0659e39ea364472b4b958f7135a12766"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#a0659e39ea364472b4b958f7135a12766">morph::ui::detail::kBuiltInRefusal</a> = &quot;This was refused.&quot;</td></tr>
-<tr class="memdesc:a0659e39ea364472b4b958f7135a12766"><td class="mdescLeft">&#160;</td><td class="mdescRight">The sentence <span class="tt">refusalText</span> shows when the catalogue has neither a refusal's code nor a class of it.  <br /></td></tr>
-<tr class="memitem:a99fea7d924bd2ef4458df33becbb31de" id="r_a99fea7d924bd2ef4458df33becbb31de"><td class="memItemLeft">constexpr std::array&lt; <a class="el" href="../../d8/da8/structmorph_1_1ui_1_1detail_1_1FunctionSpec.html">FunctionSpec</a>, 50 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a99fea7d924bd2ef4458df33becbb31de">morph::ui::detail::kFunctions</a></td></tr>
-<tr class="memdesc:a99fea7d924bd2ef4458df33becbb31de"><td class="mdescLeft">&#160;</td><td class="mdescRight">The library, indexed by <span class="tt"><a class="el" href="#acdf25e669057d3af5e395c162caedc32" title="The functions of the expr/1 library.">FunctionId</a></span>.  <br /></td></tr>
-<tr class="memitem:a852a2b54ea631b709059f93c7f9110b1" id="r_a852a2b54ea631b709059f93c7f9110b1"><td class="memItemLeft">constexpr std::array&lt; std::string_view, 6 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a852a2b54ea631b709059f93c7f9110b1">morph::ui::detail::kDateUnits</a> = {&quot;days&quot;, &quot;weeks&quot;, &quot;months&quot;, &quot;years&quot;, &quot;hours&quot;, &quot;minutes&quot;}</td></tr>
-<tr class="memdesc:a852a2b54ea631b709059f93c7f9110b1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The units <span class="tt">dateAdd</span> adds.  <br /></td></tr>
-<tr class="memitem:ad64d74ef3507f875ba5797d3d4fc9bbb" id="r_ad64d74ef3507f875ba5797d3d4fc9bbb"><td class="memItemLeft">constexpr std::array&lt; std::string_view, 6 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad64d74ef3507f875ba5797d3d4fc9bbb">morph::ui::detail::kEnvNames</a></td></tr>
-<tr class="memdesc:ad64d74ef3507f875ba5797d3d4fc9bbb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The names <span class="tt">{"env": ...}</span> reads.  <br /></td></tr>
-<tr class="memitem:a0d1d95fcf12d2c7123288a5bb5d8ec14" id="r_a0d1d95fcf12d2c7123288a5bb5d8ec14"><td class="memItemLeft">constexpr std::array&lt; std::string_view, 6 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0d1d95fcf12d2c7123288a5bb5d8ec14">morph::ui::detail::kSessionNames</a></td></tr>
-<tr class="memdesc:a0d1d95fcf12d2c7123288a5bb5d8ec14"><td class="mdescLeft">&#160;</td><td class="mdescRight">The names <span class="tt">{"session": ...}</span> reads.  <br /></td></tr>
-<tr class="memitem:a1ff86c55bab12010592e438dbb884c50" id="r_a1ff86c55bab12010592e438dbb884c50"><td class="memItemLeft">constexpr std::array&lt; std::int64_t, 6 &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1ff86c55bab12010592e438dbb884c50">morph::ui::detail::kDateSpans</a></td></tr>
-<tr class="memdesc:a1ff86c55bab12010592e438dbb884c50"><td class="mdescLeft">&#160;</td><td class="mdescRight">The largest amount of each <span class="tt">dateAdd</span> unit that can stay within years 1 to 9999, in <span class="tt"><a class="el" href="#a852a2b54ea631b709059f93c7f9110b1" title="The units dateAdd adds.">kDateUnits</a></span> order.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The <span class="tt">expr/1</span> expression language of the UI document: parsing a JSON expression into an <span class="tt">Expr</span> tree, checking it against the names a document declares, and evaluating it. </p>
@@ -419,25 +348,7 @@ Variables</h2></td></tr>
 
 <p>A shared, immutable expression node. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a607768174eec9fdaf043171aeba4ae8e" name="a607768174eec9fdaf043171aeba4ae8e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a607768174eec9fdaf043171aeba4ae8e">&#9670;&#160;</a></span>KindSet</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">using <a class="el" href="#a607768174eec9fdaf043171aeba4ae8e">morph::ui::detail::KindSet</a> = std::uint16_t</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>A set of type kinds, as bits. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00143">143</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -455,7 +366,7 @@ Variables</h2></td></tr>
 
 <p>The units a client knows, by id. A unit missing from the table is its own canonical unit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01282">1282</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00318">318</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -473,25 +384,7 @@ Variables</h2></td></tr>
 
 <p>Formats a date for display: the instant already shifted to the display zone, the style (<span class="tt">short</span>, <span class="tt">medium</span> or <span class="tt">long</span>), and whether to show the time. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01286">1286</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a803180715404af97f33afee483e3e069" name="a803180715404af97f33afee483e3e069"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a803180715404af97f33afee483e3e069">&#9670;&#160;</a></span>SampleReading</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">using <a class="el" href="#a803180715404af97f33afee483e3e069">morph::ui::detail::SampleReading</a> = std::expected&lt;std::optional&lt;Moments&gt;, std::string&gt;</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>A sample read for <span class="tt">stdev</span> and <span class="tt">rsd</span>: its moments, <span class="tt">null</span> without a report, or the reason to report. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01649">1649</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00322">322</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -566,7 +459,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -592,7 +485,7 @@ Variables</h2></td></tr>
 
 <p>The functions of the <span class="tt">expr/1</span> library. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00097">97</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -630,7 +523,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01395">1395</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00411">411</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -667,7 +560,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether <code class="param">text</code> is a well-formed name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -703,12 +596,12 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>True for <span class="tt">map</span>, <span class="tt">filter</span>, <span class="tt">sort</span> and <span class="tt">runs</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00170">170</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a85c6d59707d42b1cf48512ed573cbd07" name="a85c6d59707d42b1cf48512ed573cbd07"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a85c6d59707d42b1cf48512ed573cbd07">&#9670;&#160;</a></span>runRecord()</h2>
+<a id="a32fd6995b934609a367e17b5da1b3968" name="a32fd6995b934609a367e17b5da1b3968"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a32fd6995b934609a367e17b5da1b3968">&#9670;&#160;</a></span>runRecord()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -717,7 +610,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">Value morph::ui::runRecord </td>
+          <td class="memname">MORPH_API Value morph::ui::runRecord </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a></td>          <td class="paramname"><span class="paramname"><em>key</em></span>, </td>
         </tr>
@@ -729,7 +622,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -744,12 +637,10 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The record. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00189">189</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
 </div>
 </div>
-<a id="aee7de3e89ec2578bacebb5772b15c2ab" name="aee7de3e89ec2578bacebb5772b15c2ab"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aee7de3e89ec2578bacebb5772b15c2ab">&#9670;&#160;</a></span>kindBit()</h2>
+<a id="a15bb614900f1053aa46a20778cf18a13" name="a15bb614900f1053aa46a20778cf18a13"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a15bb614900f1053aa46a20778cf18a13">&#9670;&#160;</a></span>splitPath()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -758,194 +649,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">KindSet morph::ui::detail::kindBit </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a27e5bbe43ff5d326e03ca9ad78d27349">TypeKind</a></td>          <td class="paramname"><span class="paramname"><em>kind</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The bit of one kind. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">kind</td><td>The kind. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Its bit. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00207">207</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a2c948f05e9ae69b903d2a1faf1527bec" name="a2c948f05e9ae69b903d2a1faf1527bec"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2c948f05e9ae69b903d2a1faf1527bec">&#9670;&#160;</a></span>functionSpec()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">FunctionSpec const  &amp; morph::ui::detail::functionSpec </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="#acdf25e669057d3af5e395c162caedc32">FunctionId</a></td>          <td class="paramname"><span class="paramname"><em>function</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The signature of a function. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">function</td><td>The function. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Its entry in <span class="tt">kFunctions</span>. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00331">331</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a39838f0b02e08a511f584c02f5236d0d" name="a39838f0b02e08a511f584c02f5236d0d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a39838f0b02e08a511f584c02f5236d0d">&#9670;&#160;</a></span>modeArgument()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::size_t &gt; morph::ui::detail::modeArgument </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="#acdf25e669057d3af5e395c162caedc32">FunctionId</a></td>          <td class="paramname"><span class="paramname"><em>function</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The position of a function's optional rounding mode, <span class="tt">"halfEven"</span> or <span class="tt">"halfUp"</span>. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">function</td><td>The function. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The argument index of its mode, or empty for a function that does not round. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a8309cfc6e15cd7ca3be3337aec1665bb" name="a8309cfc6e15cd7ca3be3337aec1665bb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a8309cfc6e15cd7ca3be3337aec1665bb">&#9670;&#160;</a></span>roundingMode()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; math::RoundingMode &gt; morph::ui::detail::roundingMode </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>mode</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Reads a rounding mode: <span class="tt">"halfEven"</span>, ties to the even neighbour, or <span class="tt">"halfUp"</span>, ties away from zero. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">mode</td><td>The mode's value. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The mode, or empty for any other value. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00349">349</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="aa43c7d0dc8fdbe598512991b6383097c" name="aa43c7d0dc8fdbe598512991b6383097c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa43c7d0dc8fdbe598512991b6383097c">&#9670;&#160;</a></span>oneOf()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;std::size_t N&gt; </div>
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">bool morph::ui::detail::oneOf </td>
-          <td>(</td>
-          <td class="paramtype">std::array&lt; std::string_view, N &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>names</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>name</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Whether a name is one of a closed set. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">names</td><td>The set. </td></tr>
-    <tr><td class="paramname">name</td><td>The candidate. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Whether <code class="param">name</code> is in <code class="param">names</code>. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00376">376</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a59b452b85e8fc9985ac0d103b048dd11" name="a59b452b85e8fc9985ac0d103b048dd11"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a59b452b85e8fc9985ac0d103b048dd11">&#9670;&#160;</a></span>splitPath()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::expected&lt; std::vector&lt; std::string &gt;, std::string &gt; morph::ui::detail::splitPath </td>
+          <td class="memname">MORPH_API std::expected&lt; std::vector&lt; std::string &gt;, std::string &gt; morph::ui::detail::splitPath </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>text</em></span></td><td>)</td>
           <td></td>
@@ -953,7 +657,7 @@ template&lt;std::size_t N&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -967,12 +671,10 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The segments, or the reason the path is malformed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00383">383</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a2df0ed027f18432f71838ac91380ec9a" name="a2df0ed027f18432f71838ac91380ec9a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2df0ed027f18432f71838ac91380ec9a">&#9670;&#160;</a></span>parseExpression()</h2>
+<a id="a64ab66516f4068e19c8955db2cdba35a" name="a64ab66516f4068e19c8955db2cdba35a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a64ab66516f4068e19c8955db2cdba35a">&#9670;&#160;</a></span>parseExpression()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -981,7 +683,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::expected&lt; ExprPtr, Refusal &gt; morph::ui::parseExpression </td>
+          <td class="memname">MORPH_API std::expected&lt; ExprPtr, Refusal &gt; morph::ui::parseExpression </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a289786f075a2eb48cac06ad898fc421b">Json</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>json</em></span>, </td>
         </tr>
@@ -993,7 +695,7 @@ template&lt;std::size_t N&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1008,12 +710,10 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The expression, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00841">841</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a61514f777fb960c40880693da7689afb" name="a61514f777fb960c40880693da7689afb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a61514f777fb960c40880693da7689afb">&#9670;&#160;</a></span>functionNames()</h2>
+<a id="a44616384989459c972ca98a28328346c" name="a44616384989459c972ca98a28328346c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a44616384989459c972ca98a28328346c">&#9670;&#160;</a></span>functionNames()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1022,7 +722,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::vector&lt; std::string_view &gt; morph::ui::functionNames </td>
+          <td class="memname">MORPH_API std::vector&lt; std::string_view &gt; morph::ui::functionNames </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
@@ -1030,7 +730,7 @@ template&lt;std::size_t N&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1038,12 +738,10 @@ template&lt;std::size_t N&gt; </div>
 <p>The names of the <span class="tt">expr/1</span> library, in <span class="tt">FunctionId</span> order. </p>
 <dl class="section return"><dt>Returns</dt><dd>The names. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00847">847</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
 </div>
 </div>
-<a id="ae2ba06141133aff6c7a012173174f403" name="ae2ba06141133aff6c7a012173174f403"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae2ba06141133aff6c7a012173174f403">&#9670;&#160;</a></span>typeOfValue()</h2>
+<a id="ab6c3c70c366d52d57f7391af27a2d7ee" name="ab6c3c70c366d52d57f7391af27a2d7ee"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab6c3c70c366d52d57f7391af27a2d7ee">&#9670;&#160;</a></span>typeAlong()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1052,43 +750,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">Type morph::ui::detail::typeOfValue </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The static type of a literal. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">value</td><td>The literal. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Its type; <span class="tt">any</span> for <span class="tt">null</span>. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00941">941</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a3bd16d187223dc35cc160c792e2b5445" name="a3bd16d187223dc35cc160c792e2b5445"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a3bd16d187223dc35cc160c792e2b5445">&#9670;&#160;</a></span>typeAlong()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::expected&lt; Type, std::string &gt; morph::ui::detail::typeAlong </td>
+          <td class="memname">MORPH_API std::expected&lt; Type, std::string &gt; morph::ui::detail::typeAlong </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../df/d58/structmorph_1_1ui_1_1Type.html">Type</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>type</em></span>, </td>
         </tr>
@@ -1105,7 +767,7 @@ template&lt;std::size_t N&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1121,12 +783,10 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">any</span> when the path can read something, or why it cannot. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00954">954</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a577e77efde565302952c148e229f531d" name="a577e77efde565302952c148e229f531d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a577e77efde565302952c148e229f531d">&#9670;&#160;</a></span>checkExpression()</h2>
+<a id="a7eab9ad1ffb69ee0880cc9a034e51977" name="a7eab9ad1ffb69ee0880cc9a034e51977"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7eab9ad1ffb69ee0880cc9a034e51977">&#9670;&#160;</a></span>checkExpression()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1135,7 +795,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::expected&lt; Type, Refusal &gt; morph::ui::checkExpression </td>
+          <td class="memname">MORPH_API std::expected&lt; Type, Refusal &gt; morph::ui::checkExpression </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d0/df6/structmorph_1_1ui_1_1Expr.html">Expr</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>expr</em></span>, </td>
         </tr>
@@ -1147,7 +807,7 @@ template&lt;std::size_t N&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1162,12 +822,10 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The expression's static type (<span class="tt">any</span> where it cannot be known), or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01266">1266</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
 </div>
 </div>
-<a id="af2e14516ecce42073431b9c98a357c68" name="af2e14516ecce42073431b9c98a357c68"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af2e14516ecce42073431b9c98a357c68">&#9670;&#160;</a></span>walk()</h2>
+<a id="ae3771e33bd02a9e1322f05589e8cf442" name="ae3771e33bd02a9e1322f05589e8cf442"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae3771e33bd02a9e1322f05589e8cf442">&#9670;&#160;</a></span>walk()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1176,7 +834,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">Value morph::ui::walk </td>
+          <td class="memname">MORPH_API Value morph::ui::walk </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span>, </td>
         </tr>
@@ -1188,7 +846,7 @@ template&lt;std::size_t N&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1203,12 +861,10 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value at the path, or <span class="tt">null</span> when a segment does not exist. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01372">1372</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a89f0ac8cca369fba55b123f0d68a8f0e" name="a89f0ac8cca369fba55b123f0d68a8f0e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a89f0ac8cca369fba55b123f0d68a8f0e">&#9670;&#160;</a></span>readDateValue()</h2>
+<a id="af2be1db045edea37fd07e36cc8b72704" name="af2be1db045edea37fd07e36cc8b72704"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af2be1db045edea37fd07e36cc8b72704">&#9670;&#160;</a></span>readDateValue()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1217,7 +873,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">DateValue morph::ui::readDateValue </td>
+          <td class="memname">MORPH_API DateValue morph::ui::readDateValue </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
           <td></td>
@@ -1225,7 +881,7 @@ template&lt;std::size_t N&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1239,12 +895,10 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The reading. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01420">1420</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a6f0c8e26df5bfe212235524c7cb65acd" name="a6f0c8e26df5bfe212235524c7cb65acd"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6f0c8e26df5bfe212235524c7cb65acd">&#9670;&#160;</a></span>numeric()</h2>
+<a id="a94955ba2948b5dc503bb12e2a22f6f6b" name="a94955ba2948b5dc503bb12e2a22f6f6b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a94955ba2948b5dc503bb12e2a22f6f6b">&#9670;&#160;</a></span>numeric()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1253,7 +907,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; Number &gt; morph::ui::detail::numeric </td>
+          <td class="memname">MORPH_API std::optional&lt; Number &gt; morph::ui::detail::numeric </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
           <td></td>
@@ -1261,7 +915,7 @@ template&lt;std::size_t N&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1275,12 +929,10 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The number, or <span class="tt">std::nullopt</span> when it is not one. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01478">1478</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
 </div>
 </div>
-<a id="af4d4ef368938a7871ebf67c23a12fca7" name="af4d4ef368938a7871ebf67c23a12fca7"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af4d4ef368938a7871ebf67c23a12fca7">&#9670;&#160;</a></span>makeNumber()</h2>
+<a id="a1519db0d8803f509f6d8425da2bc2ada" name="a1519db0d8803f509f6d8425da2bc2ada"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1519db0d8803f509f6d8425da2bc2ada">&#9670;&#160;</a></span>convertUnit()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1289,54 +941,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">Value morph::ui::detail::makeNumber </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>integer</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string const *</td>          <td class="paramname"><span class="paramname"><em>unit</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Builds a numeric value. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">value</td><td>The exact value. </td></tr>
-    <tr><td class="paramname">integer</td><td>Whether every operand was an <span class="tt">int</span>. </td></tr>
-    <tr><td class="paramname">unit</td><td>The unit, or <span class="tt">nullptr</span>. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>A quantity with a unit; an <span class="tt">int</span> when integral and every operand was one; a decimal otherwise. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01496">1496</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a13b1b74e7b6b85521fb8f847a779defa" name="a13b1b74e7b6b85521fb8f847a779defa"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a13b1b74e7b6b85521fb8f847a779defa">&#9670;&#160;</a></span>convertUnit()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; math::Rational &gt; morph::ui::detail::convertUnit </td>
+          <td class="memname">MORPH_API std::optional&lt; math::Rational &gt; morph::ui::detail::convertUnit </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>value</em></span>, </td>
         </tr>
@@ -1358,7 +963,7 @@ template&lt;std::size_t N&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1375,12 +980,10 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value in <code class="param">target</code>, its places widened by the decimal places of the conversion ratio; <span class="tt">std::nullopt</span> when the units do not convert or the result overflows. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01513">1513</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a180e3a07dd8279e4c8b1784d514abd9f" name="a180e3a07dd8279e4c8b1784d514abd9f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a180e3a07dd8279e4c8b1784d514abd9f">&#9670;&#160;</a></span>unitDisplay()</h2>
+<a id="a2acbb450108370d526ab2bdaea80b4f3" name="a2acbb450108370d526ab2bdaea80b4f3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2acbb450108370d526ab2bdaea80b4f3">&#9670;&#160;</a></span>unitDisplay()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1389,7 +992,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::ui::detail::unitDisplay </td>
+          <td class="memname">MORPH_API std::string morph::ui::detail::unitDisplay </td>
           <td>(</td>
           <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>unit</em></span>, </td>
         </tr>
@@ -1401,7 +1004,7 @@ template&lt;std::size_t N&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1416,12 +1019,10 @@ template&lt;std::size_t N&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its display text, or the id. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01563">1563</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
 </div>
 </div>
-<a id="af385e1bc5838efb359221fceff1919d9" name="af385e1bc5838efb359221fceff1919d9"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af385e1bc5838efb359221fceff1919d9">&#9670;&#160;</a></span>currencyDigits()</h2>
+<a id="a44b6b7bce3881e4c19594de28faba604" name="a44b6b7bce3881e4c19594de28faba604"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a44b6b7bce3881e4c19594de28faba604">&#9670;&#160;</a></span>evaluate()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1430,286 +1031,7 @@ template&lt;std::size_t N&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::uint32_t morph::ui::detail::currencyDigits </td>
-          <td>(</td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>currency</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The fraction digits a currency shows (ISO 4217's minor unit). </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">currency</td><td>The currency code. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>0, 2 or 3. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01571">1571</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a48a1cc359b801f5ad973f8f8844300f1" name="a48a1cc359b801f5ad973f8f8844300f1"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a48a1cc359b801f5ad973f8f8844300f1">&#9670;&#160;</a></span>addMonths()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::chrono::year_month_day morph::ui::detail::addMonths </td>
-          <td>(</td>
-          <td class="paramtype">std::chrono::year_month_day const &amp;</td>          <td class="paramname"><span class="paramname"><em>date</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::int64_t</td>          <td class="paramname"><span class="paramname"><em>months</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>A calendar day moved by whole months, its day of the month clamped to the target month's last day. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">date</td><td>The day. </td></tr>
-    <tr><td class="paramname">months</td><td>The months, negative to go back; bounded by the caller to the span of years 1 to 9999. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The moved day: <span class="tt">2026-01-31</span> plus one month is <span class="tt">2026-02-28</span>. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01585">1585</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a1998a78285d5a19ef23acdc54424023c" name="a1998a78285d5a19ef23acdc54424023c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1998a78285d5a19ef23acdc54424023c">&#9670;&#160;</a></span>inIsoRange()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">bool morph::ui::detail::inIsoRange </td>
-          <td>(</td>
-          <td class="paramtype">std::chrono::year_month_day const &amp;</td>          <td class="paramname"><span class="paramname"><em>date</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Whether a calendar day lies in years 1 to 9999, the years ISO text can write. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">date</td><td>The day. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Whether it is in range. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01605">1605</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a829b66b228c2f3833f1a49af9a1bf6a2" name="a829b66b228c2f3833f1a49af9a1bf6a2"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a829b66b228c2f3833f1a49af9a1bf6a2">&#9670;&#160;</a></span>isoDate()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::string morph::ui::detail::isoDate </td>
-          <td>(</td>
-          <td class="paramtype">std::chrono::year_month_day const &amp;</td>          <td class="paramname"><span class="paramname"><em>date</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>A calendar day as ISO text. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">date</td><td>The day. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd><span class="tt">yyyy-MM-dd</span>. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01612">1612</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="ad28338c35f7f093975baa3c67938ff47" name="ad28338c35f7f093975baa3c67938ff47"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad28338c35f7f093975baa3c67938ff47">&#9670;&#160;</a></span>commonDenominator()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::uint64_t &gt; morph::ui::detail::commonDenominator </td>
-          <td>(</td>
-          <td class="paramtype">std::vector&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>values</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The least common multiple of exact values' denominators, over which each value is an integer. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">values</td><td>The values, canonical. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The common denominator, or empty past <span class="tt">int64</span>. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01635">1635</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="aaa46d23d40d1b13f54f80c36f580bde8" name="aaa46d23d40d1b13f54f80c36f580bde8"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aaa46d23d40d1b13f54f80c36f580bde8">&#9670;&#160;</a></span>momentsOf()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">SampleReading morph::ui::detail::momentsOf </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d6/dda/value_8hpp.html#a5bc161239292773472a840de4f8ffe7e">ValueList</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>items</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="#a1b716e9b0352b72447f08451f3ecc33c">UnitTable</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>units</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The exact moments of a sample of numbers, or of quantities converted to the first element's unit. </p>
-<p>A <span class="tt">null</span> element makes the sample <span class="tt">null</span>; an element that is not a number, a quantity among plain numbers or units that do not convert is a mismatch; a common denominator, an element or a sum that leaves its width overflows. </p><dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">items</td><td>The sample. </td></tr>
-    <tr><td class="paramname">units</td><td>The unit table. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The moments; empty for a <span class="tt">null</span> element; the reason for a mismatch or an overflow. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01658">1658</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="ae1f73a4f9f451e9f2793b6ad9ccb05d4" name="ae1f73a4f9f451e9f2793b6ad9ccb05d4"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae1f73a4f9f451e9f2793b6ad9ccb05d4">&#9670;&#160;</a></span>spreadOf()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::expected&lt; math::Rational, std::string &gt; morph::ui::detail::spreadOf </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../de/d3c/structmorph_1_1ui_1_1detail_1_1Moments.html">Moments</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>moments</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>relative</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::uint32_t</td>          <td class="paramname"><span class="paramname"><em>places</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6a">math::RoundingMode</a></td>          <td class="paramname"><span class="paramname"><em>mode</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The standard deviation or the RSD of a sample, correctly rounded at <code class="param">places</code>. </p>
-<p>With <span class="tt">n</span> elements <span class="tt">X = x * D</span>, <span class="tt">V = n * sum X^2 - (sum X)^2</span>: the sample standard deviation is the root of <span class="tt">V * 10^(2 * places) / (n * (n - 1) * D^2)</span>, and the RSD in percent the root of <span class="tt">10^(4 + 2 * places) * n * V / ((n - 1) * (sum X)^2)</span>, where <span class="tt">D</span> cancels. Nothing is rounded before the root. </p><dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">moments</td><td>The sample's moments, two or more elements. </td></tr>
-    <tr><td class="paramname">relative</td><td>Whether to compute the RSD. </td></tr>
-    <tr><td class="paramname">places</td><td>The places of the result. </td></tr>
-    <tr><td class="paramname">mode</td><td>The tie-breaking rule. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The result, or the reason it cannot be computed. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01719">1719</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a5a3fbb8f3f65cb7c1fe710274f13c612" name="a5a3fbb8f3f65cb7c1fe710274f13c612"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5a3fbb8f3f65cb7c1fe710274f13c612">&#9670;&#160;</a></span>evaluate()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">Value morph::ui::evaluate </td>
+          <td class="memname">MORPH_API Value morph::ui::evaluate </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d0/df6/structmorph_1_1ui_1_1Expr.html">Expr</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>expr</em></span>, </td>
         </tr>
@@ -1721,7 +1043,7 @@ template&lt;std::size_t N&gt; </div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1735,8 +1057,6 @@ template&lt;std::size_t N&gt; </div>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its value. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l03065">3065</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -1763,248 +1083,7 @@ template&lt;std::size_t N&gt; </div>
 
 <p>The most nodes one expression may have; a document with a larger expression is refused at load. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="adfd6fb089175637ecf4324dfe2b43509" name="adfd6fb089175637ecf4324dfe2b43509"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#adfd6fb089175637ecf4324dfe2b43509">&#9670;&#160;</a></span>kAllKinds</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">KindSet morph::ui::detail::kAllKinds = 0xFFFF</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Every kind. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00212">212</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a904a78e57c1d4f5b33790ba34d0addad" name="a904a78e57c1d4f5b33790ba34d0addad"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a904a78e57c1d4f5b33790ba34d0addad">&#9670;&#160;</a></span>kNumeric</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">KindSet morph::ui::detail::kNumeric = kindBit(TypeKind::Int) | kindBit(TypeKind::Decimal) | kindBit(TypeKind::Quantity)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The numbers. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00214">214</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a36510bc5882d9dbd986570731bef4ea7" name="a36510bc5882d9dbd986570731bef4ea7"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a36510bc5882d9dbd986570731bef4ea7">&#9670;&#160;</a></span>kOrdered</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">KindSet morph::ui::detail::kOrdered = kNumeric | kindBit(TypeKind::Timestamp) | kindBit(TypeKind::String)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The ordered kinds. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00216">216</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a0659e39ea364472b4b958f7135a12766" name="a0659e39ea364472b4b958f7135a12766"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0659e39ea364472b4b958f7135a12766">&#9670;&#160;</a></span>kBuiltInRefusal</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::string_view morph::ui::detail::kBuiltInRefusal = &quot;This was refused.&quot;</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The sentence <span class="tt">refusalText</span> shows when the catalogue has neither a refusal's code nor a class of it. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00219">219</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a99fea7d924bd2ef4458df33becbb31de" name="a99fea7d924bd2ef4458df33becbb31de"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a99fea7d924bd2ef4458df33becbb31de">&#9670;&#160;</a></span>kFunctions</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::array&lt;FunctionSpec, 50&gt; morph::ui::detail::kFunctions</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The library, indexed by <span class="tt">FunctionId</span>. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a852a2b54ea631b709059f93c7f9110b1" name="a852a2b54ea631b709059f93c7f9110b1"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a852a2b54ea631b709059f93c7f9110b1">&#9670;&#160;</a></span>kDateUnits</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::array&lt;std::string_view, 6&gt; morph::ui::detail::kDateUnits = {&quot;days&quot;, &quot;weeks&quot;, &quot;months&quot;, &quot;years&quot;, &quot;hours&quot;, &quot;minutes&quot;}</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The units <span class="tt">dateAdd</span> adds. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00361">361</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="ad64d74ef3507f875ba5797d3d4fc9bbb" name="ad64d74ef3507f875ba5797d3d4fc9bbb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad64d74ef3507f875ba5797d3d4fc9bbb">&#9670;&#160;</a></span>kEnvNames</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::array&lt;std::string_view, 6&gt; morph::ui::detail::kEnvNames</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-<b>Initial value:</b><div class="fragment"><div class="line">= {<span class="stringliteral">&quot;widthClass&quot;</span>, <span class="stringliteral">&quot;locale&quot;</span>,  <span class="stringliteral">&quot;platform&quot;</span>,</div>
-<div class="line">                        <span class="stringliteral">&quot;online&quot;</span>,     <span class="stringliteral">&quot;backend&quot;</span>, <span class="stringliteral">&quot;context&quot;</span>}</div>
-</div><!-- fragment -->
-<p>The names <span class="tt">{"env": ...}</span> reads. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00364">364</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a0d1d95fcf12d2c7123288a5bb5d8ec14" name="a0d1d95fcf12d2c7123288a5bb5d8ec14"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0d1d95fcf12d2c7123288a5bb5d8ec14">&#9670;&#160;</a></span>kSessionNames</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::array&lt;std::string_view, 6&gt; morph::ui::detail::kSessionNames</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-<b>Initial value:</b><div class="fragment"><div class="line">= {<span class="stringliteral">&quot;principal&quot;</span>, <span class="stringliteral">&quot;userName&quot;</span>, <span class="stringliteral">&quot;displayName&quot;</span>,</div>
-<div class="line">                        <span class="stringliteral">&quot;userKey&quot;</span>,   <span class="stringliteral">&quot;tenant&quot;</span>,   <span class="stringliteral">&quot;authenticated&quot;</span>}</div>
-</div><!-- fragment -->
-<p>The names <span class="tt">{"session": ...}</span> reads. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00368">368</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a1ff86c55bab12010592e438dbb884c50" name="a1ff86c55bab12010592e438dbb884c50"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1ff86c55bab12010592e438dbb884c50">&#9670;&#160;</a></span>kDateSpans</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::array&lt;std::int64_t, 6&gt; morph::ui::detail::kDateSpans</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-<b>Initial value:</b><div class="fragment"><div class="line">= {3&#39;652&#39;059, 521&#39;723,    119&#39;988,</div>
-<div class="line">                    9&#39;999,     87&#39;649&#39;416, 5&#39;258&#39;964&#39;960}</div>
-</div><!-- fragment -->
-<p>The largest amount of each <span class="tt">dateAdd</span> unit that can stay within years 1 to 9999, in <span class="tt">kDateUnits</span> order. </p>
-<p>Compared with the amount before any <span class="tt">std::chrono</span> arithmetic, whose day and month counts are narrower than <span class="tt">int64</span>, so a huge amount is reported rather than narrowed into a date. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01599">1599</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>

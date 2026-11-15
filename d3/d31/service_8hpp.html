@@ -131,6 +131,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d31/service
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;set&gt;</code><br />
 <code>#include &lt;stdexcept&gt;</code><br />
@@ -138,17 +139,10 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d31/service
 <code>#include &lt;string_view&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
-<code>#include &quot;../core/logger.hpp&quot;</code><br />
 <code>#include &quot;../core/remote.hpp&quot;</code><br />
-<code>#include &quot;../core/wire.hpp&quot;</code><br />
-<code>#include &quot;../session/session.hpp&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d0/dab/bundle_8hpp_source.html">bundle.hpp</a>&quot;</code><br />
-<code>#include &quot;<a class="el" href="../../d1/d1e/catalogue_8hpp_source.html">catalogue.hpp</a>&quot;</code><br />
-<code>#include &quot;<a class="el" href="../../dd/d39/document_8hpp_source.html">document.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dd/dc1/file__store_8hpp_source.html">file_store.hpp</a>&quot;</code><br />
-<code>#include &quot;<a class="el" href="../../d6/da7/shell__parts_8hpp_source.html">shell_parts.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d9/df6/ui_2theme_8hpp_source.html">theme.hpp</a>&quot;</code><br />
-<code>#include &quot;<a class="el" href="../../d6/dda/value_8hpp_source.html">value.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d3/d31/service_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -166,8 +160,6 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A screen as the bundle serves it.  <a href="../../db/d17/structmorph_1_1ui_1_1ServedScreen.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AServedBundle" id="r_morph_3A_3Aui_3A_3AServedBundle"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html">morph::ui::ServedBundle</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">An application's bundle, built and immutable: what <span class="tt"><a class="el" href="../../d1/d38/classmorph_1_1ui_1_1UiService.html" title="The UI service: answers ui-hello, ui-catalog and ui-fetch from one ServedBundle, and ui-evaluate thro...">UiService</a></span> serves.  <a href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html#details">More...</a><br /></td></tr>
-<tr class="memitem:morph_3A_3Aui_3A_3Adetail_3A_3ADocumentActions" id="r_morph_3A_3Aui_3A_3Adetail_3A_3ADocumentActions"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d6/d46/classmorph_1_1ui_1_1detail_1_1DocumentActions.html">morph::ui::detail::DocumentActions</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Collects the actions and model types a loaded document names, resolving each query's, mutation's and model-bound node's alias through the enclosing scopes.  <a href="../../d6/d46/classmorph_1_1ui_1_1detail_1_1DocumentActions.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3ABundleFile" id="r_morph_3A_3Aui_3A_3ABundleFile"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/d11/structmorph_1_1ui_1_1BundleFile.html">morph::ui::BundleFile</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A file of the bundle that is not a screen, as <span class="tt"><a class="el" href="../../d0/dc8/classmorph_1_1ui_1_1UiRegistry.html#a2128f6b54dd36ef1e0e80b7090359c22" title="Adds a file that is not a screen: the app document (app, whose id is app), a theme (theme),...">UiRegistry::addFile</a></span> takes it.  <a href="../../db/d11/structmorph_1_1ui_1_1BundleFile.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AUiRegistry" id="r_morph_3A_3Aui_3A_3AUiRegistry"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d0/dc8/classmorph_1_1ui_1_1UiRegistry.html">morph::ui::UiRegistry</a></td></tr>
@@ -177,12 +169,6 @@ Classes</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:acab995b09a00bc773a70a72f080437eb" id="r_acab995b09a00bc773a70a72f080437eb"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#acab995b09a00bc773a70a72f080437eb">morph::ui::detail::checkServable</a> (std::string const &amp;bytes)</td></tr>
-<tr class="memdesc:acab995b09a00bc773a70a72f080437eb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <code class="param">bytes</code> can be served: within <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#ab3522276f59bad162fb9ab02cf36f55c" title="The largest file a bundle may hold, and a client accepts.">kMaxFileBytes</a></span>, and within the envelope bound once escaped into an <span class="tt">ok</span> reply.  <br /></td></tr>
-<tr class="memitem:ad9e64f82f50f869f0a17e7dd6365a259" id="r_ad9e64f82f50f869f0a17e7dd6365a259"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad9e64f82f50f869f0a17e7dd6365a259">morph::ui::detail::checkEntry</a> (<a class="el" href="../../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html">CatalogEntry</a> const &amp;entry)</td></tr>
-<tr class="memdesc:ad9e64f82f50f869f0a17e7dd6365a259"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks a catalog entry's own fields.  <br /></td></tr>
-<tr class="memitem:a61f10b6fe342beea9342254a1633dbc8" id="r_a61f10b6fe342beea9342254a1633dbc8"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a61f10b6fe342beea9342254a1633dbc8">morph::ui::detail::permitsAll</a> (<a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &amp;authorizer, <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> const &amp;session, std::vector&lt; <a class="el" href="../../dd/d95/structmorph_1_1ui_1_1ActionRef.html">ActionRef</a> &gt; const &amp;refs)</td></tr>
-<tr class="memdesc:a61f10b6fe342beea9342254a1633dbc8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the principal of <code class="param">session</code> may run every action of <code class="param">refs</code>.  <br /></td></tr>
 <tr class="memitem:ad69b07175bd3a612103673995ff06c20" id="r_ad69b07175bd3a612103673995ff06c20"><td class="memItemLeft">constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#ad69b07175bd3a612103673995ff06c20">morph::ui::isUiServiceRead</a> (std::string_view modelType, std::string_view actionType) noexcept</td></tr>
 <tr class="memdesc:ad69b07175bd3a612103673995ff06c20"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether an authoriser is asked about one of the UI service's reads: <span class="tt">ui</span>'s <span class="tt">hello</span>, <span class="tt">catalog</span> or <span class="tt">fetch</span>.  <br /></td></tr>
 </table>
@@ -192,125 +178,6 @@ Functions</h2></td></tr>
 
 <p class="definition">Definition in file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
-<a id="acab995b09a00bc773a70a72f080437eb" name="acab995b09a00bc773a70a72f080437eb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#acab995b09a00bc773a70a72f080437eb">&#9670;&#160;</a></span>checkServable()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::checkServable </td>
-          <td>(</td>
-          <td class="paramtype">std::string const &amp;</td>          <td class="paramname"><span class="paramname"><em>bytes</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Whether <code class="param">bytes</code> can be served: within <span class="tt">kMaxFileBytes</span>, and within the envelope bound once escaped into an <span class="tt">ok</span> reply. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">bytes</td><td>The file. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Why it cannot, or nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
-
-</div>
-</div>
-<a id="ad9e64f82f50f869f0a17e7dd6365a259" name="ad9e64f82f50f869f0a17e7dd6365a259"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad9e64f82f50f869f0a17e7dd6365a259">&#9670;&#160;</a></span>checkEntry()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::optional&lt; std::string &gt; morph::ui::detail::checkEntry </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d7/d47/structmorph_1_1ui_1_1CatalogEntry.html">CatalogEntry</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>entry</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Checks a catalog entry's own fields. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">entry</td><td>The entry. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Why it is refused, or nothing. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a61f10b6fe342beea9342254a1633dbc8" name="a61f10b6fe342beea9342254a1633dbc8"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a61f10b6fe342beea9342254a1633dbc8">&#9670;&#160;</a></span>permitsAll()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">bool morph::ui::detail::permitsAll </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html">::morph::session::IAuthorizer</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>authorizer</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>session</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::vector&lt; <a class="el" href="../../dd/d95/structmorph_1_1ui_1_1ActionRef.html">ActionRef</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>refs</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Whether the principal of <code class="param">session</code> may run every action of <code class="param">refs</code>. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">authorizer</td><td>The authoriser. </td></tr>
-    <tr><td class="paramname">session</td><td>The session, its principal verified. </td></tr>
-    <tr><td class="paramname">refs</td><td>The actions. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>Whether it may run all of them; <span class="tt">true</span> for none. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
-
-</div>
-</div>
 <a id="ad69b07175bd3a612103673995ff06c20" name="ad69b07175bd3a612103673995ff06c20"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad69b07175bd3a612103673995ff06c20">&#9670;&#160;</a></span>isUiServiceRead()</h2>
 
@@ -348,7 +215,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Whether it is one of those reads. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00945">945</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00346">346</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

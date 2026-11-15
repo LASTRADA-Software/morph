@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d5e/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>Evaluates expressions against an environment, with the comprehension variables in scope.  
+<p>Evaluates expressions against an environment: the part of the evaluator that other code drives directly, such as grouping and ordering a table's rows. <span class="tt"><a class="el" href="../../d8/d0e/expression_8hpp.html#a44b6b7bce3881e4c19594de28faba604" title="Evaluates an expression.">evaluate</a></span> is the entry point for one expression.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>&gt;</code></p>
@@ -130,6 +130,14 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d5e/classmo
 Public Member Functions</h2></td></tr>
 <tr class="memitem:af21122b27b0d1a33cbd5ce3e3f8bfa49" id="r_af21122b27b0d1a33cbd5ce3e3f8bfa49"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#af21122b27b0d1a33cbd5ce3e3f8bfa49">Evaluator</a> (<a class="el" href="../../dc/d40/classmorph_1_1ui_1_1Environment.html">Environment</a> const &amp;env)</td></tr>
 <tr class="memdesc:af21122b27b0d1a33cbd5ce3e3f8bfa49"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates against <code class="param">env</code>.  <br /></td></tr>
+<tr class="memitem:a4d28c867abd1196c070373b92b359f80" id="r_a4d28c867abd1196c070373b92b359f80"><td class="memItemLeft"><a id="a4d28c867abd1196c070373b92b359f80" name="a4d28c867abd1196c070373b92b359f80"></a>
+&#160;</td><td class="memItemRight"><b>Evaluator</b> (Evaluator const &amp;)=delete</td></tr>
+<tr class="memitem:a6a5ffca88dd90ce8617e186bd8db9176" id="r_a6a5ffca88dd90ce8617e186bd8db9176"><td class="memItemLeft"><a id="a6a5ffca88dd90ce8617e186bd8db9176" name="a6a5ffca88dd90ce8617e186bd8db9176"></a>
+<a class="el" href="#af21122b27b0d1a33cbd5ce3e3f8bfa49">Evaluator</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#af21122b27b0d1a33cbd5ce3e3f8bfa49">Evaluator</a> const &amp;)=delete</td></tr>
+<tr class="memitem:a4a215f36e40ec9f1517de78eaf5aaa0d" id="r_a4a215f36e40ec9f1517de78eaf5aaa0d"><td class="memItemLeft"><a id="a4a215f36e40ec9f1517de78eaf5aaa0d" name="a4a215f36e40ec9f1517de78eaf5aaa0d"></a>
+&#160;</td><td class="memItemRight"><b>Evaluator</b> (Evaluator &amp;&amp;)=delete</td></tr>
+<tr class="memitem:a7c10febc10e65351d48451a7670f51b6" id="r_a7c10febc10e65351d48451a7670f51b6"><td class="memItemLeft"><a id="a7c10febc10e65351d48451a7670f51b6" name="a7c10febc10e65351d48451a7670f51b6"></a>
+<a class="el" href="#af21122b27b0d1a33cbd5ce3e3f8bfa49">Evaluator</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#af21122b27b0d1a33cbd5ce3e3f8bfa49">Evaluator</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a44a924bd8725d4ae722d9e494ac57656" id="r_a44a924bd8725d4ae722d9e494ac57656"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a44a924bd8725d4ae722d9e494ac57656">eval</a> (<a class="el" href="../../d0/df6/structmorph_1_1ui_1_1Expr.html">Expr</a> const &amp;expr)</td></tr>
 <tr class="memdesc:a44a924bd8725d4ae722d9e494ac57656"><td class="mdescLeft">&#160;</td><td class="mdescRight">Evaluates one node.  <br /></td></tr>
 <tr class="memitem:a8f291609fa8b321aa9f3973bcb78aff9" id="r_a8f291609fa8b321aa9f3973bcb78aff9"><td class="memItemLeft">std::optional&lt; std::strong_ordering &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8f291609fa8b321aa9f3973bcb78aff9">sortOrder</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;lhs, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;rhs)</td></tr>
@@ -137,12 +145,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:aefe4c20cbb0dcc1aaa9a64ee22e71343" id="r_aefe4c20cbb0dcc1aaa9a64ee22e71343"><td class="memItemLeft">std::optional&lt; std::vector&lt; std::size_t &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aefe4c20cbb0dcc1aaa9a64ee22e71343">sortRows</a> (std::vector&lt; std::vector&lt; <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> &gt; &gt; const &amp;keys, std::vector&lt; bool &gt; const &amp;descending)</td></tr>
 <tr class="memdesc:aefe4c20cbb0dcc1aaa9a64ee22e71343"><td class="mdescLeft">&#160;</td><td class="mdescRight">A stable order of rows by their sort keys: by each key in turn, <span class="tt">null</span> last in either direction, and a descending key reversing the comparison, not the rows, so rows with equal keys keep their order.  <br /></td></tr>
 <tr class="memitem:a6c2b0cfaeacaf7614a4d05aa7fb46444" id="r_a6c2b0cfaeacaf7614a4d05aa7fb46444"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a6c2b0cfaeacaf7614a4d05aa7fb46444">sameRun</a> (<a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;lhs, <a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a> const &amp;rhs)</td></tr>
-<tr class="memdesc:a6c2b0cfaeacaf7614a4d05aa7fb46444"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether two <span class="tt">by</span> values put their elements in one run: <span class="tt">eq</span>'s comparison, except that <span class="tt">null</span> equals <span class="tt">null</span>, so the elements without the value make one run.  <br /></td></tr>
+<tr class="memdesc:a6c2b0cfaeacaf7614a4d05aa7fb46444"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether two values belong to one run when adjacent rows are grouped.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Evaluates expressions against an environment, with the comprehension variables in scope. </p>
+<div class="textblock"><p>Evaluates expressions against an environment: the part of the evaluator that other code drives directly, such as grouping and ordering a table's rows. <span class="tt"><a class="el" href="../../d8/d0e/expression_8hpp.html#a44b6b7bce3881e4c19594de28faba604" title="Evaluates an expression.">evaluate</a></span> is the entry point for one expression. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01763">1763</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l00474">474</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="af21122b27b0d1a33cbd5ce3e3f8bfa49" name="af21122b27b0d1a33cbd5ce3e3f8bfa49"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af21122b27b0d1a33cbd5ce3e3f8bfa49">&#9670;&#160;</a></span>Evaluator()</h2>
@@ -162,7 +170,7 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel explicit">explicit</span></span>  </td>
+<span class="mlabels"><span class="mlabel explicit">explicit</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -170,12 +178,10 @@ Public Member Functions</h2></td></tr>
 <p>Evaluates against <code class="param">env</code>. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">env</td><td>What the expression reads. </td></tr>
+    <tr><td class="paramname">env</td><td>What the expression reads; it must outlive the evaluator. </td></tr>
   </table>
   </dd>
 </dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01767">1767</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -198,7 +204,7 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -211,8 +217,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its value; <span class="tt">null</span> on a runtime error, which is reported. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01772">1772</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -238,7 +242,7 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -252,8 +256,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The ordering; <span class="tt">nullopt</span> when the two are not of one comparable kind. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01837">1837</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -279,7 +281,7 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -293,8 +295,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rows' indices in sorted order; <span class="tt">nullopt</span> when a key's values are not of one comparable kind. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01853">1853</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
 
 </div>
 </div>
@@ -320,22 +320,20 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
-<p>Whether two <span class="tt">by</span> values put their elements in one run: <span class="tt">eq</span>'s comparison, except that <span class="tt">null</span> equals <span class="tt">null</span>, so the elements without the value make one run. </p>
+<p>Whether two values belong to one run when adjacent rows are grouped. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">lhs</td><td>A value. </td></tr>
-    <tr><td class="paramname">rhs</td><td>A value. </td></tr>
+    <tr><td class="paramname">rhs</td><td>The other. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>Whether they are the same run's. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d8/d0e/expression_8hpp_source.html#l01883">1883</a> of file <a class="el" href="../../d8/d0e/expression_8hpp_source.html">expression.hpp</a>.</p>
+<dl class="section return"><dt>Returns</dt><dd>Whether they are the same element. </dd></dl>
 
 </div>
 </div>

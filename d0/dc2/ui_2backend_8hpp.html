@@ -127,6 +127,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/dc2/ui_2bac
 <code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
@@ -238,8 +239,8 @@ Enumerations</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:a14b0ac907b260865f8f1be0b88c444ad" id="r_a14b0ac907b260865f8f1be0b88c444ad"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a14b0ac907b260865f8f1be0b88c444ad">morph::ui::widthClassOf</a> (double units)</td></tr>
-<tr class="memdesc:a14b0ac907b260865f8f1be0b88c444ad"><td class="mdescLeft">&#160;</td><td class="mdescRight">A width in the vocabulary's units (what <span class="tt">fixed(n)</span> counts) as a width class: <span class="tt">compact</span> below 80 units, <span class="tt">medium</span> below <span class="tt"><a class="el" href="#a8fac25a5ffe5feb09b970bba606e05ab" title="The width, in units, from which a surface is expanded: the compact bound, 80, plus the shell&#39;s sideba...">kExpandedWidthUnits</a></span> (108), <span class="tt">expanded</span> otherwise. Every backend classes its surface with it, so a document's breakpoints sit at the same number of its own units on every frontend.  <br /></td></tr>
+<tr class="memitem:a89aa196c5dae970e88e32ce861f11346" id="r_a89aa196c5dae970e88e32ce861f11346"><td class="memItemLeft">MORPH_API std::string&#160;</td><td class="memItemRight"><a class="el" href="#a89aa196c5dae970e88e32ce861f11346">morph::ui::widthClassOf</a> (double units)</td></tr>
+<tr class="memdesc:a89aa196c5dae970e88e32ce861f11346"><td class="mdescLeft">&#160;</td><td class="mdescRight">A width in the vocabulary's units (what <span class="tt">fixed(n)</span> counts) as a width class: <span class="tt">compact</span> below 80 units, <span class="tt">medium</span> below <span class="tt"><a class="el" href="#a8fac25a5ffe5feb09b970bba606e05ab" title="The width, in units, from which a surface is expanded: the compact bound, 80, plus the shell&#39;s sideba...">kExpandedWidthUnits</a></span> (108), <span class="tt">expanded</span> otherwise. Every backend classes its surface with it, so a document's breakpoints sit at the same number of its own units on every frontend.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
@@ -282,7 +283,7 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00384">384</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00385">385</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -316,13 +317,13 @@ Variables</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00716">716</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l00717">717</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
-<a id="a14b0ac907b260865f8f1be0b88c444ad" name="a14b0ac907b260865f8f1be0b88c444ad"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a14b0ac907b260865f8f1be0b88c444ad">&#9670;&#160;</a></span>widthClassOf()</h2>
+<a id="a89aa196c5dae970e88e32ce861f11346" name="a89aa196c5dae970e88e32ce861f11346"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a89aa196c5dae970e88e32ce861f11346">&#9670;&#160;</a></span>widthClassOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -331,7 +332,7 @@ Variables</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::ui::widthClassOf </td>
+          <td class="memname">MORPH_API std::string morph::ui::widthClassOf </td>
           <td>(</td>
           <td class="paramtype">double</td>          <td class="paramname"><span class="paramname"><em>units</em></span></td><td>)</td>
           <td></td>
@@ -339,7 +340,7 @@ Variables</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -352,8 +353,6 @@ Variables</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The class: <span class="tt">compact</span>, <span class="tt">medium</span> or <span class="tt">expanded</span>. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01488">1488</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -380,7 +379,7 @@ Variables</h2></td></tr>
 
 <p>The width, in units, from which a surface is <span class="tt">expanded</span>: the compact bound, 80, plus the shell's sidebar (28), the narrowest window whose page beside that sidebar is not itself compact. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01481">1481</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html#l01474">1474</a> of file <a class="el" href="../../d0/dc2/ui_2backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

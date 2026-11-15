@@ -132,6 +132,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d9/da5/explore
 <code>#include &lt;iterator&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;ranges&gt;</code><br />
 <code>#include &lt;set&gt;</code><br />
@@ -161,15 +162,6 @@ Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aui_3A_3AExplorer" id="r_morph_3A_3Aui_3A_3AExplorer"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d9/df4/classmorph_1_1ui_1_1Explorer.html">morph::ui::Explorer</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">The app explorer, as a host screen (spec 6 §15): a splitter with the list — a search, the catalog's screens, and every model the catalog names with every action of it — and the chosen action's sections: its facts, its fields, the places that use it, and "Try it", the widget the framework builds for it, mounted live.  <a href="../../d9/df4/classmorph_1_1ui_1_1Explorer.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
-<tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
-Typedefs</h2></td></tr>
-<tr class="memitem:a191f7a48bd7c8fcd053ee1cfe44d900e" id="r_a191f7a48bd7c8fcd053ee1cfe44d900e"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a191f7a48bd7c8fcd053ee1cfe44d900e">morph::ui::detail::explorer::ScopeChain</a> = std::vector&lt;<a class="el" href="../../d2/dd6/structmorph_1_1ui_1_1ScopeDecl.html">ScopeDecl</a> const*&gt;</td></tr>
-<tr class="memdesc:a191f7a48bd7c8fcd053ee1cfe44d900e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The scopes around a node, innermost last: the aliases in its reach.  <br /></td></tr>
-<tr class="memitem:aeea66fab5e4e1dd398f5b1ccce7be4de" id="r_aeea66fab5e4e1dd398f5b1ccce7be4de"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#aeea66fab5e4e1dd398f5b1ccce7be4de">morph::ui::ModelSchemas</a> = std::expected&lt;std::string, std::string&gt;</td></tr>
-<tr class="memdesc:aeea66fab5e4e1dd398f5b1ccce7be4de"><td class="mdescLeft">&#160;</td><td class="mdescRight">A model's <span class="tt">schemas</span> document: <span class="tt">{actionType: schema}</span>, or why the server would not describe the model.  <br /></td></tr>
-<tr class="memitem:a1a29de123e21fc804c77937bcb84f2d9" id="r_a1a29de123e21fc804c77937bcb84f2d9"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a1a29de123e21fc804c77937bcb84f2d9">morph::ui::SchemasByModel</a> = std::map&lt;std::string, <a class="el" href="#aeea66fab5e4e1dd398f5b1ccce7be4de">ModelSchemas</a>, std::less&lt;&gt;&gt;</td></tr>
-<tr class="memdesc:a1a29de123e21fc804c77937bcb84f2d9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The schemas documents of the models, by model type.  <br /></td></tr>
-</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
 Enumerations</h2></td></tr>
 <tr class="memitem:ad1540cdb6e081f60a89952a56cfd1f31" id="r_ad1540cdb6e081f60a89952a56cfd1f31"><td class="memItemLeft">enum class &#160;</td><td class="memItemRight"><a class="el" href="#ad1540cdb6e081f60a89952a56cfd1f31">morph::ui::ActionUseKind</a> : std::uint8_t { <br />
@@ -192,92 +184,25 @@ Enumerations</h2></td></tr>
 Functions</h2></td></tr>
 <tr class="memitem:ac603cc8423f597fc43f2f4e0f5ccf62e" id="r_ac603cc8423f597fc43f2f4e0f5ccf62e"><td class="memItemLeft">constexpr std::string_view&#160;</td><td class="memItemRight"><a class="el" href="#ac603cc8423f597fc43f2f4e0f5ccf62e">morph::ui::actionUseKindName</a> (<a class="el" href="#ad1540cdb6e081f60a89952a56cfd1f31">ActionUseKind</a> kind) noexcept</td></tr>
 <tr class="memdesc:ac603cc8423f597fc43f2f4e0f5ccf62e"><td class="mdescLeft">&#160;</td><td class="mdescRight">The name of an action use's kind.  <br /></td></tr>
-<tr class="memitem:a44e1134550b46829e39fd43933f435d6" id="r_a44e1134550b46829e39fd43933f435d6"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a44e1134550b46829e39fd43933f435d6">morph::ui::detail::explorer::typeOf</a> (<a class="el" href="#a191f7a48bd7c8fcd053ee1cfe44d900e">ScopeChain</a> const &amp;scopes, std::string_view alias)</td></tr>
-<tr class="memdesc:a44e1134550b46829e39fd43933f435d6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The model type an alias binds, from the innermost scope that declares it.  <br /></td></tr>
-<tr class="memitem:a4253de644b52aedb06bb5c6e02b1480b" id="r_a4253de644b52aedb06bb5c6e02b1480b"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a4253de644b52aedb06bb5c6e02b1480b">morph::ui::detail::explorer::addUse</a> (std::vector&lt; <a class="el" href="../../df/de4/structmorph_1_1ui_1_1ActionUse.html">ActionUse</a> &gt; &amp;uses, <a class="el" href="#a191f7a48bd7c8fcd053ee1cfe44d900e">ScopeChain</a> const &amp;scopes, <a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a> const &amp;catalog, std::string_view alias, std::string action, <a class="el" href="#ad1540cdb6e081f60a89952a56cfd1f31">ActionUseKind</a> kind, std::string pointer)</td></tr>
-<tr class="memdesc:a4253de644b52aedb06bb5c6e02b1480b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records one use, its model type the alias's, else the catalog's for the action.  <br /></td></tr>
-<tr class="memitem:a926514bcf776c48af33cdc6e286513b2" id="r_a926514bcf776c48af33cdc6e286513b2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a926514bcf776c48af33cdc6e286513b2">morph::ui::detail::explorer::scopeUses</a> (std::vector&lt; <a class="el" href="../../df/de4/structmorph_1_1ui_1_1ActionUse.html">ActionUse</a> &gt; &amp;uses, <a class="el" href="#a191f7a48bd7c8fcd053ee1cfe44d900e">ScopeChain</a> const &amp;scopes, <a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a> const &amp;catalog)</td></tr>
-<tr class="memdesc:a926514bcf776c48af33cdc6e286513b2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the queries and mutations of the innermost scope.  <br /></td></tr>
-<tr class="memitem:a78533f0f6de3a8ee139d2f5f230b811e" id="r_a78533f0f6de3a8ee139d2f5f230b811e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a78533f0f6de3a8ee139d2f5f230b811e">morph::ui::detail::explorer::nodeUses</a> (std::vector&lt; <a class="el" href="../../df/de4/structmorph_1_1ui_1_1ActionUse.html">ActionUse</a> &gt; &amp;uses, <a class="el" href="#a191f7a48bd7c8fcd053ee1cfe44d900e">ScopeChain</a> &amp;scopes, <a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a> const &amp;catalog, <a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const &amp;node)</td></tr>
-<tr class="memdesc:a78533f0f6de3a8ee139d2f5f230b811e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Records the uses of a node and everything under it, with the scope it creates.  <br /></td></tr>
-<tr class="memitem:a4c5bd9fa62509d2f5b1e54674a870d3d" id="r_a4c5bd9fa62509d2f5b1e54674a870d3d"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../df/de4/structmorph_1_1ui_1_1ActionUse.html">ActionUse</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4c5bd9fa62509d2f5b1e54674a870d3d">morph::ui::actionUses</a> (<a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &amp;document, <a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a> const &amp;catalog={})</td></tr>
-<tr class="memdesc:a4c5bd9fa62509d2f5b1e54674a870d3d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Every place a loaded document names an action: its queries and mutations at any scope, and its <span class="tt">form</span>, <span class="tt">collection</span> and <span class="tt">wizard</span> nodes, in document order.  <br /></td></tr>
-<tr class="memitem:a5f6fd4c26e84c166856b1a5a4a9417eb" id="r_a5f6fd4c26e84c166856b1a5a4a9417eb"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a5f6fd4c26e84c166856b1a5a4a9417eb">morph::ui::detail::explorer::joined</a> (std::vector&lt; std::string &gt; const &amp;parts, std::string_view separator)</td></tr>
-<tr class="memdesc:a5f6fd4c26e84c166856b1a5a4a9417eb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Texts joined by a separator.  <br /></td></tr>
-<tr class="memitem:acb0bb7f2d8c9440d1f7394da5d7ab19a" id="r_acb0bb7f2d8c9440d1f7394da5d7ab19a"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#acb0bb7f2d8c9440d1f7394da5d7ab19a">morph::ui::detail::explorer::typeText</a> (<a class="el" href="../../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html">forms::FieldSpec</a> const &amp;field)</td></tr>
-<tr class="memdesc:acb0bb7f2d8c9440d1f7394da5d7ab19a"><td class="mdescLeft">&#160;</td><td class="mdescRight">A field's type as the explorer lists it.  <br /></td></tr>
-<tr class="memitem:a41b5b4d495e9c3c6978cc8b378737ee7" id="r_a41b5b4d495e9c3c6978cc8b378737ee7"><td class="memItemLeft">std::expected&lt; std::vector&lt; <a class="el" href="../../d2/d20/structmorph_1_1ui_1_1ActionField.html">ActionField</a> &gt;, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a41b5b4d495e9c3c6978cc8b378737ee7">morph::ui::actionFields</a> (std::string_view schemaJson)</td></tr>
-<tr class="memdesc:a41b5b4d495e9c3c6978cc8b378737ee7"><td class="mdescLeft">&#160;</td><td class="mdescRight">The fields of an action, in <span class="tt">x-order</span>, as the forms engine reads its schema.  <br /></td></tr>
+<tr class="memitem:a4bcb05b31cecf4223791b280185cd809" id="r_a4bcb05b31cecf4223791b280185cd809"><td class="memItemLeft">MORPH_API std::vector&lt; <a class="el" href="../../df/de4/structmorph_1_1ui_1_1ActionUse.html">ActionUse</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4bcb05b31cecf4223791b280185cd809">morph::ui::actionUses</a> (<a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &amp;document, <a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a> const &amp;catalog={})</td></tr>
+<tr class="memdesc:a4bcb05b31cecf4223791b280185cd809"><td class="mdescLeft">&#160;</td><td class="mdescRight">Every place a loaded document names an action: its queries and mutations at any scope, and its <span class="tt">form</span>, <span class="tt">collection</span> and <span class="tt">wizard</span> nodes, in document order.  <br /></td></tr>
+<tr class="memitem:a0ef04d348c6386b5ac06cb45dc3cdbd2" id="r_a0ef04d348c6386b5ac06cb45dc3cdbd2"><td class="memItemLeft">MORPH_API std::expected&lt; std::vector&lt; <a class="el" href="../../d2/d20/structmorph_1_1ui_1_1ActionField.html">ActionField</a> &gt;, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0ef04d348c6386b5ac06cb45dc3cdbd2">morph::ui::actionFields</a> (std::string_view schemaJson)</td></tr>
+<tr class="memdesc:a0ef04d348c6386b5ac06cb45dc3cdbd2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The fields of an action, in <span class="tt">x-order</span>, as the forms engine reads its schema.  <br /></td></tr>
 <tr class="memitem:a3d89aad821adb34d13845cbd0c23ddc2" id="r_a3d89aad821adb34d13845cbd0c23ddc2"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a3d89aad821adb34d13845cbd0c23ddc2">morph::ui::tryItScreenId</a> (std::string_view actionId)</td></tr>
 <tr class="memdesc:a3d89aad821adb34d13845cbd0c23ddc2"><td class="mdescLeft">&#160;</td><td class="mdescRight">The screen id "Try it" mounts an action's document under.  <br /></td></tr>
-<tr class="memitem:aeb941be12f35506a7ea9530ba3d5f3af" id="r_aeb941be12f35506a7ea9530ba3d5f3af"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#aeb941be12f35506a7ea9530ba3d5f3af">morph::ui::tryItDocument</a> (std::string_view actionId, std::string_view modelType, <a class="el" href="#a6b393f9a7c4fab3681ed905652701c7d">TryItKind</a> kind)</td></tr>
-<tr class="memdesc:aeb941be12f35506a7ea9530ba3d5f3af"><td class="mdescLeft">&#160;</td><td class="mdescRight">The one-node document "Try it" mounts for an action.  <br /></td></tr>
-<tr class="memitem:a661cbaa10fb0a520c5e996a0f968f3b5" id="r_a661cbaa10fb0a520c5e996a0f968f3b5"><td class="memItemLeft">std::expected&lt; std::map&lt; std::string, std::string, std::less&lt;&gt; &gt;, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a661cbaa10fb0a520c5e996a0f968f3b5">morph::ui::schemasOf</a> (std::string_view document)</td></tr>
-<tr class="memdesc:a661cbaa10fb0a520c5e996a0f968f3b5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The actions a model's <span class="tt">schemas</span> document lists, with each one's schema.  <br /></td></tr>
-<tr class="memitem:a844592a56d9f6c8af64d9cf5e7d65628" id="r_a844592a56d9f6c8af64d9cf5e7d65628"><td class="memItemLeft"><a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a>&#160;</td><td class="memItemRight"><a class="el" href="#a844592a56d9f6c8af64d9cf5e7d65628">morph::ui::tryItCatalog</a> (<a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a> catalog, <a class="el" href="#a1a29de123e21fc804c77937bcb84f2d9">SchemasByModel</a> const &amp;schemas)</td></tr>
-<tr class="memdesc:a844592a56d9f6c8af64d9cf5e7d65628"><td class="mdescLeft">&#160;</td><td class="mdescRight">The catalog a "Try it" document loads with: <code class="param">catalog</code>, whose <span class="tt">action</span> lookup also answers an action only a model's <span class="tt">schemas</span> document lists (load-time validation refuses an action the catalog does not know, and the catalog knows only those a served document names), and whose <span class="tt">schema</span> lookup also answers from the documents.  <br /></td></tr>
+<tr class="memitem:a591287294c84843c47225d0ff2ae885c" id="r_a591287294c84843c47225d0ff2ae885c"><td class="memItemLeft">MORPH_API std::string&#160;</td><td class="memItemRight"><a class="el" href="#a591287294c84843c47225d0ff2ae885c">morph::ui::tryItDocument</a> (std::string_view actionId, std::string_view modelType, <a class="el" href="#a6b393f9a7c4fab3681ed905652701c7d">TryItKind</a> kind)</td></tr>
+<tr class="memdesc:a591287294c84843c47225d0ff2ae885c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The one-node document "Try it" mounts for an action.  <br /></td></tr>
+<tr class="memitem:aeb88f126f7e0af4e659da12467fc0c05" id="r_aeb88f126f7e0af4e659da12467fc0c05"><td class="memItemLeft">MORPH_API std::expected&lt; std::map&lt; std::string, std::string, std::less&lt;&gt; &gt;, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aeb88f126f7e0af4e659da12467fc0c05">morph::ui::schemasOf</a> (std::string_view document)</td></tr>
+<tr class="memdesc:aeb88f126f7e0af4e659da12467fc0c05"><td class="mdescLeft">&#160;</td><td class="mdescRight">The actions a model's <span class="tt">schemas</span> document lists, with each one's schema.  <br /></td></tr>
+<tr class="memitem:a89b3ce75c9a7244207cd0676ec1ced3a" id="r_a89b3ce75c9a7244207cd0676ec1ced3a"><td class="memItemLeft">MORPH_API <a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a>&#160;</td><td class="memItemRight"><a class="el" href="#a89b3ce75c9a7244207cd0676ec1ced3a">morph::ui::tryItCatalog</a> (<a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a> catalog, <a class="el" href="../../d0/dab/bundle_8hpp.html#a1a29de123e21fc804c77937bcb84f2d9">SchemasByModel</a> const &amp;schemas)</td></tr>
+<tr class="memdesc:a89b3ce75c9a7244207cd0676ec1ced3a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The catalog a "Try it" document loads with: <code class="param">catalog</code>, whose <span class="tt">action</span> lookup also answers an action only a model's <span class="tt">schemas</span> document lists (load-time validation refuses an action the catalog does not know, and the catalog knows only those a served document names), and whose <span class="tt">schema</span> lookup also answers from the documents.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The app explorer: what a morph application is made of — its screens, the models they use with every action, and for one action its facts, its fields, the places that use it and the widget the framework builds for it, mounted live. </p>
 <p>Specified in <span class="tt">docs/spec/ui/explorer.md</span>. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-</div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Typedef Documentation</h2>
-<a id="a191f7a48bd7c8fcd053ee1cfe44d900e" name="a191f7a48bd7c8fcd053ee1cfe44d900e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a191f7a48bd7c8fcd053ee1cfe44d900e">&#9670;&#160;</a></span>ScopeChain</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">using <a class="el" href="#a191f7a48bd7c8fcd053ee1cfe44d900e">morph::ui::detail::explorer::ScopeChain</a> = std::vector&lt;ScopeDecl const*&gt;</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>The scopes around a node, innermost last: the aliases in its reach. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
-</div>
-</div>
-<a id="aeea66fab5e4e1dd398f5b1ccce7be4de" name="aeea66fab5e4e1dd398f5b1ccce7be4de"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aeea66fab5e4e1dd398f5b1ccce7be4de">&#9670;&#160;</a></span>ModelSchemas</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">using <a class="el" href="#aeea66fab5e4e1dd398f5b1ccce7be4de">morph::ui::ModelSchemas</a> = std::expected&lt;std::string, std::string&gt;</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>A model's <span class="tt">schemas</span> document: <span class="tt">{actionType: schema}</span>, or why the server would not describe the model. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00324">324</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a1a29de123e21fc804c77937bcb84f2d9" name="a1a29de123e21fc804c77937bcb84f2d9"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1a29de123e21fc804c77937bcb84f2d9">&#9670;&#160;</a></span>SchemasByModel</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">using <a class="el" href="#a1a29de123e21fc804c77937bcb84f2d9">morph::ui::SchemasByModel</a> = std::map&lt;std::string, ModelSchemas, std::less&lt;&gt;&gt;</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>The schemas documents of the models, by model type. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00327">327</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
-</div>
-</div>
-<a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Enumeration Type Documentation</h2>
+</div><a name="doc-enum-members" id="doc-enum-members"></a><h2 id="header-doc-enum-members" class="groupheader">Enumeration Type Documentation</h2>
 <a id="ad1540cdb6e081f60a89952a56cfd1f31" name="ad1540cdb6e081f60a89952a56cfd1f31"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad1540cdb6e081f60a89952a56cfd1f31">&#9670;&#160;</a></span>ActionUseKind</h2>
 
@@ -312,7 +237,7 @@ Functions</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
 
 </div>
 </div>
@@ -346,7 +271,7 @@ Functions</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
 
 </div>
 </div>
@@ -383,12 +308,12 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">"query"</span>, <span class="tt">"mutation"</span>, <span class="tt">"form"</span>, <span class="tt">"collection"</span> or <span class="tt">"wizard"</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a44e1134550b46829e39fd43933f435d6" name="a44e1134550b46829e39fd43933f435d6"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a44e1134550b46829e39fd43933f435d6">&#9670;&#160;</a></span>typeOf()</h2>
+<a id="a4bcb05b31cecf4223791b280185cd809" name="a4bcb05b31cecf4223791b280185cd809"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4bcb05b31cecf4223791b280185cd809">&#9670;&#160;</a></span>actionUses()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -397,216 +322,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::ui::detail::explorer::typeOf </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="#a191f7a48bd7c8fcd053ee1cfe44d900e">ScopeChain</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>scopes</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>alias</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>The model type an alias binds, from the innermost scope that declares it. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">scopes</td><td>The scopes around the use. </td></tr>
-    <tr><td class="paramname">alias</td><td>The alias. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The type; empty when no scope declares the alias. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a4253de644b52aedb06bb5c6e02b1480b" name="a4253de644b52aedb06bb5c6e02b1480b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4253de644b52aedb06bb5c6e02b1480b">&#9670;&#160;</a></span>addUse()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::ui::detail::explorer::addUse </td>
-          <td>(</td>
-          <td class="paramtype">std::vector&lt; <a class="el" href="../../df/de4/structmorph_1_1ui_1_1ActionUse.html">ActionUse</a> &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>uses</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="#a191f7a48bd7c8fcd053ee1cfe44d900e">ScopeChain</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>scopes</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>catalog</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>alias</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>action</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="#ad1540cdb6e081f60a89952a56cfd1f31">ActionUseKind</a></td>          <td class="paramname"><span class="paramname"><em>kind</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>pointer</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Records one use, its model type the alias's, else the catalog's for the action. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">uses</td><td>Where it is recorded. </td></tr>
-    <tr><td class="paramname">scopes</td><td>The scopes around the use. </td></tr>
-    <tr><td class="paramname">catalog</td><td>The facts a borrowed alias's type is read from. </td></tr>
-    <tr><td class="paramname">alias</td><td>The alias the use goes through. </td></tr>
-    <tr><td class="paramname">action</td><td>The action id. </td></tr>
-    <tr><td class="paramname">kind</td><td>What names it. </td></tr>
-    <tr><td class="paramname">pointer</td><td>Its JSON Pointer. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a926514bcf776c48af33cdc6e286513b2" name="a926514bcf776c48af33cdc6e286513b2"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a926514bcf776c48af33cdc6e286513b2">&#9670;&#160;</a></span>scopeUses()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::ui::detail::explorer::scopeUses </td>
-          <td>(</td>
-          <td class="paramtype">std::vector&lt; <a class="el" href="../../df/de4/structmorph_1_1ui_1_1ActionUse.html">ActionUse</a> &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>uses</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="#a191f7a48bd7c8fcd053ee1cfe44d900e">ScopeChain</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>scopes</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>catalog</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Records the queries and mutations of the innermost scope. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">uses</td><td>Where they are recorded. </td></tr>
-    <tr><td class="paramname">scopes</td><td>The scopes, the one read last. </td></tr>
-    <tr><td class="paramname">catalog</td><td>The facts a borrowed alias's type is read from. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a78533f0f6de3a8ee139d2f5f230b811e" name="a78533f0f6de3a8ee139d2f5f230b811e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a78533f0f6de3a8ee139d2f5f230b811e">&#9670;&#160;</a></span>nodeUses()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::ui::detail::explorer::nodeUses </td>
-          <td>(</td>
-          <td class="paramtype">std::vector&lt; <a class="el" href="../../df/de4/structmorph_1_1ui_1_1ActionUse.html">ActionUse</a> &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>uses</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="#a191f7a48bd7c8fcd053ee1cfe44d900e">ScopeChain</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>scopes</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>catalog</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype"><a class="el" href="../../df/d0e/structmorph_1_1ui_1_1DocNode.html">DocNode</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>node</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Records the uses of a node and everything under it, with the scope it creates. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">uses</td><td>Where they are recorded. </td></tr>
-    <tr><td class="paramname">scopes</td><td>The scopes around the node; restored on return. </td></tr>
-    <tr><td class="paramname">catalog</td><td>The facts a borrowed alias's type is read from. </td></tr>
-    <tr><td class="paramname">node</td><td>The node. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00128">128</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a4c5bd9fa62509d2f5b1e54674a870d3d" name="a4c5bd9fa62509d2f5b1e54674a870d3d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4c5bd9fa62509d2f5b1e54674a870d3d">&#9670;&#160;</a></span>actionUses()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::vector&lt; ActionUse &gt; morph::ui::actionUses </td>
+          <td class="memname">MORPH_API std::vector&lt; ActionUse &gt; morph::ui::actionUses </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d4/d02/structmorph_1_1ui_1_1Document.html">Document</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>document</em></span>, </td>
         </tr>
@@ -618,7 +334,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -633,12 +349,10 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The uses. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00168">168</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a5f6fd4c26e84c166856b1a5a4a9417eb" name="a5f6fd4c26e84c166856b1a5a4a9417eb"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5f6fd4c26e84c166856b1a5a4a9417eb">&#9670;&#160;</a></span>joined()</h2>
+<a id="a0ef04d348c6386b5ac06cb45dc3cdbd2" name="a0ef04d348c6386b5ac06cb45dc3cdbd2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0ef04d348c6386b5ac06cb45dc3cdbd2">&#9670;&#160;</a></span>actionFields()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -647,84 +361,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::ui::detail::explorer::joined </td>
-          <td>(</td>
-          <td class="paramtype">std::vector&lt; std::string &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>parts</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>separator</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Texts joined by a separator. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">parts</td><td>The texts. </td></tr>
-    <tr><td class="paramname">separator</td><td>What goes between two. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The joined text. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00198">198</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
-</div>
-</div>
-<a id="acb0bb7f2d8c9440d1f7394da5d7ab19a" name="acb0bb7f2d8c9440d1f7394da5d7ab19a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#acb0bb7f2d8c9440d1f7394da5d7ab19a">&#9670;&#160;</a></span>typeText()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::string morph::ui::detail::explorer::typeText </td>
-          <td>(</td>
-          <td class="paramtype"><a class="el" href="../../d6/dd8/structmorph_1_1forms_1_1FieldSpec.html">forms::FieldSpec</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>field</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>A field's type as the explorer lists it. </p>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">field</td><td>The field, as the forms engine reads it. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="section return"><dt>Returns</dt><dd>The type. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a41b5b4d495e9c3c6978cc8b378737ee7" name="a41b5b4d495e9c3c6978cc8b378737ee7"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a41b5b4d495e9c3c6978cc8b378737ee7">&#9670;&#160;</a></span>actionFields()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::expected&lt; std::vector&lt; ActionField &gt;, std::string &gt; morph::ui::actionFields </td>
+          <td class="memname">MORPH_API std::expected&lt; std::vector&lt; ActionField &gt;, std::string &gt; morph::ui::actionFields </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>schemaJson</em></span></td><td>)</td>
           <td></td>
@@ -732,7 +369,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -745,8 +382,6 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The rows; none for a schema without properties. Or why the schema cannot be read. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00247">247</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
 
 </div>
 </div>
@@ -782,12 +417,12 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">explorer:try:&lt;action&gt;</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00291">291</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00109">109</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
 
 </div>
 </div>
-<a id="aeb941be12f35506a7ea9530ba3d5f3af" name="aeb941be12f35506a7ea9530ba3d5f3af"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aeb941be12f35506a7ea9530ba3d5f3af">&#9670;&#160;</a></span>tryItDocument()</h2>
+<a id="a591287294c84843c47225d0ff2ae885c" name="a591287294c84843c47225d0ff2ae885c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a591287294c84843c47225d0ff2ae885c">&#9670;&#160;</a></span>tryItDocument()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -796,7 +431,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::ui::tryItDocument </td>
+          <td class="memname">MORPH_API std::string morph::ui::tryItDocument </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>actionId</em></span>, </td>
         </tr>
@@ -813,7 +448,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -829,12 +464,10 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The document's JSON text, with the id <span class="tt">tryItScreenId(actionId)</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00306">306</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a661cbaa10fb0a520c5e996a0f968f3b5" name="a661cbaa10fb0a520c5e996a0f968f3b5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a661cbaa10fb0a520c5e996a0f968f3b5">&#9670;&#160;</a></span>schemasOf()</h2>
+<a id="aeb88f126f7e0af4e659da12467fc0c05" name="aeb88f126f7e0af4e659da12467fc0c05"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aeb88f126f7e0af4e659da12467fc0c05">&#9670;&#160;</a></span>schemasOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -843,7 +476,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::expected&lt; std::map&lt; std::string, std::string, std::less&lt;&gt; &gt;, std::string &gt; morph::ui::schemasOf </td>
+          <td class="memname">MORPH_API std::expected&lt; std::map&lt; std::string, std::string, std::less&lt;&gt; &gt;, std::string &gt; morph::ui::schemasOf </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>document</em></span></td><td>)</td>
           <td></td>
@@ -851,7 +484,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -865,12 +498,10 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The schemas by action id, or why the document cannot be read. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00332">332</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a844592a56d9f6c8af64d9cf5e7d65628" name="a844592a56d9f6c8af64d9cf5e7d65628"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a844592a56d9f6c8af64d9cf5e7d65628">&#9670;&#160;</a></span>tryItCatalog()</h2>
+<a id="a89b3ce75c9a7244207cd0676ec1ced3a" name="a89b3ce75c9a7244207cd0676ec1ced3a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a89b3ce75c9a7244207cd0676ec1ced3a">&#9670;&#160;</a></span>tryItCatalog()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -879,19 +510,19 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">Catalog morph::ui::tryItCatalog </td>
+          <td class="memname">MORPH_API Catalog morph::ui::tryItCatalog </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a></td>          <td class="paramname"><span class="paramname"><em>catalog</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype"><a class="el" href="#a1a29de123e21fc804c77937bcb84f2d9">SchemasByModel</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>schemas</em></span>&#160;)</td>
+          <td class="paramtype"><a class="el" href="../../d0/dab/bundle_8hpp.html#a1a29de123e21fc804c77937bcb84f2d9">SchemasByModel</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>schemas</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -905,8 +536,6 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The catalog. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d9/da5/explorer_8hpp_source.html#l00357">357</a> of file <a class="el" href="../../d9/da5/explorer_8hpp_source.html">explorer.hpp</a>.</p>
 
 </div>
 </div>

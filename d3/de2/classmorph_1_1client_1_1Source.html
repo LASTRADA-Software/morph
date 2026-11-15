@@ -170,7 +170,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a7cf36584cd533b47f9cdf1ca415b3179"><td class="mdescLeft">&#160;</td><td class="mdescRight">The message catalogues of the current bundle, loaded from its verified files.  <br /></td></tr>
 <tr class="memitem:add2a95e2a800a3c9ae2ee78dc6108497" id="r_add2a95e2a800a3c9ae2ee78dc6108497"><td class="memItemLeft"><a class="el" href="../../de/df1/structmorph_1_1ui_1_1CatalogReply.html">ui::CatalogReply</a> const *&#160;</td><td class="memItemRight"><a class="el" href="#add2a95e2a800a3c9ae2ee78dc6108497">catalogReply</a> () const noexcept</td></tr>
 <tr class="memdesc:add2a95e2a800a3c9ae2ee78dc6108497"><td class="mdescLeft">&#160;</td><td class="mdescRight">The catalog for the current principal: its entries, what the principal may run, and the facts.  <br /></td></tr>
-<tr class="memitem:aa22e5799d85b1e7bff781e9176a79e0a" id="r_aa22e5799d85b1e7bff781e9176a79e0a"><td class="memItemLeft"><a class="el" href="../../d9/da5/explorer_8hpp.html#a1a29de123e21fc804c77937bcb84f2d9">ui::SchemasByModel</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#aa22e5799d85b1e7bff781e9176a79e0a">schemasByModel</a> () const noexcept</td></tr>
+<tr class="memitem:aa22e5799d85b1e7bff781e9176a79e0a" id="r_aa22e5799d85b1e7bff781e9176a79e0a"><td class="memItemLeft"><a class="el" href="../../d0/dab/bundle_8hpp.html#a1a29de123e21fc804c77937bcb84f2d9">ui::SchemasByModel</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#aa22e5799d85b1e7bff781e9176a79e0a">schemasByModel</a> () const noexcept</td></tr>
 <tr class="memdesc:aa22e5799d85b1e7bff781e9176a79e0a"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">schemas</span> document of every model the catalog names, by model type, or why it did not arrive: what the explorer lists each model's actions from.  <br /></td></tr>
 <tr class="memitem:aea500124a6afd35d3116258b29b44e8c" id="r_aea500124a6afd35d3116258b29b44e8c"><td class="memItemLeft">std::string const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#aea500124a6afd35d3116258b29b44e8c">principal</a> () const noexcept</td></tr>
 <tr class="memdesc:aea500124a6afd35d3116258b29b44e8c"><td class="mdescLeft">&#160;</td><td class="mdescRight">The principal the source's session carries now.  <br /></td></tr>
@@ -225,7 +225,7 @@ Protected Member Functions</h2></td></tr>
 <div class="textblock"><p>An <span class="tt">AppSource</span> that also hands the shell what it mounts screens with, once it delivered a bundle. </p>
 <p>Opened, it holds a bridge over its backend, owned by the context's executor, and the verified bundle with its catalog. Everything it hands out is valid from a successful <span class="tt">ready</span> until <span class="tt"><a class="el" href="#aafe1e52304476a80028d428748b3344a" title="Drops a ready not yet delivered and releases the bridge, the transport and the bundle.">close</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="aeaad7b8aa88ec5a86900439317634ec1" name="aeaad7b8aa88ec5a86900439317634ec1"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aeaad7b8aa88ec5a86900439317634ec1">&#9670;&#160;</a></span>dispatcher()</h2>
@@ -579,7 +579,7 @@ Protected Member Functions</h2></td></tr>
 <p>The bundle the catalog currently lists. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; null before a bundle was delivered. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00130">130</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -637,7 +637,7 @@ Protected Member Functions</h2></td></tr>
 <p>The catalog for the current principal: its entries, what the principal may run, and the facts. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; null before a bundle was delivered. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00139">139</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -651,7 +651,7 @@ Protected Member Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../d9/da5/explorer_8hpp.html#a1a29de123e21fc804c77937bcb84f2d9">ui::SchemasByModel</a> const  &amp; morph::client::Source::schemasByModel </td>
+          <td class="memname"><a class="el" href="../../d0/dab/bundle_8hpp.html#a1a29de123e21fc804c77937bcb84f2d9">ui::SchemasByModel</a> const  &amp; morph::client::Source::schemasByModel </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td> const</td>
@@ -667,7 +667,7 @@ Protected Member Functions</h2></td></tr>
 <p>The <span class="tt">schemas</span> document of every model the catalog names, by model type, or why it did not arrive: what the explorer lists each model's actions from. </p>
 <dl class="section return"><dt>Returns</dt><dd>Them; empty before a bundle was delivered. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -697,7 +697,7 @@ Protected Member Functions</h2></td></tr>
 <p>The principal the source's session carries now. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; empty for none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00149">149</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -815,7 +815,7 @@ Protected Member Functions</h2></td></tr>
 <p>Whether the source's transport is connected now: false from the moment the transport drops until it connects again. An in-process source has no transport to lose and stays true. </p>
 <dl class="section return"><dt>Returns</dt><dd>The state. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00172">172</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00171">171</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -872,7 +872,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html#a269e1ddb653265e435e2d999c9e0683b">morph::client::LocalSource</a>, and <a class="el" href="../../d2/d13/classmorph_1_1client_1_1RemoteSource.html#a0a9a81c60c8d4e6f4d3afa276860a56d">morph::client::RemoteSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00181">181</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -955,7 +955,7 @@ Protected Member Functions</h2></td></tr>
 <p>The exchange the UI service is reached by, which a client's other services share. </p>
 <dl class="section return"><dt>Returns</dt><dd>It; empty before the source opened. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00195">195</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00194">194</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -985,7 +985,7 @@ Protected Member Functions</h2></td></tr>
 <p>The session every call carries now, which a sign-in replaces. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00198">198</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -1017,7 +1017,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html#a186bfa54800603e503af579499bd026f">morph::client::LocalSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -1085,7 +1085,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d2/d13/classmorph_1_1client_1_1RemoteSource.html#aaf58b97837f7d5217dda96ae7d16e7dc">morph::client::RemoteSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -1116,7 +1116,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../d1/d98/classmorph_1_1client_1_1LocalSource.html#aecef09617452f1b38080912d72268f25">morph::client::LocalSource</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00227">227</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00226">226</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>
@@ -1186,7 +1186,7 @@ Protected Member Functions</h2></td></tr>
 <p>The session every request carries, for a source to fill before <span class="tt"><a class="el" href="#a9d81d8a1c64187d1be0b70aafc11011c" title="Opens the source: the transport, the bridge and the bundle, verified.">open</a></span> sends anything. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00238">238</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d2e/source_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../d2/d2e/source_8hpp_source.html">source.hpp</a>.</p>
 
 </div>
 </div>

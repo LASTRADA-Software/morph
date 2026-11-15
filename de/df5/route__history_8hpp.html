@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/df5/route__
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
@@ -140,10 +141,10 @@ Classes</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:a136f99b460f18c0e0abc96070d036060" id="r_a136f99b460f18c0e0abc96070d036060"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a136f99b460f18c0e0abc96070d036060">morph::ui::fragmentOf</a> (std::string_view route)</td></tr>
-<tr class="memdesc:a136f99b460f18c0e0abc96070d036060"><td class="mdescLeft">&#160;</td><td class="mdescRight">The URL fragment that holds a route.  <br /></td></tr>
-<tr class="memitem:ae20a02b29600e0c26a86579371409c5d" id="r_ae20a02b29600e0c26a86579371409c5d"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ae20a02b29600e0c26a86579371409c5d">morph::ui::routeOfFragment</a> (std::string_view fragment)</td></tr>
-<tr class="memdesc:ae20a02b29600e0c26a86579371409c5d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The route a URL fragment holds.  <br /></td></tr>
+<tr class="memitem:a1515cd5b9099f37d3499371419cc084f" id="r_a1515cd5b9099f37d3499371419cc084f"><td class="memItemLeft">MORPH_API std::string&#160;</td><td class="memItemRight"><a class="el" href="#a1515cd5b9099f37d3499371419cc084f">morph::ui::fragmentOf</a> (std::string_view route)</td></tr>
+<tr class="memdesc:a1515cd5b9099f37d3499371419cc084f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The URL fragment that holds a route.  <br /></td></tr>
+<tr class="memitem:a120f034bbfe59de8760684bdc59370fa" id="r_a120f034bbfe59de8760684bdc59370fa"><td class="memItemLeft">MORPH_API std::string&#160;</td><td class="memItemRight"><a class="el" href="#a120f034bbfe59de8760684bdc59370fa">morph::ui::routeOfFragment</a> (std::string_view fragment)</td></tr>
+<tr class="memdesc:a120f034bbfe59de8760684bdc59370fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">The route a URL fragment holds.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Route history (spec 3 §10, spec 6 §20): the route of the screen a shell shows, kept in a history the user moves through with back and forward, such as a browser's. </p>
@@ -151,8 +152,8 @@ Functions</h2></td></tr>
 
 <p class="definition">Definition in file <a class="el" href="../../de/df5/route__history_8hpp_source.html">route_history.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
-<a id="a136f99b460f18c0e0abc96070d036060" name="a136f99b460f18c0e0abc96070d036060"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a136f99b460f18c0e0abc96070d036060">&#9670;&#160;</a></span>fragmentOf()</h2>
+<a id="a1515cd5b9099f37d3499371419cc084f" name="a1515cd5b9099f37d3499371419cc084f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1515cd5b9099f37d3499371419cc084f">&#9670;&#160;</a></span>fragmentOf()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -161,7 +162,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::ui::fragmentOf </td>
+          <td class="memname">MORPH_API std::string morph::ui::fragmentOf </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>route</em></span></td><td>)</td>
           <td></td>
@@ -169,7 +170,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -183,12 +184,10 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">#/</span> followed by the route. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/df5/route__history_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../de/df5/route__history_8hpp_source.html">route_history.hpp</a>.</p>
-
 </div>
 </div>
-<a id="ae20a02b29600e0c26a86579371409c5d" name="ae20a02b29600e0c26a86579371409c5d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ae20a02b29600e0c26a86579371409c5d">&#9670;&#160;</a></span>routeOfFragment()</h2>
+<a id="a120f034bbfe59de8760684bdc59370fa" name="a120f034bbfe59de8760684bdc59370fa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a120f034bbfe59de8760684bdc59370fa">&#9670;&#160;</a></span>routeOfFragment()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -197,7 +196,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::string morph::ui::routeOfFragment </td>
+          <td class="memname">MORPH_API std::string morph::ui::routeOfFragment </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>fragment</em></span></td><td>)</td>
           <td></td>
@@ -205,7 +204,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -218,8 +217,6 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The route after <span class="tt">#/</span>, or empty for a fragment of any other form. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../de/df5/route__history_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../de/df5/route__history_8hpp_source.html">route_history.hpp</a>.</p>
 
 </div>
 </div>

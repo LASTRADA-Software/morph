@@ -147,7 +147,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Collects an application's screens and files and builds the bundle the UI service serves. </p>
 <p>Built once, before the service answers anything; <span class="tt"><a class="el" href="#a104e81c219e2531a0284d5d107d9c923" title="Builds the bundle.">build</a></span> copies everything into an immutable <span class="tt"><a class="el" href="../../de/d9f/structmorph_1_1ui_1_1ServedBundle.html" title="An application&#39;s bundle, built and immutable: what UiService serves.">ServedBundle</a></span>. A screen authored with the C++ builders is added by its emitted text, so an authoring registry feeds this one through <span class="tt"><a class="el" href="#aeffd84aad6901012d278b55fff460242" title="Registers a screen: its catalog entry and its document.">addScreen</a></span> without either depending on the other. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00286">286</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ad9d853d15da0d8f07b0a334895a82571" name="ad9d853d15da0d8f07b0a334895a82571"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad9d853d15da0d8f07b0a334895a82571">&#9670;&#160;</a></span>UiRegistry()</h2>
@@ -185,7 +185,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -195,9 +195,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">std::expected&lt; void, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt; morph::ui::UiRegistry::addScreen </td>
@@ -210,11 +207,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>text</em></span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Registers a screen: its catalog entry and its document. </p>
@@ -227,8 +219,6 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00305">305</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
-
 </div>
 </div>
 <a id="aecc0977a771be85a0603bef75053c5f6" name="aecc0977a771be85a0603bef75053c5f6"></a>
@@ -236,9 +226,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">std::expected&lt; void, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt; morph::ui::UiRegistry::addEntry </td>
@@ -247,11 +234,6 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Lists an entry that has no document: a host screen (<span class="tt">host</span>), or one the application has not built (<span class="tt">available: false</span>). </p>
@@ -263,8 +245,6 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or the refusal. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00323">323</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
-
 </div>
 </div>
 <a id="a2128f6b54dd36ef1e0e80b7090359c22" name="a2128f6b54dd36ef1e0e80b7090359c22"></a>
@@ -272,9 +252,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">std::expected&lt; void, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt; morph::ui::UiRegistry::addFile </td>
@@ -283,23 +260,16 @@ Public Member Functions</h2></td></tr>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Adds a file that is not a screen: the app document (<span class="tt">app</span>, whose id is <span class="tt">app</span>), a theme (<span class="tt">theme</span>), a message catalogue (<span class="tt">messages</span>), a delivered component (<span class="tt">component</span>) or an icon (<span class="tt">icon</span>). </p>
-<p>Refused for another kind, an empty or over-long id, a kind and id already added, a file too large to serve, an app document that load-time validation refuses or whose id is not <span class="tt">app</span>, a message catalogue whose id is not <span class="tt">i18n/LOCALE.json</span>, that <span class="tt"><a class="el" href="../../d1/d1e/catalogue_8hpp.html#a935ff438e23593faa128224518dfad59" title="Parses a catalogue: a flat JSON object of message key to MessageFormat 2 pattern.">parseCatalogue</a></span> refuses, or that has a pattern outside the <span class="tt">ui/1</span> subset, and a theme file that is neither a theme index <span class="tt"><a class="el" href="../../d9/df6/ui_2theme_8hpp.html#ac675e3e977612d26632df96f9a69c2d3" title="Parses a theme index: {&quot;vocab&quot;: &quot;ui-theme/1&quot;, &quot;base&quot;: id, &quot;dark&quot;: id, …, &quot;density&quot;: {....">parseThemeIndex</a></span> takes nor a token file <span class="tt"><a class="el" href="../../d9/df6/ui_2theme_8hpp.html#a687d392bf2a97ad1d3a33f97bf55d31a" title="Parses a DTCG 2025.10 token file.">parseTokens</a></span> takes, and an icon that is not SVG text or is larger than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#a9a1d0eec1394d9636d5083eb38cc1556" title="The largest icon file a bundle may hold.">kMaxIconBytes</a></span>. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>Refused for another kind, an empty or over-long id, a kind and id already added, a file too large to serve, an app document that load-time validation refuses or whose id is not <span class="tt">app</span>, a message catalogue whose id is not <span class="tt">i18n/LOCALE.json</span>, that <span class="tt"><a class="el" href="../../d1/d1e/catalogue_8hpp.html#a935ff438e23593faa128224518dfad59" title="Parses a catalogue: a flat JSON object of message key to MessageFormat 2 pattern.">parseCatalogue</a></span> refuses, or that has a pattern outside the <span class="tt">ui/1</span> subset, and a theme file that is neither a theme index <span class="tt"><a class="el" href="../../d9/df6/ui_2theme_8hpp.html#aba646304f727a9c6ed249b3796f41b7a" title="Parses a theme index: {&quot;vocab&quot;: &quot;ui-theme/1&quot;, &quot;base&quot;: id, &quot;dark&quot;: id, …, &quot;density&quot;: {....">parseThemeIndex</a></span> takes nor a token file <span class="tt"><a class="el" href="../../d9/df6/ui_2theme_8hpp.html#ad8bc90744352f997e6d008a299ad3668" title="Parses a DTCG 2025.10 token file.">parseTokens</a></span> takes, and an icon that is not SVG text or is larger than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#a9a1d0eec1394d9636d5083eb38cc1556" title="The largest icon file a bundle may hold.">kMaxIconBytes</a></span>. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">file</td><td>The file. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or the refusal. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00344">344</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -308,9 +278,6 @@ Public Member Functions</h2></td></tr>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">std::expected&lt; void, <a class="el" href="../../de/d52/structmorph_1_1ui_1_1Refusal.html">Refusal</a> &gt; morph::ui::UiRegistry::setShellParts </td>
@@ -323,11 +290,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype"><a class="el" href="../../db/dff/structmorph_1_1ui_1_1Catalog.html">Catalog</a></td>          <td class="paramname"><span class="paramname"><em>reads</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>Declares the shell's parts (<span class="tt">docs/spec/ui/shell_parts.md</span>): a scope switcher, module counts, search, an inbox and the person's menu. They are written into the app document's <span class="tt">shell</span> member, so they travel in the file every client already reads; an application that added no app document gets an otherwise empty one, public. </p>
@@ -340,8 +302,6 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Nothing, or the refusal. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -376,7 +336,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00397">397</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00205">205</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>
@@ -398,15 +358,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Builds the bundle. </p>
 <p>Refused when a screen names a delivered component (<span class="tt">qml</span>) whose hash no <span class="tt">component</span> file has, when the bundle holds more than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#a26b6188a56f040e6d44027d4e379f33b" title="The most files a manifest, and entries a catalog, may list.">kMaxBundleFiles</a></span> files or entries, and when it needs more than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#a3602898655368bce825c85533dbfcfe0" title="The most items of a list or map in a ui-hello (vocabularies, host components, commands,...">kMaxListItems</a></span> vocabularies or a vocabulary name longer than <span class="tt"><a class="el" href="../../d0/dab/bundle_8hpp.html#afb8fd4d49b556176e90b375abafb4fec" title="The longest name: an id, a kind, a vocabulary, a host name, an application id or version.">kMaxNameBytes</a></span>. A theme file's token that nothing reads is logged at warn and does not refuse the build. </p><dl class="section return"><dt>Returns</dt><dd>The bundle, or the refusal. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d3/d31/service_8hpp_source.html#l00406">406</a> of file <a class="el" href="../../d3/d31/service_8hpp_source.html">service.hpp</a>.</p>
 
 </div>
 </div>

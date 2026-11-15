@@ -138,10 +138,12 @@ Public Member Functions</h2></td></tr>
 &#160;</td><td class="memItemRight"><b>QueryRuntime</b> (QueryRuntime &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a40612b80bfe8ab6bd6353a1bc4104cfe" id="r_a40612b80bfe8ab6bd6353a1bc4104cfe"><td class="memItemLeft"><a id="a40612b80bfe8ab6bd6353a1bc4104cfe" name="a40612b80bfe8ab6bd6353a1bc4104cfe"></a>
 <a class="el" href="#a6730b678581e1071579ff5d97257e021">QueryRuntime</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a6730b678581e1071579ff5d97257e021">QueryRuntime</a> &amp;&amp;)=delete</td></tr>
-<tr class="memitem:abcd463b12f6eabf7c1509d1080d6eb64" id="r_abcd463b12f6eabf7c1509d1080d6eb64"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#abcd463b12f6eabf7c1509d1080d6eb64">~QueryRuntime</a> ()</td></tr>
-<tr class="memdesc:abcd463b12f6eabf7c1509d1080d6eb64"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stops its timers and releases its entry.  <br /></td></tr>
-<tr class="memitem:af76caa2735d7321758f7c31676824d39" id="r_af76caa2735d7321758f7c31676824d39"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af76caa2735d7321758f7c31676824d39">start</a> ()</td></tr>
-<tr class="memdesc:af76caa2735d7321758f7c31676824d39"><td class="mdescLeft">&#160;</td><td class="mdescRight">Starts it: makes its key and the Effect that follows it, and its refresh timer.  <br /></td></tr>
+<tr class="memitem:abcd463b12f6eabf7c1509d1080d6eb64" id="r_abcd463b12f6eabf7c1509d1080d6eb64"><td class="memItemLeft"><a id="abcd463b12f6eabf7c1509d1080d6eb64" name="abcd463b12f6eabf7c1509d1080d6eb64"></a>
+&#160;</td><td class="memItemRight"><b>~QueryRuntime</b> ()</td></tr>
+<tr class="memdesc:abcd463b12f6eabf7c1509d1080d6eb64"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stops its timers and releases its entry. <br /></td></tr>
+<tr class="memitem:af76caa2735d7321758f7c31676824d39" id="r_af76caa2735d7321758f7c31676824d39"><td class="memItemLeft"><a id="af76caa2735d7321758f7c31676824d39" name="af76caa2735d7321758f7c31676824d39"></a>
+void&#160;</td><td class="memItemRight"><b>start</b> ()</td></tr>
+<tr class="memdesc:af76caa2735d7321758f7c31676824d39"><td class="mdescLeft">&#160;</td><td class="mdescRight">Starts it: makes its key and the Effect that follows it, and its refresh timer. <br /></td></tr>
 <tr class="memitem:a6e43dccf4cbb073c9f66df68aa1836a9" id="r_a6e43dccf4cbb073c9f66df68aa1836a9"><td class="memItemLeft"><a class="el" href="../../da/d54/classmorph_1_1ui_1_1Value.html">Value</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6e43dccf4cbb073c9f66df68aa1836a9">value</a> () const</td></tr>
 <tr class="memdesc:a6e43dccf4cbb073c9f66df68aa1836a9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The value: the entry's, kept from the previous key while the new one has none. A tracked read.  <br /></td></tr>
 <tr class="memitem:a5a36cdc179a0f4286fcbfbbeeb230a86" id="r_a5a36cdc179a0f4286fcbfbbeeb230a86"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a5a36cdc179a0f4286fcbfbbeeb230a86">pending</a> () const</td></tr>
@@ -154,14 +156,18 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a20e050f70b656b5f4c85d92bd6e205ed"><td class="mdescLeft">&#160;</td><td class="mdescRight">The failure's action refusal, <span class="tt">null</span> when none or when the failure was not a refusal. A tracked read.  <br /></td></tr>
 <tr class="memitem:a241f07f87d6fab24fd23944c98a8b5f7" id="r_a241f07f87d6fab24fd23944c98a8b5f7"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a241f07f87d6fab24fd23944c98a8b5f7">settled</a> () const</td></tr>
 <tr class="memdesc:a241f07f87d6fab24fd23944c98a8b5f7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether the query has a value or a failure for its current key, or is idle. A tracked read, for a boundary.  <br /></td></tr>
-<tr class="memitem:a9483f6ce2e8ac9164bed5bf4409d8b3d" id="r_a9483f6ce2e8ac9164bed5bf4409d8b3d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9483f6ce2e8ac9164bed5bf4409d8b3d">refetch</a> ()</td></tr>
-<tr class="memdesc:a9483f6ce2e8ac9164bed5bf4409d8b3d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Refetches the current key now, ending a debounce wait.  <br /></td></tr>
-<tr class="memitem:aa6207e8e5cdc3bbb3ae3c25293f449ca" id="r_aa6207e8e5cdc3bbb3ae3c25293f449ca"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa6207e8e5cdc3bbb3ae3c25293f449ca">refetchCurrent</a> ()</td></tr>
-<tr class="memdesc:aa6207e8e5cdc3bbb3ae3c25293f449ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fetches the key its body has now, inside the batch that changed the body: switches to that key's entry when it differs from the current one, and fetches the current one otherwise. A backend switch uses it, so a body <span class="tt">onBackendChange</span> changed is fetched once, with what the recovery set, and the old key is not fetched first.  <br /></td></tr>
-<tr class="memitem:a96c4a06c67ce46512d4f312f4a10ac7e" id="r_a96c4a06c67ce46512d4f312f4a10ac7e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a96c4a06c67ce46512d4f312f4a10ac7e">invalidate</a> ()</td></tr>
-<tr class="memdesc:a96c4a06c67ce46512d4f312f4a10ac7e"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../d3/d93/structmorph_1_1ui_1_1detail_1_1Marks.html" title="The entries one change marks stale, each once, in the order they were found.">Marks</a> its entry stale and refetches it.  <br /></td></tr>
-<tr class="memitem:a6d9018dd02099225eb2cc1c049f49411" id="r_a6d9018dd02099225eb2cc1c049f49411"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a6d9018dd02099225eb2cc1c049f49411">detach</a> ()</td></tr>
-<tr class="memdesc:a6d9018dd02099225eb2cc1c049f49411"><td class="mdescLeft">&#160;</td><td class="mdescRight">Forgets its entry without releasing it: the session dropped the cache.  <br /></td></tr>
+<tr class="memitem:a9483f6ce2e8ac9164bed5bf4409d8b3d" id="r_a9483f6ce2e8ac9164bed5bf4409d8b3d"><td class="memItemLeft"><a id="a9483f6ce2e8ac9164bed5bf4409d8b3d" name="a9483f6ce2e8ac9164bed5bf4409d8b3d"></a>
+void&#160;</td><td class="memItemRight"><b>refetch</b> ()</td></tr>
+<tr class="memdesc:a9483f6ce2e8ac9164bed5bf4409d8b3d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Refetches the current key now, ending a debounce wait. <br /></td></tr>
+<tr class="memitem:aa6207e8e5cdc3bbb3ae3c25293f449ca" id="r_aa6207e8e5cdc3bbb3ae3c25293f449ca"><td class="memItemLeft"><a id="aa6207e8e5cdc3bbb3ae3c25293f449ca" name="aa6207e8e5cdc3bbb3ae3c25293f449ca"></a>
+void&#160;</td><td class="memItemRight"><b>refetchCurrent</b> ()</td></tr>
+<tr class="memdesc:aa6207e8e5cdc3bbb3ae3c25293f449ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fetches the key its body has now, inside the batch that changed the body: switches to that key's entry when it differs from the current one, and fetches the current one otherwise. A backend switch uses it, so a body <span class="tt">onBackendChange</span> changed is fetched once, with what the recovery set, and the old key is not fetched first. <br /></td></tr>
+<tr class="memitem:a96c4a06c67ce46512d4f312f4a10ac7e" id="r_a96c4a06c67ce46512d4f312f4a10ac7e"><td class="memItemLeft"><a id="a96c4a06c67ce46512d4f312f4a10ac7e" name="a96c4a06c67ce46512d4f312f4a10ac7e"></a>
+void&#160;</td><td class="memItemRight"><b>invalidate</b> ()</td></tr>
+<tr class="memdesc:a96c4a06c67ce46512d4f312f4a10ac7e"><td class="mdescLeft">&#160;</td><td class="mdescRight"><a class="el" href="../../d3/d93/structmorph_1_1ui_1_1detail_1_1Marks.html" title="The entries one change marks stale, each once, in the order they were found.">Marks</a> its entry stale and refetches it. <br /></td></tr>
+<tr class="memitem:a6d9018dd02099225eb2cc1c049f49411" id="r_a6d9018dd02099225eb2cc1c049f49411"><td class="memItemLeft"><a id="a6d9018dd02099225eb2cc1c049f49411" name="a6d9018dd02099225eb2cc1c049f49411"></a>
+void&#160;</td><td class="memItemRight"><b>detach</b> ()</td></tr>
+<tr class="memdesc:a6d9018dd02099225eb2cc1c049f49411"><td class="mdescLeft">&#160;</td><td class="mdescRight">Forgets its entry without releasing it: the session dropped the cache. <br /></td></tr>
 <tr class="memitem:a961bbcb54a4237993ab69b932660e718" id="r_a961bbcb54a4237993ab69b932660e718"><td class="memItemLeft">std::shared_ptr&lt; <a class="el" href="../../dc/d53/structmorph_1_1ui_1_1detail_1_1CacheEntry.html">CacheEntry</a> &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a961bbcb54a4237993ab69b932660e718">entry</a> () const</td></tr>
 <tr class="memdesc:a961bbcb54a4237993ab69b932660e718"><td class="mdescLeft">&#160;</td><td class="mdescRight">The current entry. A tracked read.  <br /></td></tr>
 <tr class="memitem:ab3d7f37afac0ffe20cf23a72018044d5" id="r_ab3d7f37afac0ffe20cf23a72018044d5"><td class="memItemLeft"><a class="el" href="../../da/db7/structmorph_1_1ui_1_1QueryDecl.html">QueryDecl</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ab3d7f37afac0ffe20cf23a72018044d5">decl</a> () const noexcept</td></tr>
@@ -174,16 +180,13 @@ Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A query at run time (spec 5 §5): a key over the scope, an entry of the session's cache, latest wins. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02144">2144</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01434">1434</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a6730b678581e1071579ff5d97257e021" name="a6730b678581e1071579ff5d97257e021"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6730b678581e1071579ff5d97257e021">&#9670;&#160;</a></span>QueryRuntime()</h2>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
           <td class="memname">morph::ui::detail::QueryRuntime::QueryRuntime </td>
@@ -201,11 +204,6 @@ Public Member Functions</h2></td></tr>
           <td class="paramtype"><a class="el" href="../../d7/d28/structmorph_1_1ui_1_1detail_1_1ModelAlias.html">ModelAlias</a> *</td>          <td class="paramname"><span class="paramname"><em>alias</em></span>&#160;)</td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>A query of <code class="param">scope</code>, not yet started. </p>
@@ -218,69 +216,9 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04497">4497</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
-
-</div>
-</div>
-<a id="abcd463b12f6eabf7c1509d1080d6eb64" name="abcd463b12f6eabf7c1509d1080d6eb64"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#abcd463b12f6eabf7c1509d1080d6eb64">&#9670;&#160;</a></span>~QueryRuntime()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">morph::ui::detail::QueryRuntime::~QueryRuntime </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Stops its timers and releases its entry. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04508">4508</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
-
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
-<a id="af76caa2735d7321758f7c31676824d39" name="af76caa2735d7321758f7c31676824d39"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af76caa2735d7321758f7c31676824d39">&#9670;&#160;</a></span>start()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::ui::detail::QueryRuntime::start </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Starts it: makes its key and the Effect that follows it, and its refresh timer. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04520">4520</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
-
-</div>
-</div>
 <a id="a6e43dccf4cbb073c9f66df68aa1836a9" name="a6e43dccf4cbb073c9f66df68aa1836a9"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6e43dccf4cbb073c9f66df68aa1836a9">&#9670;&#160;</a></span>value()</h2>
 
@@ -299,15 +237,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The value: the entry's, kept from the previous key while the new one has none. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04649">4649</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -329,15 +265,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Whether a request is in flight or waiting out its debounce. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04662">4662</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -359,15 +293,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The failure's text, <span class="tt">null</span> when none. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04670">4670</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -389,15 +321,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The failure's kind, <span class="tt">null</span> when none. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04678">4678</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -419,15 +349,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The failure's action refusal, <span class="tt">null</span> when none or when the failure was not a refusal. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04686">4686</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -449,131 +377,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Whether the query has a value or a failure for its current key, or is idle. A tracked read, for a boundary. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04691">4691</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a9483f6ce2e8ac9164bed5bf4409d8b3d" name="a9483f6ce2e8ac9164bed5bf4409d8b3d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a9483f6ce2e8ac9164bed5bf4409d8b3d">&#9670;&#160;</a></span>refetch()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::ui::detail::QueryRuntime::refetch </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Refetches the current key now, ending a debounce wait. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04614">4614</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
-
-</div>
-</div>
-<a id="aa6207e8e5cdc3bbb3ae3c25293f449ca" name="aa6207e8e5cdc3bbb3ae3c25293f449ca"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa6207e8e5cdc3bbb3ae3c25293f449ca">&#9670;&#160;</a></span>refetchCurrent()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::ui::detail::QueryRuntime::refetchCurrent </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Fetches the key its body has now, inside the batch that changed the body: switches to that key's entry when it differs from the current one, and fetches the current one otherwise. A backend switch uses it, so a body <span class="tt">onBackendChange</span> changed is fetched once, with what the recovery set, and the old key is not fetched first. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04630">4630</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a96c4a06c67ce46512d4f312f4a10ac7e" name="a96c4a06c67ce46512d4f312f4a10ac7e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a96c4a06c67ce46512d4f312f4a10ac7e">&#9670;&#160;</a></span>invalidate()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::ui::detail::QueryRuntime::invalidate </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p><a class="el" href="../../d3/d93/structmorph_1_1ui_1_1detail_1_1Marks.html" title="The entries one change marks stale, each once, in the order they were found.">Marks</a> its entry stale and refetches it. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02198">2198</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a6d9018dd02099225eb2cc1c049f49411" name="a6d9018dd02099225eb2cc1c049f49411"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6d9018dd02099225eb2cc1c049f49411">&#9670;&#160;</a></span>detach()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void morph::ui::detail::QueryRuntime::detach </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Forgets its entry without releasing it: the session dropped the cache. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02206">2206</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -603,7 +413,7 @@ Public Member Functions</h2></td></tr>
 <p>The current entry. A tracked read. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">nullptr</span> while idle. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02214">2214</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01495">1495</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -633,7 +443,7 @@ Public Member Functions</h2></td></tr>
 <p>The declaration. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02218">2218</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01499">1499</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -663,7 +473,7 @@ Public Member Functions</h2></td></tr>
 <p>The model type. </p>
 <dl class="section return"><dt>Returns</dt><dd>It. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l02222">2222</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l01503">1503</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>
@@ -685,15 +495,13 @@ Public Member Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>The channel its alias is bound to now. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or <span class="tt">nullptr</span> while the alias is unbound. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../db/d42/interpreter_8hpp_source.html#l04517">4517</a> of file <a class="el" href="../../db/d42/interpreter_8hpp_source.html">interpreter.hpp</a>.</p>
 
 </div>
 </div>

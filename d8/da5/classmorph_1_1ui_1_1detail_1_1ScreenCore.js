@@ -2,6 +2,7 @@ var classmorph_1_1ui_1_1detail_1_1ScreenCore =
 [
     [ "KeptState", "d4/d6b/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1KeptState.html", "d4/d6b/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1KeptState" ],
     [ "LoweredNode", "dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode.html", "dd/d69/structmorph_1_1ui_1_1detail_1_1ScreenCore_1_1LoweredNode" ],
+    [ "FormSubmitter", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#adca8122c70e654294546d27f29e36b10", null ],
     [ "ScreenCore", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ad210f952c0974f91c563de5224ad8ffa", null ],
     [ "~ScreenCore", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#af885c2ccb1e563db0c786de88bc0ec50", null ],
     [ "runLifecycleOf", "d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#afa9e8d5bc626f0a212411a2735cceffe", null ],

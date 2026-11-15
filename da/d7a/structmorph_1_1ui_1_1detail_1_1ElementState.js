@@ -1,6 +1,7 @@
 var structmorph_1_1ui_1_1detail_1_1ElementState =
 [
     [ "ElementState", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a2863b8eda54d714a0bba9197c3c86071", null ],
+    [ "~ElementState", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a1ad3f062f9dc86030b5c08011e94bb4f", null ],
     [ "node", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a589efe67975370d9e38f564a20b53324", null ],
     [ "scope", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#aad6bb9589f1391ef520d88245cb5405d", null ],
     [ "draft", "da/d7a/structmorph_1_1ui_1_1detail_1_1ElementState.html#a0495623e28b252d69995ce0db3f69f41", null ],

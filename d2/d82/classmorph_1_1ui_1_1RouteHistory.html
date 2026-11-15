@@ -147,7 +147,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Keeps the route of the screen a shell shows in a history, and opens the route of an entry the user moves to (spec 3 §10). </p>
 <p>The shell opens <span class="tt"><a class="el" href="#ace4b022cd7fd602ca33bf707b2d3cd3e" title="The route the history held when this was made: a reloaded page&#39;s, or a shared link&#39;s.">initial()</a></span> first, when it can, and calls <span class="tt"><a class="el" href="#ab364dc5e4860bc799302c8181a71f379" title="The shell now shows a screen whose route is route.">shown</a></span> after it mounts each screen. The first <span class="tt"><a class="el" href="#ab364dc5e4860bc799302c8181a71f379" title="The shell now shows a screen whose route is route.">shown</a></span> replaces the entry the history started on, so opening the first screen does not add a step back to an empty page; each later call adds an entry, unless the route is already the current entry's. Moving back or forward calls <span class="tt">open</span>, which shows the route's screen, or the start screen when the route cannot be opened, before it returns. The first screen it shows replaces the entry instead of adding one, so a refused route is not left in the history; a screen shown after that, such as a redirect, adds an entry as it would anywhere else. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/df5/route__history_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../de/df5/route__history_8hpp_source.html">route_history.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df5/route__history_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../de/df5/route__history_8hpp_source.html">route_history.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ad2a263d6d890af01d013fa5e1a6561d1" name="ad2a263d6d890af01d013fa5e1a6561d1"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad2a263d6d890af01d013fa5e1a6561d1">&#9670;&#160;</a></span>RouteHistory()</h2>
@@ -185,7 +185,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/df5/route__history_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../de/df5/route__history_8hpp_source.html">route_history.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df5/route__history_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../de/df5/route__history_8hpp_source.html">route_history.hpp</a>.</p>
 
 </div>
 </div>
@@ -216,7 +216,7 @@ Public Member Functions</h2></td></tr>
 <p>The route the history held when this was made: a reloaded page's, or a shared link's. </p>
 <dl class="section return"><dt>Returns</dt><dd>It, or empty for none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/df5/route__history_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../de/df5/route__history_8hpp_source.html">route_history.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df5/route__history_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../de/df5/route__history_8hpp_source.html">route_history.hpp</a>.</p>
 
 </div>
 </div>
@@ -251,7 +251,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/df5/route__history_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../de/df5/route__history_8hpp_source.html">route_history.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/df5/route__history_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../de/df5/route__history_8hpp_source.html">route_history.hpp</a>.</p>
 
 </div>
 </div>

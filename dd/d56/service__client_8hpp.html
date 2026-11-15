@@ -130,6 +130,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/d56/service
 <code>#include &lt;functional&gt;</code><br />
 <code>#include &lt;map&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;mutex&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;stdexcept&gt;</code><br />
@@ -177,14 +178,14 @@ Typedefs</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:a21da2dab2785509c0d05243580445c67" id="r_a21da2dab2785509c0d05243580445c67"><td class="memItemLeft"><a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a>&#160;</td><td class="memItemRight"><a class="el" href="#a21da2dab2785509c0d05243580445c67">morph::ui::exchangeOver</a> (<a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">::morph::backend::IEnvelopeTransport</a> &amp;backend, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;cbExec)</td></tr>
-<tr class="memdesc:a21da2dab2785509c0d05243580445c67"><td class="mdescLeft">&#160;</td><td class="mdescRight">An <span class="tt"><a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2" title="Sends one request and calls its callback once with the reply. The transport assigns the request&#39;s cal...">Exchange</a></span> over a transport: each request is one <span class="tt">IEnvelopeTransport::request</span>, and its reply, <span class="tt">ok</span> or <span class="tt">err</span>, is the exchange's reply; a failure to deliver either is the error, as its message.  <br /></td></tr>
-<tr class="memitem:a633b0dc9cf83174fafc064b82d0a93ae" id="r_a633b0dc9cf83174fafc064b82d0a93ae"><td class="memItemLeft">std::expected&lt; std::string, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a633b0dc9cf83174fafc064b82d0a93ae">morph::ui::evaluationValue</a> (<a class="el" href="#aa7bd52d471710378eef6816161e39f05">ExchangeReply</a> reply)</td></tr>
-<tr class="memdesc:a633b0dc9cf83174fafc064b82d0a93ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">The value an <span class="tt"><a class="el" href="../../d8/d0e/expression_8hpp.html#a5a3fbb8f3f65cb7c1fe710274f13c612" title="Evaluates an expression.">evaluate</a></span> query takes from a <span class="tt">ui-evaluate</span> reply: the evaluated body's members, with the field errors under <span class="tt">errors</span> and the verdict under <span class="tt">ready</span>, where <span class="tt">errors.&lt;field&gt;</span> attaches each to its element.  <br /></td></tr>
-<tr class="memitem:a58c25963d99bf45c425dc9a0767058f5" id="r_a58c25963d99bf45c425dc9a0767058f5"><td class="memItemLeft">std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const &amp;, std::string const &amp;, std::string const &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a58c25963d99bf45c425dc9a0767058f5">morph::ui::evaluatorOver</a> (<a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a> exchange, <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec)</td></tr>
-<tr class="memdesc:a58c25963d99bf45c425dc9a0767058f5"><td class="mdescLeft">&#160;</td><td class="mdescRight">An evaluator over the UI service: each evaluation is one <span class="tt">ui-evaluate</span> request through <code class="param">exchange</code>, and resolves with <span class="tt"><a class="el" href="#a633b0dc9cf83174fafc064b82d0a93ae" title="The value an evaluate query takes from a ui-evaluate reply: the evaluated body&#39;s members,...">evaluationValue</a></span> of its reply. What <span class="tt"><a class="el" href="../../db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html" title="A Dispatcher over the bridge&#39;s model-free seams: bindByType, executeRaw and the string-keyed attach,...">BridgeDispatcher</a></span> takes as its <span class="tt"><a class="el" href="../../db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666" title="Evaluates an action body without running it: the model&#39;s type id, the action id and the JSON body in,...">Evaluator</a></span>.  <br /></td></tr>
-<tr class="memitem:a1690457eb94f2afd6e00fa94c316aad4" id="r_a1690457eb94f2afd6e00fa94c316aad4"><td class="memItemLeft">std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const &amp;, std::string const &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a1690457eb94f2afd6e00fa94c316aad4">morph::ui::watcherOver</a> (<a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a> exchange, std::function&lt;<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a>()&gt; currentSession, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec)</td></tr>
-<tr class="memdesc:a1690457eb94f2afd6e00fa94c316aad4"><td class="mdescLeft">&#160;</td><td class="mdescRight">A watcher over the server (spec 8 §7): each <span class="tt">watch</span> or <span class="tt">unwatch</span> is one request of that kind through <code class="param">exchange</code>, carrying the session <code class="param">currentSession</code> returns when it is sent. What <span class="tt"><a class="el" href="../../d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#acbb2aac89841c0aad006e65ffb6d3510" title="Sends the cache&#39;s watch changes to the server. Empty: the session still counts what its cache holds,...">SessionOptions::watcher</a></span> takes.  <br /></td></tr>
+<tr class="memitem:a908cb58903fb9fcc97a22a96c0a2a384" id="r_a908cb58903fb9fcc97a22a96c0a2a384"><td class="memItemLeft">MORPH_API <a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a>&#160;</td><td class="memItemRight"><a class="el" href="#a908cb58903fb9fcc97a22a96c0a2a384">morph::ui::exchangeOver</a> (<a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">::morph::backend::IEnvelopeTransport</a> &amp;backend, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;cbExec)</td></tr>
+<tr class="memdesc:a908cb58903fb9fcc97a22a96c0a2a384"><td class="mdescLeft">&#160;</td><td class="mdescRight">An <span class="tt"><a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2" title="Sends one request and calls its callback once with the reply. The transport assigns the request&#39;s cal...">Exchange</a></span> over a transport: each request is one <span class="tt">IEnvelopeTransport::request</span>, and its reply, <span class="tt">ok</span> or <span class="tt">err</span>, is the exchange's reply; a failure to deliver either is the error, as its message.  <br /></td></tr>
+<tr class="memitem:a4b1f32e04122b75e73d3ff60a88f26bd" id="r_a4b1f32e04122b75e73d3ff60a88f26bd"><td class="memItemLeft">MORPH_API std::expected&lt; std::string, std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4b1f32e04122b75e73d3ff60a88f26bd">morph::ui::evaluationValue</a> (<a class="el" href="#aa7bd52d471710378eef6816161e39f05">ExchangeReply</a> reply)</td></tr>
+<tr class="memdesc:a4b1f32e04122b75e73d3ff60a88f26bd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The value an <span class="tt"><a class="el" href="../../d8/d0e/expression_8hpp.html#a44b6b7bce3881e4c19594de28faba604" title="Evaluates an expression.">evaluate</a></span> query takes from a <span class="tt">ui-evaluate</span> reply: the evaluated body's members, with the field errors under <span class="tt">errors</span> and the verdict under <span class="tt">ready</span>, where <span class="tt">errors.&lt;field&gt;</span> attaches each to its element.  <br /></td></tr>
+<tr class="memitem:aaef073f998e6c0c1525329ae8214e41b" id="r_aaef073f998e6c0c1525329ae8214e41b"><td class="memItemLeft">MORPH_API std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const &amp;, std::string const &amp;, std::string const &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#aaef073f998e6c0c1525329ae8214e41b">morph::ui::evaluatorOver</a> (<a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a> exchange, <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec)</td></tr>
+<tr class="memdesc:aaef073f998e6c0c1525329ae8214e41b"><td class="mdescLeft">&#160;</td><td class="mdescRight">An evaluator over the UI service: each evaluation is one <span class="tt">ui-evaluate</span> request through <code class="param">exchange</code>, and resolves with <span class="tt"><a class="el" href="#a4b1f32e04122b75e73d3ff60a88f26bd" title="The value an evaluate query takes from a ui-evaluate reply: the evaluated body&#39;s members,...">evaluationValue</a></span> of its reply. What <span class="tt"><a class="el" href="../../db/d70/classmorph_1_1ui_1_1BridgeDispatcher.html" title="A Dispatcher over the bridge&#39;s model-free seams: bindByType, executeRaw and the string-keyed attach,...">BridgeDispatcher</a></span> takes as its <span class="tt"><a class="el" href="../../db/d42/interpreter_8hpp.html#ad2bb1c25ff29729e8df7001d21c5e666" title="Evaluates an action body without running it: the model&#39;s type id, the action id and the JSON body in,...">Evaluator</a></span>.  <br /></td></tr>
+<tr class="memitem:a4d3b7f4a8c3c2b3542f543860d56f98f" id="r_a4d3b7f4a8c3c2b3542f543860d56f98f"><td class="memItemLeft">MORPH_API std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const &amp;, std::string const &amp;)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4d3b7f4a8c3c2b3542f543860d56f98f">morph::ui::watcherOver</a> (<a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a> exchange, std::function&lt;<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a>()&gt; currentSession, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec)</td></tr>
+<tr class="memdesc:a4d3b7f4a8c3c2b3542f543860d56f98f"><td class="mdescLeft">&#160;</td><td class="mdescRight">A watcher over the server (spec 8 §7): each <span class="tt">watch</span> or <span class="tt">unwatch</span> is one request of that kind through <code class="param">exchange</code>, carrying the session <code class="param">currentSession</code> returns when it is sent. What <span class="tt"><a class="el" href="../../d4/d0c/structmorph_1_1ui_1_1SessionOptions.html#acbb2aac89841c0aad006e65ffb6d3510" title="Sends the cache&#39;s watch changes to the server. Empty: the session still counts what its cache holds,...">SessionOptions::watcher</a></span> takes.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The client side of the UI service (spec 5 §12, "Content addressing"): <span class="tt">UiClient</span> runs <span class="tt">ui-hello</span>, <span class="tt">ui-catalog</span> and <span class="tt">ui-fetch</span> over a transport the caller supplies, verifies every file against the manifest and the manifest against the <span class="tt">ui-hello</span> digest, and keeps what it verified in a <span class="tt">VerifiedCache</span>. </p>
@@ -206,7 +207,7 @@ Functions</h2></td></tr>
 
 <p>One reply, or why the transport could not deliver it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00208">208</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00165">165</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
@@ -224,13 +225,13 @@ Functions</h2></td></tr>
 
 <p>Sends one request and calls its callback once with the reply. The transport assigns the request's <span class="tt">callId</span> and matches the reply to it; a failure to deliver either is the error. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00212">212</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
-<a id="a21da2dab2785509c0d05243580445c67" name="a21da2dab2785509c0d05243580445c67"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a21da2dab2785509c0d05243580445c67">&#9670;&#160;</a></span>exchangeOver()</h2>
+<a id="a908cb58903fb9fcc97a22a96c0a2a384" name="a908cb58903fb9fcc97a22a96c0a2a384"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a908cb58903fb9fcc97a22a96c0a2a384">&#9670;&#160;</a></span>exchangeOver()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -239,7 +240,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">Exchange morph::ui::exchangeOver </td>
+          <td class="memname">MORPH_API Exchange morph::ui::exchangeOver </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d8/df0/classmorph_1_1backend_1_1IEnvelopeTransport.html">::morph::backend::IEnvelopeTransport</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>backend</em></span>, </td>
         </tr>
@@ -251,7 +252,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -266,12 +267,10 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exchange. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a633b0dc9cf83174fafc064b82d0a93ae" name="a633b0dc9cf83174fafc064b82d0a93ae"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a633b0dc9cf83174fafc064b82d0a93ae">&#9670;&#160;</a></span>evaluationValue()</h2>
+<a id="a4b1f32e04122b75e73d3ff60a88f26bd" name="a4b1f32e04122b75e73d3ff60a88f26bd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4b1f32e04122b75e73d3ff60a88f26bd">&#9670;&#160;</a></span>evaluationValue()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -280,7 +279,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::expected&lt; std::string, std::string &gt; morph::ui::evaluationValue </td>
+          <td class="memname">MORPH_API std::expected&lt; std::string, std::string &gt; morph::ui::evaluationValue </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="#aa7bd52d471710378eef6816161e39f05">ExchangeReply</a></td>          <td class="paramname"><span class="paramname"><em>reply</em></span></td><td>)</td>
           <td></td>
@@ -288,7 +287,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -302,12 +301,10 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The value as JSON text, or why there is none: the transport's reason, the server's <span class="tt">err</span> message, or why the reply body was refused. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00649">649</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a58c25963d99bf45c425dc9a0767058f5" name="a58c25963d99bf45c425dc9a0767058f5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a58c25963d99bf45c425dc9a0767058f5">&#9670;&#160;</a></span>evaluatorOver()</h2>
+<a id="aaef073f998e6c0c1525329ae8214e41b" name="aaef073f998e6c0c1525329ae8214e41b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaef073f998e6c0c1525329ae8214e41b">&#9670;&#160;</a></span>evaluatorOver()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -316,7 +313,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const  &amp;, std::string const  &amp;, std::string const  &amp;)&gt; morph::ui::evaluatorOver </td>
+          <td class="memname">MORPH_API std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const  &amp;, std::string const  &amp;, std::string const  &amp;)&gt; morph::ui::evaluatorOver </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a></td>          <td class="paramname"><span class="paramname"><em>exchange</em></span>, </td>
         </tr>
@@ -333,7 +330,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -349,12 +346,10 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The evaluator: the model's type id, the action id and its JSON body in, the query's value out. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00682">682</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
-
 </div>
 </div>
-<a id="a1690457eb94f2afd6e00fa94c316aad4" name="a1690457eb94f2afd6e00fa94c316aad4"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1690457eb94f2afd6e00fa94c316aad4">&#9670;&#160;</a></span>watcherOver()</h2>
+<a id="a4d3b7f4a8c3c2b3542f543860d56f98f" name="a4d3b7f4a8c3c2b3542f543860d56f98f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4d3b7f4a8c3c2b3542f543860d56f98f">&#9670;&#160;</a></span>watcherOver()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -363,7 +358,7 @@ Functions</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const  &amp;, std::string const  &amp;)&gt; morph::ui::watcherOver </td>
+          <td class="memname">MORPH_API std::function&lt;<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;(std::string const  &amp;, std::string const  &amp;)&gt; morph::ui::watcherOver </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="#a96f7e4884f3c2bd61741d715df661bf2">Exchange</a></td>          <td class="paramname"><span class="paramname"><em>exchange</em></span>, </td>
         </tr>
@@ -380,7 +375,7 @@ Functions</h2></td></tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+<span class="mlabels"><span class="mlabel nodiscard">nodiscard</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -395,8 +390,6 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The watcher: the kind and the <span class="tt">WatchBody</span> JSON in; the reply body out, or the transport's or the server's reason as the failure. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../dd/d56/service__client_8hpp_source.html#l00717">717</a> of file <a class="el" href="../../dd/d56/service__client_8hpp_source.html">service_client.hpp</a>.</p>
 
 </div>
 </div>
