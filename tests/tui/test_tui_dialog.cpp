@@ -149,6 +149,39 @@ TEST_CASE("tui dialog: a sheet fills the screen, its footer at the bottom, and i
     CHECK(harness.draw().front().starts_with("[ Behind ]"));
 }
 
+// Control: ignore setHeadNote, setFooterNote or setCloseButton in the overlay (the note or the control is missing from
+// the box, or a press on the control dismisses nothing), or let a sheet draw the control too.
+TEST_CASE("tui dialog: a head note and a close control end the title's row, a footer note takes the last row",
+          "[tui][dialog]") {
+    Harness harness{30, 9};
+    Scene scene{harness, {}};
+    auto const text = harness.make<TextImpl>(scene.body.get());
+    text->setText("Sure?");
+    int dismissed = 0;
+    scene.dialog->setOnDismiss([&] { ++dismissed; });
+    scene.dialog->setHeadNote("3 of 9");
+    scene.dialog->setFooterNote("Saved just now");
+    scene.dialog->setCloseButton(true);
+    scene.dialog->setDismissLabel("Done");
+    scene.dialog->setOpen(true);
+    Rows const rows = harness.draw();
+    REQUIRE(rows.size() >= 6);
+    CHECK(rows.at(2) == "  ┌─Confirm─3 of 9─[Done]─┐");
+    CHECK(rows.at(3) == "  │ Sure?                 │");
+    CHECK(rows.at(4) == "  │ Saved just now        │");
+    CHECK(rows.at(5) == "  └───────────────────────┘");
+    // A press on the note does nothing; one on the control dismisses once and closes the box.
+    static_cast<void>(harness.click({.x = 14, .y = 2}));
+    CHECK(dismissed == 0);
+    static_cast<void>(harness.click({.x = 21, .y = 2}));
+    CHECK(dismissed == 1);
+    CHECK_FALSE(scene.dialog->isOpen());
+    // A sheet's head holds its own control, so the close control is not drawn beside it.
+    scene.dialog->setSheet(true);
+    scene.dialog->setOpen(true);
+    CHECK(harness.draw().front().find("[Done]") == harness.draw().front().rfind("[Done]"));
+}
+
 TEST_CASE("tui dialog: Esc anywhere inside calls onDismiss", "[tui][dialog]") {
     Harness harness{30, 10};
     Scene scene{harness, {"OK"}};

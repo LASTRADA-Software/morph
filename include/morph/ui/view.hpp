@@ -1025,11 +1025,18 @@ struct Dialog {
     /// @brief Whether it is drawn as a sheet that fills the window, with a head holding a dismiss control and the
     ///        title. Changing it while open keeps the content and its state.
     Prop<bool> sheet = false;
-    /// @brief The label of a sheet's dismiss control, which dismisses as Escape does.
+    /// @brief The label of the dismiss control, a sheet's or `closeButton`'s, which dismisses as Escape does.
     Prop<std::string> dismissLabel = std::string{"Close"};
     /// @brief The description as runs; while bound or not empty, shown in place of `description`, which an older
     ///        client draws.
     Prop<std::vector<TextSpan>> descriptionSpans;
+    /// @brief A short muted note on the title's row, against the trailing edge; empty shows none.
+    Prop<std::string> headNote;
+    /// @brief A short muted note leading in the footer's row, opposite the actions; empty shows none.
+    Prop<std::string> footerNote;
+    /// @brief Whether a dismiss control, labelled `dismissLabel`, is drawn on the title's row, against the trailing
+    ///        edge. A sheet's head holds one already, so this adds nothing while `sheet` holds.
+    Prop<bool> closeButton = false;
 };
 
 /// @brief A progress indicator.
@@ -1610,6 +1617,14 @@ struct Drawer {
     Common common{};
     /// @brief The description as runs, as a dialog's.
     Prop<std::vector<TextSpan>> descriptionSpans;
+    /// @brief A short muted note on the title's row, as a dialog's.
+    Prop<std::string> headNote;
+    /// @brief A short muted note leading in the footer's row, as a dialog's.
+    Prop<std::string> footerNote;
+    /// @brief Whether a dismiss control is drawn on the title's row, as a dialog's.
+    Prop<bool> closeButton = false;
+    /// @brief The label of the dismiss control `closeButton` draws.
+    Prop<std::string> dismissLabel = std::string{"Close"};
 };
 
 /// @brief A row of buttons: the actions of what holds it. Inside the content of a dialog or drawer, at any depth, it

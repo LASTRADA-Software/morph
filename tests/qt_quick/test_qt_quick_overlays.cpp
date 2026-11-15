@@ -546,6 +546,79 @@ TEST_CASE(
     CHECK_FALSE(dynamic_cast<detail::DialogImpl&>(*dialog).open());
 }
 
+// Mutation: ignore `headNote`, `footerNote` or `closeButton` in MorphDialog/MorphDrawer/MorphFooter (the named item
+// is missing, hidden or empty).
+TEST_CASE("qt_quick dialog and drawer: head note, footer note and close control are drawn, and the control dismisses",
+          "[qt_quick]") {
+    Scene scene;
+    auto dialog = scene.backend().createDialog(nullptr);
+    auto drawer = scene.backend().createDrawer(nullptr, ui::Side::End);
+    int dismissals = 0;
+    dialog->setTitle("Edit");
+    dialog->setOnDismiss([&dismissals] { ++dismissals; });
+    drawer->setTitle("Filters");
+    drawer->setOnDismiss([&dismissals] { ++dismissals; });
+
+    // Nothing is drawn until asked for.
+    dialog->setOpen(true);
+    scene.settle();
+    auto const hidden = [&](char const* name) {
+        QQuickItem const* const found = namedItem(scene.window().contentItem(), QString::fromLatin1(name));
+        return found == nullptr || !found->isVisible();
+    };
+    CHECK(hidden("headNote"));
+    CHECK(hidden("footerNote"));
+    CHECK(hidden("headClose"));
+    dialog->setOpen(false);
+
+    dialog->setHeadNote("3 of 9");
+    dialog->setFooterNote("Saved just now");
+    dialog->setCloseButton(true);
+    dialog->setDismissLabel("Done");
+    dialog->setOpen(true);
+    scene.settle();
+    QQuickItem const* const note = namedItem(scene.window().contentItem(), QStringLiteral("headNote"));
+    REQUIRE(note != nullptr);
+    CHECK(note->isVisible());
+    CHECK(note->property("text").toString() == QStringLiteral("3 of 9"));
+    QQuickItem const* const foot = namedItem(scene.window().contentItem(), QStringLiteral("footerNote"));
+    REQUIRE(foot != nullptr);
+    CHECK(foot->isVisible());
+    CHECK(foot->property("text").toString() == QStringLiteral("Saved just now"));
+    QQuickItem* const close = namedItem(scene.window().contentItem(), QStringLiteral("headClose"));
+    REQUIRE(close != nullptr);
+    CHECK(close->isVisible());
+    CHECK(close->property("text").toString() == QStringLiteral("Done"));
+    scene.click(*close);
+    CHECK(dismissals == 1);
+    CHECK_FALSE(dynamic_cast<detail::DialogImpl&>(*dialog).open());
+    dialog->setOpen(false);
+
+    // A sheet's head holds the dismiss control already, so `closeButton` adds none.
+    dialog->setSheet(true);
+    dialog->setOpen(true);
+    scene.settle();
+    CHECK(hidden("headClose"));
+    dialog->setOpen(false);
+
+    drawer->setHeadNote("beta");
+    drawer->setFooterNote("Unsaved");
+    drawer->setCloseButton(true);
+    drawer->setOpen(true);
+    scene.settle();
+    QQuickItem const* const drawerNote = namedItem(scene.window().contentItem(), QStringLiteral("headNote"));
+    REQUIRE(drawerNote != nullptr);
+    CHECK(drawerNote->property("text").toString() == QStringLiteral("beta"));
+    QQuickItem const* const drawerFoot = namedItem(scene.window().contentItem(), QStringLiteral("footerNote"));
+    REQUIRE(drawerFoot != nullptr);
+    CHECK(drawerFoot->isVisible());
+    QQuickItem* const drawerClose = namedItem(scene.window().contentItem(), QStringLiteral("headClose"));
+    REQUIRE(drawerClose != nullptr);
+    CHECK(drawerClose->property("text").toString() == QStringLiteral("Close"));
+    scene.click(*drawerClose);
+    CHECK(dismissals == 2);
+}
+
 namespace {
 
 // A popup's left and right edges in window coordinates; the popup is placed in its parent item's coordinates.

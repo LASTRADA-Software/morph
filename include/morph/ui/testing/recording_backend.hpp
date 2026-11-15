@@ -1437,8 +1437,8 @@ private:
     std::unique_ptr<FakeSlot> _footer;
 };
 
-/// @brief A fake `DialogWidget`: properties `open`, `title`, `description`, `sheet` and `dismissLabel` (when set); a
-///        `Footer` child once its footer is asked for.
+/// @brief A fake `DialogWidget`: properties `open`, `title`, `description`, `sheet`, `dismissLabel`, `headNote`,
+///        `footerNote` and `closeButton` (when set); a `Footer` child once its footer is asked for.
 class FakeDialog final : public FakeOverlay<DialogWidget> {
 public:
     using FakeOverlay<DialogWidget>::FakeOverlay;
@@ -1451,6 +1451,9 @@ public:
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
     void setSheet(bool sheet) override { set("sheet", formatBool(sheet)); }
     void setDismissLabel(std::string_view label) override { set("dismissLabel", formatText(label)); }
+    void setHeadNote(std::string_view note) override { set("headNote", formatText(note)); }
+    void setFooterNote(std::string_view note) override { set("footerNote", formatText(note)); }
+    void setCloseButton(bool shown) override { set("closeButton", formatBool(shown)); }
 };
 
 /// @brief A fake `BannerWidget`: properties `tone`, `text`, `spans` (as `formatSpans` gives them), `actionLabel`,
@@ -1680,8 +1683,8 @@ public:
     void setOnAction(Action onAction) override { callbacks().action = std::move(onAction); }
 };
 
-/// @brief A fake `DrawerWidget`: properties `side`, `open`, `title`, `description`; a `Footer` child once its footer
-///        is asked for.
+/// @brief A fake `DrawerWidget`: properties `side`, `open`, `title`, `description`, and `headNote`, `footerNote`,
+///        `closeButton` and `dismissLabel` (when set); a `Footer` child once its footer is asked for.
 class FakeDrawer final : public FakeOverlay<DrawerWidget> {
 public:
     using FakeOverlay<DrawerWidget>::FakeOverlay;
@@ -1692,6 +1695,10 @@ public:
         set("descriptionSpans", formatSpans(spans));
     }
     void setOnDismiss(Action onDismiss) override { callbacks().dismiss = std::move(onDismiss); }
+    void setDismissLabel(std::string_view label) override { set("dismissLabel", formatText(label)); }
+    void setHeadNote(std::string_view note) override { set("headNote", formatText(note)); }
+    void setFooterNote(std::string_view note) override { set("footerNote", formatText(note)); }
+    void setCloseButton(bool shown) override { set("closeButton", formatBool(shown)); }
 };
 
 /// @brief A fake `PopoverWidget`: properties `open` and `width`.

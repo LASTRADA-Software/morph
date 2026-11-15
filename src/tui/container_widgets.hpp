@@ -346,6 +346,10 @@ private:
 ///
 /// A dialog drawn as a sheet fills the viewport; its top row draws `[dismissLabel]` before the title, and a press on
 /// it dismisses as Esc does. Its footer, when it holds anything, takes the box's bottom rows.
+///
+/// The head note is drawn muted on the title's row against its right end, after which comes `[dismissLabel]` while
+/// the close control is on and the box is not a sheet; a press on the control dismisses as Esc does. The footer note
+/// is drawn muted on a row of its own at the bottom of the box, under the content and the footer.
 class OverlayCore {
 public:
     /// @param self The dialog or drawer this is the overlay of.
@@ -367,6 +371,9 @@ public:
     void setOnDismiss(ui::Action onDismiss) { _onDismiss = std::move(onDismiss); }
     void setSheet(bool sheet);
     void setDismissLabel(std::string_view label);
+    void setHeadNote(std::string_view note);
+    void setFooterNote(std::string_view note);
+    void setCloseButton(bool shown);
     /// The footer, which a sheet lays out at the bottom of its box.
     void setFooter(WidgetBase const* footer) noexcept { _footer = footer; }
     /// Closes the overlay and calls `onDismiss`, as Esc does.
@@ -386,6 +393,14 @@ private:
     [[nodiscard]] ::core::tui::Size frameSize() const;
     /// The cells of a sheet's dismiss control in the box's top row: its first column and its width.
     [[nodiscard]] std::pair<int, int> dismissCells() const;
+    /// Whether the title's row ends in a close control: asked for, and not a sheet, whose head holds one already.
+    [[nodiscard]] bool hasCloseControl() const noexcept { return _closeButton && !_sheet; }
+    /// The width of the dismiss control, `[label]`.
+    [[nodiscard]] int closeControlWidth() const;
+    /// The width the title row gives its trailing part: the note, then the close control, one cell apart.
+    [[nodiscard]] int trailingWidth() const;
+    /// The rows the footer note takes under the content: one while it is not empty.
+    [[nodiscard]] int footerNoteRows() const noexcept { return _footerNote.empty() ? 0 : 1; }
     void paintFrame(::core::tui::Canvas& canvas);
     [[nodiscard]] ::core::tui::EventResult frameEvent(::core::tui::InputEvent const& event);
     [[nodiscard]] bool holdsFocus() const;
@@ -406,6 +421,9 @@ private:
     std::vector<ui::TextSpan> _descriptionRuns;  ///< The description's runs; empty for a plain description.
     ui::Action _onDismiss;
     std::string _dismissLabel = "Close";
+    std::string _headNote;
+    std::string _footerNote;
+    bool _closeButton = false;
     WidgetBase const* _footer = nullptr;
     bool _sheet = false;
     bool _open = false;
@@ -454,6 +472,9 @@ public:
     void setOnDismiss(ui::Action onDismiss) override { _overlay.setOnDismiss(std::move(onDismiss)); }
     void setSheet(bool sheet) override { _overlay.setSheet(sheet); }
     void setDismissLabel(std::string_view label) override { _overlay.setDismissLabel(label); }
+    void setHeadNote(std::string_view note) override { _overlay.setHeadNote(note); }
+    void setFooterNote(std::string_view note) override { _overlay.setFooterNote(note); }
+    void setCloseButton(bool shown) override { _overlay.setCloseButton(shown); }
     [[nodiscard]] ui::ContainerWidget& footer() override {
         ui::ContainerWidget& footer = _footer.of(*this);
         _overlay.setFooter(dynamic_cast<WidgetBase const*>(&footer));
@@ -492,6 +513,10 @@ public:
     void setDescriptionSpans(std::vector<ui::TextSpan> const& spans) override { _overlay.setDescriptionSpans(spans); }
     [[nodiscard]] std::string accessibleDescription() const override { return _overlay.description(); }
     void setOnDismiss(ui::Action onDismiss) override { _overlay.setOnDismiss(std::move(onDismiss)); }
+    void setDismissLabel(std::string_view label) override { _overlay.setDismissLabel(label); }
+    void setHeadNote(std::string_view note) override { _overlay.setHeadNote(note); }
+    void setFooterNote(std::string_view note) override { _overlay.setFooterNote(note); }
+    void setCloseButton(bool shown) override { _overlay.setCloseButton(shown); }
     [[nodiscard]] ui::ContainerWidget& footer() override { return _footer.of(*this); }
     [[nodiscard]] ::core::tui::Size naturalSize() const override { return {.width = 0, .height = 0}; }
     [[nodiscard]] std::string probeText() const override { return _overlay.title(); }

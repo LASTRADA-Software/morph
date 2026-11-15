@@ -1411,9 +1411,6 @@ private:
         if (spec.sheet.isBound() || spec.sheet.constant()) {
             bind(scope, spec.sheet, [&widget](bool sheet) { widget.setSheet(sheet); });
         }
-        if (spec.dismissLabel.isBound() || spec.dismissLabel.constant() != "Close") {
-            bind(scope, spec.dismissLabel, [&widget](std::string const& label) { widget.setDismissLabel(label); });
-        }
         return mountOverlay(scope, spec, widget);
     }
 
@@ -1435,6 +1432,18 @@ private:
         } else if (spec.description.isBound() || !spec.description.constant().empty()) {
             bind(scope, spec.description,
                  [&widget](std::string const& description) { widget.setDescription(description); });
+        }
+        if (spec.headNote.isBound() || !spec.headNote.constant().empty()) {
+            bind(scope, spec.headNote, [&widget](std::string const& note) { widget.setHeadNote(note); });
+        }
+        if (spec.footerNote.isBound() || !spec.footerNote.constant().empty()) {
+            bind(scope, spec.footerNote, [&widget](std::string const& note) { widget.setFooterNote(note); });
+        }
+        if (spec.closeButton.isBound() || spec.closeButton.constant()) {
+            bind(scope, spec.closeButton, [&widget](bool shown) { widget.setCloseButton(shown); });
+        }
+        if (spec.dismissLabel.isBound() || spec.dismissLabel.constant() != "Close") {
+            bind(scope, spec.dismissLabel, [&widget](std::string const& label) { widget.setDismissLabel(label); });
         }
         auto& content = scope.make<std::unique_ptr<reactive::Scope>>();
         auto& shownOpen = scope.make<std::optional<bool>>();

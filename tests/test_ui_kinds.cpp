@@ -206,6 +206,52 @@ TEST_CASE("ui::drawer: the content exists only while open, a closed drawer takes
     CHECK(ran == Lines{"apply", "dismiss"});
 }
 
+// The notes and the close control reach the widget whether given as constants or bound. Mutations: drop any of the
+// three `bind` calls for the notes and the close control in mountOverlay (the property is never set); apply them
+// under a different Prop (the values swap).
+TEST_CASE("ui::dialog and ui::drawer: head note, footer note and close control reach the widget", "[ui]") {
+    Owner owner;
+    Runtime runtime{owner};
+    RecordingBackend backend;
+    Signal<std::string> note{runtime, "3 of 9"};
+    Signal<bool> close{runtime, false};
+    ui::Node dialogWithNotes = ui::dialog({
+        .title = "Edit",
+        .dismissLabel = "Done",
+        .headNote = [&] { return note.get(); },
+        .footerNote = "Saved just now",
+        .closeButton = [&] { return close.get(); },
+    });
+    ui::Node drawerWithNotes = ui::drawer({
+        .title = "Filters",
+        .headNote = "beta",
+        .footerNote = "Unsaved",
+        .closeButton = true,
+        .dismissLabel = "Hide",
+    });
+    ui::Mounted const view{
+        runtime,
+        backend,
+        ui::column(
+            {.children = {std::move(dialogWithNotes), std::move(drawerWithNotes), ui::dialog({.title = "Plain"})}}),
+    };
+    CHECK(backend.prop(2, "headNote") == "3 of 9");
+    CHECK(backend.prop(2, "footerNote") == "Saved just now");
+    CHECK(backend.prop(2, "closeButton") == "false");
+    CHECK(backend.prop(2, "dismissLabel") == "Done");
+    CHECK(backend.prop(3, "headNote") == "beta");
+    CHECK(backend.prop(3, "footerNote") == "Unsaved");
+    CHECK(backend.prop(3, "closeButton") == "true");
+    CHECK(backend.prop(3, "dismissLabel") == "Hide");
+    // A dialog that sets none of them is told none of them.
+    CHECK(backend.dump().find("Dialog#4 open=false title=Plain\n") != std::string::npos);
+    note.set("4 of 9");
+    close.set(true);
+    owner.runAll();
+    CHECK(backend.prop(2, "headNote") == "4 of 9");
+    CHECK(backend.prop(2, "closeButton") == "true");
+}
+
 // A drawer's `open` is controlled as a dialog's is: the user's dismissal closes it, and a document that keeps it open
 // opens it again over the content it still holds. Mutations: leave Drawer out of RecordingBackend::dismiss's close (it
 // never shows closed); skip the re-assertion in mountOverlay (it stays closed).
