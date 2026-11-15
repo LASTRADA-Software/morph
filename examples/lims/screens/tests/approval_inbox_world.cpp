@@ -12,6 +12,8 @@
 
 #include "billing_test_support.hpp"
 #include "lims/billing/models/invoice_model.hpp"
+#include "lims/org/dto/auth_dto.hpp"
+#include "lims/org/models/auth_model.hpp"
 
 namespace lims::inboxtest {
 
@@ -21,9 +23,12 @@ morph::time::DateTime at(int year, unsigned month, unsigned day, int hour) {
     return lims::test::at(year, month, day, hour);
 }
 
-std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> inboxBundle() {
-    ui::ScreenRegistry screens;
-    auto registered = screens.add(ui::screen(std::string{kInbox}, [](ui::Scope& screen) {
+namespace {
+
+/// @brief The inbox screen.
+/// @return The screen.
+ui::Screen inboxScreen() {
+    return ui::screen(std::string{kInbox}, [](ui::Scope& screen) {
         auto const invoices = screen.model<lims::InvoiceModel>("invoices");
         auto const pending = screen.query<lims::ListPendingApprovals>("pending", invoices);
         auto const rows = pending.value().at(&lims::ListInvoicesResult::invoices);
@@ -34,19 +39,77 @@ std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal
             ui::button({.label = "Submit", .onClick = ui::run(submit, {{&lims::SubmitInvoice::invoiceId, 1}})})
                 .testId("submit"),
         });
-    }));
-    if (!registered) {
-        return std::unexpected(registered.error());
+    });
+}
+
+/// @brief The sign-in screen: any username, then the inbox.
+/// @return The screen.
+ui::Screen signInScreen() {
+    return ui::screen(std::string{kSignIn}, [](ui::Scope& screen) {
+        auto const auth = screen.model<lims::LimsAuthModel>("auth", {.instance = ui::Instance::Private});
+        auto const username = ui::element("username");
+        auto const login =
+            screen.mutation<lims::LimsLogin>("login", auth,
+                                             {
+                                                 .body = {{&lims::LimsLogin::username, username.value()}},
+                                                 .onSuccess =
+                                                     {
+                                                         ui::signIn(ui::MutationRef{"login"}),
+                                                         ui::navigate(std::string{kInbox}),
+                                                     },
+                                             });
+        return ui::column({
+            ui::textInput({.label = "Username"}).id(username).testId("username"),
+            ui::button({.label = "Sign in", .onClick = ui::run(login)}).testId("signIn"),
+        });
+    });
+}
+
+/// @brief A bundle of the inbox, and of the sign-in before it when asked.
+/// @param withSignIn Whether the bundle opens with the sign-in.
+/// @return The bundle, or the refusal.
+std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> bundleOf(bool withSignIn) {
+    ui::ScreenRegistry screens;
+    auto inbox = screens.add(inboxScreen());
+    if (!inbox) {
+        return std::unexpected(inbox.error());
+    }
+    ui::RegisteredScreen const* signIn = nullptr;
+    if (withSignIn) {
+        auto registered = screens.add(signInScreen());
+        if (!registered) {
+            return std::unexpected(registered.error());
+        }
+        signIn = *registered;
     }
     morph::ui::UiRegistry served{morph::ui::ApplicationInfo{.id = "lims-approval-inbox-test", .version = "1.0"},
                                  screens.catalog()};
+    if (signIn != nullptr) {
+        morph::ui::CatalogEntry entry;
+        entry.id = std::string{kSignIn};
+        entry.title = "Sign in";
+        entry.isPublic = true;
+        if (auto added = served.addScreen(std::move(entry), signIn->text); !added) {
+            return std::unexpected(std::move(added.error()));
+        }
+    }
     morph::ui::CatalogEntry entry;
     entry.id = std::string{kInbox};
     entry.title = "Approvals";
-    if (auto added = served.addScreen(std::move(entry), (*registered)->text); !added) {
+    if (auto added = served.addScreen(std::move(entry), (*inbox)->text); !added) {
         return std::unexpected(std::move(added.error()));
     }
     return served.build();
+}
+
+}  // namespace
+
+std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> inboxBundle() {
+    return bundleOf(false);
+}
+
+std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> signInBundle() {
+    return bundleOf(true);
 }
 
 struct World::Impl {

@@ -3,9 +3,12 @@
 #include <Lightweight/SqlStatement.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
+#include <chrono>
 #include <core/async/Task.hpp>
 #include <cstdint>
 #include <morph/session/session.hpp>
+#include <morph/util/datetime.hpp>
+#include <optional>
 #include <string>
 
 #include "lims/billing/authorization/billing_authorization.hpp"
@@ -215,6 +218,30 @@ InvoiceView InvoiceModel::execute(const ApproveInvoice& action) {
     }
     sqlTxn.Commit();
     return invoiceView(mapper, static_cast<std::int64_t>(row.id.Value()));
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+std::optional<::morph::time::DateTime> InvoiceModel::execute(const NextApprovalDeadline& action) {
+    static_cast<void>(action);
+    Lightweight::DataMapper mapper;
+    auto const rows = mapper.Query<db::InvoiceRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::InvoiceRecord::state>, "=",
+                                 static_cast<int>(InvoiceState::Submitted))
+                          .All();
+    std::optional<std::int64_t> next;
+    std::int64_t const now = nowMillis();
+    for (auto const& row : rows) {
+        // `escalated` holds from the deadline on, so only a deadline strictly ahead is still to come.
+        std::int64_t const deadline = row.deadlineAt.Value();
+        if (deadline > now && (!next || deadline < *next)) {
+            next = deadline;
+        }
+    }
+    if (!next) {
+        return std::nullopt;
+    }
+    return ::morph::time::DateTime{std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{*next}}};
 }
 
 // An action handler: the registry calls it on the instance, like every other.

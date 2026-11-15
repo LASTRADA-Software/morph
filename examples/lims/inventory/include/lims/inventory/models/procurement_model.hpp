@@ -6,6 +6,8 @@
 #include <morph/core/effects.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/ui/author.hpp>
+#include <morph/util/datetime.hpp>
+#include <optional>
 
 #include "lims/inventory/dto/order_dto.hpp"
 #include "lims/inventory/dto/receipt_dto.hpp"
@@ -89,6 +91,13 @@ public:
     /// @return Its requisitions by id; none for a company the caller cannot see.
     /// @throws ValidationError if no company is named.
     ListRequisitionsResult execute(const ListRequisitions& action);
+
+    /// @brief The next instant, after now, at which a submitted requisition's approval moves from its site to its
+    ///        company: the earliest deadline still ahead. The requisitions an approver may approve change at that
+    ///        instant with no action behind it.
+    /// @param action Carries nothing.
+    /// @return The instant, or nothing when no submitted requisition has a deadline ahead.
+    std::optional<::morph::time::DateTime> execute(const NextRequisitionDeadline& action);
 
     /// @brief Lists the submitted requisitions the caller could approve now: those whose approval rule allows them,
     ///        at the site before the deadline and at the company from it.
@@ -209,6 +218,9 @@ BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::GetRequisition, "GetRequisit
 BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::ListRequisitions, "ListRequisitions", ::morph::model::Loggable::No)
 BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::ListPendingRequisitions, "ListPendingRequisitions",
                       ::morph::model::Loggable::No)
+BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::NextRequisitionDeadline, "NextRequisitionDeadline",
+                      ::morph::model::Loggable::No)
+BRIDGE_REGISTER_CHANGES_AT(lims::ProcurementModel, lims::NextRequisitionDeadline, lims::RequisitionView)
 BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::CountPendingRequisitions, "CountPendingRequisitions",
                       ::morph::model::Loggable::No)
 BRIDGE_DECLARE_ACTION(lims::ProcurementModel, lims::CreateSupplier, "CreateSupplier")

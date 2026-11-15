@@ -2,9 +2,12 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <morph/session/session.hpp>
+#include <morph/util/datetime.hpp>
 #include <morph/util/rational.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -251,6 +254,30 @@ ListRequisitionsResult ProcurementModel::execute(const ListRequisitions& action)
         result.requisitions.push_back(inventory::requisitionView(mapper, static_cast<std::int64_t>(row.id.Value())));
     }
     return result;
+}
+
+// An action handler: the registry calls it on the instance, like every other.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+std::optional<::morph::time::DateTime> ProcurementModel::execute(const NextRequisitionDeadline& action) {
+    static_cast<void>(action);
+    Lightweight::DataMapper mapper;
+    auto const rows = mapper.Query<db::RequisitionRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::RequisitionRecord::state>, "=",
+                                 static_cast<int>(RequisitionState::Submitted))
+                          .All();
+    std::optional<std::int64_t> next;
+    std::int64_t const now = nowMillis();
+    for (auto const& row : rows) {
+        // A requisition escalates from its deadline on, so only a deadline strictly ahead is still to come.
+        std::int64_t const deadline = row.deadlineAt.Value();
+        if (deadline > now && (!next || deadline < *next)) {
+            next = deadline;
+        }
+    }
+    if (!next) {
+        return std::nullopt;
+    }
+    return ::morph::time::DateTime{std::chrono::sys_time<std::chrono::milliseconds>{std::chrono::milliseconds{*next}}};
 }
 
 // An action handler: the registry calls it on the instance, like every other.

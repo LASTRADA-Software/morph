@@ -353,6 +353,53 @@ TEST_CASE("an_added_updates_must_be_held_by_the_result", "[push][records][added]
     REQUIRE_THAT(message, Catch::Matchers::ContainsSubstring("result holds no `V_Row`"));
 }
 
+// ── Time-derived facts ───────────────────────────────────────────────────────
+
+namespace {
+
+std::string timeFactRefusal(ActionResultSlotMap const& slots, EffectsMap const& declared,
+                            std::vector<morph::effects::detail::DeclaredChangeTime> const& facts) {
+    try {
+        static_cast<void>(morph::effects::detail::resolveForTesting({record("V_Row", typeid(VRow))}, slots, declared,
+                                                                    {}, {}, facts));
+    } catch (morph::model::EffectsRegistrationError const& error) {
+        return error.what();
+    }
+    FAIL_CHECK("resolving did not throw EffectsRegistrationError");
+    return {};
+}
+
+}  // namespace
+
+TEST_CASE("a_time_fact_resolves_to_record_names", "[push][records][time]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Next", result({}));
+    auto const resolved = morph::effects::detail::resolveForTesting(
+        {record("V_Row", typeid(VRow))}, slots, {}, {}, {},
+        {{.action = "A_Next", .model = "M_Rows", .records = {typeid(VRow)}}});
+    REQUIRE(resolved.changeTimes == std::vector<morph::effects::ChangeTimeSource>{
+                                        {.action = "A_Next", .model = "M_Rows", .records = {"V_Row"}}});
+}
+
+TEST_CASE("a_time_fact_is_refused_when_it_names_nothing_registered", "[push][records][time]") {
+    ActionResultSlotMap slots;
+    slots.emplace("A_Next", result({}));
+    auto const unknownAction =
+        timeFactRefusal(slots, {}, {{.action = "A_Gone", .model = "M", .records = {typeid(VRow)}}});
+    REQUIRE_THAT(unknownAction, Catch::Matchers::ContainsSubstring("`A_Gone`"));
+    REQUIRE_THAT(unknownAction, Catch::Matchers::ContainsSubstring("not a registered action"));
+
+    auto const unknownRecord =
+        timeFactRefusal(slots, {}, {{.action = "A_Next", .model = "M", .records = {typeid(VOther)}}});
+    REQUIRE_THAT(unknownRecord, Catch::Matchers::ContainsSubstring("not a registered record"));
+
+    EffectsMap declared;
+    morph::effects::detail::addEffects(declared, "A_Next", {changesOf(typeid(VRow))});
+    auto const withEffects =
+        timeFactRefusal(slots, declared, {{.action = "A_Next", .model = "M", .records = {typeid(VRow)}}});
+    REQUIRE_THAT(withEffects, Catch::Matchers::ContainsSubstring("also declares effects"));
+}
+
 TEST_CASE("action_id_held_by_two_action_types_throws", "[push][records]") {
     ActionResultSlotMap slots;
     slots.emplace("A_Shared", result({{.type = typeid(VRow), .path = ""}}));

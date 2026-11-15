@@ -2,7 +2,7 @@
 //
 // Hypothesis 5, second instance: a requisition is raised, submitted and approved as ordinary actions on its row, four
 // eyes and a value limit per role hold, its approval escalates from the site to the company at its deadline, and
-// an open approvals inbox is not told when the deadline passes.
+// an open approvals inbox is told when the deadline passes.
 
 #include <Lightweight/SqlConnection.hpp>
 #include <Lightweight/SqlStatement.hpp>
@@ -15,6 +15,7 @@
 #include <morph/core/action_guard.hpp>
 #include <morph/session/session_auth.hpp>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -247,40 +248,31 @@ TEST_CASE("Hypothesis 5: a requisition submitted on one rig is approved on anoth
     }
 }
 
-// The second time this is measured (decision 35 is the first): nothing tells an open inbox that a deadline passed.
-// The witness is anna, a site approver, whose pending list loses the requisition at the deadline. The control is in
-// the case: after the silence, a requisition raised through the server reaches the same connection, so the
-// connection can hear a change of the record and the silence before it is the measurement. Mutation: watch a record
-// name no record has ("Inventory_Requisitions"): the silence still holds, and the control's CHECK fails.
-TEST_CASE("requisitions: an approver's open inbox is not told when a deadline passes",
+// An open inbox is told when a deadline passes. The witness is anna, a site approver, whose pending list loses the
+// requisition at the deadline; the server learns the instant from `NextRequisitionDeadline`, owns the clock, and tells
+// the connection watching `Inventory_Requisition` when the clock reaches it. Before the deadline the connection is
+// told nothing, so the message after it is the deadline's. Mutation: drop the server's fan-out at the reported
+// instant (the connection is told nothing and the check after the deadline fails).
+TEST_CASE("requisitions: an approver's open inbox is told when a deadline passes",
           "[lims][inventory][requisition][effects]") {
     DbFixture fixture;
     auto const setUp = lims::test::requisitionSetUp();
     static_cast<void>(submitted(setUp.draft));
+    std::optional<ScopedClockOverride> clock;
+    clock.emplace(at(2026, 11, 11));
     BackendRig rig{Mode::Socket, 0, lims::test::limsAuthorizer(kSecret)};
     auto const anna = rig.connect();
     REQUIRE(anna->watch({"Inventory_Requisition"}, as("anna")).kind == "ok");
-    {
-        ScopedClockOverride const before{at(2026, 11, 11)};
-        REQUIRE(pendingFor("anna") == std::vector<std::int64_t>{*setUp.draft.id});
-    }
+    REQUIRE(pendingFor("anna") == std::vector<std::int64_t>{*setUp.draft.id});
     auto const heardBefore = anna->changes().size();
-    ScopedClockOverride const past{at(2026, 11, 12, 10)};
-    bool const told = ServerConnection::eventually([&] { return anna->changes().size() > heardBefore; },
-                                                   std::chrono::milliseconds{1000});
-    CHECK_FALSE(told);
-    CHECK(pendingFor("anna").empty());
-    // The control: a change of the same record, made through the server after the deadline, is heard.
-    auto const rita = rig.connect();
-    auto const procurement = rita->registerModel("ProcurementModel", as("rita"));
-    REQUIRE(procurement != 0);
-    auto const body = glz::write_json(lims::CreateRequisition{.company = lims::test::seededCompany(),
-                                                              .site = lims::test::seededSite(),
-                                                              .reason = "control"})
-                          .value_or(std::string{});
-    REQUIRE(rita->execute(procurement, "ProcurementModel", "CreateRequisition", body, as("rita")).kind == "ok");
+    CHECK_FALSE(ServerConnection::eventually([&] { return anna->changes().size() > heardBefore; },
+                                             std::chrono::milliseconds{300}));
+
+    clock.reset();
+    clock.emplace(at(2026, 11, 12, 10));  // past the requisition's deadline
     CHECK(ServerConnection::eventually([&] { return anna->changes().size() > heardBefore; },
-                                       std::chrono::milliseconds{1000}));
+                                       std::chrono::milliseconds{3000}));
+    CHECK(pendingFor("anna").empty());
 }
 
 namespace {
