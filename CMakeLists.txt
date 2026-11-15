@@ -420,6 +420,7 @@ add_library(morph STATIC
     src/ui/host.cpp
     src/ui/backend.cpp
     src/ui/explorer.cpp
+    src/ui/navigator.cpp
     src/ui/service_client.cpp
     src/ui/theme.cpp
     src/ui/shell_frame.cpp
