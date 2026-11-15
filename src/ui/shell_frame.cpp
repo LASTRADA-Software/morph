@@ -77,7 +77,7 @@ ShellFrame::ShellFrame(IViewBackend& backend MORPH_LIFETIMEBOUND, ContainerWidge
     _sideStart->setLayout({.width = Sizing::fixed(0), .height = {}});
     _side->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
     _side->setGap(3);
-    _sideTop->setLayout({.width = {}, .height = Sizing::fixed(0)});
+    _sideTop->setLayout({.width = {}, .height = Sizing::fixed(0)});  // NOLINT(readability-trailing-comma)
     _sideEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
     _name->setRole(TextRole::Heading);
     _name->setText(options.applicationName);
@@ -85,7 +85,7 @@ ShellFrame::ShellFrame(IViewBackend& backend MORPH_LIFETIMEBOUND, ContainerWidge
 
     // The principal and the sign-out button sit at the sidebar's foot: the navigator takes the sidebar's spare
     // height above them. Left on the top line they would compete with the head's actions for its trailing edge.
-    _navigator->root().setLayout({.width = {}, .height = Sizing::stretch()});
+    _navigator->root().setLayout({.width = {}, .height = Sizing::stretch()});  // NOLINT(readability-trailing-comma)
     _principal->setRole(TextRole::Muted);
     _principal->setTestId("shell_principal");
     _signOut->setLabel("Sign out");
@@ -106,8 +106,8 @@ ShellFrame::ShellFrame(IViewBackend& backend MORPH_LIFETIMEBOUND, ContainerWidge
     // own gap; the line is centred across the bar.
     _topBar->setGap(2);
     _topBar->setHeadBar(true);
-    _topAbove->setLayout({.width = {}, .height = Sizing::fixed(0)});
-    _topBelow->setLayout({.width = {}, .height = Sizing::fixed(0)});
+    _topAbove->setLayout({.width = {}, .height = Sizing::fixed(0)});  // NOLINT(readability-trailing-comma)
+    _topBelow->setLayout({.width = {}, .height = Sizing::fixed(0)});  // NOLINT(readability-trailing-comma)
     _topLine->setGap(4);
     _topLine->setAlign(Align::Center);
     _topLine->setTestId("shell_topbar_line");
@@ -129,6 +129,7 @@ ShellFrame::ShellFrame(IViewBackend& backend MORPH_LIFETIMEBOUND, ContainerWidge
     _navMenu->setOnActivate([this](std::vector<std::size_t> const& path) { chooseNav(path); });
     _navMenu->setVisible(false);
     _navigator->setOnChanged([this] { showNavEntries(); });
+    // NOLINTNEXTLINE(readability-trailing-comma)
     _leadBlock->setLayout({.width = Sizing::stretch(), .height = {}, .minWidth = kShellHeadLeadMinimum});
     _eyebrow->setTestId("shell_head_eyebrow");
     _eyebrow->setVisible(false);
@@ -169,7 +170,7 @@ ShellFrame::ShellFrame(IViewBackend& backend MORPH_LIFETIMEBOUND, ContainerWidge
     _page->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
     _page->setGap(4);
     _page->setTestId("shell_page");
-    _top->setLayout({.width = {}, .height = Sizing::fixed(0)});
+    _top->setLayout({.width = {}, .height = Sizing::fixed(0)});  // NOLINT(readability-trailing-comma)
     _padded->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
     _padded->setGap(4);
     _left->setLayout({.width = Sizing::fixed(0), .height = {}});
@@ -184,9 +185,9 @@ ShellFrame::ShellFrame(IViewBackend& backend MORPH_LIFETIMEBOUND, ContainerWidge
     _chatStart->setLayout({.width = Sizing::fixed(0), .height = {}});
     _chatColumn->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
     _chatColumn->setGap(3);
-    _chatTop->setLayout({.width = {}, .height = Sizing::fixed(0)});
+    _chatTop->setLayout({.width = {}, .height = Sizing::fixed(0)});  // NOLINT(readability-trailing-comma)
     _chatSlot->setLayout({.width = Sizing::stretch(), .height = Sizing::stretch()});
-    _chatBottom->setLayout({.width = {}, .height = Sizing::fixed(0)});
+    _chatBottom->setLayout({.width = {}, .height = Sizing::fixed(0)});  // NOLINT(readability-trailing-comma)
     _chatEnd->setLayout({.width = Sizing::fixed(0), .height = {}});
     buildParts();
     showChat();
@@ -311,6 +312,7 @@ void ShellFrame::setSearchText(std::string_view text) {
     showSearch();
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters,readability-identifier-length): the message, yes, then no.
 void ShellFrame::confirm(std::string_view message, std::string_view yes, std::string_view no,
                          std::function<void(bool)> done) {
     if (_confirm == nullptr) {
@@ -355,7 +357,8 @@ void ShellFrame::showTitle() {
 
 std::string ShellFrame::connectionText(ConnectionState state) const {
     ShellLabels const& labels = _parts.labels;
-    return state == ConnectionState::Connected      ? labels.connected
+    return state == ConnectionState::Connected ? labels.connected
+           // NOLINTNEXTLINE(readability-avoid-nested-conditional-operator): a three-way pick over the state.
            : state == ConnectionState::Reconnecting ? labels.reconnecting
                                                     : labels.offline;
 }
@@ -386,8 +389,8 @@ void ShellFrame::showNavEntries() {
     std::vector<MenuEntry> navigation = _navigator->menuEntries();
     _navEntryCount = navigation.size();
     std::size_t const firstNavigation = entries.size();
-    for (std::size_t index = 0; index < navigation.size(); ++index) {
-        add(std::move(navigation.at(index)), NavTarget::Kind::Navigator, firstNavigation);
+    for (MenuEntry& item : navigation) {
+        add(std::move(item), NavTarget::Kind::Navigator, firstNavigation);
     }
     if (_parts.help.shown) {
         add(MenuEntry{.separator = true}, NavTarget::Kind::Separator, 0);
@@ -439,6 +442,7 @@ void ShellFrame::chooseNav(std::vector<std::size_t> const& path) {
         case NavTarget::Kind::Context:
             if (path.size() == 2 && path.at(1) < _contextMap.size() && _contextMap.at(path.at(1)) &&
                 _handlers.onContext) {
+                // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the condition above checked this slot.
                 _handlers.onContext(*_contextMap.at(path.at(1)));
             }
             return;
@@ -534,6 +538,7 @@ void ShellFrame::buildParts() {
     _tools->setVisible(false);
     _searchBox = _backend.createStack(_tools.get(), Axis::Vertical);
     _searchBox->setLayout(
+        // NOLINTNEXTLINE(readability-trailing-comma)
         {.width = Sizing::stretch(), .height = {}, .minWidth = std::nullopt, .maxWidth = kShellSearchWidth});
     _searchBox->setTestId("shell_search_box");
     _search = _backend.createTextInput(_searchBox.get(), TextInputMode::SingleLine);
@@ -659,16 +664,18 @@ void ShellFrame::showBrand() {
     _footer->setVisible(connection || (brand.shown && !brand.version.empty()));
     _footerDot->setVisible(connection);
     _footerState->setVisible(connection);
-    if (connection) {
-        _footerState->setText(connectionText(*_parts.connection));
-        _footerDot->setRole(*_parts.connection == ConnectionState::Connected      ? TextRole::Success
-                            : *_parts.connection == ConnectionState::Reconnecting ? TextRole::Muted
-                                                                                  : TextRole::Error);
+    if (auto const state = _parts.connection) {
+        _footerState->setText(connectionText(*state));
+        _footerDot->setRole(*state == ConnectionState::Connected ? TextRole::Success
+                            // NOLINTNEXTLINE(readability-avoid-nested-conditional-operator)
+                            : *state == ConnectionState::Reconnecting ? TextRole::Muted
+                                                                      : TextRole::Error);
     }
     _footerVersion->setVisible(brand.shown && !brand.version.empty());
     _footerVersion->setText(brand.version);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one block per declared shell part.
 void ShellFrame::showParts() {
     bool const bar = barParts();
     ShellLabels const& labels = _parts.labels;
@@ -764,16 +771,16 @@ std::vector<MenuEntry> ShellFrame::contextEntries() {
             heading.label = option.group;
             heading.heading = true;
             heading.enabled = false;
-            entries.push_back(std::move(heading));
-            _contextMap.push_back(std::nullopt);
+            entries.emplace_back(std::move(heading));
+            _contextMap.emplace_back(std::nullopt);
         }
         group = option.group;
         MenuEntry entry;
         entry.label = option.label;
         entry.description = option.detail;
         entry.checked = _parts.context.chosen == index;
-        entries.push_back(std::move(entry));
-        _contextMap.push_back(index);
+        entries.emplace_back(std::move(entry));
+        _contextMap.emplace_back(index);
     }
     return entries;
 }
@@ -899,10 +906,10 @@ std::string ShellFrame::hitSignature() const {
 }
 
 std::optional<std::pair<std::size_t, std::size_t>> ShellFrame::hitAt(std::size_t flat) const {
-    for (std::size_t source = 0; source < _parts.search.sources.size(); ++source) {
-        std::size_t const size = _parts.search.sources.at(source).hits.size();
+    for (ShellSourceView const& view : _parts.search.sources) {
+        std::size_t const size = view.hits.size();
         if (flat < size) {
-            return std::pair{_parts.search.sources.at(source).source, flat};
+            return std::pair{view.source, flat};
         }
         flat -= size;
     }
@@ -948,8 +955,8 @@ void ShellFrame::searchChord(std::string const& chord) {
     std::size_t const total = hitCount();
     if (chord == "Down" || chord == "Up") {
         if (total != 0) {
-            std::size_t const at = _highlight.value_or(chord == "Down" ? total - 1 : 0);
-            _highlight = chord == "Down" ? (at + 1) % total : (at + total - 1) % total;
+            std::size_t const current = _highlight.value_or(chord == "Down" ? total - 1 : 0);
+            _highlight = chord == "Down" ? (current + 1) % total : (current + total - 1) % total;
             showSearch();
         }
     } else if (chord == "Shift+Enter" || chord == "Alt+Enter") {
@@ -1010,7 +1017,7 @@ std::string ShellFrame::resultsKey(bool panel, bool overlay) const {
         for (ShellHitView const& hit : source.hits) {
             key += "\x1e" + hit.kind + "\x1d" + hit.title + "\x1d" + hit.detail;
         }
-        key += "\x1f";
+        key += '\x1f';
     }
     return key;
 }
@@ -1027,11 +1034,11 @@ void ShellFrame::retire(ResultsColumn& column) {
 
 void ShellFrame::renderResults(StackWidget& into, ResultsColumn& column) {
     ShellLabels const& labels = _parts.labels;
-    auto const text = [&](std::string const& value, TextRole role, std::string const& id) {
+    auto const text = [&](std::string const& value, TextRole role, std::string const& testId) {
         auto widget = _backend.createText(&into);
         widget->setText(value);
         widget->setRole(role);
-        widget->setTestId(id);
+        widget->setTestId(testId);
         column.texts.push_back(std::move(widget));
     };
     bool pending = false;
@@ -1044,8 +1051,7 @@ void ShellFrame::renderResults(StackWidget& into, ResultsColumn& column) {
         text(labels.searching, TextRole::Muted, "shell_search_busy");
     }
     std::size_t flat = 0;
-    for (std::size_t index = 0; index < _parts.search.sources.size(); ++index) {
-        ShellSourceView const& source = _parts.search.sources.at(index);
+    for (ShellSourceView const& source : _parts.search.sources) {
         if (source.hits.empty() && !source.failed) {
             continue;
         }

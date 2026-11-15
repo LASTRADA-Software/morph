@@ -14,6 +14,7 @@
 
 namespace morph::ui {
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the first row, the count, the total: the order setters take.
 void TableWidget::setRealizedWindow(std::size_t first, std::size_t count, std::size_t total) {
     static_cast<void>(first);
     static_cast<void>(count);
@@ -26,6 +27,7 @@ std::unique_ptr<CustomWidget> IViewBackend::createCustom(ContainerWidget* parent
     return nullptr;
 }
 
+// NOLINTNEXTLINE(modernize-use-string-view): the declaration returns std::string.
 std::string widthClassOf(double units) {
     if (units < 80.0) {
         return "compact";

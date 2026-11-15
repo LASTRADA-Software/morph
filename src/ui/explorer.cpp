@@ -443,7 +443,7 @@ void Explorer::listAll() {
                 entry.button = _backend->createButton(model.column.get());
                 entry.button->setLabel(action);
                 entry.button->setTestId("explorer_action_" + action);
-                entry.button->setOnClick([this, id = action] { select(id); });
+                entry.button->setOnClick([this, actionId = action] { select(actionId); });
                 model.actions.push_back(std::move(entry));
             }
         } else {

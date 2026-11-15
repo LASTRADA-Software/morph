@@ -185,6 +185,7 @@ namespace detail {
 // group's path, then the type it passes down.
 [[nodiscard]] MORPH_API std::optional<std::string> readGroup(Json::object_t const& group, std::string const& prefix,
                                                              std::string const& inherited, TokenSet& out);
+// NOLINTEND(misc-no-recursion,bugprone-easily-swappable-parameters)
 
 }  // namespace detail
 
@@ -242,6 +243,7 @@ using TokenFileLookup = std::function<TokenSet const*(std::string_view fileId)>;
                                                                           std::string_view variant,
                                                                           std::string_view density,
                                                                           std::string_view surface);
+// NOLINTEND(bugprone-easily-swappable-parameters)
 
 namespace detail {
 

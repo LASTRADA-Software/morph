@@ -25,6 +25,7 @@ namespace {
 /// @param key    A `morph.shell.*` key.
 /// @param locale The session's locale; only its language matters.
 /// @return The text; the key when it names none.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a message key, then a locale tag.
 std::string builtinShellText(std::string_view key, std::string_view locale) {
     struct Entry {
         std::string_view key;
@@ -32,6 +33,7 @@ std::string builtinShellText(std::string_view key, std::string_view locale) {
         std::string_view de;
     };
     static constexpr std::array<Entry, 27> kRows = {{
+        // NOLINTBEGIN(modernize-use-designated-initializers): the columns are key, English, German.
         {"morph.shell.context", "Scope", "Bereich"},
         {"morph.shell.search", "Search", "Suche"},
         {"morph.shell.searchResults", "Search results", "Suchergebnisse"},
@@ -60,8 +62,10 @@ std::string builtinShellText(std::string_view key, std::string_view locale) {
         {"morph.shell.connected", "Connected", "Verbunden"},
         {"morph.shell.reconnecting", "Reconnecting…", "Verbindung wird wiederhergestellt…"},
         {"morph.shell.offline", "Offline", "Offline"},
+        // NOLINTEND(modernize-use-designated-initializers)
     }};
     bool const german = locale.starts_with("de");
+    // NOLINTNEXTLINE(readability-qualified-auto): an array iterator is a pointer on some standard libraries only.
     auto const found = std::ranges::find_if(kRows, [key](Entry const& row) { return row.key == key; });
     if (found == kRows.end()) {
         return std::string{key};
@@ -76,7 +80,7 @@ namespace morph::ui {
 
 std::string shellText(std::string_view key, FormatContext const& format) {
     if (format.translations) {
-        if (auto const pattern = format.translations(std::string{key}, format.locale)) {
+        if (auto const pattern = format.translations(key, format.locale)) {
             return *pattern;
         }
     }
@@ -202,6 +206,7 @@ void ShellPartsModel::setSearchText(std::string const& text) {
     static_cast<void>(_root->setState(shell_names::kSearchText, Value{text}));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the source index, then the hit index within it.
 std::optional<ShellPartsModel::Target> ShellPartsModel::hit(std::size_t source, std::size_t hit) const {
     std::vector<Target> const hits = sourceHits(source);
     if (hit >= hits.size()) {
@@ -278,6 +283,7 @@ void ShellPartsModel::problem(std::string const& text) const {
     }
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one branch per value shape.
 std::string ShellPartsModel::describe(Value const& value, FormatContext const& format) {
     if (ValueRecord const* const record = value.asRecord()) {
         auto const key = record->find("t");
@@ -357,6 +363,7 @@ std::optional<long long> ShellPartsModel::countOf(Value const& reply, std::strin
 std::vector<ShellPartsModel::Option> ShellPartsModel::parseOptions(AppRoot::QueryRead const& read,
                                                                    FormatContext const& format) {
     std::vector<Option> out;
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): parseOptions runs only once a context switch is declared.
     ContextSwitch const& declared = *_parts->context;
     Value const* const list = read.value.field(declared.optionsField);
     ValueList const* const items = list == nullptr ? nullptr : list->asList();
@@ -472,6 +479,7 @@ std::vector<ShellPartsModel::Target> ShellPartsModel::sourceHits(std::size_t sou
     return out;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one section per declared search source.
 ShellSearchView ShellPartsModel::searchView(FormatContext const& format) const {
     ShellSearchView out;
     if (_parts->search.empty()) {
@@ -588,6 +596,7 @@ ShellHelpView ShellPartsModel::helpView() const {
 }
 
 ValueRecord ShellPartsModel::helpParams() const {
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access): helpParams runs only while a help view is declared.
     auto const text = glz::write_json(_parts->help->params);
     auto const json = text ? parseJson(*text) : std::unexpected(std::string{"unwritable"});
     auto const value = json ? valueFromJson(*json) : std::unexpected(json.error());
@@ -595,6 +604,7 @@ ValueRecord ShellPartsModel::helpParams() const {
     return record == nullptr ? ValueRecord{} : *record;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): one section per principal facet.
 ShellPrincipalView ShellPartsModel::principalView(FormatContext const& format) const {
     ShellPrincipalView out;
     if (!_parts->principal) {
@@ -627,7 +637,7 @@ ShellPrincipalView ShellPartsModel::principalView(FormatContext const& format) c
             }
         }
     }
-    auto choices = [&format](std::vector<std::string> const& tags) {
+    auto const choices = [&format](std::vector<std::string> const& tags) {
         std::vector<ShellChoiceView> list;
         for (std::string const& tag : tags) {
             list.push_back(ShellChoiceView{.tag = tag, .label = shellText("morph.shell.locale." + tag, format)});
