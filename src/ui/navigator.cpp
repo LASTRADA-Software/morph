@@ -236,14 +236,16 @@ Navigator::Menu Navigator::menu() const {
         out.targets.push_back(MenuSlot{.screenId = screenId, .items = {}});
     }
     if (!_pins.empty() && !_groups.empty()) {
-        out.entries.push_back(MenuEntry{.label = {},
-                                        .icon = {},
-                                        .keys = {},
-                                        .checked = std::nullopt,
-                                        .enabled = true,
-                                        .items = {},
-                                        .separator = true,
-                                        .description = {}});
+        out.entries.push_back(MenuEntry{
+            .label = {},
+            .icon = {},
+            .keys = {},
+            .checked = std::nullopt,
+            .enabled = true,
+            .items = {},
+            .separator = true,
+            .description = {},
+        });
         out.targets.push_back(MenuSlot{});
     }
     if (_moduleGroups) {
@@ -444,14 +446,16 @@ void Navigator::makeGroup(Group& group) {
         if (entry.module != group.module || entry.group != group.group) {
             continue;
         }
-        Item item{.entry = &entry,
-                  .titles = titlesOf(entry),
-                  .row = _backend->createStack(group.section.get(), Axis::Horizontal),
-                  .button = {},
-                  .content = {},
-                  .label = {},
-                  .badge = {},
-                  .shown = std::nullopt};
+        Item item{
+            .entry = &entry,
+            .titles = titlesOf(entry),
+            .row = _backend->createStack(group.section.get(), Axis::Horizontal),
+            .button = {},
+            .content = {},
+            .label = {},
+            .badge = {},
+            .shown = std::nullopt,
+        };
         item.row->setTestId("nav_row_" + entry.id);
         item.row->setLayout({.width = Sizing::stretch(), .height = {}});
         item.row->setAlign(Align::Center);
