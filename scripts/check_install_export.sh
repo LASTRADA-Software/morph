@@ -278,6 +278,22 @@ int main() {
     if (morph::ui::detail::base64Size("AQID") != 3) {
         return 1;
     }
+    // Calls into the document loader's and the expression language's compiled halves.
+    auto const loaded =
+        morph::ui::loadDocumentText(R"({"vocab": "ui/1", "id": "t", "view": {"kind": "text", "text": "x"}})");
+    if (!loaded.has_value() || loaded->view->kind != "text") {
+        return 1;
+    }
+    auto const json = morph::ui::parseJson(R"({"fn": "add", "args": [1, 2]})");
+    auto const expr = json ? morph::ui::parseExpression(*json) : std::unexpected(morph::ui::Refusal{});
+    morph::ui::StaticEnvironment const env;
+    if (!expr.has_value()) {
+        return 1;
+    }
+    auto const sum = morph::ui::evaluate(**expr, env);
+    if (sum.asInt() == nullptr || *sum.asInt() != 3) {
+        return 1;
+    }
     std::printf("morph %d.%d.%d consumed from the install prefix\n", MORPH_VERSION_MAJOR,
                 MORPH_VERSION_MINOR, MORPH_VERSION_PATCH);
     return 0;
