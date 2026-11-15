@@ -652,4 +652,4 @@ ShellPrincipalView ShellPartsModel::principalView(FormatContext const& format) c
     }
     return out;
 }
-};  // namespace morph::ui
+}  // namespace morph::ui

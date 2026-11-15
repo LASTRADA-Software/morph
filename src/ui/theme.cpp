@@ -1263,4 +1263,4 @@ std::vector<std::string> themeProblems(ThemeIndex const& index, TokenFileLookup 
     }
     return problems;
 }
-};  // namespace morph::ui
+}  // namespace morph::ui
