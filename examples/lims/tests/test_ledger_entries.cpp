@@ -1534,10 +1534,14 @@ void writeJournal(lims::PeriodId period, std::vector<RawEntry> const& rows) {
 // Mutations: drop the plan's filters from the statement (translate returns "1" for the filter); order empty cells
 // first; render an exclude as NOT (cell condition) without COALESCE; round an integer operand; drop the Latin-1 fold;
 // order by the transaction-time seconds without the floor.
-TEST_CASE(
-    "ledger: a page of entries from the database equals the engine's page over the same rows, for every sort and "
-    "filter the journal offers",
-    "[lims][ledger][pages]") {
+namespace {
+
+// The corpus is split into this many test cases, each comparing every `kCorpusParts`-th query: a page costs a load per
+// row, and the whole corpus in one case outlasts a test's time limit under the sanitizers.
+constexpr std::size_t kCorpusParts = 4;
+
+// Compares the queries at @p part, @p part + kCorpusParts, ... of the corpus.
+void checkEntryPagesAgainstEngine(std::size_t part) {
     DbFixture fixture;
     auto const period = books();
     writeJournal(period.id, journalRows());
@@ -1556,6 +1560,11 @@ TEST_CASE(
     for (auto&& query : groupQueries()) {
         corpus.push_back(std::move(query));
     }
+    decltype(corpus) slice;
+    for (std::size_t i = part; i < corpus.size(); i += kCorpusParts) {
+        slice.push_back(std::move(corpus[i]));
+    }
+    REQUIRE_FALSE(slice.empty());
 
     morph::table::ConformanceOptions options;
     options.limits.totalCap = 10;
@@ -1573,17 +1582,47 @@ TEST_CASE(
         out.offset = page.offset;
         return out;
     };
-    auto const failures = morph::table::conformanceFailures(source, model, corpus, options);
+    auto const failures = morph::table::conformanceFailures(source, model, slice, options);
     for (std::size_t i = 0; i < failures.size() && i < 10; ++i) {
         WARN(failures[i]);
     }
     CHECK(failures.empty());
 }
 
-// The control for the case above: the journal and the corpus compare what the helper is said to compare. Every column
+}  // namespace
+
+TEST_CASE(
+    "ledger: a page of entries from the database equals the engine's page over the same rows, for every sort and "
+    "filter the journal offers (part 1 of 4)",
+    "[lims][ledger][pages]") {
+    checkEntryPagesAgainstEngine(0);
+}
+
+TEST_CASE(
+    "ledger: a page of entries from the database equals the engine's page over the same rows, for every sort and "
+    "filter the journal offers (part 2 of 4)",
+    "[lims][ledger][pages]") {
+    checkEntryPagesAgainstEngine(1);
+}
+
+TEST_CASE(
+    "ledger: a page of entries from the database equals the engine's page over the same rows, for every sort and "
+    "filter the journal offers (part 3 of 4)",
+    "[lims][ledger][pages]") {
+    checkEntryPagesAgainstEngine(2);
+}
+
+TEST_CASE(
+    "ledger: a page of entries from the database equals the engine's page over the same rows, for every sort and "
+    "filter the journal offers (part 4 of 4)",
+    "[lims][ledger][pages]") {
+    checkEntryPagesAgainstEngine(3);
+}
+
+// The control for the cases above: the journal and the corpus compare what the helper is said to compare. Every column
 // the database can translate is filtered, somewhere in the corpus, by a query the plan accepts and whose view is
 // neither empty nor the whole journal, except the company, which every entry shares. The standard quick-search group
-// spans `lines` and is refused as Unavailable, so the group queries of the case above are the ones that are compared.
+// spans `lines` and is refused as Unavailable, so the group queries of the cases above are the ones that are compared.
 TEST_CASE("ledger: the entry page refuses the columns the database cannot compare, and nothing else",
           "[lims][ledger][pages]") {
     DbFixture fixture;
