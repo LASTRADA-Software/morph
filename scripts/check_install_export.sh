@@ -345,6 +345,14 @@ if run_step "the consumer project could not configure against the install prefix
 
         if run_step "the consumer binary did not run" "${consumer_build}/consumer"; then
             note "the consumer binary runs"
+        elif command -v readelf >/dev/null 2>&1; then
+            # A loader failure names the library it missed, not the object that
+            # needed it or the paths it searched; these do.
+            for object in "${consumer_build}/consumer" "$prefix"/lib*/lib*.so*; do
+                [[ -f "$object" && ! -L "$object" ]] || continue
+                printf -- '-- %s\n' "$object" >&2
+                readelf -d "$object" 2>/dev/null | grep -E 'NEEDED|RPATH|RUNPATH' >&2 || true
+            done
         fi
     fi
 fi

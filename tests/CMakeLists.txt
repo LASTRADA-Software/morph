@@ -825,7 +825,7 @@ set_tests_properties(morph_client_only_facade PROPERTIES TIMEOUT 60)
 if(DEFINED AF_SANITIZER)
     foreach(_morph_guard_probe IN ITEMS morph_client_only_guard_links morph_client_only_runtime_throw
                                         morph_client_only_facade morph_declare_source_canary
-                                        morph_effects_unseen_links)
+                                        morph_effects_unseen_links morph_duplicate_model_id)
         apply_sanitizers(${_morph_guard_probe} ${AF_SANITIZER})
     endforeach()
     unset(_morph_guard_probe)

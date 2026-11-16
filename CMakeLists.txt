@@ -45,6 +45,18 @@ if(MORPH_BUILD_SHARED)
     if(WIN32 AND NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
         set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
     endif()
+    # An installed libmorph needs core-cpp's libraries, and each of those needs
+    # the others; all are installed into one directory. A search path relative
+    # to the library itself finds them wherever the prefix lands, instead of
+    # relying on the program's own search path, which the loader does not apply
+    # to a library's dependencies.
+    if(NOT DEFINED CMAKE_INSTALL_RPATH)
+        if(APPLE)
+            set(CMAKE_INSTALL_RPATH "@loader_path")
+        elseif(UNIX)
+            set(CMAKE_INSTALL_RPATH "$ORIGIN")
+        endif()
+    endif()
 endif()
 option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
 option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
