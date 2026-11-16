@@ -1562,7 +1562,7 @@ void checkEntryPagesAgainstEngine(std::size_t part) {
     }
     decltype(corpus) slice;
     for (std::size_t i = part; i < corpus.size(); i += kCorpusParts) {
-        slice.push_back(std::move(corpus[i]));
+        slice.push_back(std::move(corpus.at(i)));
     }
     REQUIRE_FALSE(slice.empty());
 
