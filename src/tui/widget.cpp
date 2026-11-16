@@ -224,7 +224,7 @@ namespace {
 void invert(::core::tui::Buffer& buffer, ::core::tui::Rect area) {
     for (int row = area.y; row < area.y + area.height; ++row) {
         for (int col = area.x; col < area.x + area.width; ++col) {
-            if (auto* const cell = buffer.tryAt(row, col)) {
+            if (auto* const cell = buffer.cellAt({.x = col, .y = row})) {
                 cell->style.inverse = true;
             }
         }
@@ -236,7 +236,7 @@ void invert(::core::tui::Buffer& buffer, ::core::tui::Rect area) {
 void colour(::core::tui::Buffer& buffer, ::core::tui::Rect area, ::core::tui::Color foreground) {
     for (int row = area.y; row < area.y + area.height; ++row) {
         for (int col = area.x; col < area.x + area.width; ++col) {
-            if (auto* const cell = buffer.tryAt(row, col)) {
+            if (auto* const cell = buffer.cellAt({.x = col, .y = row})) {
                 cell->style.fg = foreground;
             }
         }
@@ -274,8 +274,8 @@ void WidgetBase::paintClipped(::core::tui::Canvas& canvas, ::core::tui::Size lai
     ::core::tui::Buffer scratch{drawn.height, left + drawn.width};
     for (int row = 0; row < drawn.height; ++row) {
         for (int col = 0; col < drawn.width; ++col) {
-            auto const* const from = screen.tryAt(drawn.y + row, drawn.x + col);
-            auto* const into = scratch.tryAt(row, left + col);
+            auto const* const from = screen.cellAt({.x = drawn.x + col, .y = drawn.y + row});
+            auto* const into = scratch.cellAt({.x = left + col, .y = row});
             if (from != nullptr && into != nullptr) {
                 *into = *from;
             }
@@ -290,8 +290,8 @@ void WidgetBase::paintClipped(::core::tui::Canvas& canvas, ::core::tui::Size lai
 
     for (int row = 0; row < drawn.height; ++row) {
         for (int col = 0; col < drawn.width; ++col) {
-            auto const* const from = scratch.tryAt(row, left + col);
-            auto* const into = screen.tryAt(drawn.y + row, drawn.x + col);
+            auto const* const from = scratch.cellAt({.x = left + col, .y = row});
+            auto* const into = screen.cellAt({.x = drawn.x + col, .y = drawn.y + row});
             if (from == nullptr || into == nullptr) {
                 continue;
             }

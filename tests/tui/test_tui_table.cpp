@@ -728,11 +728,11 @@ TEST_CASE("tui table: a toned row's cells draw in the tone's style", "[tui][tabl
     auto const& buffer = harness.screen().renderedBuffer();
     auto const& theme = harness.screen().theme();
     // Row 1 is the first data row; its first cell starts after the two-cell gutter.
-    CHECK(buffer.at(1, 2).style.fg == theme.error.fg);
-    CHECK_FALSE(buffer.at(2, 2).style.fg == theme.error.fg);
+    CHECK(buffer.cellAt({.x = 2, .y = 1})->style.fg == theme.error.fg);
+    CHECK_FALSE(buffer.cellAt({.x = 2, .y = 2})->style.fg == theme.error.fg);
     fruit.table->setRowTone(*fruit.rows.at(0), std::nullopt);
     static_cast<void>(harness.draw());
-    CHECK_FALSE(harness.screen().renderedBuffer().at(1, 2).style.fg == theme.error.fg);
+    CHECK_FALSE(harness.screen().renderedBuffer().cellAt({.x = 2, .y = 1})->style.fg == theme.error.fg);
     CHECK_THROWS_AS(fruit.table->setRowTone(*fruit.cells.at(0), ui::Tone::Ok), std::logic_error);
 }
 

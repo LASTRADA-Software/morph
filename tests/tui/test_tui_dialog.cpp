@@ -1110,7 +1110,7 @@ TEST_CASE("tui dialog: a description given as runs draws them on its row and rea
     REQUIRE(row < rows.size());
     auto const column = static_cast<int>(rows.at(row).find("0.21"));
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(static_cast<int>(row), column).style.bold);
-    CHECK(buffer.at(static_cast<int>(row), column).style.fg == harness.screen().theme().error.fg);
+    CHECK(buffer.cellAt({.x = column, .y = static_cast<int>(row)})->style.bold);
+    CHECK(buffer.cellAt({.x = column, .y = static_cast<int>(row)})->style.fg == harness.screen().theme().error.fg);
     CHECK(scene.dialog->accessibleDescription() == "Impurity B: 0.21 %");
 }

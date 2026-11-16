@@ -1100,7 +1100,8 @@ TEST_CASE("tui lists: a segmented select draws its options in one row and choose
     std::vector<ui::Key> chosen;
     select->setOnSelect([&chosen](ui::Key key) { chosen.push_back(std::move(key)); });
     CHECK(harness.draw() == Rows{" All 24 │ Flagged 2"});
-    CHECK(harness.screen().renderedBuffer().at(0, 1).style.bg == harness.screen().theme().listItemSelected.bg);
+    CHECK(harness.screen().renderedBuffer().cellAt({.x = 1, .y = 0})->style.bg ==
+          harness.screen().theme().listItemSelected.bg);
     harness.focus(*select);
     CHECK(harness.key(KeyCode::Right) == EventResult::Handled);
     CHECK(chosen == std::vector<ui::Key>{ui::Key{std::int64_t{2}}});

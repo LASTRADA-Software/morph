@@ -644,10 +644,10 @@ TEST_CASE("tui fields: a field the user cannot reach is drawn muted", "[tui][fie
     REQUIRE_FALSE(theme.textMuted.fg == theme.inputNormal.fg);
     outer->setEnabled(false);
     static_cast<void>(harness.draw());
-    CHECK(harness.screen().renderedBuffer().at(0, 0).style.fg == theme.textMuted.fg);
+    CHECK(harness.screen().renderedBuffer().cellAt({.x = 0, .y = 0})->style.fg == theme.textMuted.fg);
     outer->setEnabled(true);
     static_cast<void>(harness.draw());
-    CHECK(harness.screen().renderedBuffer().at(0, 0).style.fg == theme.inputNormal.fg);
+    CHECK(harness.screen().renderedBuffer().cellAt({.x = 0, .y = 0})->style.fg == theme.inputNormal.fg);
 }
 
 TEST_CASE("tui fields: Enter on an empty file picker picks nothing", "[tui][fields]") {
@@ -1073,7 +1073,7 @@ TEST_CASE("tui fields: a captioned required input draws its mark after the capti
     CHECK(rows.at(0) == "Meaning *");
     CHECK(
         std::ranges::none_of(rows.begin() + 1, rows.end(), [](std::string const& row) { return row.contains('*'); }));
-    CHECK(harness.screen().renderedBuffer().at(0, 8).style.fg == harness.screen().theme().error.fg);
+    CHECK(harness.screen().renderedBuffer().cellAt({.x = 8, .y = 0})->style.fg == harness.screen().theme().error.fg);
     // Without a caption the mark stays at the control's right edge.
     input->setCaption("", false);
     Rows const bare = harness.draw();
@@ -1110,7 +1110,7 @@ TEST_CASE(
     REQUIRE(rows.size() == 2);
     CHECK(rows.at(0).ends_with('!'));
     CHECK(rows.at(1) == "Out of spec");
-    CHECK(harness.screen().renderedBuffer().at(1, 0).style.fg == harness.screen().theme().error.fg);
+    CHECK(harness.screen().renderedBuffer().cellAt({.x = 0, .y = 1})->style.fg == harness.screen().theme().error.fg);
     CHECK(input->accessibleDescription() == "Out of spec");
     input->setErrors({"Not a number"});
     CHECK(input->accessibleDescription() == "Not a number\nOut of spec");
@@ -1142,7 +1142,7 @@ TEST_CASE("tui fields: a prominent input draws its text bold", "[tui][fields]") 
     input->setEmphasis(ui::InputEmphasis::Prominent);
     input->setText("S-123");
     CHECK(harness.draw() == Rows{"S-123"});
-    CHECK(harness.screen().renderedBuffer().at(0, 0).style.bold);
+    CHECK(harness.screen().renderedBuffer().cellAt({.x = 0, .y = 0})->style.bold);
 }
 
 // A field narrower than a text it was given draws the text's first cells and an ellipsis, not the tail the editor's
