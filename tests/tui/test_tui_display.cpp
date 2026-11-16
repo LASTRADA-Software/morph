@@ -207,8 +207,8 @@ TEST_CASE("tui banner: a banner's runs draw on its row, a strong run bold", "[tu
     banner->setSpans({{.text = "Refused.", .strong = true}, {.text = " 3 left"}});
     CHECK(harness.draw() == Rows{"Refused. 3 left"});
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(0, 0).style.bold);
-    CHECK_FALSE(buffer.at(0, 10).style.bold);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.bold);
+    CHECK_FALSE(buffer.cellAt({.x = 10, .y = 0})->style.bold);
     CHECK(banner->probeText() == "Refused. 3 left");
 }
 
@@ -221,9 +221,9 @@ TEST_CASE("tui key-value: a stacked pair takes two rows, and a toned value is bo
                   {.label = "Containers", .value = "180 needed", .tone = ui::Tone::Err}});
     CHECK(harness.draw() == Rows{"Serial", "D-9", "Containers", "180 needed"});
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(3, 0).style.bold);
-    CHECK(buffer.at(3, 0).style.fg == harness.screen().theme().error.fg);
-    CHECK_FALSE(buffer.at(1, 0).style.bold);
+    CHECK(buffer.cellAt({.x = 0, .y = 3})->style.bold);
+    CHECK(buffer.cellAt({.x = 0, .y = 3})->style.fg == harness.screen().theme().error.fg);
+    CHECK_FALSE(buffer.cellAt({.x = 0, .y = 1})->style.bold);
     CHECK(kv->probeText() == "Serial: D-9\nContainers: 180 needed");
 }
 
@@ -309,9 +309,9 @@ TEST_CASE("tui banner: a link action is underlined inside its sentence and a cli
     banner->setActionStyle(ui::BannerActionStyle::Link, false);
     CHECK(harness.draw() == Rows{"1 field needs attention: Containers per pull."});
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(0, 25).style.underline);
-    CHECK_FALSE(buffer.at(0, 5).style.underline);
-    CHECK_FALSE(buffer.at(0, 44).style.underline);
+    CHECK(buffer.cellAt({.x = 25, .y = 0})->style.underline);
+    CHECK_FALSE(buffer.cellAt({.x = 5, .y = 0})->style.underline);
+    CHECK_FALSE(buffer.cellAt({.x = 44, .y = 0})->style.underline);
     static_cast<void>(harness.click({.x = 30, .y = 0}));
     CHECK(actions == 1);
     static_cast<void>(harness.click({.x = 5, .y = 0}));

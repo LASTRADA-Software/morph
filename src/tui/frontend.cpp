@@ -38,7 +38,9 @@ int Frontend::run(ui::AppSource& source) {
     if (auto const ready = terminal->initialize(); !ready) {
         throw std::runtime_error{"morph::tui::Frontend: the terminal did not initialise: " + ready.error()};
     }
-    ::core::tui::Screen screen{*terminal, ::core::tui::ScreenConfig{.alternateScreen = owned != nullptr}};
+    auto const screenBuffer =
+        owned != nullptr ? ::core::tui::ScreenBuffer::Alternate : ::core::tui::ScreenBuffer::Primary;
+    ::core::tui::Screen screen{*terminal, ::core::tui::ScreenConfig{.screenBuffer = screenBuffer}};
     std::optional<::core::tui::runtime::TuiRuntime> input;
     if (_config.input != nullptr) {
         input.emplace(ioLoop.loop(), *_config.input);

@@ -60,8 +60,8 @@ TEST_CASE("tui widgets: a button weight of 600 or more draws its caption bold, a
     light->setWeight(500);
     static_cast<void>(harness.draw());
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(0, 2).style.bold);
-    CHECK_FALSE(buffer.at(1, 2).style.bold);
+    CHECK(buffer.cellAt({.x = 2, .y = 0})->style.bold);
+    CHECK_FALSE(buffer.cellAt({.x = 2, .y = 1})->style.bold);
 }
 
 // Mutation: ignore the alignment in TextImpl::paintControl (each line starts at cell 0).
@@ -722,11 +722,11 @@ TEST_CASE("tui widgets: a primary button is bold, a danger one bold in the error
     ghost->setEmphasis(ui::ButtonEmphasis::Ghost);
     static_cast<void>(harness.draw());
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK_FALSE(buffer.at(0, 2).style.bold);
-    CHECK(buffer.at(1, 2).style.bold);
-    CHECK(buffer.at(2, 2).style.bold);
-    CHECK(buffer.at(2, 2).style.fg == harness.screen().theme().error.fg);
-    CHECK_FALSE(buffer.at(3, 2).style.bold);
+    CHECK_FALSE(buffer.cellAt({.x = 2, .y = 0})->style.bold);
+    CHECK(buffer.cellAt({.x = 2, .y = 1})->style.bold);
+    CHECK(buffer.cellAt({.x = 2, .y = 2})->style.bold);
+    CHECK(buffer.cellAt({.x = 2, .y = 2})->style.fg == harness.screen().theme().error.fg);
+    CHECK_FALSE(buffer.cellAt({.x = 2, .y = 3})->style.bold);
 }
 
 // Mutation: map Section to Normal in roleStyle (the section is neither bold nor muted).
@@ -742,9 +742,9 @@ TEST_CASE("tui widgets: a section text is bold and muted, a step below a heading
     static_cast<void>(harness.draw());
     auto const& buffer = harness.screen().renderedBuffer();
     auto const& theme = harness.screen().theme();
-    CHECK(buffer.at(0, 0).style.bold);
-    CHECK(buffer.at(0, 0).style.fg == theme.textMuted.fg);
-    CHECK(buffer.at(1, 0).style.bold);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.bold);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.fg == theme.textMuted.fg);
+    CHECK(buffer.cellAt({.x = 0, .y = 1})->style.bold);
     CHECK_FALSE(theme.textMuted.fg == theme.textBold.fg);
 }
 
@@ -760,9 +760,9 @@ TEST_CASE("tui widgets: a display text is bold as a heading is, and a small text
     small->setRole(ui::TextRole::Small);
     static_cast<void>(harness.draw());
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(0, 0).style.bold);
-    CHECK_FALSE(buffer.at(0, 1).style.bold);
-    CHECK(buffer.at(0, 1).style.fg == harness.screen().theme().textNormal.fg);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.bold);
+    CHECK_FALSE(buffer.cellAt({.x = 1, .y = 0})->style.bold);
+    CHECK(buffer.cellAt({.x = 1, .y = 0})->style.fg == harness.screen().theme().textNormal.fg);
 }
 
 // Mutation: map Headline to Normal in roleStyle (the title is not bold, and differs from a heading).
@@ -779,10 +779,10 @@ TEST_CASE("tui widgets: a headline text is drawn as a heading is: a cell has one
     normal->setText("Instrument");
     static_cast<void>(harness.draw());
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(0, 0).style.bold);
-    CHECK(buffer.at(0, 0).style.fg == buffer.at(1, 0).style.fg);
-    CHECK(buffer.at(0, 0).style.bold == buffer.at(1, 0).style.bold);
-    CHECK_FALSE(buffer.at(2, 0).style.bold);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.bold);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.fg == buffer.cellAt({.x = 0, .y = 1})->style.fg);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.bold == buffer.cellAt({.x = 0, .y = 1})->style.bold);
+    CHECK_FALSE(buffer.cellAt({.x = 0, .y = 2})->style.bold);
 }
 
 // Mutation: draw an item as a push button (its line shows `[ ... ]`).
@@ -811,8 +811,8 @@ TEST_CASE("tui widgets: an item button paints its label unbracketed across its l
         return lhs.fg == rhs.fg && lhs.bg == rhs.bg && lhs.bold == rhs.bold && lhs.inverse == rhs.inverse;
     };
     // The selected item's style runs to the end of its line, past its label.
-    CHECK(same(buffer.at(2, 19).style, theme.listItemSelected));
-    CHECK(same(buffer.at(1, 19).style, theme.textNormal));
+    CHECK(same(buffer.cellAt({.x = 19, .y = 2})->style, theme.listItemSelected));
+    CHECK(same(buffer.cellAt({.x = 19, .y = 1})->style, theme.textNormal));
     CHECK_FALSE(same(theme.listItemSelected, theme.textNormal));
 }
 
@@ -836,10 +836,10 @@ TEST_CASE("tui widgets: a selected push button draws its caption in the list's s
     auto const same = [](::core::tui::Style const& lhs, ::core::tui::Style const& rhs) {
         return lhs.fg == rhs.fg && lhs.bg == rhs.bg && lhs.bold == rhs.bold && lhs.inverse == rhs.inverse;
     };
-    CHECK(same(buffer.at(1, 2).style, theme.listItemSelected));
-    CHECK(same(buffer.at(1, 3).style, theme.listItemSelected));
-    CHECK_FALSE(same(buffer.at(1, 0).style, theme.listItemSelected));
-    CHECK_FALSE(same(buffer.at(0, 2).style, theme.listItemSelected));
+    CHECK(same(buffer.cellAt({.x = 2, .y = 1})->style, theme.listItemSelected));
+    CHECK(same(buffer.cellAt({.x = 3, .y = 1})->style, theme.listItemSelected));
+    CHECK_FALSE(same(buffer.cellAt({.x = 0, .y = 1})->style, theme.listItemSelected));
+    CHECK_FALSE(same(buffer.cellAt({.x = 2, .y = 0})->style, theme.listItemSelected));
 }
 
 TEST_CASE("tui widgets: a sidebar surface draws its subtree inverse; a card draws nothing", "[tui][widgets]") {
@@ -857,9 +857,9 @@ TEST_CASE("tui widgets: a sidebar surface draws its subtree inverse; a card draw
     outside->setText("outside");
     CHECK(harness.draw() == Rows{"inside", "card", "outside"});
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(0, 0).style.inverse);
-    CHECK_FALSE(buffer.at(1, 0).style.inverse);
-    CHECK_FALSE(buffer.at(2, 0).style.inverse);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.inverse);
+    CHECK_FALSE(buffer.cellAt({.x = 0, .y = 1})->style.inverse);
+    CHECK_FALSE(buffer.cellAt({.x = 0, .y = 2})->style.inverse);
 }
 
 // Mutation: ignore `strong` in paintRuns (the strong run is not bold).
@@ -870,10 +870,10 @@ TEST_CASE("tui widgets: a text's runs draw in order, a strong run bold and its n
     text->setSpans({{.text = "Lot "}, {.text = "L-26", .strong = true}, {.text = " ok\nnext", .mono = true}});
     CHECK(harness.draw() == Rows{"Lot L-26 ok", "next"});
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK_FALSE(buffer.at(0, 3).style.bold);
-    CHECK(buffer.at(0, 4).style.bold);
-    CHECK(buffer.at(0, 7).style.bold);
-    CHECK_FALSE(buffer.at(0, 8).style.bold);
+    CHECK_FALSE(buffer.cellAt({.x = 3, .y = 0})->style.bold);
+    CHECK(buffer.cellAt({.x = 4, .y = 0})->style.bold);
+    CHECK(buffer.cellAt({.x = 7, .y = 0})->style.bold);
+    CHECK_FALSE(buffer.cellAt({.x = 8, .y = 0})->style.bold);
     CHECK(text->probeText() == "Lot L-26 ok\nnext");
     text->setText("plain");
     CHECK(harness.draw() == Rows{"plain"});
@@ -903,15 +903,15 @@ TEST_CASE("tui widgets: a toned run takes the tone's colour, and a toned text ke
     text->setSpans({{.text = "Past due "}, {.text = "7", .tone = ui::Tone::Err}});
     CHECK(harness.draw() == Rows{"Past due 7"});
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK_FALSE(buffer.at(0, 0).style.fg == theme.error.fg);
-    CHECK(buffer.at(0, 9).style.fg == theme.error.fg);
+    CHECK_FALSE(buffer.cellAt({.x = 0, .y = 0})->style.fg == theme.error.fg);
+    CHECK(buffer.cellAt({.x = 9, .y = 0})->style.fg == theme.error.fg);
     text->setText("Past due 7");
     text->setRole(ui::TextRole::Heading);
     text->setTone(ui::Tone::Err);
     static_cast<void>(harness.draw());
     auto const& drawn = harness.screen().renderedBuffer();
-    CHECK(drawn.at(0, 0).style.fg == theme.error.fg);
-    CHECK(drawn.at(0, 0).style.bold);
+    CHECK(drawn.cellAt({.x = 0, .y = 0})->style.fg == theme.error.fg);
+    CHECK(drawn.cellAt({.x = 0, .y = 0})->style.bold);
 }
 
 // Mutation: leave the mark's cells out of the text's natural size (the mark then overwrites its last characters).
@@ -939,10 +939,10 @@ TEST_CASE("tui widgets: a danger outlined button is red and not bold, a danger o
     danger->setEmphasis(ui::ButtonEmphasis::Danger);
     static_cast<void>(harness.draw());
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(0, 2).style.fg == harness.screen().theme().error.fg);
-    CHECK_FALSE(buffer.at(0, 2).style.bold);
-    CHECK(buffer.at(1, 2).style.fg == harness.screen().theme().error.fg);
-    CHECK(buffer.at(1, 2).style.bold);
+    CHECK(buffer.cellAt({.x = 2, .y = 0})->style.fg == harness.screen().theme().error.fg);
+    CHECK_FALSE(buffer.cellAt({.x = 2, .y = 0})->style.bold);
+    CHECK(buffer.cellAt({.x = 2, .y = 1})->style.fg == harness.screen().theme().error.fg);
+    CHECK(buffer.cellAt({.x = 2, .y = 1})->style.bold);
 }
 
 // Mutation: leave out the fill of the line's style under the content (its rows lose the selected line's colour).
@@ -971,8 +971,8 @@ TEST_CASE("tui widgets: a selected list entry with content paints its line on ev
     for (int row = 0; row < 3; ++row) {
         INFO("row " << row);
         for (int const cell : {0, 20}) {
-            CHECK(buffer.at(row, cell).style.fg == selected.fg);
-            CHECK(buffer.at(row, cell).style.bold == selected.bold);
+            CHECK(buffer.cellAt({.x = cell, .y = row})->style.fg == selected.fg);
+            CHECK(buffer.cellAt({.x = cell, .y = row})->style.bold == selected.bold);
         }
     }
     static_cast<void>(harness.click({.x = 3, .y = 2}));
@@ -998,8 +998,8 @@ TEST_CASE("tui widgets: a caption text is drawn in the muted style", "[tui][widg
     caption->setRole(ui::TextRole::Caption);
     CHECK(harness.draw() == Rows{"Needs a reason"});
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(0, 0).style.fg == harness.screen().theme().textMuted.fg);
-    CHECK_FALSE(buffer.at(0, 0).style.bold);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.fg == harness.screen().theme().textMuted.fg);
+    CHECK_FALSE(buffer.cellAt({.x = 0, .y = 0})->style.bold);
 }
 
 // Guard: a label is the normal text style on the terminal. It passes without the role too (an unknown role falls
@@ -1012,8 +1012,8 @@ TEST_CASE("tui widgets: a label text is drawn in the normal style", "[tui][widge
     label->setRole(ui::TextRole::Label);
     CHECK(harness.draw() == Rows{"Sample type"});
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(0, 0).style.fg == harness.screen().theme().textNormal.fg);
-    CHECK_FALSE(buffer.at(0, 0).style.bold);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.fg == harness.screen().theme().textNormal.fg);
+    CHECK_FALSE(buffer.cellAt({.x = 0, .y = 0})->style.bold);
 }
 
 // Mutation: map Overline to Normal in roleStyle (the label is neither bold nor muted).
@@ -1025,8 +1025,8 @@ TEST_CASE("tui widgets: an overline text is bold and muted, written as it reads"
     overline->setRole(ui::TextRole::Overline);
     CHECK(harness.draw() == Rows{"Record type"});
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(0, 0).style.bold);
-    CHECK(buffer.at(0, 0).style.fg == harness.screen().theme().textMuted.fg);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.bold);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.fg == harness.screen().theme().textMuted.fg);
 }
 
 // Mutation: draw `[  ]` for an icon-only button whose icon has no glyph (the caption ignores the accessible name).
@@ -1065,9 +1065,9 @@ TEST_CASE("tui widgets: the toolbar surfaces, joined to the head's block or not,
     barText->setText("bar");
     CHECK(harness.draw() == Rows{"toolbar", "joined", "bar"});
     auto const& buffer = harness.screen().renderedBuffer();
-    CHECK(buffer.at(0, 0).style.inverse);
-    CHECK(buffer.at(1, 0).style.inverse);
-    CHECK_FALSE(buffer.at(2, 0).style.inverse);
+    CHECK(buffer.cellAt({.x = 0, .y = 0})->style.inverse);
+    CHECK(buffer.cellAt({.x = 0, .y = 1})->style.inverse);
+    CHECK_FALSE(buffer.cellAt({.x = 0, .y = 2})->style.inverse);
 }
 
 namespace {

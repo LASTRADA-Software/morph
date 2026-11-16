@@ -317,7 +317,9 @@ endif()
 # its event loop and timers, base64 and the wakeup primitive from it. Only the
 # modules morph links are built (EXCLUDE_FROM_ALL, unless morph installs; see
 # below), none of core-cpp's own tests, examples or TLS, and its TUI only with
-# MORPH_BUILD_TUI (without image decoding). With the TUI off core-cpp needs no
+# MORPH_BUILD_TUI (without image decoding). Its logind sleep/wake notification
+# (CORE_CPP_WITH_SYSTEMD) is off: morph does not watch the power state, and on
+# Linux it would add libsystemd and pkg-config to the build. With the TUI off core-cpp needs no
 # dependency but the thread library and nothing is fetched on its behalf; with
 # it on, core::tui needs libunicode, which the block above provides. Under
 # Emscripten it builds its single-threaded WebAssembly subset, which is what
@@ -348,7 +350,7 @@ endif()
 # is off while morph installs: CMake leaves an excluded subdirectory's install
 # rules out of the parent's install, so `cmake --install` would install
 # morph's package without the core-cpp package it depends on.
-set(MORPH_CORE_CPP_VERSION 0.7)
+set(MORPH_CORE_CPP_VERSION 0.21)
 option(MORPH_INSTALL "Generate morph's install and export rules" ${PROJECT_IS_TOP_LEVEL})
 if(NOT DEFINED AF_SANITIZER)
     find_package(core-cpp ${MORPH_CORE_CPP_VERSION} CONFIG QUIET)
@@ -367,13 +369,14 @@ if(NOT core-cpp_FOUND)
     CPMAddPackage(
         NAME core-cpp
         GITHUB_REPOSITORY contour-terminal/core-cpp
-        GIT_TAG v0.7.0
-        VERSION 0.7.0
+        GIT_TAG v0.21.0
+        VERSION 0.21.0
         SYSTEM YES
         EXCLUDE_FROM_ALL ${_morph_core_cpp_exclude_from_all}
         OPTIONS "CORE_CPP_TESTING OFF" "CORE_CPP_BUILD_EXAMPLES OFF"
                 "CORE_CPP_WITH_TUI ${MORPH_BUILD_TUI}" "CORE_CPP_WITH_IMAGES OFF"
-                "CORE_CPP_WITH_TLS OFF" "CORE_CPP_FETCH_DEPS OFF" "CORE_CPP_INSTALL ${MORPH_INSTALL}")
+                "CORE_CPP_WITH_TLS OFF" "CORE_CPP_WITH_SYSTEMD OFF" "CORE_CPP_FETCH_DEPS OFF"
+                "CORE_CPP_INSTALL ${MORPH_INSTALL}")
     unset(_morph_core_cpp_exclude_from_all)
 endif()
 

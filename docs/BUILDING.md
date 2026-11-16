@@ -9,7 +9,7 @@
 - **[Glaze](https://github.com/stephenberry/glaze) 7.4** for JSON reflection,
   found with `find_package` (for example from the `vcpkg.json` manifest) or
   fetched through CPM.
-- **[core-cpp](https://github.com/contour-terminal/core-cpp) 0.7**, fetched
+- **[core-cpp](https://github.com/contour-terminal/core-cpp) 0.21**, fetched
   through CPM. morph's timers run on its event loop, coroutines build on its
   `Task<T>`, and `morph::net` takes its base64 and wakeup primitive from it.
   `morph::morph` is a static library (templates and the macro-sensitive core
