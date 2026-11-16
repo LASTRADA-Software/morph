@@ -745,9 +745,16 @@ template <typename A>
     return kDesc;
 }
 
-// Forward declarations so instance() methods inside the classes can reference them.
-MORPH_API class ActionDispatcher& defaultDispatcher();
-MORPH_API class ModelRegistryFactory& defaultRegistry();
+class ActionDispatcher;
+class ModelRegistryFactory;
+
+/// @brief Returns the process-level `ActionDispatcher` singleton.
+/// @return The one dispatcher shared by every module of the process.
+MORPH_API ActionDispatcher& defaultDispatcher();
+
+/// @brief Returns the process-level `ModelRegistryFactory` singleton.
+/// @return The one registry shared by every module of the process.
+MORPH_API ModelRegistryFactory& defaultRegistry();
 
 /// @brief Registry that maps (modelId, actionId) pairs to type-erased runner functions.
 ///
@@ -1532,12 +1539,6 @@ private:
     /// @brief The model type each id was registered for.
     std::unordered_map<std::string, std::type_index> _types;
 };
-
-/// @brief Returns the process-level `ActionDispatcher` singleton.
-MORPH_API ActionDispatcher& defaultDispatcher();
-
-/// @brief Returns the process-level `ModelRegistryFactory` singleton.
-MORPH_API ModelRegistryFactory& defaultRegistry();
 
 // The three `register*Once` helpers are `noexcept` while allocating, and that
 // is a decision rather than an oversight. Their only caller is the

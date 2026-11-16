@@ -2567,7 +2567,9 @@ private:
     friend class Interpreter;
     friend class Inspector;
 
-    Screen() = default;
+    // Out of line: an exported class emits its inline members in every module, and this one destroys a
+    // `std::unique_ptr<Mounted>` on a throw, which needs `Mounted` complete.
+    Screen();
 
     /// Evaluates a head expression of runs; a run the head cannot read is dropped and reported.
     [[nodiscard]] std::vector<TextSpan> headSpans(ExprPtr const& expr) const;

@@ -53,15 +53,15 @@ namespace detail {
 
 /// @brief Process-wide override for `DateTime::now()`, guarded by a mutex.
 ///
-/// Mirrors `morph::journal::detail::defaultActionLogState()` — the same
-/// "mutex-guarded function-local static" shape used for the action-log and
-/// logger override seams elsewhere in the codebase. An empty `std::function`
-/// (the default) means "no override installed"; `DateTime::now()` falls back
-/// to `std::chrono::system_clock::now()` in that case. Forward-declared here
-/// (before `DateTime` is a complete type -- a function signature only needs
-/// `DateTime` to be declared, not defined) and defined out-of-line just after
-/// the `DateTime` struct, before `DateTime::now()`'s first caller needs it.
-[[nodiscard]] std::pair<std::mutex, std::function<DateTime()>>& nowOverrideState();
+/// Mirrors `morph::journal::detail::defaultActionLogState()`. An empty
+/// `std::function` (the default) means "no override installed";
+/// `DateTime::now()` falls back to `std::chrono::system_clock::now()` in that
+/// case. Defined in the compiled library, so a shared morph and the program
+/// using it see one override rather than one each. Declared before `DateTime`
+/// is complete: a function signature only needs `DateTime` declared.
+/// @return Reference to the process-wide `(mutex, override callable)` pair;
+///         the callable is empty when no override is installed.
+[[nodiscard]] MORPH_API std::pair<std::mutex, std::function<DateTime()>>& nowOverrideState();
 
 }  // namespace detail
 
@@ -283,18 +283,6 @@ struct DateTime {
         return lhs.value - rhs.value;
     }
 };
-
-namespace detail {
-
-/// @brief Function-local static backing `DateTime::now()`'s override seam.
-///
-/// Defined out-of-line (after `DateTime` is a complete type) since the state
-/// is keyed on `std::function<DateTime()>`.
-/// @return Reference to the process-wide `(mutex, override callable)` pair;
-///         the callable is empty when no override is installed.
-MORPH_API std::pair<std::mutex, std::function<DateTime()>>& nowOverrideState();
-
-}  // namespace detail
 
 /// @brief Installs @p clock as the process-wide override for `DateTime::now()`
 ///        (and therefore `Timestamp::now()`, which delegates to it).
