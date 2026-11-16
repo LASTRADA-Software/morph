@@ -1411,9 +1411,6 @@ private:
         if (spec.sheet.isBound() || spec.sheet.constant()) {
             bind(scope, spec.sheet, [&widget](bool sheet) { widget.setSheet(sheet); });
         }
-        if (spec.dismissLabel.isBound() || spec.dismissLabel.constant() != "Close") {
-            bind(scope, spec.dismissLabel, [&widget](std::string const& label) { widget.setDismissLabel(label); });
-        }
         return mountOverlay(scope, spec, widget);
     }
 
@@ -1436,6 +1433,7 @@ private:
             bind(scope, spec.description,
                  [&widget](std::string const& description) { widget.setDescription(description); });
         }
+        bindOverlayChrome(scope, spec, widget);
         auto& content = scope.make<std::unique_ptr<reactive::Scope>>();
         auto& shownOpen = scope.make<std::optional<bool>>();
         // A bound `open` is controlled: a dismissal the document refuses opens the dialog again, over the content it
@@ -1481,6 +1479,24 @@ private:
             });
         }
         return widget;
+    }
+
+    // An overlay's notes, close control and dismiss label: each is told only when the document sets it, so a backend
+    // keeps its own default for the rest.
+    template <typename Spec, typename OverlayWidget>
+    void bindOverlayChrome(reactive::Scope& scope, Spec const& spec, OverlayWidget& widget) {
+        if (spec.headNote.isBound() || !spec.headNote.constant().empty()) {
+            bind(scope, spec.headNote, [&widget](std::string const& note) { widget.setHeadNote(note); });
+        }
+        if (spec.footerNote.isBound() || !spec.footerNote.constant().empty()) {
+            bind(scope, spec.footerNote, [&widget](std::string const& note) { widget.setFooterNote(note); });
+        }
+        if (spec.closeButton.isBound() || spec.closeButton.constant()) {
+            bind(scope, spec.closeButton, [&widget](bool shown) { widget.setCloseButton(shown); });
+        }
+        if (spec.dismissLabel.isBound() || spec.dismissLabel.constant() != "Close") {
+            bind(scope, spec.dismissLabel, [&widget](std::string const& label) { widget.setDismissLabel(label); });
+        }
     }
 
     // After a Dialog's content failed to mount: tells the application through `onDismiss` that the dialog is closed.

@@ -117,6 +117,54 @@ Rules of thumb:
 - **`updates<R>` and `changes<R>` together mean the whole type**: the change is reported without keys.
 - Declare each action's effects in **one** place. A header included by several translation units is still one
   declaration; a second, different declaration for the same action is refused.
+- **A write that lands in another module's record** is declared by the code that composes the two modules, with
+  `BRIDGE_ADD_EFFECTS` (below). The action's own module cannot name that record, and a second
+  `BRIDGE_REGISTER_EFFECTS` is refused.
+
+### Effects the composing code adds
+
+An action sometimes changes a record of a module it must not include: a billing action that posts a ledger entry in
+its own transaction, or an organisation action that changes which samples a lab screen lists. The module cannot write
+that effect, and the application that links both can.
+
+```cpp
+// app/src/ledger_wiring.cpp, which includes both modules
+BRIDGE_ADD_EFFECTS(lims::PostInvoice, ::morph::effects::changes<lims::JournalEntryView>)
+```
+
+- The addition is **unioned** with the action's own `BRIDGE_REGISTER_EFFECTS`; it can never remove an effect, and
+  `none` is not accepted in it. An action with no declaration of its own has the additions alone.
+- Two different `BRIDGE_REGISTER_EFFECTS` for one action are still refused. An addition is the only second source.
+- It takes any of `updates<R>`, `changes<R>` and `changesInstance`, and `R` must be a registered record. An addition
+  for an action nobody registered, or for an unregistered record, is refused when the registries are first read, with
+  the other problems, and never ignored.
+- It expands to nothing under `MORPH_CLIENT_ONLY`.
+- Put it in a translation unit that is always linked into the server, such as the one that wires the modules together.
+  A static library's object that nothing references is dropped, and its addition with it.
+
+### Facts that change with time alone
+
+A list filtered by a deadline changes when the clock passes the deadline, though no action runs. The model says when,
+and the server tells the watchers at that instant.
+
+```cpp
+// A registered read beside the others: the next instant, after now, at which a requisition's scope moves.
+struct NextRequisitionDeadline {};
+std::optional<morph::time::DateTime> ProcurementModel::execute(NextRequisitionDeadline const&);
+BRIDGE_REGISTER_ACTION(lims::ProcurementModel, lims::NextRequisitionDeadline, "NextRequisitionDeadline")
+BRIDGE_REGISTER_CHANGES_AT(lims::ProcurementModel, lims::NextRequisitionDeadline, lims::RequisitionView)
+```
+
+- The action reports a fact and nothing else. It arms no timer and posts no work; the server owns the clock.
+- It must return `std::optional<morph::time::DateTime>`: an instant strictly after the model's own now, or `nullopt`
+  when nothing is pending. It declares no effects, takes no fields, and reads from the same clock the server uses
+  (`ServerConfig::clock`).
+- At that instant the server marks every listed record, and every record derived from it, as changed, as if an
+  action declaring `changes<R>` had run, and then asks for the following instant. It asks again after any action
+  whose effects name one of the records, since the next instant may have moved.
+- A reporter that is not a registered action, that declares effects, or that names an unregistered record is
+  refused with the other registry problems.
+- In a local-mode client there is no server, so nothing is told at the instant: use `refreshEvery` there.
 
 ## Records
 
@@ -216,7 +264,8 @@ Work through it every time you add an action or change what one does. A coding a
    every action's effects.
 5. **Would a key alone leak something to another user?** Add `privateKeys` to the record.
 6. **Write `BRIDGE_REGISTER_EFFECTS` (`<morph/core/effects.hpp>`) directly under the action's
-   `BRIDGE_REGISTER_ACTION`.**
+   `BRIDGE_REGISTER_ACTION`.** A record the action's module cannot include is added by the composing code with
+   `BRIDGE_ADD_EFFECTS`.
 7. **Remove any refresh the screens did by hand**: an `onSuccess` refetch that the effects now cover.
 8. **Build and run the screen tests.** A bad declaration fails when the server starts. Check that the bundle loads
    with no warnings ([Testing](#testing)).

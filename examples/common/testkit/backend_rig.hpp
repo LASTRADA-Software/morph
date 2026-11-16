@@ -20,6 +20,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "clock.hpp"
 #include "testkit/server_connection.hpp"
 
 /// @file
@@ -244,6 +245,10 @@ public:
                 ::morph::backend::ServerConfig config;
                 // Lets a connection from connect() take events; a socket client never sends this kind.
                 config.services.push_back(std::make_shared<EventsHello>());
+                // The server waits for a model's reported instant on the ladder's clock, which a test moves by hand,
+                // so it reads the clock often.
+                config.clock = [] { return *::morph::ladder::now().value; };
+                config.clockRecheck = std::chrono::milliseconds{20};
                 if (authorizer) {
                     _server = std::make_shared<::morph::backend::RemoteServer>(*_workerPool, authorizer, config);
                 } else {

@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "../util/datetime.hpp"
 #include "detail/result_walker.hpp"
 #include "records.hpp"
 #include "registry.hpp"
@@ -124,6 +125,22 @@ struct ActionRecord {
     friend bool operator==(ActionRecord const& lhs, ActionRecord const& rhs) = default;
 };
 
+/// @brief An action that reports when records change by the passage of time alone.
+struct ChangeTimeSource {
+    /// The reporting action's id.
+    std::string action;
+    /// The type id of the model the action belongs to; a fresh instance of it answers.
+    std::string model;
+    /// The wire names of the records that change at the reported instant.
+    std::vector<std::string> records;
+
+    /// @brief Memberwise equality.
+    /// @param lhs One source.
+    /// @param rhs The other.
+    /// @return True when action, model and records match.
+    friend bool operator==(ChangeTimeSource const& lhs, ChangeTimeSource const& rhs) = default;
+};
+
 namespace detail {
 
 /// @brief One effect as a registrar records it: the record still a type, not yet a name.
@@ -142,6 +159,27 @@ struct DeclaredEffect {
 
 /// @brief Every distinct effects declaration, by action id. More than one for an id is a conflict.
 using EffectsMap = std::map<std::string, std::vector<std::vector<DeclaredEffect>>, std::less<>>;
+
+/// @brief The effects added to each action by the code that composes its module with others, by action id.
+///
+/// Apart from `EffectsMap`: an addition is never in conflict with a base declaration, it is unioned with it.
+using AddedEffectsMap = std::map<std::string, std::vector<DeclaredEffect>, std::less<>>;
+
+/// @brief One time-derived fact as a registrar records it: the records still types, not yet names.
+struct DeclaredChangeTime {
+    /// The reporting action's id.
+    std::string action;
+    /// The model's type id.
+    std::string model;
+    /// The record types.
+    std::vector<std::type_index> records;
+
+    /// @brief Memberwise equality.
+    /// @param lhs One declaration.
+    /// @param rhs The other.
+    /// @return True when action, model and records match.
+    friend bool operator==(DeclaredChangeTime const& lhs, DeclaredChangeTime const& rhs) = default;
+};
 
 /// @brief Maps an effect tag type to its `DeclaredEffect`.
 /// @tparam E An effect tag.
@@ -203,6 +241,23 @@ inline void addEffects(EffectsMap& map, std::string_view actionId, std::vector<D
     }
 }
 
+/// @brief Adds effects to an action's additions, skipping any already there.
+/// @param map The registry to add to.
+/// @param actionId The action's id.
+/// @param added The effects.
+inline void addAddedEffects(AddedEffectsMap& map, std::string_view actionId,
+                            std::vector<DeclaredEffect> const& added) {
+    auto entry = map.find(actionId);
+    if (entry == map.end()) {
+        entry = map.emplace(std::string{actionId}, std::vector<DeclaredEffect>{}).first;
+    }
+    for (auto const& effect : added) {
+        if (std::ranges::find(entry->second, effect) == entry->second.end()) {
+            entry->second.push_back(effect);
+        }
+    }
+}
+
 /// @brief The process-level effects registry, appended to by static registrars.
 /// @return The mutable map.
 inline EffectsMap& mutableEffectsRegistry() {
@@ -228,6 +283,75 @@ inline bool registerEffectsOnce() noexcept {
     return true;
 }
 
+/// @brief The process-level list of time-derived facts, appended to by static registrars.
+/// @return The mutable list.
+inline std::vector<DeclaredChangeTime>& mutableChangeTimesRegistry() {
+    static std::vector<DeclaredChangeTime> entries;
+    return entries;
+}
+
+/// @brief Adds a time-derived fact, unless an equal one is already there.
+/// @param list The registry to add to.
+/// @param declared The fact.
+inline void addChangeTime(std::vector<DeclaredChangeTime>& list, DeclaredChangeTime declared) {
+    if (std::ranges::find(list, declared) == list.end()) {
+        list.push_back(std::move(declared));
+    }
+}
+
+/// @brief Static-init helper for `BRIDGE_REGISTER_CHANGES_AT`.
+/// @tparam Model The model the action belongs to.
+/// @tparam Action The reporting action; its result must be `std::optional<morph::time::DateTime>`.
+/// @tparam Records The record types that change at the reported instant.
+/// @return Always true, so the result can initialise a namespace-scope variable.
+template <typename Model, typename Action, typename... Records>
+inline bool registerChangeTimeOnce() noexcept {
+    static_assert(sizeof...(Records) > 0, "BRIDGE_REGISTER_CHANGES_AT: name at least one record");
+    static_assert(
+        std::is_same_v<typename ::morph::model::ActionTraits<Action>::Result, std::optional<::morph::time::DateTime>>,
+        "BRIDGE_REGISTER_CHANGES_AT: the action must return std::optional<morph::time::DateTime>");
+    // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
+    assert(!::morph::model::registrationPhaseClosed() &&
+           "registerChangeTimeOnce: registration after the registration phase closed. The process-level "
+           "registries are unsynchronised and are read-only once dispatch begins -- registering now "
+           "races their internals against concurrent lookups. Load and register plugin modules before "
+           "the first dispatch.");
+    addChangeTime(mutableChangeTimesRegistry(),
+                  DeclaredChangeTime{
+                      .action = std::string{::morph::model::ActionTraits<Action>::typeId()},
+                      .model = std::string{::morph::model::ModelTraits<Model>::typeId()},
+                      .records = {std::type_index{typeid(Records)}...},
+                  });
+    return true;
+}
+
+/// @brief The process-level registry of added effects, appended to by static registrars.
+/// @return The mutable map.
+inline AddedEffectsMap& mutableAddedEffectsRegistry() {
+    static AddedEffectsMap entries;
+    return entries;
+}
+
+/// @brief Static-init helper for `BRIDGE_ADD_EFFECTS`.
+/// @tparam Action The action type; `ActionTraits<Action>` must be visible.
+/// @tparam E The effect tags.
+/// @return Always true, so the result can initialise a namespace-scope variable.
+template <typename Action, typename... E>
+inline bool registerAddedEffectsOnce() noexcept {
+    static_assert(sizeof...(E) > 0, "BRIDGE_ADD_EFFECTS: add at least one effect");
+    static_assert((!std::is_same_v<E, none> && ...),
+                  "BRIDGE_ADD_EFFECTS: an addition adds an effect, and none is the absence of one");
+    // NOLINTNEXTLINE(misc-static-assert,cert-dcl03-c)
+    assert(!::morph::model::registrationPhaseClosed() &&
+           "registerAddedEffectsOnce: registration after the registration phase closed. The process-level "
+           "registries are unsynchronised and are read-only once dispatch begins -- registering now "
+           "races their internals against concurrent lookups. Load and register plugin modules before "
+           "the first dispatch.");
+    addAddedEffects(mutableAddedEffectsRegistry(), ::morph::model::ActionTraits<Action>::typeId(),
+                    std::vector<DeclaredEffect>{EffectOf<E>::value()...});
+    return true;
+}
+
 /// @brief The matched and validated registries: what every read is answered from.
 struct Resolved {
     /// @brief The records, one entry per registered type, in registration order.
@@ -238,6 +362,8 @@ struct Resolved {
     std::map<std::string, std::vector<ActionRecord>, std::less<>> actionRecords;
     /// @brief The ids of the actions holding each record, by record name, in id order.
     std::map<std::string, std::vector<std::string>, std::less<>> holding;
+    /// @brief The actions that report when records change by time alone, in registration order.
+    std::vector<ChangeTimeSource> changeTimes;
 
     /// @brief See `morph::effects::effectsOf`.
     /// @param actionId The action's id.
@@ -345,11 +471,15 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 /// @param resultSlots Every action's result slots, by action id.
 /// @param declared Every action's effects declarations, by action id.
 /// @param slotConflicts Action ids registered by more than one action type.
+/// @param added Every action's added effects, by action id.
+/// @param changeTimes Every time-derived fact.
 /// @return The resolved registries.
 /// @throws morph::model::EffectsRegistrationError listing every problem, when there is one.
 [[nodiscard]] inline Resolved resolve(std::vector<record::RecordInfo> records,
                                       model::detail::ActionResultSlotMap const& resultSlots,
-                                      EffectsMap const& declared, std::vector<std::string> const& slotConflicts) {
+                                      EffectsMap const& declared, std::vector<std::string> const& slotConflicts,
+                                      AddedEffectsMap const& added,
+                                      std::vector<DeclaredChangeTime> const& changeTimes) {
     std::vector<std::string> problems;
 
     // An identical registration, as a record registered in a header gives once per translation unit, is
@@ -437,16 +567,42 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
         }
     }
 
-    for (auto const& [actionId, declarations] : declared) {
-        if (declarations.size() > 1) {
+    // Every action with a base declaration or an addition. An addition for an id no action registered is refused.
+    std::map<std::string, int, std::less<>> actionIds;
+    for (auto const& entry : declared) {
+        actionIds.emplace(entry.first, 0);
+    }
+    for (auto const& entry : added) {
+        actionIds.emplace(entry.first, 0);
+        if (!resultSlots.contains(entry.first)) {
+            problems.push_back("effects are added to action `" + entry.first + "`, which is not a registered action");
+        }
+    }
+    for (auto const& idEntry : actionIds) {
+        std::string const& actionId = idEntry.first;
+        auto const base = declared.find(actionId);
+        if (base != declared.end() && base->second.size() > 1) {
             problems.push_back("action `" + actionId + "` declares different effects in two registrations");
             continue;
         }
-        auto const& declaration = declarations.front();
-        if (declaration.size() > 1 &&
-            std::ranges::any_of(declaration, [](DeclaredEffect const& effect) { return effect.kind == Kind::None; })) {
-            problems.push_back("action `" + actionId + "` declares none together with other effects");
-            continue;
+        std::vector<DeclaredEffect> declaration;
+        if (base != declared.end()) {
+            declaration = base->second.front();
+            if (declaration.size() > 1 && std::ranges::any_of(declaration, [](DeclaredEffect const& effect) {
+                    return effect.kind == Kind::None;
+                })) {
+                problems.push_back("action `" + actionId + "` declares none together with other effects");
+                continue;
+            }
+        }
+        // An addition changes something, so a base `none` does not stand beside it; no other base effect is dropped.
+        if (auto const addition = added.find(actionId); addition != added.end()) {
+            std::erase_if(declaration, [](DeclaredEffect const& effect) { return effect.kind == Kind::None; });
+            for (auto const& effect : addition->second) {
+                if (std::ranges::find(declaration, effect) == declaration.end()) {
+                    declaration.push_back(effect);
+                }
+            }
         }
         std::vector<Effect> effects;
         for (auto const& effect : declaration) {
@@ -479,6 +635,29 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
         resolved.effects.emplace(actionId, std::move(effects));
     }
 
+    for (auto const& fact : changeTimes) {
+        if (!resultSlots.contains(fact.action)) {
+            problems.push_back("`" + fact.action +
+                               "` reports when records change by time, but is not a registered action");
+            continue;
+        }
+        if (resolved.effects.contains(fact.action)) {
+            problems.push_back("`" + fact.action +
+                               "` reports when records change by time, so it reads, and it also declares effects");
+        }
+        ChangeTimeSource source{.action = fact.action, .model = fact.model, .records = {}};
+        for (auto const& type : fact.records) {
+            auto const found = indexOf.find(type);
+            if (found == indexOf.end()) {
+                problems.push_back("`" + fact.action + "` reports when " + type.name() +
+                                   " changes by time, which is not a registered record");
+                continue;
+            }
+            source.records.push_back(records.at(found->second).name);
+        }
+        resolved.changeTimes.push_back(std::move(source));
+    }
+
     if (!problems.empty()) {
         throw model::EffectsRegistrationError(std::move(problems));
     }
@@ -491,13 +670,17 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 /// @param resultSlots The action result slots, by action id.
 /// @param declared The effects declarations, by action id.
 /// @param slotConflicts Action ids registered by more than one action type.
+/// @param added The added effects, by action id.
+/// @param changeTimes The time-derived facts.
 /// @return The resolved registries.
 /// @throws morph::model::EffectsRegistrationError listing every problem, when there is one.
 [[nodiscard]] inline Resolved resolveForTesting(std::vector<record::RecordInfo> records,
                                                 model::detail::ActionResultSlotMap const& resultSlots,
                                                 EffectsMap const& declared,
-                                                std::vector<std::string> const& slotConflicts = {}) {
-    return resolve(std::move(records), resultSlots, declared, slotConflicts);
+                                                std::vector<std::string> const& slotConflicts = {},
+                                                AddedEffectsMap const& added = {},
+                                                std::vector<DeclaredChangeTime> const& changeTimes = {}) {
+    return resolve(std::move(records), resultSlots, declared, slotConflicts, added, changeTimes);
 }
 
 /// @brief The process registries, matched and validated on the first call.
@@ -519,7 +702,8 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
     std::call_once(state.once, [] {
         try {
             state.value.emplace(resolve(record::detail::recordRegistry(), model::detail::actionResultSlots(),
-                                        mutableEffectsRegistry(), model::detail::actionResultConflicts()));
+                                        mutableEffectsRegistry(), model::detail::actionResultConflicts(),
+                                        mutableAddedEffectsRegistry(), mutableChangeTimesRegistry()));
         } catch (model::EffectsRegistrationError const& error) {
             state.error.emplace(error);
         }
@@ -539,6 +723,11 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 [[nodiscard]] inline std::optional<std::vector<Effect>> effectsOf(std::string_view actionId) {
     return detail::resolved().effectsOf(actionId);
 }
+
+/// @brief The actions that report when records change by time alone, with the records each names.
+/// @return One entry per reporter, in registration order.
+/// @throws morph::model::EffectsRegistrationError when the registered configuration is invalid.
+[[nodiscard]] inline std::vector<ChangeTimeSource> changeTimesOf() { return detail::resolved().changeTimes; }
 
 /// @brief The records an action's result holds, with the paths to each.
 ///
@@ -589,6 +778,53 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
     namespace {                                                                       \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_effects_reg_, __COUNTER__) = \
         morph::effects::detail::registerEffectsOnce<A, __VA_ARGS__>();                \
+    }
+#endif
+
+/// @def BRIDGE_REGISTER_CHANGES_AT
+/// @brief Registers action @p A of model @p M as the reporter of the next instant at which the listed records
+///        change by the passage of time alone, with no action behind it.
+///
+/// @p A returns `std::optional<morph::time::DateTime>`: the next such instant, strictly after the model's own
+/// now, or `nullopt` when none is pending. It is a read: it declares no effects and takes no fields. The server
+/// asks it, owns the clock, and at that instant marks the records changed as an action's `changes<R>` would, then
+/// asks again; the model arms no timer and posts no work. A reporter that is not a registered action, that also
+/// declares effects, or that names an unregistered record is refused on the first read. Repeating the same
+/// registration is a no-op. Expands to nothing under `MORPH_CLIENT_ONLY`.
+/// @param M The model type.
+/// @param A The reporting action type.
+/// @param ... The record types.
+#ifdef MORPH_CLIENT_ONLY
+#define BRIDGE_REGISTER_CHANGES_AT(M, A, ...)
+#else
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage): a registration macro is the public API.
+#define BRIDGE_REGISTER_CHANGES_AT(M, A, ...)                                             \
+    namespace {                                                                           \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_change_time_reg_, __COUNTER__) = \
+        morph::effects::detail::registerChangeTimeOnce<M, A, __VA_ARGS__>();              \
+    }
+#endif
+
+/// @def BRIDGE_ADD_EFFECTS
+/// @brief Adds effects to action @p A from the code that composes its module with the module that owns the
+///        record: any of `morph::effects::updates<R>`, `changes<R>` and `changesInstance`.
+///
+/// The action's own module cannot name a record of a module it does not include, and a second
+/// `BRIDGE_REGISTER_EFFECTS` for the action is refused, so the composing code, which includes both, adds the
+/// effect here. The addition is unioned with the action's own declaration and never removes an effect; `none` is
+/// refused at compile time. An addition for an action nobody registered, or for a record nobody registered, is
+/// refused on the first read, never ignored. Repeating an addition is a no-op. Place it in a translation unit
+/// that is always linked into the server. Expands to nothing under `MORPH_CLIENT_ONLY`.
+/// @param A The action type.
+/// @param ... The effects to add.
+#ifdef MORPH_CLIENT_ONLY
+#define BRIDGE_ADD_EFFECTS(A, ...)
+#else
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage): a registration macro is the public API.
+#define BRIDGE_ADD_EFFECTS(A, ...)                                                          \
+    namespace {                                                                             \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_added_effects_reg_, __COUNTER__) = \
+        morph::effects::detail::registerAddedEffectsOnce<A, __VA_ARGS__>();                 \
     }
 #endif
 // NOLINTEND(bugprone-throwing-static-initialization,cert-err58-cpp,misc-anonymous-namespace-in-header,cert-dcl59-cpp)

@@ -22,6 +22,15 @@ if(WIN32)
     add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
 
+# Links run at most this many at once under Ninja. A debug-info link of a ladder test binary takes several GB, and a
+# build parallel to the core count links as many binaries at once, which is what exhausts a 16 GB CI runner; compiles
+# keep the full parallelism.
+set(MORPH_LINK_JOBS 2 CACHE STRING "Links Ninja runs at once (0: no limit)")
+if(CMAKE_GENERATOR MATCHES "Ninja" AND MORPH_LINK_JOBS GREATER 0)
+    set_property(GLOBAL APPEND PROPERTY JOB_POOLS morph_link=${MORPH_LINK_JOBS})
+    set(CMAKE_JOB_POOL_LINK morph_link)
+endif()
+
 option(MORPH_BUILD_TESTS         "Build tests"         ON)
 option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
 option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)

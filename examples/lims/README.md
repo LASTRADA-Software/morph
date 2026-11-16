@@ -902,8 +902,9 @@ not list queries, and an action that changes a record is authorized by its decla
 **Finding: a shared module's action cannot declare effects on another module's records.** Assigning or revoking a
 role changes which samples a principal sees, so `AssignRole` changes the rows `ListSamples` answers. But `AssignRole`
 belongs to `org`, which cannot name lab's `SampleView`, and a second `BRIDGE_REGISTER_EFFECTS` for the same action
-from `app` is refused as "declares different effects in two registrations". So a screen listing samples does not
-refresh when its viewer's roles change; it refreshes on the next sample change or reload. Registering `SampleView` as
+from `app` is refused as "declares different effects in two registrations". `BRIDGE_ADD_EFFECTS` from `app` is the
+way to declare it (decision 39). Until it does, a screen listing samples does not refresh when its viewer's roles
+change; it refreshes on the next sample change or reload. Registering `SampleView` as
 derived from the role-assignment record would give the same refresh, but the registry refuses a derived record that has
 a key (`include/morph/core/effects.hpp`, the "is derived from other records but has a key" check), and `SampleView`
 has one. Inferred from reading `include/morph/core/effects.hpp` (`addEffects`, the two-declarations check, and the
@@ -1184,10 +1185,12 @@ with lab's verification but the declared authorization (`lims::Authorization`, `
 instance, but escalation is not scheduled work: it is a deadline the rule reads when an approver acts or lists, so
 nothing has to start at the deadline or resume after a restart. Measured in the same file with the clock before and
 after the deadline. The one consequence is an effects question, not a scheduling one, measured in
-`screens/tests/test_lims_approval_inbox.cpp`: a site approver's inbox, mounted before the deadline, still lists the
-invoice after it, and shows the escalation only when it asks again. What the test measures is that the open inbox is
-not told: it is checked after the harness advances past the deadline. The cause is inferred, not measured: no action
-ran, so no effect was declared or fanned out. Hypothesis 4 therefore has one instance in this design, the billing run
+`screens/tests/test_lims_approval_inbox.cpp`: a site approver's inbox, mounted before the deadline, must drop the
+invoice when the deadline passes. No action runs at that instant, so no effect fans out; the model reports the instant
+instead. `NextApprovalDeadline` answers the earliest deadline still ahead and is registered with
+`BRIDGE_REGISTER_CHANGES_AT` for `InvoiceView`; the server owns the clock, tells every watcher of the record when the
+clock reaches the instant, and asks again. The test moves the clock without sleeping and asserts that the open inbox
+shows "0 pending". Hypothesis 4 therefore has one instance in this design, the billing run
 (decision 34), and the design's row says so. Part C's requisition escalation is expected to take this shape.
 
 ### 36. Billing's approval pairs and the approver's value limit are declared, and checked in the model (hypothesis 6, second instance)
@@ -1300,13 +1303,13 @@ empty for such a caller, which cannot mislead, since recording the posting refus
 
 Two causes, measured apart in `tests/test_cross_module_effects.cpp` and by the `lims.cross_module_effects.*` probes.
 
-**(i) An action cannot declare an effect on another module's record — confirmed.** `PostInvoice` posting in one
-shared transaction (decision 38) writes the ledger's `Ledger_Entry` inside billing's action; an accountant watching
-`Ledger_Entry` is not told, while the ledger's own `CreateDraftEntry` on the same connection is heard. Billing cannot
-name the ledger's record (it does not include the ledger), and the composing code, which sees both, cannot add the
-declaration: a second `BRIDGE_REGISTER_EFFECTS` for `PostInvoice` makes the effects configuration refuse to resolve,
-"action `PostInvoice` declares different effects in two registrations" (the `refused` probe prints it; the `control`
-probe, without the second registration, resolves).
+**(i) An action cannot declare an effect on another module's record, so the composing code adds it.** `PostInvoice`
+posting in one shared transaction (decision 38) writes the ledger's `Ledger_Entry` inside billing's action. Billing
+cannot name the ledger's record (it does not include the ledger), and a second `BRIDGE_REGISTER_EFFECTS` is refused.
+The app, which includes both, states it with `BRIDGE_ADD_EFFECTS` in `app/src/ledger_wiring.cpp`; the addition is
+unioned with billing's own `updates<InvoiceView>`, and an accountant watching `Ledger_Entry` hears the posting. The
+`accepted` probe checks that the union holds both effects, the `control` probe that the configuration resolves without
+the addition.
 
 **(ii) A write outside any action derives no changes — confirmed, and not a gap.** `RecordBillableLine` run in process
 outside any dispatch writes the line and no watcher of `Billing_Line` is told; the same write dispatched through the
@@ -1317,8 +1320,7 @@ events client is heard. Changes are derived from executed actions by design: the
 The measured miss exists only in the shared-transaction mode. The shipped server posts dispatched, and there the
 ledger's half runs as the ledger's own `RecordPosting`, which a watching accountant hears (decision 38's test). The
 shared transaction is itself the workaround for hypothesis 1's missing seam — two modules' actions as one fact, each
-keeping its effects — and if that seam lands this instance goes with it. The instance no other seam fixes is decision
-26's, still inferred: org's `AssignRole` changes which samples lab's list returns, a change of visibility rather than a
+keeping its effects — and if that seam lands this instance goes with it. Decision 26's case, still inferred: org's `AssignRole` changes which samples lab's list returns, a change of visibility rather than a
 write, which neither dispatching nor a multi-action seam would make lab's screen hear. The one existing mechanism that
 carries a change from one record to another, `record::derivedFrom`, is refused on a keyed record, and both
 `Ledger_Entry` and `SampleView` are keyed. So cause (i) is filed against `include/morph` as a missing seam: a way for
@@ -1492,10 +1494,10 @@ submitted on one rig is approved on another a day later in `Local`, `LocalSingle
 and the limit hold. The lifecycle needed no state outside the row, and shares no code with invoice approval but the
 declared authorization: each lifecycle wrote its own transition helper, pending list and escalation predicate
 (`requisitions.cpp`, 320 lines; `invoice_approval.cpp`, 250). Escalation is again a deadline the rule reads, not
-scheduled work (decision 35); and again an approver's open inbox is not told when the deadline passes. That is
-measured on a site approver's watching connection, with a requisition raised after the deadline in the same case as
-the control that the connection hears a change of the record. It is the same gap in a second module, so it is filed
-against `include/morph`; Part D Task 20 builds the deadline effect.
+scheduled work (decision 35); and again an approver's open inbox had to be told when the deadline passes. That is
+measured on a site approver's watching connection: `NextRequisitionDeadline` reports the instant, and the connection
+hears a change of `Inventory_Requisition` when the clock reaches it. It is the same gap in a second module, which is
+why the framework took it: the model reports the instant and the server owns the timer.
 
 **Declared authorization, third module.** The rule is declared once beside each action
 (`inventory_authorization.hpp`) and the framework's guard runs it; no handler makes the first authorization call.

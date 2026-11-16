@@ -119,11 +119,11 @@ FLOORS = {
     # Measured in the CI coverage leg (22 branch arms) when the test kit was installed with
     # morph::reactive.
     "include/morph/testing": (74.0, 77.27),
-    # 5261 of 5562 branch arms (94.59%) with the UI document, expr/1, the whole palette, the document interpreter
-    # and the authoring builders: the interpreter's clang 22.1.8 coverage build of morph_tests gave 4901 of 5202,
-    # and the authoring builders add 360 arms, every one taken in the same configuration. The ui tests are the
-    # only ones that reach these headers.
-    "include/morph/ui": (92.0, 94.59),
+    # 15784 of 17204 branch arms (91.75%) in the CI coverage leg, over the headers and the compiled src/ui sources
+    # together: the document, expr/1, the palette, the interpreter, the shell and the authoring builders. The floor
+    # sits below the measurement by the margin the other subsystems keep, so new ui code is held to its own tests
+    # rather than to the coverage the older code built up.
+    "include/morph/ui": (90.0, 91.75),
     "include/morph/util": (93.0, 96.39),
 }
 

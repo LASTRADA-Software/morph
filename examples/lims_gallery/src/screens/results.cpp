@@ -416,7 +416,8 @@ ui::Node suitability() {
                                  {.gap = 1, .align = Align::Center})
                              .testId(std::string{"suitability-"} + check.name));
     }
-    return ui::panel({ui::row(checks, {.gap = 4, .align = Align::Center})}, {.padding = 1}).testId("suitability");
+    return ui::panel({ui::row(checks, {.gap = 4, .align = Align::Center, .wrap = true})}, {.padding = 1})
+        .testId("suitability");
 }
 
 ui::Node resultInput(Worksheet const& sheet, Evaluation const& evaluation, Field const& field) {
@@ -467,7 +468,7 @@ ui::Node resultTable(Worksheet const& sheet) {
          .cell = ui::text({.text = ui::row("spec")})},
         {.name = "evaluation",
          .label = "Evaluation",
-         .width = ui::fixed(26),
+         .width = ui::fixed(27),
          .cell = evaluationCell(sheet, evaluation)}};
     return ui::table(
                sheet.lines,

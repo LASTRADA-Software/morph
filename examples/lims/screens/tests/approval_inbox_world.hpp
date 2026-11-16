@@ -16,6 +16,9 @@ namespace lims::inboxtest {
 /// @brief The screen id of the inbox.
 inline constexpr std::string_view kInbox = "test.approvalInbox";
 
+/// @brief The screen id of the sign-in that `signInBundle` opens with.
+inline constexpr std::string_view kSignIn = "test.approvalSignIn";
+
 /// @brief A UTC instant on a calendar day.
 /// @param year The year.
 /// @param month The month, 1 to 12.
@@ -28,6 +31,11 @@ inline constexpr std::string_view kInbox = "test.approvalInbox";
 ///        submits invoice 1.
 /// @return The bundle, or the refusal.
 std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> inboxBundle();
+
+/// @brief The inbox bundle behind a sign-in screen: any username signs in and lands on the inbox, for a server that
+///        authenticates its callers.
+/// @return The bundle, or the refusal.
+std::expected<std::shared_ptr<morph::ui::ServedBundle const>, morph::ui::Refusal> signInBundle();
 
 /// @brief A fresh database holding the lab the approval tests run in, destroyed with the object.
 class World {

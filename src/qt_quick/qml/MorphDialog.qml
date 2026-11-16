@@ -17,7 +17,14 @@ MorphWidget {
     // joined characters of; while there are any, the label shows their markup.
     property var descriptionRuns: []
     property bool sheet: false
+    // The label of the dismiss control: the sheet's, or the head's `closeButton`.
     property string dismissLabel: "Close"
+    // A muted note trailing on the title's row.
+    property string headNote: ""
+    // A muted note leading in the footer's row.
+    property string footerNote: ""
+    // Whether the title's row holds a dismiss control; a sheet's head holds one already.
+    property bool closeButton: false
     // Set while C++ opens or closes it, so that is not taken for a dismissal.
     property bool programmatic: false
     readonly property Item content: column
@@ -181,19 +188,78 @@ MorphWidget {
                     text: root.title
                 }
 
-                Item {
-                    Layout.preferredWidth: dismissButton.width
-                    Layout.preferredHeight: 1
+                // As wide as the dismiss button so the title stays centred; it holds the head note, which a longer note
+                // widens up to a third of the sheet.
+                Label {
+                    id: sheetNote
+                    objectName: "sheetHeadNote"
+                    textFormat: Text.PlainText
+                    Layout.preferredWidth: Math.max(dismissButton.width, Math.min(implicitWidth, contentColumn.width / 3))
+                    horizontalAlignment: Text.AlignRight
+                    font: Theme.bodyFont
+                    color: Theme.cardScheme.muted
+                    elide: Text.ElideRight
+                    text: root.headNote
                 }
             }
 
-            Label {
-                textFormat: Text.PlainText
-                id: titleLabel
-                font: Theme.headingFont
-                color: Theme.cardScheme.text
-                visible: root.title !== "" && !root.sheet
-                text: root.title
+            // The title, with the head note trailing, muted, and the close control after it.
+            RowLayout {
+                id: titleRow
+                objectName: "titleRow"
+                visible: !root.sheet && (root.title !== "" || root.headNote !== "" || root.closeButton)
+                Layout.fillWidth: true
+                spacing: Theme.spaceOf(2)
+
+                Label {
+                    textFormat: Text.PlainText
+                    id: titleLabel
+                    Layout.fillWidth: true
+                    font: Theme.headingFont
+                    color: Theme.cardScheme.text
+                    elide: Text.ElideRight
+                    visible: root.title !== ""
+                    text: root.title
+                }
+
+                Label {
+                    id: headNoteLabel
+                    objectName: "headNote"
+                    textFormat: Text.PlainText
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    Layout.fillWidth: root.title === ""
+                    horizontalAlignment: Text.AlignRight
+                    font: Theme.bodyFont
+                    color: Theme.cardScheme.muted
+                    elide: Text.ElideRight
+                    visible: root.headNote !== ""
+                    text: root.headNote
+                }
+
+                Button {
+                    id: headClose
+                    objectName: "headClose"
+                    visible: root.closeButton && !root.sheet
+                    flat: true
+                    text: root.dismissLabel
+                    font: Theme.bodyFont
+                    leftPadding: Theme.spaceOf(1)
+                    rightPadding: Theme.spaceOf(1)
+                    palette.buttonText: Theme.cardScheme.accent
+                    contentItem: MorphPlainContent {
+                        control: headClose
+                        color: headClose.palette.buttonText
+                    }
+                    background: MorphButtonBackground {
+                        scheme: Theme.cardScheme
+                        ghost: true
+                        hovered: headClose.hovered
+                        pressed: headClose.down
+                        focused: headClose.visualFocus
+                    }
+                    Accessible.name: root.dismissLabel
+                    onClicked: popup.close()
+                }
             }
 
             Label {
@@ -236,7 +302,7 @@ MorphWidget {
                 Layout.maximumHeight: root.sheet
                     ? Infinity
                     : Math.max(0, (popup.Overlay.overlay?.height ?? Infinity) - 4 * Theme.unitHeight -
-                               titleLabel.height - footerArea.height -
+                               (titleRow.visible ? titleRow.height : 0) - footerArea.height -
                                (footerRule.visible ? footerRule.height + contentColumn.spacing + 2 * contentColumn.ruleMargin : 0) -
                                contentColumn.spacing * 2 - (headRule.visible ? 2 * contentColumn.ruleMargin : 0) -
                                (root.description === "" ? 0 : descriptionLabel.height + headRule.height +
@@ -270,6 +336,8 @@ MorphWidget {
             ColumnLayout {
                 id: footerArea
                 Layout.fillWidth: true
+                // The footer reads the note from the area it sits in.
+                property string footerNote: root.footerNote
                 // A sheet's footer fills the sheet's width, so its action is as wide as a thumb needs; the footer
                 // reads this from the area it sits in.
                 property bool stretchesFooter: root.sheet

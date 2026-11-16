@@ -255,7 +255,7 @@ constexpr std::array<KeySpec, 7> kTabsKeys = {{{"tabs", Shape::Parts, "tab"},
 constexpr std::array<KeySpec, 3> kTabKeys = {
     {{"id", Shape::Name}, {"label", Shape::Expr}, {"children", Shape::Nodes}}};
 /// @brief The keys of `dialog` and `drawer`.
-constexpr std::array<KeySpec, 14> kDialogKeys = {{{"open", Shape::Condition},
+constexpr std::array<KeySpec, 17> kDialogKeys = {{{"open", Shape::Condition},
                                                   {"gap", Shape::Expr},
                                                   {"title", Shape::Expr},
                                                   {"description", Shape::Expr},
@@ -268,7 +268,10 @@ constexpr std::array<KeySpec, 14> kDialogKeys = {{{"open", Shape::Condition},
                                                   {"side", Shape::Expr},
                                                   {"sheet", Shape::Condition},
                                                   {"dismissLabel", Shape::Expr},
-                                                  {"descriptionSpans", Shape::Expr}}};
+                                                  {"descriptionSpans", Shape::Expr},
+                                                  {"headNote", Shape::Expr},
+                                                  {"footerNote", Shape::Expr},
+                                                  {"closeButton", Shape::Condition}}};
 /// @brief The keys of `group`: a labelled set of inputs, lowered to a column of existing kinds.
 constexpr std::array<KeySpec, 6> kGroupKeys = {{{"label", Shape::Expr},
                                                 {"required", Shape::Condition},
@@ -3188,19 +3191,18 @@ private:
         }
     }
 
-    // A dialog's `sheet` and the label of its dismiss control: a drawer already fills the height on a phone and takes
-    // neither, and a `dismissLabel` labels only a sheet's control.
+    // A dialog's `sheet`: a drawer already fills the height on a phone and takes none. A `dismissLabel` labels the
+    // dismiss control of a sheet or of a `closeButton`, so it needs one of them (a drawer has no sheet).
     static void checkSheet(DocNode const& node) {
-        if (node.kind == "drawer") {
-            for (std::string_view const key : {"sheet", "dismissLabel"}) {
-                if (node.prop(key)) {
-                    refuse(pointerAppend(node.path, key),
-                           "`" + std::string{key} + "` is a dialog's; a drawer already fills the height");
-                }
-            }
-        } else if (node.kind == "dialog" && node.prop("dismissLabel") && !node.prop("sheet")) {
+        if (node.kind == "drawer" && node.prop("sheet")) {
+            refuse(pointerAppend(node.path, "sheet"), "`sheet` is a dialog's; a drawer already fills the height");
+        }
+        bool const sheet = node.kind == "dialog" && node.prop("sheet");
+        if ((node.kind == "dialog" || node.kind == "drawer") && node.prop("dismissLabel") && !sheet &&
+            !node.prop("closeButton")) {
             refuse(pointerAppend(node.path, "dismissLabel"),
-                   "`dismissLabel` labels a sheet's dismiss control; give the dialog `sheet`");
+                   "`dismissLabel` labels a sheet's dismiss control or a `closeButton`; give the " + node.kind +
+                       (node.kind == "dialog" ? " `sheet` or `closeButton`" : " `closeButton`"));
         }
     }
 

@@ -457,6 +457,16 @@ public:
         this->write("description", toQString(ui::spansText(spans)));
         this->write("descriptionRuns", runsOf(spans));
     }
+    void setHeadNote(std::string_view note) override { this->write("headNote", toQString(note)); }
+    // The note is drawn by the footer item, so a note needs one even when no action asked for it.
+    void setFooterNote(std::string_view note) override {
+        if (!note.empty()) {
+            static_cast<void>(footer());
+        }
+        this->write("footerNote", toQString(note));
+    }
+    void setCloseButton(bool shown) override { this->write("closeButton", shown); }
+    void setDismissLabel(std::string_view label) override { this->write("dismissLabel", toQString(label)); }
     void setOnDismiss(ui::Action onDismiss) override {
         this->relay().on(QStringLiteral("dismiss"), [onDismiss = std::move(onDismiss)](QVariant const&) {
             if (onDismiss) {
@@ -489,7 +499,6 @@ class DialogImpl final : public OverlayImpl<ui::DialogWidget> {
 public:
     using OverlayImpl<ui::DialogWidget>::OverlayImpl;
     void setSheet(bool sheet) override { write("sheet", sheet); }
-    void setDismissLabel(std::string_view label) override { write("dismissLabel", toQString(label)); }
 };
 
 using DrawerImpl = OverlayImpl<ui::DrawerWidget>;

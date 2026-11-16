@@ -37,6 +37,7 @@
 #include <utility>
 #include <vector>
 
+#include "clock.hpp"
 #include "testkit/fake_app_context.hpp"
 #include "testkit/wait.hpp"
 
@@ -85,19 +86,27 @@ protected:
         _workers = std::make_unique<exec::ThreadPoolExecutor>(2);
         backend::ServerConfig config;
         config.services.push_back(std::make_shared<ui::UiService>(std::move(*bundle)));
+        // The server waits for a model's reported instant on the ladder's clock, which a test moves by hand, so it
+        // reads the clock often.
+        config.clock = [] { return *::morph::ladder::now().value; };
+        config.clockRecheck = std::chrono::milliseconds{20};
         _server = _app.serverAuthorizer
                       ? std::make_shared<backend::RemoteServer>(*_workers, _app.serverAuthorizer(), config)
                       : std::make_shared<backend::RemoteServer>(*_workers, config);
-        ui::Exchange exchange = [server = _server](wire::Envelope const& request,
-                                                   std::function<void(ui::ExchangeReply)> const& done) {
+        // One connection for the models and for the `ui-*` requests, as one socket would be: the server tells a
+        // connection what changed only when that connection negotiated events and has a watch.
+        backend::ConnectionId const cid = _server->openConnection();
+        ui::Exchange exchange = [server = _server, cid](wire::Envelope const& request,
+                                                        std::function<void(ui::ExchangeReply)> const& done) {
             try {
-                done(wire::decode(server->handleInline(wire::encode(request))));
+                done(wire::decode(server->handleInline(wire::encode(request), cid)));
             } catch (std::exception const& error) {
                 done(std::unexpected(std::string{error.what()}));
             }
         };
-        return Transport{.backend = std::make_unique<backend::SimulatedRemoteBackend>(*_server),
-                         .exchange = std::move(exchange)};
+        return Transport{.backend = std::make_unique<backend::SimulatedRemoteBackend>(*_server, cid),
+                         .exchange = std::move(exchange),
+                         .serverEvents = true};
     }
 
     void disconnect() override {

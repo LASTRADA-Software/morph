@@ -205,21 +205,56 @@ TEST_CASE("FormSession: a record loaded while a save was in flight takes its lat
     CHECK(form->field("a").text().peek() == "5");
 }
 
-// Mutation: accept what was sent in automatic mode too -> a record's value loads under someone still typing.
-TEST_CASE("FormSession: an automatic form's saved field stays an edit", "[forms-engine][session]") {
+// Mutation: leave a saved automatic field an edit forever -> another client's value never reaches it.
+TEST_CASE("FormSession: an automatic form's saved field takes the record's later value", "[forms-engine][session]") {
     Harness harness;
     auto const form = harness.session("TestAction", kTwoInts);
     harness.type(*form, "a", "9");
     harness.type(*form, "b", "2");
     REQUIRE(form->successCount() == 1);
-    // The explicit trigger, which an automatic form also has, is no end of an edit either.
+    // The explicit trigger, which an automatic form also has, ends an edit the same way.
     form->submit();
     harness.settle();
     REQUIRE(form->successCount() == 2);
     form->refill(R"({"a":5,"b":6})");
     harness.settle();
-    CHECK(form->field("a").text().peek() == "9");
-    CHECK(form->field("b").text().peek() == "2");
+    CHECK(form->field("a").text().peek() == "5");
+    CHECK(form->field("b").text().peek() == "6");
+}
+
+// Mutation: load the record's form of the saved value -> `1` becomes `1.000` under the cursor.
+TEST_CASE("FormSession: an automatic form's saved field keeps its text when the record echoes the same value",
+          "[forms-engine][session]") {
+    constexpr std::string_view kNumber =
+        R"({"properties":{"mass":{"type":["object","null"],"x-decimalPlaces":3,)"
+        R"("ExtUnits":{"unitAscii":"kg","unitUnicode":"kg"},"x-order":0}},"required":["mass"]})";
+    Harness harness;
+    auto const form = harness.session("TestAction", kNumber);
+    harness.type(*form, "mass", "1");
+    REQUIRE(form->successCount() == 1);
+    form->refill(R"({"mass":{"num":1,"den":1,"dp":3}})");
+    harness.settle();
+    CHECK(form->field("mass").text().peek() == "1");
+    form->refill(R"({"mass":{"num":5,"den":2,"dp":3}})");
+    harness.settle();
+    CHECK(form->field("mass").text().peek() == "2.500");
+}
+
+// Mutation: end the edit of a field changed after the save was sent -> the record's value replaces what was typed.
+TEST_CASE("FormSession: an automatic form's field typed after the save was sent stays an edit",
+          "[forms-engine][session]") {
+    Harness harness;
+    auto const form = harness.session("TestAction", kTwoInts);
+    harness.server.replyWith([](auto const&) { return std::optional<std::string>{}; });
+    harness.type(*form, "a", "9");
+    harness.type(*form, "b", "2");
+    harness.type(*form, "a", "12");
+    harness.server.resolveSubmit(0, R"({"ok":true})");
+    harness.settle();
+    REQUIRE(form->successCount() >= 1);
+    form->refill(R"({"a":5,"b":6})");
+    harness.settle();
+    CHECK(form->field("a").text().peek() == "12");
 }
 
 // Mutation: advance the baseline when the save is sent rather than when it succeeds -> a refused save loses what was
@@ -314,6 +349,26 @@ TEST_CASE("FormSession: a stored payload round-trips, absent members start blank
     zoned.settle();
     CHECK(shifted->field("takenAt").text().peek() == "2026-07-20T11:00:00");
     CHECK(shifted->body()->contains(R"("takenAt":"2026-07-20T09:00:00Z")"));
+}
+
+// Mutation: leave the locale out of `SessionCore::setFormat` -> the body keeps reading the old decimal separator.
+TEST_CASE("FormSession: setFormat moves the number locale and the date patterns of a built form",
+          "[forms-engine][session]") {
+    constexpr std::string_view kSchema = R"({"$defs":{"double":{"type":"number"}},"properties":{
+      "reading":{"$ref":"#/$defs/double","x-order":0},
+      "day":{"type":"string","format":"date","x-order":1}},"required":["reading"],"x-submitMode":"explicit"})";
+    Harness harness;
+    auto const form = harness.session("TestAction", kSchema);
+    harness.type(*form, "reading", "1,5");
+    CHECK_FALSE(form->ready());
+    CHECK(form->pattern(true).empty());
+
+    form->setFormat({.decimalSeparator = ",", .groupSeparator = "."}, "dd.MM.yyyy", "dd.MM.yyyy HH:mm");
+    harness.settle();
+    CHECK(form->ready());
+    CHECK(form->body() == R"({"reading":1.5})");
+    CHECK(form->pattern(true) == "dd.MM.yyyy");
+    CHECK(form->pattern(false) == "dd.MM.yyyy HH:mm");
 }
 
 TEST_CASE("FormSession: x-blankAs empty submits \"\" once the field was filled, and only then",
@@ -724,7 +779,7 @@ TEST_CASE("FormSession: a collection nobody entered is left out of the body, one
     auto const form = harness.session("TestAction", kGroupAndRows);
     harness.type(*form, "n", "1");
     CHECK(form->body() == R"({"n":1})");
-    form->refill(R"({"rows":[]})");
+    form->refill(R"({"n":1,"rows":[]})");
     harness.settle();
     CHECK(form->body() == R"({"n":1,"rows":[]})");
 }

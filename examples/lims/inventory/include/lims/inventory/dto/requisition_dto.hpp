@@ -169,6 +169,14 @@ struct ListRequisitions {
     [[nodiscard]] bool validate() const noexcept { return company.hasValue(); }
 };
 
+/// @brief Reports the next instant at which a submitted requisition's approval escalates from its site to its
+///        company, for the server to tell the screens that list requisitions by that scope.
+struct NextRequisitionDeadline {
+    /// @brief Whether the query is well-formed.
+    /// @return Always `true`: it names nothing.
+    [[nodiscard]] static bool validate() noexcept { return true; }
+};
+
 /// @brief Lists the submitted requisitions the caller could approve now.
 struct ListPendingRequisitions {
     /// @brief Whether the query is well-formed.

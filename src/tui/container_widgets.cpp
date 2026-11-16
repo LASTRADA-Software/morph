@@ -971,7 +971,36 @@ void OverlayCore::setDismissLabel(std::string_view label) {
     _self->refresh();
 }
 
-std::pair<int, int> OverlayCore::dismissCells() const { return {2, displayWidth(_dismissLabel) + 2}; }
+void OverlayCore::setHeadNote(std::string_view note) {
+    _headNote = std::string{note};
+    _self->refresh();
+}
+
+void OverlayCore::setFooterNote(std::string_view note) {
+    _footerNote = std::string{note};
+    _self->refresh();
+}
+
+void OverlayCore::setCloseButton(bool shown) {
+    _closeButton = shown;
+    _self->refresh();
+}
+
+int OverlayCore::closeControlWidth() const { return displayWidth(_dismissLabel) + 2; }
+
+int OverlayCore::trailingWidth() const {
+    int const control = hasCloseControl() ? closeControlWidth() : 0;
+    int const note = displayWidth(_headNote);
+    return note + control + (note != 0 && control != 0 ? 1 : 0);
+}
+
+// A sheet's control leads the row; a head's close control ends it, against the box's inside edge.
+std::pair<int, int> OverlayCore::dismissCells() const {
+    if (hasCloseControl()) {
+        return {frameSize().width - 2 - closeControlWidth(), closeControlWidth()};
+    }
+    return {2, closeControlWidth()};
+}
 
 ::core::tui::Size FooterImpl::naturalSize() const { return stackNaturalSize(children(), ui::Axis::Horizontal, 1); }
 
@@ -997,7 +1026,11 @@ ui::ContainerWidget& OverlayFooter::of(ContainerBase& overlay) {
 std::vector<::core::tui::Rect> OverlayCore::childAreas(::core::tui::Size size) const {
     int const head = _description.empty() ? 0 : 2;
     ::core::tui::Rect const inner{
-        .x = 2, .y = 1 + head, .width = std::max(0, size.width - 4), .height = std::max(0, size.height - 2 - head)};
+        .x = 2,
+        .y = 1 + head,
+        .width = std::max(0, size.width - 4),
+        .height = std::max(0, size.height - 2 - head - footerNoteRows()),
+    };
     std::span<WidgetBase* const> const children = _self->children();
     // A sheet's footer stands at the bottom of the box, under content that takes the rest of its height.
     bool const footerLast = _sheet && !children.empty() && children.back() == _footer && _footer->shown();
@@ -1034,12 +1067,17 @@ bool OverlayCore::showsFrame() const {
     if (_sheet && !_side.has_value()) {
         return {.width = area.width, .height = area.height};
     }
-    int const width = std::max({inner.width + 4, displayWidth(_title) + 4, displayWidth(_description) + 4});
+    int const titleRow = displayWidth(_title) + trailingWidth() + (trailingWidth() != 0 && !_title.empty() ? 1 : 0);
+    int const width =
+        std::max({inner.width + 4, titleRow + 4, displayWidth(_description) + 4, displayWidth(_footerNote) + 4});
     int const head = _description.empty() ? 0 : 2;
     if (_side.has_value()) {
         return {.width = std::min(width, area.width), .height = area.height};
     }
-    return {.width = std::min(width, area.width), .height = std::min(inner.height + 2 + head, area.height)};
+    return {
+        .width = std::min(width, area.width),
+        .height = std::min(inner.height + 2 + head + footerNoteRows(), area.height),
+    };
 }
 
 // A dialog is centred; a drawer stands against its side, the whole height of the screen.
@@ -1063,13 +1101,32 @@ void OverlayCore::paintFrame(::core::tui::Canvas& canvas) {
     auto const& theme = canvas.theme();
     canvas.fill(canvas.area(), ' ', theme.dialogBackground);
     canvas.drawBox(canvas.area(), ::core::tui::BorderStyle::Single, theme.dialogBorder);
-    auto title = canvas.subcanvas({.x = 2, .y = 0, .width = std::max(0, canvas.width() - 4), .height = 1});
+    int const rowWidth = std::max(0, canvas.width() - 4);
+    int const trailing = trailingWidth();
+    // The title gives up the cells the trailing note and control take, and one between.
+    auto title = canvas.subcanvas(
+        {.x = 2, .y = 0, .width = std::max(0, rowWidth - trailing - (trailing != 0 ? 1 : 0)), .height = 1});
     if (_sheet) {
         std::string const control = "[" + _dismissLabel + "]";
         title.putString(0, 0, control, theme.dialogTitle);
         title.putString(0, displayWidth(control) + 1, _title, theme.dialogTitle);
     } else {
         title.putString(0, 0, _title, theme.dialogTitle);
+    }
+    if (trailing != 0) {
+        auto tail = canvas.subcanvas({.x = 2, .y = 0, .width = rowWidth, .height = 1});
+        int column = rowWidth - trailing;
+        if (!_headNote.empty()) {
+            tail.putString(0, column, _headNote, theme.textMuted);
+            column += displayWidth(_headNote) + 1;
+        }
+        if (hasCloseControl()) {
+            tail.putString(0, column, "[" + _dismissLabel + "]", theme.dialogTitle);
+        }
+    }
+    if (!_footerNote.empty() && canvas.height() > 2) {
+        auto line = canvas.subcanvas({.x = 2, .y = canvas.height() - 2, .width = rowWidth, .height = 1});
+        line.putString(0, 0, splitLines(_footerNote).front(), theme.textMuted);
     }
     if (!_description.empty() && canvas.height() > 3) {
         // One row, clipped at the frame's width like any terminal text, then a rule across the frame's inside.
@@ -1098,7 +1155,8 @@ void OverlayCore::paintFrame(::core::tui::Canvas& canvas) {
             // core::tui made the event relative to the box, so this is the cell in it.
             auto const [first, width] = dismissCells();
             int const column = mouse->x - 1;
-            bool const onDismiss = _sheet && mouse->y - 1 == 0 && column >= first && column < first + width;
+            bool const onDismiss =
+                (_sheet || hasCloseControl()) && mouse->y - 1 == 0 && column >= first && column < first + width;
             if (onDismiss && _open && _self->actionable()) {
                 dismiss();
             }

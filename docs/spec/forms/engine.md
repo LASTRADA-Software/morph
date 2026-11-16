@@ -190,11 +190,24 @@ it. A view mounted on it is destroyed first.
   engagement, and its members' and rows') as `prefill`, `reset` or `assign` last left it, and as it was built.
   `refill(bodyJson)` loads like `prefill`, except that a top-level field whose snapshot differs (the user changed
   it since) keeps what was entered. It is for a later value of the record already being edited; `prefill` is for
-  another record. A successful submission of an explicit form ends the edit of every field still holding what it
-  sent, so the record's later values reach those; a field changed while the submission was in flight, or one whose
-  submission failed, stays an edit. An automatic form's submission does not end an edit: it goes out while the person
-  may still be typing, and loading the record's form of a number (`1.000` for a typed `1`) would change the text
-  under their cursor.
+  another record. A successful submission, automatic or explicit, ends the edit of every field still holding what it
+  sent, so the record's later values reach those; a field changed after the submission was sent, or one whose
+  submission failed, stays an edit. An automatic form submits while the person may still be typing, which two rules
+  make safe. First, the record's form of the value just sent does not load: a saved scalar takes the record's value
+  only when it would encode differently from the draft, so a typed `1` stays `1` when the record answers `1.000`
+  (the comparison is the encoded body entry, not the text). Second, the snapshot a success is judged against is the
+  one taken when that submission went out, so text typed while it was in flight is never mistaken for it, even when a
+  following submission starts in the same turn as the reply. The engine has no focus, so "still typing" is "changed
+  since the last send", which is exactly what the snapshots record. An automatic form's object and collection do not
+  end their edit on a save: their members and rows cannot be compared with the record without rebuilding them under
+  the cursor, so they own what was entered until the form is rebuilt or loaded with `prefill`. A member the record leaves out loads blank into a field that is no longer an edit, as it does in `prefill`.
+- **Formatting follows the screen.** `setFormat(locale, datePattern, dateTimePattern)` on a `FormSession` (and so on a
+  `WizardSession`'s steps and a `CollectionSession`'s editor) replaces the number locale and the date patterns of a
+  built form. The number locale is read by every field's encoding, so each re-encodes its draft at once and the body
+  follows; the drafts keep the text as typed, so `1,5` typed under a comma locale reads as an error once the locale
+  switches to a point. The date inputs' `pattern` is read tracked and follows. The screen's interpreter keeps an effect per
+  form, collection and wizard that applies the session's current formatting, and holds the facts it applied, because the
+  number locale is a set of views into them. The display zone and the translations are read once, at build.
 - **Choice options** are a `reactive::Query<std::string, std::string>` per Choice, keyed on the options request:
   `{}` for an independent Choice, `{"parent": <literal>, …}` once every parent encodes, idle while one does not.
   A parent change refetches, and a reply for a superseded request is dropped. A selection the answered options no
@@ -257,7 +270,7 @@ before it.
 | Quantity | `TextInput` showing its unit, as a Decimal's (one unit); with alternatives, a `TextInput` with no unit and a unit `Select` beside it; switching converts the draft exactly |
 | Boolean | `Checkbox` labelled with the field |
 | Enum, Choice | `Select` (dropdown, or radio for `x-widget: radio`) keyed by each option's JSON literal; a Choice adds a `Busy` while its options load |
-| DateTime, EpochDateTime; Date, EpochDate | `DateTimeInput` (date-time in the display zone; date); the input shows and reads `FormSessionOptions::datePattern` or `dateTimePattern` while they are set (`ScreenCore::engineOptions` fills them from the session's formatting), and the draft text stays ISO |
+| DateTime, EpochDateTime; Date, EpochDate | `DateTimeInput` (date-time in the display zone; date); the input shows and reads `FormSessionOptions::datePattern` or `dateTimePattern` while they are set (`ScreenCore::engineOptions` fills them from the session's formatting), and the draft text stays ISO; the input follows `FormSession::setFormat`, which the screen calls whenever its formatting changes |
 | Slider | `Slider` over `x-min`..`x-max` by `x-step` |
 | Array | `TextInput`, comma-separated |
 | Object | `Panel` of its members' cells |

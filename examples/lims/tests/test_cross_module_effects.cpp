@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The cross-module effects question, cause by cause, on watching connections: (i) billing's PostInvoice writes the
-// ledger's Ledger_Entry inside itself and cannot declare it; (ii) the relay's billing line reaches a watcher when its
-// write is a dispatched action, and not when the same write runs outside any dispatch.
+// ledger's Ledger_Entry inside itself, and the composing code declares that effect for it; (ii) the relay's billing
+// line reaches a watcher when its write is a dispatched action, and not when the same write runs outside any dispatch.
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -59,9 +59,10 @@ namespace {
 
 }  // namespace
 
-// Cause (i). The control is the ledger's own action on the same connection, which it hears.
+// Cause (i). Mutation: drop the union of added effects (the watcher hears nothing within the window). The ledger's own
+// action on the same connection is heard either way.
 TEST_CASE(
-    "cross-module effects (i): billing's write of a ledger entry inside its own action reaches no ledger "
+    "cross-module effects (i): billing's write of a ledger entry inside its own action reaches a ledger "
     "watcher",
     "[lims][effects]") {
     lims::test::LabFixture const fixture;
@@ -77,7 +78,7 @@ TEST_CASE(
     REQUIRE(posted.state == lims::InvoiceState::Posted);
     bool const heard = ServerConnection::eventually([&] { return accountant->heardOf("Ledger_Entry"); },
                                                     std::chrono::milliseconds{1500});
-    CHECK_FALSE(heard);
+    CHECK(heard);
 
     // The control: the ledger's own action, dispatched on the same server, is heard on the same connection.
     auto const ledger = accountant->registerModel("LedgerModel", as("acc"));

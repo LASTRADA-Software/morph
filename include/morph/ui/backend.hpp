@@ -695,10 +695,27 @@ public:
     /// @param sheet Whether it is a sheet.
     virtual void setSheet(bool sheet) = 0;
 
-    /// @brief Sets the label of a sheet's dismiss control; a new dialog's is "Close". The mount calls this only when
-    ///        the label is bound or not the default.
+    /// @brief Sets the label of the dismiss control, a sheet's or the one `setCloseButton` draws; a new overlay's is
+    ///        "Close". The mount calls this only when the label is bound or not the default.
     /// @param label The label, UTF-8.
     virtual void setDismissLabel(std::string_view label) = 0;
+
+    /// @brief Shows a short muted note on the title's row, against the trailing edge. The mount calls it only when
+    ///        the note is bound or not empty.
+    /// @param note The note, UTF-8; empty shows none.
+    virtual void setHeadNote(std::string_view note) = 0;
+
+    /// @brief Shows a short muted note leading in the footer's row, opposite the actions. The footer shows while
+    ///        the note is not empty, though it holds no action. The mount calls it only when the note is bound or
+    ///        not empty.
+    /// @param note The note, UTF-8; empty shows none.
+    virtual void setFooterNote(std::string_view note) = 0;
+
+    /// @brief Draws a dismiss control (labelled by `setDismissLabel`) on the title's row, against the trailing edge,
+    ///        which dismisses exactly as Escape does. A sheet's head already holds one, so this adds nothing there.
+    ///        The mount calls it only when the condition is bound or true.
+    /// @param shown Whether the control is drawn.
+    virtual void setCloseButton(bool shown) = 0;
 };
 
 /// @brief A progress indicator.
@@ -1126,6 +1143,28 @@ public:
     ///        The mount puts the drawer's actions here.
     /// @return It, owned by the drawer and valid as long as the drawer.
     virtual ContainerWidget& footer() = 0;
+
+    /// @brief Sets the label of the dismiss control `setCloseButton` draws; a new drawer's is "Close". The mount
+    ///        calls this only when the label is bound or not the default.
+    /// @param label The label, UTF-8.
+    virtual void setDismissLabel(std::string_view label) = 0;
+
+    /// @brief Shows a short muted note on the title's row, against the trailing edge. The mount calls it only when
+    ///        the note is bound or not empty.
+    /// @param note The note, UTF-8; empty shows none.
+    virtual void setHeadNote(std::string_view note) = 0;
+
+    /// @brief Shows a short muted note leading in the footer's row, opposite the actions. The footer shows while
+    ///        the note is not empty, though it holds no action. The mount calls it only when the note is bound or
+    ///        not empty.
+    /// @param note The note, UTF-8; empty shows none.
+    virtual void setFooterNote(std::string_view note) = 0;
+
+    /// @brief Draws a dismiss control (labelled by `setDismissLabel`) on the title's row, against the trailing edge,
+    ///        which dismisses exactly as Escape does.
+    ///        The mount calls it only when the condition is bound or true.
+    /// @param shown Whether the control is drawn.
+    virtual void setCloseButton(bool shown) = 0;
 };
 
 /// @brief A non-modal panel that belongs to another widget: the results of a search under its field. It takes no
