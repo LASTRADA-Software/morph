@@ -1031,9 +1031,12 @@ private:
         return _config.clock ? _config.clock() : ::morph::time::DateTime::now();
     }
 
-    /// @brief Begins asking every reporter for its instant, once, on the first envelope the server handles.
+    /// @brief Begins asking every reporter this server can run for its instant, once, on the first envelope the
+    /// server handles.
     ///
-    /// Not in the constructor: asking runs model code, and a task needs the server held by a `shared_ptr`.
+    /// Not in the constructor: asking runs model code, and a task needs the server held by a `shared_ptr`. A reporter
+    /// whose model this server's registry does not hold is skipped: the declarations are process-wide, the registry is
+    /// this server's, and an ask it cannot answer would only be a model-strand task outliving whoever owns it.
     /// On the server strand.
     void startTimeFacts() {
         if (_timeFactsStarted) {
@@ -1041,7 +1044,9 @@ private:
         }
         _timeFactsStarted = true;
         for (auto const& source : ::morph::effects::detail::resolved().changeTimes) {
-            _timeFacts.push_back(TimeFact{.source = source});
+            if (_registry.contains(source.model)) {
+                _timeFacts.push_back(TimeFact{.source = source});
+            }
         }
         for (std::size_t index = 0; index < _timeFacts.size(); ++index) {
             askTimeFact(index);

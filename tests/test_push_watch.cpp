@@ -18,7 +18,9 @@
 #include <morph/core/detail/change_coalescer.hpp>
 #include <morph/core/effects.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/records.hpp>
+#include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/session/session.hpp>
@@ -1994,4 +1996,32 @@ TEST_CASE("the_process_registry_lists_the_reporter", "[push][watch][time]") {
     REQUIRE(found != sources.end());
     CHECK(found->model == "T_TimedModel");
     CHECK(found->records == std::vector<std::string>{"T_TimedRow"});
+}
+
+// The reporter declarations are process-wide; a server asks only those its own registry can run. One that asked the
+// rest would leave a model-strand task reading a registry its owner is free to destroy once the reply is in.
+TEST_CASE("a_server_asks_only_the_reporters_its_registry_holds", "[push][watch][time]") {
+    std::mutex mutex;
+    std::vector<std::string> asked;
+    ::morph::log::ScopedLoggerOverride const guard{
+        [&](::morph::log::LogLevel, std::string_view message) {
+            if (message.contains("[timeFacts]")) {
+                std::scoped_lock const lock{mutex};
+                asked.emplace_back(message);
+            }
+        },
+        ::morph::log::LogLevel::debug,
+    };
+    ::morph::model::detail::ModelRegistryFactory registry;
+    ::morph::model::detail::ActionDispatcher dispatcher;
+    {
+        ::morph::exec::ThreadPoolExecutor pool{2};
+        auto const server =
+            std::make_shared<RemoteServer>(pool, ::morph::backend::ServerConfig{}, dispatcher, registry);
+        auto const reply = ::morph::wire::decode(
+            server->handleInline(::morph::wire::encode(::morph::wire::makeRegister("T_NotHere"))));
+        CHECK(reply.kind == "err");
+    }  // the pool joins here: anything the server posted has run
+    std::scoped_lock const lock{mutex};
+    CHECK(asked.empty());
 }
