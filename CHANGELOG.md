@@ -11,6 +11,10 @@ API surface).
 
 ### Changed
 
+- **morph requires core-cpp 0.21** (was 0.7). The package bound is minor-exact
+  while core-cpp is 0.x, so an installed core-cpp must be 0.21. morph builds
+  core-cpp without its logind power monitor (`CORE_CPP_WITH_SYSTEMD=OFF`), so
+  the bump adds no libsystemd or pkg-config requirement.
 - **A `gap` or `padding` is a spacing step.** It names a step from 0 to 5,
   which the mount clamps and each frontend maps: the theme's `space.0` …
   `space.5` (0, 4, 8, 12, 16, 24 px by default) on Qt Quick, and rows and
