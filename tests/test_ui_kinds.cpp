@@ -244,7 +244,7 @@ TEST_CASE("ui::dialog and ui::drawer: head note, footer note and close control r
     CHECK(backend.prop(3, "closeButton") == "true");
     CHECK(backend.prop(3, "dismissLabel") == "Hide");
     // A dialog that sets none of them is told none of them.
-    CHECK(backend.dump().find("Dialog#4 open=false title=Plain\n") != std::string::npos);
+    CHECK(backend.dump().contains("Dialog#4 open=false title=Plain\n"));
     note.set("4 of 9");
     close.set(true);
     owner.runAll();

@@ -174,7 +174,7 @@ struct ListRequisitions {
 struct NextRequisitionDeadline {
     /// @brief Whether the query is well-formed.
     /// @return Always `true`: it names nothing.
-    [[nodiscard]] bool validate() const noexcept { return true; }
+    [[nodiscard]] static bool validate() noexcept { return true; }
 };
 
 /// @brief Lists the submitted requisitions the caller could approve now.

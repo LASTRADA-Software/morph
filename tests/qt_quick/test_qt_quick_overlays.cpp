@@ -585,7 +585,7 @@ TEST_CASE("qt_quick dialog and drawer: head note, footer note and close control 
     REQUIRE(foot != nullptr);
     CHECK(foot->isVisible());
     CHECK(foot->property("text").toString() == QStringLiteral("Saved just now"));
-    QQuickItem* const close = namedItem(scene.window().contentItem(), QStringLiteral("headClose"));
+    QQuickItem const* const close = namedItem(scene.window().contentItem(), QStringLiteral("headClose"));
     REQUIRE(close != nullptr);
     CHECK(close->isVisible());
     CHECK(close->property("text").toString() == QStringLiteral("Done"));
@@ -612,7 +612,7 @@ TEST_CASE("qt_quick dialog and drawer: head note, footer note and close control 
     QQuickItem const* const drawerFoot = namedItem(scene.window().contentItem(), QStringLiteral("footerNote"));
     REQUIRE(drawerFoot != nullptr);
     CHECK(drawerFoot->isVisible());
-    QQuickItem* const drawerClose = namedItem(scene.window().contentItem(), QStringLiteral("headClose"));
+    QQuickItem const* const drawerClose = namedItem(scene.window().contentItem(), QStringLiteral("headClose"));
     REQUIRE(drawerClose != nullptr);
     CHECK(drawerClose->property("text").toString() == QStringLiteral("Close"));
     scene.click(*drawerClose);
