@@ -136,7 +136,7 @@ Inheritance diagram for morph::ui::DialogWidget:</div>
 <area href="../../df/d10/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf.html" alt="morph::ui::testing::detail::FakeLeaf&lt; DialogWidget &gt;" shape="rect" coords="0,168,328,192"/>
 <area href="../../d1/dfd/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeContainer.html" alt="morph::ui::testing::detail::FakeContainer&lt; DialogWidget &gt;" shape="rect" coords="0,224,328,248"/>
 <area href="../../d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html" alt="morph::ui::testing::detail::FakeOverlay&lt; DialogWidget &gt;" shape="rect" coords="0,280,328,304"/>
-<area href="../../dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog.html" title="A fake DialogWidget: properties open, title, description, sheet and dismissLabel (when set); a Footer..." alt="morph::ui::testing::detail::FakeDialog" shape="rect" coords="0,336,328,360"/>
+<area href="../../dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog.html" title="A fake DialogWidget: properties open, title, description, sheet, dismissLabel, headNote,..." alt="morph::ui::testing::detail::FakeDialog" shape="rect" coords="0,336,328,360"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -157,7 +157,13 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:aa9020c40ca61262e7f10cdf6f7b2a267" id="r_aa9020c40ca61262e7f10cdf6f7b2a267"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#aa9020c40ca61262e7f10cdf6f7b2a267">setSheet</a> (bool sheet)=0</td></tr>
 <tr class="memdesc:aa9020c40ca61262e7f10cdf6f7b2a267"><td class="mdescLeft">&#160;</td><td class="mdescRight">Draws the dialog as a sheet, or as a centred overlay again.  <br /></td></tr>
 <tr class="memitem:a14c16ba54ce9b2edf12b25267cf09f6b" id="r_a14c16ba54ce9b2edf12b25267cf09f6b"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a14c16ba54ce9b2edf12b25267cf09f6b">setDismissLabel</a> (std::string_view label)=0</td></tr>
-<tr class="memdesc:a14c16ba54ce9b2edf12b25267cf09f6b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the label of a sheet's dismiss control; a new dialog's is "Close". The mount calls this only when the label is bound or not the default.  <br /></td></tr>
+<tr class="memdesc:a14c16ba54ce9b2edf12b25267cf09f6b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the label of the dismiss control, a sheet's or the one <span class="tt"><a class="el" href="#ad5cd7b0fb92a431bb2597b85c9269eff" title="Draws a dismiss control (labelled by setDismissLabel) on the title&#39;s row, against the trailing edge,...">setCloseButton</a></span> draws; a new overlay's is "Close". The mount calls this only when the label is bound or not the default.  <br /></td></tr>
+<tr class="memitem:a78af76c7a3c086fc84616c5373771007" id="r_a78af76c7a3c086fc84616c5373771007"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a78af76c7a3c086fc84616c5373771007">setHeadNote</a> (std::string_view note)=0</td></tr>
+<tr class="memdesc:a78af76c7a3c086fc84616c5373771007"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a short muted note on the title's row, against the trailing edge. The mount calls it only when the note is bound or not empty.  <br /></td></tr>
+<tr class="memitem:a5816b5bc13e699826d49ce225fc59a68" id="r_a5816b5bc13e699826d49ce225fc59a68"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a5816b5bc13e699826d49ce225fc59a68">setFooterNote</a> (std::string_view note)=0</td></tr>
+<tr class="memdesc:a5816b5bc13e699826d49ce225fc59a68"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a short muted note leading in the footer's row, opposite the actions. The footer shows while the note is not empty, though it holds no action. The mount calls it only when the note is bound or not empty.  <br /></td></tr>
+<tr class="memitem:ad5cd7b0fb92a431bb2597b85c9269eff" id="r_ad5cd7b0fb92a431bb2597b85c9269eff"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#ad5cd7b0fb92a431bb2597b85c9269eff">setCloseButton</a> (bool shown)=0</td></tr>
+<tr class="memdesc:ad5cd7b0fb92a431bb2597b85c9269eff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Draws a dismiss control (labelled by <span class="tt"><a class="el" href="#a14c16ba54ce9b2edf12b25267cf09f6b" title="Sets the label of the dismiss control, a sheet&#39;s or the one setCloseButton draws; a new overlay&#39;s is ...">setDismissLabel</a></span>) on the title's row, against the trailing edge, which dismisses exactly as Escape does. A sheet's head already holds one, so this adds nothing there. The mount calls it only when the condition is bound or true.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1ContainerWidget"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">morph::ui::ContainerWidget</a></td></tr>
 <tr class="memitem:a0f85cf00d946d0fc63f6d7057310478d pub_methods_classmorph_1_1ui_1_1ContainerWidget" id="r_a0f85cf00d946d0fc63f6d7057310478d"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html#a0f85cf00d946d0fc63f6d7057310478d">moveChild</a> (Widget &amp;child, std::size_t index)=0</td></tr>
 <tr class="memdesc:a0f85cf00d946d0fc63f6d7057310478d pub_methods_classmorph_1_1ui_1_1ContainerWidget"><td class="mdescLeft">&#160;</td><td class="mdescRight">Moves <code class="param">child</code> to position <code class="param">index:</code> it is removed, then inserted before the child now at <code class="param">index</code>.  <br /></td></tr>
@@ -432,7 +438,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </div><div class="memdoc">
 
 <p>Draws the dialog as a sheet, or as a centred overlay again. </p>
-<p>A sheet fills the window, with no margin and no rounding, and keeps every rule of the dialog: the focus trap, the footer, Escape as a dismissal. A press outside is not possible, so its head holds a dismiss control (labelled by <span class="tt"><a class="el" href="#a14c16ba54ce9b2edf12b25267cf09f6b" title="Sets the label of a sheet&#39;s dismiss control; a new dialog&#39;s is &quot;Close&quot;. The mount calls this only whe...">setDismissLabel</a></span>) before the title, which dismisses exactly as Escape does. Changing it while the dialog is open keeps the content and its state. A new dialog is not a sheet; the mount calls this only when the document binds <span class="tt">sheet</span> or sets it. </p><dl class="params"><dt>Parameters</dt><dd>
+<p>A sheet fills the window, with no margin and no rounding, and keeps every rule of the dialog: the focus trap, the footer, Escape as a dismissal. A press outside is not possible, so its head holds a dismiss control (labelled by <span class="tt"><a class="el" href="#a14c16ba54ce9b2edf12b25267cf09f6b" title="Sets the label of the dismiss control, a sheet&#39;s or the one setCloseButton draws; a new overlay&#39;s is ...">setDismissLabel</a></span>) before the title, which dismisses exactly as Escape does. Changing it while the dialog is open keeps the content and its state. A new dialog is not a sheet; the mount calls this only when the document binds <span class="tt">sheet</span> or sets it. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">sheet</td><td>Whether it is a sheet. </td></tr>
   </table>
@@ -466,7 +472,7 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </table>
 </div><div class="memdoc">
 
-<p>Sets the label of a sheet's dismiss control; a new dialog's is "Close". The mount calls this only when the label is bound or not the default. </p>
+<p>Sets the label of the dismiss control, a sheet's or the one <span class="tt"><a class="el" href="#ad5cd7b0fb92a431bb2597b85c9269eff" title="Draws a dismiss control (labelled by setDismissLabel) on the title&#39;s row, against the trailing edge,...">setCloseButton</a></span> draws; a new overlay's is "Close". The mount calls this only when the label is bound or not the default. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">label</td><td>The label, UTF-8. </td></tr>
@@ -475,6 +481,111 @@ Widget &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (Widget &amp;&a
 </dl>
 
 <p>Implemented in <a class="el" href="../../dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog.html#a579111232485dce72a6fc332fc4b2e90">morph::ui::testing::detail::FakeDialog</a>.</p>
+
+</div>
+</div>
+<a id="a78af76c7a3c086fc84616c5373771007" name="a78af76c7a3c086fc84616c5373771007"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a78af76c7a3c086fc84616c5373771007">&#9670;&#160;</a></span>setHeadNote()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::DialogWidget::setHeadNote </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>note</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows a short muted note on the title's row, against the trailing edge. The mount calls it only when the note is bound or not empty. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">note</td><td>The note, UTF-8; empty shows none. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog.html#aeba41cd94328f8f06e25e246a28c6cc7">morph::ui::testing::detail::FakeDialog</a>.</p>
+
+</div>
+</div>
+<a id="a5816b5bc13e699826d49ce225fc59a68" name="a5816b5bc13e699826d49ce225fc59a68"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5816b5bc13e699826d49ce225fc59a68">&#9670;&#160;</a></span>setFooterNote()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::DialogWidget::setFooterNote </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>note</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows a short muted note leading in the footer's row, opposite the actions. The footer shows while the note is not empty, though it holds no action. The mount calls it only when the note is bound or not empty. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">note</td><td>The note, UTF-8; empty shows none. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog.html#ab3cb0f19596fbcd593b961605496b5e8">morph::ui::testing::detail::FakeDialog</a>.</p>
+
+</div>
+</div>
+<a id="ad5cd7b0fb92a431bb2597b85c9269eff" name="ad5cd7b0fb92a431bb2597b85c9269eff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad5cd7b0fb92a431bb2597b85c9269eff">&#9670;&#160;</a></span>setCloseButton()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual void morph::ui::DialogWidget::setCloseButton </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>shown</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel pure-virtual">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Draws a dismiss control (labelled by <span class="tt"><a class="el" href="#a14c16ba54ce9b2edf12b25267cf09f6b" title="Sets the label of the dismiss control, a sheet&#39;s or the one setCloseButton draws; a new overlay&#39;s is ...">setDismissLabel</a></span>) on the title's row, against the trailing edge, which dismisses exactly as Escape does. A sheet's head already holds one, so this adds nothing there. The mount calls it only when the condition is bound or true. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">shown</td><td>Whether the control is drawn. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implemented in <a class="el" href="../../dd/df1/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeDialog.html#a56e86e6781208e669f8d86fb62405f01">morph::ui::testing::detail::FakeDialog</a>.</p>
 
 </div>
 </div>

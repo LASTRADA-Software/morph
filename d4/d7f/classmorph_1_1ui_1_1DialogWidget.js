@@ -7,5 +7,8 @@ var classmorph_1_1ui_1_1DialogWidget =
     [ "setOnDismiss", "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#abfe9f8e1ed2759f606aa3ffc0f3766d3", null ],
     [ "footer", "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#a29fb618b7ddbda6903e347933a498397", null ],
     [ "setSheet", "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#aa9020c40ca61262e7f10cdf6f7b2a267", null ],
-    [ "setDismissLabel", "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#a14c16ba54ce9b2edf12b25267cf09f6b", null ]
+    [ "setDismissLabel", "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#a14c16ba54ce9b2edf12b25267cf09f6b", null ],
+    [ "setHeadNote", "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#a78af76c7a3c086fc84616c5373771007", null ],
+    [ "setFooterNote", "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#a5816b5bc13e699826d49ce225fc59a68", null ],
+    [ "setCloseButton", "d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#ad5cd7b0fb92a431bb2597b85c9269eff", null ]
 ];

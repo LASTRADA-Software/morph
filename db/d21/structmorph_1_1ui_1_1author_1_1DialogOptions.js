@@ -11,5 +11,8 @@ var structmorph_1_1ui_1_1author_1_1DialogOptions =
     [ "onDismiss", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#a5576b6f4846c63fb7e537113e6e388be", null ],
     [ "actions", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#abe0e322c5669f797101d3293c86a2d3a", null ],
     [ "sheet", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#a8bc612f02325bfc7c222ebb4c2aa926f", null ],
-    [ "dismissLabel", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#afc494ce086e93f6f85e08a0fc95635df", null ]
+    [ "dismissLabel", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#afc494ce086e93f6f85e08a0fc95635df", null ],
+    [ "headNote", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#aa962fb93a15e938e06cfc8a876f832d2", null ],
+    [ "footerNote", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#a0278d599a6a5c32a4ea7a49712a3d943", null ],
+    [ "closeButton", "db/d21/structmorph_1_1ui_1_1author_1_1DialogOptions.html#a5d1daf258efb816d4f6d6e1eace87929", null ]
 ];

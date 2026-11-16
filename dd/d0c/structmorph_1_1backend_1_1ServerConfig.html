@@ -144,12 +144,16 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a603c136c3365d4db231069a4a8f3b208"><td class="mdescLeft">&#160;</td><td class="mdescRight">Extensions that answer envelope kinds the server does not know itself, consulted in order. Empty: none, and every unknown kind is answered <span class="tt">err "unknown envelope kind: &lt;kind&gt;"</span>. A null entry is refused by the constructor.  <br /></td></tr>
 <tr class="memitem:af49a7940b3ae7345a58bb499dff8c50f" id="r_af49a7940b3ae7345a58bb499dff8c50f"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#af49a7940b3ae7345a58bb499dff8c50f">coalesceWindow</a> {50}</td></tr>
 <tr class="memdesc:af49a7940b3ae7345a58bb499dff8c50f"><td class="mdescLeft">&#160;</td><td class="mdescRight">How long a connection's changes are merged before they are sent as one <span class="tt">changes</span> event.  <br /></td></tr>
+<tr class="memitem:a4698a11b840e667b5290edce7f0dcd74" id="r_a4698a11b840e667b5290edce7f0dcd74"><td class="memItemLeft">std::function&lt;<a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html">::morph::time::DateTime</a>()&gt;&#160;</td><td class="memItemRight"><a class="el" href="#a4698a11b840e667b5290edce7f0dcd74">clock</a></td></tr>
+<tr class="memdesc:a4698a11b840e667b5290edce7f0dcd74"><td class="mdescLeft">&#160;</td><td class="mdescRight">The server's "now", read when it waits for an instant a model reported (<span class="tt"><a class="el" href="../../d0/d83/effects_8hpp.html#a48219a6fdd6dbcf4a097b7a4563e3938" title="Registers action A of model M as the reporter of the next instant at which the listed records change ...">BRIDGE_REGISTER_CHANGES_AT</a></span>). Empty: <span class="tt"><a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html#a0072664563c3df7e5ff8fe15b63558da" title="The current UTC instant, truncated to milliseconds.">morph::time::DateTime::now()</a></span>.  <br /></td></tr>
+<tr class="memitem:afdb64d7513a7e63c970e06d51d266c70" id="r_afdb64d7513a7e63c970e06d51d266c70"><td class="memItemLeft">std::chrono::milliseconds&#160;</td><td class="memItemRight"><a class="el" href="#afdb64d7513a7e63c970e06d51d266c70">clockRecheck</a> {1000}</td></tr>
+<tr class="memdesc:afdb64d7513a7e63c970e06d51d266c70"><td class="mdescLeft">&#160;</td><td class="mdescRight">The longest the server sleeps before reading <span class="tt"><a class="el" href="#a4698a11b840e667b5290edce7f0dcd74" title="The server&#39;s &quot;now&quot;, read when it waits for an instant a model reported (BRIDGE_REGISTER_CHANGES_AT)....">clock</a></span> again while it waits for a reported instant.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Everything about a <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> that is configured rather than learned: given once, at construction, and never changed. </p>
 <p>The server reads these fields on its own strand and on its models' strands without a lock, which is sound only because nothing writes them after the constructor. A deployment that wants different limits constructs a different server. See <span class="tt">docs/spec/core/backend.md</span>, "`ServerConfig`". </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00309">309</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00310">310</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a8f2301d75b1e9742f2b110a70e035041" name="a8f2301d75b1e9742f2b110a70e035041"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8f2301d75b1e9742f2b110a70e035041">&#9670;&#160;</a></span>limits</h2>
@@ -165,7 +169,7 @@ Public Attributes</h2></td></tr>
 
 <p>Opt-in resource limits. Default-constructed: unbounded. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00311">311</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00312">312</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -184,7 +188,7 @@ Public Attributes</h2></td></tr>
 <p>Consulted whenever an instance is constructed with a non-empty <span class="tt">contextKey</span> — every <span class="tt">register</span> envelope, and every <span class="tt">attach</span> that misses the shared directory and therefore creates the instance. </p>
 <p><span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> owns the model instances of every remote client, so it is the only place that can attach an action log to them. Null: no instance gets a log. Runs on the server's strand. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00320">320</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -203,7 +207,7 @@ Public Attributes</h2></td></tr>
 <p>Called with the server's health: once from the constructor, and again, on the server's strand, whenever readiness changes (<span class="tt">beginShutdown()</span>). Null: nothing is called. </p>
 <p>A deployment's transport can expose it over a probe endpoint; morph does not embed an HTTP server. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00328">328</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00329">329</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -221,7 +225,7 @@ Public Attributes</h2></td></tr>
 
 <p>Oldest protocol version this server accepts in reply to <span class="tt">"hello"</span>. Must not exceed <span class="tt"><a class="el" href="#a274facbfd4d88bdf90b107acd85597a8" title="Newest protocol version this server accepts in reply to &quot;hello&quot;. Widen the range when a kProtocolVers...">maxProtocolVersion</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00332">332</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00333">333</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -239,7 +243,7 @@ Public Attributes</h2></td></tr>
 
 <p>Newest protocol version this server accepts in reply to <span class="tt">"hello"</span>. Widen the range when a <span class="tt">kProtocolVersion</span> bump must keep serving older clients through their deprecation window (see docs/spec/core/wire.md, "Action-evolution policy"). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00338">338</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -257,7 +261,7 @@ Public Attributes</h2></td></tr>
 
 <p>Whether an <span class="tt">execute</span> body must carry every field the action's served schema marks <span class="tt">required</span>. See <span class="tt">PayloadCompleteness</span> for why <span class="tt">Lenient</span> is the default. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00343">343</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00344">344</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -275,7 +279,7 @@ Public Attributes</h2></td></tr>
 
 <p>Extensions that answer envelope kinds the server does not know itself, consulted in order. Empty: none, and every unknown kind is answered <span class="tt">err "unknown envelope kind: &lt;kind&gt;"</span>. A null entry is refused by the constructor. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00349">349</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -294,7 +298,45 @@ Public Attributes</h2></td></tr>
 <p>How long a connection's changes are merged before they are sent as one <span class="tt">changes</span> event. </p>
 <p>The window opens at the first change queued for the connection, and its queue is sent when the window closes, or at once when 256 keys are queued. Zero sends each fan-out's event at once, unmerged. Negative is refused by the constructor. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00358">358</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00359">359</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4698a11b840e667b5290edce7f0dcd74" name="a4698a11b840e667b5290edce7f0dcd74"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4698a11b840e667b5290edce7f0dcd74">&#9670;&#160;</a></span>clock</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::function&lt;<a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html">::morph::time::DateTime</a>()&gt; morph::backend::ServerConfig::clock</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The server's "now", read when it waits for an instant a model reported (<span class="tt"><a class="el" href="../../d0/d83/effects_8hpp.html#a48219a6fdd6dbcf4a097b7a4563e3938" title="Registers action A of model M as the reporter of the next instant at which the listed records change ...">BRIDGE_REGISTER_CHANGES_AT</a></span>). Empty: <span class="tt"><a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html#a0072664563c3df7e5ff8fe15b63558da" title="The current UTC instant, truncated to milliseconds.">morph::time::DateTime::now()</a></span>. </p>
+<p>A test supplies a clock it advances by hand, so a deadline passes without a sleep. The model reports its instants from the same clock. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00366">366</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="afdb64d7513a7e63c970e06d51d266c70" name="afdb64d7513a7e63c970e06d51d266c70"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afdb64d7513a7e63c970e06d51d266c70">&#9670;&#160;</a></span>clockRecheck</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::chrono::milliseconds morph::backend::ServerConfig::clockRecheck {1000}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The longest the server sleeps before reading <span class="tt"><a class="el" href="#a4698a11b840e667b5290edce7f0dcd74" title="The server&#39;s &quot;now&quot;, read when it waits for an instant a model reported (BRIDGE_REGISTER_CHANGES_AT)....">clock</a></span> again while it waits for a reported instant. </p>
+<p>A system clock can be set and an injected one is advanced by a test, neither of which a sleep notices, so the instant is judged by reading <span class="tt"><a class="el" href="#a4698a11b840e667b5290edce7f0dcd74" title="The server&#39;s &quot;now&quot;, read when it waits for an instant a model reported (BRIDGE_REGISTER_CHANGES_AT)....">clock</a></span>, never by the length of the sleep. Not positive is refused by the constructor. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00373">373</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

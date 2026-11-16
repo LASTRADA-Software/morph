@@ -62,6 +62,7 @@ var annotated_dup =
       [ "effects", null, [
         [ "detail", null, [
           [ "DeclaredEffect", "d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect.html", "d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect" ],
+          [ "DeclaredChangeTime", "da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html", "da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime" ],
           [ "EffectOf", "dd/d86/structmorph_1_1effects_1_1detail_1_1EffectOf.html", null ],
           [ "Resolved", "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html", "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved" ]
         ] ],
@@ -69,6 +70,7 @@ var annotated_dup =
         [ "Changes", "dc/d63/structmorph_1_1effects_1_1Changes.html", "dc/d63/structmorph_1_1effects_1_1Changes" ],
         [ "changes", "d6/d2b/structmorph_1_1effects_1_1changes.html", null ],
         [ "changesInstance", "dc/de2/structmorph_1_1effects_1_1changesInstance.html", null ],
+        [ "ChangeTimeSource", "d2/da8/structmorph_1_1effects_1_1ChangeTimeSource.html", "d2/da8/structmorph_1_1effects_1_1ChangeTimeSource" ],
         [ "Effect", "da/dae/structmorph_1_1effects_1_1Effect.html", "da/dae/structmorph_1_1effects_1_1Effect" ],
         [ "InstanceChange", "dd/dbe/structmorph_1_1effects_1_1InstanceChange.html", "dd/dbe/structmorph_1_1effects_1_1InstanceChange" ],
         [ "none", "d9/d7d/structmorph_1_1effects_1_1none.html", null ],

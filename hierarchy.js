@@ -51,6 +51,8 @@ var hierarchy =
     [ "morph::effects::Changes", "dc/d63/structmorph_1_1effects_1_1Changes.html", null ],
     [ "morph::effects::changes&lt; R &gt;", "d6/d2b/structmorph_1_1effects_1_1changes.html", null ],
     [ "morph::effects::changesInstance", "dc/de2/structmorph_1_1effects_1_1changesInstance.html", null ],
+    [ "morph::effects::ChangeTimeSource", "d2/da8/structmorph_1_1effects_1_1ChangeTimeSource.html", null ],
+    [ "morph::effects::detail::DeclaredChangeTime", "da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html", null ],
     [ "morph::effects::detail::DeclaredEffect", "d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect.html", null ],
     [ "morph::effects::detail::EffectOf&lt; E &gt;", "dd/d86/structmorph_1_1effects_1_1detail_1_1EffectOf.html", null ],
     [ "morph::effects::detail::Resolved", "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html", null ],

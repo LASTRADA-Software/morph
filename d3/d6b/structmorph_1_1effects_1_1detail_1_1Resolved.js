@@ -7,5 +7,6 @@ var structmorph_1_1effects_1_1detail_1_1Resolved =
     [ "records", "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#a2a4a86568b646327ab6616b2fd7fda4a", null ],
     [ "effects", "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#aa8d875f286a4f2e71983d013954cfa97", null ],
     [ "actionRecords", "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#a44020f9685c00c710b3c0c2889ec15b0", null ],
-    [ "holding", "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#a788f408136cf693ee9c182139aca33ec", null ]
+    [ "holding", "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#a788f408136cf693ee9c182139aca33ec", null ],
+    [ "changeTimes", "d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html#a20103be4ca7f7e1f6e6e88b659a159b9", null ]
 ];

@@ -12,6 +12,7 @@ var classmorph_1_1forms_1_1WizardSession =
     [ "next", "d4/df2/classmorph_1_1forms_1_1WizardSession.html#a69da82ae5247572fcdda403b206bac92", null ],
     [ "back", "d4/df2/classmorph_1_1forms_1_1WizardSession.html#a975e483cdc7a0f3f50f42aec42379d88", null ],
     [ "resolved", "d4/df2/classmorph_1_1forms_1_1WizardSession.html#a583be7cb84947b9e6f095f1125ef1dc2", null ],
+    [ "setFormat", "d4/df2/classmorph_1_1forms_1_1WizardSession.html#a869682ace818f1df60ef9808074e7c7c", null ],
     [ "title", "d4/df2/classmorph_1_1forms_1_1WizardSession.html#a29d366ad2e27be254420fa2c7acdf40e", null ],
     [ "stepTitle", "d4/df2/classmorph_1_1forms_1_1WizardSession.html#ae6d6f6f2a5fd1bd4b5afcc744c308b31", null ]
 ];

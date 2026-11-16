@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/d5a/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>A fake <span class="tt"><a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html" title="A panel over the content that slides in from the side fixed at creation; it follows a dialog&#39;s rules....">DrawerWidget</a></span>: properties <span class="tt">side</span>, <span class="tt">open</span>, <span class="tt">title</span>, <span class="tt">description</span>; a <span class="tt">Footer</span> child once its footer is asked for.  
+<p>A fake <span class="tt"><a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html" title="A panel over the content that slides in from the side fixed at creation; it follows a dialog&#39;s rules....">DrawerWidget</a></span>: properties <span class="tt">side</span>, <span class="tt">open</span>, <span class="tt">title</span>, <span class="tt">description</span>, and <span class="tt">headNote</span>, <span class="tt">footerNote</span>, <span class="tt">closeButton</span> and <span class="tt">dismissLabel</span> (when set); a <span class="tt">Footer</span> child once its footer is asked for.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>&gt;</code></p>
@@ -152,6 +152,14 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a1578fe26bc9af26083b166c97a787c40"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows the description as runs, as <span class="tt"><a class="el" href="../../d4/d7f/classmorph_1_1ui_1_1DialogWidget.html#a5aa02913974bce067b123ad5666eea6f" title="Shows the description as runs, as TextWidget::setSpans shows a text, and makes their joined character...">DialogWidget::setDescriptionSpans</a></span> does.  <br /></td></tr>
 <tr class="memitem:a08ade23e2ae2ed1078400d8967bdf9c9" id="r_a08ade23e2ae2ed1078400d8967bdf9c9"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a08ade23e2ae2ed1078400d8967bdf9c9">setOnDismiss</a> (<a class="el" href="../../d8/d11/view_8hpp.html#a27496baa3be32dfe93ae53501e082f6f">Action</a> onDismiss) override</td></tr>
 <tr class="memdesc:a08ade23e2ae2ed1078400d8967bdf9c9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets what a user dismissal (Esc on the TUI) calls.  <br /></td></tr>
+<tr class="memitem:a369f3d43b0c4464cd64171bfc2ece10c" id="r_a369f3d43b0c4464cd64171bfc2ece10c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a369f3d43b0c4464cd64171bfc2ece10c">setDismissLabel</a> (std::string_view label) override</td></tr>
+<tr class="memdesc:a369f3d43b0c4464cd64171bfc2ece10c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets the label of the dismiss control <span class="tt"><a class="el" href="#adf896595ad9d324211960b5e823df977" title="Draws a dismiss control (labelled by setDismissLabel) on the title&#39;s row, against the trailing edge,...">setCloseButton</a></span> draws; a new drawer's is "Close". The mount calls this only when the label is bound or not the default.  <br /></td></tr>
+<tr class="memitem:a797e3355c940bdb3f20782a1293ebc4e" id="r_a797e3355c940bdb3f20782a1293ebc4e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a797e3355c940bdb3f20782a1293ebc4e">setHeadNote</a> (std::string_view note) override</td></tr>
+<tr class="memdesc:a797e3355c940bdb3f20782a1293ebc4e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a short muted note on the title's row, against the trailing edge. The mount calls it only when the note is bound or not empty.  <br /></td></tr>
+<tr class="memitem:acb00390b54a14e6a0f95a2bcd99abe9b" id="r_acb00390b54a14e6a0f95a2bcd99abe9b"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#acb00390b54a14e6a0f95a2bcd99abe9b">setFooterNote</a> (std::string_view note) override</td></tr>
+<tr class="memdesc:acb00390b54a14e6a0f95a2bcd99abe9b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Shows a short muted note leading in the footer's row, opposite the actions. The footer shows while the note is not empty, though it holds no action. The mount calls it only when the note is bound or not empty.  <br /></td></tr>
+<tr class="memitem:adf896595ad9d324211960b5e823df977" id="r_adf896595ad9d324211960b5e823df977"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#adf896595ad9d324211960b5e823df977">setCloseButton</a> (bool shown) override</td></tr>
+<tr class="memdesc:adf896595ad9d324211960b5e823df977"><td class="mdescLeft">&#160;</td><td class="mdescRight">Draws a dismiss control (labelled by <span class="tt"><a class="el" href="#a369f3d43b0c4464cd64171bfc2ece10c" title="Sets the label of the dismiss control setCloseButton draws; a new drawer&#39;s is &quot;Close&quot;....">setDismissLabel</a></span>) on the title's row, against the trailing edge, which dismisses exactly as Escape does. The mount calls it only when the condition is bound or true.  <br /></td></tr>
 <tr class="inherit_header pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay"><td colspan="2">Public Member Functions inherited from <a class="el" href="../../d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html">morph::ui::testing::detail::FakeOverlay&lt; DrawerWidget &gt;</a></td></tr>
 <tr class="memitem:a53f06774350e0dc15870fbbffe896f2c pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay" id="r_a53f06774350e0dc15870fbbffe896f2c"><td class="memItemLeft"><a class="el" href="../../d4/d3a/classmorph_1_1ui_1_1ContainerWidget.html">ContainerWidget</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../d6/dff/classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay.html#a53f06774350e0dc15870fbbffe896f2c">footer</a> () override</td></tr>
 <tr class="memdesc:a53f06774350e0dc15870fbbffe896f2c pub_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeOverlay"><td class="mdescLeft">&#160;</td><td class="mdescRight">The footer, a <span class="tt">Footer</span> container child of the overlay.  <br /></td></tr>
@@ -216,9 +224,9 @@ Additional Inherited Members</h2></td></tr>
 <tr class="memdesc:a7e1dc5da8d400e819d73832cdad60580 pro_methods_classmorph_1_1ui_1_1testing_1_1detail_1_1FakeLeaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">This widget's id.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html" title="A panel over the content that slides in from the side fixed at creation; it follows a dialog&#39;s rules....">DrawerWidget</a></span>: properties <span class="tt">side</span>, <span class="tt">open</span>, <span class="tt">title</span>, <span class="tt">description</span>; a <span class="tt">Footer</span> child once its footer is asked for. </p>
+<div class="textblock"><p>A fake <span class="tt"><a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html" title="A panel over the content that slides in from the side fixed at creation; it follows a dialog&#39;s rules....">DrawerWidget</a></span>: properties <span class="tt">side</span>, <span class="tt">open</span>, <span class="tt">title</span>, <span class="tt">description</span>, and <span class="tt">headNote</span>, <span class="tt">footerNote</span>, <span class="tt">closeButton</span> and <span class="tt">dismissLabel</span> (when set); a <span class="tt">Footer</span> child once its footer is asked for. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01685">1685</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01688">1688</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="afffc5d580ea27123c014e11a4a4b19af" name="afffc5d580ea27123c014e11a4a4b19af"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#afffc5d580ea27123c014e11a4a4b19af">&#9670;&#160;</a></span>setOpen()</h2>
@@ -253,7 +261,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html#acbd90848392ad26037d8dd37e2f2d00c">morph::ui::DrawerWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01688">1688</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01691">1691</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -290,7 +298,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html#a9d4c87bdae39bc1318f796cf73226b39">morph::ui::DrawerWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01689">1689</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01692">1692</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -327,7 +335,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html#aa8accfd4fab92c13310b50ab3bc450d4">morph::ui::DrawerWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01690">1690</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01693">1693</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -364,7 +372,7 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html#a4c72d72d06d05831d1fed9a2cc056977">morph::ui::DrawerWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01691">1691</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01694">1694</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -401,7 +409,155 @@ Additional Inherited Members</h2></td></tr>
 
 <p>Implements <a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html#a942321f59ec1fe79a37c1d986da435be">morph::ui::DrawerWidget</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01694">1694</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01697">1697</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a369f3d43b0c4464cd64171bfc2ece10c" name="a369f3d43b0c4464cd64171bfc2ece10c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a369f3d43b0c4464cd64171bfc2ece10c">&#9670;&#160;</a></span>setDismissLabel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeDrawer::setDismissLabel </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>label</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sets the label of the dismiss control <span class="tt"><a class="el" href="#adf896595ad9d324211960b5e823df977" title="Draws a dismiss control (labelled by setDismissLabel) on the title&#39;s row, against the trailing edge,...">setCloseButton</a></span> draws; a new drawer's is "Close". The mount calls this only when the label is bound or not the default. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">label</td><td>The label, UTF-8. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html#a4e285e58fa4522325bbe866dc2540ffe">morph::ui::DrawerWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01698">1698</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a797e3355c940bdb3f20782a1293ebc4e" name="a797e3355c940bdb3f20782a1293ebc4e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a797e3355c940bdb3f20782a1293ebc4e">&#9670;&#160;</a></span>setHeadNote()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeDrawer::setHeadNote </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>note</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows a short muted note on the title's row, against the trailing edge. The mount calls it only when the note is bound or not empty. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">note</td><td>The note, UTF-8; empty shows none. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html#abab710a252a674baecc1193ec6ab36b4">morph::ui::DrawerWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01699">1699</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="acb00390b54a14e6a0f95a2bcd99abe9b" name="acb00390b54a14e6a0f95a2bcd99abe9b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acb00390b54a14e6a0f95a2bcd99abe9b">&#9670;&#160;</a></span>setFooterNote()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeDrawer::setFooterNote </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>note</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Shows a short muted note leading in the footer's row, opposite the actions. The footer shows while the note is not empty, though it holds no action. The mount calls it only when the note is bound or not empty. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">note</td><td>The note, UTF-8; empty shows none. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html#a74111a681749e1bdb23aad5c55c448ca">morph::ui::DrawerWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01700">1700</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adf896595ad9d324211960b5e823df977" name="adf896595ad9d324211960b5e823df977"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adf896595ad9d324211960b5e823df977">&#9670;&#160;</a></span>setCloseButton()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::ui::testing::detail::FakeDrawer::setCloseButton </td>
+          <td>(</td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>shown</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Draws a dismiss control (labelled by <span class="tt"><a class="el" href="#a369f3d43b0c4464cd64171bfc2ece10c" title="Sets the label of the dismiss control setCloseButton draws; a new drawer&#39;s is &quot;Close&quot;....">setDismissLabel</a></span>) on the title's row, against the trailing edge, which dismisses exactly as Escape does. The mount calls it only when the condition is bound or true. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">shown</td><td>Whether the control is drawn. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p>Implements <a class="el" href="../../de/d3c/classmorph_1_1ui_1_1DrawerWidget.html#af9b69d2dda978d06352a88c12d96a3ef">morph::ui::DrawerWidget</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html#l01701">1701</a> of file <a class="el" href="../../de/dd9/recording__backend_8hpp_source.html">recording_backend.hpp</a>.</p>
 
 </div>
 </div>

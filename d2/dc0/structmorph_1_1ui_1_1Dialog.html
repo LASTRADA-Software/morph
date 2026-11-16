@@ -143,9 +143,15 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a60fe2eaccab23a760d47996f39d4da79" id="r_a60fe2eaccab23a760d47996f39d4da79"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a60fe2eaccab23a760d47996f39d4da79">sheet</a> = false</td></tr>
 <tr class="memdesc:a60fe2eaccab23a760d47996f39d4da79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether it is drawn as a sheet that fills the window, with a head holding a dismiss control and the title. Changing it while open keeps the content and its state.  <br /></td></tr>
 <tr class="memitem:aed08238e04671670bd52d1ef4f873f00" id="r_aed08238e04671670bd52d1ef4f873f00"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aed08238e04671670bd52d1ef4f873f00">dismissLabel</a> = std::string{&quot;Close&quot;}</td></tr>
-<tr class="memdesc:aed08238e04671670bd52d1ef4f873f00"><td class="mdescLeft">&#160;</td><td class="mdescRight">The label of a sheet's dismiss control, which dismisses as Escape does.  <br /></td></tr>
+<tr class="memdesc:aed08238e04671670bd52d1ef4f873f00"><td class="mdescLeft">&#160;</td><td class="mdescRight">The label of the dismiss control, a sheet's or <span class="tt"><a class="el" href="#aaca457c67510b3e1db16029438f79d61" title="Whether a dismiss control, labelled dismissLabel, is drawn on the title&#39;s row, against the trailing e...">closeButton</a></span>'s, which dismisses as Escape does.  <br /></td></tr>
 <tr class="memitem:a2e89c627ddbc39e88e3ea23e9b4e8030" id="r_a2e89c627ddbc39e88e3ea23e9b4e8030"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::vector&lt; <a class="el" href="../../d7/d59/structmorph_1_1ui_1_1TextSpan.html">TextSpan</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a2e89c627ddbc39e88e3ea23e9b4e8030">descriptionSpans</a></td></tr>
 <tr class="memdesc:a2e89c627ddbc39e88e3ea23e9b4e8030"><td class="mdescLeft">&#160;</td><td class="mdescRight">The description as runs; while bound or not empty, shown in place of <span class="tt"><a class="el" href="#a1e9a48cad6e318f8c03409c5a7b43b50" title="A line under the title, in the head, that describes the dialog and is its accessible description; emp...">description</a></span>, which an older client draws.  <br /></td></tr>
+<tr class="memitem:afc4af5b28c6e32b88bdd1d40613d2eca" id="r_afc4af5b28c6e32b88bdd1d40613d2eca"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#afc4af5b28c6e32b88bdd1d40613d2eca">headNote</a></td></tr>
+<tr class="memdesc:afc4af5b28c6e32b88bdd1d40613d2eca"><td class="mdescLeft">&#160;</td><td class="mdescRight">A short muted note on the title's row, against the trailing edge; empty shows none.  <br /></td></tr>
+<tr class="memitem:ad69218577e9cc7613101c3cc8ac0609a" id="r_ad69218577e9cc7613101c3cc8ac0609a"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad69218577e9cc7613101c3cc8ac0609a">footerNote</a></td></tr>
+<tr class="memdesc:ad69218577e9cc7613101c3cc8ac0609a"><td class="mdescLeft">&#160;</td><td class="mdescRight">A short muted note leading in the footer's row, opposite the actions; empty shows none.  <br /></td></tr>
+<tr class="memitem:aaca457c67510b3e1db16029438f79d61" id="r_aaca457c67510b3e1db16029438f79d61"><td class="memItemLeft"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt; bool &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aaca457c67510b3e1db16029438f79d61">closeButton</a> = false</td></tr>
+<tr class="memdesc:aaca457c67510b3e1db16029438f79d61"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a dismiss control, labelled <span class="tt"><a class="el" href="#aed08238e04671670bd52d1ef4f873f00" title="The label of the dismiss control, a sheet&#39;s or closeButton&#39;s, which dismisses as Escape does.">dismissLabel</a></span>, is drawn on the title's row, against the trailing edge. A sheet's head holds one already, so this adds nothing while <span class="tt"><a class="el" href="#a60fe2eaccab23a760d47996f39d4da79" title="Whether it is drawn as a sheet that fills the window, with a head holding a dismiss control and the t...">sheet</a></span> holds.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>A modal overlay; its content is mounted only while it is open. </p>
@@ -290,7 +296,7 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The label of a sheet's dismiss control, which dismisses as Escape does. </p>
+<p>The label of the dismiss control, a sheet's or <span class="tt"><a class="el" href="#aaca457c67510b3e1db16029438f79d61" title="Whether a dismiss control, labelled dismissLabel, is drawn on the title&#39;s row, against the trailing e...">closeButton</a></span>'s, which dismisses as Escape does. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01029">1029</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
@@ -311,6 +317,60 @@ Public Attributes</h2></td></tr>
 <p>The description as runs; while bound or not empty, shown in place of <span class="tt"><a class="el" href="#a1e9a48cad6e318f8c03409c5a7b43b50" title="A line under the title, in the head, that describes the dialog and is its accessible description; emp...">description</a></span>, which an older client draws. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01032">1032</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="afc4af5b28c6e32b88bdd1d40613d2eca" name="afc4af5b28c6e32b88bdd1d40613d2eca"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#afc4af5b28c6e32b88bdd1d40613d2eca">&#9670;&#160;</a></span>headNote</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::Dialog::headNote</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A short muted note on the title's row, against the trailing edge; empty shows none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01034">1034</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ad69218577e9cc7613101c3cc8ac0609a" name="ad69218577e9cc7613101c3cc8ac0609a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad69218577e9cc7613101c3cc8ac0609a">&#9670;&#160;</a></span>footerNote</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;std::string&gt; morph::ui::Dialog::footerNote</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A short muted note leading in the footer's row, opposite the actions; empty shows none. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01036">1036</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aaca457c67510b3e1db16029438f79d61" name="aaca457c67510b3e1db16029438f79d61"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaca457c67510b3e1db16029438f79d61">&#9670;&#160;</a></span>closeButton</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../db/d73/classmorph_1_1ui_1_1Prop.html">Prop</a>&lt;bool&gt; morph::ui::Dialog::closeButton = false</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether a dismiss control, labelled <span class="tt"><a class="el" href="#aed08238e04671670bd52d1ef4f873f00" title="The label of the dismiss control, a sheet&#39;s or closeButton&#39;s, which dismisses as Escape does.">dismissLabel</a></span>, is drawn on the title's row, against the trailing edge. A sheet's head holds one already, so this adds nothing while <span class="tt"><a class="el" href="#a60fe2eaccab23a760d47996f39d4da79" title="Whether it is drawn as a sheet that fills the window, with a head holding a dismiss control and the t...">sheet</a></span> holds. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/d11/view_8hpp_source.html#l01039">1039</a> of file <a class="el" href="../../d8/d11/view_8hpp_source.html">view.hpp</a>.</p>
 
 </div>
 </div>

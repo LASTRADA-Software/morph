@@ -156,6 +156,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:acdd3edf535e7f7f54df513a9298bae36"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds the change an <span class="tt"><a class="el" href="../../d5/d2a/structmorph_1_1effects_1_1updates.html" title="Effect: the action edits existing rows of record R, and its result carries them.">updates</a>&lt;R&gt;</span> effect makes: the keys of the <span class="tt">R</span> rows found in the result.  <br /></td></tr>
 <tr class="memitem:a2275ac78842a6bd297548021a96f68ed" id="r_a2275ac78842a6bd297548021a96f68ed"><td class="memItemLeft"><a class="el" href="../../dc/d63/structmorph_1_1effects_1_1Changes.html">Changes</a>&#160;</td><td class="memItemRight"><a class="el" href="#a2275ac78842a6bd297548021a96f68ed">morph::effects::detail::deriveChangesFrom</a> (<a class="el" href="../../d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html">Resolved</a> const &amp;resolved, std::string_view actionId, std::string_view resultJson, <a class="el" href="../../dd/dbe/structmorph_1_1effects_1_1InstanceChange.html">InstanceChange</a> const &amp;ranOn)</td></tr>
 <tr class="memdesc:a2275ac78842a6bd297548021a96f68ed"><td class="mdescLeft">&#160;</td><td class="mdescRight">See <span class="tt"><a class="el" href="#a679ff44da34495119967d31ec3f53743" title="The changes a successful execute made, from the action&#39;s declared effects and its result.">morph::effects::deriveChanges</a></span>, over given registries.  <br /></td></tr>
+<tr class="memitem:a02e3e64179b3ec48debe0abe679eb1cb" id="r_a02e3e64179b3ec48debe0abe679eb1cb"><td class="memItemLeft"><a class="el" href="../../dc/d63/structmorph_1_1effects_1_1Changes.html">Changes</a>&#160;</td><td class="memItemRight"><a class="el" href="#a02e3e64179b3ec48debe0abe679eb1cb">morph::effects::detail::wholeTypeChanges</a> (<a class="el" href="../../d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html">Resolved</a> const &amp;resolved, std::vector&lt; std::string &gt; const &amp;records)</td></tr>
+<tr class="memdesc:a02e3e64179b3ec48debe0abe679eb1cb"><td class="mdescLeft">&#160;</td><td class="mdescRight">The whole-type changes of <code class="param">records</code>, and of every record derived from them.  <br /></td></tr>
 <tr class="memitem:a679ff44da34495119967d31ec3f53743" id="r_a679ff44da34495119967d31ec3f53743"><td class="memItemLeft"><a class="el" href="../../dc/d63/structmorph_1_1effects_1_1Changes.html">Changes</a>&#160;</td><td class="memItemRight"><a class="el" href="#a679ff44da34495119967d31ec3f53743">morph::effects::deriveChanges</a> (std::string_view actionId, std::string_view resultJson, <a class="el" href="../../dd/dbe/structmorph_1_1effects_1_1InstanceChange.html">InstanceChange</a> const &amp;ranOn)</td></tr>
 <tr class="memdesc:a679ff44da34495119967d31ec3f53743"><td class="mdescLeft">&#160;</td><td class="mdescRight">The changes a successful execute made, from the action's declared effects and its result.  <br /></td></tr>
 </table>
@@ -570,6 +572,47 @@ Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="a02e3e64179b3ec48debe0abe679eb1cb" name="a02e3e64179b3ec48debe0abe679eb1cb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a02e3e64179b3ec48debe0abe679eb1cb">&#9670;&#160;</a></span>wholeTypeChanges()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">Changes morph::effects::detail::wholeTypeChanges </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html">Resolved</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>resolved</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::vector&lt; std::string &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>records</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The whole-type changes of <code class="param">records</code>, and of every record derived from them. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">resolved</td><td>The resolved registries. </td></tr>
+    <tr><td class="paramname">records</td><td>The changed records' wire names. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The changes. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../dd/d18/changes_8hpp_source.html#l00257">257</a> of file <a class="el" href="../../dd/d18/changes_8hpp_source.html">changes.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a679ff44da34495119967d31ec3f53743" name="a679ff44da34495119967d31ec3f53743"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a679ff44da34495119967d31ec3f53743">&#9670;&#160;</a></span>deriveChanges()</h2>
 
@@ -619,7 +662,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/d18/changes_8hpp_source.html#l00265">265</a> of file <a class="el" href="../../dd/d18/changes_8hpp_source.html">changes.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/d18/changes_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../dd/d18/changes_8hpp_source.html">changes.hpp</a>.</p>
 
 </div>
 </div>

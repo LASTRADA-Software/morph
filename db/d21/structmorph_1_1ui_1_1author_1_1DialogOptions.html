@@ -151,7 +151,13 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a8bc612f02325bfc7c222ebb4c2aa926f" id="r_a8bc612f02325bfc7c222ebb4c2aa926f"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a8bc612f02325bfc7c222ebb4c2aa926f">sheet</a></td></tr>
 <tr class="memdesc:a8bc612f02325bfc7c222ebb4c2aa926f"><td class="mdescLeft">&#160;</td><td class="mdescRight">A dialog's condition for being drawn as a sheet that fills the window, such as <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a5629d3f805e018646a8a4508d8802030" title="eq: equality of magnitude. A function, not ==: an == that returns an expression rather than a bool br...">eq</a>(<a class="el" href="../../d1/dc0/author_8hpp.html#a19d670a24bfa61ce68d4f773b3346590" title="A client environment value, {&quot;env&quot;: name}: widthClass, locale, platform, online, backend.">env</a>("<a class="el" href="../../d1/dc0/author_8hpp.html#a09821e08f79d165fee2d4086c5047e43" title="The width class a screen lays out for: the client&#39;s {&quot;env&quot;: &quot;widthClass&quot;}, and expanded where no clie...">widthClass</a>"), "compact")</span>; a drawer takes none.  <br /></td></tr>
 <tr class="memitem:afc494ce086e93f6f85e08a0fc95635df" id="r_afc494ce086e93f6f85e08a0fc95635df"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#afc494ce086e93f6f85e08a0fc95635df">dismissLabel</a></td></tr>
-<tr class="memdesc:afc494ce086e93f6f85e08a0fc95635df"><td class="mdescLeft">&#160;</td><td class="mdescRight">The label of a sheet's dismiss control; absent is "Close". Only with <span class="tt"><a class="el" href="#a8bc612f02325bfc7c222ebb4c2aa926f" title="A dialog&#39;s condition for being drawn as a sheet that fills the window, such as eq(env(&quot;widthClass&quot;),...">sheet</a></span>.  <br /></td></tr>
+<tr class="memdesc:afc494ce086e93f6f85e08a0fc95635df"><td class="mdescLeft">&#160;</td><td class="mdescRight">The label of the dismiss control of a sheet or of <span class="tt"><a class="el" href="#a5d1daf258efb816d4f6d6e1eace87929" title="A condition: while true a dismiss control, labelled dismissLabel, is drawn on the title&#39;s row....">closeButton</a></span>; absent is "Close". Only with one of them.  <br /></td></tr>
+<tr class="memitem:aa962fb93a15e938e06cfc8a876f832d2" id="r_aa962fb93a15e938e06cfc8a876f832d2"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#aa962fb93a15e938e06cfc8a876f832d2">headNote</a></td></tr>
+<tr class="memdesc:aa962fb93a15e938e06cfc8a876f832d2"><td class="mdescLeft">&#160;</td><td class="mdescRight">A short muted note on the title's row, against the trailing edge.  <br /></td></tr>
+<tr class="memitem:a0278d599a6a5c32a4ea7a49712a3d943" id="r_a0278d599a6a5c32a4ea7a49712a3d943"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a0278d599a6a5c32a4ea7a49712a3d943">footerNote</a></td></tr>
+<tr class="memdesc:a0278d599a6a5c32a4ea7a49712a3d943"><td class="mdescLeft">&#160;</td><td class="mdescRight">A short muted note leading in the footer's row, opposite the actions.  <br /></td></tr>
+<tr class="memitem:a5d1daf258efb816d4f6d6e1eace87929" id="r_a5d1daf258efb816d4f6d6e1eace87929"><td class="memItemLeft"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a>&#160;</td><td class="memItemRight"><a class="el" href="#a5d1daf258efb816d4f6d6e1eace87929">closeButton</a></td></tr>
+<tr class="memdesc:a5d1daf258efb816d4f6d6e1eace87929"><td class="mdescLeft">&#160;</td><td class="mdescRight">A condition: while true a dismiss control, labelled <span class="tt"><a class="el" href="#afc494ce086e93f6f85e08a0fc95635df" title="The label of the dismiss control of a sheet or of closeButton; absent is &quot;Close&quot;. Only with one of th...">dismissLabel</a></span>, is drawn on the title's row. A sheet's head holds one already, so it adds nothing while <span class="tt"><a class="el" href="#a8bc612f02325bfc7c222ebb4c2aa926f" title="A dialog&#39;s condition for being drawn as a sheet that fills the window, such as eq(env(&quot;widthClass&quot;),...">sheet</a></span> holds.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Options of <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a7c4730acdfb702f008d2d7660b96145a" title="A dialog node, a scope of its own; open and close name it by its element.">dialog</a></span> and <span class="tt"><a class="el" href="../../d1/dc0/author_8hpp.html#a3dcd7914cb2f6046a8156c5e4a2ceb93" title="A drawer node, a scope of its own.">drawer</a></span>. </p>
@@ -368,9 +374,63 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>The label of a sheet's dismiss control; absent is "Close". Only with <span class="tt"><a class="el" href="#a8bc612f02325bfc7c222ebb4c2aa926f" title="A dialog&#39;s condition for being drawn as a sheet that fills the window, such as eq(env(&quot;widthClass&quot;),...">sheet</a></span>. </p>
+<p>The label of the dismiss control of a sheet or of <span class="tt"><a class="el" href="#a5d1daf258efb816d4f6d6e1eace87929" title="A condition: while true a dismiss control, labelled dismissLabel, is drawn on the title&#39;s row....">closeButton</a></span>; absent is "Close". Only with one of them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04540">4540</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04541">4541</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa962fb93a15e938e06cfc8a876f832d2" name="aa962fb93a15e938e06cfc8a876f832d2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa962fb93a15e938e06cfc8a876f832d2">&#9670;&#160;</a></span>headNote</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> morph::ui::author::DialogOptions::headNote</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A short muted note on the title's row, against the trailing edge. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04543">4543</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0278d599a6a5c32a4ea7a49712a3d943" name="a0278d599a6a5c32a4ea7a49712a3d943"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0278d599a6a5c32a4ea7a49712a3d943">&#9670;&#160;</a></span>footerNote</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> morph::ui::author::DialogOptions::footerNote</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A short muted note leading in the footer's row, opposite the actions. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04545">4545</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5d1daf258efb816d4f6d6e1eace87929" name="a5d1daf258efb816d4f6d6e1eace87929"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5d1daf258efb816d4f6d6e1eace87929">&#9670;&#160;</a></span>closeButton</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d1/dc0/author_8hpp.html#a6cf67f27ce681eb17a9e041051b30122">AnyHandle</a> morph::ui::author::DialogOptions::closeButton</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A condition: while true a dismiss control, labelled <span class="tt"><a class="el" href="#afc494ce086e93f6f85e08a0fc95635df" title="The label of the dismiss control of a sheet or of closeButton; absent is &quot;Close&quot;. Only with one of th...">dismissLabel</a></span>, is drawn on the title's row. A sheet's head holds one already, so it adds nothing while <span class="tt"><a class="el" href="#a8bc612f02325bfc7c222ebb4c2aa926f" title="A dialog&#39;s condition for being drawn as a sheet that fills the window, such as eq(env(&quot;widthClass&quot;),...">sheet</a></span> holds. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/dc0/author_8hpp_source.html#l04548">4548</a> of file <a class="el" href="../../d1/dc0/author_8hpp_source.html">author.hpp</a>.</p>
 
 </div>
 </div>

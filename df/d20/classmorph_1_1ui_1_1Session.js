@@ -16,6 +16,7 @@ var classmorph_1_1ui_1_1Session =
     [ "formatLocale", "df/d20/classmorph_1_1ui_1_1Session.html#a4e7f45828761d716a9c611b35b86b07e", null ],
     [ "setFormatting", "df/d20/classmorph_1_1ui_1_1Session.html#ab4bb72d416ad96d9b3ddc921c77736ee", null ],
     [ "formatting", "df/d20/classmorph_1_1ui_1_1Session.html#a3c1570a1514749caf3e4d2efc71799b7", null ],
+    [ "formattingHandle", "df/d20/classmorph_1_1ui_1_1Session.html#a5c09c3508c67a544d1525da6d3c54d86", null ],
     [ "formattingNow", "df/d20/classmorph_1_1ui_1_1Session.html#a83ffa8b4a74665f049066d0b81f0e47b", null ],
     [ "setDatePatterns", "df/d20/classmorph_1_1ui_1_1Session.html#a2bbcd2ed81447561104aea41203c113b", null ],
     [ "setLocale", "df/d20/classmorph_1_1ui_1_1Session.html#a9f7a33567bbb6d52e4865076d20b8838", null ],

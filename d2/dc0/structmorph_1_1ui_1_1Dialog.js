@@ -8,5 +8,8 @@ var structmorph_1_1ui_1_1Dialog =
     [ "common", "d2/dc0/structmorph_1_1ui_1_1Dialog.html#a219f13d0e54b4c061108df03747a9724", null ],
     [ "sheet", "d2/dc0/structmorph_1_1ui_1_1Dialog.html#a60fe2eaccab23a760d47996f39d4da79", null ],
     [ "dismissLabel", "d2/dc0/structmorph_1_1ui_1_1Dialog.html#aed08238e04671670bd52d1ef4f873f00", null ],
-    [ "descriptionSpans", "d2/dc0/structmorph_1_1ui_1_1Dialog.html#a2e89c627ddbc39e88e3ea23e9b4e8030", null ]
+    [ "descriptionSpans", "d2/dc0/structmorph_1_1ui_1_1Dialog.html#a2e89c627ddbc39e88e3ea23e9b4e8030", null ],
+    [ "headNote", "d2/dc0/structmorph_1_1ui_1_1Dialog.html#afc4af5b28c6e32b88bdd1d40613d2eca", null ],
+    [ "footerNote", "d2/dc0/structmorph_1_1ui_1_1Dialog.html#ad69218577e9cc7613101c3cc8ac0609a", null ],
+    [ "closeButton", "d2/dc0/structmorph_1_1ui_1_1Dialog.html#aaca457c67510b3e1db16029438f79d61", null ]
 ];

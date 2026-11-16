@@ -5,6 +5,8 @@ var classmorph_1_1forms_1_1FormSession =
     [ "runtime", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a064ce010ade87f427adcc002a94aa7e2", null ],
     [ "submitMode", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a777b454feee5854c151590cc41acf92d", null ],
     [ "options", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#ae71dc1ef3f256bc1d66aaf0cba8ec032", null ],
+    [ "setFormat", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#af8e56e5805129b4ce748be40fb6f4ccd", null ],
+    [ "pattern", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a35a1a57d90181fe28d105cc02313f564", null ],
     [ "fields", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a2d6fded476ac413464a734dfae06f706", null ],
     [ "field", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a045b3c6bd718cf8d692ae05ace6b6cd5", null ],
     [ "ready", "dc/dd2/classmorph_1_1forms_1_1FormSession.html#a7f769264371e559304f86afe7080bd05", null ],

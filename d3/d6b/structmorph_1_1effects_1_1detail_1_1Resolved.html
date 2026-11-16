@@ -147,11 +147,13 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a44020f9685c00c710b3c0c2889ec15b0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Each action's records, by action id; actions whose result holds none are absent.  <br /></td></tr>
 <tr class="memitem:a788f408136cf693ee9c182139aca33ec" id="r_a788f408136cf693ee9c182139aca33ec"><td class="memItemLeft">std::map&lt; std::string, std::vector&lt; std::string &gt;, std::less&lt;&gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a788f408136cf693ee9c182139aca33ec">holding</a></td></tr>
 <tr class="memdesc:a788f408136cf693ee9c182139aca33ec"><td class="mdescLeft">&#160;</td><td class="mdescRight">The ids of the actions holding each record, by record name, in id order.  <br /></td></tr>
+<tr class="memitem:a20103be4ca7f7e1f6e6e88b659a159b9" id="r_a20103be4ca7f7e1f6e6e88b659a159b9"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d2/da8/structmorph_1_1effects_1_1ChangeTimeSource.html">ChangeTimeSource</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a20103be4ca7f7e1f6e6e88b659a159b9">changeTimes</a></td></tr>
+<tr class="memdesc:a20103be4ca7f7e1f6e6e88b659a159b9"><td class="mdescLeft">&#160;</td><td class="mdescRight">The actions that report when records change by time alone, in registration order.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The matched and validated registries: what every read is answered from. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00232">232</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00356">356</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="aef17c97bae85a8405211fcf02a53a2c1" name="aef17c97bae85a8405211fcf02a53a2c1"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aef17c97bae85a8405211fcf02a53a2c1">&#9670;&#160;</a></span>effectsOf()</h2>
@@ -185,7 +187,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Its effects, or <span class="tt">nullopt</span> when it declared none. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00371">371</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -221,7 +223,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The records its result holds. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00255">255</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00381">381</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -257,7 +259,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The record, or null. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00265">265</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00391">391</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -293,7 +295,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The ids of the actions whose result holds it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00273">273</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00399">399</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -312,7 +314,7 @@ Public Attributes</h2></td></tr>
 
 <p>The records, one entry per registered type, in registration order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00234">234</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00358">358</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -330,7 +332,7 @@ Public Attributes</h2></td></tr>
 
 <p>Each action's effects, by action id; actions that declared none are absent. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00236">236</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00360">360</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -348,7 +350,7 @@ Public Attributes</h2></td></tr>
 
 <p>Each action's records, by action id; actions whose result holds none are absent. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00238">238</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00362">362</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -366,7 +368,25 @@ Public Attributes</h2></td></tr>
 
 <p>The ids of the actions holding each record, by record name, in id order. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00364">364</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a20103be4ca7f7e1f6e6e88b659a159b9" name="a20103be4ca7f7e1f6e6e88b659a159b9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a20103be4ca7f7e1f6e6e88b659a159b9">&#9670;&#160;</a></span>changeTimes</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt;<a class="el" href="../../d2/da8/structmorph_1_1effects_1_1ChangeTimeSource.html">ChangeTimeSource</a>&gt; morph::effects::detail::Resolved::changeTimes</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The actions that report when records change by time alone, in registration order. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00366">366</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>

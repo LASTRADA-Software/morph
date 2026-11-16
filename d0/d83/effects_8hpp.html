@@ -137,6 +137,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d83/effects
 <code>#include &lt;typeinfo&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
 <code>#include &lt;vector&gt;</code><br />
+<code>#include &quot;<a class="el" href="../../d7/d4a/datetime_8hpp_source.html">../util/datetime.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../dc/d7e/result__walker_8hpp_source.html">detail/result_walker.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>&quot;</code><br />
 <code>#include &quot;registry.hpp&quot;</code><br />
@@ -159,8 +160,12 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One effect of an action, with its record resolved to a wire name.  <a href="../../da/dae/structmorph_1_1effects_1_1Effect.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aeffects_3A_3AActionRecord" id="r_morph_3A_3Aeffects_3A_3AActionRecord"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../da/d4f/structmorph_1_1effects_1_1ActionRecord.html">morph::effects::ActionRecord</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A record an action's result holds, and where.  <a href="../../da/d4f/structmorph_1_1effects_1_1ActionRecord.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aeffects_3A_3AChangeTimeSource" id="r_morph_3A_3Aeffects_3A_3AChangeTimeSource"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d2/da8/structmorph_1_1effects_1_1ChangeTimeSource.html">morph::effects::ChangeTimeSource</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">An action that reports when records change by the passage of time alone.  <a href="../../d2/da8/structmorph_1_1effects_1_1ChangeTimeSource.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aeffects_3A_3Adetail_3A_3ADeclaredEffect" id="r_morph_3A_3Aeffects_3A_3Adetail_3A_3ADeclaredEffect"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect.html">morph::effects::detail::DeclaredEffect</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One effect as a registrar records it: the record still a type, not yet a name.  <a href="../../d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aeffects_3A_3Adetail_3A_3ADeclaredChangeTime" id="r_morph_3A_3Aeffects_3A_3Adetail_3A_3ADeclaredChangeTime"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html">morph::effects::detail::DeclaredChangeTime</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">One time-derived fact as a registrar records it: the records still types, not yet names.  <a href="../../da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aeffects_3A_3Adetail_3A_3AEffectOf_3C_20E_20_3E" id="r_morph_3A_3Aeffects_3A_3Adetail_3A_3AEffectOf_3C_20E_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../dd/d86/structmorph_1_1effects_1_1detail_1_1EffectOf.html">morph::effects::detail::EffectOf&lt; E &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Maps an effect tag type to its <span class="tt"><a class="el" href="../../d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect.html" title="One effect as a registrar records it: the record still a type, not yet a name.">DeclaredEffect</a></span>.  <a href="../../dd/d86/structmorph_1_1effects_1_1detail_1_1EffectOf.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aeffects_3A_3Adetail_3A_3AResolved" id="r_morph_3A_3Aeffects_3A_3Adetail_3A_3AResolved"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html">morph::effects::detail::Resolved</a></td></tr>
@@ -170,11 +175,17 @@ Classes</h2></td></tr>
 Macros</h2></td></tr>
 <tr class="memitem:a59ad50411c077010fbc3bd4feab8ceef" id="r_a59ad50411c077010fbc3bd4feab8ceef"><td class="memItemLeft">#define&#160;</td><td class="memItemRight"><a class="el" href="#a59ad50411c077010fbc3bd4feab8ceef">BRIDGE_REGISTER_EFFECTS</a>(A, ...)</td></tr>
 <tr class="memdesc:a59ad50411c077010fbc3bd4feab8ceef"><td class="mdescLeft">&#160;</td><td class="mdescRight">Declares what action <code class="param">A</code> changes: any of <span class="tt"><a class="el" href="../../d5/d2a/structmorph_1_1effects_1_1updates.html" title="Effect: the action edits existing rows of record R, and its result carries them.">morph::effects::updates</a>&lt;R&gt;</span>, <span class="tt">changes&lt;R&gt;</span>, <span class="tt">changesInstance</span> and <span class="tt">none</span>.  <br /></td></tr>
+<tr class="memitem:a48219a6fdd6dbcf4a097b7a4563e3938" id="r_a48219a6fdd6dbcf4a097b7a4563e3938"><td class="memItemLeft">#define&#160;</td><td class="memItemRight"><a class="el" href="#a48219a6fdd6dbcf4a097b7a4563e3938">BRIDGE_REGISTER_CHANGES_AT</a>(M,  A, ...)</td></tr>
+<tr class="memdesc:a48219a6fdd6dbcf4a097b7a4563e3938"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers action <code class="param">A</code> of model <code class="param">M</code> as the reporter of the next instant at which the listed records change by the passage of time alone, with no action behind it.  <br /></td></tr>
+<tr class="memitem:a9182418d8ae5d7ad70fc7cee1792e063" id="r_a9182418d8ae5d7ad70fc7cee1792e063"><td class="memItemLeft">#define&#160;</td><td class="memItemRight"><a class="el" href="#a9182418d8ae5d7ad70fc7cee1792e063">BRIDGE_ADD_EFFECTS</a>(A, ...)</td></tr>
+<tr class="memdesc:a9182418d8ae5d7ad70fc7cee1792e063"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds effects to action <code class="param">A</code> from the code that composes its module with the module that owns the record: any of <span class="tt"><a class="el" href="../../d5/d2a/structmorph_1_1effects_1_1updates.html" title="Effect: the action edits existing rows of record R, and its result carries them.">morph::effects::updates</a>&lt;R&gt;</span>, <span class="tt">changes&lt;R&gt;</span> and <span class="tt">changesInstance</span>.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
 Typedefs</h2></td></tr>
 <tr class="memitem:a901ec8a8737d064f44ea9663acc4c57e" id="r_a901ec8a8737d064f44ea9663acc4c57e"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#a901ec8a8737d064f44ea9663acc4c57e">morph::effects::detail::EffectsMap</a> = std::map&lt;std::string, std::vector&lt;std::vector&lt;<a class="el" href="../../d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect.html">DeclaredEffect</a>&gt;&gt;, std::less&lt;&gt;&gt;</td></tr>
 <tr class="memdesc:a901ec8a8737d064f44ea9663acc4c57e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Every distinct effects declaration, by action id. More than one for an id is a conflict.  <br /></td></tr>
+<tr class="memitem:aa4b41bd61d6fdd06526bb95d5ffa8265" id="r_aa4b41bd61d6fdd06526bb95d5ffa8265"><td class="memItemLeft">using&#160;</td><td class="memItemRight"><a class="el" href="#aa4b41bd61d6fdd06526bb95d5ffa8265">morph::effects::detail::AddedEffectsMap</a> = std::map&lt;std::string, std::vector&lt;<a class="el" href="../../d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect.html">DeclaredEffect</a>&gt;, std::less&lt;&gt;&gt;</td></tr>
+<tr class="memdesc:aa4b41bd61d6fdd06526bb95d5ffa8265"><td class="mdescLeft">&#160;</td><td class="mdescRight">The effects added to each action by the code that composes its module with others, by action id.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
 Enumerations</h2></td></tr>
@@ -189,25 +200,41 @@ Enumerations</h2></td></tr>
 Functions</h2></td></tr>
 <tr class="memitem:a43da2cecc27c4c250ffcc0fb463c4deb" id="r_a43da2cecc27c4c250ffcc0fb463c4deb"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a43da2cecc27c4c250ffcc0fb463c4deb">morph::effects::detail::addEffects</a> (<a class="el" href="#a901ec8a8737d064f44ea9663acc4c57e">EffectsMap</a> &amp;map, std::string_view actionId, std::vector&lt; <a class="el" href="../../d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect.html">DeclaredEffect</a> &gt; declared)</td></tr>
 <tr class="memdesc:a43da2cecc27c4c250ffcc0fb463c4deb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds one declaration for an action, unless an equal one is already there.  <br /></td></tr>
+<tr class="memitem:af09da37f2ba648c08b73695a1d42bba2" id="r_af09da37f2ba648c08b73695a1d42bba2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af09da37f2ba648c08b73695a1d42bba2">morph::effects::detail::addAddedEffects</a> (<a class="el" href="#aa4b41bd61d6fdd06526bb95d5ffa8265">AddedEffectsMap</a> &amp;map, std::string_view actionId, std::vector&lt; <a class="el" href="../../d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect.html">DeclaredEffect</a> &gt; const &amp;added)</td></tr>
+<tr class="memdesc:af09da37f2ba648c08b73695a1d42bba2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds effects to an action's additions, skipping any already there.  <br /></td></tr>
 <tr class="memitem:aa53aba391af4ad0e71bb04322b88617b" id="r_aa53aba391af4ad0e71bb04322b88617b"><td class="memItemLeft"><a class="el" href="#a901ec8a8737d064f44ea9663acc4c57e">EffectsMap</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#aa53aba391af4ad0e71bb04322b88617b">morph::effects::detail::mutableEffectsRegistry</a> ()</td></tr>
 <tr class="memdesc:aa53aba391af4ad0e71bb04322b88617b"><td class="mdescLeft">&#160;</td><td class="mdescRight">The process-level effects registry, appended to by static registrars.  <br /></td></tr>
 <tr class="memitem:a53a6eaf8708b668ec640f0fc34c7e71a" id="r_a53a6eaf8708b668ec640f0fc34c7e71a"><td class="memTemplParams" colspan="2">template&lt;typename Action, typename... E&gt; </td></tr>
 <tr class="memitem:a53a6eaf8708b668ec640f0fc34c7e71a template"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a53a6eaf8708b668ec640f0fc34c7e71a">morph::effects::detail::registerEffectsOnce</a> () noexcept</td></tr>
 <tr class="memdesc:a53a6eaf8708b668ec640f0fc34c7e71a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Static-init helper for <span class="tt"><a class="el" href="#a59ad50411c077010fbc3bd4feab8ceef" title="Declares what action A changes: any of morph::effects::updates&lt;R&gt;, changes&lt;R&gt;, changesInstance and no...">BRIDGE_REGISTER_EFFECTS</a></span>.  <br /></td></tr>
+<tr class="memitem:a74dc0e2a9174f1df3160e8f8a24baa48" id="r_a74dc0e2a9174f1df3160e8f8a24baa48"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html">DeclaredChangeTime</a> &gt; &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a74dc0e2a9174f1df3160e8f8a24baa48">morph::effects::detail::mutableChangeTimesRegistry</a> ()</td></tr>
+<tr class="memdesc:a74dc0e2a9174f1df3160e8f8a24baa48"><td class="mdescLeft">&#160;</td><td class="mdescRight">The process-level list of time-derived facts, appended to by static registrars.  <br /></td></tr>
+<tr class="memitem:aad542d9769faa4950f6963c835d8a14f" id="r_aad542d9769faa4950f6963c835d8a14f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aad542d9769faa4950f6963c835d8a14f">morph::effects::detail::addChangeTime</a> (std::vector&lt; <a class="el" href="../../da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html">DeclaredChangeTime</a> &gt; &amp;list, <a class="el" href="../../da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html">DeclaredChangeTime</a> declared)</td></tr>
+<tr class="memdesc:aad542d9769faa4950f6963c835d8a14f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adds a time-derived fact, unless an equal one is already there.  <br /></td></tr>
+<tr class="memitem:a873cb03f5d6c4e5c4926c5247f0f0643" id="r_a873cb03f5d6c4e5c4926c5247f0f0643"><td class="memTemplParams" colspan="2">template&lt;typename Model, typename Action, typename... Records&gt; </td></tr>
+<tr class="memitem:a873cb03f5d6c4e5c4926c5247f0f0643 template"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a873cb03f5d6c4e5c4926c5247f0f0643">morph::effects::detail::registerChangeTimeOnce</a> () noexcept</td></tr>
+<tr class="memdesc:a873cb03f5d6c4e5c4926c5247f0f0643"><td class="mdescLeft">&#160;</td><td class="mdescRight">Static-init helper for <span class="tt"><a class="el" href="#a48219a6fdd6dbcf4a097b7a4563e3938" title="Registers action A of model M as the reporter of the next instant at which the listed records change ...">BRIDGE_REGISTER_CHANGES_AT</a></span>.  <br /></td></tr>
+<tr class="memitem:a9f8a9f3bb3ed311597da709109b80c1d" id="r_a9f8a9f3bb3ed311597da709109b80c1d"><td class="memItemLeft"><a class="el" href="#aa4b41bd61d6fdd06526bb95d5ffa8265">AddedEffectsMap</a> &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a9f8a9f3bb3ed311597da709109b80c1d">morph::effects::detail::mutableAddedEffectsRegistry</a> ()</td></tr>
+<tr class="memdesc:a9f8a9f3bb3ed311597da709109b80c1d"><td class="mdescLeft">&#160;</td><td class="mdescRight">The process-level registry of added effects, appended to by static registrars.  <br /></td></tr>
+<tr class="memitem:a13dd2f0438eb911a3b43aa10a326a4fa" id="r_a13dd2f0438eb911a3b43aa10a326a4fa"><td class="memTemplParams" colspan="2">template&lt;typename Action, typename... E&gt; </td></tr>
+<tr class="memitem:a13dd2f0438eb911a3b43aa10a326a4fa template"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a13dd2f0438eb911a3b43aa10a326a4fa">morph::effects::detail::registerAddedEffectsOnce</a> () noexcept</td></tr>
+<tr class="memdesc:a13dd2f0438eb911a3b43aa10a326a4fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Static-init helper for <span class="tt"><a class="el" href="#a9182418d8ae5d7ad70fc7cee1792e063" title="Adds effects to action A from the code that composes its module with the module that owns the record:...">BRIDGE_ADD_EFFECTS</a></span>.  <br /></td></tr>
 <tr class="memitem:a9772e6ef66ceb65ec26995da9e96e19f" id="r_a9772e6ef66ceb65ec26995da9e96e19f"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a9772e6ef66ceb65ec26995da9e96e19f">morph::effects::detail::pathWithin</a> (std::string_view prefix, std::string_view path)</td></tr>
 <tr class="memdesc:a9772e6ef66ceb65ec26995da9e96e19f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether <code class="param">prefix</code> is <code class="param">path</code> or a JSON path that contains it.  <br /></td></tr>
 <tr class="memitem:a0ea54039a0288d1ca8a7c4f78556238a" id="r_a0ea54039a0288d1ca8a7c4f78556238a"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a0ea54039a0288d1ca8a7c4f78556238a">morph::effects::detail::sameRegistration</a> (<a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">record::RecordInfo</a> const &amp;lhs, <a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">record::RecordInfo</a> const &amp;rhs)</td></tr>
 <tr class="memdesc:a0ea54039a0288d1ca8a7c4f78556238a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether two registrations of one record type declared the same record.  <br /></td></tr>
 <tr class="memitem:a688d7bd2342f8d470c401a9ef4a1469b" id="r_a688d7bd2342f8d470c401a9ef4a1469b"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a688d7bd2342f8d470c401a9ef4a1469b">morph::effects::detail::findDerivationCycles</a> (std::vector&lt; <a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">record::RecordInfo</a> &gt; const &amp;records, std::map&lt; std::type_index, std::size_t &gt; const &amp;indexOf, std::vector&lt; std::string &gt; &amp;problems)</td></tr>
 <tr class="memdesc:a688d7bd2342f8d470c401a9ef4a1469b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends a problem for every <span class="tt">derivedFrom</span> cycle among the records.  <br /></td></tr>
-<tr class="memitem:a88d2d477333be3eb1ae32d91033badc7" id="r_a88d2d477333be3eb1ae32d91033badc7"><td class="memItemLeft"><a class="el" href="../../d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html">Resolved</a>&#160;</td><td class="memItemRight"><a class="el" href="#a88d2d477333be3eb1ae32d91033badc7">morph::effects::detail::resolve</a> (std::vector&lt; <a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">record::RecordInfo</a> &gt; records, model::detail::ActionResultSlotMap const &amp;resultSlots, <a class="el" href="#a901ec8a8737d064f44ea9663acc4c57e">EffectsMap</a> const &amp;declared, std::vector&lt; std::string &gt; const &amp;slotConflicts)</td></tr>
-<tr class="memdesc:a88d2d477333be3eb1ae32d91033badc7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Matches action results against records and validates the configuration.  <br /></td></tr>
-<tr class="memitem:a20e3ef8a8f96338177b27ace2b251883" id="r_a20e3ef8a8f96338177b27ace2b251883"><td class="memItemLeft"><a class="el" href="../../d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html">Resolved</a>&#160;</td><td class="memItemRight"><a class="el" href="#a20e3ef8a8f96338177b27ace2b251883">morph::effects::detail::resolveForTesting</a> (std::vector&lt; <a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">record::RecordInfo</a> &gt; records, model::detail::ActionResultSlotMap const &amp;resultSlots, <a class="el" href="#a901ec8a8737d064f44ea9663acc4c57e">EffectsMap</a> const &amp;declared, std::vector&lt; std::string &gt; const &amp;slotConflicts={})</td></tr>
-<tr class="memdesc:a20e3ef8a8f96338177b27ace2b251883"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves a registry built by a test, leaving the process registry untouched.  <br /></td></tr>
+<tr class="memitem:a2af83e93c73c69a098ca91badaedd781" id="r_a2af83e93c73c69a098ca91badaedd781"><td class="memItemLeft"><a class="el" href="../../d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html">Resolved</a>&#160;</td><td class="memItemRight"><a class="el" href="#a2af83e93c73c69a098ca91badaedd781">morph::effects::detail::resolve</a> (std::vector&lt; <a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">record::RecordInfo</a> &gt; records, model::detail::ActionResultSlotMap const &amp;resultSlots, <a class="el" href="#a901ec8a8737d064f44ea9663acc4c57e">EffectsMap</a> const &amp;declared, std::vector&lt; std::string &gt; const &amp;slotConflicts, <a class="el" href="#aa4b41bd61d6fdd06526bb95d5ffa8265">AddedEffectsMap</a> const &amp;added, std::vector&lt; <a class="el" href="../../da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html">DeclaredChangeTime</a> &gt; const &amp;changeTimes)</td></tr>
+<tr class="memdesc:a2af83e93c73c69a098ca91badaedd781"><td class="mdescLeft">&#160;</td><td class="mdescRight">Matches action results against records and validates the configuration.  <br /></td></tr>
+<tr class="memitem:ac7eac6b10f0c34aac58cfc9a2f18a9bd" id="r_ac7eac6b10f0c34aac58cfc9a2f18a9bd"><td class="memItemLeft"><a class="el" href="../../d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html">Resolved</a>&#160;</td><td class="memItemRight"><a class="el" href="#ac7eac6b10f0c34aac58cfc9a2f18a9bd">morph::effects::detail::resolveForTesting</a> (std::vector&lt; <a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">record::RecordInfo</a> &gt; records, model::detail::ActionResultSlotMap const &amp;resultSlots, <a class="el" href="#a901ec8a8737d064f44ea9663acc4c57e">EffectsMap</a> const &amp;declared, std::vector&lt; std::string &gt; const &amp;slotConflicts={}, <a class="el" href="#aa4b41bd61d6fdd06526bb95d5ffa8265">AddedEffectsMap</a> const &amp;added={}, std::vector&lt; <a class="el" href="../../da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html">DeclaredChangeTime</a> &gt; const &amp;changeTimes={})</td></tr>
+<tr class="memdesc:ac7eac6b10f0c34aac58cfc9a2f18a9bd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves a registry built by a test, leaving the process registry untouched.  <br /></td></tr>
 <tr class="memitem:a0618bb1fbcf9061c17abd1a2f96abbb1" id="r_a0618bb1fbcf9061c17abd1a2f96abbb1"><td class="memItemLeft"><a class="el" href="../../d3/d6b/structmorph_1_1effects_1_1detail_1_1Resolved.html">Resolved</a> const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a0618bb1fbcf9061c17abd1a2f96abbb1">morph::effects::detail::resolved</a> ()</td></tr>
 <tr class="memdesc:a0618bb1fbcf9061c17abd1a2f96abbb1"><td class="mdescLeft">&#160;</td><td class="mdescRight">The process registries, matched and validated on the first call.  <br /></td></tr>
 <tr class="memitem:a0da71756f3f2109d984819766d280ad6" id="r_a0da71756f3f2109d984819766d280ad6"><td class="memItemLeft">std::optional&lt; std::vector&lt; <a class="el" href="../../da/dae/structmorph_1_1effects_1_1Effect.html">Effect</a> &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0da71756f3f2109d984819766d280ad6">morph::effects::effectsOf</a> (std::string_view actionId)</td></tr>
 <tr class="memdesc:a0da71756f3f2109d984819766d280ad6"><td class="mdescLeft">&#160;</td><td class="mdescRight">The effects an action declared.  <br /></td></tr>
+<tr class="memitem:ae9bc561d2ee3fdad6cae733ee8b97d12" id="r_ae9bc561d2ee3fdad6cae733ee8b97d12"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d2/da8/structmorph_1_1effects_1_1ChangeTimeSource.html">ChangeTimeSource</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ae9bc561d2ee3fdad6cae733ee8b97d12">morph::effects::changeTimesOf</a> ()</td></tr>
+<tr class="memdesc:ae9bc561d2ee3fdad6cae733ee8b97d12"><td class="mdescLeft">&#160;</td><td class="mdescRight">The actions that report when records change by time alone, with the records each names.  <br /></td></tr>
 <tr class="memitem:adc95fd735bc37851e0c8e0aa089659dd" id="r_adc95fd735bc37851e0c8e0aa089659dd"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../da/d4f/structmorph_1_1effects_1_1ActionRecord.html">ActionRecord</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#adc95fd735bc37851e0c8e0aa089659dd">morph::effects::recordsOf</a> (std::string_view actionId)</td></tr>
 <tr class="memdesc:adc95fd735bc37851e0c8e0aa089659dd"><td class="mdescLeft">&#160;</td><td class="mdescRight">The records an action's result holds, with the paths to each.  <br /></td></tr>
 <tr class="memitem:a5f50dc416fcd1e869c24f9d0b86be794" id="r_a5f50dc416fcd1e869c24f9d0b86be794"><td class="memItemLeft"><a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">record::RecordInfo</a> const *&#160;</td><td class="memItemRight"><a class="el" href="#a5f50dc416fcd1e869c24f9d0b86be794">morph::effects::recordNamed</a> (std::string_view name)</td></tr>
@@ -253,7 +280,85 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00588">588</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00777">777</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a48219a6fdd6dbcf4a097b7a4563e3938" name="a48219a6fdd6dbcf4a097b7a4563e3938"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a48219a6fdd6dbcf4a097b7a4563e3938">&#9670;&#160;</a></span>BRIDGE_REGISTER_CHANGES_AT</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">#define BRIDGE_REGISTER_CHANGES_AT</td>
+          <td>(</td>
+          <td class="paramtype"></td>          <td class="paramname"><span class="paramname"><em>M</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"></td>          <td class="paramname"><span class="paramname"><em>A</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"></td>          <td class="paramname"><span class="paramname"><em></em></span>...&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<b>Value:</b><div class="fragment"><div class="line"><span class="keyword">namespace </span>{                                                                           \</div>
+<div class="line">[[maybe_unused]] <span class="keyword">const</span> <span class="keywordtype">bool</span> BRIDGE_DETAIL_CAT(bridge_change_time_reg_, __COUNTER__) = \</div>
+<div class="line">    morph::effects::detail::registerChangeTimeOnce&lt;M, A, __VA_ARGS__&gt;();              \</div>
+<div class="line">}</div>
+</div><!-- fragment -->
+<p>Registers action <code class="param">A</code> of model <code class="param">M</code> as the reporter of the next instant at which the listed records change by the passage of time alone, with no action behind it. </p>
+<p><code class="param">A</code> returns <span class="tt">std::optional&lt;<a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html" title="A UTC instant with millisecond precision.">morph::time::DateTime</a>&gt;</span>: the next such instant, strictly after the model's own now, or <span class="tt">nullopt</span> when none is pending. It is a read: it declares no effects and takes no fields. The server asks it, owns the clock, and at that instant marks the records changed as an action's <span class="tt">changes&lt;R&gt;</span> would, then asks again; the model arms no timer and posts no work. A reporter that is not a registered action, that also declares effects, or that names an unregistered record is refused on the first read. Repeating the same registration is a no-op. Expands to nothing under <span class="tt">MORPH_CLIENT_ONLY</span>. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">M</td><td>The model type. </td></tr>
+    <tr><td class="paramname">A</td><td>The reporting action type. </td></tr>
+    <tr><td class="paramname">...</td><td>The record types. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00801">801</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9182418d8ae5d7ad70fc7cee1792e063" name="a9182418d8ae5d7ad70fc7cee1792e063"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9182418d8ae5d7ad70fc7cee1792e063">&#9670;&#160;</a></span>BRIDGE_ADD_EFFECTS</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">#define BRIDGE_ADD_EFFECTS</td>
+          <td>(</td>
+          <td class="paramtype"></td>          <td class="paramname"><span class="paramname"><em>A</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"></td>          <td class="paramname"><span class="paramname"><em></em></span>...&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<b>Value:</b><div class="fragment"><div class="line"><span class="keyword">namespace </span>{                                                                             \</div>
+<div class="line">[[maybe_unused]] <span class="keyword">const</span> <span class="keywordtype">bool</span> BRIDGE_DETAIL_CAT(bridge_added_effects_reg_, __COUNTER__) = \</div>
+<div class="line">    morph::effects::detail::registerAddedEffectsOnce&lt;A, __VA_ARGS__&gt;();                 \</div>
+<div class="line">}</div>
+</div><!-- fragment -->
+<p>Adds effects to action <code class="param">A</code> from the code that composes its module with the module that owns the record: any of <span class="tt"><a class="el" href="../../d5/d2a/structmorph_1_1effects_1_1updates.html" title="Effect: the action edits existing rows of record R, and its result carries them.">morph::effects::updates</a>&lt;R&gt;</span>, <span class="tt">changes&lt;R&gt;</span> and <span class="tt">changesInstance</span>. </p>
+<p>The action's own module cannot name a record of a module it does not include, and a second <span class="tt"><a class="el" href="#a59ad50411c077010fbc3bd4feab8ceef" title="Declares what action A changes: any of morph::effects::updates&lt;R&gt;, changes&lt;R&gt;, changesInstance and no...">BRIDGE_REGISTER_EFFECTS</a></span> for the action is refused, so the composing code, which includes both, adds the effect here. The addition is unioned with the action's own declaration and never removes an effect; <span class="tt">none</span> is refused at compile time. An addition for an action nobody registered, or for a record nobody registered, is refused on the first read, never ignored. Repeating an addition is a no-op. Place it in a translation unit that is always linked into the server. Expands to nothing under <span class="tt">MORPH_CLIENT_ONLY</span>. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">A</td><td>The action type. </td></tr>
+    <tr><td class="paramname">...</td><td>The effects to add. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00824">824</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,7 +377,26 @@ Functions</h2></td></tr>
 
 <p>Every distinct effects declaration, by action id. More than one for an id is a conflict. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00144">144</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00161">161</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa4b41bd61d6fdd06526bb95d5ffa8265" name="aa4b41bd61d6fdd06526bb95d5ffa8265"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa4b41bd61d6fdd06526bb95d5ffa8265">&#9670;&#160;</a></span>AddedEffectsMap</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="#aa4b41bd61d6fdd06526bb95d5ffa8265">morph::effects::detail::AddedEffectsMap</a> = std::map&lt;std::string, std::vector&lt;DeclaredEffect&gt;, std::less&lt;&gt;&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The effects added to each action by the code that composes its module with others, by action id. </p>
+<p>Apart from <span class="tt">EffectsMap</span>: an addition is never in conflict with a base declaration, it is unioned with it. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -309,7 +433,7 @@ Functions</h2></td></tr>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -356,7 +480,53 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00186">186</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af09da37f2ba648c08b73695a1d42bba2" name="af09da37f2ba648c08b73695a1d42bba2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af09da37f2ba648c08b73695a1d42bba2">&#9670;&#160;</a></span>addAddedEffects()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::effects::detail::addAddedEffects </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="#aa4b41bd61d6fdd06526bb95d5ffa8265">AddedEffectsMap</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>map</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>actionId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../d8/d83/structmorph_1_1effects_1_1detail_1_1DeclaredEffect.html">DeclaredEffect</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>added</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Adds effects to an action's additions, skipping any already there. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">map</td><td>The registry to add to. </td></tr>
+    <tr><td class="paramname">actionId</td><td>The action's id. </td></tr>
+    <tr><td class="paramname">added</td><td>The effects. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -386,7 +556,7 @@ Functions</h2></td></tr>
 <p>The process-level effects registry, appended to by static registrars. </p>
 <dl class="section return"><dt>Returns</dt><dd>The mutable map. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00208">208</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -425,7 +595,186 @@ template&lt;typename Action, typename... E&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Always true, so the result can initialise a namespace-scope variable. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00218">218</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00273">273</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a74dc0e2a9174f1df3160e8f8a24baa48" name="a74dc0e2a9174f1df3160e8f8a24baa48"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a74dc0e2a9174f1df3160e8f8a24baa48">&#9670;&#160;</a></span>mutableChangeTimesRegistry()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; DeclaredChangeTime &gt; &amp; morph::effects::detail::mutableChangeTimesRegistry </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The process-level list of time-derived facts, appended to by static registrars. </p>
+<dl class="section return"><dt>Returns</dt><dd>The mutable list. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00288">288</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aad542d9769faa4950f6963c835d8a14f" name="aad542d9769faa4950f6963c835d8a14f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aad542d9769faa4950f6963c835d8a14f">&#9670;&#160;</a></span>addChangeTime()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::effects::detail::addChangeTime </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html">DeclaredChangeTime</a> &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>list</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html">DeclaredChangeTime</a></td>          <td class="paramname"><span class="paramname"><em>declared</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Adds a time-derived fact, unless an equal one is already there. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">list</td><td>The registry to add to. </td></tr>
+    <tr><td class="paramname">declared</td><td>The fact. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00296">296</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a873cb03f5d6c4e5c4926c5247f0f0643" name="a873cb03f5d6c4e5c4926c5247f0f0643"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a873cb03f5d6c4e5c4926c5247f0f0643">&#9670;&#160;</a></span>registerChangeTimeOnce()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Model, typename Action, typename... Records&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::effects::detail::registerChangeTimeOnce </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Static-init helper for <span class="tt"><a class="el" href="#a48219a6fdd6dbcf4a097b7a4563e3938" title="Registers action A of model M as the reporter of the next instant at which the listed records change ...">BRIDGE_REGISTER_CHANGES_AT</a></span>. </p>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">Model</td><td>The model the action belongs to. </td></tr>
+    <tr><td class="paramname">Action</td><td>The reporting action; its result must be <span class="tt">std::optional&lt;<a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html" title="A UTC instant with millisecond precision.">morph::time::DateTime</a>&gt;</span>. </td></tr>
+    <tr><td class="paramname">Records</td><td>The record types that change at the reported instant. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Always true, so the result can initialise a namespace-scope variable. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00308">308</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9f8a9f3bb3ed311597da709109b80c1d" name="a9f8a9f3bb3ed311597da709109b80c1d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9f8a9f3bb3ed311597da709109b80c1d">&#9670;&#160;</a></span>mutableAddedEffectsRegistry()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">AddedEffectsMap &amp; morph::effects::detail::mutableAddedEffectsRegistry </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The process-level registry of added effects, appended to by static registrars. </p>
+<dl class="section return"><dt>Returns</dt><dd>The mutable map. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00330">330</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a13dd2f0438eb911a3b43aa10a326a4fa" name="a13dd2f0438eb911a3b43aa10a326a4fa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a13dd2f0438eb911a3b43aa10a326a4fa">&#9670;&#160;</a></span>registerAddedEffectsOnce()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Action, typename... E&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::effects::detail::registerAddedEffectsOnce </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Static-init helper for <span class="tt"><a class="el" href="#a9182418d8ae5d7ad70fc7cee1792e063" title="Adds effects to action A from the code that composes its module with the module that owns the record:...">BRIDGE_ADD_EFFECTS</a></span>. </p>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">Action</td><td>The action type; <span class="tt">ActionTraits&lt;Action&gt;</span> must be visible. </td></tr>
+    <tr><td class="paramname">E</td><td>The effect tags. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Always true, so the result can initialise a namespace-scope variable. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00340">340</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -466,7 +815,7 @@ template&lt;typename Action, typename... E&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>True when <code class="param">path</code> is at or below <code class="param">prefix</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00285">285</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00411">411</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -507,7 +856,7 @@ template&lt;typename Action, typename... E&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>True when name, key, sources and privacy all match. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00296">296</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00422">422</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -553,12 +902,12 @@ template&lt;typename Action, typename... E&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00306">306</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00432">432</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a88d2d477333be3eb1ae32d91033badc7" name="a88d2d477333be3eb1ae32d91033badc7"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a88d2d477333be3eb1ae32d91033badc7">&#9670;&#160;</a></span>resolve()</h2>
+<a id="a2af83e93c73c69a098ca91badaedd781" name="a2af83e93c73c69a098ca91badaedd781"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2af83e93c73c69a098ca91badaedd781">&#9670;&#160;</a></span>resolve()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -584,7 +933,17 @@ template&lt;typename Action, typename... E&gt; </div>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::vector&lt; std::string &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>slotConflicts</em></span>&#160;)</td>
+          <td class="paramtype">std::vector&lt; std::string &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>slotConflicts</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#aa4b41bd61d6fdd06526bb95d5ffa8265">AddedEffectsMap</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>added</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html">DeclaredChangeTime</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>changeTimes</em></span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -601,6 +960,8 @@ template&lt;typename Action, typename... E&gt; </div>
     <tr><td class="paramname">resultSlots</td><td>Every action's result slots, by action id. </td></tr>
     <tr><td class="paramname">declared</td><td>Every action's effects declarations, by action id. </td></tr>
     <tr><td class="paramname">slotConflicts</td><td>Action ids registered by more than one action type. </td></tr>
+    <tr><td class="paramname">added</td><td>Every action's added effects, by action id. </td></tr>
+    <tr><td class="paramname">changeTimes</td><td>Every time-derived fact. </td></tr>
   </table>
   </dd>
 </dl>
@@ -612,12 +973,12 @@ template&lt;typename Action, typename... E&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00478">478</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a20e3ef8a8f96338177b27ace2b251883" name="a20e3ef8a8f96338177b27ace2b251883"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a20e3ef8a8f96338177b27ace2b251883">&#9670;&#160;</a></span>resolveForTesting()</h2>
+<a id="ac7eac6b10f0c34aac58cfc9a2f18a9bd" name="ac7eac6b10f0c34aac58cfc9a2f18a9bd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac7eac6b10f0c34aac58cfc9a2f18a9bd">&#9670;&#160;</a></span>resolveForTesting()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -643,7 +1004,17 @@ template&lt;typename Action, typename... E&gt; </div>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">std::vector&lt; std::string &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>slotConflicts</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
+          <td class="paramtype">std::vector&lt; std::string &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>slotConflicts</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#aa4b41bd61d6fdd06526bb95d5ffa8265">AddedEffectsMap</a> const &amp;</td>          <td class="paramname"><span class="paramname"><em>added</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="../../da/d54/structmorph_1_1effects_1_1detail_1_1DeclaredChangeTime.html">DeclaredChangeTime</a> &gt; const &amp;</td>          <td class="paramname"><span class="paramname"><em>changeTimes</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -660,6 +1031,8 @@ template&lt;typename Action, typename... E&gt; </div>
     <tr><td class="paramname">resultSlots</td><td>The action result slots, by action id. </td></tr>
     <tr><td class="paramname">declared</td><td>The effects declarations, by action id. </td></tr>
     <tr><td class="paramname">slotConflicts</td><td>Action ids registered by more than one action type. </td></tr>
+    <tr><td class="paramname">added</td><td>The added effects, by action id. </td></tr>
+    <tr><td class="paramname">changeTimes</td><td>The time-derived facts. </td></tr>
   </table>
   </dd>
 </dl>
@@ -671,7 +1044,7 @@ template&lt;typename Action, typename... E&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00496">496</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00677">677</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -707,7 +1080,7 @@ template&lt;typename Action, typename... E&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00511">511</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00694">694</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -749,7 +1122,43 @@ template&lt;typename Action, typename... E&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00539">539</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00723">723</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae9bc561d2ee3fdad6cae733ee8b97d12" name="ae9bc561d2ee3fdad6cae733ee8b97d12"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae9bc561d2ee3fdad6cae733ee8b97d12">&#9670;&#160;</a></span>changeTimesOf()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; ChangeTimeSource &gt; morph::effects::changeTimesOf </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The actions that report when records change by time alone, with the records each names. </p>
+<dl class="section return"><dt>Returns</dt><dd>One entry per reporter, in registration order. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">morph::model::EffectsRegistrationError</td><td>when the registered configuration is invalid. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00730">730</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -791,7 +1200,7 @@ template&lt;typename Action, typename... E&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00550">550</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00739">739</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -833,7 +1242,7 @@ template&lt;typename Action, typename... E&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00558">558</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00747">747</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>
@@ -875,7 +1284,7 @@ template&lt;typename Action, typename... E&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00566">566</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/d83/effects_8hpp_source.html#l00755">755</a> of file <a class="el" href="../../d0/d83/effects_8hpp_source.html">effects.hpp</a>.</p>
 
 </div>
 </div>

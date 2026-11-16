@@ -9,5 +9,6 @@ var changes_8hpp =
     [ "morph::effects::detail::addInstanceChange", "dd/d18/changes_8hpp.html#ad29692a3aa55bc959c77327824444567", null ],
     [ "morph::effects::detail::addUpdatesChange", "dd/d18/changes_8hpp.html#acdd3edf535e7f7f54df513a9298bae36", null ],
     [ "morph::effects::detail::deriveChangesFrom", "dd/d18/changes_8hpp.html#a2275ac78842a6bd297548021a96f68ed", null ],
+    [ "morph::effects::detail::wholeTypeChanges", "dd/d18/changes_8hpp.html#a02e3e64179b3ec48debe0abe679eb1cb", null ],
     [ "morph::effects::deriveChanges", "dd/d18/changes_8hpp.html#a679ff44da34495119967d31ec3f53743", null ]
 ];
