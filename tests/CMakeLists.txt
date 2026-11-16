@@ -466,7 +466,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$" AND NOT CMAKE_CXX_CO
     # a $<BUILD_INTERFACE:...>. morph's own include directory is named directly
     # rather than unwrapped from the target, so a change to how that target is
     # declared cannot quietly leave this pointing at an installed copy.
-    set(MORPH_FORMS_DAG_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/include")
+    set(MORPH_FORMS_DAG_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/include" "${PROJECT_BINARY_DIR}/generated")
     get_target_property(_morph_forms_dag_glaze_includes glaze::glaze INTERFACE_INCLUDE_DIRECTORIES)
     foreach(_dir IN LISTS _morph_forms_dag_glaze_includes)
         string(REGEX REPLACE "^\\$<BUILD_INTERFACE:(.*)>$" "\\1" _dir "${_dir}")
@@ -663,6 +663,19 @@ target_include_directories(morph_guard_probe_deps INTERFACE "${PROJECT_SOURCE_DI
 target_link_libraries(morph_guard_probe_deps INTERFACE
     glaze::glaze core::base core::async core::net core::platform
     $<TARGET_NAME_IF_EXISTS:Threads::Threads>)
+
+# The process-wide state the headers reach through a function is defined in
+# src/ui/process_state.cpp. A probe that does not link morph::morph links its
+# own static copy, built without any consumer macro.
+add_library(morph_guard_probe_state STATIC ${PROJECT_SOURCE_DIR}/src/ui/process_state.cpp)
+target_include_directories(morph_guard_probe_state PUBLIC
+    "${PROJECT_SOURCE_DIR}/include" "${PROJECT_BINARY_DIR}/generated")
+target_compile_definitions(morph_guard_probe_state PUBLIC MORPH_STATIC_DEFINE)
+target_compile_features(morph_guard_probe_state PUBLIC cxx_std_23)
+target_link_libraries(morph_guard_probe_state PUBLIC
+    glaze::glaze core::base core::async core::net core::platform
+    $<TARGET_NAME_IF_EXISTS:Threads::Threads>)
+target_link_libraries(morph_guard_probe_deps INTERFACE morph_guard_probe_state)
 
 add_executable(morph_client_only_guard_links compile_checks/client_only_no_model_link.cpp)
 target_compile_definitions(morph_client_only_guard_links PRIVATE MORPH_CLIENT_ONLY)

@@ -2627,7 +2627,7 @@ private:
 /// a binding on one updates, and `{"set": "app.name", …}` writes the app document's state. A query of the app
 /// document runs once however many screens read it. Destroying the root runs its `onUnmount`, takes its scope off the
 /// session and releases its model instances; a host does that before it clears the session on sign-out.
-class AppRoot {
+class MORPH_API AppRoot {
 public:
     AppRoot(AppRoot const&) = delete;
     AppRoot& operator=(AppRoot const&) = delete;

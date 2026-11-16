@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <morph/export.hpp>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -619,10 +620,7 @@ public:
 
     /// @brief Returns the process-level singleton registry.
     /// @return Reference to the singleton.
-    static ViewRegistry& instance() {
-        static ViewRegistry inst;
-        return inst;
-    }
+    MORPH_API static ViewRegistry& instance();
 
 private:
     std::unordered_map<std::string, std::function<const std::string&()>> _providers;

@@ -106,6 +106,7 @@
 #include <limits>
 #include <morph/core/logger.hpp>
 #include <morph/core/payload_shape_tag.hpp>
+#include <morph/export.hpp>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -197,10 +198,7 @@ namespace detail {
 
 /// @brief Per-thread clamp counter, scoped by `WireClampScope`.
 /// @return Reference to this thread's counter.
-[[nodiscard]] inline std::size_t& wireClampCounter() noexcept {
-    static thread_local std::size_t clamped = 0;
-    return clamped;
-}
+[[nodiscard]] MORPH_API std::size_t& wireClampCounter() noexcept;
 
 }  // namespace detail
 

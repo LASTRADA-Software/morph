@@ -12,6 +12,7 @@
 #include <glaze/glaze.hpp>
 #include <map>
 #include <memory>
+#include <morph/export.hpp>
 #include <morph/util/rational.hpp>
 #include <stdexcept>
 #include <string>
@@ -75,10 +76,7 @@ namespace detail {
 ///
 /// @return Reference to the process-wide flag; `true` once the registration
 ///         phase has closed.
-[[nodiscard]] inline std::atomic<bool>& registrationPhaseFlag() noexcept {
-    static std::atomic<bool> closed{false};
-    return closed;
-}
+[[nodiscard]] MORPH_API std::atomic<bool>& registrationPhaseFlag() noexcept;
 
 }  // namespace detail
 
@@ -748,8 +746,8 @@ template <typename A>
 }
 
 // Forward declarations so instance() methods inside the classes can reference them.
-inline class ActionDispatcher& defaultDispatcher();
-inline class ModelRegistryFactory& defaultRegistry();
+MORPH_API class ActionDispatcher& defaultDispatcher();
+MORPH_API class ModelRegistryFactory& defaultRegistry();
 
 /// @brief Registry that maps (modelId, actionId) pairs to type-erased runner functions.
 ///
@@ -1536,16 +1534,10 @@ private:
 };
 
 /// @brief Returns the process-level `ActionDispatcher` singleton.
-inline ActionDispatcher& defaultDispatcher() {
-    static ActionDispatcher inst;
-    return inst;
-}
+MORPH_API ActionDispatcher& defaultDispatcher();
 
 /// @brief Returns the process-level `ModelRegistryFactory` singleton.
-inline ModelRegistryFactory& defaultRegistry() {
-    static ModelRegistryFactory inst;
-    return inst;
-}
+MORPH_API ModelRegistryFactory& defaultRegistry();
 
 // The three `register*Once` helpers are `noexcept` while allocating, and that
 // is a decision rather than an oversight. Their only caller is the

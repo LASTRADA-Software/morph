@@ -38,6 +38,7 @@
 #include <glaze/glaze.hpp>
 #include <morph/attributes.hpp>
 #include <morph/core/payload_shape_tag.hpp>
+#include <morph/export.hpp>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -291,10 +292,7 @@ namespace detail {
 /// is keyed on `std::function<DateTime()>`.
 /// @return Reference to the process-wide `(mutex, override callable)` pair;
 ///         the callable is empty when no override is installed.
-inline std::pair<std::mutex, std::function<DateTime()>>& nowOverrideState() {
-    static std::pair<std::mutex, std::function<DateTime()>> state;
-    return state;
-}
+MORPH_API std::pair<std::mutex, std::function<DateTime()>>& nowOverrideState();
 
 }  // namespace detail
 

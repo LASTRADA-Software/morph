@@ -8,6 +8,7 @@
 #include <functional>
 #include <iterator>
 #include <map>
+#include <morph/export.hpp>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -260,10 +261,7 @@ inline void addAddedEffects(AddedEffectsMap& map, std::string_view actionId,
 
 /// @brief The process-level effects registry, appended to by static registrars.
 /// @return The mutable map.
-inline EffectsMap& mutableEffectsRegistry() {
-    static EffectsMap entries;
-    return entries;
-}
+MORPH_API EffectsMap& mutableEffectsRegistry();
 
 /// @brief Static-init helper for `BRIDGE_REGISTER_EFFECTS`.
 /// @tparam Action The action type; `ActionTraits<Action>` must be visible.
@@ -285,10 +283,7 @@ inline bool registerEffectsOnce() noexcept {
 
 /// @brief The process-level list of time-derived facts, appended to by static registrars.
 /// @return The mutable list.
-inline std::vector<DeclaredChangeTime>& mutableChangeTimesRegistry() {
-    static std::vector<DeclaredChangeTime> entries;
-    return entries;
-}
+MORPH_API std::vector<DeclaredChangeTime>& mutableChangeTimesRegistry();
 
 /// @brief Adds a time-derived fact, unless an equal one is already there.
 /// @param list The registry to add to.
@@ -327,10 +322,7 @@ inline bool registerChangeTimeOnce() noexcept {
 
 /// @brief The process-level registry of added effects, appended to by static registrars.
 /// @return The mutable map.
-inline AddedEffectsMap& mutableAddedEffectsRegistry() {
-    static AddedEffectsMap entries;
-    return entries;
-}
+MORPH_API AddedEffectsMap& mutableAddedEffectsRegistry();
 
 /// @brief Static-init helper for `BRIDGE_ADD_EFFECTS`.
 /// @tparam Action The action type; `ActionTraits<Action>` must be visible.
@@ -691,28 +683,7 @@ inline void findDerivationCycles(std::vector<record::RecordInfo> const& records,
 /// on every call.
 /// @return The resolved registries.
 /// @throws morph::model::EffectsRegistrationError when the registered configuration is invalid.
-[[nodiscard]] inline Resolved const& resolved() {
-    model::detail::noteRegistryRead(true);
-    struct State {
-        std::once_flag once;
-        std::optional<Resolved> value;
-        std::optional<model::EffectsRegistrationError> error;
-    };
-    static State state;
-    std::call_once(state.once, [] {
-        try {
-            state.value.emplace(resolve(record::detail::recordRegistry(), model::detail::actionResultSlots(),
-                                        mutableEffectsRegistry(), model::detail::actionResultConflicts(),
-                                        mutableAddedEffectsRegistry(), mutableChangeTimesRegistry()));
-        } catch (model::EffectsRegistrationError const& error) {
-            state.error.emplace(error);
-        }
-    });
-    if (state.error) {
-        throw *state.error;
-    }
-    return *state.value;
-}
+[[nodiscard]] MORPH_API Resolved const& resolved();
 
 }  // namespace detail
 

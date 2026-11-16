@@ -32,6 +32,18 @@ if(CMAKE_GENERATOR MATCHES "Ninja" AND MORPH_LINK_JOBS GREATER 0)
 endif()
 
 option(MORPH_BUILD_TESTS         "Build tests"         ON)
+option(MORPH_BUILD_SHARED        "Build morph::morph as a shared library (MORPH_API marks what it exports; symbols are hidden by default)" OFF)
+# A shared morph links core-cpp's static libraries into itself, so they, and
+# every other static library built in this tree, must be position-independent.
+if(MORPH_BUILD_SHARED)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    # Windows finds a DLL only beside the executable (or on PATH), and a test
+    # binary also runs at build time, to list its cases. One flat directory for
+    # every executable and for morph.dll is what makes both work.
+    if(WIN32 AND NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
+    endif()
+endif()
 option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
 option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
 option(MORPH_BUILD_HMAC_EXAMPLES "Build vetted-HMAC adapter examples (libsodium/OpenSSL, heavy deps)" OFF)
@@ -419,11 +431,17 @@ if(NOT WIN32 AND NOT EMSCRIPTEN)
 endif()
 
 # ── Library target ───────────────────────────────────────────────────────────
-# A static library: the templates and the macro-sensitive core headers stay in
-# headers, and what does not depend on a consumer's configuration is compiled
-# once, in src/ui.
+# Static by default, shared with MORPH_BUILD_SHARED: the templates and the
+# macro-sensitive core headers stay in headers, and what does not depend on a
+# consumer's configuration is compiled once, in src/ui.
 include(GenerateExportHeader)
-add_library(morph STATIC
+if(MORPH_BUILD_SHARED)
+    set(_morph_library_type SHARED)
+else()
+    set(_morph_library_type STATIC)
+endif()
+add_library(morph ${_morph_library_type}
+    src/ui/process_state.cpp
     src/ui/document.cpp
     src/ui/expression.cpp
     src/ui/interpreter.cpp
@@ -467,13 +485,34 @@ endif()
 
 # MORPH_API marks what a consumer calls into the compiled library. A static
 # build defines MORPH_STATIC_DEFINE for the library and its consumers, which
-# makes the macro empty.
+# makes the macro empty. A shared build hides every symbol that MORPH_API does
+# not mark, on every platform, so a missing mark is a link error on Linux too
+# and not only on Windows.
 generate_export_header(morph
     BASE_NAME MORPH
     EXPORT_MACRO_NAME MORPH_API
     EXPORT_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/generated/morph/export.hpp"
 )
-target_compile_definitions(morph PUBLIC MORPH_STATIC_DEFINE)
+if(MORPH_BUILD_SHARED)
+    set_target_properties(morph PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+    )
+    if(NOT WIN32)
+        target_compile_options(morph PRIVATE
+            "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/cmake/morph_default_visibility.hpp")
+    endif()
+    if(MSVC)
+        # C4251 and C4275 fire on an exported class whose member or base is a
+        # standard-library type. Those types are header-defined and compiled
+        # identically on both sides under one toolchain version, which is the
+        # only combination a DLL and its consumer are supported in, so the
+        # warning reports nothing actionable.
+        target_compile_options(morph PUBLIC /wd4251 /wd4275)
+    endif()
+else()
+    target_compile_definitions(morph PUBLIC MORPH_STATIC_DEFINE)
+endif()
 apply_warnings(morph)
 # Every consumer of this archive carries an AF_SANITIZER block of its own, which is what makes instrumenting a static
 # library safe: the link options are PRIVATE and do not propagate out of a static library.
@@ -1323,6 +1362,8 @@ if(MORPH_INSTALL)
         FILE_SET morph_detail_headers DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
         FILE_SET morph_generated_headers DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     )
 
     # Optional components ship only when this configuration actually created

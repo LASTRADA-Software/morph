@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <morph/export.hpp>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -155,10 +156,7 @@ private:
 /// @brief Returns the process-level migration registry `replay()` uses by
 ///        default. Empty until an application adds to it.
 /// @return Reference to the process-wide registry.
-[[nodiscard]] inline PayloadMigrationRegistry& defaultPayloadMigrations() {
-    static PayloadMigrationRegistry registry;
-    return registry;
-}
+[[nodiscard]] MORPH_API PayloadMigrationRegistry& defaultPayloadMigrations();
 
 namespace detail {
 
@@ -171,10 +169,7 @@ namespace detail {
 /// plus an RAII guard that restores the previous value on scope exit), applied
 /// to a `bool` instead of a `const Context*`. Model/rule code never touches
 /// this directly; it reads the public accessor `isReplaying()`.
-inline bool& tlsIsReplaying() {
-    thread_local bool tls = false;
-    return tls;
-}
+MORPH_API bool& tlsIsReplaying();
 
 /// @brief RAII helper that sets the thread-local replay flag for its scope,
 ///        restoring the previous value on destruction.

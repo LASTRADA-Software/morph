@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <format>
 #include <functional>
+#include <morph/export.hpp>
 #include <mutex>
 #include <print>
 #include <string>
@@ -128,10 +129,7 @@ struct LogState {
     std::atomic<std::uint64_t> dropped{0};
 };
 
-inline LogState& logState() {
-    static LogState state;
-    return state;
-}
+MORPH_API LogState& logState();
 
 /// @brief Internal emit entry point used by the public level helpers.
 ///

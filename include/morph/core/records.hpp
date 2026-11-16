@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <glaze/glaze.hpp>
 #include <memory>
+#include <morph/export.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -181,10 +182,7 @@ void applyKey(RecordInfo& info) {
 
 /// @brief The process-level record list, appended to by static registrars.
 /// @return The mutable list.
-inline std::vector<RecordInfo>& mutableRecordRegistry() {
-    static std::vector<RecordInfo> entries;
-    return entries;
-}
+MORPH_API std::vector<RecordInfo>& mutableRecordRegistry();
 
 /// @brief The records declared so far, raw and unvalidated.
 /// @return The entries in registration order.

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <morph/export.hpp>
 #include <mutex>
 #include <span>
 #include <string_view>
@@ -105,10 +106,7 @@ struct ObserveState {
 
 /// @brief Returns the process-wide `ObserveState` singleton (Meyers singleton,
 ///        thread-safe first-use construction — mirrors `morph::log::detail::logState`).
-inline ObserveState& observeState() {
-    static ObserveState state;
-    return state;
-}
+MORPH_API ObserveState& observeState();
 
 /// @brief Emits @p metric if a sink is installed; a single relaxed atomic load
 ///        (no mutex, no `MetricEvent` construction) if not.

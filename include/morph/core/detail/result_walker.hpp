@@ -16,6 +16,7 @@
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <map>
+#include <morph/export.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -187,10 +188,7 @@ template <typename R>
 
 /// @brief The process-level map of action result slots, filled by static registrars.
 /// @return The mutable map.
-inline ActionResultSlotMap& mutableActionResultSlots() {
-    static ActionResultSlotMap entries;
-    return entries;
-}
+MORPH_API ActionResultSlotMap& mutableActionResultSlots();
 
 /// @brief Every registered action's result slots, by action id.
 /// @return The map, unmatched against records.
@@ -198,10 +196,7 @@ inline ActionResultSlotMap const& actionResultSlots() { return mutableActionResu
 
 /// @brief The process-level list of action ids registered by more than one action type.
 /// @return The mutable list.
-inline std::vector<std::string>& mutableActionResultConflicts() {
-    static std::vector<std::string> ids;
-    return ids;
-}
+MORPH_API std::vector<std::string>& mutableActionResultConflicts();
 
 /// @brief The action ids that a second, different action type registered under.
 ///
