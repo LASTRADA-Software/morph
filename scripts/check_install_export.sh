@@ -35,6 +35,9 @@
 # `find_package`. Every assertion below therefore has a consumer-visible
 # consequence behind it.
 #
+# `--shared` builds, installs and consumes morph::morph as a shared library
+# (MORPH_BUILD_SHARED=ON); the default is the static library.
+#
 # `--skip-header-set-verification` drops the one slow phase (compiling every
 # header in morph's interface header sets standalone, ~44 translation units).
 # It exists for scripts/test_check_install_export.sh, which needs the fast
@@ -49,12 +52,17 @@
 set -euo pipefail
 
 skip_header_set_verification=0
+shared=0
 repo_root=""
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --skip-header-set-verification)
             skip_header_set_verification=1
+            shift
+            ;;
+        --shared)
+            shared=1
             shift
             ;;
         -*)
@@ -73,7 +81,7 @@ if [ -z "$repo_root" ]; then
 else
     repo_root="$(cd "$repo_root" && pwd)"
 fi
-readonly repo_root skip_header_set_verification
+readonly repo_root skip_header_set_verification shared
 
 failures=0
 
@@ -131,7 +139,8 @@ if ! run_step "the library did not configure" \
         -DCMAKE_BUILD_TYPE=Release \
         -DMORPH_BUILD_TESTS=OFF \
         -DMORPH_BUILD_EXAMPLES=OFF \
-        -DMORPH_BUILD_NET=ON; then
+        -DMORPH_BUILD_NET=ON \
+        -DMORPH_BUILD_SHARED="$([ "$shared" -eq 1 ] && echo ON || echo OFF)"; then
     printf '\n%d install/export check(s) failed.\n' "$failures" >&2
     exit 1
 fi
@@ -152,8 +161,7 @@ if [ "$skip_header_set_verification" -eq 0 ]; then
     fi
 fi
 
-# morph::morph is a static library that links core-cpp's static modules, and
-# morph's install installs them with core-cpp's package. They have to be built
+# morph::morph links core-cpp's static modules, and morph's install installs them with core-cpp's package. They have to be built
 # first: installing an unbuilt tree fails with "file INSTALL cannot find".
 run_step "the library did not build" \
     cmake --build "$build_dir" || true
@@ -184,6 +192,20 @@ if [ -f "$targets_file" ]; then
     # README and the consumer below all say morph::net.
     if grep -q '^add_library(morph::morph_' "$targets_file"; then
         fail "an optional target is exported as '$(grep -o 'morph::morph_[a-z_]*' "$targets_file" | head -1)' rather than under its alias name -- install(EXPORT NAMESPACE morph::) prefixes the target name, so each optional target needs EXPORT_NAME"
+    fi
+
+    # The mode under test must be the mode installed: a --shared run that
+    # installed the archive would pass every later step while proving nothing
+    # about a shared library.
+    if [ "$shared" -eq 1 ]; then
+        if ! grep -q '^add_library(morph::morph SHARED IMPORTED' "$targets_file"; then
+            fail "--shared was given but morph::morph is not exported as a SHARED imported target"
+        fi
+        if ! compgen -G "${prefix}/lib/libmorph.so*" >/dev/null && ! compgen -G "${prefix}/lib/libmorph*.dylib" >/dev/null; then
+            fail "--shared was given but no libmorph shared object was installed"
+        fi
+    elif ! grep -q '^add_library(morph::morph STATIC IMPORTED' "$targets_file"; then
+        fail "morph::morph is not exported as a STATIC imported target"
     fi
 
     # morph::client is built by default and is a compiled archive: an install

@@ -12,7 +12,8 @@
 - **[core-cpp](https://github.com/contour-terminal/core-cpp) 0.21**, fetched
   through CPM. morph's timers run on its event loop, coroutines build on its
   `Task<T>`, and `morph::net` takes its base64 and wakeup primitive from it.
-  `morph::morph` is a static library (templates and the macro-sensitive core
+  `morph::morph` is a static library by default, or a shared one with
+  `MORPH_BUILD_SHARED=ON` (templates and the macro-sensitive core
   headers stay in headers), and `core::base`, `core::net` and
   `core::platform` are static libraries too, so a project that links
   `morph::morph` builds them too.
@@ -43,6 +44,7 @@ need `VCPKG_ROOT` set.
 | Option | Default | What it builds |
 |---|---|---|
 | `MORPH_BUILD_TESTS` | `ON` | The unit tests |
+| `MORPH_BUILD_SHARED` | `OFF` | Build `morph::morph` as a shared library. Every symbol is hidden unless `MORPH_API` marks it, on every platform; see below |
 | `MORPH_BUILD_EXAMPLES` | `ON` | The dependency-free examples (forms, concepts, gallery, LIMS gallery); the generic client when a frontend is on |
 | `MORPH_BUILD_CLIENT` | `ON` | `morph::client`, the generic client's source and shell |
 | `MORPH_BUILD_QT` | `OFF` | The Qt 6 WebSocket transport and executor |
@@ -122,6 +124,19 @@ next to morph's.
 `add_subdirectory(morph)` or `FetchContent` gives you the same `morph::morph`
 target. `MORPH_INSTALL` defaults to `PROJECT_IS_TOP_LEVEL`, so a vendored morph
 adds nothing to your project's install.
+
+### Building morph as a shared library
+
+`-DMORPH_BUILD_SHARED=ON` builds `morph::morph` as a shared library (`libmorph.so`, `morph.dll`). The library is
+compiled with hidden symbol visibility, so what a consumer can call is exactly what `MORPH_API`
+(`<morph/export.hpp>`) marks, on Linux and Windows alike. The process-wide state that header code reaches through a
+function (the registries, the logger, the thread-local dispatch slots) is defined in the library, so the library and
+the executable share one copy. core-cpp's static libraries are linked into `morph` and built position-independent.
+core-cpp's executor-scope slot is an inline thread-local in its headers; on Linux the library declares it with default
+visibility so the dynamic linker merges the library's copy with the executable's.
+On Windows every executable and `morph.dll` go to `<build>/bin`, because Windows loads a DLL only from beside the
+executable. `find_package(morph CONFIG)` works in both modes; an installed shared `morph` is found with its
+`libmorph.so` or `morph.dll`.
 
 ### A bare include path (not supported)
 
