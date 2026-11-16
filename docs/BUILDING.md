@@ -9,7 +9,7 @@
 - **[Glaze](https://github.com/stephenberry/glaze) 7.4** for JSON reflection,
   found with `find_package` (for example from the `vcpkg.json` manifest) or
   fetched through CPM.
-- **[core-cpp](https://github.com/contour-terminal/core-cpp) 0.21**, fetched
+- **[core-cpp](https://github.com/contour-terminal/core-cpp) 0.22**, fetched
   through CPM. morph's timers run on its event loop, coroutines build on its
   `Task<T>`, and `morph::net` takes its base64 and wakeup primitive from it.
   `morph::morph` is a static library by default, or a shared one with
@@ -131,10 +131,9 @@ adds nothing to your project's install.
 compiled with hidden symbol visibility, so what a consumer can call is exactly what `MORPH_API`
 (`<morph/export.hpp>`) marks, on Linux and Windows alike. The process-wide state that header code reaches through a
 function (the registries, the logger, the thread-local dispatch slots) is defined in the library, so the library and
-the executable share one copy. core-cpp's static libraries are linked into `morph` and built position-independent.
-core-cpp's executor-scope slot is an inline thread-local in its headers; on Linux the library declares it with default
-visibility so the dynamic linker merges the library's copy with the executable's.
-On Windows every executable and `morph.dll` go to `<build>/bin`, because Windows loads a DLL only from beside the
+the executable share one copy. core-cpp is built shared too (`CORE_CPP_BUILD_SHARED`), for the same reason: it keeps
+process and thread state of its own, such as the current executor. A configure that finds an installed static core-cpp
+stops and says so. On Windows every executable, `morph.dll` and core-cpp's DLLs go to `<build>/bin`, because Windows loads a DLL only from beside the
 executable. `find_package(morph CONFIG)` works in both modes; an installed shared `morph` is found with its
 `libmorph.so` or `morph.dll`.
 

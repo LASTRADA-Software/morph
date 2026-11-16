@@ -33,13 +33,15 @@ endif()
 
 option(MORPH_BUILD_TESTS         "Build tests"         ON)
 option(MORPH_BUILD_SHARED        "Build morph::morph as a shared library (MORPH_API marks what it exports; symbols are hidden by default)" OFF)
-# A shared morph links core-cpp's static libraries into itself, so they, and
-# every other static library built in this tree, must be position-independent.
+# A shared morph links a shared core-cpp (CORE_CPP_BUILD_SHARED): core-cpp keeps
+# process and thread state of its own, such as the current executor, and a
+# static copy in both libmorph and the executable would be two. Static
+# libraries this tree links into the shared morph are position-independent.
 if(MORPH_BUILD_SHARED)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
     # Windows finds a DLL only beside the executable (or on PATH), and a test
     # binary also runs at build time, to list its cases. One flat directory for
-    # every executable and for morph.dll is what makes both work.
+    # every executable, morph.dll and core-cpp's DLLs is what makes both work.
     if(WIN32 AND NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
         set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
     endif()
@@ -362,7 +364,7 @@ endif()
 # is off while morph installs: CMake leaves an excluded subdirectory's install
 # rules out of the parent's install, so `cmake --install` would install
 # morph's package without the core-cpp package it depends on.
-set(MORPH_CORE_CPP_VERSION 0.21)
+set(MORPH_CORE_CPP_VERSION 0.22)
 option(MORPH_INSTALL "Generate morph's install and export rules" ${PROJECT_IS_TOP_LEVEL})
 if(NOT DEFINED AF_SANITIZER)
     find_package(core-cpp ${MORPH_CORE_CPP_VERSION} CONFIG QUIET)
@@ -381,15 +383,34 @@ if(NOT core-cpp_FOUND)
     CPMAddPackage(
         NAME core-cpp
         GITHUB_REPOSITORY contour-terminal/core-cpp
-        GIT_TAG v0.21.0
-        VERSION 0.21.0
+        GIT_TAG v0.22.0
+        VERSION 0.22.0
         SYSTEM YES
         EXCLUDE_FROM_ALL ${_morph_core_cpp_exclude_from_all}
         OPTIONS "CORE_CPP_TESTING OFF" "CORE_CPP_BUILD_EXAMPLES OFF"
                 "CORE_CPP_WITH_TUI ${MORPH_BUILD_TUI}" "CORE_CPP_WITH_IMAGES OFF"
                 "CORE_CPP_WITH_TLS OFF" "CORE_CPP_WITH_SYSTEMD OFF" "CORE_CPP_FETCH_DEPS OFF"
-                "CORE_CPP_INSTALL ${MORPH_INSTALL}")
+                "CORE_CPP_INSTALL ${MORPH_INSTALL}" "CORE_CPP_BUILD_SHARED ${MORPH_BUILD_SHARED}")
     unset(_morph_core_cpp_exclude_from_all)
+endif()
+
+# A shared morph needs a shared core-cpp, and one found installed may be static.
+# Linked anyway, libmorph and the executable would each carry core-cpp's state,
+# and an executor scope one of them enters would be invisible to the other.
+if(MORPH_BUILD_SHARED)
+    get_target_property(_morph_core_cpp_type core::base TYPE)
+    if(NOT _morph_core_cpp_type STREQUAL "SHARED_LIBRARY")
+        if(core-cpp_FOUND)
+            set(_morph_core_cpp_from "the installed one at ${core-cpp_DIR}")
+        else()
+            set(_morph_core_cpp_from "the one fetched into this build")
+        endif()
+        message(FATAL_ERROR
+            "MORPH_BUILD_SHARED=ON needs a shared core-cpp, but ${_morph_core_cpp_from} is ${_morph_core_cpp_type}. "
+            "Install a core-cpp built with CORE_CPP_BUILD_SHARED=ON, or take it off CMAKE_PREFIX_PATH so morph "
+            "fetches one.")
+    endif()
+    unset(_morph_core_cpp_type)
 endif()
 
 # A core-cpp found installed brings whatever modules it was built with. One
@@ -498,10 +519,6 @@ if(MORPH_BUILD_SHARED)
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON
     )
-    if(NOT WIN32)
-        target_compile_options(morph PRIVATE
-            "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/cmake/morph_default_visibility.hpp")
-    endif()
     if(MSVC)
         # C4251 and C4275 fire on an exported class whose member or base is a
         # standard-library type. Those types are header-defined and compiled
