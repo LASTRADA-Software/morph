@@ -660,7 +660,7 @@ Two commits: **7a** `PageWindow`; **7b** the session's read and watch, the query
   - `PageWindow<GenericRow>` (in `description.hpp`): the same members with `GenericPage` in place of `Page<Row>` and no key function parameter (`explicit PageWindow(std::int64_t pageSize = 200, std::size_t maxPages = 8, std::size_t maxKeys = 1000, std::size_t maxColumns = 96);`), and in place of `row`: `RowId const* key(std::int64_t index) const;` `Cell const* cell(std::int64_t index, std::string_view column) const;` (null when the row or the column is not held) `bool holds(std::int64_t index, std::string_view column) const;`
 - Produces (7b):
   - `CallOptions::stop` (`::core::async::StopToken`; a stop sends the wire's `cancel` where the server takes one)
-  - `async::Completion<Value> Session::read(std::shared_ptr<ModelChannel> const& channel, std::string const& actionId, Value const& body, ::core::async::StopToken stop = {});`
+  - `async::Completion<std::string> Session::read(std::shared_ptr<ModelChannel> const& channel, std::string const& actionId, Value const& body, ::core::async::StopToken stop = {});` — resolves with the reply's JSON text, not a `Value`: a page's Number cells are JSON numbers with fractions, which `ui::valueFromJson` refuses, so the caller decodes the text itself (`table::readGenericPage`, Task 11c's `readTypedPage`). A stated deviation from the spec's `Completion<Value>` (index decision 30).
   - `class WatchHolder` (move-only; destroying it releases its count of the record)
   - `async::Completion<WatchHolder> Session::watchRecord(std::string const& record, std::function<void(effects::RecordChange const&)> handler);`
   - `effects::ActionRecord::{std::vector<std::string> open; std::vector<std::string> partial;}` beside Task 2's `opaque`, and `ui::ActionRecordInfo::{open, partial, opaque}` (all in `operator==`)
@@ -780,7 +780,8 @@ TEST_CASE("cache: an open entry is marked by a change to a key it does not hold"
 Add:
 - `"cache: a partial entry is not merged into"`: reply with `unloadedRows [{"index":0,"levels":["recipe"]}]`; an `updates T_Row` reply of `{code:1, qty:5}` marks the entry (one more call) and leaves `rows[0].qty` as it was; with `unloadedRows []` the same reply merges (`rows[0].qty == 5`, no call). Mutation: the cache ignoring `partial`.
 - `"cache: an opaque entry is marked by every change and never merged"`: a `T_TablePage` entry and a distinct-values-shaped entry of the same action are both marked by a keyed change naming key 99, and an `updates` reply marks without merging. Mutation: the cache looking for a key member.
-- `"cache: a read makes no entry"`: `session.read(channel, "T_Page", body)` resolves with the reply; `cacheSize()` unchanged; a stop before the reply settles the completion as cancelled and passes `CallOptions::stop` to the channel. Mutation: `read` going through `acquire`.
+- `"cache: a read makes no entry"`: `session.read(channel, "T_Page", body)` resolves with the reply's text, byte for byte as the channel returned it; `cacheSize()` unchanged; a stop before the reply settles the completion as cancelled and passes `CallOptions::stop` to the channel. Mutation: `read` going through `acquire`.
+- `"cache: a read's text keeps a fractional number"`: the channel replies with a generic page of one row whose Number cell is `2.5` (written by `table::writeGenericPage` over a one-column description); `session.read` resolves, and `table::readGenericPage(text, description)` decodes it to a page whose cell `(0, "n")` is the number 2.5. Mutation: `read` parsing the reply through `valueFromJson` and resolving with `valueToJson(…).dump()` of the result (the completion fails: a number with a fraction is refused).
 - `"cache: a watch without an entry joins the watch set"`: `watchRecord("T_Row", handler)` sends one `watch` naming `T_Row` and resolves after its reply; `watchSet()` names `T_Row` while the holder lives and not after it is destroyed (one `unwatch`); a `resync` event calls the handler once with `keys` absent; a `changes` event for `T_Row` calls it with the event's keys. Mutation: holders not counted in the watch set.
 
 In `tests/net/test_push_unloaded_rows.cpp`, the bridge half of (d) with gate E3:
@@ -791,7 +792,8 @@ TEST_CASE("table over the bridge: exactly the arrived rows update, without polli
     // WideTableModel::configure: small with recipePreloaded = 0, recipeBatch = 20; the recipe gate held.
     // No refreshEvery, no clock advanced. The CountingChannel counts page requests (no `keys`) and keyed ones apart.
     // 1. watchRecord("WideTableModel.small") resolves. PageWindow<GenericRow> w{200, 8}; w.visible(0, 30, {"id","d000"})
-    //    returns two fetches (pages 0 and 1: no total is known yet); each is sent with Session::read and accepted.
+    //    returns two fetches (pages 0 and 1: no total is known yet); each is sent with Session::read, its text decoded
+    //    with table::readGenericPage(text, *description) (the description from Describe.small), and accepted.
     //    pageRequests == 2, keyedRequests == 0; every row's unloadedLevels names "recipe".
     // 2. Settle 200 ms: still 2 and 0.
     // 3. recipeGate().release(1): one loader call of 20 keys runs (the display wants keep each want's keys in
@@ -821,14 +823,14 @@ A helper `bool memberSet(Value const& value, std::string_view path)`: set when t
 - [ ] **Step 11: Implement `read` and `watchRecord`**
 
 - `CallOptions::stop`; `BridgeDispatcher::Channel::execute` uses `RawHandler::execute(…, stop)` when `stop.stop_possible()`.
-- `read` sends through `channel->execute(actionId, toJson(body), {.stop = stop})`, parses the reply into a `Value` on the owner, and settles; no entry is made, no effects applied; a stopped call settles cancelled and its reply is dropped.
+- `read` sends through `channel->execute(actionId, valueToJson(body).dump(), {.stop = stop})` and settles on the owner with the reply's text unparsed; no entry is made, no effects applied; a stopped call settles cancelled and its reply is dropped. It does not read the reply into a `Value`: `valueFromJson` refuses a number with a fraction, and a page's Number cells are such numbers.
 - `watchRecord` counts the record in `_recordRefs` as an entry does (a count leaving zero sends a `watch` for it at once, through `flushWatches`), stores the handler under a holder id, and resolves when that watch's reply arrives (at once when the record was already watched and acknowledged, or there is no watcher). `applyChanges` calls each handler whose record a change names, after marking entries; `reconnected` (reconnect and `resync`) calls each with `RecordChange{record, nullopt}`. `WatchHolder`'s destructor removes the handler and counts the record out.
 
 - [ ] **Step 12: Run the targets** — `ctest --test-dir build/cl-debug -R "^(cache|stale_mark|own_updates|changes_reply)" --output-on-failure` and `ctest --test-dir build/linux-everything -R "^table over the bridge" --output-on-failure`: all pass, the existing push-cache cases included.
 
 - [ ] **Step 13: Benchmarks** — K4 (a 4,096-key event against an entry of 200 rows; storing a decoded 200 × 300 page) in `tests/bench_interpreter.cpp`; E1 (first page of sorted 100,000 × 300 `wide` with `recipe` unloaded, request to accepted page, against no level) and E2 (loader return to patched rows for 20 rows, p50/p99) in `test_push_unloaded_rows.cpp` under `"[.benchmark][net]"`. Record into table.md's "Benchmarks: client cache and window" and "Benchmarks: end to end".
 
-- [ ] **Step 14: Docs** — `docs/spec/core/registry.md` (a holder's `openMembers()`/`partialMember()`; `ActionRecord::open`, `partial`, `opaque`; `Table.<id>` holds its record opaquely); `docs/spec/ui/interpreter.md` "Queries and the cache" (the three entry rules; `Session::read`; `watchRecord` and its holder). Docs build green.
+- [ ] **Step 14: Docs** — `docs/spec/core/registry.md` (a holder's `openMembers()`/`partialMember()`; `ActionRecord::open`, `partial`, `opaque`; `Table.<id>` holds its record opaquely); `docs/spec/ui/interpreter.md` "Queries and the cache" (the three entry rules; `Session::read`, which resolves with the reply's JSON text because a `Value` holds no number with a fraction or an exponent and a page's Number cells are such numbers, so the caller decodes with `table::readGenericPage`; `watchRecord` and its holder); `Session::read`'s `@return` in `interpreter.hpp` says the same. Docs build green.
 
 - [ ] **Step 15: Mutations, then commit**
 

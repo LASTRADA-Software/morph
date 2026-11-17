@@ -47,11 +47,18 @@ build/cl-release/tests/morph_table_tests.exe "[.benchmark][<tag>]"
 
 ## Decisions
 
-- **`x-units` is not emitted.** table.md 2534-2536 has a typed row's schema list the column's units as `x-units`. That schema is `forms::schemaJson<Row>()`, built from the type alone, while the units are the application's run-time registry (2500-2502), and 2505 says a client learns units "from the table's description … and from nowhere else". 8c therefore marks a `MeasureValue` property `x-measure` only, and the units reach a client in `TableDescription::units` (filled by `DescribeTable`). The spec's `x-units` sentence should be changed to say that. Reading a document row's `{num, den, unit}` in `ValueRowsSource` is Task 11a's, and dropping a stored display unit that names a removed unit is Task 12c's (the index assigns both).
+- **`x-units` is not emitted.** table.md 2534-2536 has a typed row's schema list the column's units as `x-units`. That schema is `forms::schemaJson<Row>()`, built from the type alone, while the units are the application's run-time registry (2500-2502), and 2505 says a client learns units "from the table's description … and from nowhere else". 8c therefore marks a `MeasureValue` property `x-measure` only, and the units reach a client in `TableDescription::units` (filled by `DescribeTable`). 8c Step 13 changes the spec's `x-units` sentence (and adds one line to the "learns units from the table's description" bullet) to say that, in 8c's own commit. Reading a document row's `{num, den, unit}` in `ValueRowsSource` is Task 11a's, and dropping a stored display unit that names a removed unit is Task 12c's (the index assigns both).
 
 ## Order inside Part C
 
-As the index's cross-part decision 17 fixes: 8a needs Task 3; **8b needs 8a** (its pooled values list extends `distinctValues`, and its `Together` value index reuses 8a's `ValueSet`); **8c needs Tasks 1, 2 and 5** (the generic page, the describe reply, the level cache); 8d is independent. 8a, 8b and 8c all touch `filter.hpp` and `query.hpp`: they merge one at a time, in the order 8a, 8b, 8c, each rebased on the last.
+As the index's cross-part decision 17 fixes, the order is **8a → 8b → 8d**, with 8c after 8b, before or after 8d:
+
+- 8a needs Task 3.
+- **8b needs 8a**: its pooled values list extends `distinctValues`, and its `Together` value index reuses 8a's `ValueSet`.
+- **8d needs 8b**: `ColumnLayoutValue::groups` is a `std::vector<ColumnGroupInfo>`, and 8b moves `ColumnGroupInfo` into `data_source.hpp`, which `engine.hpp` already includes. 8d never includes `description.hpp` from `engine.hpp`: `description.hpp` reaches `engine.hpp` through `query.hpp`, so that include would be a cycle. With 8b landed first, none remains.
+- **8c needs Tasks 1, 2 and 5** (the generic page, the describe reply, the level cache) and 8b.
+
+8a, 8b and 8c all touch `filter.hpp` and `query.hpp`; 8b and 8d both touch `engine.hpp`. They merge one at a time, each rebased on the last.
 
 ## Interfaces consumed from other parts
 
@@ -118,7 +125,7 @@ TEST_CASE("table: oneOf matches what its eq entries match", "[table][filter]") {
                              std::string{"alpha"}}),
                         .services = {}};
     CHECK(text.by(on("c", {oneOf({"alpha", "BETA"})})) == Rows{0, 1, 4});
-    CHECK(text.by(on("c", {oneOf({"alpha", "BETA"})})) == text.by(on("c", {eq("alpha"), eq("BETA")})));
+    CHECK(*text.by(on("c", {oneOf({"alpha", "BETA"})})) == *text.by(on("c", {eq("alpha"), eq("BETA")})));
     CHECK(text.by(on("c", {}, Combine::Any, {oneOf({"alpha", "BETA"})})) == Rows{2, 3});
     CHECK(text.by(on("c", {oneOf({"alpha", "BETA"}), isEmpty()})) == Rows{0, 1, 3, 4});
     FilterEntry exact = oneOf({"alpha"});
@@ -146,7 +153,7 @@ TEST_CASE("table: an empty or repeating oneOf", "[table][filter]") {   // Review
                             {std::string{"Alpha"}, std::string{"beta"}, Cell{}}), .services = {}};
     CHECK(text.by(on("c", {oneOf({})})) == Rows{});
     CHECK(text.by(on("c", {}, Combine::Any, {oneOf({})})) == Rows{0, 1, 2});
-    CHECK(text.by(on("c", {oneOf({"alpha", "ALPHA"})})) == text.by(on("c", {oneOf({"alpha"})})));
+    CHECK(*text.by(on("c", {oneOf({"alpha", "ALPHA"})})) == *text.by(on("c", {oneOf({"alpha"})})));
 }
 
 TEST_CASE("table: a oneOf of any size is one lookup a cell", "[table][filter]") {   // gate D5
@@ -159,13 +166,13 @@ TEST_CASE("table: a oneOf of any size is one lookup a cell", "[table][filter]") 
 TEST_CASE("table: oneOf is the OR of its eq entries over random tables", "[table][filter]") {   // invariant 23
     // std::mt19937 seed 23; 200 tables of 50 rows over kinds Text, Integer, Decimal, Date, Bool;
     // cells drawn from 8 values plus empty and one invalid text; a oneOf of 1..6 drawn values.
-    CHECK(f.by(on("c", {oneOf(values)})) == f.by(on("c", eqEntries(values))));          // include, combine any
-    CHECK(f.by(on("c", {}, Combine::Any, {oneOf(values)})) ==
-          f.by(on("c", {}, Combine::Any, eqEntries(values))));                            // exclude
+    CHECK(*f.by(on("c", {oneOf(values)})) == *f.by(on("c", eqEntries(values))));        // include, combine any
+    CHECK(*f.by(on("c", {}, Combine::Any, {oneOf(values)})) ==
+          *f.by(on("c", {}, Combine::Any, eqEntries(values))));                          // exclude
 }
 ```
 
-(`Filtered`, `on`, `eq`, `isEmpty` are the file's existing helpers; the D5 case builds key columns as `Filtered::by` does and keeps the pointers to call `evaluate` itself.)
+(`Filtered`, `on`, `eq`, `isEmpty` are the file's existing helpers; the D5 case builds key columns as `Filtered::by` does and keeps the pointers to call `evaluate` itself. `Filtered::by` returns `std::expected<Rows, TableError>` and `TableError` has no `operator==`, so two results are compared as `*a == *b`; a result against a `Rows` literal compares directly. Every case below follows that rule.)
 
 - [ ] **Step 2: Write the failing limit tests** in `tests/table/test_table_query.cpp`:
 
@@ -384,6 +391,7 @@ Expected: all pass.
   // data_source.hpp (ColumnGroupInfo as Task 1 defined it: id, label, columns)
   [[nodiscard]] virtual std::span<ColumnGroupInfo const> DataSource::groups() const { return {}; }
   void VectorSource::setGroups(std::vector<ColumnGroupInfo> groups);
+  [[nodiscard]] std::span<ColumnGroupInfo const> VectorSource::groups() const override;   // what setGroups stored
   // filter.hpp
   enum class GroupMode : std::uint8_t { Columns, Together };                 // JSON "columns", "together"
   struct ColumnCount { enum class Kind : std::uint8_t { Any, All, AtLeast, Exactly } kind = Kind::Any; std::int64_t n = 1; };
@@ -398,21 +406,24 @@ Expected: all pass.
   ```
   `ColumnCount` JSON is `"any"`, `"all"`, `{"atLeast": n}` or `{"exactly": n}` (custom glaze read/write).
 
-- [ ] **Step 1: Write the failing truth-table test** in `test_table_filter.cpp`. Helper `Match groupMatch(VectorSource const&, GroupFilter, std::uint32_t row)` compiles `FilterSpec{.groups = {g}}` with `source.groups()`, builds the key columns as `Filtered::by` does, and returns `CompiledFilter::evaluateGroup(compiled->groups()[0], pointers, row)`. Header mutation line: "`Together` evaluated as `atLeast` with n = entries: the truth-table case fails on row F, F, X".
+- [ ] **Step 1: Write the failing truth-table test** in `test_table_filter.cpp`.
+  - Change the existing helper `Filtered::by` to compile with the source's declared groups: `compileFilter(spec, source->columns(), services, source->groups())`. Without it every `.group = "company"` case below is `UnknownColumn`, because the group is resolved only through the span `compileFilter` is given. The existing cases name no declared group and are unchanged by it.
+  - The truth-table source (`Filtered f`, its `VectorSource` with `setGroups` declaring `company`) and `by(GroupFilter) -> std::expected<Rows, TableError>` (`f.by` of a spec holding that one group) are file-scope helpers, used by every `[groups]` case below.
+  - Helper `Match groupMatch(VectorSource const&, GroupFilter, std::uint32_t row)` compiles `FilterSpec{.groups = {g}}` with `source.groups()`, builds the key columns as `Filtered::by` does, and returns `CompiledFilter::evaluateGroup(compiled->groups()[0], pointers, row)`.
+  - Header mutation lines: "`Together` evaluated as `atLeast` with n = entries: the truth-table case fails on row F, F, X"; "`Filtered::by` compiling without `source->groups()`: every declared-group case fails with `UnknownColumn`".
 
 ```cpp
 // companyA, companyB, companyC (Text), declared group {"company", "Company", {companyA, companyB, companyC}}
 // 0: F, S, X   1: F, F, X   2: S, F, F   3: F, X, Y   4: X, Y, Z
 TEST_CASE("groups: the spec's truth table", "[table][filter][groups]") {
-    auto const by = [&](GroupFilter g) { return f.by(FilterSpec{.columns = {}, .groups = {std::move(g)}}); };
     CHECK(by({.group = "company", .include = {eq("F")}}) == Rows{0, 1, 2, 3});
     CHECK(by({.group = "company", .mode = GroupMode::Together, .include = {eq("F"), eq("S")}}) == Rows{0, 2});
     CHECK(by({.group = "company", .include = {oneOf({"F", "S", "T"})}}) == Rows{0, 1, 2, 3});
     CHECK(by({.group = "company", .match = {.kind = ColumnCount::Kind::AtLeast, .n = 2}, .include = {oneOf({"F", "S"})}}) == Rows{0, 1, 2});
     CHECK(by({.group = "company", .match = {.kind = ColumnCount::Kind::Exactly, .n = 1}, .include = {eq("F")}}) == Rows{0, 3});
     CHECK(by({.group = "company", .match = {.kind = ColumnCount::Kind::All, .n = 1}, .include = {oneOf({"F", "S"})}}) == Rows{2});
-    CHECK(by({.columns = {"companyA", "companyB", "companyC"}, .include = {eq("F")}}) ==
-          by({.group = "company", .include = {eq("F")}}));                   // the plain group is `any`
+    CHECK(*by({.columns = {"companyA", "companyB", "companyC"}, .include = {eq("F")}}) ==
+          *by({.group = "company", .include = {eq("F")}}));                  // the plain group is `any`
     CHECK(by({.group = "company", .include = {}, .exclude = {eq("X")}}) == Rows{2});   // "none of the companies is X"
     std::vector<FilterEntry> seventeen;                                       // only the 17th entry can match
     for (int i = 1; i <= 16; ++i) seventeen.push_back(eq("A" + std::to_string(i)));
@@ -441,13 +452,40 @@ TEST_CASE("groups: duplicate columns, exactly zero and too many together entries
                                                      .include = {eq("A"), eq("B"), eq("C"), eq("D")}}}})
               .error().code == TableErrorCode::InvalidSpec);
     CHECK(f.by(FilterSpec{.columns = {}, .groups = {{.group = "company", .mode = GroupMode::Together, .include = {eq("A")}}}})
-              .error().code == TableErrorCode::InvalidSpec);                   // fewer than 2 entries
+              .error().code == TableErrorCode::InvalidSpec);                   // one entry: neither 0 nor 2..k
+    // Together takes 0, or 2 to k, include entries: an exclude-only group compiles in either mode.
+    // Mutation: compileGroup requiring 2..k include entries in Together mode with no exception for 0.
+    CHECK(by({.group = "company", .mode = GroupMode::Together, .include = {}, .exclude = {eq("X")}}) == Rows{2});
+    CHECK(*by({.group = "company", .mode = GroupMode::Together, .include = {}, .exclude = {eq("X")}}) ==
+          *by({.group = "company", .include = {}, .exclude = {eq("X")}}));
+    CHECK(by({.group = "company", .mode = GroupMode::Together, .include = {}, .exclude = {}}) == Rows{0, 1, 2, 3, 4});
     CHECK(f.by(FilterSpec{.columns = {}, .groups = {{.group = "company", .match = {.kind = ColumnCount::Kind::AtLeast, .n = 4},
                                                      .include = {eq("F")}}}}).error().code == TableErrorCode::InvalidSpec);
     CHECK(f.by(FilterSpec{.columns = {}, .groups = {{.group = "company", .columns = {"companyA", "companyB"},
                                                      .include = {eq("F")}}}}).error().code == TableErrorCode::InvalidSpec);
     CHECK(f.by(FilterSpec{.columns = {}, .groups = {{.group = "nope", .include = {eq("F")}}}}).error().code ==
           TableErrorCode::UnknownColumn);
+}
+
+TEST_CASE("groups: more than 32 entries on a side is refused where the filter compiles", "[table][filter][groups]") {
+    // Engine::setFilter compiles without validate's QueryLimits, so the bound that keeps every entry a bit of a
+    // std::uint32_t mask is compileGroup's own. 33 include entries, only the 33rd ("F") able to match.
+    std::vector<FilterEntry> thirtyThree;
+    for (int i = 1; i <= 32; ++i) thirtyThree.push_back(eq("A" + std::to_string(i)));
+    thirtyThree.push_back(eq("F"));
+    std::vector<FilterEntry> thirtyTwo(thirtyThree.end() - 32, thirtyThree.end());   // "A2".."A32", "F"
+    CHECK(by({.group = "company", .include = thirtyThree}).error().code == TableErrorCode::LimitExceeded);
+    CHECK(by({.group = "company", .include = {eq("F")}, .exclude = thirtyThree}).error().code ==
+          TableErrorCode::LimitExceeded);
+    CHECK(by({.group = "company", .include = thirtyTwo}) == Rows{0, 1, 2, 3});      // 32 a side compiles
+    CHECK(by({.group = "company", .include = thirtyTwo, .exclude = {eq("X")}}) == Rows{2});
+    Engine engine{f.source};
+    FilterSpec over;
+    over.groups.push_back({.group = "company", .include = thirtyThree});
+    CHECK(engine.setFilter(over).error().code == TableErrorCode::LimitExceeded);
+    CHECK(engine.filter().empty());                                                  // the filter is unchanged
+    // Mutation: compileGroup without its 32-a-side bound — the first CHECK gets rows (and a shift by 32), not
+    // LimitExceeded. validate still refuses include + exclude over maxEntries (Step 5); that is a query's bound.
 }
 
 TEST_CASE("groups: a declared group is checked where the columns are read", "[table][filter][groups]") {
@@ -463,19 +501,36 @@ TEST_CASE("groups: the JSON shape reads and writes", "[table][filter][groups]") 
     for (auto const* m : {R"("any")", R"("all")", R"({"atLeast":3})", R"({"exactly":0})"}) { /* read then write gives m back */ }
 }
 
+// Generators shared by the two property cases (file scope in test_table_filter.cpp):
+//   Cell randomCell(std::mt19937& rng, double unloaded)
+//       -> Cell{Unloaded{}} with probability `unloaded` (std::bernoulli_distribution), otherwise one of
+//          "A", "B", "C", "D", "E" or empty (std::uniform_int_distribution<int>{0, 5}).
+//   GroupFilter randomGroupFilter(std::mt19937& rng, std::size_t k)
+//       -> .columns = c0..c{k-1}; mode Columns or Together (equal odds);
+//          Columns: match any / all / atLeast n / exactly n (n uniform in 0..k), combine any or all, 1..k include
+//          entries; Together: 2..k include entries (the only counts besides 0 that compile);
+//          each entry eq, oneOf (1..3 letters), ne or startsWith, operands drawn from "A".."E";
+//          0..2 exclude entries of the same kinds.
+//   std::vector<std::vector<Cell>> completions(std::vector<Cell> const& row)
+//       -> every row obtained by replacing each Unloaded cell by one of "A".."E" or empty (6^u rows, u <= k).
+
 TEST_CASE("groups: invariant 24 over random tables", "[table][filter][groups]") {
-    // std::mt19937 seed 24; 300 tables of 40 rows, k = 2..5 Text columns over {A..E, empty};
-    // random mode, match (n in 0..k), combine, 1..k include entries (eq, oneOf, ne, startsWith).
+    // std::mt19937 seed 24; 300 tables of 40 rows, k = 2..5 Text columns of randomCell(rng, 0.0);
+    // one randomGroupFilter(rng, k) per table.
     // Oracle: Columns mode counts columns whose cell satisfies the entries one by one (CompiledFilter::matches);
-    // Together tries every injective assignment of entries to columns.
-    CHECK(f.by(spec) == oracleRows);
+    // Together tries every injective assignment of entries to columns; an exclude rejects on any match.
+    CHECK(f.by(spec) == oracleRows);   // Mutation: Together decided as atLeast with n = entry count
 }
 
 TEST_CASE("groups: invariant 1 over random completions", "[table][filter][groups]") {      // gate G7's oracle
-    // std::mt19937 seed 1; 200 tables of 30 rows, k = 3, about a third of the cells Unloaded;
-    // for each row, every completion of its unloaded cells over {A..E, empty}:
-    // evaluate == Yes  =>  the oracle passes every completion; == No  =>  it passes none;
-    // == Unknown  =>  it passes some and fails some.
+    // std::mt19937 seed 1; 200 tables of 30 rows, k = 3 columns of randomCell(rng, 1.0 / 3);
+    // one randomGroupFilter(rng, 3) per table; for each row r, m = groupMatch(source, filter, r), and over every
+    // row of completions(row r) the invariant-24 oracle gives:
+    //   m == Match::Yes  =>  the oracle passes every completion;
+    //   m == Match::No   =>  it passes none.
+    // Unknown is not checked: invariant 1 is soundness only, and `exactly n` or the Together wildcard pass may
+    // answer Unknown where every completion agrees.
+    // Mutation: the known pass reading an unknown column as matching every entry — a Yes row has a failing completion.
 }
 
 TEST_CASE("groups: a row costs k lookups and at most one augmentation an entry", "[table][filter][groups]") {  // gate G5
@@ -517,8 +572,8 @@ TEST_CASE("distinct: a group's values are pooled", "[table][distinct][groups]") 
 - [ ] **Step 5: Implement declarations and compile.**
   - Move `ColumnGroupInfo` (unchanged members, `operator== = default` and Doxygen) from `description.hpp` to `data_source.hpp`; add `struct ColumnGroup` (the typed row's constexpr declaration), `DataSource::groups()`, `VectorSource::setGroups`, and `[[nodiscard]] std::optional<TableError> detail::checkGroups(std::span<ColumnInfo const>, std::span<ColumnGroupInfo const>)`: each group has 2 to 16 columns, all present and of one kind, and no column is in two groups; otherwise `SourceContract` naming the group's id. `apply`, `distinctValues` and `Engine::setFilter` run it before compiling.
   - `GroupFilter` gains members in the order of the Interfaces block (existing designated initializers `.columns, .combine, .include` stay valid). `glz::meta` for `GroupMode` and the custom read/write for `ColumnCount`.
-  - `compileGroup(GroupFilter const&, columns, services, groups)`: exactly one of `group` and `columns` is non-empty, else `InvalidSpec`; `group` resolves through `groups` (`UnknownColumn` naming it when absent); a column named twice is `InvalidSpec`; `Together` takes 2 to k include entries, else `InvalidSpec`; `AtLeast`/`Exactly` take `0 <= n <= k`, else `InvalidSpec`. `CompiledFilter::Group` keeps `k` (the named column count), `mode`, `match`, and per column the include and exclude entries that compiled for it; a column on which `combine: all` cannot compile every include entry, or `any` none, never satisfies (it counts as a known *no*). An include or exclude entry that compiles on none of the columns is the error the existing rule returns. A group with no include and no exclude entry compiles to nothing.
-  - Per column, the compile builds a **value index**: one hash map from a cell key to the bit mask (`std::uint32_t`: `Columns` mode takes up to `maxEntries` = 32 entries; only `Together` is capped at 16) of the include entries that are `eq` or `oneOf` on it (folded text unless `caseSensitive`), and the list of the other include entries with their bit. `exclude` is compiled the same way into its own index.
+  - `compileGroup(GroupFilter const&, columns, services, groups)`: exactly one of `group` and `columns` is non-empty, else `InvalidSpec`; `group` resolves through `groups` (`UnknownColumn` naming it when absent); a column named twice is `InvalidSpec`; `Together` takes 0, or 2 to k, include entries, else `InvalidSpec` (0 is an exclude-only group, which compiles in either mode; table.md's "at least 2 entries" is about a group that has include entries); `AtLeast`/`Exactly` take `0 <= n <= k`, else `InvalidSpec`; more than 32 include entries, or more than 32 exclude entries, is `LimitExceeded` with an empty column. That last bound is `compileGroup`'s own, not only `validate`'s, because `Engine::setFilter` compiles with no `QueryLimits` (it calls `compileFilterGuarded` directly) and each side's entries are bits of one `std::uint32_t` mask. `CompiledFilter::Group` keeps `k` (the named column count), `mode`, `match`, and per column the include and exclude entries that compiled for it; a column on which `combine: all` cannot compile every include entry, or `any` none, never satisfies (it counts as a known *no*). An include or exclude entry that compiles on none of the columns is the error the existing rule returns. A group with no include and no exclude entry compiles to nothing: `compileFilter` keeps a compiled group when its `include` or its `exclude` is non-empty (the condition `!group.include.empty()` becomes `!group.include.empty() || !group.exclude.empty()`).
+  - Per column, the compile builds a **value index**: one hash map from a cell key to the bit mask (`std::uint32_t`: `Columns` mode takes up to 32 entries a side, as `compileGroup` enforces; `Together` is capped at k ≤ 16) of the include entries that are `eq` or `oneOf` on it (folded text unless `caseSensitive`), and the list of the other include entries with their bit. `exclude` is compiled the same way into its own index.
   - `checkFilters`: a group's `include + exclude` count against `maxEntries`, every exclude entry against `maxTextLength`; `group` and `columns` resolve and pass `checkColumn` (a declared group through `source.groups()`, which `validate` receives as a new trailing `std::span<ColumnGroupInfo const> groups = {}` parameter).
 
 - [ ] **Step 6: Extend `CompiledFilter::evaluateGroup(Group const&, keys, row, counters)`** with this algorithm (the spec fixes it; G5 counts it):
@@ -571,7 +626,7 @@ group result: No if include-part or exclude-part is No; else Unknown if either i
 
 - [ ] **Step 10: Run** `ctest --test-dir build/cl-debug -R "groups|distinct|x-group|filter" --output-on-failure`; expected: all pass, and the existing group cases (`"columns combine by AND, and a group matches on any of its columns"`, `"an all-group uses only the columns that evaluate every entry"`) unchanged and passing.
 
-- [ ] **Step 11: Mutations.** (a) `Together` decided as `atLeast` with n = entry count: the truth table fails on row `F, F, X`. (b) `exactly` deciding `Yes` while `q > 0`: the three-valued case `{F,X,U}` fails. (c) the known pass reading unknown columns as matching every entry: the three-valued case `{F,F,U}` reports `Yes`. (d) skipping the covered-mask check: G5 fails (augmentations on rows that cannot match). Paste each; revert.
+- [ ] **Step 11: Mutations.** (a) `Together` decided as `atLeast` with n = entry count: the truth table fails on row `F, F, X`. (b) `exactly` deciding `Yes` while `q > 0`: the three-valued case `{F,X,U}` fails. (c) the known pass reading unknown columns as matching every entry: the three-valued case `{F,F,U}` reports `Yes`. (d) skipping the covered-mask check: G5 fails (augmentations on rows that cannot match). (e) `compileGroup` without its 32-a-side bound: `"groups: more than 32 entries on a side is refused where the filter compiles"` fails on its first `CHECK`. (f) `Together` requiring 2 to k include entries with no exception for 0: `"groups: duplicate columns, exactly zero and too many together entries"` fails on the exclude-only `Together` line. (g) `Filtered::by` compiling without `source->groups()`: the truth-table case fails with `UnknownColumn`. Paste each; revert.
 
 - [ ] **Step 12: Timings G1–G4, G6, G7.** `TEST_CASE("table benchmark: column groups", "[.benchmark][table][groups]")` on 100,000 rows generated with `std::mt19937{7}` (a group of 3 and one of 16 Text columns, keys built): G1 `any` with a 2-value `oneOf`; G2 with a 1,000-value `oneOf`; G3 `atLeast 2` and `exactly 1`; G4 `together` 2 entries over 3 columns and 16 over 16; G6 pooled distinct values, first 200; G7 G1 and G4 with a third of the cells `Unloaded` — the case first asserts the undecided count equals the oracle's from Step 1's invariant-1 test on a 1,000-row slice. Write the figures into table.md "Benchmarks: column groups".
 
@@ -598,7 +653,10 @@ group result: No if include-part or exclude-part is No; else Unknown if either i
 - Consumes: 8a's `ValueSet`, `distinctValues`; Task 3's `Unloaded`, `SourceContract`; Task 1's generic page; Task 5's `CellLevelCache`, `LevelCacheOptions`, `LevelCacheStats`.
 - Produces:
   ```cpp
-  struct UnitInfo { std::string id; std::string symbol; std::string dimension; math::Rational toBase; std::uint32_t decimals = 0; };
+  struct UnitInfo { std::string id; std::string symbol; std::string dimension; math::Rational toBase; std::uint32_t decimals = 0;
+                    [[nodiscard]] bool operator==(UnitInfo const&) const = default; };
+  // UnitInfo needs ==: TableDescription's defaulted operator== (Task 1) covers `units`, and without it that
+  // operator is deleted. table::UnitInfo is not ui::UnitInfo (ui/expression.hpp); ui code names it qualified.
   using UnitId = std::uint32_t;
   inline constexpr UnitId kUnknownUnit = std::numeric_limits<UnitId>::max();   // never a live unit
   class UnitRegistry {
@@ -622,7 +680,8 @@ group result: No if include-part or exclude-part is No; else Unknown if either i
   template <units::UnitEnum E>
   std::expected<void, TableError> addUnitsOf(UnitRegistryBuilder& builder, std::span<E const> units,
                                              std::string_view (*dimensionOf)(E));
-  struct Measure { math::Rational amount; UnitId unit = 0; };
+  struct Measure { math::Rational amount; UnitId unit = 0;
+                   [[nodiscard]] bool operator==(Measure const&) const = default; };   // amount by Rational's ==
   using Cell = std::variant<std::monostate, std::int64_t, math::Rational, double, std::string, bool, QuantityCell,
                             Unloaded, Measure>;
   // ColumnKind::Measure appended after Custom, JSON "measure"; ColumnInfo::dimensions (std::vector<std::string>, last member)
@@ -633,19 +692,30 @@ group result: No if include-part or exclude-part is No; else Unknown if either i
   struct DistinctValue { /* 8a members */ std::string dimension; std::string unit; };
   // description.hpp
   [[nodiscard]] std::expected<std::shared_ptr<UnitRegistry const>, TableError> registryOf(TableDescription const& description);
-  // writeGenericPage / readGenericPage gain a trailing `UnitRegistry const* units = nullptr`
+  // writeGenericPage / readGenericPage gain a trailing `UnitRegistry const* units = nullptr`:
+  [[nodiscard]] GenericPage writeGenericPage(PageRows const& page, DataSource const& source,
+                                             std::span<std::string const> columns, UnitRegistry const* units = nullptr);
+      // Task 1's writer returns a GenericPage, not an expected, so it has no error to return: a non-null `units`
+      // when a written column is Measure is its documented precondition (an assert in debug builds), and
+      // detail::answerQuery checks it first, answering SourceContract when served.services.units is null
+  [[nodiscard]] std::expected<GenericPage, TableError>
+  readGenericPage(std::string_view json, TableDescription const& description, UnitRegistry const* units = nullptr);
+      // units == nullptr: resolved through registryOf(description), built once per call and only when a
+      // column of the page is Measure — a client has no registry of its own, only the description's units
   // level_cache.hpp
   // LevelCacheOptions::units: std::function<std::shared_ptr<UnitRegistry const>()>   (empty: no units)
   // ui/measure.hpp
   namespace morph::ui {
-  struct TypedMeasure { math::Rational amount; std::string unit; };          // unit: the unit's id
+  struct TypedMeasure { math::Rational amount; std::string unit;             // unit: the unit's id
+                        [[nodiscard]] bool operator==(TypedMeasure const&) const = default; };
+                        // parseMeasure's tests compare std::optional<TypedMeasure> with a TypedMeasure
   [[nodiscard]] std::optional<TypedMeasure> parseMeasure(std::string_view text, std::span<table::UnitInfo const> units,
                                                          LocaleFacts const& locale, std::string_view chosen = {});
   [[nodiscard]] std::string measureOperand(TypedMeasure const& measure);   // "0.3 kg"; "0.003" for the ratio unit
   }
   ```
 
-The test registry used below (built once in the file): `""` (seeded), `kg` (`"kg"`, mass, 1, 3), `g` (`"g"`, mass, 1/1000, 0), `percent` (`"%"`, ratio, 1/100, 2). Helper `m(std::string_view amount, std::string_view unit) -> Cell` is `Measure{dec(amount), *registry->find(unit)}`. Columns: `col("w", ColumnKind::Measure)` with `dimensions = {"mass", "ratio"}` unless a case says otherwise; `ApplyOptions::services.units = registry`.
+The test registry used below (built once in the file): `""` (seeded), `kg` (`"kg"`, mass, 1, 3), `g` (`"g"`, mass, 1/1000, 0), `percent` (`"%"`, ratio, 1/100, 2). Helper `m(std::string_view amount, std::string_view unit) -> Cell` is `Measure{dec(amount), *registry->find(unit)}`. Columns: `col("w", ColumnKind::Measure)` with `dimensions = {"mass", "ratio"}` unless a case says otherwise; `ApplyOptions::services.units = registry`. The filter helpers dereference, so two of them compare as plain vectors (`TableError` has no `operator==`, so two `std::expected`s would not compile): `rowsOf(FilterEntry) -> Rows` is `REQUIRE`d to succeed and returns `*f.by(…)`; `error(FilterEntry) -> TableError` and `errorOnMassOnly(FilterEntry) -> TableError` are `REQUIRE`d to fail and return `.error()`.
 
 - [ ] **Step 1: Write the failing order and filter tests** in `test_table_measure.cpp` (header mutation line: "a key that ignores the unit's factor: `300 g sorts between 0.2 kg and 0.5 kg` fails"):
 
@@ -755,7 +825,7 @@ TEST_CASE("units: addUnitsOf reads a unit enum", "[table][measure]") {
 
   `addUnitsOf` rule pinned by this test: within a dimension the base is the dimension's existing base unit (`""` for ratio) or else the first enumerator of `units` in that dimension; every other unit's `toBase` is the product of `UnitRelation::fromTo` along a relation path to the base (searched in both directions, the reverse taking the reciprocal); a unit with no path is `InvalidSpec`; `symbol` is `UnitMeta::display`, `decimals` `UnitMeta::defaultDecimals`.
 
-- [ ] **Step 3: Write the failing wire, typed-row and parser tests.** In `test_table_description.cpp`: `"generic page: a measure round-trips"` — a page of one Measure column holding `Measure{3/10, kg}` writes `[3, 10, "kg"]`, reads back equal through `registryOf(description)`; reading with a null registry is `SourceContract`; an unknown id in the JSON reads as `Measure{…, kUnknownUnit}` (an invalid cell). In `test_table_measure.cpp`:
+- [ ] **Step 3: Write the failing wire, typed-row and parser tests.** In `test_table_description.cpp`: `"generic page: a measure round-trips"` — a page of one Measure column holding `Measure{3/10, kg}` writes `[3, 10, "kg"]` (`writeGenericPage(…, registry.get())`), and reads back as `std::get<Measure>(cell) == Measure{dec("0.3"), kgId}` both through `readGenericPage(json, description, registryOf(description)->get())` and through `readGenericPage(json, description)` with no registry passed (the description's `units` hold `kg`, so `kgId` is `registryOf(description)`'s number for it); an unknown id in the JSON reads as `Measure{…, kUnknownUnit}` (an invalid cell). Mutation: `readGenericPage` with `units == nullptr` returning `SourceContract` instead of building `registryOf(description)` — the no-registry read fails. In `test_table_measure.cpp`:
 
 ```cpp
 TEST_CASE("measure: typed rows carry their unit by id", "[table][measure]") {
@@ -797,8 +867,8 @@ result = sign(exact[l] <=> exact[r]);  return dir == Descending ? -result : resu
 - [ ] **Step 7: Filters** (`filter.hpp`). `operatorDefined(Measure, op)` is the numeric kinds' rule. An operand on a `Measure` column is `<decimal>` or `<decimal> <unit id>` (one space; the decimal by `parseDecimal`); no id is the ratio unit `""`. The unit must be live, its dimension allowed by the column, and `checkedMul` must fit; otherwise `InvalidValue` naming the column. `CompiledFilter::Entry` gains `std::array<std::uint32_t, 2> places`; `between`'s two places must be equal (`InvalidValue`). `matches` on a valid `Measure` cell: `Ne` → `places != entry.places[0] || exact != operand`; every other comparison → `false` when the places differ, else `compare` on `exact`. `ValueSet` holds `(place, base amount)` pairs for a `Measure` column.
 
 - [ ] **Step 8: Typed rows, distinct, wire, level cache, parser.**
-  - `query.hpp`: `MeasureValue` with `glz::meta` writing `{"num","den","unit"}`; `kindOf<MeasureValue>()` is `Measure`; the cell readers become `Cell (*)(Row const&, UnitRegistry const*)` and `toCell(MeasureValue)` resolves the id (`find`), giving `kUnknownUnit` when absent; `RowsSource` takes `std::shared_ptr<UnitRegistry const> units` as its last constructor parameter and the typed `apply` passes `options.services.units`. `apply`, `distinctValues` and `Engine::setSort`/`setFilter` return `SourceContract` when a column they sort, filter or list values of is `Measure` and `services.units` is null; `writeGenericPage` does when a column it writes is `Measure` and its `units` is null. `distinctValues` on a `Measure` column groups by `(place, base amount)`; a value's `text` is `<amount> <symbol>` of its first row (no space and no symbol for `""`), `operand` `<amount> <unit id>`, `dimension` and `unit` that row's.
-  - `description.hpp`: `TableDescription::units` (`std::vector<UnitInfo>`, after `levels`, so `describe`'s revision covers it); `DescribeTable<F>::invoke` (Task 2) sets `units = unitsFor(*served.services.units, columnInfos(description))` before `describe` when a column is `Measure` and the model left `units` empty, and `detail::answerQuery` passes `served.services.units.get()` to `writeGenericPage`. `registryOf(description)` builds a registry from `description.units` (`""` already seeded and skipped). The page writer writes `Measure` as `[num, den, "<id>"]` through `units`; the reader resolves the id through `units`; a `Measure` column with `units == nullptr` is `SourceContract`.
+  - `query.hpp`: `MeasureValue` with `glz::meta` writing `{"num","den","unit"}`; `kindOf<MeasureValue>()` is `Measure`; the cell readers become `Cell (*)(Row const&, UnitRegistry const*)` and `toCell(MeasureValue)` resolves the id (`find`), giving `kUnknownUnit` when absent; `RowsSource` takes `std::shared_ptr<UnitRegistry const> units` as its last constructor parameter and the typed `apply` passes `options.services.units`. `apply`, `distinctValues` and `Engine::setSort`/`setFilter` return `SourceContract` when a column they sort, filter or list values of is `Measure` and `services.units` is null; so does `detail::answerQuery` when a column it would write is `Measure` and `served.services.units` is null, checked before it calls `writeGenericPage` (whose non-null `units` for a `Measure` column is a precondition: it returns a `GenericPage`, not an `expected`). `distinctValues` on a `Measure` column groups by `(place, base amount)`; a value's `text` is `<amount> <symbol>` of its first row (no space and no symbol for `""`), `operand` `<amount> <unit id>`, `dimension` and `unit` that row's.
+  - `description.hpp`: `TableDescription::units` (`std::vector<UnitInfo>`, after `levels`, so `describe`'s revision covers it); `DescribeTable<F>::invoke` (Task 2) sets `units = unitsFor(*served.services.units, columnInfos(description))` before `describe` when a column is `Measure` and the model left `units` empty, and `detail::answerQuery` passes `served.services.units.get()` to `writeGenericPage`. `registryOf(description)` builds a registry from `description.units` (`""` already seeded and skipped). The page writer writes `Measure` as `[num, den, "<id>"]` through `units`. The reader resolves the id through `units` when given one; with `units == nullptr` and a `Measure` column in the page it builds `registryOf(description)` once for the call and resolves through that (an error from `registryOf` is returned as is). Part D's `WindowRows` calls `readGenericPage(json, description)` with no registry, which is why the default resolves through the description: a client learns units from the description and from nowhere else.
   - `level_cache.hpp`: the cache records `units()->lineage()` with each stored value set; `snapshot()` first compares the current registry's lineage with the recorded one and, when they differ, runs `invalidateAll()` (counted in `invalidatedKeys`).
   - `forms.hpp`: a `MeasureValue` property gets `"x-measure": true`. `views.hpp`: `inferColumnKind` returns `"measure"` for an `x-measure` property.
   - `ui/measure.hpp`: `parseMeasure` reads an optional `-`, digits, at most one `locale.numeric.decimalSeparator` followed by digits, optional spaces, then a unit: an exact match of a unit's `symbol` or `id` first, then the same compared ASCII-case-insensitively, first in `units` order; no unit text takes `chosen`. Anything else (a group separator included) is `std::nullopt`. `measureOperand` writes `formatRationalDecimal(amount)`, then `" " + unit` unless `unit` is empty.
@@ -811,11 +881,19 @@ result = sign(exact[l] <=> exact[r]);  return dir == Descending ? -result : resu
 
 - [ ] **Step 10: Run** `cmake --build --preset cl-debug --target morph_table_tests morph_tests`, then `ctest --test-dir build/cl-debug -R "measure|units|generic page|wide table|over the bridge" --output-on-failure`, then `-R "table|views"`; expected: all pass. `morph_net_tests` (the wide model over a socket) is POSIX-only: run `-R "push"` on `linux-everything` before merging.
 
-- [ ] **Step 11: Mutations.** (a) `KeyColumn` storing `amount` instead of `amount * factor`: `"300 g sorts between…"` fails. (b) `compareKeys` negating the place comparison under `Descending`: the same case's descending line fails. (c) `ne` returning `false` across dimensions: `"filters compare base amounts…"` fails on `ne("250 g")`. (d) `forColumn` dropped and `find(info(unit).id)` per cell: M5 fails. (e) the level cache skipping the lineage check: the level-cache case fails. Paste each; revert.
+- [ ] **Step 11: Mutations.** (a) `KeyColumn` storing `amount` instead of `amount * factor`: `"300 g sorts between…"` fails. (b) `compareKeys` negating the place comparison under `Descending`: the same case's descending line fails. (c) `ne` returning `false` across dimensions: `"filters compare base amounts…"` fails on `ne("250 g")`. (d) `forColumn` dropped and `find(info(unit).id)` per cell: M5 fails. (e) the level cache skipping the lineage check: the level-cache case fails. (f) `readGenericPage` with `units == nullptr` returning `SourceContract` instead of resolving through `registryOf(description)`: `"generic page: a measure round-trips"` fails on the no-registry read. Paste each; revert.
 
 - [ ] **Step 12: Timings M1–M4.** `TEST_CASE("table benchmark: values with units", "[.benchmark][table][measure]")`: 100,000 rows from `std::mt19937{7}`, one `Measure` column over the fixture registry (three dimensions, ten units) and a `Quantity` column of the same amounts converted by factor; M1 keys and sort of each; M2 `gt "250 g"` against the quantity column's `gt "0.25"`; M3 compile 1,000 operands with units, and `ui::parseMeasure` of 1,000 typed texts; M4 `distinctValues` on the measure column against a decimal column. Write the figures into table.md "Benchmarks: values with units".
 
-- [ ] **Step 13: Docs build; commit** `feat(table): values with units`.
+- [ ] **Step 13: Correct table.md on `x-units`** (see Decisions), in this commit, so the spec states what 8c builds:
+  - In "Values with units", the bullet "On the wire a unit is always its string id…": replace its last sentence,
+    "The row's schema marks the property `x-measure` and lists the column's units as `x-units` (`{id, symbol, dimension, num, den, decimals}`), so a client parses, converts and shows without asking."
+    with
+    "The row's schema marks the property `x-measure` and lists no units: it is built from the row type alone, and the units are the application's run-time registry. A client parses, converts and shows a measure with the units of the table's description, without asking."
+  - In the bullet "**A client learns units from the table's description**", after "it has no registry of its own.", add: "A typed row's schema carries none either; it marks a measure's property `x-measure` only."
+  - Check: `grep -n "x-units" docs/spec/table/table.md` prints nothing, and `grep -rn "x-units" docs/spec include` prints nothing.
+
+- [ ] **Step 14: Docs build; commit** `feat(table): values with units` (table.md's `x-units` correction of Step 13 and the M1–M4 figures of Step 12 in the same commit).
 
 ---
 
@@ -828,7 +906,7 @@ result = sign(exact[l] <=> exact[r]);  return dir == Descending ? -result : resu
 - Modify: `tests/table/test_table_columns.cpp` (new cases), `tests/table/test_table_engine.cpp` (the existing `rebuild` expectation)
 
 **Interfaces:**
-- Consumes: `ColumnGroupInfo` (Task 1's, in `description.hpp`; 8b moves it unchanged to `data_source.hpp`, which `description.hpp` includes, so `engine.hpp` includes `description.hpp` if 8d lands first and `data_source.hpp` after 8b).
+- Consumes: `ColumnGroupInfo` from `data_source.hpp`, where 8b moved it (8d lands after 8b; `engine.hpp` already includes `data_source.hpp` and gains no include).
 - Produces:
   ```cpp
   /// The stored shape of a layout: {"order", "hidden", "pinned", "widths", "groups", "units"}.
@@ -970,5 +1048,5 @@ fit(value, D = declared ids):
 ## Self-review
 
 - **Spec coverage.** Value-set operator (8a Steps 1, 5, 6); its limits and wire bound D6 (8a Step 2); distinct values — which rows, which values, unloaded, order and bound, dates, levels (the column is read for every candidate, through `apply`'s key building), client mode, server mode, validation, caching (8a Steps 3, 7, 8); column groups — declaring, user-formed groups (fitted in 8d), the filter and its JSON, both truth tables, `Together`, excludes, the pooled values list, `x-group` (8b); values with units — registry, lineage, tombstones, unit-id rule, ratio, wire, typed rows, order, filters, `parseMeasure`, values list (8c); display units per dimension are stored by 8d and drawn by Task 15; the layout (8d). The menu halves, D7, D8 and D9 are Tasks 10 and 12, as the roadmap assigns. Neighbouring specs for step 3: `../forms/views.md` (8b Step 8); `engine.md`'s fitting-rule row is step 4, not here.
-- **Type consistency.** `FilterCounters` is introduced in 8a and used by 8b; `ValueSet` in 8a, extended to measures in 8c; `DistinctValue` gains `dimension`/`unit` in 8c only; `ColumnGroupInfo` moves to `data_source.hpp` in 8b and is consumed by 8d; `GroupFilter`'s member order keeps the existing designated initializers valid.
+- **Type consistency.** `FilterCounters` is introduced in 8a and used by 8b; `ValueSet` in 8a, extended to measures in 8c; `DistinctValue` gains `dimension`/`unit` in 8c only; `ColumnGroupInfo` moves to `data_source.hpp` in 8b and is consumed by 8d, which lands after it; `GroupFilter`'s member order keeps the existing designated initializers valid.
 - **Proportion.** Code blocks are tests and signatures; the only bodies are the group evaluation, the measure comparison and the fitting rule, which the spec fixes and the tests alone would not determine.
