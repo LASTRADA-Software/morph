@@ -44,7 +44,8 @@ None of the roadmap's Review Focus items falls in this part.
 ### Task 0: The fixture and the baseline (table.md step 0)
 
 **Files:**
-- Create: `tests/table/wide_table_model.hpp`, `tests/table/wide_table_model.cpp` (static library `morph_wide_table_model`), `tests/table/test_wide_table.cpp` (in `morph_table_tests`), `tests/qt_quick/bench_qt_quick_table.cpp` (in `morph_qt_quick_tests`), `tests/qt_quick/wasm/wide_rows_baseline.cpp` and `tests/qt_quick/wasm/CMakeLists.txt` (B5's browser harness)
+- Create: `tests/table/wide_table_model.hpp`, `tests/table/wide_table_model.cpp` (static library `morph_wide_table_model`), `tests/table/test_wide_table.cpp` (in `morph_table_tests`), `tests/qt_quick/bench_qt_quick_table.cpp` (in `morph_qt_quick_tests`), `tests/qt_quick/wide_rows_document.hpp` (the `rows` document F2–F5 and B5 both mount), `tests/qt_quick/wasm/wide_rows_baseline.cpp` and `tests/qt_quick/wasm/CMakeLists.txt` (B5's browser harness)
+- Modify: `include/morph/table/data_source.hpp:71-76` (`QuantityCell` gains `[[nodiscard]] bool operator==(QuantityCell const&) const = default;` with its Doxygen, so `Cell == Cell` compiles; index decision 38), `tests/table/table_fixtures.hpp` (`tabletest::sameCell`)
 - Modify: `CMakeLists.txt:1252` (an `if(EMSCRIPTEN AND MORPH_BUILD_QT_QUICK AND MORPH_BUILD_TESTS)` branch adding `tests/qt_quick/wasm`), `tests/CMakeLists.txt:882-909` (the library; `morph_table_tests` links it and `test_wide_table.cpp`; `morph_tests` links it; an `if(EMSCRIPTEN)` branch that builds only `morph_wide_table_model` and `morph_table_tests`), `tests/net/CMakeLists.txt:13-17`, `tests/qt_quick/CMakeLists.txt` (link and the bench file), `tests/table/bench_table.cpp`, `tests/bench_interpreter.cpp`, `tests/table/test_table_engine.cpp:210` (tag `[threads]`), `.github/workflows/ci.yml` (new job `table-wasm`), `docs/spec/table/table.md` (a "Recorded baselines" table at the end of "Performance", before "## Invariants")
 
 **Interfaces:**
@@ -89,6 +90,8 @@ public:
     // notified after the lock is released. The source is shared by every model instance's strand (Part B's fifty clients).
 };
 ```
+
+- Produces (namespace `tabletest`, `tests/table/table_fixtures.hpp`): `[[nodiscard]] inline bool sameCell(morph::table::Cell const& a, morph::table::Cell const& b)`, true when both hold the same alternative and equal values, and, for a `Rational`, equal `decimalPlaces` too (for a `QuantityCell`, of `amount` and of `toCanonical`). `Rational::operator==` compares the value only (`util/rational.hpp:692`), so `Cell == Cell` means "the same value" and `sameCell` means "the same cell, places included"; a test that pins places uses `sameCell`.
 
 **The layout** (`wideColumns(300)`, in declared order; position `p` counts from 0):
 
@@ -135,7 +138,7 @@ TEST_CASE("wide table: the same seed gives the same cells", "[table][wide]") {
     REQUIRE(sa->rowCount() == 1'000);
     for (std::size_t r = 0; r < 1'000; ++r) {
         REQUIRE(sa->rowId(r) == sb->rowId(r));
-        for (std::size_t c = 0; c < 300; ++c) { REQUIRE(sa->cell(r, c) == sb->cell(r, c)); }   // Mutation: seed from std::random_device
+        for (std::size_t c = 0; c < 300; ++c) { REQUIRE(tabletest::sameCell(sa->cell(r, c), sb->cell(r, c))); }   // Mutation: seed from std::random_device
     }
     bench::WideTableSource const other{{.rows = 1'000, .columns = 300, .seed = 8}};
     CHECK_FALSE(other.snapshot()->cell(0, 1) == sa->cell(0, 1));   // Mutation: generator ignoring the seed
@@ -170,9 +173,36 @@ TEST_CASE("wide table: the column mix is the spec's", "[table][wide]") {
 TEST_CASE("wide table: shared rows agree between 300 and 30 columns", "[table][wide]") {
     bench::WideTableSource const wide{{.rows = 2'000, .columns = 300, .seed = 7}};
     bench::WideTableSource const small{{.rows = 1'000, .columns = 30, .seed = 7}};
-    // For every column of `small`, its cells equal `wide`'s cells of the same id on rows 0..999, empty cells included.
+    auto const ws = wide.snapshot(); auto const ss = small.snapshot();
+    auto const wideIds = wide.columns();
+    int empties = 0;
+    for (std::size_t c = 0; c < small.columns().size(); ++c) {
+        auto const at = std::ranges::find(wideIds, small.columns()[c].id, &morph::table::ColumnInfo::id);
+        REQUIRE(at != wideIds.end());
+        auto const w = static_cast<std::size_t>(at - wideIds.begin());
+        CHECK(small.layout()[c].sparse == wide.layout()[w].sparse);
+        for (std::size_t r = 0; r < 1'000; ++r) {
+            REQUIRE(tabletest::sameCell(ss->cell(r, c), ws->cell(r, w)));
+            empties += std::holds_alternative<std::monostate>(ss->cell(r, c)) ? 1 : 0;
+        }
+    }
+    CHECK(empties > 0);   // `t003` is sparse in both layouts, so empty cells were compared
     // Mutation: wideColumns(30) recomputing `sparse` from the 30 layout's positions.
     // Mutation: hashing the column's position instead of its id.
+}
+
+TEST_CASE("table fixtures: sameCell tells places apart and operator== does not", "[table][wide]") {
+    using morph::math::Rational; using morph::math::Numerator; using morph::math::Denominator; using morph::math::DecimalPlaces;
+    Cell const two{Rational{Numerator{5}, Denominator{2}, DecimalPlaces{2}}};
+    Cell const four{Rational{Numerator{5}, Denominator{2}, DecimalPlaces{4}}};
+    CHECK(two == four);
+    CHECK_FALSE(tabletest::sameCell(two, four));
+    CHECK(tabletest::sameCell(two, two));
+    Cell const kg{QuantityCell{std::get<Rational>(two), Rational{Numerator{1000}, Denominator{1}, DecimalPlaces{0}}}};
+    Cell const g{QuantityCell{std::get<Rational>(two), Rational{Numerator{1}, Denominator{1}, DecimalPlaces{0}}}};
+    CHECK(kg == kg);
+    CHECK_FALSE(kg == g);                                   // Mutation: QuantityCell::operator== comparing `amount` only
+    CHECK_FALSE(tabletest::sameCell(two, Cell{std::int64_t{2}}));   // Mutation: sameCell delegating to operator==
 }
 
 TEST_CASE("wide table: seed 7 has the pinned digest", "[table][wide]") {
@@ -202,9 +232,9 @@ TEST_CASE("wide table: an edit changes one cell and copies one column", "[table]
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `cmake --preset cl-debug && cmake --build --preset cl-debug --target morph_table_tests`
-Expected: compile failure, `wide_table_model.hpp` not found.
+Expected: compile failure, `wide_table_model.hpp` not found (add `table/test_wide_table.cpp` to `morph_table_tests` in `tests/CMakeLists.txt` first, so the build sees it).
 
-- [ ] **Step 3: Implement the fixture** in `tests/table/wide_table_model.{hpp,cpp}` with the interface, layout and generator above, and add to `tests/CMakeLists.txt`:
+- [ ] **Step 3: Implement the fixture** in `tests/table/wide_table_model.{hpp,cpp}` with the interface, layout and generator above, `QuantityCell::operator==` in `data_source.hpp`, `tabletest::sameCell` in `table_fixtures.hpp`, and add to `tests/CMakeLists.txt`:
 
 ```cmake
 add_library(morph_wide_table_model STATIC table/wide_table_model.cpp)
@@ -218,11 +248,17 @@ apply_warnings(morph_wide_table_model)
 - [ ] **Step 4: Run the tests to see them pass**
 
 Run: `cmake --build --preset cl-debug --target morph_table_tests && ctest --test-dir build/cl-debug -R "wide table" --output-on-failure`
-Expected: 6 tests pass; then the whole target: `ctest --test-dir build/cl-debug -R "^table" --output-on-failure` all pass.
+Expected: 6 tests pass, and `ctest --test-dir build/cl-debug -R "table fixtures" --output-on-failure` 1 more; then the rest of the target: `ctest --test-dir build/cl-debug -R "^table" --output-on-failure` all pass.
 
 - [ ] **Step 5: Build the table tests for WebAssembly and run them under Node**
 
-In `tests/CMakeLists.txt`, at the top after the pinned-facts block: under `if(EMSCRIPTEN)`, define `morph_wide_table_model` and `morph_table_tests` exactly as above, register no `catch_discover_tests`, and `return()`. Add to `.github/workflows/ci.yml` a job:
+In `tests/CMakeLists.txt`, at the top after the pinned-facts block: under `if(EMSCRIPTEN)`, define `morph_wide_table_model` and `morph_table_tests` exactly as above, register no `catch_discover_tests`, and `return()`. Emscripten's default heap is a fixed 16 MiB and no target in this repository sets another, so the branch also gives the executable a heap that grows:
+
+```cmake
+target_link_options(morph_table_tests PRIVATE -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB)
+```
+
+That holds the 100,000 × 300 column store B2 runs S1 and S2 over. S8's `VectorSource` of the same rows (near 1.7 GB of cells, and its keys beside them) is native only: its case is compiled out under `__EMSCRIPTEN__`. Add to `.github/workflows/ci.yml` a job:
 
 ```yaml
   table-wasm:
@@ -271,6 +307,21 @@ Run on a Release build, machine load recorded:
 `build/cl-release/tests/morph_table_tests.exe "[.benchmark][baseline]"` and `build/cl-release/tests/morph_tests.exe "[.benchmark][baseline]"`;
 `cmake --preset cl-qt-release -DMORPH_BUILD_QT_QUICK=ON && cmake --build --preset cl-qt-release --target morph_qt_quick_tests`, then with `QT_QPA_PLATFORM=offscreen`: `build/cl-qt-release/tests/qt_quick/morph_qt_quick_tests.exe "[.benchmark][baseline]"`;
 B2 under Node as in the table above. B5: in the root `CMakeLists.txt`, beside `:1252` (which adds `tests/qt_quick` only when `NOT EMSCRIPTEN`), add `if(EMSCRIPTEN AND MORPH_BUILD_QT_QUICK AND MORPH_BUILD_TESTS) add_subdirectory(tests/qt_quick/wasm) endif()`; configure with the form of `.github/workflows/wasm-demo.yml:114-119`: `"$WASM/bin/qt-cmake" -S . -B build-wasm-qt -G Ninja -DCMAKE_BUILD_TYPE=Release -DQT_HOST_PATH="$HOST" -DMORPH_BUILD_TESTS=ON -DMORPH_BUILD_EXAMPLES=OFF -DMORPH_BUILD_QT=ON -DMORPH_BUILD_QT_QUICK=ON`, build `cmake --build build-wasm-qt --target wide_rows_baseline`, and run it with `emrun` as the table says. (The `if(EMSCRIPTEN)` branch of `tests/CMakeLists.txt` returns before anything else, so this build compiles only `morph_table_tests`, its fixture and this harness.)
+The B5 harness, so that nothing in it is left to choose:
+
+- `tests/qt_quick/wide_rows_document.hpp`: `namespace bench { [[nodiscard]] std::string wideRowsDocument(WideTableSource const& source); }`, the `ui/1` document text of one `table` whose `rows` are the source's cells as literal row objects keyed by column id and whose `columns` are its 300 ids. `bench_qt_quick_table.cpp` (F2–F5) and the harness both mount this text, so B5 measures the table F2 measures.
+- `tests/qt_quick/wasm/CMakeLists.txt`:
+
+```cmake
+qt_add_executable(wide_rows_baseline wide_rows_baseline.cpp)
+target_link_libraries(wide_rows_baseline PRIVATE morph::qt_quick morph_wide_table_model)
+target_include_directories(wide_rows_baseline PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/tests)
+target_link_options(wide_rows_baseline PRIVATE -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB)
+apply_warnings(wide_rows_baseline)
+```
+
+- `wide_rows_baseline.cpp`: a `main` that owns the `QGuiApplication` and a 1,280 × 800 window as `tests/qt_quick/test_qt_quick_main.cpp` and `qt_quick_harness.hpp` set one up, mounts `wideRowsDocument(WideTableSource{{.rows = 2'000, .columns = 300, .seed = 7}})`, and on the first frame after the mount prints `mounted rows=2000 ms=<mount time>`; it then scrolls the table down by one viewport over one second and prints `frame ms=<t>` per frame and `done` at the end. It links no Catch2: its guard is the `mounted rows=2000` line.
+
 Expected: every case prints its rows and none fails its guard. Add to table.md, at the end of "Performance":
 
 ```markdown
@@ -287,9 +338,10 @@ one row per figure (S1, S2, S7, S8, B1 ×3 native, B2 for S1, S2, B1 ×3 and W2 
 Apply each mutation named in Step 1, see its test fail, revert; paste the failing lines into the commit body.
 
 ```bash
-git add tests/table/wide_table_model.hpp tests/table/wide_table_model.cpp tests/table/test_wide_table.cpp \
+git add include/morph/table/data_source.hpp tests/table/table_fixtures.hpp \
+        tests/table/wide_table_model.hpp tests/table/wide_table_model.cpp tests/table/test_wide_table.cpp \
         tests/table/bench_table.cpp tests/table/test_table_engine.cpp tests/bench_interpreter.cpp \
-        tests/qt_quick/bench_qt_quick_table.cpp tests/qt_quick/wasm tests/qt_quick/CMakeLists.txt \
+        tests/qt_quick/bench_qt_quick_table.cpp tests/qt_quick/wide_rows_document.hpp tests/qt_quick/wasm tests/qt_quick/CMakeLists.txt \
         CMakeLists.txt tests/CMakeLists.txt tests/net/CMakeLists.txt .github/workflows/ci.yml docs/spec/table/table.md
 git commit -m "test(table): wide-table fixture and baselines"
 ```
@@ -397,7 +449,7 @@ git commit -m "refactor(table): remove paging in a database"
 
 **Files:**
 - Create: `include/morph/table/description.hpp` (add to the `FILE_SET` beside `query.hpp`, `CMakeLists.txt:723`), `tests/table/test_table_description.cpp` (in `morph_table_tests`)
-- Modify: `include/morph/table/query.hpp:67-78` (`TableQuery::columns`), `:102-121` (`QueryLimits::maxColumns`), `:228-250` (`validate` checks `columns`), `tests/table/bench_table.cpp` (W1, W2, W5, W6, W7)
+- Modify: `include/morph/table/query.hpp:67-78` (`TableQuery::columns`), `:102-121` (`QueryLimits::maxColumns`), `:228-250` (`validate` checks `columns` and normalises it; `detail::orderedColumns` beside `detail::checkColumn`), `tests/table/wide_table_model.{hpp,cpp}` (`bench::wideDescription`), `tests/table/bench_table.cpp` (W1, W2, W5, W6, W7)
 
 **Interfaces:**
 - Consumes: `PageRows` (`query.hpp:282`), `TotalKind`, `DataSource`, `ColumnInfo`, `Cell`, `RowId`, `TableError` (existing); `morph::model::detail::fnv1a64`, `hex64` (`core/payload_schema.hpp`); `bench::WideTableSource` (Task 0).
@@ -408,6 +460,16 @@ git commit -m "refactor(table): remove paging in a database"
 struct TableQuery { std::vector<SortKey> sort; FilterSpec filters; PageRequest page;
                     std::optional<std::vector<std::string>> columns; /* absent: every column */ };
 struct QueryLimits { /* … */ std::size_t maxColumns = 512; };
+namespace detail {
+/// `asked` in the order of `columns`, each id once; an id `columns` lacks is dropped (validate has refused it first).
+[[nodiscard]] std::vector<std::string> orderedColumns(std::span<ColumnInfo const> columns,
+                                                      std::vector<std::string> const& asked);
+}
+
+// tests/table/wide_table_model.hpp, namespace bench
+/// The description of `wideColumns(columns)`: `id` as given, `label` = `id`, each column's label its id, `group` and
+/// `groups` (`g3`, `g16`, labels their ids) from the layout, key `"id"`, `levels` empty, `revision` empty.
+[[nodiscard]] morph::table::TableDescription wideDescription(std::string id, int columns);
 
 // description.hpp
 struct TableColumn { ColumnInfo info; std::string label; std::string group;
@@ -443,11 +505,11 @@ Members later tasks insert, at the place table.md's block puts them: `TableColum
 **Pinned rules.**
 - `describe` returns the description with `revision = hex64(fnv1a64(glz::write_json(d with revision cleared)))`: 16 lowercase hex digits. The canonical JSON is glaze's default write of the struct, members in declaration order.
 - The page's JSON members, in this order: `revision`, `columns`, `keys`, `rows`, `total` (absent when not counted), `totalKind` (`"exact"`/`"atLeast"`), `offset`. `glz::meta<GenericPage>` maps `rows` through a `glz::custom` pair that writes each cell with `appendCellJson` and reads each with `cellFromJson(json, std::nullopt)`; `readGenericPage` re-reads the cells with their column's kind.
-- A cell is written by its alternative (table.md, "Rows on the wire"): `null`; an integer; a finite `double` as glaze writes it, a non-finite one as the string `"nan"`, `"inf"` or `"-inf"`; a string; `true`/`false`; a `Rational` with `p = decimalPlaces` as `[numerator × (10^p / denominator), 10^p]` when `10^p` is a multiple of the denominator and the product fits `int64`, otherwise `[numerator, denominator]`; a `QuantityCell` as `[n, d, [fn, fd]]` with amount and factor written by the `Rational` rule, and as the plain `Rational` `[n, d]` when its factor is 1.
-- `cellFromJson` reads by shape: `null` → empty; an integral number → `int64` (a `double` when `kind` is `Number`); any other number → `double`; a string → `std::string` (in a `Number` column, `"nan"`, `"inf"`, `"-inf"` → that `double`); a boolean → `bool`; `[n, d]` with `d > 0` → `Rational{Numerator{n}, Denominator{d}, DecimalPlaces{k}}` where `k` is such that `d == 10^k` (`k ≤ 18`), otherwise `kMaxDecimalPlaces`; `[n, d, [fn, fd]]` → `QuantityCell`; anything else (an object, `[n, 0]`, a negative denominator, a third element of another shape, another length) → the `std::string` of its JSON text, which no kind but `Text` reads as valid. Read this way, the client's cell keys exactly as the server's did, so a cell the server keyed as invalid is invalid on the client.
+- A cell is written by its alternative (table.md, "Rows on the wire"): `null`; an integer; a finite `double` as glaze writes it, with `.0` appended when that text has no `.`, `e` or `E` (so `2.0` is `2.0` and `-0.0` is `-0.0`, never the integer token `2`), a non-finite one as the string `"nan"`, `"inf"` or `"-inf"`; a string; `true`/`false`; a `Rational` with `p = decimalPlaces` as `[numerator × (10^p / denominator), 10^p]` when `10^p` is a multiple of the denominator and the product fits `int64`, otherwise `[numerator, denominator]`; a `QuantityCell` as `[n, d, [fn, fd]]` with amount and factor written by the `Rational` rule, and as the plain `Rational` `[n, d]` when its factor is 1.
+- `cellFromJson` reads by shape: `null` → empty; a number whose token has no `.`, `e` or `E` → `int64` (a `double` when `kind` is `Number`, or when it does not fit `int64`); any other number → `double`, whatever the kind, so a `double` the server held in an `Integer` or `Decimal` column, which it keyed invalid (`sort.hpp`'s `readInteger` and `readExact` take no `double`), is a `double` and invalid on the client too; a string → `std::string` (in a `Number` column, `"nan"`, `"inf"`, `"-inf"` → that `double`); a boolean → `bool`; `[n, d]` with `d > 0` → `Rational{Numerator{n}, Denominator{d}, DecimalPlaces{k}}` where `k` is such that `d == 10^k` (`k ≤ 18`), otherwise `kMaxDecimalPlaces`; `[n, d, [fn, fd]]` → `QuantityCell`; anything else (an object, `[n, 0]`, a negative denominator, a third element of another shape, another length) → the `std::string` of its JSON text, which no kind but `Text` reads as valid. Read this way, the client's cell keys exactly as the server's did, so a cell the server keyed as invalid is invalid on the client.
 - `readGenericPage` refuses with `TableError{.code = InvalidValue}` (naming the column where there is one) when the JSON is not a page, a `columns` entry is not in the description (`UnknownColumn`), a row's length differs from `columns`, or `keys` and `rows` differ in length.
 - `writeGenericPage` writes `columns` as given (the caller orders and deduplicates them), `keys[i] = snapshot->rowId(page.rows[i])`, the cells of those columns only, `total` and `offset` from `page`; `revision` is left for the caller.
-- `validate` checks `query.columns` when present: more than `maxColumns` entries is `LimitExceeded`; each entry through `detail::checkColumn` (`UnknownColumn`, `ColumnNotReadable`).
+- `validate` checks `query.columns` when present, and normalises it (table.md, "Data levels": "`validate` bounds `columns` by `QueryLimits::maxColumns` (512), puts it in the description's order and removes duplicates"): more than `maxColumns` entries, counted as received, is `LimitExceeded`; each entry through `detail::checkColumn` (`UnknownColumn`, `ColumnNotReadable`); the query it returns holds `detail::orderedColumns(columns, *query.columns)`. An absent list stays absent and an empty one stays empty. Every caller of `validate` or `apply` therefore sees the list in the order of the columns it validated against, each id once.
 
 - [ ] **Step 1: Write the failing tests** in `tests/table/test_table_description.cpp`
 
@@ -477,21 +539,26 @@ TEST_CASE("generic page: every cell kind round-trips", "[table][description]") {
     //   {"revision":"9f2c","columns":["id","name","net","share","dose"],"keys":[101,102],
     //    "rows":[[101,"Alpha",[1250,100],[3,1000],[5,1,[1,1000]]],[102,"Beta",null,null,[250,1]]],
     //    "total":9093,"totalKind":"exact","offset":0}
-    // readGenericPage(that JSON, description) gives back: keys, columns, total, offset equal; each cell equal to the
-    // written one (Rational by value and decimalPlaces; QuantityCell by amount and toCanonical).
+    // readGenericPage(that JSON, description) gives back: keys, columns, total, offset equal; tabletest::sameCell(read,
+    // written) for every cell (so a Rational's decimalPlaces and a QuantityCell's amount and toCanonical are compared).
     // The same page with all eight columns: `ratio` reads as double 0.1 and 2.5, `flag` as bool, `on` as int64 19'000.
     // Mutation: writing a Rational as glaze's {"num","den","dp"} object.
+    // Mutation: reading [1250, 100] with DecimalPlaces{kMaxDecimalPlaces} (operator== still holds; sameCell fails).
 }
 
 TEST_CASE("generic page: a cell that does not read as its column's kind is invalid", "[table][description]") {
-    // readGenericPage of a one-column Integer page whose rows are ["abc"], [2.5], [[1,0]], [{"x":1}], [7]:
-    // buildKeys over a VectorSource of the read rows gives states {Invalid, Invalid, Invalid, Invalid, Valid}.
-    // The same values in a Text column: the last four keys are Valid (a Text column has no invalid cell).
+    // readGenericPage of a one-column Integer page whose rows are ["abc"], [2.5], [[1,0]], [{"x":1}], [2.0], [7]:
+    // buildKeys over a VectorSource of the read rows gives states {Invalid, Invalid, Invalid, Invalid, Invalid, Valid}.
+    // The same values in a Text column: the last five keys are Valid (a Text column has no invalid cell).
+    // Server and client agree: a VectorSource of one Integer column holding Cell{2.0} keys Invalid; its page through
+    // writeGenericPage and glz::write_json holds the token 2.0; read back, the cell holds a double and keys Invalid.
+    // The same for a Decimal column. In a Number column 2.0 writes 2.0 and reads as double 2.0, Valid.
     // Mutation: cellFromJson parsing "abc"-like strings for the column's kind on read (2.5 read as Integer 2).
+    // Mutation: writing a double as glaze does (2.0 becomes 2, an int64 the client keys Valid).
 }
 
 TEST_CASE("generic page: numbers at the edges cross the wire unchanged", "[table][description]") {   // Review Focus 2
-    // Number column: NaN, +inf, -inf, -0.0, 1e308 → written as "nan", "inf", "-inf", -0.0, 1e308 → read back equal
+    // Number column: NaN, +inf, -inf, -0.0, 1e308 → written as "nan", "inf", "-inf", -0.0, glaze's 1E308 → read back equal
     //   (NaN by std::isnan). Integer column: INT64_MIN, INT64_MAX. Decimal column: Rational{INT64_MAX, 3, places 2}
     //   (10^2 is not a multiple of 3, so written [INT64_MAX, 3]) and Rational{INT64_MAX / 10, 1, places 18}
     //   (the scaled numerator overflows, so written [n, 1]) → read back equal by value.
@@ -510,19 +577,22 @@ TEST_CASE("table query: columns round-trip and are bounded", "[table][query]") {
     // glz::write_json(TableQuery{.columns = std::vector<std::string>{"a","b"}}) contains "columns":["a","b"] and reads back
     // equal; R"({"sort":[],"filters":{},"page":{"offset":0,"limit":10}})" reads with columns == std::nullopt.
     // validate against columns {id, a, b} with mayRead refusing "b":
-    //   columns {"zz"} → UnknownColumn "zz"; {"b"} → ColumnNotReadable "b"; 513 entries → LimitExceeded; {} → accepted.
+    //   columns {"zz"} → UnknownColumn "zz"; {"b"} → ColumnNotReadable "b"; 513 entries → LimitExceeded (513 copies of
+    //   "a" too: the bound counts entries as received); {} → accepted, and the returned query's columns are present and empty.
     // Mutation: validate ignoring `columns`.
 }
 
 TEST_CASE("table query: a columns list is answered in the description's order, once each", "[table][query]") {   // Review Focus 1
-    // Over the description of wideColumns(30):
-    //   detail::orderedColumns(description, std::vector<std::string>{"t000","id","t000","i001"}) == {"id","i001","t000"};
-    //   detail::orderedColumns(description, std::nullopt) == the 30 ids in layout order.
-    // (`detail::orderedColumns(TableDescription const&, std::optional<std::vector<std::string>> const&)
-    //   -> std::vector<std::string>` drops ids the description lacks; validate has refused them before Task 2 calls it.)
+    // infos = columnInfos(bench::wideDescription("small", 30)):
+    //   validate(TableQuery{.columns = std::vector<std::string>{"t000","id","t000","i001"}}, infos)->columns
+    //     == std::vector<std::string>{"id","i001","t000"};
+    //   validate(TableQuery{}, infos)->columns == std::nullopt (absent stays absent: every column);
+    //   validate with columns {"t000","zz"} → UnknownColumn "zz" (an unknown id is refused, not dropped);
+    //   apply(WideTableSource{1'000, 30, 7}, the first query) succeeds: apply validates through the same step.
+    //   detail::orderedColumns(infos, {"i001","nope","id"}) == {"id","i001"}.
     // writeGenericPage of rows 0..199 of WideTableSource{1'000, 30, 7} with an empty column list gives 200 keys and
     //   200 rows of zero cells.
-    // Mutation: writing the columns in the query's order.
+    // Mutation: validate returning `columns` as received (the query's order, the duplicate kept).
 }
 
 TEST_CASE("generic page: a page names only the asked columns", "[table][description]") {   // gate W1
@@ -532,23 +602,28 @@ TEST_CASE("generic page: a page names only the asked columns", "[table][descript
 }
 
 TEST_CASE("generic page: a whole page fits an envelope", "[table][description]") {   // gate W7
-    // The same 200 rows with all 300 columns: glz::write_json(page)->size() + 4'096 < morph::wire::kMaxEnvelopeBytes.
+    // The same 200 rows with all 300 columns: every row holds 300 cells (60,000 in all), and
+    // glz::write_json(page)->size() + 4'096 < morph::wire::kMaxEnvelopeBytes; the size is also above 600'000, so the
+    // page measured is the wide one (ten bytes a cell is a floor no 300-column page is under).
+    // Mutation: writeGenericPage writing the first 40 columns whatever it is given (the row length and the floor fail).
 }
 
 TEST_CASE("description: a 300-column description round-trips", "[table][description]") {   // W6's codec
-    // A description of wideColumns(300) (label = id, group from the layout, groups g3 and g16, levels {"recipe"}),
-    // through describe, glz::write_json and glz::read_json: equal to the original.
+    // d = bench::wideDescription("wide", 300) with d.levels = {"recipe"} set by the test (the fixture serves none in
+    // this part); through describe, glz::write_json and glz::read_json: equal to the original, with 300 columns,
+    // groups g3 (3 columns) and g16 (16), and the 16-digit revision.
+    // Mutation: a glz::meta for TableDescription that leaves out `groups` (the read description has none).
 }
 ```
 
-`detail::orderedColumns` is declared in `description.hpp` beside the page writer.
+`detail::orderedColumns` is declared in `query.hpp` beside `detail::checkColumn`; `bench::wideDescription` in the fixture header.
 
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `cmake --build --preset cl-debug --target morph_table_tests`
 Expected: compile failure, `morph/table/description.hpp` not found.
 
-- [ ] **Step 3: Implement** `TableQuery::columns`, `QueryLimits::maxColumns`, `validate`'s check in `query.hpp`, and every symbol listed in Produces in `description.hpp`, with the pinned rules above. Every public symbol gets complete Doxygen.
+- [ ] **Step 3: Implement** `TableQuery::columns`, `QueryLimits::maxColumns`, `detail::orderedColumns`, `validate`'s check and normalisation in `query.hpp`, `bench::wideDescription` in the fixture, and every symbol listed in Produces in `description.hpp`, with the pinned rules above. Every public symbol gets complete Doxygen.
 
 - [ ] **Step 4: Run them to see them pass**
 
@@ -563,6 +638,7 @@ Apply each mutation named in Step 1; paste the failing lines into the commit bod
 
 ```bash
 git add include/morph/table/description.hpp include/morph/table/query.hpp CMakeLists.txt \
+        tests/table/wide_table_model.hpp tests/table/wide_table_model.cpp \
         tests/table/test_table_description.cpp tests/table/bench_table.cpp tests/CMakeLists.txt docs/spec/table/table.md
 git commit -m "feat(table): table descriptions and the generic page"
 ```
@@ -582,7 +658,7 @@ git commit -m "feat(table): table descriptions and the generic page"
 - Docs: `docs/spec/core/registry.md` (a section `### BRIDGE_REGISTER_TABLE(M, ID, FN, ...)` after `### BRIDGE_REGISTER_ACTION(M, A, NAME, ...)`, `:999`, and a paragraph on `invoke` under `### ActionTraits<Action>`, `:217`), `docs/spec/core/backend.md` (`tableWork` in the `ServerConfig` table, `:2491`, and one bullet in "Fan-out", `:1221`, saying a table action's reply is built on `tableWork` and its fan-out is the record machinery's)
 
 **Interfaces:**
-- Consumes: Task 1's `TableDescription`, `describe`, `GenericPage`, `writeGenericPage`, `detail::orderedColumns`, `columnInfos`; `validate`, `apply`, `RowsSource<Row>`, `detail::reflectedColumns<Row>`; `effects::updates<R>`, `changes<R>`; `session::current()`; `forms::detail::findFieldMeta<Row>`, `forms::detail::inferTitle`; `morph::async::DelayAwaiter` as the model for an awaiter that resumes on the strand.
+- Consumes: Task 1's `TableDescription`, `describe`, `GenericPage`, `writeGenericPage`, `columnInfos`, `bench::wideDescription`; `validate` (which orders and deduplicates `columns`), `apply`, `RowsSource<Row>`, `detail::reflectedColumns<Row>`; `effects::updates<R>`, `changes<R>`; `session::current()`; `forms::detail::findFieldMeta<Row>`, `forms::detail::inferTitle`; `morph::async::DelayAwaiter` as the model for an awaiter that resumes on the strand.
 - Produces, `namespace morph::table`:
 
 ```cpp
@@ -611,11 +687,11 @@ struct rowScoped {};
 template <typename... Records> struct derivedFrom {};
 [[nodiscard]] std::shared_ptr<DataSource const> scoped(std::shared_ptr<DataSource const> source, std::vector<RowId> keys);
 template <auto Function> struct QueryTable { TableQuery query; /* JSON is the TableQuery's: glz::meta value = &QueryTable::query */
-    template <typename Model> static core::async::Task<GenericPage> invoke(Model& model, QueryTable& action); };
+    template <typename Model> static ::core::async::Task<GenericPage> invoke(Model& model, QueryTable& action); };
 template <auto Function> struct DescribeTable {
     template <typename Model> static TableDescription invoke(Model& model, DescribeTable& action); };
 namespace detail {
-struct AnswerContext {};                              // Task 6 adds `ViewCache* views`
+struct AnswerContext {};                              // Task 6 adds `ViewCache* views`, `std::string_view record`, `bool rowScoped` (index decisions 5, 48)
 [[nodiscard]] std::expected<GenericPage, TableError> answerQuery(ServedTable const& served, TableQuery const& query,
                                                                  AnswerContext const& context = {});   // served.source is pinned
 [[nodiscard]] ServedTable pinned(ServedTable served);   // on the owner's thread: source → PinnedSource of one snapshot
@@ -645,21 +721,22 @@ template <typename Model, typename Action> decltype(auto) invokeExecute(Model& m
 
 `BRIDGE_REGISTER_TABLE(M, ID, FN, ...)`, `ID` a string literal, `FN` a member function pointer or a `table::typed<Row>(…)` expression, options `table::rowScoped` and `table::derivedFrom<…>`. It requires `BRIDGE_REGISTER_MODEL(M, …)` before it and `<morph/table/description.hpp>` in the translation unit, and emits:
 1. `template <> struct morph::table::TableTraits<KEY> { using model = M; using row = R; static constexpr bool registered = true; static constexpr std::string_view id = ID; static constexpr auto serve = FN; }`, where `KEY` is the member function pointer: `FN` itself, or `FN.function` for `typed<Row>(&M::fn)`, and `R` is `Row` for a typed table and `void` otherwise (`table::detail::tableKey(FN)` and `table::detail::TableRow<decltype(FN)>` compute them). Every type below is keyed on `KEY`, so `TableOf<&M::fn>`, `ChangedRows<&M::fn>` and `updatesTable<&M::fn>` name a typed table as they name a generic one; `QueryTable<KEY>::invoke` reads `TableTraits<KEY>::serve` to call the function;
-2. `ActionTraits` and registrars for `QueryTable<KEY>` under `"Table." ID` (result `GenericPage`) and `DescribeTable<KEY>` under `"Table." ID ".describe"` (result `TableDescription`), as `BRIDGE_DETAIL_ACTION_TRAITS_BODY` does for an action with an explicit result;
+2. `ActionTraits` and registrars for `QueryTable<KEY>` under `"Table." ID` (result `GenericPage`) and `DescribeTable<KEY>` under `"Table." ID ".describe"` (result `TableDescription`), as `BRIDGE_DETAIL_ACTION_TRAITS_BODY` does for an action with an explicit result, both with `::morph::model::Loggable::No`: they read, and a page fetch is not written to an action log (the default of `BRIDGE_REGISTER_ACTION` is `Loggable::Yes`, `registry.hpp:2122`; the tree's read actions pass `No`, `ui/preferences.hpp:316`);
 3. `registerTableRecordOnce<TableOf<KEY>, Options…>(ModelTraits<M>::typeId() + "." ID)`: a `RecordInfo` with `keyField = "key"`, `table = true`, `privateKeys` from `rowScoped`, `derivedFrom` from `derivedFrom<…>`;
 4. one more `ResultSlot{typeid(TableOf<KEY>), "", .opaque = true}` on `"Table." ID`'s result slots (`ResultSlot` gains `bool opaque = false`), which `resolve` turns into `ActionRecord{.record, .keyField, .paths = {}, .opaque = true}` so the table's action holds its record for watch admission (`remote.hpp:1794`) and names no path.
 
 **Pinned behaviour.**
+- **A table id is unique in the process, not only in its model.** The action id is `"Table." ID` with no model in it, and the effects registries are keyed by action id: a second action type under an id is listed in `actionResultConflicts()` (`registerActionResultOnce`, `registry.hpp:1626-1648`) and `effects::resolve` refuses it (`effects.hpp:522`), which fails every effects lookup of the process. Two models that each register a table `"rows"` are therefore refused when the registries resolve, with "action `Table.rows` is registered by two action types; give each its own id". table.md says the id is "unique within the model"; the difference is the handover's spec question 6 and is not settled here. The macro's Doxygen and `registry.md` state the process-wide rule, and a test below pins the refusal.
 - The walk (`result_walker::visit`): a type `T` with `T::heldRecord` and `T::heldMember()` adds `ResultSlot{typeid(typename T::heldRecord), path.empty() ? heldMember() : path + "." + heldMember()}` beside its own slot.
 - `resolve` does not report "derived from other records but has a key" for a record with `table == true`: a source's change reaches it as a whole-record change, as `addDerivedChanges` already sends.
 - `QueryTable<F>::invoke`: on the strand, build `TableContext` from `session::current()` (a static empty `Context` when null) and call `detail::serve<KEY>(model, context)`; read `currentTableRuntime()` before the first suspension and build `AnswerContext{}` from it; then, still on the strand, replace `served.source` with a `detail::PinnedSource` (the one `snapshot()` taken now and a copy of `columns()`), because a `DataSource` is owner-affine and only its snapshot may cross threads (`data_source.hpp:728`; table.md "the framework takes the source's snapshot, and then on the server's table executor…"); then run `answerQuery(pinnedServed, action.query, context)` as one work item posted to `runtime->work` and resume with its result through an awaiter built like `DelayAwaiter`, so the coroutine's own steps stay on the strand and the sort does not. With no runtime installed or a null `work` (`LocalBackend`), `answerQuery` runs inline. A `TableError` becomes `model::ActionRefusal{"table." + <the code's JSON name>, {{"column", error.column}}, error.message}`.
-- `answerQuery`: `validate(query, columnInfos(served.description), served.limits, served.mayRead)`; the query's columns as `orderedColumns(description, query.columns)`; `served.source` is a `detail::PinnedSource` (a `DataSource` holding one snapshot and a copy of the columns, whose `snapshot()` returns that snapshot and whose `subscribe` does nothing); `answerQuery` never takes a snapshot of a live source, and both `apply` (with `ApplyOptions{limits, services, mayRead}`) and `writeGenericPage` read the pinned one; a caller that passes a live source (the tests) gets it pinned by `detail::pinned(ServedTable)`, called on the caller's thread; with `query.columns` absent, the page's columns are the description's minus those `served.mayRead` refuses (invariant 14); `page.revision = served.description.revision`. A description column the source lacks is `TableError{UnknownColumn, column, "the table's source has no column <id>"}`.
+- `answerQuery`: `validate(query, columnInfos(served.description), served.limits, served.mayRead)`; the page's columns are that validated query's `columns` (in the description's order, each once, by Task 1's `validate`), kept from this first validation, since `apply` validates again against the source's columns, whose order may differ; `served.source` is a `detail::PinnedSource` (a `DataSource` holding one snapshot and a copy of the columns, whose `snapshot()` returns that snapshot and whose `subscribe` does nothing); `answerQuery` never takes a snapshot of a live source, and both `apply` (with `ApplyOptions{limits, services, mayRead}`) and `writeGenericPage` read the pinned one; a caller that passes a live source (the tests) gets it pinned by `detail::pinned(ServedTable)`, called on the caller's thread; with `query.columns` absent, the page's columns are the description's minus those `served.mayRead` refuses (invariant 14); `page.revision = served.description.revision`. A description column the source lacks is `TableError{UnknownColumn, column, "the table's source has no column <id>"}`.
 - `DescribeTable<F>::invoke` returns `describe(served.description)` (so a model never fills `revision`); it runs on the strand and touches neither the source nor a snapshot. The function result is described once per call; a model whose description does not vary returns the same object each time.
 - `detail::serve<Function>(model, context)` is the only path from a model to its `ServedTable`; `QueryTable::invoke` and `DescribeTable::invoke` call it on the strand, and Task 17a's `resolve` will too. For a plain table it calls `(model.*Function)(context)`; for a typed table (`TableTraits<Function>::row` not `void`) it calls the typed function and builds the description and the `RowsSource` as the next bullet says.
 - `typed<Row>(fn)`: `fn` is `std::shared_ptr<std::vector<Row> const> (Model::*)(TableContext const&)`. The served description's columns are `detail::reflectedColumns<Row>()` in member order, labels `findFieldMeta<Row>(id)->label` or `inferTitle(id)`, key the `keyField` of the record registered for `Row`; the source is `RowsSource<Row>` keyed by that member.
 - `scoped(source, keys)`: a `DataSource` whose snapshot maps its rows, in the shared source's order, onto the shared source's rows whose key is in `keys` (keys the source lacks are skipped); it copies no cell; when the shared source's snapshot pointer changes, the next `snapshot()` rebuilds the row map under a mutex.
 - `bench::WideTableModel` (registered `"WideTableModel"`), process-wide state set by `static void configure(WideTableOptions wide, WideTableOptions small)` (defaults `{100'000, 300, 1}` and `{1'000, 30, 1}`). `configure` may be called at any time, from any test case: it replaces both options under the state's mutex and drops both sources; each source is built lazily on the first table call that needs it after that. A request already holding a source keeps it.
-  - `wide(TableContext const&)`, `small(…)`: the description from the layout (label = id, `group` and `groups` from the layout, `levels` empty), key `id`, one shared `WideTableSource` each, `Services{}`.
+  - `wide(TableContext const&)`, `small(…)`: the description is Task 1's `bench::wideDescription("wide", 300)` and `("small", 30)` (so `levels` is empty in this part; Part B's Task 5 sets it when the slow level lands), key `id`, one shared `WideTableSource` each, `Services{}`.
   - `scoped(…)`: `small`'s source; the description is `small`'s without `d000`…`d005` for every principal except `"extended"` (all 30) and `"restricted"` (also without `t000`…`t006`); `mayRead` is membership in the caller's description.
   - Actions: `EditWideRow{std::int64_t row; std::string column; std::int64_t value;}` sets the cell in `wide`, and in `small` when the row and column are there, and returns `EditWideRowResult{ChangedRows<&WideTableModel::wide> wide; ChangedRows<&WideTableModel::small> small;}` with the changed row's key in each it changed; effects `updatesTable` on `wide` and `small`. `ReplaceWideRows{std::uint64_t seed;}` regenerates both; effects `changesTable` on both.
 
@@ -696,6 +773,23 @@ TEST_CASE("changed rows: updatesTable without its ChangedRows is refused when th
     //   declared = {"Bad": {updates<TableOf<&WideTableModel::wide>>}}) throws EffectsRegistrationError whose problems
     //   contain "action `Bad` declares updates on record `WideTableModel.wide`, but its result holds no `WideTableModel.wide`".
     // NoTableResult is a test struct {std::vector<int> ids;}.
+    // The same call with slots = {"Bad": walkResult<bench::EditWideRowResult>()} resolves, and its actionRecords for
+    // "Bad" name "WideTableModel.wide" at path "wide.rows".
+    // Mutation: the walker without the heldRecord rule (the second call throws the same problem).
+}
+
+TEST_CASE("table registration: one table id in two models is refused when the registries resolve", "[table][registration]") {
+    // Test models UqA and UqB each have a function `rows`. Neither is registered with the macro: a real second
+    // "Table.rows" would make the process registry of this executable invalid for every other case.
+    // static_assert(!std::is_same_v<QueryTable<&UqA::rows>, QueryTable<&UqB::rows>>): the two tables' query actions
+    // are two action types, which under the one id "Table.rows" is what registerActionResultOnce lists as a conflict.
+    // resolveForTesting(records = {}, slots = {"Table.rows": ActionResult{typeid(QueryTable<&UqA::rows>), {}}},
+    //   declared = {}, slotConflicts = {"Table.rows"}) throws EffectsRegistrationError whose problems contain
+    //   "action `Table.rows` is registered by two action types; give each its own id".
+    // The process registry holds no conflict: model::detail::actionResultConflicts() is empty, with WideTableModel's
+    // three tables and this file's test models registered (their ids are all different).
+    // Mutation: QueryTable keyed on the table's id text instead of its function (the static_assert fails: two models'
+    // tables would share one action type and a second table "rows" would silently answer with the first's rows).
 }
 
 TEST_CASE("table registration: rowScoped and derivedFrom are the record's", "[table][registration]") {
@@ -742,24 +836,31 @@ TEST_CASE("table action: a failing table function is an error reply and the mode
 }
 ```
 
-- [ ] **Step 2: Write the failing socket tests** in `tests/net/test_push_tables.cpp`, built on the server-and-two-clients harness of `tests/net/test_push_two_clients.cpp`, with a test model `PtModel` serving tables `first` and `second` over small `VectorSource`s, actions `EditFirst` (→ `ChangedRows<&PtModel::first>`, `updatesTable` first) and `EditBoth` (→ `{ChangedRows<&PtModel::first> first; ChangedRows<&PtModel::second> second;}`, `updatesTable` on both), and an authoriser that refuses principal `bob` both `Table.second` and `EditBoth`. A watch of a record is admitted when the principal may run any action holding it (`remote.hpp:1794-1800`), and `EditBoth` holds `PtModel.second`, so refusing `Table.second` alone would still admit bob:
+- [ ] **Step 2: Write the failing socket tests** in `tests/net/test_push_tables.cpp`, built on the server-and-two-clients harness of `tests/net/test_push_two_clients.cpp`, with a test model `PtModel` serving tables `first` and `second` over small `VectorSource`s, actions `EditFirst` (→ `ChangedRows<&PtModel::first>`, `updatesTable` first), `EditSecond` (→ `ChangedRows<&PtModel::second>`, `updatesTable` second) and `EditBoth` (→ `{ChangedRows<&PtModel::first> first; ChangedRows<&PtModel::second> second;}`, `updatesTable` on both), and an authoriser that refuses principal `bob` `Table.second`, `EditSecond` and `EditBoth`. A watch of a record is admitted when the principal may run any action holding it (`remote.hpp:1794-1800`), and `EditSecond` and `EditBoth` hold `PtModel.second`, so refusing `Table.second` alone would still admit bob:
 
 ```cpp
 TEST_CASE("tables: a principal allowed one table's action is refused the other", "[net][tables]") {
-    // bob (refused Table.second and EditBoth, the only actions holding PtModel.second): watch {PtModel.first} admitted,
+    // bob (refused Table.second, EditSecond and EditBoth, the only actions holding PtModel.second): watch {PtModel.first} admitted,
     // watch {PtModel.second} in refusedRecords; executing Table.second is refused.
     // alice: both admitted.  Mutation: one record for the model (bob is admitted to both or neither).
 }
 TEST_CASE("tables: updatesTable on one table marks only its watchers", "[net][tables]") {
     // c1 watches PtModel.first, c2 PtModel.second. EditFirst changing key 3: c1 receives a change of PtModel.first
-    // with keys [3]; c2 receives nothing within 3 × coalesceWindow.
+    // with keys [3]; c2 receives nothing within 3 × coalesceWindow. Then EditSecond changing key 4: c2 receives
+    // PtModel.second with keys [4]; c1 receives nothing.
+    // Mutation: ChangedRows<F>::heldRecord naming the model's first registered table whatever F is (the registries
+    // refuse EditSecond's updatesTable, or c1 is told of key 4).
 }
 TEST_CASE("tables: an action changing two tables sends each table its keys", "[net][tables]") {
     // EditBoth changing first key 1, second key 2: c1 gets PtModel.first [1]; c2 gets PtModel.second [2].
+    // Mutation: the walk reporting a holder's record at the holder's own path instead of at its `rows` member (no key
+    // is found at "first" or "second", so each watcher gets a change without keys).
 }
 TEST_CASE("tables: a page's columns are the caller's", "[net][tables]") {
     // Spec row "Columns by session" over the socket: WideTableModel's Table.scoped.describe for alice and restricted
     // differ; each one's Table.scoped page lists its own columns and carries its own description's revision.
+    // Mutation: QueryTable::invoke building TableContext from an empty session instead of session::current() (both
+    // principals get the same 24 columns).
 }
 TEST_CASE("tables: a table's reply is built on tableWork", "[net][tables]") {
     // ServerConfig::tableWork = a ThreadPoolExecutor{2} wrapped to record its threads' ids. PtModel.first's source is a
@@ -781,7 +882,7 @@ Expected: compile failure, `BRIDGE_REGISTER_TABLE` undefined.
 - [ ] **Step 5: Run them to see them pass**
 
 Run: `ctest --test-dir build/cl-debug -R "table registration|changed rows|columns by session|typed:|scoped:|table action" --output-on-failure`
-Expected: 9 tests pass. Then the suites the dispatcher change touches: `cmake --build --preset cl-debug --target morph_tests morph_table_tests && ctest --test-dir build/cl-debug --output-on-failure -j 8`, all pass.
+Expected: 10 tests pass. Then the suites the dispatcher change touches: `cmake --build --preset cl-debug --target morph_tests morph_table_tests && ctest --test-dir build/cl-debug --output-on-failure -j 8`, all pass.
 Run: `ctest --test-dir build/linux-everything -L net -R "tables:" --output-on-failure`
 Expected: 5 tests pass; `ctest --test-dir build/linux-everything -L net` all pass.
 
@@ -791,7 +892,7 @@ Extend `"table benchmark: the generic page"` with the `Table.wide` reply of 200 
 
 - [ ] **Step 7: Neighbouring specs, mutations, docs build, commit**
 
-Write `registry.md`'s `BRIDGE_REGISTER_TABLE` section (what the macro emits, its options, the record's name and key, `TableOf`, the walk's rule for a holder's `heldRecord`, the opaque holding, and the admission rule: a principal may watch a table's record when it may run any action holding it, the table's own `Table.<id>` or an action whose result holds its `ChangedRows`, so refusing a table means refusing all of them) and the `invoke` paragraph; `backend.md`'s `tableWork` row and Fan-out bullet. Nothing about `openMembers`, `partialMember` or `announce` (steps 2c, 2d). Apply each mutation; paste the failing lines into the commit body; run the docs build.
+Write `registry.md`'s `BRIDGE_REGISTER_TABLE` section (what the macro emits, its options, the record's name and key, `TableOf`, the walk's rule for a holder's `heldRecord`, the opaque holding, that a table id is unique in the process and what happens when it is not, that both table actions are `Loggable::No`, and the admission rule: a principal may watch a table's record when it may run any action holding it, the table's own `Table.<id>` or an action whose result holds its `ChangedRows`, so refusing a table means refusing all of them) and the `invoke` paragraph; `backend.md`'s `tableWork` row and Fan-out bullet. Nothing about `openMembers`, `partialMember` or `announce` (steps 2c, 2d). Apply each mutation; paste the failing lines into the commit body; run the docs build.
 
 ```bash
 git add include/morph/table/description.hpp include/morph/table/runtime.hpp include/morph/core src/ui/process_state.cpp CMakeLists.txt \

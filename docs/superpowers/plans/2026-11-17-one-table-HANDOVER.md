@@ -4,17 +4,17 @@ The implementation plan for `docs/spec/table/table.md` and `docs/spec/table/edit
 
 ## Status
 
-The plans go through review rounds with Fable until a review reports no Critical or Important issue. Every finding from round 1 (A, B, D, E, F, G) and round 2 (C) is applied. Applying them added Cross-part decisions 30–36 to the index and extended #19 and #28.
+The plans go through review rounds with Fable until a review reports no Critical or Important issue. Every finding through round 2 (all seven parts; round 3 for C) is applied. Applying them added Cross-part decisions 30–53 to the index and extended #19, #20 and #28.
 
 | Part | File | State |
 |---|---|---|
-| A — Tasks 0–2 | `…-a-foundation.md` | Round-1 fixes applied. Next review: round 2. |
-| B — Tasks 3–7 | `…-b-slow-columns.md` | Round-1 fixes applied; aligned with #30 (`Session::read` yields text). Next review: round 2. |
-| C — Task 8 | `…-c-engine-config.md` | Round-2 fixes applied. Next review: round 3. |
-| D — Tasks 9–11 | `…-d-screen.md` | Round-1 fixes applied; aligned with #30, #32–#35. Next review: round 2. |
-| E — Tasks 12–14, 16 | `…-e-configure.md` | Round-1 fixes applied. Next review: round 2. |
-| F — Tasks 15, 17 | `…-f-display-and-acting.md` | Round-1 fixes applied; `tableMessage` points to Task 9d. Next review: round 2. |
-| G — Tasks 19–24 | `…-g-editing.md` | Round-1 fixes applied; marks drawn per cell (#28). Next review: round 2. |
+| A — Tasks 0–2 | `…-a-foundation.md` | Round-2 fixes applied. Next review: round 3. |
+| B — Tasks 3–7 | `…-b-slow-columns.md` | Round-2 fixes applied; aligned with #30 (`Session::read` yields text). Next review: round 3. |
+| C — Task 8 | `…-c-engine-config.md` | Round-3 fixes applied. Next review: round 4. |
+| D — Tasks 9–11 | `…-d-screen.md` | Round-2 fixes applied; aligned with #30, #32–#35. Next review: round 3. |
+| E — Tasks 12–14, 16 | `…-e-configure.md` | Round-2 fixes applied. Next review: round 3. |
+| F — Tasks 15, 17 | `…-f-display-and-acting.md` | Round-2 fixes applied; `tableMessage` points to Task 9d. Next review: round 3. |
+| G — Tasks 19–24 | `…-g-editing.md` | Round-2 fixes applied; marks drawn per cell (#28). Next review: round 3. |
 
 Nothing in the plans has been compiled. Where a part rests on reading code rather than building it, it says so. For example, G's claim that glaze cannot reflect a base class's members comes from reading `to_tuple.hpp`, and Task 24's first step checks it with a `static_assert`.
 
@@ -23,7 +23,7 @@ Nothing in the plans has been compiled. Where a part rests on reading code rathe
 1. **Run a fresh Fable review of all seven parts.** Each review checks:
    - spec fidelity;
    - executability against the real code;
-   - consistency with sibling parts and with the index's decisions (1–36);
+   - consistency with sibling parts and with the index's decisions (1–53);
    - plan quality per `superpowers:writing-plans`.
 
    Reviewers report only Critical or Important issues, or "NO ISSUES".
@@ -58,3 +58,9 @@ The plans deviate from or settle the spec on each of these. Confirm each one, th
 14. A `Timestamp` in a `rows` table becomes a `DateTime` cell of whole seconds, rounded down (Task 11a).
 15. A preferences store has no conditional write, so two model instances can overshoot the stored-state quota by one document (Task 9c).
 16. After a `Conflict`, if the reload finds nothing stored, the one retry saves with an empty `expected` (Task 14b). Question 9 is settled in the plan.
+17. A `Together` group takes 0, or 2 to k, include entries; the spec says at least 2 (table.md "Column groups"). With 0 it filters by its exclude entries alone. Task 8b's commit corrects the spec.
+18. A table id must be unique in the process, not only in its model: an action id registered by two action types fails every effects lookup (question 6 restated with the evidence, `effects.hpp`). Task 2 pins and tests the rule.
+19. A page that reaches the client through the query cache keeps a fractional number as a decimal (index #46): an opaque entry's reply is decoded with a table-aware variant of `valueFromJson`.
+20. A typed table with a `MeasureValue` member gets its unit registry from a new model hook, `tableUnits(TableContext const&)` (index #49), which table.md does not name.
+21. Part E's configuration menus settle three things the spec does not state: the date tree is include-only (ticked buckets, touching ones merged; over 32 entries nothing applies and the status line says "Too many dates to list; filter with a condition"); the column-group chooser has a "Remove group" control; and when the ticked and unticked sides are equal, the unticked side is sent (an exclude).
+22. Part D's stated deviations 6–8: a `rows` column is `Number` only through a literal `kind`; a new description revision mounts the table again (window, sort, filters and selection survive; realized cells and scroll offset do not); the preference names `morph.tableState` and scopes starting `morph.table` are reserved, so a person cannot reset their own quota.
