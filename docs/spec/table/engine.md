@@ -304,6 +304,10 @@ edited included; the next repair holds them again.
   model's translation and reports every disagreement. `compileFilterGuarded` is the one compile step `apply`,
   `Engine` and `planQuery` share, so a collator or date parser that throws is `ServiceFailed` in all three. The
   design is [`database_pages.md`](database_pages.md).
+- A table whose rows are cheap and whose slow columns load later marks the unloaded cells `Unloaded`: an unloaded cell
+  sorts after the empties, a filter over it is three-valued, and its row is undecided rather than rejected. A column
+  names the data level its cells need, a query names the columns it shows, and a `Page` says which of its cells are
+  still coming. The design is [`table.md`](table.md).
 - `escapeLikePattern` is for a database-backed server that maps `contains` to
   SQL `LIKE`: it keeps `%` and `_` ordinary.
 - `TableError` serialises with its code by name (`"unsupportedOperator"`), so a
@@ -470,6 +474,7 @@ against `wire::decode` both ways.
 
 - `docs/superpowers/specs/2026-10-08-table-engine-design.md` — the
   program-level design this module implements.
+- [table.md](table.md) — the one table every surface uses: descriptions, the pipeline, unloaded cells, caches, configuration and budgets.
 - [../core/callback_scope.md](../core/callback_scope.md) — the lifetime gate on
   every completion.
 - [../core/executor.md](../core/executor.md) — owner and worker executors.
