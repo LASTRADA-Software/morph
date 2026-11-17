@@ -206,6 +206,11 @@ message naming the column. The predicate runs after `validate`, so the usual ref
 that the refusals are equal values. Which columns a client may offer to sort and filter belongs in the schema and is
 not part of this seam.
 
+A model that asks for it (`Residual::Allow`) is not refused: it receives a prefilter plan, fetches the rows that
+plan admits, and `finishPlan` answers the whole query over them in C++
+([`table.md`, "What a store cannot express"](table.md#what-a-store-cannot-express)). The refusal above is what
+a model that does not ask receives.
+
 ## Totals
 
 `Page<Row>` has `TotalKind totalKind = TotalKind::Exact`, with `enum class TotalKind { Exact, AtLeast }`, written in JSON
@@ -213,6 +218,9 @@ by name, `"exact"` and `"atLeast"`, as the module's other wire enums are:
 
 - `Exact`: `total` is the count of the filtered view.
 - `AtLeast`: `total` is a lower bound and the view has at least that many rows; a client shows "100,000 or more".
+  A total is a lower bound for one of two reasons: the count stopped at the cap, or the filter cannot yet decide some
+  rows because a cell it reads is not loaded ([`table.md`, "Totals"](table.md#totals)), and `Page::undecided`
+  is then not zero.
 - `total` absent: not counted.
 
 `apply` reports `Exact` at or below `QueryLimits::totalCap` and omits the total above it. A model
@@ -225,6 +233,10 @@ than `totalCap`, reports `AtLeast` with `total = totalCap`. Rules:
 - A `limit` of zero returns the count and no rows.
 - The conformance helper holds an `Exact` total to the true count on either side of the cap: where `apply` omits the
   total it counts the view itself.
+- When the oracle reports undecided rows, a total at or below the cap is `AtLeast` on both sides and equals the count
+  of the rows the filter has admitted; the helper holds the model to that count, to that kind and to the same
+  `undecided`. Above the cap the rule is the cap's: `AtLeast` with `total = totalCap`, or an `Exact` count, which a
+  model may report only when `undecided` is zero.
 
 `PageWindow<Row>::totalKind()` returns the kind of the latest reply that carried a total; `reset` clears it with the
 total. `PageWindow` stops fetching past an `Exact` total only; past an `AtLeast` total it keeps fetching until a

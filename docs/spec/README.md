@@ -136,7 +136,10 @@ rules, exact values and reactive session, headless ·
 mapping for a table, on and off the owner thread, and `table::apply` for a
 server ·
 [`table/database_pages.md`](table/database_pages.md) — paging a table that
-lives in a database: `planQuery`, `Page::totalKind` and the conformance helper
+lives in a database: `planQuery`, `Page::totalKind` and the conformance helper ·
+[`table/table.md`](table/table.md) — the one table every surface
+uses: a table as a description any model can offer, the single pipeline,
+unloaded cells and levels, the caches, configuration, and the budgets
 
 **Reactive state and control**
 [`reactive/signals.md`](reactive/signals.md) ·
