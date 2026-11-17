@@ -227,7 +227,8 @@ struct TableColumn {
   `errorCount` counts them wherever the row is.
 - **A row at once.** A column whose `EditInfo` names a `RowEdit` collects the row's edits while focus stays in the
   row and commits them together when focus leaves it, or on `Ctrl+Enter`. A refusal puts each `FieldError` on
-  its cell and keeps focus in the row. This is for a record whose members are checked together, and
+  its cell and, while the table has focus, moves focus back to the first refused cell: focus has left the row
+  by the time the reply arrives. This is for a record whose members are checked together, and
   `editMode: "row"` on the table chooses it for all its columns.
 - **Who may edit.** The action's authorisation is the rule: a principal the authoriser refuses for the action
   sees the column read-only, which the client learns from the catalog's permitted actions. A row is read-only
@@ -235,6 +236,10 @@ struct TableColumn {
   ([`table.md`](table.md#how-a-column-shows-its-cells)). `TableColumn::edit` absent is read-only.
 - A cell that is unloaded, or in a busy row ([`table.md`](table.md#rows-at-work-rows-that-failed)), takes no
   edit: an edit of a value the user has not seen is an overwrite of whatever arrives.
+- **A table's own edits make no row busy.** They are not registered as runs in the table's row states: a cell
+  being saved is stale, not busy, so a second cell of the row can be entered while the first is saving, and
+  its edit is queued behind it. A row is busy only through another run that names it, such as a document's
+  mutation or another table's action.
 - **No row is held still.** An edit in a sorted or filtered column moves its row, or takes it out of the view,
   when the window next fetches it. The walk moves by view position at the moment of the commit
   ([Walking](#walking)), so entering a column of a sorted table continues down the rows that were below, and
@@ -355,8 +360,9 @@ A grid of a form adds and removes rows of its field.
 
 - `appendRows` (a literal flag) adds a row by the walk past the end, and offers "Add row" under the grid.
 - The cell's and the table's menus offer "Insert row above", "Insert row below" and "Delete row" (or "Delete
-  rows" for a selection); `Ctrl+Shift+=` inserts below and `Ctrl+-` deletes, as in a spreadsheet. A deletion of
-  rows that hold values asks once, in the table's status line, with "Undo" until the next change.
+  rows" for a selection); `Ctrl+Shift+=` inserts below and `Ctrl+-` deletes, as in a spreadsheet. A deletion
+  happens at once, with no question first: the status line says "Deleted {n} rows" with "Undo" until the next
+  change.
 - The field's `minItems` and `maxItems` bound them: the entries are disabled at a bound, and say why.
 - `rowsFixed` (a literal flag) offers none of them: the rows are the record's, such as one per sieve of a
   standard series.
@@ -515,11 +521,11 @@ Every key is optional, and a table that names none of them is what [`table.md`](
 | Choices per row | Options depending on a row member are fetched once per distinct value. Mutation: a fetch per row. | `tests/test_ui_grid.cpp` |
 | Paste, fill, clear | A 3 × 4 block over a read-only column keeps its shape, drops and counts those values, adds rows to `maxItems` and reports the rest; fill down and clear touch editable cells only; one paste is one derive round. Mutation: a paste that shifts values past a read-only cell. | `tests/test_ui_grid.cpp` |
 | Cell selection | `selection` is the two corners by key and column; `Shift`+arrows extend it; `cells` on a model's table is refused. Mutation: corners stored as view positions, which a sort moves to other rows. | `tests/test_ui_grid.cpp` |
-| Rows of a grid | Insert and delete at `minItems` and `maxItems` are disabled; a deletion of rows with values offers "Undo"; `rowsFixed` offers none. Mutation: bounds unchecked. | `tests/test_ui_grid.cpp` |
+| Rows of a grid | Insert and delete at `minItems` and `maxItems` are disabled; a deletion removes the rows at once and offers "Undo"; `rowsFixed` offers none. Mutation: bounds unchecked. | `tests/test_ui_grid.cpp` |
 | A sorted grid keeps its record | Sorting a grid by a column and editing a row submits the array in its entered order with the edit in place; an added row shows at the end until the sort changes. Mutation: a source that reorders the field's rows. | `tests/test_ui_grid.cpp` |
 | Submission | An explicit submit with a cell editor open sends the typed value; a field error `specimens[3].mass` lands on that cell. Mutation: submit before the editor commits. | `tests/test_ui_grid.cpp` |
 | What changed | Typing in one cell marks that cell and its row, not its neighbours; "Revert cell" restores the loaded value; a derive reply moves no snapshot. Mutation: a mark per `ObjectArray`, which marks every cell. | `tests/test_ui_grid.cpp` |
-| Cells of a model's table | An edit commits through the column's action, is stale until the reply and modified until the row's next fetch, and shows a `FieldError` on refusal; `row` mode commits once when focus leaves the row; a draft survives its row scrolling out and back, and follows a `from`; a principal refused the action sees the column read-only. Mutation: drafts held by the window, which loses them on scroll. | `tests/test_ui_table_model.cpp`; `tests/net/test_push_tables.cpp` |
+| Cells of a model's table | An edit commits through the column's action, is stale until the reply and modified until the row's next fetch, and shows a `FieldError` on refusal; `row` mode commits once when focus leaves the row and a refusal brings focus back to the first refused cell; a second cell of a row whose first edit is saving takes an edit; a draft survives its row scrolling out and back, and follows a `from`; a principal refused the action sees the column read-only. Mutation: drafts held by the window, which loses them on scroll. | `tests/test_ui_table_model.cpp`; `tests/net/test_push_tables.cpp` |
 | Bands | A band over three columns draws once; moving one away draws it over two runs; across the pinned edge it draws as two parts; hiding all three draws none; the band's unit is not repeated by its columns. Mutation: a band drawn over its first and last column's span, which covers a foreign column. | `tests/test_ui_mount.cpp`; `tests/qt_quick` |
 | Spans | A cell spanning two rows and three columns covers them; the walk passes over covered cells; a paste onto a covered cell drops the value; moving a covered column cuts the span. Mutation: covered cells left focusable. | `tests/test_ui_mount.cpp`; `tests/test_ui_grid.cpp` |
 | Summary rows | A grid's `mean` and `stdev` follow every committed value exactly and follow the filter; group summaries are per run; a model-backed table refuses `summaries`. Mutation: summaries over the source rows, which ignore the filter. | `tests/test_ui_grid.cpp` |
