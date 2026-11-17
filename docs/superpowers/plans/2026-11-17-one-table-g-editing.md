@@ -53,35 +53,42 @@ Names the roadmap pins are used as it gives them. Rows marked **assumed** are no
 | Task 3 | `table::Unloaded`, `TableErrorCode::SourceContract`, `CellEdits::commit` refusing an unloaded cell with `FieldError{"…", "not loaded yet"}` | roadmap, table.md |
 | Task 8d | `table::ColumnLayout::{setPinned, pinned, value, apply}` with `value()`/`apply` over `table::ColumnLayoutValue{order, hidden, pinned, widths, groups, units}`; existing `setVisible`, `visible`, `move`, `order` | index #7, Part C |
 | Task 9 | `ui::TableRows`, `EngineRows`, `WindowRows`, `TableRowRef`, `TableCountsView`, `SortChain`; `WindowRows::setDescription(table::TableDescription)` and `onStaleDescription(std::function<void()>)` (the lowering refetches the description and calls `setDescription`) | roadmap, Part D |
-| Task 9 | `EngineRows` constructible over any `table::DataSource&` | **assumed** (Part D does not show its constructor) |
+| Task 9 | `EngineRows(std::shared_ptr<table::DataSource> source, RecordOf recordOf, table::EngineOptions options)`; `struct RowRecord { table::RowId key; Value row; }`; `using RecordOf = std::function<RowRecord(table::RowSnapshot const&, std::size_t sourceRow)>` (an owning record, memoised by `EngineRows`); `TableRows::row(index)` empty for a row not fetched yet, `TableRows::total()` | index #21, #28, Part D |
 | Task 9 | `ui::TableStatus{counts, state, retry, message, shown}`, `Table::status`; `ui::TableColumn::id`; `ui::TableArrangement{visible, pinned, widths}`, `Table::arrangement` | index #11, #14, Part D |
 | Task 10a | Mount-held focus `(row key, column id)`; `TableWidget::setFocusCell(std::size_t viewRow, std::size_t column)`, `setOnFocusMove(std::function<void(FocusMove)>)`, `enum class FocusMove { Up, Down, Left, Right, Home, End, First, Last, PageUp, PageDown }` | Part D |
 | Task 11 | `ui::ValueRowsSource` | roadmap |
 | Task 12b | `IViewBackend::copyText(std::string_view) -> bool` | index #12, Part E |
-| Task 12c | `void ScreenCore::tableMessage(ElementState& table, std::string text)`; every grid and model-table message is posted through it | index #11, Part E |
+| Task 9d | `void ScreenCore::tableMessage(ElementState& table, std::string text)` (`tableMessage(table, "")` clears the message; 6 s hold, `kStatusMessageHold`); every grid and model-table message is posted through it | index #11, Part D |
 | Task 15 | `ui::formatCell(table::Cell const&, table::TableColumn const&, ui::FormatContext const&, DisplayUnits const& = {}) -> std::string`; `ui::FormatContext` (`ui/expression.hpp`), `ui::localeFacts`, `ui::withoutGrouping`; `TableColumn::{display, tone, tooltip}`; `TableDescription::{rowTone, rowLock}` | index #9, Part F |
-| Task 17a | `forms::DeclaresSchemaValue<T>` (a type's `schemaValue()` returning `{keyword, name}`, written by `annotateSchemaMarker`), `name` the `RecordInfo::name` in `model::recordRegistry()` whose `type` is `typeid(TableOf<fn>)`; `TableInputKind`, `TableInput{member, record, kind}`, `tableInputsOf(std::string_view schemaJson)`, `RunObserver` | Part F |
+| Task 17a | `forms::DeclaresSchemaValue<T>` (a type's `schemaValue()` returning `{keyword, name}`, written by `annotateSchemaMarker` on the **property** of a member of that type), `name` the `RecordInfo::name` in `model::recordRegistry()` whose `type` is `typeid(TableOf<fn>)`; `TableInputKind`, `TableInput{member, record, kind}`, `tableInputsOf(std::string_view schemaJson)` (top-level properties only), `RunObserver` (called by `MutationRuntime`, so only for runs the session's mutations make) | Part F |
+| Task 17a | `ui::StatusEntry{std::string id; std::string label;}` (by value); `TableStatus::{entries, standing, standingEntries}`; `ScreenCore::tableMessage(ElementState&, std::string text, std::vector<StatusEntry> entries)`; `TableWidget::setOnStatusEntry(std::function<void(std::string)>)`. A transient notice with a choice is a message with entries; a state that lasts while its source holds is `standing` | index #19, Part F |
+| Task 17d | `TableOptions::cellMenu` (`std::function<std::vector<MenuItem>(Key const& row, std::size_t column)>`: built-ins, separator, the application's), `TableWidget::setCellMenu`; Part E's `TableOptions::menu(std::optional<std::size_t>)` | Part F, Part E |
 | Task 17c | `ChangedRow::from`, `FailedRow`, `ChangedRows::failed`; `ui::RowStates` via `TableRows::states()` (`isBusy(key)`, `failure(key)`, `busyCount()`), `TableRows::moveKey(from, to)`, `ui::lockText(TableRowRef const&, TableDescription const&)`, `ui::refusesEdit(TableRows const&, std::int64_t index, TableDescription const&)` | index #10, Part F |
 
 ## File structure
 
 | File | Responsibility | Task |
 |---|---|---|
-| `include/morph/ui/view.hpp` | `KeyOutcome`; `Table::onKey`, `onText`; `RowSpan::columns`; `TableRowView::summary`; `CellMarks`; `BandRun`; `Table::bands` | 19, 22 |
-| `include/morph/ui/mount.hpp` | The focus chain, `Mounted::focusNext/focusPrevious`; cell marks; `bandRuns`, `columnUnitShown`, `bandedHeaderName`; `cutSpans`; summary rows | 19, 22 |
-| `include/morph/ui/backend.hpp` | `TableWidget::setOnText`, `setCellMarks`, `setRowModified`, `setBands`, `setRowSummary` (all with no-op defaults); the Tab contract | 19, 22 |
+| `include/morph/ui/view.hpp` | `CellRef`, `KeyOutcome`; `Table::onKey`, `keyChords`, `onText`, `onFocusCell`, `onActivateCell`, `onFocusOut`, `editing`, `editor`; `CellMarks`, `MarkedCell`, `markedCell`, `TableRowLook::modified`; `CellRange`, `Table::cellSelection`, `onCellSelect`; `RowSpan::columns`; `TableRowView::summary`; `BandRun`; `Table::bands` | 19, 21, 22 |
+| `include/morph/ui/mount.hpp` | The focus chain, `Mounted::focusNext/focusPrevious`; the cell editor in place of a cell; cell marks bound in each cell's own scope (`MarkedCell`); the cell rectangle; `bandRuns`, `columnUnitShown`, `bandedHeaderName`; `cutColumns`; summary rows | 19, 21, 22 |
+| `include/morph/ui/backend.hpp` | `TableWidget::setOnText`, `setOnCellClick`, `setOnFocusOut`, `setCellEditor`, `setCellMarks`, `setRowModified`, `setCellSelection`, `setOnCellSelect`, `setBands`, `setRowSummary` (all with no-op defaults); the Tab contract | 19, 21, 22 |
+| `include/morph/ui/testing/recording_backend.hpp` | Drivers `typeInto`, `clickCell`, `focusOut`, `selectCells`; records `marks:<column>`, `modified`, `editor:<column>`, `cellSelection` | 19, 21 |
+| `include/morph/forms/engine/field_control.hpp` (new) | The scalar controls of a field, moved out of `form_view.hpp` so `grid.hpp` and `form_view.hpp` both include them and neither includes the other's includer | 19 |
+| `include/morph/forms/engine/form_view.hpp` | Includes `field_control.hpp` and `ui/grid.hpp`; draws an `ObjectArray` whose widget is `grid` with `ui::formGrid` | 19 |
 | `include/morph/ui/form_rows.hpp` (new) | `FormRowsSource` | 19 |
-| `include/morph/ui/grid.hpp` (new) | `GridColumn`, `GridOptions`, `CellFacts`, `cellReadOnly`, `GridSource`, `FormGridSource`, `GridRows`, `GridController`, `PasteResult`, `pasteMessage`, `FixedGridSource`, `ModelGridSource`, `summaryScopeRows` | 19–24 |
+| `include/morph/ui/grid.hpp` (new) | `GridColumn`, `GridOptions`, `CellFacts`, `cellReadOnly`, `GridSource`, `FormGridSource`, `GridRows`, `GridController`, `formatOf`, `formGrid`, `PasteResult`, `pasteMessage`, `FixedGridSource`, `ModelGridSource`, `summaryScopeRows` | 19–24 |
 | `include/morph/forms/derive.hpp` (new) | `DeriveOf`, `Derived`, `derived<>()`, `clearDerived`, `DeriveOptions`, `DeriveRound`, `DeriveLoad`, `DeriveState` | 20 |
 | `include/morph/forms/forms.hpp` | `FieldMeta::derived`, `withDerived()`; `x-derived`; row types' `computedFields` in the schema and in `recomputeAll` | 20 |
-| `include/morph/forms/engine/field_model.hpp` | `FieldSpec::derived`, `minItems`, `maxItems` | 20, 21 |
+| `include/morph/forms/engine/field_model.hpp` | `FieldSpec::computed`, `derived`, `minItems`, `maxItems` | 19, 20, 21 |
 | `include/morph/forms/engine/form_session.hpp` | Per-cell snapshots, `modified`, `rowModified`, `revert`; `field()` by row key; rounds; `insertRow`, `removeRows`, `restoreRows`; row-scoped and shared Choice options | 19–21 |
 | `include/morph/core/registry.hpp` | `clearDerived` in `prepareAction` and `evaluateAction` | 20 |
 | `include/morph/table/description.hpp` | `BandInfo`, `TableDescription::bands`, `checkBands`; `TableColumn::edit` | 22, 24 |
-| `include/morph/table/edits.hpp` | `CellEdit`, `RowEdit`, `EditInfo`, `checkEdits`; `CellEdits` row commits, drafts by key, `moveRow`, `keepColumns` | 24 |
+| `include/morph/table/edits.hpp` | `CellEdit`, `RowEdit` (each with an in-class glaze meta), `EditInfo`, `checkEdits`; `CellEdits` row commits, drafts by key, `moveRow`, `keepColumns`, `rowAbsent` | 24 |
+| `include/morph/forms/forms.hpp` | `annotateSchemaRoot<A>`: the action's own `schemaValue()` at the schema root | 24 |
 | `src/ui/document.cpp`, `src/ui/interpreter.cpp`, `include/morph/ui/interpreter.hpp` | Vocabulary, refusals, lowering, element values | 19–24 |
 | `src/qt_quick/table.cpp` + QML, `src/tui/table_widget.cpp` | Editors in cells, marks, bands, spans, summary rows | 19, 22 |
 | `tests/test_ui_grid.cpp` (new), `tests/forms/test_forms_derive.cpp` (new), `tests/grid_test_support.hpp` (new) | Grid and derive tests and their fixture | 19–23 |
+| `tests/tui/test_tui_table.cpp` | The terminal grid: editor in a cell, Tab, bands | 19, 22 |
 
 ## Review Focus
 
@@ -102,30 +109,37 @@ Names the roadmap pins are used as it gives them. Rows marked **assumed** are no
 **Files:**
 - Modify: `include/morph/ui/view.hpp`, `include/morph/ui/backend.hpp`, `include/morph/ui/mount.hpp`, `include/morph/ui/testing/recording_backend.hpp`
 - Create: `include/morph/ui/form_rows.hpp`, `include/morph/ui/grid.hpp`, `tests/grid_test_support.hpp`, `tests/test_ui_grid.cpp` (add to `morph_tests` in `tests/CMakeLists.txt`)
-- Modify: `include/morph/forms/engine/form_session.hpp`, `include/morph/forms/engine/form_view.hpp` (an `ObjectArray` whose widget is `grid` draws `ui::formGrid`), `src/ui/document.cpp`, `src/ui/interpreter.cpp`, `include/morph/ui/interpreter.hpp`, `tests/ui_interpreter_support.hpp` (catalog schema `Lims_RecordSpecimens`)
-- Modify: `src/qt_quick/table.cpp` and its QML, `src/tui/table_widget.cpp` (cell editors, `setOnText`, marks); `tests/qt_quick/test_qt_quick_table.cpp`
-- Docs: `docs/spec/ui/view_tree.md`, `docs/spec/ui/backend_contract.md` (focus chain, `focusNext`/`focusPrevious`, `setOnText`, Tab delivered to a widget that declares it), `docs/spec/forms/engine.md` (the grid widget leaves "Not supported"; per-cell snapshots, `modified`, `revert`), `docs/spec/ui/document.md`, `docs/spec/ui/interpreter.md` (`form`/`field` on `table`, the `grid` overlay, `enterMoves`, `walk`, element values), `docs/spec/qt_quick/backend.md` (editors inside cells, cell and row marks), `docs/spec/table/table.md` (check it points to editing.md and lists `TableColumn::edit`, `TableDescription::bands`; add what is missing).
+- Create: `include/morph/forms/engine/field_control.hpp` (the helpers `isSet` … `controlCommon`, `optionSelect` and every scalar case of `fieldControl`, moved verbatim from `form_view.hpp` into `forms::detail::engine::scalarControl(FieldState& state)`; it includes `form_session.hpp` and `ui/view.hpp`, never `form_view.hpp` or `grid.hpp`)
+- Modify: `include/morph/forms/engine/form_session.hpp`, `include/morph/forms/engine/field_model.hpp` (`FieldSpec::computed`), `include/morph/forms/engine/form_view.hpp` (includes `field_control.hpp` and `../../ui/grid.hpp`; `fieldControl` calls `scalarControl` for every scalar kind and draws an `ObjectArray` whose `spec().widget == "grid"` with `ui::formGrid`), `src/ui/document.cpp`, `src/ui/interpreter.cpp`, `include/morph/ui/interpreter.hpp`, `tests/ui_interpreter_support.hpp` (catalog schema `Lims_RecordSpecimens`)
+- Modify: `src/qt_quick/table.cpp` and its QML, `src/tui/table_widget.cpp` (cell editors, `setOnText`, `setOnCellClick`, `setOnFocusOut`, `setCellEditor`, marks); `tests/qt_quick/test_qt_quick_table.cpp`, `tests/tui/test_tui_table.cpp`
+
+**The include order.** `fieldControl` (the forms control a cell editor is) lives in `form_view.hpp`, and `form_view.hpp` must draw a grid, so `grid.hpp` including `form_view.hpp` while `form_view.hpp` includes `grid.hpp` would be a cycle. The scalar controls move to `field_control.hpp`; `grid.hpp` includes `field_control.hpp`, `form_session.hpp`, `ui/view.hpp`, `ui/table_rows.hpp` and `ui/expression.hpp`; `form_view.hpp` includes `grid.hpp`. Verified against the code: `form_view.hpp` includes `ui/view.hpp`, `form_session.hpp`, `overrides.hpp` (lines 25–33) and defines `fieldControl` at line 210, whose scalar cases read no `ViewOptions` member (only the `Object`/`ObjectArray` cases do, through `fieldCell`).
+- Docs: `docs/spec/ui/view_tree.md` (`markedCell`: a cell's marks are its cell view's, bound with the cell and rebound with it), `docs/spec/ui/backend_contract.md` (focus chain, `focusNext`/`focusPrevious`, `setOnText`, Tab delivered to a widget that declares it), `docs/spec/forms/engine.md` (the grid widget leaves "Not supported"; per-cell snapshots, `modified`, `revert`), `docs/spec/ui/document.md`, `docs/spec/ui/interpreter.md` (`form`/`field` on `table`, the `grid` overlay, `enterMoves`, `walk`, element values), `docs/spec/qt_quick/backend.md` (editors inside cells, cell and row marks), `docs/spec/table/table.md` (check it points to editing.md and lists `TableColumn::edit`, `TableDescription::bands`; add what is missing).
 
 **Interfaces:**
-- Consumes: `ui::TableRows`, `EngineRows` (Task 9); `ValueRowsSource` (Task 11); `ui::formatCell` (Task 15); Task 10a's mount-held focus, `TableWidget::setFocusCell(viewRow, column)` and `setOnFocusMove(FocusMove)`; `ui::TableColumn::id`, `Table::arrangement` and `TableStatus::message` (Task 9); `ScreenCore::tableMessage` (Task 12c); `forms::FormSession`, `FieldState`, `RowState`, `forms::detail::engine::fieldControl` (existing).
+- Consumes: `ui::TableRows`, `EngineRows` (Task 9); `ValueRowsSource` (Task 11); `ui::formatCell` (Task 15); Task 10a's mount-held focus, `TableWidget::setFocusCell(viewRow, column)` and `setOnFocusMove(FocusMove)`; `ui::TableColumn::id`, `Table::arrangement` and `TableStatus::message` (Task 9); `ScreenCore::tableMessage` and `TableStatus::{standing, standingEntries}`, `StatusEntry` (Tasks 9d, 17a; index #19); `TableOptions::cellMenu` (Task 17d); `forms::FormSession` (`options()` gives `locale`, `bcp47`, `datePattern`, `dateTimePattern`), `FieldState`, `RowState`, `forms::detail::engine::fieldControl` (existing, its scalar part moved to `scalarControl`).
 - Produces:
-  - `view.hpp`: `struct CellRef { Key key; std::string column; bool operator==(CellRef const&) const = default; };` `Table::focus` (`std::optional<Prop<std::optional<CellRef>>>`: when set, the table's focus is the grid's, and the mount shows it with Task 10a's `setFocusCell(viewRow, place in the layout)`) and `Table::onFocusCell` (`std::function<void(CellRef)>`: a click or a `FocusMove` the mount resolves to a cell, handed to the grid instead of moving the mount's own focus); `enum class KeyOutcome : std::uint8_t { Handled, Ignored, FocusNext, FocusPrevious };` `Table::onKey` (`std::function<KeyOutcome(std::string const& chord)>`), `Table::keyChords` (`std::vector<std::string>`), `Table::onText` (`std::function<void(std::string)>`); `struct CellMarks { bool readOnly = false; bool modified = false; bool error = false; bool stale = false; bool muted = false; bool operator==(CellMarks const&) const = default; };` `TableRowView::marks` (`std::optional<Prop<std::vector<CellMarks>>>`, one per column) and `TableRowView::modified` (`std::optional<Prop<bool>>`).
-  - `backend.hpp`: `virtual void TableWidget::setOnText(std::function<void(std::string)> onText) {}`; `virtual void TableWidget::setCellMarks(Widget& row, std::size_t column, CellMarks const& marks) {}`; `virtual void TableWidget::setRowModified(Widget& row, bool modified) {}`. Contract: a widget whose `setKeys` lists `Tab` or `Shift+Tab` receives them instead of moving focus.
+  - `view.hpp`: `struct CellRef { Key key; std::string column; bool operator==(CellRef const&) const = default; };` `Table::focus` (`std::optional<Prop<std::optional<CellRef>>>`: when set, the table's focus is the grid's, and the mount shows it with Task 10a's `setFocusCell(viewRow, place in the layout)`) and `Table::onFocusCell` (`std::function<void(CellRef)>`: a click or a `FocusMove` the mount resolves to a cell, handed to the grid instead of moving the mount's own focus); `Table::onActivateCell` (`std::function<void(CellRef)>`: a double click on a cell); `Table::onFocusOut` (`std::function<void()>`: focus left the table's widget and everything inside it, an open editor included); `Table::editing` (`std::optional<Prop<std::optional<CellRef>>>`) and `Table::editor` (`std::function<Node(CellRef const&)>`): while `editing` names a cell, the mount builds `editor(cell)` once, mounts it as a child of that cell's row widget, calls `TableWidget::setCellEditor(row, column, &widget)` and `widget.focus()`; when `editing` changes it calls `setCellEditor(row, column, nullptr)` and unmounts the editor (a focused cell's row stays realized, Task 10a, so the editor's row is never pooled while it is open); `enum class KeyOutcome : std::uint8_t { Handled, Ignored, FocusNext, FocusPrevious };` `Table::onKey` (`std::function<KeyOutcome(std::string const& chord)>`), `Table::keyChords` (`Prop<std::vector<std::string>>`, re-declared to the backend with `setKeys` on each change), `Table::onText` (`std::function<void(std::string)>`); `struct CellMarks { bool readOnly = false; bool modified = false; bool error = false; bool stale = false; bool muted = false; bool operator==(CellMarks const&) const = default; };` Marks are a cell's, drawn by its cell view (index #28), not a row's: `struct MarkedCell { Node content; Prop<CellMarks> marks; };` and `[[nodiscard]] Node markedCell(Node content, Prop<CellMarks> marks)` — a node a `TableSource::cellView` returns (or a cell of a `TableRowView`). The mount mounts `content` as the cell and binds `marks` in the cell's own scope, calling `TableWidget::setCellMarks(row, column, marks)` (`column` the cell's index into `Table::columns`, as `setCellLoad` takes it) after the row's key, on every change, and whenever a pooled cell is attached to another row widget (Task 10a), whether or not the marks changed. Because the binding lives with the cell and reads the cell's own row signal, a pooled cell rebound to another row (its signal set) re-evaluates its marks with its content; nothing per row holds them. Anywhere but a table cell a `MarkedCell` mounts its content and its marks are not read. The row's own mark is `TableRowLook::modified` (`std::optional<Prop<bool>>`, bound in the row's scope by `rowView`; the mount calls `TableWidget::setRowModified`), beside Task 9d's `tone`, `label`, `spans` and `heading`.
+  - `backend.hpp` (every new member has a default that does nothing): `virtual void TableWidget::setOnText(std::function<void(std::string)> onText)` (printable text typed while a cell has focus and no editor is open); `virtual void TableWidget::setOnCellClick(std::function<void(std::size_t viewRow, std::size_t column, bool doubleClick)> onClick)` (`column` the place in the layout, as `setFocusCell` takes it; a single click calls it with `false`, the second click of a double click with `true`); `virtual void TableWidget::setOnFocusOut(std::function<void()> onFocusOut)` (focus moved to a widget outside the table, its editor and its popups); `virtual void TableWidget::setCellEditor(Widget& row, std::size_t column, Widget* editor)` (draws `editor`, a child of `row`, over the cell's area in place of its content; null draws the cell again); `virtual void TableWidget::setCellMarks(Widget& row, std::size_t column, CellMarks const& marks)`; `virtual void TableWidget::setRowModified(Widget& row, bool modified)`. Contract: a widget whose `setKeys` lists `Tab` or `Shift+Tab` receives them instead of moving focus. Verified against the code: `TableWidget` (`backend.hpp:764`) has `setOnActivate(std::function<void(Key)>)` for a row and no cell click, and no widget has a focus-out callback; `Widget::setKeys` and `Widget::focus` exist (`backend.hpp:91`, `:94`).
+  - **Chords.** `GridController::keyChords()` (tracked) is what `Table::keyChords` binds. With no editor open: `Tab`, `Shift+Tab`, `Enter`, `F2`, `Space`, `Delete`, `Escape`, `Ctrl+Enter`, and from Task 21 `Shift+Up`, `Shift+Down`, `Shift+Left`, `Shift+Right`, `Ctrl+A`, `Ctrl+C`, `Ctrl+V`, `Ctrl+D`, `Ctrl+Shift+=`, `Ctrl+-` (plain arrows are Task 10a's `FocusMove`). With an editor open: exactly `Enter`, `Tab`, `Shift+Tab`, `Escape`, `Ctrl+Enter`, so every other key (arrows, `Home`, `End`, `Delete`, `Ctrl+C`/`Ctrl+V` on the text, `Alt+Down` on a dropdown) reaches the editor. The editor is `scalarControl(field)` for a form's field, or for the one-field session of a model's cell (Task 24); its `TextInput` is drawn with no `onCommit`, so `Enter` is the table's alone. A `Boolean` cell has no editor (`Space` toggles it).
   - `mount.hpp`: `bool Mounted::focusNext(std::string_view focusId)`, `bool Mounted::focusPrevious(std::string_view focusId)`; the mount answers a table's `KeyOutcome::FocusNext`/`FocusPrevious` by moving focus along the chain from the table's widget. The chain is the mounted widgets that take focus — `TextInput`, `Button`, `Checkbox`, `Select`, `Menu`, `DateTimeInput`, `Slider`, `FilePicker`, `ActionButton`, `Table`, `Tabs`, a `Badge` with `onRemove` — that are visible and enabled, in document order (a walk of the mounted tree in child order, computed when asked).
   - `form_rows.hpp`: `class FormRowsSource final : public table::DataSource` — `FormRowsSource(forms::FormSession& form, std::string arrayPath, std::vector<table::ColumnInfo> columns)`; `columns()`, `snapshot()`, `subscribe`, `unsubscribe`; `[[nodiscard]] forms::RowState* row(table::RowId const& key) const`. A row's id is `RowId{static_cast<std::int64_t>(RowState::key())}`; rows in the array's order. A cell is the member's encoding as a cell of the column's kind (`Integer` → `int64`, `Decimal`/`Quantity` → `Rational`, `Number` → `double`, `Text`/`Enum`/`Choice` → `std::string`, `Date` → days, `DateTime` → seconds, `Bool` → `bool`), `std::monostate` when blank, and, when the draft does not encode, `std::string{draft}` — an invalid cell in every column but `Text`, where it is the text itself. A draft change of one member notifies `Updated` for its row alone.
   - `grid.hpp`:
     - `enum class EnterMoves : std::uint8_t { Down, Right, None };` `enum class Walk : std::uint8_t { Rows, Columns };`
     - `struct GridColumn { std::string id; std::string label; std::string field; std::function<std::string(forms::RowState const&)> value; };` — `field` empty with `value` set is a display column.
-    - `struct GridOptions { EnterMoves enterMoves = EnterMoves::Down; Walk walk = Walk::Rows; };`
+    - `struct GridOptions { EnterMoves enterMoves = EnterMoves::Down; Walk walk = Walk::Rows; std::function<void(Key)> onActivate; };` — `onActivate` is the table's `onActivate`, which `Enter` or a double click on a read-only cell runs.
     - `struct CellFacts { forms::FieldState const* field = nullptr; bool hasEdit = true; bool overlayReadOnly = false; bool companionReadOnly = false; bool busy = false; bool locked = false; bool unloaded = false; };` and `[[nodiscard]] bool cellReadOnly(CellFacts const& facts);` — true when `field` is null or `!hasEdit`, the field's `readonly()` (which covers `x-readonly`, `x-computed`, `x-derived` and a `readonlyWhen` reaching it), or any other member is true.
-    - `class GridSource` (pure virtual): `rows() const -> std::vector<Key>` (view order); `columns() const -> std::vector<std::string>` (visible, layout order); `readOnly(Key const&, std::string_view column) const -> bool` (calls `cellReadOnly`); `covered(Key const&, std::string_view) const -> bool`; `draft(Key const&, std::string_view) const -> std::string`; `text(Key const&, std::string_view) const -> std::string` (display text, `formatCell`); `error(Key const&, std::string_view) const -> std::optional<std::string>`; `write(Key const&, std::string_view column, std::string draft) -> void` (a user's draft); `committed() -> void` (an edit is meant; one call per change); `marks(Key const&, std::string_view) const -> CellMarks`.
-    - `class FormGridSource final : public GridSource` — `FormGridSource(forms::FormSession& form, std::string arrayPath, std::vector<GridColumn> columns, FormatContext const& format)` (`text()` is the draft while blank or not encoding, else `formatCell` of the cell with the column's display places set to the field's places); `[[nodiscard]] TableRows& view()`; `void setLayout(std::vector<std::string> visible)` (the visible column ids in layout order, which the lowering feeds from Task 9's `Table::arrangement`; default every column in declared order); `[[nodiscard]] forms::FieldState* field(Key const& row, std::string_view column) const`; `modifiedCount() const -> std::size_t`, `modifiedRows() const -> std::size_t`, `errorCount() const -> std::size_t` (all tracked).
-    - `class GridRows final : public TableRows` over an `EngineRows` of a `FormRowsSource`: the engine's view, less the rows added since the sort or the filter last changed, which follow it in the order they were added (they pass the filter until it changes).
-    - `class GridController` — `GridController(reactive::Runtime& runtime, GridSource& source, GridOptions options)`; `[[nodiscard]] std::optional<CellRef> focus() const` (tracked); `void focusCell(CellRef cell)` (a click or an arrow; refused for a covered cell); `[[nodiscard]] std::optional<CellRef> editing() const` (tracked); `KeyOutcome press(std::string_view chord)`; `void type(std::string_view text)` (on a focused cell with no editor: opens the editor with `text` replacing the value; with the editor open: the editor's whole new text, as a `TextInput` edit reports it); `void leave()` (focus left the table: commits); `[[nodiscard]] std::string const& message() const` (tracked; the latest refusal or notice, which the lowering posts with `ScreenCore::tableMessage`); `[[nodiscard]] Node node(TableOptions options)` (the table node, wiring `onKey`, `onText`, focus and marks).
-    - `ui::formGrid(forms::FormSession&, forms::FieldState& array, std::vector<GridColumn>, GridOptions) -> Node` (used by `form_view.hpp` and by the lowering).
-  - `form_session.hpp`: `FormSession::field(path)` also takes `rows#<key>.member` (a row by key); `[[nodiscard]] bool modified(std::string_view path) const` (tracked: reads the field's draft and unit; true when they differ from what the field held when the form was last loaded, or the field's row was added since; false for a read-only member); `[[nodiscard]] bool rowModified(std::string_view arrayPath, std::uint64_t key) const`; `void revert(std::string_view path)` (programmatic: restores the loaded draft and unit; a row path reverts each member; reverting a row added since the load removes it). The load record is `std::map<std::string, LoadedCell, std::less<>>` by `FieldState::path()`, `struct LoadedCell { std::string text; std::size_t unit; }`, written for every member of every `ObjectArray` row by `prefill`, `reset`, construction, a field `refill` loads and a field `acceptSent` ends the edit of.
+    - `class GridSource` (pure virtual), **by view index**, because a model's table holds only a window of its rows: `rowCount() const -> std::size_t` (the view's rows, fetched or not); `keyAt(std::size_t viewRow) const -> std::optional<Key>` (empty while that row is not fetched); `positionOf(Key const&) const -> std::optional<std::size_t>` (the key's view position now, empty when it is not in the view); `columns() const -> std::vector<std::string>` (visible, layout order); `readOnly(Key const&, std::string_view column) const -> bool` (calls `cellReadOnly`); `covered(Key const&, std::string_view) const -> bool`; `draft(Key const&, std::string_view) const -> std::string`; `text(Key const&, std::string_view) const -> std::string` (display text, `formatCell`); `error(Key const&, std::string_view) const -> std::optional<std::string>`; `write(Key const&, std::string_view column, std::string draft) -> void` (a user's draft); `committed() -> void` (an edit is meant; one call per change); `marks(Key const&, std::string_view) const -> CellMarks` (tracked: every read it depends on is a tracked read, so a binding over it follows drafts, errors, edits and row states); `keyOf(Value const& record) const -> std::optional<Key>` (the key of the row a cell's row signal holds: a cell view knows its row only through that signal, which a pooled cell's rebind sets to another record; empty for a record with no key, which draws no marks); `rowModified(Key const&) const -> bool` (tracked: some cell of the row is modified, or the row was added since the load); `view() -> TableRows&` (the rows `node()` mounts).
+    - `class FormGridSource final : public GridSource` — `FormGridSource(forms::FormSession& form, std::string arrayPath, std::vector<GridColumn> columns, FormatContext format)` (it makes its `std::shared_ptr<FormRowsSource>` and the `GridRows` over it; every row of a form is fetched, so `keyAt` is never empty below `rowCount`; `text()` is the draft while blank or not encoding, else `formatCell` of the cell with the column's display places set to the field's places); `view()` (its `GridRows`); `rowModified(key)` is `FormSession::rowModified(arrayPath, key)`; `void setLayout(std::vector<std::string> visible)` (the visible column ids in layout order, which the lowering feeds from Task 9's `Table::arrangement`; default every column in declared order); `[[nodiscard]] forms::FieldState* field(Key const& row, std::string_view column) const`; `modifiedCount() const -> std::size_t`, `modifiedRows() const -> std::size_t`, `errorCount() const -> std::size_t` (all tracked).
+    - `class GridRows final : public TableRows` — `GridRows(std::shared_ptr<FormRowsSource> source)`, over `EngineRows(source, source->recordOf(), table::EngineOptions{})` (index #21): the engine's view, less the rows added since the sort or the filter last changed, which follow it in the order they were added (they pass the filter until it changes). With no sort and no filter the view is the array's order, an inserted row in its place. It answers Task 17c's `states()` with a `RowStates` of its own that nothing registers into (a grid of a form runs no action per row) and `moveKey` by doing nothing (a form row's key never changes).
+    - `form_rows.hpp` also gives `[[nodiscard]] RecordOf FormRowsSource::recordOf() const` — the grid's own record (index #28): `RowRecord{RowId{key}, row}`, `row` an object holding, for every member of the row type, its encoded value, `null` when blank or not encoding, and the member `#key`, the row's key (no member of a row type is named `#key`: `#` introduces a row key in `FormSession::field` paths). `FormGridSource::keyOf` reads `#key`. `summaryScopeRows` (Task 22) and a column's `value` expression read this record.
+    - `class GridController` — `GridController(reactive::Runtime& runtime, GridSource& source, GridOptions options)`; `[[nodiscard]] std::optional<CellRef> focus() const` (tracked); `void focusCell(CellRef cell)` (a click or an arrow; refused for a covered cell; commits an open editor on another cell first); `void activate(CellRef cell)` (what `Enter` and `F2` with no editor, and a double click, do: focuses the cell, then opens the editor holding the value on an editable cell, or calls `GridOptions::onActivate(cell.key)` on a read-only one); `[[nodiscard]] std::optional<CellRef> editing() const` (tracked); `[[nodiscard]] std::vector<std::string> keyChords() const` (tracked, per **Chords** above); `KeyOutcome press(std::string_view chord)`; `void type(std::string_view text)` (on a focused cell with no editor: opens the editor with `text` replacing the value; with the editor open: the editor's whole new text, as a `TextInput` edit reports it); `void leave()` (focus left the table: commits); `[[nodiscard]] std::string const& message() const` (tracked; the latest transient refusal or notice, which the lowering posts with `ScreenCore::tableMessage`) and `[[nodiscard]] std::vector<StatusEntry> const& messageEntries() const` (tracked; the choices that notice offers, posted with it through `tableMessage`'s entries overload); `[[nodiscard]] std::string standing() const` and `[[nodiscard]] std::vector<StatusEntry> standingEntries() const` (tracked; a state that lasts while its source holds, which the lowering writes to `TableStatus::standing`/`standingEntries`, index #19; Task 20 fills them); `void chooseEntry(std::string_view id)` (an entry chosen in the status line, `TableWidget::setOnStatusEntry`); `[[nodiscard]] std::vector<MenuItem> cellEntries(Key const& row, std::string_view column)` (the grid's entries of a cell's menu, which the lowering puts after Task 17d's built-ins and before its separator and the document's entries: here "Revert cell", enabled while `modified` holds for that cell, and "Revert row", enabled while `rowModified` holds, each calling `FormSession::revert` and then `committed()` once; Task 21 adds the row entries); `[[nodiscard]] Node node(TableOptions options)` (the table node, wiring `onKey`, `keyChords`, `onText`, `onFocusCell`, `onActivateCell` → `activate`, `onFocusOut` → `leave`, `editing`/`editor` and `cellMenu`; its rows are Task 9d's `Table::source`: `TableSource{rows = source.view() (a non-owning `shared_ptr`, aliasing an empty owner: the grid's owner outlives the mounted node), cellView, rowView, alwaysFetched, levels}`. `cellView(c, row)` is `markedCell(<the cell's text, bound to source.text(key, id)>, <marks bound to source.marks(key, id)>)` with `key = source.keyOf(row.get())` and `id` column `c`'s id — so marks are drawn per cell, from the cell's own row signal; `rowView(row)` gives `TableRowLook{.modified = <bound to source.rowModified(keyOf(row.get()))>}`).
+    - `[[nodiscard]] FormatContext formatOf(forms::FormSession const& form)` — `{.locale = options().bcp47, .numeric = options().locale, .datePattern = options().datePattern, .dateTimePattern = options().dateTimePattern}`, read when called (a later `setFormat` is read by the next call).
+    - `ui::formGrid(forms::FormSession& form, forms::FieldState& array, std::vector<GridColumn> columns, GridOptions options, FormatContext format) -> Node` (used by `form_view.hpp`, which passes `formatOf(session)` and every member as a column in schema order, and by the lowering, which passes the screen's `FormatContext`).
+  - `form_session.hpp`: `FormSession::field(path)` also takes `rows#<key>.member` (a row by key); `[[nodiscard]] bool modified(std::string_view path) const` (tracked: reads the field's draft and unit; true when they differ from what the field held when the form was last loaded, or the field's row was added since; false for a computed or derived member, `spec().computed || spec().derived`, whose value only a round writes, and for no other: a member a `readonlyWhen` rule or `x-readonly` freezes after the user typed in it stays modified); `field_model.hpp`: `bool FieldSpec::computed = false;`, set where `x-computed` is read (`field_model.hpp:598`), since `computedInputs` alone cannot tell an `x-computed` with no inputs from none; `[[nodiscard]] bool rowModified(std::string_view arrayPath, std::uint64_t key) const`; `void revert(std::string_view path)` (programmatic: restores the loaded draft and unit; a row path reverts each member; reverting a row added since the load removes it). The load record is `std::map<std::string, LoadedCell, std::less<>>` by `FieldState::path()`, `struct LoadedCell { std::string text; std::size_t unit; }`, written for every member of every `ObjectArray` row by `prefill`, `reset`, construction, a field `refill` loads and a field `acceptSent` ends the edit of.
   - Document: `table` takes `form` (a form node id) and `field` (a path) in place of `rows`; a form field overlay takes `"widget": "grid"` with `grid`, a part holding a table node's keys; `enterMoves` (`down`/`right`/`none`), `walk` (`rows`/`columns`); element values `modifiedCount`, `modifiedRows`, `errorCount`, `editing` (`{key, column}` or `null`). Loader refusals: `form` with `rows`; a column `field` naming no member of the row type ("Refused when the document loads").
   - Status-line copy (posted through `ScreenCore::tableMessage`): typing on a read-only cell: `"This cell is read-only"`.
+  - `recording_backend.hpp`: drivers `void typeInto(int tableId, std::string text)` (calls the `setOnText` handler), `void clickCell(int tableId, std::size_t viewRow, std::size_t column, bool doubleClick = false)` (calls the `setOnCellClick` handler; a double click first calls it with `false`, as a backend does), `void focusOut(int tableId)` (calls the `setOnFocusOut` handler; `RecordingBackend::focus(id)` of a widget outside a table that held focus calls it too); records `setCellMarks` as property `marks:<column>` on the row widget it names (`r`,`m`,`e`,`s`,`u` for the set flags, `""` for none; a pooled cell's marks land on the row widget it is attached to now), `setRowModified` as `modified`, `setCellEditor` as `editor:<column>` (the editor widget's id, `""` for null).
 
 - [ ] **Step 1: Write the fixture** `tests/grid_test_support.hpp` — namespace `morph::test::grid`:
 
@@ -158,9 +172,17 @@ struct GridFixture {
     [[nodiscard]] std::string json(std::string_view path) const;   // the field's encoded JSON, "" when none
 };
 inline ui::CellRef at(std::int64_t key, std::string column) { return ui::CellRef{ui::Key{key}, std::move(column)}; }
+// Every fetched key of the source's view, in view order.
+inline std::vector<ui::Key> keysOf(ui::GridSource const& source) {
+    std::vector<ui::Key> keys;
+    for (std::size_t i = 0; i < source.rowCount(); ++i) {
+        if (auto key = source.keyAt(i)) keys.push_back(*key);
+    }
+    return keys;
+}
 ```
 
-`GridFixture` prefills `{"sampleId":1,"specimens":[{},…]}`, builds the session with `FormSessionOptions{.locale = {.decimalSeparator = ",", .groupSeparator = "."}}` and the source with a `ui::FormatContext` of `ui::withoutGrouping(ui::localeFacts("de"))`, so a cell of `1` at two places shows `1,00`. Add the same schema to `corpusCatalog().schema` in `tests/ui_interpreter_support.hpp` as `Lims_RecordSpecimens`.
+`GridFixture` prefills `{"sampleId":1,"specimens":[{},…]}`, builds the session with `FormSessionOptions{.locale = ui::localeFacts("de").numeric, .bcp47 = "de"}` and the source with `ui::FormatContext{.locale = "de", .numeric = ui::withoutGrouping(ui::localeFacts("de").numeric)}` (`localeFacts` returns a `LocaleFacts` row and `withoutGrouping` takes its `render::NumericLocale`, `locale_table.hpp:117`, `:171`), so a cell of `1` at two places shows `1,00`. Add the same schema to `corpusCatalog().schema` in `tests/ui_interpreter_support.hpp` as `Lims_RecordSpecimens`.
 
 - [ ] **Step 2: Write the failing tests** in `tests/test_ui_grid.cpp`:
 
@@ -262,16 +284,16 @@ TEST_CASE("grid: a sorted grid keeps its record", "[ui][grid]") {
         f.grid->focusCell(at(key, "mass")); f.grid->type(text); f.grid->press("Enter");
     }
     REQUIRE(f.source->view().setSort({table::SortKey{.column = "mass"}}).has_value());
-    CHECK(f.source->rows() == std::vector<ui::Key>{ui::Key{std::int64_t{2}}, ui::Key{std::int64_t{3}}, ui::Key{std::int64_t{1}}});
+    CHECK(keysOf(*f.source) == std::vector<ui::Key>{ui::Key{std::int64_t{2}}, ui::Key{std::int64_t{3}}, ui::Key{std::int64_t{1}}});
     f.grid->focusCell(at(3, "mass")); f.grid->type("9"); f.grid->press("Enter");
     CHECK(f.json("specimens[2].mass") == R"({"num":900,"den":100,"dp":2})");   // in place, entered order
     CHECK(f.json("specimens[0].mass") == R"({"num":300,"den":100,"dp":2})");
     std::uint64_t const added = f.form->field("specimens").addRow();
     f.grid->focusCell(at(static_cast<std::int64_t>(added), "mass")); f.grid->type("0"); f.grid->press("Enter");
-    CHECK(f.source->rows().back() == ui::Key{static_cast<std::int64_t>(added)});   // at the end until the sort changes
+    CHECK(keysOf(*f.source).back() == ui::Key{static_cast<std::int64_t>(added)});   // at the end until the sort changes
     REQUIRE(f.source->view().setSort({}).has_value());
     REQUIRE(f.source->view().setSort({table::SortKey{.column = "mass"}}).has_value());
-    CHECK(f.source->rows().front() == ui::Key{static_cast<std::int64_t>(added)});   // 0,00 sorts first
+    CHECK(keysOf(*f.source).front() == ui::Key{static_cast<std::int64_t>(added)});   // 0,00 sorts first
 }
 
 // Mutation: modified() comparing the whole ObjectArray's snapshot, which marks every cell.
@@ -291,7 +313,44 @@ TEST_CASE("grid: what changed", "[ui][grid]") {
     std::uint64_t const added = f.form->field("specimens").addRow();
     CHECK(f.form->rowModified("specimens", added));          // a row added since the load, as a whole
 }
+
+// Mutation: modified() false for every read-only member (the readonlyWhen section loses the typed cell's mark).
+TEST_CASE("grid: only computed and derived members never draw a modified mark", "[ui][grid]") {
+    GridFixture f{1};
+    SECTION("a cell frozen by a rule after typing stays modified") {
+        f.grid->focusCell(at(1, "mass")); f.grid->type("4"); f.grid->press("Enter");
+        f.h.type(*f.form, "reviewer", "ana");                  // readonlyWhen now freezes the grid
+        REQUIRE(f.form->field("specimens[0].mass").readonly().get());
+        CHECK(f.form->modified("specimens#1.mass"));
+        CHECK(f.source->marks(ui::Key{std::int64_t{1}}, "mass").modified);
+    }
+    SECTION("a computed member written programmatically is not modified") {
+        f.form->assign("specimens[0].density", R"({"num":2,"den":1,"dp":3})");
+        CHECK_FALSE(f.form->modified("specimens#1.density"));
+        CHECK_FALSE(f.form->rowModified("specimens", 1));
+    }
+}
+
+// Mutation: "Revert row" reverting the focused cell only (label keeps "x").
+TEST_CASE("grid: revert cell and revert row from the cell's menu", "[ui][grid]") {
+    GridFixture f{2};
+    f.grid->focusCell(at(1, "label")); f.grid->type("x"); f.grid->press("Tab");
+    f.grid->type("4"); f.grid->press("Enter");                 // (1, mass)
+    auto entries = f.grid->cellEntries(ui::Key{std::int64_t{2}}, "mass");
+    CHECK(labelsOf(entries) == std::vector<std::string>{"Revert cell", "Revert row"});
+    CHECK_FALSE(enabledOf(entry(entries, "Revert cell")));       // row 2 holds nothing typed
+    entries = f.grid->cellEntries(ui::Key{std::int64_t{1}}, "mass");
+    entry(entries, "Revert cell").onSelect();
+    CHECK(f.form->field("specimens[0].mass").draft().empty());
+    CHECK(f.form->field("specimens[0].label").draft() == "x");
+    entries = f.grid->cellEntries(ui::Key{std::int64_t{1}}, "label");
+    entry(entries, "Revert row").onSelect();
+    CHECK(f.form->field("specimens[0].label").draft().empty());
+    CHECK_FALSE(f.form->rowModified("specimens", 1));
+}
 ```
+
+`tests/grid_test_support.hpp` also gives `labelsOf(std::vector<ui::MenuItem> const&) -> std::vector<std::string>` (each entry's label as bound now), `entry(std::vector<ui::MenuItem> const&, std::string_view label) -> ui::MenuItem const&` (`REQUIRE`s it exists) and `enabledOf(ui::MenuItem const&) -> bool`; Task 21 reuses them.
 
 Interpreter-level, same file, through `ui::testing::Harness` and a document holding `{"kind":"form","id":"rec","model":"sample","action":"Lims_RecordSpecimens","submit":"explicit"}`, a text input `before`, `{"kind":"table","id":"grid","testId":"grid","form":"rec","field":"specimens","columns":[{"id":"mass","field":"mass"},{"id":"note","field":"note"}]}` and a text input `after`:
 
@@ -310,12 +369,41 @@ TEST_CASE("grid: Tab on the last editable cell moves focus to the next control",
     // CHECK h.backend.focused() == h.byTestId("TextInput","after")
     // press "Shift+Tab" on (1, mass): CHECK focused() == byTestId("TextInput","before")
 }
+// Mutation: the loader checking a column's `field` only when the grid mounts (loadDocumentText succeeds).
 TEST_CASE("grid: a column naming no member is refused when the document loads", "[ui][grid][interpreter]") {
     // a column {"id":"x","field":"nosuch"}: loadDocumentText fails; the message names "nosuch"
 }
+// Mutation: the mount not wiring setOnFocusOut to GridController::leave (the draft stays uncommitted, "" not "3").
+TEST_CASE("grid: a click focuses a cell, a double click opens its editor, focus leaving commits", "[ui][grid][interpreter]") {
+    // int const table = h.byTestId("Table","grid");
+    // h.backend.clickCell(table, 0, 0): CHECK readJson(editing) == "null" and the recorded focus cell is (0, 0)
+    // h.backend.clickCell(table, 1, 0, true): CHECK readJson(R"({"ref":"grid.editing"})") == R"({"key":2,"column":"mass"})"
+    //   and the table's row 2 records "editor:0" naming a TextInput widget that has focus (h.backend.focused())
+    // h.backend.edit(<that TextInput>, "3"); h.backend.focusOut(table)
+    // CHECK the form field specimens[1].mass draft == "3", readJson(editing) == "null", "editor:0" recorded ""
+    // h.backend.typeInto(table, "8") with focus on (1, note): the editor opens on (1, note) holding "8"
+    // CHECK the table's declared keys are exactly {Enter, Tab, Shift+Tab, Escape, Ctrl+Enter} while it is open
+}
 ```
 
-These three are written out in full Catch2 with the Harness calls named in the comments; the comments are the assertions.
+Mount-level, same file, over `GridFixture` and a `RecordingBackend` mounting `f.grid->node({})` (column indices in schema order: `label` 0, `mass` 1, `volume` 2, `density` 3, `limit` 4, `note` 5):
+
+```cpp
+// Mutations: the marks bound in the row's scope instead of the cell's (the pooled cell showing row 30 keeps row 1's
+// "m"); setCellMarks skipped when a pooled cell joins another row widget with equal marks.
+TEST_CASE("grid: a cell's marks are drawn by its cell view and follow the row it shows", "[ui][grid][mount]") {
+    // GridFixture f{40}; mounted with 20 realized rows.
+    // focus (1, mass), type "4", Enter: the row widget showing key 1 records marks:1 == "m" and modified == true;
+    //   its marks:3 (density, computed) contains "r"; the row widget showing key 2 records marks:1 == "" and
+    //   modified == false
+    // scroll to view row 25, so the row of key 1 leaves the window: the row widget showing key 30 records
+    //   marks:1 == ""; Mounted::stats().cellsRebound > 0 and cellsCreated is unchanged (no cellView call)
+    // f.form->revert("specimens#1.mass"); scroll back to view row 0: the row widget showing key 1 records
+    //   marks:1 == "" and modified == false
+}
+```
+
+These five are written out in full Catch2 with the Harness calls named in the comments; the comments are the assertions.
 
 Qt Quick, `tests/qt_quick/test_qt_quick_table.cpp`:
 
@@ -326,6 +414,22 @@ TEST_CASE("qt_quick grid: typing on a focused cell opens its editor, Tab walks a
     // holding "5" in that cell; Tab commits it (field draft "5") and focuses (1, volume); Tab on (2, note) gives
     // focus to the second text input's item.
 }
+// Mutation: the QML cell sending a double click as two single clicks (no editor opens).
+TEST_CASE("qt_quick grid: a double click opens the editor in the cell and focus leaving commits", "[qt_quick][grid]") {
+    // QTest::mouseDClick on (2, mass): a TextField item lies inside that cell's rectangle and has active focus;
+    // keyClicks "7", then a click on the second text input: field draft "7", no TextField in the table.
+}
+```
+
+Terminal, `tests/tui/test_tui_table.cpp`:
+
+```cpp
+// Mutation: the terminal table ignoring setOnText (the keystroke moves nothing and opens no editor).
+TEST_CASE("tui grid: typing on a focused cell opens its editor, Enter commits and moves down", "[tui][grid]") {
+    // A mounted formGrid of two rows: focus (1, mass), feed the key "5": the rendered row 1 shows "5" with the
+    // terminal cursor in the mass column; feed Enter: field draft "5", focus (2, mass); feed Tab on (2, note):
+    // focus leaves the table to the next control.
+}
 ```
 
 - [ ] **Step 3: Run to see them fail**
@@ -333,7 +437,7 @@ TEST_CASE("qt_quick grid: typing on a focused cell opens its editor, Tab walks a
 Run: `cmake --build --preset cl-debug --target morph_tests`
 Expected: compile errors — `morph/ui/grid.hpp` not found, `FormSession::modified` not declared.
 
-- [ ] **Step 4: Implement the focus chain** in `view.hpp`, `backend.hpp`, `mount.hpp` with the signatures above; `RecordingBackend` records `setOnText` as a callback and gains `void typeInto(int tableId, std::string text)`; it records `setCellMarks` as property `marks:<column>` (`r`,`m`,`e`,`s`,`u` letters for the set flags) and `setRowModified` as `modified`.
+- [ ] **Step 4: Implement the focus chain** in `view.hpp`, `backend.hpp`, `mount.hpp` with the signatures above, `markedCell` and the mount's binding of a cell's marks in the cell's own scope, `TableRowLook::modified`, and the `RecordingBackend` drivers and records listed under Produces. Then move the scalar controls to `field_control.hpp` with no change of behaviour: `ctest --test-dir build/cl-debug -R "form" --output-on-failure` passes unchanged before anything else in `form_view.hpp` changes.
 
 - [ ] **Step 5: Implement per-cell snapshots** in `form_session.hpp`: `field()` by `#key`, `modified`, `rowModified`, `revert`, the load record.
 
@@ -341,28 +445,32 @@ Expected: compile errors — `morph/ui/grid.hpp` not found, `FormSession::modifi
 
 ```text
 next(from, forward):                                  // view positions at the moment of the call
-  cells = rows() × columns() in walk order (Rows: row-major; Columns: column-major)
-  step from `from`'s position (or before the first / after the last when there is no focus)
-  return the first cell with !readOnly && !covered, or none
-Tab:        commit an open editor; next(focus, true)  -> focus it, Handled;  none -> FocusNext
-Shift+Tab:  commit; next(focus, false)               -> focus it, Handled;  none -> FocusPrevious
+  start = positionOf(from.key) (or before the first / after the last when there is no focus)
+  cells = [0, rowCount()) × columns() in walk order (Rows: row-major; Columns: column-major), stepping from start
+  for each cell: keyAt(row) empty -> return Stop{row, column}       // a row not fetched yet: never walked past
+                 !readOnly && !covered -> return Found{cell}
+  return None
+Stop{row, column}: focus moves to that view row in that column (Task 10a's placeholder focus, which keeps the
+            row realized, so the window fetches it); Handled. The next Tab walks on from it once it has arrived.
+Tab:        commit an open editor; next(focus, true)  -> Found: focus it, Handled;  Stop: as above;  None -> FocusNext
+Shift+Tab:  commit; next(focus, false)               -> the same, None -> FocusPrevious
 Enter (editor open): commit; Down: first editable cell in the same column below; Right: next(focus, true) within
-            the row; None: stay. Nothing found: stay. Enter, F2 or a double click with no editor opens it on an
-            editable cell; on a read-only cell it runs the table's onActivate.
+            the row; None: stay. Nothing found: stay; a row not fetched yet below: Stop. Enter, F2 or a double
+            click with no editor: activate(focus).
 Space on a Boolean cell: toggles and commits, no editor. Delete with no editor: blanks the cell (write "").
 Arrows: move to any cell (read-only included, covered cells passed over); Ctrl+arrow to the last cell that way.
 ```
 
 Commit writes the editor's text with `write` and calls `committed()` once.
 
-- [ ] **Step 7: Implement the lowering and the loader** in `src/ui/document.cpp`, `src/ui/interpreter.cpp`: `table` with `form`/`field` lowers to `formGrid` over the form element's session; the `grid` overlay adds `overrides.byField(id, …)` drawing the same; element values; refusals. `form_view.hpp` draws an `ObjectArray` whose `spec().widget == "grid"` with `ui::formGrid`.
+- [ ] **Step 7: Implement the lowering and the loader** in `src/ui/document.cpp`, `src/ui/interpreter.cpp`: `table` with `form`/`field` lowers to `formGrid` over the form element's session; the `grid` overlay adds `overrides.byField(id, …)` drawing the same; element values; refusals. `form_view.hpp` draws an `ObjectArray` whose `spec().widget == "grid"` with `ui::formGrid(session, state, <every member in schema order>, {}, ui::formatOf(session))`; the overlay's `grid` part replaces those columns and options. The lowering posts `GridController::message()` with its `messageEntries()` through `tableMessage`, writes `standing()`/`standingEntries()` into the table's `TableStatus`, and routes `setOnStatusEntry` to `chooseEntry`.
 
-- [ ] **Step 8: Implement editors in cells** in the Qt Quick and terminal tables: `setOnText`, `setCellMarks`, `setRowModified`, `Tab`/`Shift+Tab` delivered to a table that lists them.
+- [ ] **Step 8: Implement editors in cells** in the Qt Quick and terminal tables: `setOnText`, `setOnCellClick`, `setOnFocusOut`, `setCellEditor` (the editor's item placed over the cell's rectangle and given focus), `setCellMarks`, `setRowModified`, `Tab`/`Shift+Tab` delivered to a table that lists them.
 
 - [ ] **Step 9: Run the tests**
 
 Run: `cmake --build --preset cl-debug --target morph_tests && ctest --test-dir build/cl-debug -R "grid:" --output-on-failure`
-Expected: all `grid:` cases pass. Then `ctest --test-dir build/cl-debug -R "form|table|mount" --output-on-failure` — no regressions. Qt Quick: `ctest --test-dir build/cl-qt-debug -R "qt_quick grid" --output-on-failure` — pass.
+Expected: all `grid:` cases pass. Then `ctest --test-dir build/cl-debug -R "form|table|mount" --output-on-failure` — no regressions. Qt Quick and terminal: `ctest --test-dir build/cl-qt-debug -R "qt_quick grid|tui grid" --output-on-failure` — pass.
 
 - [ ] **Step 10: Mutate** each named mutation once; record the failing lines.
 
@@ -393,7 +501,7 @@ git commit -m "feat(ui): grids of a form"
   - `registry.hpp`: `prepareAction` and `evaluateAction` call `forms::clearDerived(action)` before `recomputeAll`.
   - `form_session.hpp`: `void deriveWith(DeriveOptions options)`; `void noteCommit()`; `void recalculate()`; `[[nodiscard]] DeriveState deriveState() const` (tracked); `[[nodiscard]] std::string partialBody() const` (every top-level field that encodes; an `Object` or `ObjectArray` member by member, leaving out blank and non-encoding members; every row written, in order, `{}` for a row with nothing); `[[nodiscard]] DeriveRound captureRound()` (next sequence, `partialBody()`, the row keys of every `ObjectArray` by `FieldState::path()`); `DeriveLoad loadDerived(DeriveRound const& round, Derived const& reply)` (derived members only); `DeriveLoad loadDerived(DeriveRound const& round, std::string_view evaluatedBody)` (computed members only, the reply's `errors` and `ready` ignored). Both resolve `name[i]` through `round.rowKeys[name][i]` and the row's current position by key, drop a row since removed, refuse a path that names no member of their kind, write programmatically and move no snapshot. `std::uint64_t FieldState::insertRow(std::size_t position)` (a user action; position past the end appends).
   - Choices: a row member's `x-optionsDependsOn` names are looked up in its row, then among the top-level fields; a row member's options are fetched only after `void FieldState::openOptions()` (what a cell editor calls when it opens); identical `(optionsAction, request)` pairs share one fetch for the session's life, a failed fetch is not kept.
-  - `grid.hpp`: `GridColumn` gains `std::function<std::string(forms::RowState const&)> fieldOf` (a member per row; tracked) and per-row overlays `decimals` (`std::function<std::optional<std::uint32_t>(forms::RowState const&)>`), `unit` (`std::function<std::optional<std::string>(…)>`), `readonly` (`std::function<bool(…)>`), `options` (`std::function<std::optional<std::vector<std::string>>(…)>`, option JSON literals kept), `placeholder` (`std::function<std::string(…)>`). A column with `fieldOf` has `ColumnKind::Text` in `FormRowsSource`, its cell the member's draft. Derived and computed cells draw `CellMarks::muted` while `deriveState()` is `Running` and `stale` while `Failed`; the status line then offers `"Recalculate"`.
+  - `grid.hpp`: `GridColumn` gains `std::function<std::string(forms::RowState const&)> fieldOf` (a member per row; tracked) and per-row overlays `decimals` (`std::function<std::optional<std::uint32_t>(forms::RowState const&)>`), `unit` (`std::function<std::optional<std::string>(…)>`), `readonly` (`std::function<bool(…)>`), `options` (`std::function<std::optional<std::vector<std::string>>(…)>`, option JSON literals kept), `placeholder` (`std::function<std::string(…)>`). A column with `fieldOf` has `ColumnKind::Text` in `FormRowsSource`, its cell the member's draft. Derived and computed cells draw `CellMarks::muted` while `deriveState()` is `Running` and `stale` while `Failed`. While `Failed`, `GridController::standing()` is `"Derived values could not be recalculated"` and `standingEntries()` is `{StatusEntry{"recalculate", "Recalculate"}}` (a standing state, index #19: it lasts until a round succeeds, through the message hold); `chooseEntry("recalculate")` calls `FormSession::recalculate()`. Both are empty in every other state.
   - Document: `form` takes `derive` (an action id of the form's model) and `deriveDebounce` (a literal integer, milliseconds); a grid column's `field` may be an expression in the row's scope, and takes `decimals`, `unit`, `readonly`, `options`, `placeholder` as expressions in the row's scope. The lowering calls `deriveWith` with `evaluate` = the form alias's channel `execute(action, body, {.evaluate = true})` and `derive` = `execute(derive, R"({"body":)" + body + "}")`, and reports each refused path once.
 
 - [ ] **Step 1: Write the failing server tests** in `tests/forms/test_forms_derive.cpp`:
@@ -500,8 +608,9 @@ TEST_CASE("grid: derived values", "[ui][grid][derive]") {
     CHECK(f.form->deriveState() == forms::DeriveState::Failed);
     CHECK(f.source->marks(ui::Key{std::int64_t{2}}, "limit").stale);
     CHECK(f.json("specimens[2].limit") == R"({"num":700,"den":100,"dp":2})");
-    CHECK(f.grid->message() == "Derived values could not be recalculated. Recalculate");
-    f.form->recalculate(); f.h.settle();
+    CHECK(f.grid->standing() == "Derived values could not be recalculated");
+    CHECK(f.grid->standingEntries() == std::vector<ui::StatusEntry>{{"recalculate", "Recalculate"}});
+    f.grid->chooseEntry("recalculate"); f.h.settle();
     CHECK(f.evaluate.submits().size() == 4);
 }
 
@@ -514,9 +623,21 @@ TEST_CASE("grid: an older derive reply is ignored", "[ui][grid][derive]") {
     CHECK(f.form->loadDerived(newer, value(R"({"num":9,"den":1,"dp":2})")).loaded == 1);
     CHECK(f.form->loadDerived(older, value(R"({"num":8,"den":1,"dp":2})")).loaded == 0);
     CHECK(f.json("specimens[1].limit") == R"({"num":900,"den":100,"dp":2})");
-    f.form->field("specimens").removeRow(2);
-    auto const gone = f.form->captureRound();
-    CHECK(f.form->loadDerived(gone, value(R"({"num":1,"den":1,"dp":2})")).loaded == 0);   // that row is gone
+}
+
+// Mutation: loadDerived resolving `specimens[i]` against the current rows (row 2's path falls past the end, which
+// passes for the wrong reason, so the reply also names specimens[0], which must still land on row 1).
+TEST_CASE("grid: a value for a row removed since the call is dropped", "[ui][grid][derive]") {
+    GridFixture f{2};
+    auto const round = f.form->captureRound();                 // rows 1, 2 at sending
+    f.form->field("specimens").removeRow(2);                   // then row 2 goes
+    auto const load = f.form->loadDerived(round, forms::Derived{.values = {
+        {"specimens[1].limit", glz::raw_json{R"({"num":1,"den":1,"dp":2})"}},
+        {"specimens[0].limit", glz::raw_json{R"({"num":3,"den":1,"dp":2})"}}}});
+    CHECK(load.loaded == 1);
+    CHECK(load.refused.empty());                                 // a removed row is dropped, not refused
+    CHECK(f.json("specimens[0].limit") == R"({"num":300,"den":100,"dp":2})");
+    CHECK(f.form->field("specimens").rows().size() == 1);
 }
 
 // Mutation: a derive reply that moves the loaded snapshot of the members it writes.
@@ -530,7 +651,7 @@ TEST_CASE("grid: a derive reply moves no snapshot", "[ui][grid][derive]") {
     CHECK(load.refused == std::vector<std::string>{"specimens[0].mass"});
     CHECK(f.form->modified("specimens#1.mass"));
     CHECK(f.form->field("specimens[0].mass").draft() == "4");
-    CHECK_FALSE(f.form->modified("specimens#1.limit"));        // a read-only member draws no modified mark
+    CHECK_FALSE(f.form->modified("specimens#1.limit"));        // a derived member draws no modified mark
 }
 
 // Mutation: the column's field resolved once for every row.
@@ -596,18 +717,23 @@ Expected: all pass, including the existing `test_computed_fields.cpp` and `test_
 **Spec:** editing.md "Selecting cells, clipboard and fill", "Rows of a grid", Invariant 7; Failure modes rows on paste, insert and delete, `selectionMode: "cells"` on a model's table.
 
 **Files:**
-- Modify: `include/morph/ui/grid.hpp`, `include/morph/forms/engine/field_model.hpp`, `include/morph/forms/engine/form_session.hpp`, `src/ui/document.cpp`, `src/ui/interpreter.cpp`, `src/qt_quick/table.cpp` and QML, `src/tui/table_widget.cpp`; `tests/test_ui_grid.cpp`
-- Docs: `docs/spec/ui/document.md`, `docs/spec/ui/interpreter.md` (`selectionMode: "cells"` and its value, `appendRows`, `rowsFixed`, the row menu entries).
+- Modify: `include/morph/ui/view.hpp`, `include/morph/ui/backend.hpp`, `include/morph/ui/mount.hpp`, `include/morph/ui/testing/recording_backend.hpp`, `include/morph/ui/grid.hpp`, `include/morph/forms/engine/field_model.hpp`, `include/morph/forms/engine/form_session.hpp`, `src/ui/document.cpp`, `src/ui/interpreter.cpp`, `src/qt_quick/table.cpp` and QML, `src/tui/table_widget.cpp`; `tests/test_ui_grid.cpp`, `tests/test_ui_mount.cpp`, `tests/qt_quick/test_qt_quick_table.cpp`
+- Docs: `docs/spec/ui/document.md`, `docs/spec/ui/interpreter.md` (`selectionMode: "cells"` and its value, `appendRows`, `rowsFixed`, the row menu entries, "Add row"), `docs/spec/ui/view_tree.md` and `docs/spec/ui/backend_contract.md` (`Table::cellSelection`, `setCellSelection`, `setOnCellSelect`).
 
 **Interfaces:**
-- Consumes: Task 19's `GridController`, `GridSource`; Task 20's `FieldState::insertRow`; Task 12b's `IViewBackend::copyText` (the lowering hands it `GridController::copy()`) and Task 12c's `ScreenCore::tableMessage`.
+- Consumes: Task 19's `GridController`, `GridSource`; Task 20's `FieldState::insertRow`; Task 12b's `IViewBackend::copyText` (the lowering hands it `GridController::copy()`) and Task 9d's `ScreenCore::tableMessage` with Task 17a's entries overload; Task 17d's `TableOptions::cellMenu`; Task 19's `cellEntries`, `messageEntries`, `chooseEntry`.
 - Produces:
+  - `view.hpp`: `struct CellRange { CellRef anchor; CellRef focus; bool operator==(CellRange const&) const = default; };` (beside `CellRef`); `Table::cellSelection` (`std::optional<Prop<std::optional<CellRange>>>`: when set, the table selects cells, not rows) and `Table::onCellSelect` (`std::function<void(std::optional<CellRange>)>`). The mount maps between keys and view positions: it shows a range with `setCellSelection` at the corners' view positions and layout places now (so a sort or a column move redraws the rectangle the same corners span), and turns a reported rectangle into a `CellRange` through the rows' keys and the layout's ids. A corner whose row is not in the view, or whose column is hidden, shows no rectangle; the range is kept.
+  - `backend.hpp` (defaults do nothing): `virtual void TableWidget::setCellSelection(std::optional<std::array<std::size_t, 4>> rect)` (`{firstRow, rowCount, firstColumn, columnCount}` in view rows and layout places; empty: none; never calls the handler) and `virtual void TableWidget::setOnCellSelect(std::function<void(std::size_t anchorRow, std::size_t anchorColumn, std::size_t focusRow, std::size_t focusColumn)> onSelect)` (a drag from cell to cell, a `Shift`+click, a row header click — anchor `(row, 0)`, focus `(row, last)` — and a column header's selection gesture — anchor `(0, column)`, focus `(last row, column)`). In cell mode the backend draws no row selection and reports no `onSelectionChange`. `Shift`+arrows and `Ctrl+A` are the grid's chords (declared with `setKeys`), not the backend's.
+  - `recording_backend.hpp`: records `setCellSelection` as property `cellSelection` (`"r<first>+<count>,c<first>+<count>"`, `""` for none); driver `void selectCells(int tableId, std::size_t anchorRow, std::size_t anchorColumn, std::size_t focusRow, std::size_t focusColumn)`.
   - `field_model.hpp`: `std::optional<std::size_t> FieldSpec::minItems, maxItems;` read from an array's `minItems`/`maxItems`.
   - `form_session.hpp`: `struct RemovedRow { std::size_t position; std::shared_ptr<RowState> row; };` `std::vector<RemovedRow> FieldState::removeRows(std::span<std::uint64_t const> keys);` `void FieldState::restoreRows(std::vector<RemovedRow> rows);` (each back at its position, ascending).
-  - `grid.hpp`: `struct CellRange { CellRef anchor; CellRef focus; bool operator==(CellRange const&) const = default; };` `GridOptions` gains `bool appendRows = false; bool rowsFixed = false;` `GridController` gains `[[nodiscard]] std::optional<CellRange> selection() const` (tracked), `void select(std::optional<CellRange> range)`, `[[nodiscard]] std::string copy() const` (tab-separated display text of the rectangle, view order, layout order; a tab or line break inside a cell written as a space), `PasteResult paste(std::string_view text)`, `void fillDown()`, `void clear()`, `void insertRow(bool below)`, `void deleteRows()`, `void undo()`, `[[nodiscard]] RowOps rowOps() const` (tracked); `struct PasteResult { std::size_t written = 0; std::size_t readOnly = 0; std::size_t pastRows = 0; std::size_t pastColumns = 0; };` `[[nodiscard]] std::string pasteMessage(PasteResult const& result);` `struct RowOps { bool insert; bool remove; std::string why; };` `GridSource` gains `appendRow() -> std::optional<Key>`, `insertRow(std::size_t position) -> std::optional<Key>`, `removeRows(std::span<Key const>) -> bool` (true when one held a value), `undoRemove() -> void`, `rowCount() -> std::size_t`, `bounds() -> std::pair<std::size_t, std::optional<std::size_t>>` (minItems, maxItems).
+  - `grid.hpp`: `GridOptions` gains `bool appendRows = false; bool rowsFixed = false;` `GridController` gains `[[nodiscard]] std::optional<CellRange> selection() const` (tracked), `void select(std::optional<CellRange> range)`, `[[nodiscard]] std::string copy() const` (tab-separated display text of the rectangle, view order, layout order; a tab or line break inside a cell written as a space), `PasteResult paste(std::string_view text)`, `void fillDown()`, `void clear()`, `void insertRow(bool below)`, `void deleteRows()`, `void undo()`, `[[nodiscard]] RowOps rowOps() const` (tracked); `struct PasteResult { std::size_t written = 0; std::size_t readOnly = 0; std::size_t pastRows = 0; std::size_t pastColumns = 0; };` `[[nodiscard]] std::string pasteMessage(PasteResult const& result);` `struct RowOps { bool insert; bool remove; std::string why; };` `GridSource` gains `appendRow() -> std::optional<Key>`, `insertRow(std::size_t position) -> std::optional<Key>`, `removeRows(std::span<Key const>) -> bool` (true when one held a value), `undoRemove() -> void`, `bounds() -> std::pair<std::size_t, std::optional<std::size_t>>` (minItems, maxItems).
   - Chords: `Shift`+arrows extend from the anchor; `Ctrl+A` the whole grid; `Ctrl+C` copy; `Ctrl+V` paste; `Ctrl+D` fill down; `Delete` clear; `Ctrl+Shift+=` insert below; `Ctrl+-` delete; a row header click selects its row, a column header's selection gesture its column.
-  - Copy, exact: paste message `"Pasted {written} values"`, then, when anything was dropped, `"; "` and the parts present joined by `" and "`: `"{readOnly} on read-only cells"`, `"{pastRows} past the last row"`, `"{pastColumns} past the last column"`, then `" were dropped"`. Deletion of rows holding values: `"Deleted {n} rows. Undo"` (`"Deleted 1 row. Undo"`), Undo until the next change. Disabled entries: at `maxItems` `"A grid holds at most {maxItems} rows"`, at `minItems` `"A grid holds at least {minItems} rows"`; with `rowsFixed` no entry is offered.
+  - Copy, exact: paste message `"Pasted {written} values"`, then, when anything was dropped, `"; "` and the parts present joined by `" and "`: `"{readOnly} on read-only cells"`, `"{pastRows} past the last row"`, `"{pastColumns} past the last column"`, then `" were dropped"`. Deletion of rows holding values: the message `"Deleted {n} rows"` (`"Deleted 1 row"`) with `messageEntries()` `{StatusEntry{"undo", "Undo"}}` (index #19: a transient notice with a choice, posted through `tableMessage`'s entries overload); `chooseEntry("undo")` calls `undo()`, which restores the rows while no change has followed the deletion and does nothing after one (the next change also clears the entries). Disabled entries: at `maxItems` `"A grid holds at most {maxItems} rows"`, at `minItems` `"A grid holds at least {minItems} rows"`; with `rowsFixed` no entry is offered.
   - Paste, which the signatures do not determine: lines split on `\n`, a trailing `\r` removed from each, a final empty line dropped; cells split on `\t`; each value trimmed of spaces. Start: the focused cell; in a grid with no rows, the first visible column of the first row the paste adds. Row `r0+i` past the last row: appended when `appendRows` and the count is below `maxItems`, else every value of that line counts in `pastRows`. Column `c0+j` past the last visible column counts in `pastColumns`. A read-only or covered target counts in `readOnly`. Every other value is written with `write` (the cell's draft, in the user's locale), all in one runtime batch, then `committed()` once. Fill and clear: editable cells of the rectangle only, one batch, one `committed()`.
+  - **One change per row operation.** `insertRow`, `deleteRows`, `undo`, a row appended by the walk and the "Add row" button each change the form once and call `committed()` exactly once, however many rows they touch, so each causes one derive round.
+  - **Menu entries.** `cellEntries(row, column)` gains, after "Revert cell" and "Revert row" and a separator: "Insert row above", "Insert row below", and "Delete row" — "Delete rows" when the cell selection spans more than one row, deleting every row it spans. "Insert row …" is disabled at `maxItems` and "Delete …" at `minItems` (or when the deletion would go below it), each with its `MenuItem::description` the reason (the copy above). With `rowsFixed` none of the three is offered. The lowering offers the same three in the table's own menu (Part E's `TableOptions::menu` with no column) for the focused row. With `appendRows`, `node()` draws an "Add row" button under the table (test id `<table testId>_addRow`), disabled at `maxItems` with the same reason as its tooltip; it appends a row and focuses its first editable cell.
   - Document: `selectionMode: "cells"` (the default for a grid of a form; refused on a model's table), `selection`/`onSelectionChange` with `{"anchor": {"key", "column"}, "focus": {"key", "column"}}` or `null`; `appendRows`, `rowsFixed` (literal flags).
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_ui_grid.cpp`:
@@ -626,6 +752,7 @@ TEST_CASE("grid: cell selection", "[ui][grid][cells]") {
     CHECK(f.grid->selection() == ui::CellRange{at(1, "mass"), at(2, "volume")});   // corners kept by key
     CHECK(f.grid->copy() == "1,00\t\n2,00\t\n3,00\t");    // rows 2, 3, 1 now lie between the corners' positions
 }
+// Mutation: the loader accepting selectionMode "cells" on a model-backed table (loadDocumentText succeeds).
 TEST_CASE("grid: cells on a model's table are refused when the document loads", "[ui][grid][cells]") {
     // {"kind":"table","model":"m","table":"specimens","selectionMode":"cells"}: loadDocumentText fails, message names selectionMode
 }
@@ -707,8 +834,9 @@ TEST_CASE("grid: rows of a grid", "[ui][grid][rows]") {
     f.grid->focusCell(at(1, "label"));
     f.grid->press("Ctrl+-");
     CHECK(f.form->field("specimens").rows().size() == 1);
-    CHECK(f.grid->message() == "Deleted 1 row. Undo");
-    f.grid->undo();
+    CHECK(f.grid->message() == "Deleted 1 row");
+    CHECK(f.grid->messageEntries() == std::vector<ui::StatusEntry>{{"undo", "Undo"}});
+    f.grid->chooseEntry("undo");
     CHECK(f.form->field("specimens[0].label").draft() == "kept");
     SECTION("rowsFixed offers none") {
         GridFixture fixed{2, ui::GridOptions{.rowsFixed = true}};
@@ -725,7 +853,70 @@ TEST_CASE("grid: rows of a grid", "[ui][grid][rows]") {
         CHECK(grow.grid->focus() == at(2, "label"));
     }
 }
+
+// Mutation: the row entries offered with no bound check (Insert enabled at maxItems).
+TEST_CASE("grid: row entries in the cell's menu and Add row", "[ui][grid][rows]") {
+    std::string schema{kSpecimens};
+    schema.replace(schema.find(R"("maxItems":5)"), 12, R"("maxItems":3)");
+    GridFixture f{2, ui::GridOptions{.appendRows = true}, schema};
+    auto entries = f.grid->cellEntries(ui::Key{std::int64_t{1}}, "label");
+    CHECK(labelsOf(entries) == std::vector<std::string>{"Revert cell", "Revert row", "", "Insert row above",
+                                                        "Insert row below", "Delete row"});   // "" the separator
+    entry(entries, "Insert row above").onSelect();
+    CHECK(keysOf(*f.source).size() == 3);
+    CHECK(keysOf(*f.source).at(1) == ui::Key{std::int64_t{1}});   // the new row stands above row 1
+    entries = f.grid->cellEntries(ui::Key{std::int64_t{1}}, "label");
+    CHECK_FALSE(enabledOf(entry(entries, "Insert row below")));
+    CHECK(descriptionOf(entry(entries, "Insert row below")) == "A grid holds at most 3 rows");
+    f.grid->select(ui::CellRange{at(1, "label"), at(2, "mass")});
+    entries = f.grid->cellEntries(ui::Key{std::int64_t{1}}, "label");
+    entry(entries, "Delete rows").onSelect();
+    CHECK(keysOf(*f.source).size() == 1);
+    SECTION("rowsFixed offers no row entry") {
+        GridFixture fixed{2, ui::GridOptions{.rowsFixed = true}};
+        CHECK(labelsOf(fixed.grid->cellEntries(ui::Key{std::int64_t{1}}, "label")) ==
+              std::vector<std::string>{"Revert cell", "Revert row"});
+    }
+}
+
+// Mutation: insertRow calling committed() once per member it creates (several rounds for one insertion).
+TEST_CASE("grid: each row operation is one change", "[ui][grid][rows]") {
+    GridFixture f{3};
+    f.enableDerive();
+    f.grid->focusCell(at(1, "label"));
+    f.grid->insertRow(true);
+    f.scheduler.advance(150ms); f.h.settle();
+    CHECK(f.evaluate.submits().size() == 1);
+    f.evaluate.resolveSubmit(0, R"({"errors":{},"ready":false})"); f.derive.resolveSubmit(0, kNoValues); f.h.settle();
+    f.grid->focusCell(at(1, "label")); f.grid->type("x"); f.grid->press("Enter");
+    f.scheduler.advance(150ms); f.h.settle();
+    f.evaluate.resolveSubmit(1, R"({"errors":{},"ready":false})"); f.derive.resolveSubmit(1, kNoValues); f.h.settle();
+    f.grid->select(ui::CellRange{at(1, "label"), at(4, "label")});   // view [1, 4, 2, 3]: rows 1 and 4
+    f.grid->deleteRows();                                      // two rows, one holding a value
+    f.scheduler.advance(150ms); f.h.settle();
+    CHECK(f.evaluate.submits().size() == 3);
+    f.evaluate.resolveSubmit(2, R"({"errors":{},"ready":false})"); f.derive.resolveSubmit(2, kNoValues); f.h.settle();
+    f.grid->chooseEntry("undo");
+    f.scheduler.advance(150ms); f.h.settle();
+    CHECK(f.evaluate.submits().size() == 4);
+}
 ```
+
+`tests/grid_test_support.hpp` gains `descriptionOf(ui::MenuItem const&) -> std::string`.
+
+`tests/test_ui_mount.cpp`, over `RecordingBackend` and a client-mode table node with `cellSelection` bound to a signal and three rows keyed 1, 2, 3, columns `a`, `b`, `c`:
+
+```cpp
+// Mutation: the mount sending the rectangle once at its first positions (the sort leaves "r0+2,c0+2" recorded).
+TEST_CASE("mount: a cell selection is shown by its corners' positions now", "[ui][mount][cells]") {
+    // selection {anchor (1, a), focus (2, b)}: CHECK the table records cellSelection == "r0+2,c0+2"
+    // re-sort the rows to 3, 1, 2: CHECK cellSelection == "r1+2,c0+2"
+    // h.backend.selectCells(table, 0, 1, 2, 2): onCellSelect receives {anchor (3, b), focus (2, c)}
+    // the bound selection set to null: CHECK cellSelection == ""
+}
+```
+
+Qt Quick: `"qt_quick grid: a drag selects a rectangle of cells and a row header click its row"` — a mouse press on (1, mass), a move to (2, volume) and a release report `onCellSelect(0, 1, 1, 2)`, and the QML draws the rectangle `setCellSelection` gives, not a row selection. Mutation: the QML table reporting the drag as a row selection.
 
 - [ ] **Step 2: Run to see them fail** — `cmake --build --preset cl-debug --target morph_tests`; expected: `GridController::paste` not declared.
 
@@ -875,17 +1066,19 @@ TEST_CASE("summary: over no rows", "[ui][grid][summary][interpreter]") {
     CHECK(h.text("summary_stats_label") == "0");
     CHECK(h.text("summary_stats_mass").empty());
 }
+// Mutation: a group's summary evaluated over every row of the table (both runs show 12.00).
 TEST_CASE("summary: group summaries are per run", "[ui][grid][summary][interpreter]") {
     // group by r.label with summaries [{key: "m", cells: {mass: mean}}]; labels A, A, B; masses 10, 12, 14
     CHECK(h.text("summary_0_m_mass") == "11.00");
     CHECK(h.text("summary_1_m_mass") == "14.00");
 }
+// Mutation: the loader checking `summaries` on the table node and not on its group part (the second loads).
 TEST_CASE("summary: a model-backed table refuses summaries", "[ui][summary][interpreter]") {
     // {"kind":"table","model":"m","table":"specimens","summaries":[…]} and a group part with summaries: both refused
 }
 ```
 
-Qt Quick: `"qt_quick table: a band draws over each run of its columns and across the pinned edge"` — after `setBands({{0,"Mass retained","g",1,2,false},{0,"Mass retained","g",4,1,false}})` the header holds two band items whose x and width equal the covered columns' extents. TUI: `"tui table: bands draw above the header"` — the rendered header's first line holds `Mass retained [g]` over columns 1–3.
+Qt Quick: `"qt_quick table: a band draws over each run of its columns and across the pinned edge"` — after `setBands({{0,"Mass retained","g",1,2,false},{0,"Mass retained","g",4,1,false}})` the header holds two band items whose x and width equal the covered columns' extents. Mutation: the QML band item placed from its first run's x to its last run's end (one item, as wide as columns 1–4). TUI: `"tui table: bands draw above the header"` — the rendered header's first line holds `Mass retained [g]` over columns 1–3. Mutation: the terminal table drawing the band over the declared columns' widths instead of the runs `setBands` gave (the label starts over column 0).
 
 - [ ] **Step 2: Run to see them fail** — `cmake --build --preset cl-debug --target morph_tests`; expected: `ui::bandRuns` not declared.
 
@@ -903,7 +1096,7 @@ Qt Quick: `"qt_quick table: a band draws over each run of its columns and across
 
 **Interfaces:**
 - Consumes: Task 19–21 `GridSource`, `GridController`, `cellReadOnly`; Task 22 `CellSpan`, `cutColumns`.
-- Produces: `grid.hpp`: `struct FixedCell { std::string field; std::function<std::string()> value; std::string text; std::size_t rows = 1; std::size_t columns = 1; std::function<bool()> readonly; std::function<std::optional<std::uint32_t>()> decimals; };` `struct FixedRow { std::string key; std::string label; std::map<std::string, FixedCell, std::less<>> cells; };` `struct FixedBlock { std::string forEach; std::vector<FixedRow> rows; };` `class FixedGridSource final : public GridSource` — `FixedGridSource(forms::FormSession& form, std::vector<std::variant<FixedRow, FixedBlock>> rows, std::vector<GridColumn> columns)`; row keys are `Key{std::string}`: a fixed row's `key`, a block row's `"<RowState::key()>/<key>"`; a block's `{field}` path is relative to the specimen's row (`specimens#<key>.<field>`); a cell with `{text}` or `{value}` is read-only. Not sorted, filtered or rearranged by rows; columns may be hidden and resized.
+- Produces: `grid.hpp`: `struct FixedCell { std::string field; std::function<std::string()> value; std::string text; std::size_t rows = 1; std::size_t columns = 1; std::function<bool()> readonly; std::function<std::optional<std::uint32_t>()> decimals; };` `struct FixedRow { std::string key; std::string label; std::map<std::string, FixedCell, std::less<>> cells; };` `struct FixedBlock { std::string forEach; std::vector<FixedRow> rows; };` `class FixedGridSource final : public GridSource` — `FixedGridSource(forms::FormSession* form, std::vector<std::variant<FixedRow, FixedBlock>> rows, std::vector<GridColumn> columns, FormatContext format)` (`form` null for a fixed grid of `{text}` and `{value}` cells only, which the loader allows without `form`; a `{field}` cell with `form` null is the loader's refusal, so the source never meets one); every row is held, so `keyAt` is never empty below `rowCount`; row keys are `Key{std::string}`: a fixed row's `key`, a block row's `"<RowState::key()>/<key>"`; a block's `{field}` path is relative to the specimen's row (`specimens#<key>.<field>`); a cell with `{text}` or `{value}` is read-only. Not sorted, filtered or rearranged by rows; columns may be hidden and resized. Its `view()` is a `TableRows` over its expanded rows whose record holds the member `#key`, the row's key, which `keyOf` reads; `rowModified(key)` is true while a `{field}` cell of the row is `FormSession::modified`.
 
 - [ ] **Step 1: Write the failing tests** — `Lims_SetLimits` schema: `limits` object with `density {min, max}` (decimals, 3 places), `moisture {min, max}` (decimals, 1 place), `method` (enum `["A","B"]`), `count` (integer); and `specimens` (array of `{mass: decimal 2}`).
 
@@ -930,13 +1123,14 @@ TEST_CASE("fixed grid: four parameters walk, paste and validate per cell", "[ui]
 // Mutation: block row keys by position, which move every row's state on insertion.
 TEST_CASE("fixed grid: a forEach block repeats per specimen with stable keys", "[ui][grid][fixed]") {
     // rows: [{forEach: "specimens", rows: [{key: "mass", cells: {v: {field: "mass"}}}]}], two specimens (keys 1, 2)
-    CHECK(f.source->rows() == std::vector<ui::Key>{ui::Key{std::string{"1/mass"}}, ui::Key{std::string{"2/mass"}}});
+    CHECK(keysOf(*f.source) == std::vector<ui::Key>{ui::Key{std::string{"1/mass"}}, ui::Key{std::string{"2/mass"}}});
     f.grid->focusCell(ui::CellRef{ui::Key{std::string{"2/mass"}}, "v"}); f.grid->type("5"); f.grid->press("Enter");
     std::uint64_t const added = f.form->field("specimens").insertRow(0);
-    CHECK(f.source->rows().front() == ui::Key{std::to_string(added) + "/mass"});
+    CHECK(keysOf(*f.source).front() == ui::Key{std::to_string(added) + "/mass"});
     CHECK(f.source->draft(ui::Key{std::string{"2/mass"}}, "v") == "5");
 }
 
+// Mutation: the loader's duplicate-key check comparing keys within one block only (two top-level "density" load).
 TEST_CASE("fixed grid: the loader refuses what the spec refuses", "[ui][grid][fixed]") {
     // each refused by loadDocumentText: two layoutRows parts with key "density"; layoutRows with rows;
     // layoutRows with field; a {field} cell without form; form with rows
@@ -950,16 +1144,19 @@ TEST_CASE("fixed grid: the loader refuses what the spec refuses", "[ui][grid][fi
 **Spec:** editing.md "Cells of a model's table", "Read-only and computed" (the model-table half), "Walking" (moving by view position), Invariant 6; Failure modes rows on edit kinds, `editMode`, refused edits, `FieldError`/`FailedRow`; table.md "Rows an action changed" (a key that changes), "Rows at work, rows that failed". Needs Tasks 9 and 17.
 
 **Files:**
-- Modify: `include/morph/table/edits.hpp`, `include/morph/table/description.hpp`, `include/morph/ui/interpreter.hpp` and `src/ui/interpreter.cpp` (`TableInputKind::CellEdit` in `tableInputsOf`, so a `CellEdit`/`RowEdit` run marks its row busy through `RowStates`), `include/morph/ui/grid.hpp`, `src/ui/document.cpp`, `src/ui/interpreter.cpp`, `include/morph/ui/interpreter.hpp`, `tests/ui_interpreter_support.hpp` (schemas `Lims_EditSpecimenCount`, `Lims_EditSpecimenRow`)
+- Modify: `include/morph/table/edits.hpp`, `include/morph/table/description.hpp`, `include/morph/forms/forms.hpp` (`annotateSchemaRoot<A>`), `include/morph/ui/interpreter.hpp` and `src/ui/interpreter.cpp` (`TableInputKind::CellEdit` in `tableInputsOf`, read at the schema root, so a `CellEdit`/`RowEdit` run the session's mutations make marks its row busy through `RowStates`), `include/morph/ui/grid.hpp`, `include/morph/ui/table_rows.hpp` (`WindowRows::onRowsAbsent`), `src/ui/document.cpp`, `src/ui/interpreter.cpp`, `include/morph/ui/interpreter.hpp`, `tests/ui_interpreter_support.hpp` (schemas `Lims_EditSpecimenCount`, `Lims_EditSpecimenRow`)
 - Tests: `tests/table/test_table_pending.cpp` (the `CellEdits` cases, beside its existing ones), `tests/table/test_table_description.cpp`, `tests/test_ui_table_model.cpp`, `tests/net/test_push_tables.cpp`
 - Docs: `docs/spec/ui/document.md`, `docs/spec/ui/interpreter.md` (`editMode`, an editable model column's lowering), `docs/spec/table/engine.md` (`CellEdits` row commits, drafts by key).
 
 **Interfaces:**
-- Consumes: `TableRows`, `WindowRows::setDescription`, `onStaleDescription` (Task 9); `TableRows::states()` (`isBusy`, `failure`), `TableRows::moveKey`, `lockText`, `refusesEdit`, `FailedRow`, `ChangedRows::failed` (Task 17c); `DeclaresSchemaValue`, `model::recordRegistry()`, `TableInputKind`, `tableInputsOf` (Task 17a); `ScreenCore::tableMessage` (Task 12c); `Session::can(action)` (existing); `forms::FormModel::fromSchema`, `forms::FormSession` (existing); Task 19's `GridController`, `GridSource`, `cellReadOnly`.
+- Consumes: `TableRows`, `WindowRows::setDescription`, `onStaleDescription` (Task 9); `TableRows::states()` (`isBusy`, `failure`), `TableRows::moveKey`, `lockText`, `refusesEdit`, `FailedRow`, `ChangedRows::failed` (Task 17c); `DeclaresSchemaValue`, `model::recordRegistry()`, `TableInputKind`, `tableInputsOf` (Task 17a); `ScreenCore::tableMessage` (Task 9d); `Session::can(action)` (existing); `forms::FormModel::fromSchema`, `forms::FormSession` (existing); Task 19's `GridController`, `GridSource`, `cellReadOnly`; `ModelChannel::execute(actionId, body, CallOptions)` (existing, `interpreter.hpp:119`).
 - Produces:
-  - `edits.hpp`: `template <auto Function, typename T> struct CellEdit { RowId key; T value; };` and `template <auto Function, typename Values> struct RowEdit { RowId key; Values values; };`, each with a `schemaValue()` (Task 17a's `DeclaresSchemaValue`) returning `{"x-cellEditOf", name}` / `{"x-rowEditOf", name}`, `name` the `RecordInfo::name` in `model::recordRegistry()` whose `type` is `typeid(TableOf<Function>)`; `TableInputKind` gains `CellEdit` and `tableInputsOf` lists both keywords, the busy key being the body's `key`; `struct EditInfo { std::string action; std::string member; std::string readonly; };` `[[nodiscard]] std::expected<void, TableError> checkEdits(TableDescription const& description, std::function<std::optional<std::string>(std::string_view action)> const& schemaOf);` — `SourceContract` when a column's kind does not fit its field's kind, or `member` is not a member of `values`; the fits are `Integer` ↔ {Integer, Slider, Enum, Choice}, `Key` ↔ {Integer, Choice}, `Decimal` ↔ {Decimal}, `Quantity` ↔ {Quantity}, `Measure` ↔ {Quantity}, `Number` ↔ {Number, Slider}, `Text` ↔ {Text, Multiline, Enum, Choice}, `Date` ↔ {Date, EpochDate}, `DateTime` ↔ {DateTime, EpochDateTime}, `Bool` ↔ {Boolean}, `Custom` ↔ {Text, Enum, Choice}. Task 2's describe path calls it with the dispatcher's action schemas.
-  - `edits.hpp`, `CellEdits` additions: `struct EditCell { std::string column; std::string json; };` `struct RowEditRequest { RowId row; std::vector<EditCell> cells; };` `using RowEditDone = std::function<void(std::expected<void, std::vector<FieldError>>)>;` `using RowEditCommit = std::function<void(RowEditRequest const&, RowEditDone)>;` `explicit CellEdits(RowEditCommit commit);` (a model's table: no patcher, no engine); `void commitRow(RowEditRequest request);` (queued with the row's other edits, in order); `void setDraft(RowId const& row, std::string_view column, std::string text, std::optional<std::string> error);` `[[nodiscard]] std::optional<std::string> draft(RowId const&, std::string_view) const;` `void clearDraft(RowId const&, std::string_view);` `[[nodiscard]] bool modified(RowId const&, std::string_view) const;` (from a success until `rowFetched`); `void rowFetched(RowId const& row);` (ends the row's modified marks and its settled drafts; a stale cell is left as it is); `void moveRow(RowId const& from, RowId const& to);` (drafts, errors, modified marks and queued edits); `void keepColumns(std::span<std::string const> columns);` (drops drafts, errors and marks of every other column); `[[nodiscard]] std::size_t errorCount() const;` `[[nodiscard]] std::size_t modifiedCount() const;` `stale` and `error` see row commits too. `TableColumn::edit` (`std::optional<EditInfo>`).
-  - `grid.hpp`: `struct ModelColumn { std::string id; std::optional<table::EditInfo> edit; std::optional<forms::FieldSpec> field; };` `enum class EditMode : std::uint8_t { Cell, Row };` `class ModelGridSource final : public GridSource` — `ModelGridSource(TableRows& rows, table::CellEdits& edits, std::vector<ModelColumn> columns, EditMode mode, std::function<bool(std::string_view action)> may)`; read-only through `cellReadOnly` with `hasEdit = edit && may(edit->action)`, `companionReadOnly` from the `EditInfo::readonly` column's `true`, `busy` and `locked` from `refusesEdit(rows, index, description)` (busy is `rows.states().isBusy(key)`, locked is `lockText(row, description)`), with one rule on top: a row whose only busy run is this source's own `CellEdits` queue is not refused; `unloaded` from the row's cell. A draft is encoded with the column's `FieldSpec` (`forms::encodeScalar`); an editor is a one-field `forms::FormSession` over that spec. Cell mode: a commit sends `RowEditRequest{key, {{column, json}}}`; row mode: a row's cells are collected while focus stays in the row and sent as one request when focus leaves it or on `Ctrl+Enter`; a refusal sets each `FieldError` on its cell and, while the table has focus, moves focus to the first refused cell. A success whose `ChangedRows` does not name the row calls `rowFetched` at once. `void ModelGridSource::moveKey(Key const& from, Key const& to)` calls `rows.moveKey(from, to)` and `edits.moveRow(from, to)`; the lowering of an editable table calls it where Task 17c's lowering calls `TableRows::moveKey` for a `ChangedRow::from`. `void ModelGridSource::setDescription(table::TableDescription const&)` calls `keepColumns` with its column ids; the lowering calls it wherever it calls `WindowRows::setDescription`. A `FailedRow` for the row is a `FieldError` on each cell of the request.
+  - `edits.hpp`: `template <auto Function, typename T> struct CellEdit { RowId key; T value; };` and `template <auto Function, typename Values> struct RowEdit { RowId key; Values values; };`, each with a `static std::pair<std::string_view, std::string> schemaValue()` (Task 17a's `DeclaresSchemaValue`) returning `{"x-cellEditOf", name}` / `{"x-rowEditOf", name}`, `name` the `RecordInfo::name` in `model::recordRegistry()` whose `type` is `typeid(TableOf<Function>)`, and an in-class glaze meta, `struct glaze { using T = CellEdit; static constexpr auto value = glz::object("key", &T::key, "value", &T::value); };` (`RowEdit`: `"key"`, `"values"`). An application's action derives from one (`struct EditSpecimenCount : table::CellEdit<&SpecimensModel::specimens, std::int64_t> {};`) so each action is its own type, and the derived type finds the meta through its base. Glaze's pure reflection cannot read such a type: it counts members by aggregate initialisation, and `D{any}` initialises the whole base from one placeholder, so it counts 1 member and then binds 1 name to a type with 2 (`glaze/reflection/to_tuple.hpp`, `count_members`, at glaze 7.4, `MORPH_GLAZE_VERSION`). This is inferred from reading glaze's source; no compiler run checked it here, so Step 1's first test is the check (if pure reflection does handle the base, the test still passes and the meta is harmless).
+  - `forms.hpp`: `template <typename A> void annotateSchemaRoot(glz::generic_u64& dom)` — when `DeclaresSchemaValue<A>`, `dom[first] = second` at the schema **root**; called in `mergeSchemaExtras<A>` beside `annotateSubmitMode<A>(dom)` (`forms.hpp:3332`). Task 17a's `annotateSchemaMarker` writes a member's keyword on its property; an edit action is the marked type itself, so its keyword has no property to sit on.
+  - `TableInputKind` gains `CellEdit`; `tableInputsOf` also reads the root: `x-cellEditOf` or `x-rowEditOf` there yields `TableInput{.member = "key", .record = name, .kind = TableInputKind::CellEdit}`, the busy key being the body's `key`. `struct EditInfo { std::string action; std::string member; std::string readonly; };` `[[nodiscard]] std::expected<void, TableError> checkEdits(TableDescription const& description, std::function<std::optional<std::string>(std::string_view action)> const& schemaOf);` — `SourceContract` when a column's kind does not fit its field's kind, or `member` is not a member of `values`; the fits are `Integer` ↔ {Integer, Slider, Enum, Choice}, `Key` ↔ {Integer, Choice}, `Decimal` ↔ {Decimal}, `Quantity` ↔ {Quantity}, `Measure` ↔ {Quantity}, `Number` ↔ {Number, Slider}, `Text` ↔ {Text, Multiline, Enum, Choice}, `Date` ↔ {Date, EpochDate}, `DateTime` ↔ {DateTime, EpochDateTime}, `Bool` ↔ {Boolean}, `Custom` ↔ {Text, Enum, Choice}. Task 2's describe path calls it with the dispatcher's action schemas.
+  - `edits.hpp`, `CellEdits` additions: `struct EditCell { std::string column; std::string json; };` `struct RowEditRequest { RowId row; std::vector<EditCell> cells; };` `using RowEditDone = std::function<void(std::expected<void, std::vector<FieldError>>)>;` `using RowEditCommit = std::function<void(RowEditRequest const&, RowEditDone)>;` `explicit CellEdits(RowEditCommit commit);` (a model's table: no patcher, no engine); `void commitRow(RowEditRequest request);` (queued with the row's other edits, in order); `void setDraft(RowId const& row, std::string_view column, std::string text, std::optional<std::string> error);` `[[nodiscard]] std::optional<std::string> draft(RowId const&, std::string_view) const;` `void clearDraft(RowId const&, std::string_view);` `[[nodiscard]] bool modified(RowId const&, std::string_view) const;` (from a success until `rowFetched`); `void rowFetched(RowId const& row);` (ends the row's modified marks and its settled drafts; a stale cell is left as it is); `void rowAbsent(RowId const& row);` (a fetch that named the row returned none — it was deleted, or no longer matches: drops the row's drafts, errors, modified marks and its edits not yet sent; an edit in flight settles as it would and leaves nothing behind); `void moveRow(RowId const& from, RowId const& to);` (drafts, errors, modified marks and queued edits); `void keepColumns(std::span<std::string const> columns);` (drops drafts, errors and marks of every other column); `[[nodiscard]] std::size_t errorCount() const;` `[[nodiscard]] std::size_t modifiedCount() const;` `stale` and `error` see row commits too. `TableColumn::edit` (`std::optional<EditInfo>`).
+  - `grid.hpp`: `struct ModelColumn { std::string id; std::optional<table::EditInfo> edit; std::optional<forms::FieldSpec> field; };` `enum class EditMode : std::uint8_t { Cell, Row };` `class ModelGridSource final : public GridSource` — `ModelGridSource(TableRows& rows, table::CellEdits& edits, std::vector<ModelColumn> columns, EditMode mode, std::function<bool(std::string_view action)> may)`; `rowCount()` is `rows.total().rows`, `keyAt(i)` the key of `rows.row(i)`, empty while that row is not fetched (Task 19's walk stops there); read-only through `cellReadOnly` with `hasEdit = edit && may(edit->action)`, `companionReadOnly` from the `EditInfo::readonly` column's `true`, `busy` and `locked` from `refusesEdit(rows, index, description)` (busy is `rows.states().isBusy(key)`, locked is `lockText(row, description)`); `unloaded` from the row's cell. `view()` is `rows`; `keyOf(record)` reads the record's field named by the key of the description `setDescription` last gave it, as a `RowId` (that column is always fetched, Task 9d's `alwaysFetched`); `rowModified(key)` is true while `edits` holds a modified mark or a draft for any of the row's columns. `marks(key, column)` is `{.readOnly = readOnly(key, column), .modified = edits.modified(row, column), .error = edits.error(row, column).has_value(), .stale = edits.stale(row, column)}` with `row` the key as a `RowId`. `CellEdits` is not reactive, so the source holds a `reactive::Signal<std::uint64_t>` it advances after each call it makes on `edits` and in each `RowEditDone`; `marks` and `rowModified` read it first, which makes them tracked reads, and the lowering mounts the table through `GridController::node`, so a model's table draws its marks per cell from each cell's own row signal, as a form grid does. **The source's own edits are not busy runs**: the lowering's `RowEditCommit` sends through `ModelChannel::execute(action, body, {})` directly, not through a `MutationRuntime`, so no `RunObserver` sees it and nothing registers it in `RowStates`; a row with its own edits queued or in flight takes further edits (queued behind them by `CellEdits`) and shows them stale. A `CellEdit`/`RowEdit` run made by a document mutation of the session, or by `Table.*` on another table, does go through `MutationRuntime`, so `tableInputsOf` marks its row busy and the cell refuses. The source subscribes to `rows.onChange`: a row a change inserts or updates is `edits.rowFetched(key)`. `void ModelGridSource::rowsAbsent(std::span<table::RowId const> keys)` calls `edits.rowAbsent` for each; the lowering wires it to `WindowRows::onRowsAbsent`. A draft is encoded with the column's `FieldSpec` (`forms::encodeScalar`); an editor is a one-field `forms::FormSession` over that spec. Cell mode: a commit sends `RowEditRequest{key, {{column, json}}}`; row mode: a row's cells are collected while focus stays in the row and sent as one request when focus leaves it or on `Ctrl+Enter`; a refusal sets each `FieldError` on its cell and, while the table has focus, moves focus to the first refused cell. A success whose `ChangedRows` does not name the row calls `rowFetched` at once. `void ModelGridSource::moveKey(Key const& from, Key const& to)` calls `rows.moveKey(from, to)` and `edits.moveRow(from, to)`; the lowering of an editable table calls it where Task 17c's lowering calls `TableRows::moveKey` for a `ChangedRow::from`. `void ModelGridSource::setDescription(table::TableDescription const&)` calls `keepColumns` with its column ids; the lowering calls it wherever it calls `WindowRows::setDescription`. A `FailedRow` for the row is a `FieldError` on each cell of the request.
+  - `table_rows.hpp`: `void WindowRows::onRowsAbsent(std::function<void(std::span<table::RowId const>)> handler)` — called once per keyed fetch reply with the keys that fetch named and the reply holds no row for (a change event's refetch of a deleted row, or of one that left the filter). A Part D type; this task adds the member and its test, and Part D's plan names it as G's.
   - Status-line copy (through `ScreenCore::tableMessage`): an edit refused at a cell: unloaded `"This value is not loaded yet"`, busy `"This row is being saved"`, locked: the row's lock text.
   - Document: `editMode` (`cell`, the default, or `row`) on a model's table; refused on any other table.
 
@@ -1042,6 +1239,52 @@ TEST_CASE("cell edits: a new revision drops drafts of a removed column", "[table
     CHECK(edits.draft(k1, "note") == "kept");
     CHECK(edits.errorCount() == 0);
 }
+
+// Mutation: rowAbsent ignored (the deleted row's draft and error stay, errorCount 1).
+TEST_CASE("cell edits: a row absent from a refetch loses its drafts", "[table][edits]") {
+    RowCommits c;
+    table::CellEdits edits{c.commit()};
+    edits.setDraft(k1, "count", "abc", "Not a number");
+    edits.setDraft(table::RowId{std::int64_t{2}}, "count", "7", std::nullopt);
+    edits.rowAbsent(k1);
+    CHECK_FALSE(edits.draft(k1, "count").has_value());
+    CHECK_FALSE(edits.error(k1, "count").has_value());
+    CHECK(edits.errorCount() == 0);
+    CHECK(edits.draft(table::RowId{std::int64_t{2}}, "count") == "7");   // other rows untouched
+}
+```
+
+`tests/test_ui_table_model.cpp`, the action types over a model the file registers (`struct EditRowsModel { std::vector<SpecimenRow> rows; table::ServedTable specimens(table::TableContext const&); };`, `BRIDGE_REGISTER_MODEL(EditRowsModel, "T_EditRows")`, `BRIDGE_REGISTER_TABLE(EditRowsModel, "specimens", &EditRowsModel::specimens)`, so the record is `T_EditRows.specimens`):
+
+```cpp
+using SpecimensModel = EditRowsModel;
+struct EditSpecimenCount : table::CellEdit<&SpecimensModel::specimens, std::int64_t> {};
+struct SpecimenValues { std::optional<std::string> label; std::optional<std::string> remark; };
+struct EditSpecimenRow : table::RowEdit<&SpecimensModel::specimens, SpecimenValues> {};
+
+// Mutation: annotateSchemaRoot left out of mergeSchemaExtras (no root keyword; tableInputsOf finds no input).
+TEST_CASE("cell edits: an edit action reads, writes and names its table at the schema root", "[ui][table][edit]") {
+    static_assert(glz::reflect<EditSpecimenCount>::size == 2);
+    EditSpecimenCount edit{};
+    REQUIRE_FALSE(glz::read_json(edit, R"({"key":4,"value":9})"));
+    CHECK(edit.value == 9);
+    CHECK(glz::write_json(edit).value() == R"({"key":4,"value":9})");
+    auto dom = glz::read_json<glz::generic_u64>(forms::schemaJson<EditSpecimenCount>()).value();
+    CHECK(glz::write_json(dom["x-cellEditOf"]).value() == R"("T_EditRows.specimens")");
+    CHECK_FALSE(dom["properties"]["key"].contains("x-cellEditOf"));
+    auto const inputs = ui::tableInputsOf(forms::schemaJson<EditSpecimenRow>());
+    REQUIRE(inputs.size() == 1);
+    CHECK(inputs.at(0).member == "key");
+    CHECK(inputs.at(0).record == "T_EditRows.specimens");
+    CHECK(inputs.at(0).kind == ui::TableInputKind::CellEdit);
+}
+
+// Mutation: onRowsAbsent called with every key the fetch named (row 2, which came back, is reported too).
+TEST_CASE("table rows: a keyed refetch that returns no row reports it absent", "[ui][table][edit]") {
+    // Task 9's Harness over a WindowRows of rows 1..3; onRowsAbsent records its calls
+    // a change event naming keys 2 and 3; the keyed fetch's reply holds row 2 only
+    // CHECK the handler was called once with exactly {3}
+}
 ```
 
 `tests/table/test_table_description.cpp`:
@@ -1081,6 +1324,53 @@ TEST_CASE("model table: read-only is one rule", "[ui][table][edit]") {
     CHECK(f.source->readOnly(ui::Key{std::int64_t{1}}, "count"));
 }
 
+// Mutation: the commit sent through MutationRuntime (its RunObserver marks row 1 busy and the second cell refuses).
+TEST_CASE("model table: the table's own edits do not make its row busy", "[ui][table][edit]") {
+    // rows 1..2, all editable; EditMode::Cell
+    // focus (1, label), type "a", Enter: one request in flight; CHECK_FALSE f.rows.states().isBusy(1)
+    // focus (1, remark), type "b", Enter: CHECK f.grid->message() is empty, f.commits.sent.size() == 1 (queued),
+    //   and the (1, remark) cell is stale
+    // settle the first: CHECK f.commits.sent.size() == 2
+    // another action's run on row 2 (f.rows.states().busyKeys(7, {2})): type on (2, label): message
+    //   "This row is being saved", nothing sent
+}
+
+// Mutation: the walk passing over a row not fetched yet as if it were read-only (focus lands on row 5).
+TEST_CASE("model table: the walk stops at a row not fetched yet", "[ui][table][edit]") {
+    // rows 1..5 in the view, row 3 not fetched (FakeRows::row(2) empty); all editable
+    // focus (2, count), type "1", Enter: CHECK f.grid->focus() is view row 2 (the placeholder of row 3, by position),
+    //   f.source->keyAt(2) is empty and nothing was written to row 4 or 5
+    // FakeRows delivers row 3; Enter with no editor, then type "2", Enter: CHECK the request names row 3
+}
+```
+
+Interpreter-level, same file, through Task 9's `Harness`, `tableCatalog()` (with `Lims_EditSpecimenCount` and `Lims_EditSpecimenRow` added to its permitted actions unless a case removes one), `replyDescribe`, `replyPage`, `statusOf`, Task 17a's `element`, `cellText`, and `cellMarks(h, key, column)` (new here, in `tests/ui_table_support.hpp`: the `marks:<column index>` the recording backend last recorded on the row widget showing `key`, `""` when none) — so the lowering is tested on Windows, where `morph_net_tests` does not build:
+
+```cpp
+// Mutation: the lowering leaving a column with `edit` read-only (no request is sent).
+TEST_CASE("model table: an editable column lowers to a cell edit", "[ui][table][edit][interpreter]") {
+    // a description whose `count` column has edit {action "Lims_EditSpecimenCount"}; a page of rows 1..3
+    // h.backend.clickCell(table, 0, <count>, true); edit the editor to "4"; press Enter on the table
+    // CHECK the channel received execute("Lims_EditSpecimenCount", {"key":1,"value":4}) and no MutationRuntime run
+    //   started (statusOf(h).standing is empty: nothing "Saving")
+    // reply {"rows":{"rows":[{"key":1}]}} and a change event naming 1; replyPage with count 4 for row 1:
+    //   before the page: CHECK cellMarks(h, 1, "count") == "m" (drawn by the cell's view); after it:
+    //   CHECK cellText(h, 1, "count") == "4" and cellMarks(h, 1, "count") == ""
+}
+// Mutation: the lowering ignoring the catalog's permitted set (the refused principal's cell opens an editor).
+TEST_CASE("model table: a column whose action is not permitted is read-only", "[ui][table][edit][interpreter]") {
+    // tableCatalog without Lims_EditSpecimenCount permitted: a double click on (1, count) opens no editor;
+    // typing "4" posts "This cell is read-only" (statusOf(h).message)
+}
+// Mutation: the loader accepting editMode on a `rows` table.
+TEST_CASE("model table: editMode is refused on a table that is not a model's", "[ui][table][edit][interpreter]") {
+    // {"kind":"table","rows":{"ref":"items"},"editMode":"row"}: loadDocumentText fails, the message names editMode;
+    // {"kind":"table","model":"m","table":"specimens","editMode":"sideways"}: fails, naming the value;
+    // {"kind":"table","model":"m","table":"specimens","editMode":"row"}: loads, and a Tab from (1, label) to
+    //   (1, remark) after typing sends nothing until focus leaves row 1
+}
+```
+
 // Mutation: the walk following the edited row instead of the view position at the commit.
 TEST_CASE("model table: Enter after an edit that moves its row lands on the row that was below", "[ui][table][edit]") {
     // view [1, 2, 3], all editable; focus (1, count), type "9", Enter; FakeRows re-sorts to [2, 3, 1]
@@ -1111,6 +1401,7 @@ TEST_CASE("push tables: a cell edit reaches the model and the change event refet
     // row 1; the editing client's cell is not modified after its refetch; the action's schema carries
     // "x-cellEditOf":"<SpecimensModel>.specimens"
 }
+// Mutation: the server's catalog listing every action as permitted (the viewer's column stays editable).
 TEST_CASE("push tables: a principal refused the edit action sees the column read-only", "[net][tables][edit]") {
     // the authoriser refuses Lims_EditSpecimenCount for principal "viewer": the catalog's permitted set lacks it, and
     // the lowered count column is read-only for that client
@@ -1125,7 +1416,7 @@ Write each commented case out in Catch2 with the fixture's calls; the comments a
 
 - [ ] **Step 5: Run**
 
-Run: `ctest --test-dir build/cl-debug -R "cell edits|description|model table|pending" --output-on-failure`, and on `linux-everything` (where `morph_net_tests` builds) `ctest --test-dir build/linux-everything -R "push tables" --output-on-failure`
+Run: `cmake --build --preset cl-debug --target morph_table_tests morph_tests && ctest --test-dir build/cl-debug -R "cell edits|description|model table|pending|table rows" --output-on-failure`, and on `linux-everything` (where `morph_net_tests` builds) `ctest --test-dir build/linux-everything -R "push tables" --output-on-failure`
 Expected: all pass, including every existing case in `test_table_pending.cpp`, `test_table_reentrancy.cpp` and `test_table_selection.cpp`.
 
 - [ ] **Step 6: Mutate**, **Step 7: Docs** (docs build), **Step 8: Commit** `feat(table): edit cells of a model's table`.
@@ -1136,12 +1427,13 @@ Expected: all pass, including every existing case in `test_table_pending.cpp`, `
 
 Each is what this plan implements; the task that lands it states it in the spec it updates.
 
-- **A row busy with its own cell edits still takes edits.** editing.md says edits to one row are queued in order (line 221) and that a busy row takes no edit (lines 236–237, 288, Invariant 6 at 482); table.md makes the row of a `CellEdit` busy (lines 2425–2427). Read together, a second cell of a row could never be entered while the first is saving. `ModelGridSource` refuses an edit for a row busy with any other action, and queues one for a row whose only work is its own `CellEdits` queue (Task 24).
+- **A row busy with its own cell edits still takes edits.** editing.md says edits to one row are queued in order (line 221) and that a busy row takes no edit (lines 236–237, 288, Invariant 6 at 482); table.md makes the row of a `CellEdit` busy (lines 2425–2427). Read together, a second cell of a row could never be entered while the first is saving. The table's own edits are therefore not busy runs: they are sent through `ModelChannel::execute` directly, never registered in `RowStates`, and shown stale instead; a row busy with any other run (a document mutation, another table's action) refuses the edit (Task 24).
 - **A row-mode refusal brings focus back.** editing.md line 228–230 commits a row "when focus leaves it" and on refusal "keeps focus in the row". Focus has left by then; it is moved back to the first refused cell while the table has focus (Task 24).
-- **Read-only cells draw no modified mark.** editing.md line 300 marks any cell whose value differs from the loaded one; its test row (521) wants typing to mark "that cell and its row, not its neighbours", while a derive reply changes the neighbouring computed cells of that row. `FormSession::modified` is false for read-only members (Task 19).
-- **A deletion offers Undo; it does not ask first.** editing.md line 358–359 "asks once, in the table's status line, with Undo"; its test row (518) "offers Undo". Rows are deleted at once and the status line says `"Deleted {n} rows. Undo"` (Task 21).
-- **Status-line copy the spec does not fix** is pinned in Tasks 19, 20, 21 and 24 (`"This cell is read-only"`, `"Derived values could not be recalculated. Recalculate"`, the paste and row messages, the refusal messages).
-- **Busy rows from a `CellEdit` input** are listed in the roadmap's Task 17c, which lands before `CellEdit` exists; Task 24 adds `TableInputKind::CellEdit` (`x-cellEditOf`, `x-rowEditOf`) to Task 17a's `tableInputsOf`. The own-queue exemption is a rule of `ModelGridSource` on top of `refusesEdit`, which stays as Part F defines it.
+- **Computed and derived cells draw no modified mark.** editing.md line 300 marks any cell whose value differs from the loaded one; its test row (521) wants typing to mark "that cell and its row, not its neighbours", while a derive reply changes the neighbouring computed cells of that row. `FormSession::modified` is false for `x-computed` and `x-derived` members only; a cell the user typed in and a rule then froze stays modified (Task 19).
+- **A deletion offers Undo; it does not ask first.** editing.md line 358–359 "asks once, in the table's status line, with Undo"; its test row (518) "offers Undo". Rows are deleted at once and the status line says `"Deleted {n} rows"` with the entry "Undo" (Task 21).
+- **Status-line copy the spec does not fix** is pinned in Tasks 19, 20, 21 and 24 (`"This cell is read-only"`, the standing `"Derived values could not be recalculated"` with the entry "Recalculate", the paste and row messages, the refusal messages). A failed derive round is a standing state, beside the ones index decision 19 lists, since it lasts until a round succeeds.
+- **Busy rows from a `CellEdit` input** are listed in the roadmap's Task 17c, which lands before `CellEdit` exists; Task 24 adds `TableInputKind::CellEdit` (`x-cellEditOf`, `x-rowEditOf`) to Task 17a's `tableInputsOf`. `refusesEdit` stays as Part F defines it; the table's own edits never reach `RowStates`, so no exemption is needed on top of it.
+- **A row absent from a refetch loses its drafts.** editing.md keeps a draft by key while its row scrolls away; a keyed fetch that names the row and returns none means the row was deleted or left the filter, and its drafts are dropped (`CellEdits::rowAbsent`, fed by `WindowRows::onRowsAbsent`, Task 24).
 - **`CellEdits` cases live in `tests/table/test_table_pending.cpp`**, beside that class's existing cases, in addition to the roadmap's `tests/test_ui_table_model.cpp` and `tests/net/test_push_tables.cpp`. `tests/forms/` is a new directory whose files join `morph_tests`.
 
 ## Self-review notes
