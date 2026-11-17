@@ -4,33 +4,28 @@ The implementation plan for `docs/spec/table/table.md` and `docs/spec/table/edit
 
 ## Status
 
-The plans go through review rounds with Fable until a review reports no Critical or Important issue. Every finding through round 2 (all seven parts; round 3 for C) is applied. Applying them added Cross-part decisions 30–53 to the index and extended #19, #20 and #28.
+The plans went through review rounds with Fable: two rounds on every part, three on C. Every finding is applied, and the review is closed. Applying them added Cross-part decisions 30–53 to the index and extended #19, #20 and #28.
 
 | Part | File | State |
 |---|---|---|
-| A — Tasks 0–2 | `…-a-foundation.md` | Round-2 fixes applied. Next review: round 3. |
-| B — Tasks 3–7 | `…-b-slow-columns.md` | Round-2 fixes applied; aligned with #30 (`Session::read` yields text). Next review: round 3. |
-| C — Task 8 | `…-c-engine-config.md` | Round-3 fixes applied. Next review: round 4. |
-| D — Tasks 9–11 | `…-d-screen.md` | Round-2 fixes applied; aligned with #30, #32–#35. Next review: round 3. |
-| E — Tasks 12–14, 16 | `…-e-configure.md` | Round-2 fixes applied. Next review: round 3. |
-| F — Tasks 15, 17 | `…-f-display-and-acting.md` | Round-2 fixes applied; `tableMessage` points to Task 9d. Next review: round 3. |
-| G — Tasks 19–24 | `…-g-editing.md` | Round-2 fixes applied; marks drawn per cell (#28). Next review: round 3. |
+| A — Tasks 0–2 | `…-a-foundation.md` | Round-2 fixes applied. |
+| B — Tasks 3–7 | `…-b-slow-columns.md` | Round-2 fixes applied; aligned with #30 (`Session::read` yields text). |
+| C — Task 8 | `…-c-engine-config.md` | Round-3 fixes applied. |
+| D — Tasks 9–11 | `…-d-screen.md` | Round-2 fixes applied; aligned with #30, #32–#35. |
+| E — Tasks 12–14, 16 | `…-e-configure.md` | Round-2 fixes applied. |
+| F — Tasks 15, 17 | `…-f-display-and-acting.md` | Round-2 fixes applied; `tableMessage` points to Task 9d. |
+| G — Tasks 19–24 | `…-g-editing.md` | Round-2 fixes applied; marks drawn per cell (#28). |
 
 Nothing in the plans has been compiled. Where a part rests on reading code rather than building it, it says so. For example, G's claim that glaze cannot reflect a base class's members comes from reading `to_tuple.hpp`, and Task 24's first step checks it with a `static_assert`.
 
 ## What to do next
 
-1. **Run a fresh Fable review of all seven parts.** Each review checks:
-   - spec fidelity;
-   - executability against the real code;
-   - consistency with sibling parts and with the index's decisions (1–53);
-   - plan quality per `superpowers:writing-plans`.
+The plan review is finished: no further review rounds are run on the plans.
 
-   Reviewers report only Critical or Important issues, or "NO ISSUES".
-2. **Repeat fix and re-review** until every part comes back with "NO ISSUES". When a finding changes a shared name or an owner, add a Cross-part decision to the index and tell the affected parts.
-3. **Then execute** with `superpowers:subagent-driven-development`, in index order.
+1. **Execute** with `superpowers:subagent-driven-development`, in index order. Fan out with Agent subagents, not the Workflow tool.
    - Implementers follow the user's model rules: Haiku for fully specified tasks, Opus for judgment, Opus for every review.
    - Net tests (`morph_net_tests`) run only on `linux-everything`.
+2. **When a task finds the plan wrong** (a signature that does not compile, a test that cannot hold), fix the plan in that task's commit. When the fix changes a shared name or an owner, add a Cross-part decision to the index and correct the affected parts.
 
 ## Spec questions — settled
 
