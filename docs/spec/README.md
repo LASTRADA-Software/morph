@@ -139,7 +139,9 @@ server ·
 lives in a database: `planQuery`, `Page::totalKind` and the conformance helper ·
 [`table/table.md`](table/table.md) — the one table every surface
 uses: a table as a description any model can offer, the single pipeline,
-unloaded cells and levels, the caches, configuration, and the budgets
+unloaded cells and levels, the caches, configuration, acting on rows, and the budgets ·
+[`table/editing.md`](table/editing.md) — typing into a table: a grid of a form, cells of a model's table, the
+cell editor, walking, paste, header bands, spans, summary rows and fixed grids
 
 **Reactive state and control**
 [`reactive/signals.md`](reactive/signals.md) ·
