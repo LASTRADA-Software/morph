@@ -14,6 +14,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <morph/export.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -6185,10 +6186,7 @@ private:
 
 /// @brief The process's screen registry, which `MORPH_REGISTER_SCREEN` enrols into.
 /// @return The registry.
-[[nodiscard]] inline ScreenRegistry& screenRegistry() noexcept {
-    static ScreenRegistry registry;
-    return registry;
-}
+[[nodiscard]] MORPH_API ScreenRegistry& screenRegistry() noexcept;
 
 /// @brief Enrols a screen into the process's registry; what `MORPH_REGISTER_SCREEN` runs.
 /// @tparam Make A callable that returns the `Screen`.

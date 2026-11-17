@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <morph/export.hpp>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -394,10 +395,7 @@ namespace detail {
 /// @brief Process-wide slot holding the default action log, plus the mutex
 ///        guarding it. A function-local static, not a namespace-scope global,
 ///        so it's safe regardless of translation-unit init order.
-inline std::pair<std::mutex, std::shared_ptr<IActionLog>>& defaultActionLogState() {
-    static std::pair<std::mutex, std::shared_ptr<IActionLog>> state;
-    return state;
-}
+MORPH_API std::pair<std::mutex, std::shared_ptr<IActionLog>>& defaultActionLogState();
 
 }  // namespace detail
 

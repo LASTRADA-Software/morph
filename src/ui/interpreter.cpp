@@ -1048,6 +1048,8 @@ void Session::applyFacts(std::string locale) {
     setFormatting(std::move(next));
 }
 
+Screen::Screen() = default;
+
 Screen::~Screen() {
     try {
         if (Commands const* const commands = lifecycleList("onUnmount")) {

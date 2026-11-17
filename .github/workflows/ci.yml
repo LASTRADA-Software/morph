@@ -175,7 +175,8 @@ jobs:
         # Release legs build without running tests and are the slowest jobs in
         # the workflow, so pull requests get the two debug legs, which build
         # and test, and master pushes add the release legs.
-        preset: ${{ fromJSON(github.event_name == 'pull_request' && '["cl-debug", "clangcl-debug"]' || '["cl-debug", "cl-release", "clangcl-debug", "clangcl-release"]') }}
+        # The shared-library legs build and test morph::morph as a DLL.
+        preset: ${{ fromJSON(github.event_name == 'pull_request' && '["cl-debug", "clangcl-debug", "cl-shared-debug", "clangcl-shared-debug"]' || '["cl-debug", "cl-release", "clangcl-debug", "clangcl-release", "cl-shared-debug", "clangcl-shared-debug"]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -219,7 +220,7 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }}
 
       - name: Test
-        if: matrix.preset == 'cl-debug' || matrix.preset == 'clangcl-debug'
+        if: endsWith(matrix.preset, '-debug')
         run: ctest --preset ${{ matrix.preset }}
 
   # Picks a self-hosted lastrada-docker runner for the Linux legs when one is
@@ -314,7 +315,9 @@ jobs:
       matrix:
         # No gcc-debug leg: linux-qt configures gcc-debug with Qt on and runs
         # the whole suite, which covers everything a plain gcc-debug leg would.
-        preset: [gcc-release, clang-debug, clang-release]
+        # clang-shared-debug builds morph::morph as a shared library with its
+        # symbols hidden by default, so an unexported symbol is a link error.
+        preset: [gcc-release, clang-debug, clang-release, clang-shared-debug]
     steps:
       - uses: actions/checkout@v4
 
@@ -2404,6 +2407,15 @@ jobs:
           CC: gcc-15
           CXX: g++-15
         run: bash scripts/check_install_export.sh
+
+      # The same check with morph::morph built as a shared library: the
+      # installed package must carry the shared target and a consumer must
+      # link and run against it.
+      - name: Install morph as a shared library and build a consumer against the prefix
+        env:
+          CC: gcc-15
+          CXX: g++-15
+        run: bash scripts/check_install_export.sh --shared
 
   # ── The master compiler cache ─────────────────────────────────────────
   # Merges the entries every Linux job used on this push into the one cache

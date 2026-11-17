@@ -7,6 +7,7 @@
 #include <expected>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <morph/export.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -631,10 +632,7 @@ private:
     };
 
     /// @brief The verification the running `admit` on this thread made, if any.
-    static const Verification*& active() noexcept {
-        thread_local const Verification* current = nullptr;
-        return current;
-    }
+    MORPH_API static const Verification*& active() noexcept;
 
     /// @brief Installs a verification for the length of one `admit`, and
     ///        restores the one it replaced, on return or on a throw.

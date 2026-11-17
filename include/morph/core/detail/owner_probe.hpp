@@ -5,6 +5,7 @@
 #include <cassert>
 #include <core/async/IExecutor.hpp>
 #include <cstdio>
+#include <morph/export.hpp>
 
 /// @file
 /// @brief The check every loop-owned body makes on entry: "am I on my owner?"
@@ -28,10 +29,7 @@ using OwnerProbe = void (*)(char const* site, ::core::async::IExecutor const& ow
 
 /// @brief The installed probe, or null.
 /// @return The process-wide probe slot.
-[[nodiscard]] inline std::atomic<OwnerProbe>& ownerProbe() noexcept {
-    static std::atomic<OwnerProbe> probe{nullptr};
-    return probe;
-}
+[[nodiscard]] MORPH_API std::atomic<OwnerProbe>& ownerProbe() noexcept;
 
 /// @brief Records that @p site is running a body that must run on @p owner.
 ///

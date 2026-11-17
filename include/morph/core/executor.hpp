@@ -9,6 +9,7 @@
 #include <coroutine>
 #include <exception>
 #include <functional>
+#include <morph/export.hpp>
 #include <mutex>
 #include <queue>
 #include <string>
@@ -404,10 +405,7 @@ public:
 /// A function-local static, so it is constructed on first use and outlives
 /// everything built over it.
 /// @return Reference to the shared inline executor.
-inline IExecutor& inlineExecutor() {
-    static InlineExecutor executor;
-    return executor;
-}
+MORPH_API IExecutor& inlineExecutor();
 
 }  // namespace detail
 

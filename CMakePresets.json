@@ -94,6 +94,20 @@
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     },
     {
+      "name": "cl-shared-debug",
+      "displayName": "Debug, morph as a shared library (MSVC)",
+      "inherits": "cl-debug",
+      "binaryDir": "${sourceDir}/build/cl-shared-debug",
+      "cacheVariables": { "MORPH_BUILD_SHARED": "ON" }
+    },
+    {
+      "name": "clangcl-shared-debug",
+      "displayName": "Debug, morph as a shared library (clang-cl)",
+      "inherits": "clangcl-debug",
+      "binaryDir": "${sourceDir}/build/clangcl-shared-debug",
+      "cacheVariables": { "MORPH_BUILD_SHARED": "ON" }
+    },
+    {
       "name": "windows-everything",
       "displayName": "Every optional feature (clang-cl release, Windows)",
       "inherits": "clangcl-release",
@@ -142,6 +156,13 @@
       "inherits": "base-clang-linux",
       "binaryDir": "${sourceDir}/build/clang-release",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "clang-shared-debug",
+      "displayName": "Debug, morph as a shared library (Clang, Linux)",
+      "inherits": "clang-debug",
+      "binaryDir": "${sourceDir}/build/clang-shared-debug",
+      "cacheVariables": { "MORPH_BUILD_SHARED": "ON" }
     },
     {
       "name": "linux-everything",
@@ -212,11 +233,14 @@
     { "name": "cl-qt-release",   "configurePreset": "cl-qt-release",   "jobs": 0 },
     { "name": "clangcl-debug",   "configurePreset": "clangcl-debug",   "jobs": 0 },
     { "name": "clangcl-release", "configurePreset": "clangcl-release", "jobs": 0 },
+    { "name": "cl-shared-debug",      "configurePreset": "cl-shared-debug",      "jobs": 0 },
+    { "name": "clangcl-shared-debug", "configurePreset": "clangcl-shared-debug", "jobs": 0 },
     { "name": "windows-everything", "configurePreset": "windows-everything", "jobs": 0 },
     { "name": "gcc-debug",       "configurePreset": "gcc-debug",       "jobs": 0 },
     { "name": "gcc-release",     "configurePreset": "gcc-release",     "jobs": 0 },
     { "name": "clang-debug",     "configurePreset": "clang-debug",     "jobs": 0 },
     { "name": "clang-release",   "configurePreset": "clang-release",   "jobs": 0 },
+    { "name": "clang-shared-debug", "configurePreset": "clang-shared-debug", "jobs": 0 },
     { "name": "linux-everything", "configurePreset": "linux-everything", "jobs": 0 },
     { "name": "clang-asan",      "configurePreset": "clang-asan",      "jobs": 0 },
     { "name": "clang-tsan",      "configurePreset": "clang-tsan",      "jobs": 0 },
@@ -235,11 +259,14 @@
     { "name": "cl-qt-debug",       "configurePreset": "cl-qt-debug",       "inherits": "base-test" },
     { "name": "cl-qt-release",     "configurePreset": "cl-qt-release",     "inherits": "base-test" },
     { "name": "clangcl-debug",     "configurePreset": "clangcl-debug",     "inherits": "base-test" },
+    { "name": "cl-shared-debug",      "configurePreset": "cl-shared-debug",      "inherits": "base-test" },
+    { "name": "clangcl-shared-debug", "configurePreset": "clangcl-shared-debug", "inherits": "base-test" },
     { "name": "windows-everything","configurePreset": "windows-everything","inherits": "base-test" },
     { "name": "gcc-debug",         "configurePreset": "gcc-debug",         "inherits": "base-test" },
     { "name": "gcc-release",       "configurePreset": "gcc-release",       "inherits": "base-test" },
     { "name": "clang-debug",       "configurePreset": "clang-debug",       "inherits": "base-test" },
     { "name": "clang-release",     "configurePreset": "clang-release",     "inherits": "base-test" },
+    { "name": "clang-shared-debug",   "configurePreset": "clang-shared-debug",   "inherits": "base-test" },
     { "name": "linux-everything",  "configurePreset": "linux-everything",  "inherits": "base-test" },
     {
       "name": "clang-asan",

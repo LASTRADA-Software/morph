@@ -2567,7 +2567,9 @@ private:
     friend class Interpreter;
     friend class Inspector;
 
-    Screen() = default;
+    // Out of line: an exported class emits its inline members in every module, and this one destroys a
+    // `std::unique_ptr<Mounted>` on a throw, which needs `Mounted` complete.
+    Screen();
 
     /// Evaluates a head expression of runs; a run the head cannot read is dropped and reported.
     [[nodiscard]] std::vector<TextSpan> headSpans(ExprPtr const& expr) const;
@@ -2627,7 +2629,7 @@ private:
 /// a binding on one updates, and `{"set": "app.name", …}` writes the app document's state. A query of the app
 /// document runs once however many screens read it. Destroying the root runs its `onUnmount`, takes its scope off the
 /// session and releases its model instances; a host does that before it clears the session on sign-out.
-class AppRoot {
+class MORPH_API AppRoot {
 public:
     AppRoot(AppRoot const&) = delete;
     AppRoot& operator=(AppRoot const&) = delete;

@@ -321,7 +321,7 @@ private:
     };
 
     // The widgets of one results column, a panel under the field or the compact overlay's body.
-    struct MORPH_API ResultsColumn {
+    struct ResultsColumn {
         std::vector<std::unique_ptr<TextWidget>> texts;
         std::vector<HitRow> rows;
         void clear();

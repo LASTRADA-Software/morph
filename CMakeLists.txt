@@ -32,6 +32,32 @@ if(CMAKE_GENERATOR MATCHES "Ninja" AND MORPH_LINK_JOBS GREATER 0)
 endif()
 
 option(MORPH_BUILD_TESTS         "Build tests"         ON)
+option(MORPH_BUILD_SHARED        "Build morph::morph as a shared library (MORPH_API marks what it exports; symbols are hidden by default)" OFF)
+# A shared morph links a shared core-cpp (CORE_CPP_BUILD_SHARED): core-cpp keeps
+# process and thread state of its own, such as the current executor, and a
+# static copy in both libmorph and the executable would be two. Static
+# libraries this tree links into the shared morph are position-independent.
+if(MORPH_BUILD_SHARED)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    # Windows finds a DLL only beside the executable (or on PATH), and a test
+    # binary also runs at build time, to list its cases. One flat directory for
+    # every executable, morph.dll and core-cpp's DLLs is what makes both work.
+    if(WIN32 AND NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
+    endif()
+    # An installed libmorph needs core-cpp's libraries, and each of those needs
+    # the others; all are installed into one directory. A search path relative
+    # to the library itself finds them wherever the prefix lands, instead of
+    # relying on the program's own search path, which the loader does not apply
+    # to a library's dependencies.
+    if(NOT DEFINED CMAKE_INSTALL_RPATH)
+        if(APPLE)
+            set(CMAKE_INSTALL_RPATH "@loader_path")
+        elseif(UNIX)
+            set(CMAKE_INSTALL_RPATH "$ORIGIN")
+        endif()
+    endif()
+endif()
 option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
 option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
 option(MORPH_BUILD_HMAC_EXAMPLES "Build vetted-HMAC adapter examples (libsodium/OpenSSL, heavy deps)" OFF)
@@ -350,7 +376,7 @@ endif()
 # is off while morph installs: CMake leaves an excluded subdirectory's install
 # rules out of the parent's install, so `cmake --install` would install
 # morph's package without the core-cpp package it depends on.
-set(MORPH_CORE_CPP_VERSION 0.21)
+set(MORPH_CORE_CPP_VERSION 0.22)
 option(MORPH_INSTALL "Generate morph's install and export rules" ${PROJECT_IS_TOP_LEVEL})
 if(NOT DEFINED AF_SANITIZER)
     find_package(core-cpp ${MORPH_CORE_CPP_VERSION} CONFIG QUIET)
@@ -369,15 +395,34 @@ if(NOT core-cpp_FOUND)
     CPMAddPackage(
         NAME core-cpp
         GITHUB_REPOSITORY contour-terminal/core-cpp
-        GIT_TAG v0.21.0
-        VERSION 0.21.0
+        GIT_TAG v0.22.0
+        VERSION 0.22.0
         SYSTEM YES
         EXCLUDE_FROM_ALL ${_morph_core_cpp_exclude_from_all}
         OPTIONS "CORE_CPP_TESTING OFF" "CORE_CPP_BUILD_EXAMPLES OFF"
                 "CORE_CPP_WITH_TUI ${MORPH_BUILD_TUI}" "CORE_CPP_WITH_IMAGES OFF"
                 "CORE_CPP_WITH_TLS OFF" "CORE_CPP_WITH_SYSTEMD OFF" "CORE_CPP_FETCH_DEPS OFF"
-                "CORE_CPP_INSTALL ${MORPH_INSTALL}")
+                "CORE_CPP_INSTALL ${MORPH_INSTALL}" "CORE_CPP_BUILD_SHARED ${MORPH_BUILD_SHARED}")
     unset(_morph_core_cpp_exclude_from_all)
+endif()
+
+# A shared morph needs a shared core-cpp, and one found installed may be static.
+# Linked anyway, libmorph and the executable would each carry core-cpp's state,
+# and an executor scope one of them enters would be invisible to the other.
+if(MORPH_BUILD_SHARED)
+    get_target_property(_morph_core_cpp_type core::base TYPE)
+    if(NOT _morph_core_cpp_type STREQUAL "SHARED_LIBRARY")
+        if(core-cpp_FOUND)
+            set(_morph_core_cpp_from "the installed one at ${core-cpp_DIR}")
+        else()
+            set(_morph_core_cpp_from "the one fetched into this build")
+        endif()
+        message(FATAL_ERROR
+            "MORPH_BUILD_SHARED=ON needs a shared core-cpp, but ${_morph_core_cpp_from} is ${_morph_core_cpp_type}. "
+            "Install a core-cpp built with CORE_CPP_BUILD_SHARED=ON, or take it off CMAKE_PREFIX_PATH so morph "
+            "fetches one.")
+    endif()
+    unset(_morph_core_cpp_type)
 endif()
 
 # A core-cpp found installed brings whatever modules it was built with. One
@@ -419,11 +464,17 @@ if(NOT WIN32 AND NOT EMSCRIPTEN)
 endif()
 
 # ── Library target ───────────────────────────────────────────────────────────
-# A static library: the templates and the macro-sensitive core headers stay in
-# headers, and what does not depend on a consumer's configuration is compiled
-# once, in src/ui.
+# Static by default, shared with MORPH_BUILD_SHARED: the templates and the
+# macro-sensitive core headers stay in headers, and what does not depend on a
+# consumer's configuration is compiled once, in src/ui.
 include(GenerateExportHeader)
-add_library(morph STATIC
+if(MORPH_BUILD_SHARED)
+    set(_morph_library_type SHARED)
+else()
+    set(_morph_library_type STATIC)
+endif()
+add_library(morph ${_morph_library_type}
+    src/ui/process_state.cpp
     src/ui/document.cpp
     src/ui/expression.cpp
     src/ui/interpreter.cpp
@@ -467,13 +518,30 @@ endif()
 
 # MORPH_API marks what a consumer calls into the compiled library. A static
 # build defines MORPH_STATIC_DEFINE for the library and its consumers, which
-# makes the macro empty.
+# makes the macro empty. A shared build hides every symbol that MORPH_API does
+# not mark, on every platform, so a missing mark is a link error on Linux too
+# and not only on Windows.
 generate_export_header(morph
     BASE_NAME MORPH
     EXPORT_MACRO_NAME MORPH_API
     EXPORT_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/generated/morph/export.hpp"
 )
-target_compile_definitions(morph PUBLIC MORPH_STATIC_DEFINE)
+if(MORPH_BUILD_SHARED)
+    set_target_properties(morph PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+    )
+    if(MSVC)
+        # C4251 and C4275 fire on an exported class whose member or base is a
+        # standard-library type. Those types are header-defined and compiled
+        # identically on both sides under one toolchain version, which is the
+        # only combination a DLL and its consumer are supported in, so the
+        # warning reports nothing actionable.
+        target_compile_options(morph PUBLIC /wd4251 /wd4275)
+    endif()
+else()
+    target_compile_definitions(morph PUBLIC MORPH_STATIC_DEFINE)
+endif()
 apply_warnings(morph)
 # Every consumer of this archive carries an AF_SANITIZER block of its own, which is what makes instrumenting a static
 # library safe: the link options are PRIVATE and do not propagate out of a static library.
@@ -1323,6 +1391,8 @@ if(MORPH_INSTALL)
         FILE_SET morph_detail_headers DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
         FILE_SET morph_generated_headers DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     )
 
     # Optional components ship only when this configuration actually created

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <morph/export.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -311,10 +312,7 @@ struct AllowAllAuthorizer : IAuthorizer {
 };
 
 /// @brief Returns the process-wide allow-all authorizer (used as the default).
-inline std::shared_ptr<IAuthorizer> allowAllAuthorizer() {
-    static auto instance = std::make_shared<AllowAllAuthorizer>();
-    return instance;
-}
+MORPH_API std::shared_ptr<IAuthorizer> allowAllAuthorizer();
 
 namespace detail {
 
@@ -325,10 +323,7 @@ namespace detail {
 /// `ScopedContext` that clears it again on scope exit. `ActionDispatcher::dispatch`
 /// itself does not touch this pointer. Models that opt in to session-aware logic
 /// call `current()` to read it.
-inline const Context*& tlsCurrent() {
-    thread_local const Context* tls = nullptr;
-    return tls;
-}
+MORPH_API const Context*& tlsCurrent();
 
 /// @brief RAII helper that sets the thread-local `Context` for its scope.
 class ScopedContext {
@@ -349,10 +344,7 @@ private:
 
 /// @brief Thread-local pointer to the `RunOrigin` of the currently dispatched action.
 /// @return The slot; it holds null for a run the server gave no origin.
-inline const RunOrigin*& tlsOrigin() {
-    thread_local const RunOrigin* tls = nullptr;
-    return tls;
-}
+MORPH_API const RunOrigin*& tlsOrigin();
 
 /// @brief RAII helper that sets the thread-local `RunOrigin` for its scope.
 class ScopedOrigin {

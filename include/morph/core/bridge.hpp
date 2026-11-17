@@ -13,6 +13,7 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <morph/export.hpp>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -139,7 +140,7 @@ public:
 
     /// @brief Returns the process-level singleton registry.
     /// @return Reference to the singleton `ActionExecuteRegistry`.
-    static ActionExecuteRegistry& instance();
+    MORPH_API static ActionExecuteRegistry& instance();
 
 private:
     // The stored key: the registry owns its ids, because nothing else outlives
@@ -205,11 +206,6 @@ private:
     /// @brief The action type each `(model, action)` id pair was registered for, keyed with `void` as its sharing.
     std::unordered_map<Key, std::type_index, KeyHash, KeyEqual> _types;
 };
-
-inline ActionExecuteRegistry& ActionExecuteRegistry::instance() {
-    static ActionExecuteRegistry inst;
-    return inst;
-}
 
 }  // namespace morph::bridge
 

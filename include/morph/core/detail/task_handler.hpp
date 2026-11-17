@@ -11,6 +11,7 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <morph/export.hpp>
 #include <optional>
 #include <thread>
 #include <utility>
@@ -146,10 +147,7 @@ public:
     [[nodiscard]] static std::size_t overlapsObserved() noexcept { return overlapCounter().load(); }
 
 private:
-    static std::atomic<std::size_t>& overlapCounter() noexcept {
-        static std::atomic<std::size_t> counter{0};
-        return counter;
-    }
+    MORPH_API static std::atomic<std::size_t>& overlapCounter() noexcept;
 
     /// Marks the calling thread as inside the gate for the scope's lifetime,
     /// and counts it if another thread already is. Reentry on the same thread,
