@@ -3,8 +3,7 @@
 Design spec for the one table every surface of morph uses: what a table is, how a model offers one or many, the
 single pipeline from a model's rows to the screen, slow columns and the caches that hold them, where sort and
 filter run, what a user can configure, and the performance all of it is held to. Read [`engine.md`](engine.md)
-first, for the engine this builds on, and [`database_pages.md`](database_pages.md) for a model that pages in a
-store.
+first, for the engine this builds on.
 
 ## Contents
 
@@ -25,8 +24,8 @@ store.
 - [Caching layers](#caching-layers)
 - [Where sort and filter run](#where-sort-and-filter-run)
 - [Configuring a table](#configuring-a-table)
+- [Acting on rows](#acting-on-rows)
 - [Values with units](#values-with-units)
-- [What a store cannot express](#what-a-store-cannot-express)
 - [Performance](#performance)
 - [Invariants](#invariants)
 - [API surface](#api-surface)
@@ -94,6 +93,9 @@ struct TableColumn {
     bool sortable = true;
     bool filterable = true;
     bool shown = true;                     // the default visibility
+    ColumnDisplay display;                 // how a cell's value becomes its text; see "How a column shows its cells"
+    std::string tone;                      // the id of a companion column holding this cell's tone, or empty
+    std::string tooltip;                   // the id of a companion column holding this cell's tooltip, or empty
 };
 
 struct ColumnGroupInfo {
@@ -105,6 +107,7 @@ struct ColumnGroupInfo {
 struct TableCapabilities {
     bool keys = true;                      // keyed queries
     bool distinct = true;                  // distinct values
+    std::uint32_t maxSortKeys = 8;         // set by the framework from `ServedTable::limits`
 };
 
 struct TableDescription {
@@ -113,8 +116,11 @@ struct TableDescription {
     std::vector<TableColumn> columns;      // in the declared order
     std::string key;                       // the id of the column that is the row's key
     std::vector<ColumnGroupInfo> groups;
+    std::vector<BandInfo> bands;           // header bands over columns: {label, columns, bands} (editing.md)
     std::vector<std::string> levels;       // every level a column names, base excluded
     std::vector<UnitInfo> units;           // the units its `Measure` columns may hold
+    std::string rowTone;                   // the id of a companion column holding each row's tone, or empty
+    std::string rowLock;                   // the id of a companion column holding why a row is locked, or empty
     TableCapabilities capabilities;
     std::string revision;                  // set by the framework: a hash of everything above
 };
@@ -134,29 +140,10 @@ struct TableContext {
     session::Context const& session;       // who asks
 };
 
-/// A table paged in a store, in place of rows held in memory (database_pages.md).
-struct PlannedTable {
-    /// Runs a plan. For a whole plan `rows` is the page in order; for a prefilter plan it is the candidates.
-    std::function<std::expected<PlanRows, TableError>(QueryPlan const&)> run;
-    /// What the store can push down; see "What a store cannot express".
-    std::function<bool(std::string_view column, PlanUse use)> translatable;
-    Residual residual = Residual::Refuse;
-};
-
-struct PlanRows {
-    std::shared_ptr<DataSource const> rows;          // columns as the description's
-    std::optional<std::int64_t> total;               // a whole plan's count
-    TotalKind totalKind = TotalKind::Exact;
-    std::vector<std::int64_t> indices;               // a keyed plan: each row's view row
-    std::optional<DistinctValues> distinct;          // a pushed-down distinct plan
-};
-
 struct ServedTable {
     TableDescription description;
-    /// The rows the caller may see, for a table held in memory or read lazily: `apply` runs over it.
+    /// The rows the caller may see, held in memory or read lazily: `apply` runs over it.
     std::shared_ptr<DataSource const> source;
-    /// In place of `source`, for a table paged in a store.
-    std::optional<PlannedTable> planned;
     /// The slow levels, one per level the description names.
     std::vector<std::shared_ptr<LevelSource>> levels;
     /// Whether the caller may read a column; empty allows every column of the description.
@@ -190,8 +177,8 @@ BRIDGE_REGISTER_TABLE(lims::DesignModel, "recipes", &lims::DesignModel::recipes,
 - **Services are the caller's.** `services` is what makes text order by the caller's locale. Left empty it is the
   default `Services`, whose collator orders by code point; a table with text columns that users sort sets a
   collator. Two callers with different collators have different `scope`s.
-- **The row scope is the model's, and it is applied before the framework sees a row.** `source` and
-  `planned.run` return only rows the caller may see. Nothing downstream filters rows by principal: a level
+- **The row scope is the model's, and it is applied before the framework sees a row.** `source` holds only
+  rows the caller may see. Nothing downstream filters rows by principal: a level
   cache, the view cache and a reply all work on the rows they are given, which is why a cached value cannot
   cross a scope. `scope` names the scope so that callers who see the same rows share a view.
 - **What a row scope costs.** A model whose callers all see the same rows returns one shared source. A model
@@ -199,16 +186,21 @@ BRIDGE_REGISTER_TABLE(lims::DesignModel, "recipes", &lims::DesignModel::recipes,
   `table::scoped(source, keys)` makes one from a shared source and the scope's row keys, without copying a cell.
   Building a source per request at 100,000 rows is a full pass per request and defeats the view cache, whose key
   holds the source's snapshot.
+- **Rows in a database are a source too.** A model whose rows live in a database serves them as a `DataSource`
+  it reads, whole or lazily by column, and the server sorts, filters, pages and counts them with `apply`. The
+  database is never asked to order or filter a view: one order on every surface needs one comparator, the
+  table's, and slow levels, unloaded cells, column groups and values with units are the engine's.
 - **A table is always C++ code.** Every table is a registered function of a C++ model; nothing on the server
   defines a table from a document or from data alone. What is generic is the table's shape, which that function
   decides when it runs. A model's set of table ids is fixed when it is registered; a table's columns are not.
 
-**Two actions per table, made by the registration.** `BRIDGE_REGISTER_TABLE(Model, "designs", …)` registers:
+**Actions per table, made by the registration.** `BRIDGE_REGISTER_TABLE(Model, "designs", …)` registers:
 
 | Action id | Takes | Returns |
 |---|---|---|
 | `Table.designs` | `TableQuery` | `GenericPage`: a page, a keyed reply or distinct values, as the query asks |
 | `Table.designs.describe` | nothing | `TableDescription` |
+| `Table.designs.resolve` | `ResolveRequest` (a `RowSelection` and a `SelectionPolicy`) | `SelectedRows` ([Acting on rows](#acting-on-rows)) |
 
 One generic action taking a table id in its body was the alternative, and loses on every count that matters:
 
@@ -224,10 +216,9 @@ A typed list action that takes a `TableQuery` and returns a `Page<Row>` remains 
 with the description derived from the row type.
 
 **Changing a row is the application's action.** The registration makes no edit action. A model changes a row
-through an action of its own, which declares its effect on the table and returns the keys it changed; a cell
-editor on a screen is a column's `cell` template calling that action. A generic, description-driven cell edit
-(an edit action per table, editable columns, an editor per kind) is a design of its own and is not in this
-contract ([What this does not do](#what-this-does-not-do)).
+through an action of its own, which declares its effect on the table and returns the keys it changed. A column
+whose description names such an action (`TableColumn::edit`) is edited in place with an editor for its kind,
+as [`editing.md`](editing.md#cells-of-a-models-table) specifies; the table's own actions change nothing.
 
 **The table's record.** Each registered table is a keyed record named `<model type>.<table id>`
 (`DesignModel.designs`), registered by `BRIDGE_REGISTER_TABLE` beside the table's actions. A record is
@@ -250,11 +241,16 @@ every watcher without keys, and each refetches its visible pages instead of its 
 watcher the authoriser admits.
 
 ```cpp
-struct ChangedRow { RowId key; };
+struct ChangedRow { RowId key; std::optional<RowId> from; };   // `from`: a key the action changed
+struct FailedRow { RowId key; std::string message; };
 
-/// The rows of one table that an action changed. Its JSON is {"rows": [{"key": …}, …]}.
+/// The rows of one table that an action changed, and those it failed to. Its JSON is
+/// {"rows": [{"key": …, "from": …}, …], "failed": [{"key": …, "message": …}, …]}.
 template <auto Function>
-struct ChangedRows { std::vector<ChangedRow> rows; };
+struct ChangedRows {
+    std::vector<ChangedRow> rows;
+    std::vector<FailedRow> failed;
+};
 
 struct RenameDesignResult {
     table::ChangedRows<&lims::DesignModel::designs> designs;
@@ -272,6 +268,9 @@ BRIDGE_REGISTER_EFFECTS(lims::ImportDesigns, ::morph::effects::changesTable<&lim
   an action whose result has no `ChangedRows<fn>` is refused when the registries are resolved.
 - **An action that changes two tables returns two members**, one `ChangedRows` per table, and declares both
   effects. One untyped list of keys could not say which table a key belongs to.
+- `from` and `failed` are what a screen shows of an action's outcome per row
+  ([Acting on rows](#acting-on-rows)). The walk collects a `from` as a changed key beside its `key`; a failed
+  row's key is not collected, since the action did not change it.
 - Watches, admission, fan-out, coalescing and `announce` are the record machinery's: a table is one more
   record.
 
@@ -367,13 +366,101 @@ A page of a generic table is row arrays under one header:
   `DataSource` with every possible column, narrowed by `mayRead`. The level caches hold raw values for a column
   list that does not depend on the caller ([The server level cache](#the-server-level-cache)) and are shared.
 
+### How a column shows its cells
+
+A cell crosses the wire as its exact value; the client turns it into text, in the session's locale, by the
+column's display. Order, filters and distinct values always use the exact value, never the text.
+
+```cpp
+/// The expression language's two modes and names (`"halfEven"`, `"halfUp"`), so a value a document rounds and
+/// the same value a column shows agree.
+enum class Rounding : std::uint8_t {
+    HalfEven,   // 0.125 at 2 places is 0.12
+    HalfUp,     // half away from zero: 0.125 at 2 places is 0.13, the rule most test standards prescribe
+};
+
+struct ValueLabel {
+    std::string operand;     // a value as a filter entry takes it: "true", "3", "V"
+    std::string text;        // what the cell shows for it
+};
+
+struct ColumnDisplay {
+    /// Places shown for an `Integer`, `Decimal`, `Quantity` or `Number` cell. Absent shows the value's own places
+    /// (a `Rational`'s declared places, a `double`'s shortest round trip).
+    std::optional<std::uint32_t> decimals;
+    Rounding rounding = Rounding::HalfEven;
+    /// With `decimals`, whether fewer places are padded with zeros: 2 places shows 1.5 as "1.50".
+    bool padPlaces = true;
+    /// Digit grouping by the locale: 12,500.
+    bool grouping = false;
+    /// What an empty cell shows: "–", "n/a". Empty shows nothing.
+    std::string empty;
+    /// The unit of a plain numeric column, shown in its header; a `Measure` column's units are its cells'.
+    std::string unit;
+    /// A `Date` or `DateTime` column's pattern; empty takes the session's.
+    std::string date;
+    /// Text for particular values: codes, booleans in words. A value no entry names shows as `decimals` says.
+    std::vector<ValueLabel> labels;
+};
+```
+
+- **Where it is formatted.** On the client, by `ui::formatCell(cell, column, locale)`, the one function every
+  backend, the copy, the status line and the filter menu call. The server sends no text for a value it can
+  send exactly; a model that formats on the server sends a `Text` column, which then sorts and filters as text.
+- **Rounding is for showing.** 0.125 shown at two places under `HalfUp` is "0.13", and a filter
+  `eq 0.13` does not match it: the filter compares the exact value. A filter menu's condition field accepts
+  more places than the column shows for that reason.
+- **The values list** formats each `DistinctValue` by the column's display. Two values that show alike (0.124
+  and 0.123 at two places) stay two entries, because ticking one must not match the other; the menu shows the
+  value's full places for entries whose texts collide.
+- **`labels`** change the text and nothing else. A column of `Bool` shows "available" and "not available", and
+  its values list shows those texts; it still orders false before true. Ordering by a label's text is a `sortBy`
+  over a column that holds it.
+- **Empty, unloaded and invalid differ on screen.** `empty` is shown for an empty cell only. An unloaded cell
+  draws its placeholder ([Cells](#cells)), an invalid one an error mark whose tooltip says the value could not be
+  read.
+- **A `Measure` column** shows each cell in its unit and to that unit's decimals ([Display](#display)), so
+  `decimals` and `unit` on it are a `SourceContract` error.
+- **The header** shows `unit` after the label, as the backend draws a unit ("Mass [kg]" or the unit on a second,
+  muted line); the header's accessible name is "Mass, kg", and "Copy with headers" writes "Mass [kg]".
+- **A document's column parts** `decimals`, `rounding`, `padPlaces`, `grouping`, `empty`, `unit`, `date` and
+  `labels` override the description's for that column, and are the only source on a table over `rows`.
+
+**Tone and tooltip.** A cell may carry a tone (`neutral`, `info`, `ok`, `warn`, `err`) and a tooltip, and a
+row a tone. A model that decides them names **companion columns**: ordinary `Text` columns of the description,
+usually `shown: false`, whose cell for a row is the tone's name or the tooltip's text.
+
+- `TableColumn::tone` and `tooltip` name a cell's companions, `TableDescription::rowTone` the row's. A
+  companion that names no column, or one that is not `Text`, is `SourceContract`.
+- **They travel with their column.** A query that names a column names its companions too, and one that draws
+  any row names the `rowTone` companion, so a tone or a tooltip costs a cell of the rows in view and nothing for
+  columns out of the window. A companion may have a level, which makes an expensive tooltip a `display` level
+  loaded for the rows in view only.
+- **A document overrides them.** A column's parts `tone` and `tooltip` are expressions in the row's scope; the
+  node's `rowTone` is one already. They win over the description's companions, whose columns are then not
+  fetched for them. A range rule ("weight ratio above 0.5 is `err`") is one of these two places: the model's
+  companion or the document's expression. The description holds no rule language of its own.
+- **Drawing.** A cell with a tone is tinted with the theme's tone surface, and keeps its selection and focus
+  marks over it. A tooltip shows on hover after the theme's delay and on keyboard focus at once, and is the
+  cell's accessible description. A cell with a tooltip draws the theme's mark for "more here", so a user knows to
+  hover.
+- **Companions are not columns a user arranges.** A column that the description names as a `tone`, `tooltip`,
+  `rowTone` or `rowLock` companion is never shown and is not listed in the column chooser or the header menus;
+  it sorts and filters only where its own `sortable` and `filterable` say so, through a document's `sort` or
+  `filters`.
+- **An unknown tone name** shows no tone and is reported once for the column, as `rowTone` is.
+- **A locked row.** A row whose `rowLock` companion holds text is locked: it draws the theme's locked hatch, its
+  text is the row's tooltip ("Being edited by another user"), and it takes no cell edit
+  ([`editing.md`](editing.md)). It can be selected and copied; whether an action accepts a locked row is the
+  action's rule, and a `FailedRow` says so when it does not.
+
 ## The pipeline
 
 ```text
  in-document rows            a collection's rows          a model's table
  (a list of values)          (the session's reply)        (description; TableQuery → GenericPage)
         │                            │                            │
-   ValueRowsSource              VectorSource         ViewCache, LevelCache, apply / planQuery ← server
+   ValueRowsSource              VectorSource         ViewCache, LevelCache, apply      ← server
         │                            │                            │  pages, keyed rows, change events
         └────────── table::Engine ───┘                       PageWindow                    ← client
               (client mode: sort, filter,               (server mode: the pages around
@@ -500,8 +587,11 @@ columns of which twenty are drawn converts twenty cells.
 expressions read:
 
 - the columns in the renderer's column window ([The renderer](#the-renderer));
-- for each of those, the columns its `cell` expression reads as `row.<id>`, found when the document loads;
-- the columns `rowTone`, `rowLabel`, `onActivate` and a row action read, for every row;
+- for each of those, the columns its `cell`, `tone` and `tooltip` expressions read as `row.<id>`, found when the
+  document loads, or, where the document gives none, its `tone` and `tooltip` companions
+  ([How a column shows its cells](#how-a-column-shows-its-cells));
+- the columns `rowTone` (or the description's `rowTone` companion), `rowLabel`, `onActivate` and the table's menu
+  entries read, for every row;
 - every column, when an expression reads the row in a way the loader cannot follow (`row[name]`, or the row
   passed whole to a function); the loader reports that once as a warning naming the node, since it turns the
   column window off for the wire.
@@ -600,10 +690,10 @@ Windowing must not change what a keyboard or a screen reader can reach.
   (`setExistingKeys`), which a server-mode table does not have. There the backend reports the gesture as two
   view rows and the lowering resolves it through `TableRows::keysOf`: rows the window holds give their keys,
   and the rest are fetched as pages that name no columns, which carry keys alone. A range of more than
-  `SessionOptions::maxRangeRows` (10,000) rows is refused with a message in the status line. `Ctrl+A` is not
-  offered in server mode.
-- **Selection in server mode** is a set of keys. It is not pruned by the filter, which the client cannot
-  evaluate; `selectedCount` counts the keys.
+  `SessionOptions::maxRangeRows` (10,000) rows is refused with a message in the status line. `Ctrl+A` selects
+  the view as a whole ([Acting on rows](#acting-on-rows)), which needs no keys.
+- **Selection in server mode** is a set of keys, or the view less a set of keys. A set of keys is not pruned by
+  the filter, which the client cannot evaluate; `selectedCount` counts the keys, or the view's total less them.
 
 ## Every surface on the pipeline
 
@@ -633,7 +723,9 @@ over `model`.
 | `pageSize`, `page` | A slice of the engine's view | Refused on a model-backed table, whose window pages. |
 | `group` (`by`, `heading`) | The run index is a hidden leading sort key computed by `ValueRowsSource`; headings are placed by the lowering after paging | Rows table only. |
 | `rowSpans` | The lowering, on the page's rows | Drawn only unsorted and below the windowing thresholds. Rows table only. |
-| `selectionMode`, `selection`, `onSelectionChange`, `selectColumn`, `selectAllLabel`, `rowLabel` | The lowering, by key; select-all selects the view through `Selection::selectAll` | A model-backed table has ranges through `keysOf` and no select-all. |
+| `selectionMode`, `selection`, `onSelectionChange`, `selectColumn`, `selectAllLabel`, `rowLabel` | The lowering, by key; select-all selects the view through `Selection::selectAll` | A model-backed table has ranges through `keysOf`, and its select-all is a selection of the view ([Acting on rows](#acting-on-rows)). |
+| `cellMenu`, `headerMenu`, `retainChanged`, `headerEnabled`, `maxSortKeys` | The lowering ([Acting on rows](#acting-on-rows)) | Served on every table; `retainChanged` has no effect on a table that cannot retain ([Rows an action changed](#rows-an-action-changed)), and `maxSortKeys` is a `rows` table's only. |
+| A column's `decimals`, `rounding`, `padPlaces`, `grouping`, `empty`, `unit`, `date`, `labels`, `tone`, `tooltip` | `ui::formatCell` and the mount ([How a column shows its cells](#how-a-column-shows-its-cells)) | Override the description's per column. |
 | `rowTone`, `onActivate` | The row's scope | Their columns are fetched for every row. |
 | `empty` | Shown while the view is empty | On a model-backed table it waits for the first reply, and is not shown while rows are undecided. |
 | `filters`, `onFiltersChange`, a column's `filterable` | `TableRows::setFilter`, as a `FilterSpec`; set from the header menu ([Filters from the header](#filters-from-the-header)) | Served on every table. |
@@ -641,7 +733,7 @@ over `model`.
 | `status` | The status line ([The status line](#the-status-line)) | A literal: `true`, `false`, or absent for the default. |
 | `persist` | The table's persisted state ([Persisted state](#persisted-state)) | A literal. |
 | `highlightKey` | A keyed query for the row's view index, then `visible` around it | Model-backed only. |
-| Element values `selection`, `selectedCount`, `sort`, `viewCount`, `pending`, `page`, `pageCount`, `pageFirst`, `pageLast` | `TableRows::counts` and the page slice | On a model-backed table `viewCount` is the reply's total, with `viewCountKind` (`exact` or `atLeast`) and `undecided` beside it. Every table has `layout`, `visibleColumns`, `hiddenCount`, `filters`, `awaiting` and `failed`. |
+| Element values `selection`, `selectedCount`, `sort`, `viewCount`, `pending`, `page`, `pageCount`, `pageFirst`, `pageLast` | `TableRows::counts` and the page slice | On a model-backed table `viewCount` is the reply's total, with `viewCountKind` (`exact` or `atLeast`) and `undecided` beside it. Every table has `layout`, `visibleColumns`, `hiddenCount`, `filters`, `awaiting`, `failed`, `selectionSet` and `busyCount` ([Acting on rows](#acting-on-rows)). |
 
 A document that uses none of `layout`, `status`, `persist`, a column's `kind` or `locked` loads and orders as it
 does without them, with two visible differences that are intended: its tables have header and table menus, and
@@ -760,8 +852,7 @@ the engine's rule in one sentence: a cell matches an operator only when the cell
 bound and `totalKind` is `AtLeast`. `AtLeast` therefore has two causes, the cap and undecided rows, and
 `Page::undecided` tells them apart: a client shows "100,000 or more" for the first and "12 so far, 40 loading" for
 the second. `apply` still omits `total` above `QueryLimits::totalCap`. A sort on an unloaded column changes no
-membership and leaves the total `Exact`. The rule a store-backed model and the conformance helper follow is in
-[`database_pages.md`, "Totals"](database_pages.md#totals).
+membership and leaves the total `Exact`.
 
 ### Unique values
 
@@ -875,6 +966,8 @@ struct TableQuery {
     /// The user asked for failed loads to be tried again: the level caches load the failed keys this query
     /// needs without waiting out their retry delay.
     bool retry = false;
+    /// Rows the view keeps although the filter rejects them (see "Acting on rows").
+    std::vector<RowId> retain;
 };
 ```
 
@@ -963,6 +1056,10 @@ struct Page {
     std::vector<std::int64_t> indices;
     /// A distinct-values reply only; `rows` is then empty.
     std::optional<DistinctValues> distinct;
+    /// The indices of rows the view retains although the filter rejects them (see "Acting on rows").
+    std::vector<std::int64_t> unmatched;
+    /// Changes whenever the view's membership may have changed; a selection of the view records it.
+    std::string viewRevision;
 };
 ```
 
@@ -1000,7 +1097,7 @@ incomplete: an unloaded row is a row the server has sent.
 A query with `keys` set asks for specific rows of the view through the table's own action, so the model's
 scope and authorisation apply to it as to a page.
 
-- The view is the one a page of the same sort and filter has. The reply's `rows` are the view's rows whose key
+- The view is the one a page of the same sort, filter and `retain` has. The reply's `rows` are the view's rows whose key
   is in `keys`, in view order, with the query's `columns`; `indices` holds each one's view row; `unloadedRows`
   describes them. A key that is not in the view (the row was removed, is rejected, or is undecided) has no row
   in the reply.
@@ -1014,11 +1111,7 @@ scope and authorisation apply to it as to a page.
   ([The window under changes](#the-window-under-changes)).
 - The server answers a keyed query from the view it has cached for the sort and filter
   ([The view cache](#the-view-cache)): a key's view row is a lookup, not a sort.
-- **A store-backed model** pushes a keyed query down when its predicate accepts `translatable("", PlanUse::Keys)`:
-  it translates `QueryPlan::keys` and reports each row's view row. Otherwise the query is answered over the
-  store's candidates in C++, or refused when the model does not allow that
-  ([What a store cannot express](#what-a-store-cannot-express)). `standardCorpus` has a keyed query. A client
-  whose keyed fetch is refused with `Unavailable` falls back to `invalidate`.
+- A client whose keyed fetch is refused with `Unavailable` falls back to `invalidate`.
 
 ## Arrival
 
@@ -1391,8 +1484,10 @@ struct ViewCacheOptions {
 ```
 
 - **Key.** The table's record, `ServedTable::scope`, and the validated query's sort and filter in canonical
-  form. `page`, `columns`, `keys` and `distinct` are not in it: every page, every column set and every keyed
-  fetch of one sort and filter read one entry.
+  form. `page`, `columns`, `keys`, `distinct` and `retain` are not in it: every page, every column set and every
+  keyed fetch of one sort and filter read one entry. A query with `retain` merges its retained rows into the
+  entry's view per request ([Rows an action changed](#rows-an-action-changed)), so sessions that retain
+  different rows still share one sort.
 - **Valid while** the table's source has the snapshot the entry was computed from and each of the view's order
   levels has the generation it read. A request finds an entry, compares those, and uses it or computes again.
   An entry is never repaired in place.
@@ -1409,7 +1504,6 @@ struct ViewCacheOptions {
 - **What it does not hold.** Cells: a reply reads them from the source and the level snapshots. Distinct
   values: a values list runs the filter again without the column's own entry, and its reply is cached by the
   client's query cache.
-- A table served through `planned` has no entry: the store orders it.
 
 A scoped table whose `scope` is left empty would share views between callers who see different rows. The
 framework cannot see that from the outside, so `table::rowScoped` and an empty `scope` together are refused
@@ -1536,7 +1630,7 @@ from the action's shape:
 
 | The source | Mode | Sort, filter, totals, distinct values, the undecided set | Selecting all |
 |---|---|---|---|
-| A model's table: its action takes a `TableQuery` (the schema carries `x-table`) | Server | On the server, once for each view and state of its data | Not offered on the client; an action over the query does it |
+| A model's table: its action takes a `TableQuery` (the schema carries `x-table`) | Server | On the server, once for each view and state of its data | A selection of the view, which an action resolves on the server ([Acting on rows](#acting-on-rows)) |
 | Rows the client holds entirely: a document's `rows`, a collection's reply | Client | An `Engine` on the client | `Selection::selectAll` |
 
 A table is in server mode, and must be, when any of these holds:
@@ -1655,8 +1749,11 @@ The engine, `TableQuery` and the document's `sort` take a list of keys; what a u
   down and remove, and "Add key".
 - Every header in the chain shows its direction; with more than one key each also shows its place in the chain,
   from 1. A header's accessible description says "sorted ascending, key 2 of 3".
-- A chain has at most `QueryLimits::maxSortKeys` (8) keys in either mode. At the bound, adding a key is refused
-  with a message in the status line, not by dropping the first key.
+- A chain has at most `maxSortKeys` keys: 8 by default, and up to 32 where a model's table's `limits` raise it,
+  which the description carries as `TableCapabilities::maxSortKeys` so the client knows the bound; a table over
+  `rows` takes it as the literal `maxSortKeys` on the node. A key costs one comparison only between rows that tie on every key before it, so a long
+  chain costs little more than a short one; the default is what a header shows legibly. At the bound, adding a
+  key is refused with a message in the status line, not by dropping the first key.
 
 `sort` and `onSortChange` keep their shapes. `Table::sort` carries the whole chain to the backend.
 
@@ -1704,10 +1801,6 @@ struct FilterEntry {
   of one query together, and `maxQuerySetBytes` (1 MiB) their text; over any of them is `LimitExceeded`. The
   entry bound alone would allow a query of millions of values across its columns. When both the ticked and the
   unticked side exceed it, the menu disables the list and says so: the user narrows with a condition.
-- In a plan it is `FilterOp::OneOf` with `PlannedCondition::values`; a store that accepts `FilterSet` translates
-  it as a set membership test, and otherwise it is applied in C++
-  ([What a store cannot express](#what-a-store-cannot-express)). `standardCorpus` adds a `oneOf` query for each
-  column, in include and in exclude.
 
 **Distinct values.**
 
@@ -1761,10 +1854,7 @@ distinctValues(DataSource const& source, TableQuery const& query, DistinctReques
 - **Levels.** The column's level is an `order` level of the request: it is needed for every candidate row.
 - **Client mode.** `Engine::distinctValues(request)` answers from the key columns the engine holds.
 - **Server mode.** `TableQuery::distinct` carries the request through the table's own action, so the model's
-  scope applies; the reply is a `Page` with no rows and `Page::distinct` set. A store-backed model pushes it down
-  as a grouped count or answers it over its candidates
-  ([What a store cannot express](#what-a-store-cannot-express)); where it refuses, the menu offers conditions
-  only.
+  scope applies; the reply is a `Page` with no rows and `Page::distinct` set.
 - **Validation.** `validate` holds a distinct request to the query's rules. Exactly one of `column` and `group`
   is set. The column, or every column of the group, exists and the caller may read it (`UnknownColumn`,
   `ColumnNotReadable`): a values list is a read of the column. `search` is at most `maxTextLength` bytes and
@@ -1908,8 +1998,7 @@ with its own filter button. Its menu is a column's, with two additions:
   are one `oneOf` entry with a `match`; the last is one `eq` entry per ticked value in `together` mode, and is
   offered while at least 2 values are ticked and no more than the group has columns.
 
-**On a server.** Over rows in memory, `apply` evaluates every form above. A model that pages in a store is
-covered by the next section.
+**On a server.** `apply` evaluates every form above.
 
 ### The status line
 
@@ -1920,7 +2009,7 @@ by each backend from `Table::status`, and it is where every refusal this documen
 |---|---|---|
 | Counts, at the leading edge | The view's size and what is still coming, from `TableRows::counts` | "9,093 rows"; "100,000 or more"; "12 so far, 40 loading"; "3 of 9,093 selected" |
 | State | A level that failed, with "Retry"; a fetch that failed, with its error | "Recipe data could not be loaded. Retry" |
-| Message, at the trailing edge | The latest refusal or notice, until the user's next gesture on the table or for six seconds | "A table sorts by at most 8 columns"; "Copied 200 rows, 12 cells were not loaded" |
+| Message, at the trailing edge | The latest refusal or notice, until the user's next gesture on the table or for six seconds | "A table sorts by at most 8 columns" (the table's bound); "Copied 200 rows, 12 cells were not loaded" |
 
 - "Retry" sends the table's query again with `TableQuery::retry` set, which makes the level cache load the
   failed keys the reply needs at once ([The server level cache](#the-server-level-cache), rule 11).
@@ -1966,7 +2055,7 @@ struct TableStateKey {
     std::string model;       // the model's type; empty for a table over a document's rows
     std::string table;       // the table's id; for a `rows` table, the node's id
     std::string qualifier;   // the screen's id, or what the table's `persist` names
-    std::string part;        // "state" or "views"
+    std::string part;        // "state", "views" or "shared"
 };
 
 struct StoredTableState {
@@ -1991,6 +2080,8 @@ public:
     virtual async::Completion<SaveResult> save(TableStateKey const& key, std::string json,
                                                std::string expected = {}) = 0;
     virtual async::Completion<bool> remove(TableStateKey const& key) = 0;
+    /// Whether the store keeps the `shared` part for everyone rather than for one person.
+    [[nodiscard]] virtual bool shares() const { return false; }
 };
 ```
 
@@ -2013,7 +2104,7 @@ public:
   server ([The framework's stores](#the-frameworks-stores)); a save over a quota is `Refused`, and the table
   says so in its status line and keeps its arrangement.
 
-**What is stored.** Two JSON documents per table, each with a version:
+**What is stored.** JSON documents per table, each with a version: the arrangement and the saved views below, and the shared views, of the views' shape ([Saved views](#saved-views)):
 
 ```json
 { "version": 1,
@@ -2026,11 +2117,12 @@ public:
 ```
 
 ```json
-{ "version": 1, "default": "Open orders",
+{ "version": 1, "default": "Open orders", "defaultOnMount": false,
   "views": [{ "name": "Open orders", "layout": {}, "sort": [], "filters": {} }] }
 ```
 
-- `part: "state"` is the arrangement in use; `part: "views"` is the saved views.
+- `part: "state"` is the arrangement in use; `part: "views"` is the saved views; `part: "shared"` is the views
+  published for everyone ([Saved views](#saved-views)).
 - `view` names the saved view the arrangement was taken from, or is absent. The menu shows the name, and shows
   it as modified when the arrangement differs from that view; nothing more is stored for it.
 - **Versions.** A document of an older version is brought forward by the framework, one version at a time, when
@@ -2142,6 +2234,221 @@ persisted state; the table's menu lists them, applies one, saves the current arr
 and removes one, and marks one as the default. Applying one sets the three values, through their handlers where
 they are bound, and records its name in the state's `view`. The view the `default` member names is applied
 when the table mounts and no `state` is stored for it. A stored view is fitted to the table as its state is.
+
+- **The default first.** With `"defaultOnMount": true` in the views document, the default view's sort and
+  filters are applied at every mount, over those of the stored `state`; the stored layout still applies. It is
+  for a user who wants each session to start from the same order, and the menu sets it as "Start from the
+  default view".
+- **Shared views.** A user may publish a view, under a name, for everyone who uses the table. Published views
+  are a third part, `part: "shared"`, of the same shape as `views`, which the store keeps for the application
+  and not for one person: a `TableStateKey` still names no person, and the store decides what the part means.
+  The table's menu lists them under the user's own, applies one as it applies one of the user's, and copies one
+  into the user's views with "Save as my view".
+  - **Who may publish.** Reading the part is the `morph.tableState` model's `load`, open to everyone who may use
+    the table. Writing it is a separate action of the model, `morph.tableState.publish`, carrying one operation
+    (add, replace, rename or remove one shared view), so the application's authoriser admits or refuses
+    publishing by action id, without reading a body. A user's own `save` of the `shared` part is refused.
+  - A shared view is changed under the `Conflict` rule, as a user's views are. The shared document has no
+    `default` and no `defaultOnMount`; they are the user's choice, kept in the user's own views document.
+  - **Which stores share.** `ITableStateStore::shares()` (default `false`) says whether a store keeps the
+    `shared` part for everyone. A table offers publishing only over a store that shares, so a host's own store
+    that does not never keeps a "shared" view for one person. `PreferencesTableStateStore` shares: it keeps the
+    part under the application's own scope in the preferences store, with no person.
+
+## Acting on rows
+
+A table is where a user picks the rows an application's action works on, and where they see what it did: a
+selection that is the whole view, the application's own entries in the table's menus, rows an action changed
+that stay in view, a row whose key an action changed, and rows an action is working on or failed on.
+
+### A selection of the view
+
+On a model-backed table the client holds a window, not the view, so "every row I see" cannot be a list of keys.
+It is a description of the view, which the server turns into keys when an action runs.
+
+```cpp
+/// What a user selected in one table. Its JSON is {"keys": […]}, or {"view": {…}, "except": […]}.
+template <auto Function>
+struct RowSelection {
+    struct View {
+        FilterSpec filters;              // the view's filter, as the table queried it
+        std::vector<RowId> retained;     // the rows the view kept although they no longer match
+        std::string revision;            // the view's `viewRevision` when the user selected it
+    };
+    std::vector<RowId> keys;             // without `view`: exactly these rows
+    std::optional<View> view;            // with it: every row of that view, less `except`
+    std::vector<RowId> except;
+};
+
+enum class SelectionPolicy : std::uint8_t {
+    Exact,      // refuse when the view's rows may have changed since the user selected it
+    Current,    // act on the view as it is when the action runs
+};
+
+struct SelectedRows {
+    std::vector<RowId> keys;             // in the table's source order
+    std::int64_t dropped = 0;            // keys the caller may no longer see, left out
+};
+
+/// Resolves on the table executor; a Task handler awaits it.
+template <auto Function, typename Model>
+[[nodiscard]] async::Completion<std::expected<SelectedRows, TableError>>
+resolve(Model const& model, RowSelection<Function> const& selection, TableContext const& context,
+        SelectionPolicy policy);
+
+/// The body of `Table.<id>.resolve`, for an action of another model or a task off the model's strand.
+template <auto Function>
+struct ResolveRequest {
+    RowSelection<Function> selection;
+    SelectionPolicy policy = SelectionPolicy::Exact;
+};
+```
+
+`RowSelection` is the value an action receives; `table::Selection`, the set of selected keys
+([`engine.md`](engine.md)), is what a client-mode table holds while the user selects.
+
+- **Making one.** On a model-backed table `Ctrl+A`, the
+  select-all box and "Select all" in the table's menu select the view: no row is fetched. `Ctrl`+click then
+  toggles a row in `except`, and a `Shift` range adds or removes a range of `except` through `keysOf`. A plain
+  click replaces the selection with that one key. A table held whole on the client selects all by keys, since it
+  holds them.
+- **Its count.** `selectedCount` is the view's total less the keys of `except` the window still sees in the
+  view; a key of `except` that has left the view is dropped from it when the window learns so. The count is
+  exact when the total is and no key of `except` is unaccounted for; the element value `selectedCountKind`
+  (`exact` or `approximate`) says which, and the status line shows an approximate count with "about".
+- **Its life.** A view selection is of one filter. A change of the filter, or of the retained rows by "Show only
+  matching rows", ends it: the selection becomes empty. A change of the sort keeps it, since the rows are the
+  same.
+- **Not while membership is open.** A view whose filter waits for a level does not yet know which rows are in
+  it, and "the rows I saw" says nothing about them. While `undecided` is above zero, or `awaiting` names a
+  level a filtered column needs, select-all is disabled and the status line says why: "Select all is available
+  once 40 rows are decided", or "… once recipe data has loaded" when no row is undecided yet. A level only the
+  sort needs does not disable it, since order is not membership.
+- **The view's revision.** Every page reply carries `viewRevision`, which names the view's membership: two
+  replies with the same revision describe the same rows, and the sort is not part of it. It is a digest of the
+  keys of the view's rows, taken in source order when the view is computed, a pass the computation makes
+  anyway; the view cache keeps it with the entry, and the retained rows merged into a reply are added to it. An
+  edit that leaves every row in or out of the view as it was, the session's own previous action included,
+  leaves the revision as it was; an edit that brings a row in or takes one out changes it.
+- **Resolving.** An action of the table's model takes a `table::RowSelection<&Model::designs>` member, and its
+  Task handler ([`../core/coroutines.md`](../core/coroutines.md#task-handlers)) awaits
+  `resolve(*this, selection, context, policy)`, which runs on the table executor. `resolve` calls the table's
+  function on that model for the caller, so the caller's row scope and `mayRead` apply, and computes the view's
+  membership: the filter's rows with an empty sort, which the view cache holds under that key when another
+  request computed it, and the retained rows merged in. An action of another model, or a server task, sends
+  `Table.<id>.resolve` with the selection and the policy instead, under its own principal. A key selection
+  resolves to the keys the caller can still see, counting the others in `dropped`. A view of more than
+  `QueryLimits::maxSelectedRows` (1,000,000) rows is `LimitExceeded`.
+- **When the rows changed.** Under `Exact`, `resolve` refuses with `TableErrorCode::ViewChanged` when the
+  revision differs. The client then takes the selection again from the view as it is now (its filter, its
+  current revision and retained rows, the same `except`), says "The rows changed since you selected them: 9,120
+  rows now. Run on these?", and sends the action again with the new selection when the user confirms.
+- **The action's input says which table.** `RowSelection<fn>`'s schema carries `x-selectionOf` with the
+  table's record, so the client knows which table an action works on
+  ([Rows at work](#rows-at-work-rows-that-failed)).
+- **One filter language.** A server task that works on "the rows matching a filter" builds a view selection and
+  resolves it under `Current`, so the rows a user filters to in a header and the rows a task selects on the
+  server are chosen by the same code.
+- **Copying a selection of the view** fetches the view's rows as pages naming the visible columns, in view
+  order, less `except`, for at most `maxCopyRows` rows; over that the copy is refused, as any copy is
+  ([Copy](#copy)).
+
+In a document a table's element value `selectionSet` is the selection's JSON on every table, for an action's
+body. `selection` is the list of keys, and is empty while the selection is a view.
+
+### The application's menu entries
+
+A table's built-in menus ([Configuring a table](#configuring-a-table)) take the application's entries after
+their own:
+
+- `cellMenu` and `headerMenu` are parts of the `menu` node's entry shape: `{label, icon, keys, checked, enabled,
+  onClick, items, description, visible}` or `{separator: true}`.
+- **A cell's menu** opens on a right-click, the menu key or a long press on a cell. It focuses the cell, and
+  selects its row alone when the row is not already selected. It shows the table's entries ("Copy", "Copy with
+  headers", "Filter by this value", "Exclude this value"), a separator, then `cellMenu`, read in the row's scope
+  with `column` (the column's id) and `value` (the cell) beside `row`.
+- **A header's menu** shows its built-in entries, a separator, then `headerMenu`, read in a scope with `column`.
+  An entry's `visible` decides which columns it appears on: `{"fn": "eq", "args": [{"ref": "column"}, "kind"]}`
+  shows it on one.
+- **"Filter by this value"** sets the column's filter to a `oneOf` of the cell's operand in `include`, replacing
+  that column's entries; "Exclude this value" adds the operand to the column's `exclude`. On an empty cell they
+  use `isEmpty`; on an unloaded or invalid cell they are disabled. On a column of a declared group the entry
+  "Filter by this value in any <group label>" sets the group's filter instead.
+- An entry's `keys` work while the table has focus. The columns its expressions read are fetched for every row,
+  as `rowTone`'s are.
+
+### Rows an action changed
+
+**Kept in view.** A user who changes the rows they filtered to (replaces a component in the designs that hold
+it) expects to see the result, not to watch the rows vanish because they no longer match. With `retainChanged`
+(a literal flag, default `false`) a row an action of this session changed stays in the view while it no longer
+passes the filter.
+
+- The retained rows are the keys of the `ChangedRows` the session's own actions returned for this table, since
+  the filter last changed. A change of the filter, or "Show only matching rows" in the status line, clears them.
+- `TableQuery::retain` carries them, at most `QueryLimits::maxRetained` (10,000) in all. An action whose rows
+  would take the set past the bound adds none of them, and the status line says so; the rows retained before
+  stay.
+- **The view.** The rows that pass the filter, and the retained rows the caller may see, in the sort's order. A
+  retained row whose filter is `Unknown` is in the view, not undecided. `Page::unmatched` holds the indices,
+  into the reply's `rows`, of its retained rows that the filter rejects.
+- **On the server** the base view of the sort and filter is the view cache's shared entry; the retained rows not
+  in it are ordered by the sort's keys and merged into it per request, a cost of the retained rows and not of
+  the table. A keyed query sees the merged view; distinct values ignore `retain`, being the filter's.
+- **In client mode** `Engine::retain(keys)` does the same; its filter run admits those keys.
+- **Ordering with the event.** The action's change event can reach the client before the action's reply, whose
+  `ChangedRows` adds the keys. On a table with `retainChanged`, while an action of this session that declares an
+  effect on the table is in flight, the window holds back the refetches the table's change events cause, for at
+  most `SessionOptions::retainHold` (2 s), and sends one when the action settles or the hold runs out, with the
+  retained rows added. Within the hold a row never leaves the view and comes back; past it, other users'
+  changes are not held up by a long action.
+- A retained row that does not match draws muted, with a tooltip saying it no longer matches the filter, and
+  the status line counts them: "3 rows shown that no longer match. Show only matching rows".
+- Retained rows are not stored with the table's state. A view selection names them, so it resolves to the rows
+  the user saw.
+
+**A key that changes.** An action may give a row a new key: saving a modified design as a new one. The action
+returns the row in its `ChangedRows` with `from`, the key the row had ([A model's tables](#a-models-tables)).
+
+- The result walk collects both keys, so the change event names both.
+- The session that ran the action moves what it holds by key from `from` to `key`: the row's membership of the
+  selection, the focus, its place among the retained rows, its busy or failed state and its cell drafts
+  ([`editing.md`](editing.md)). Both keys are then fetched, since the old one may still be a row (the original
+  design, unchanged).
+- Another session's change event names both keys without saying which became which, so there a selected or
+  focused old key behaves as any row that left the view: it is dropped from the selection, and focus moves as
+  [Keyboard, focus and assistive technology](#keyboard-focus-and-assistive-technology) says.
+
+### Rows at work, rows that failed
+
+While the session runs an action whose input names rows of a table on screen, the rows it names are **busy**:
+for a `RowSelection` member, the keys of a key selection or the held rows of a view selection that `except` does
+not name; the row of a `CellEdit` or a `RowEdit` ([`editing.md`](editing.md)); and the row of a
+`table::RowRef<&Model::designs>` member, a row key whose schema carries `x-rowOf` with the table's record, for an
+action that works on one row.
+
+- A busy row draws the theme's busy mark and takes no cell edit ([`editing.md`](editing.md)). It can still be
+  selected, copied and scrolled past.
+- The element value `busyCount` counts them, and the status line says "Saving 40 rows".
+- When the action settles, its rows stop being busy, whatever its outcome.
+
+An action that changes some rows and not others names the others in `ChangedRows::failed`, each with its
+reason ([A model's tables](#a-models-tables)).
+
+- A failed row draws with the `err` tone and its message as the row's tooltip, until the next action of this
+  session on it, until a change event that names it arrives after the action settled (a failed row's key is not
+  among the keys the action's own event names), or until the user chooses "Clear marks" in the status line. A
+  row-scoped table's events name no keys, so there the mark lasts until the next action on the row or "Clear
+  marks".
+- The status line says "12 rows could not be saved", with "Select them", which makes them the selection.
+
+### The header while the application is busy
+
+`headerEnabled` (a condition, default `true`): while it is false, the header's sort, filter and arrangement
+gestures, and the menu entries that change them, are disabled. A gesture made anyway is refused with a message
+in the status line. Selecting, scrolling, copying and the application's own entries stay available. A screen
+that runs a long operation over a table's rows sets it, so the rows do not reorder or leave the view under the
+operation.
 
 ## Values with units
 
@@ -2284,93 +2591,6 @@ shown amount is then the exact conversion, rounded half to even to the display u
 order and filters always use the exact amount. A `Measure` column aligns to the end with digits of one width, as
 an `end` column does, with the symbol after the number, so amounts in one unit line up. Changing the display
 unit changes the cells' text and may widen the column once.
-
-### Units on a server
-
-Over rows in memory `apply` does all of it. A store that keeps a base amount and a dimension beside each value
-can order and filter by them: it accepts `translatable("", PlanUse::Measure)`, and a condition reaches it as the
-operand's dimension and base amount (`PlannedCondition::dimension`, and `value` as a `Rational`). A store that
-does not is answered through a prefilter ([What a store cannot express](#what-a-store-cannot-express)).
-`standardCorpus` adds, for a `Measure` column, operands in a unit other than the cell's and of another
-dimension.
-
-## What a store cannot express
-
-A store-backed model answers a query in two parts: the store narrows, and `apply` decides. `planQuery` pushes
-down what the store can express; when something is left over, the model fetches the rows the pushed part admits
-and the server runs the whole query over them in C++. A model that allows this (`Residual::Allow`) refuses
-nothing merely because its store cannot say it.
-
-```cpp
-enum class Residual : std::uint8_t {
-    Refuse,   // a query the store cannot express whole is `Unavailable`
-    Allow,    // it is answered by a prefilter and `finishPlan`
-};
-
-[[nodiscard]] std::expected<QueryPlan, TableError>
-planQuery(TableQuery const& query, std::span<ColumnInfo const> columns, QueryLimits const& limits = {},
-          std::function<bool(std::string_view)> const& mayRead = {}, Services const& services = {},
-          std::function<bool(std::string_view, PlanUse)> const& translatable = {},
-          Residual residual = Residual::Refuse);
-
-struct QueryPlan {
-    // … sort, filters, groups, offset, limit, totalCap, keys …
-    /// The plan is a prefilter: its rows are a superset of the view, unordered and unpaged, and `finishPlan` must
-    /// be called on them.
-    bool prefilter = false;
-};
-
-/// Over the candidates as a `DataSource`: what the framework calls with the rows a `PlannedTable` returned.
-[[nodiscard]] std::expected<PageRows, TableError>
-finishPlan(QueryPlan const& plan, TableQuery const& query, DataSource const& candidates,
-           ApplyOptions const& options = {});
-
-/// The typed convenience: the rows through a `RowsSource<Row>`, the result copied into a `Page<Row>`.
-template <typename Row>
-[[nodiscard]] std::expected<Page<Row>, TableError>
-finishPlan(QueryPlan const& plan, TableQuery const& query, std::vector<Row> const& candidates, RowKey<Row> key,
-           ApplyOptions const& options = {}, /* kinds, comparators, loaded as for apply */ ...);
-```
-
-- **What `translatable` means.** It says what the store can push down: `translatable(column, use)` for `Sort`
-  and `Filter`, and for the uses a translator written for those two would not recognise (`Keys`, `Distinct`,
-  `FilterSet` for a `oneOf`, `GroupCount` for a `match` other than `any` or a group `exclude`, `Measure` for a
-  sort or filter on a column of values with units) a first question
-  with no column, `translatable("", use)`. A predicate that only looks at column names refuses an empty one, and
-  an empty predicate accepts none of them.
-- **A whole plan.** When the store accepts every part of the query, the plan is as
-  [`database_pages.md`](database_pages.md) specifies: the store sorts, filters, pages and counts.
-- **A prefilter plan.** When any part is not accepted and `residual` is `Allow`, the plan holds only the column
-  filters and `any` groups the store accepted, has no sort, `offset` 0 and `limit` of
-  `QueryLimits::maxCandidates + 1`, and `prefilter` is set. For a `together` group the plan adds a necessary
-  condition the store does know: one `any` group per entry, since every entry must match some column. The model
-  runs it and the rows go to `finishPlan`, called by the framework for a `PlannedTable`, which is `apply` over
-  them with the whole query: the parts the
-  store already applied are applied again, which changes nothing, so the answer is the oracle's by construction.
-  Sort, paging, totals, undecided rows, keyed replies and distinct values all come from that one call.
-- **The bound.** `QueryLimits::maxCandidates` (100,000, the total cap) bounds the rows a prefilter may return.
-  `finishPlan` given more refuses with `Unavailable`, whose message asks for a narrower filter; a model may count
-  the prefilter first and refuse without fetching. Under the bound the total is exact, because every candidate
-  was seen.
-- **Cost.** Each request reads the candidates from the store and runs `apply` over them: at 100,000 candidates
-  that is the store's read of 100,000 rows plus the figures of S1, S2 and G1 to G4, tens of milliseconds for the
-  C++ part (X1, measured over the fixture's rows in memory). The default bound is the size at which that part
-  stays within S1 and G4. A store's own read of the candidates comes on top, so a store-backed model whose reads
-  are slow sets a lower `maxCandidates`. A deep page costs what the first does; nothing is kept between requests.
-- **When a model still refuses.** When its rows are costly to materialise by the hundred thousand, it keeps
-  `Residual::Refuse`, or lowers `maxCandidates`, and the menu does not offer what it refuses.
-- **Distinct values** follow the same rule and meet the bound sooner: the column's own filter is removed, so with
-  no other filter the candidates are the whole table. A values list over more than `maxCandidates` rows is
-  refused and the menu offers conditions only; a store that can group pushes `Distinct` down instead.
-- **A translator that knows only whole plans is never wrong.** `residual` defaults to `Refuse`, so a model that
-  does not ask for prefilters receives either a plan made only of what its predicate accepted, or `Unavailable`.
-  It never receives a
-  prefilter plan, and so never returns a superset as an answer.
-- **Conformance.** `conformanceFailures` holds a model to `apply` whichever way it answered. For a prefilter
-  plan it also checks that the candidates contain every row of the oracle's view
-  (`ConformanceOptions::candidates`, the keys of the rows the model's prefilter returned), and it reports, per
-  use, how many queries
-  were pushed down and how many finished in C++, so a model that pushes nothing down is seen.
 
 ## Performance
 
@@ -2600,14 +2820,6 @@ browser is measured when the frontend's cost is decided and not after everything
 | M4 | `distinctValues` on the column | ≤ 1.2 × D1 on a decimal column (P) | Grouping by shown text instead of key |
 | M5 | Registry lookups per cell while building keys | One, by id (gate) | The same as M1 |
 
-### Benchmarks: a store's remainder
-
-| Id | Measures | Budget | Catches |
-|---|---|---|---|
-| X1 | `finishPlan` over 100,000 candidate rows of the fixture with a `together` group and a sort | ≤ S1 + G4 (P) | Work beyond one `apply` |
-| X2 | Rows a prefilter plan admits for a `together` of two values, the plan applied to the fixture's rows, against the view's size | Recorded; the per-entry `any` groups are in the plan (gate) | A prefilter that narrows nothing |
-| X3 | Queries pushed down and finished in C++, per use, over the corpus | Reported; a model's expected split is asserted in its own test | A model that silently stops pushing down |
-
 ### Benchmarks: every surface
 
 The budgets above are for the pipeline, and every surface is on it, natively and in the browser. These cases hold
@@ -2640,8 +2852,8 @@ pipeline, recorded once in step 0 and kept beside the budget it is held to after
    row `apply` puts in the view is in the view of the completed table, and a row it rejects is rejected there.
 2. **Soundness of the order.** Two rows with no unloaded cell in any sort column have the same relative order
    before and after any completion.
-3. **Counts.** view rows + undecided rows + rejected rows = source rows. `totalKind` is `AtLeast` whenever
-   `undecided > 0`.
+3. **Counts.** view rows + undecided rows + rejected rows = source rows, a retained row counting in the view and
+   not as rejected. `totalKind` is `AtLeast` whenever `undecided > 0`.
 4. **Unloaded is not empty.** `isEmpty` and `notEmpty` are `Unknown` on an unloaded cell; `displayText(Unloaded{})`
    is the empty string and is never used as a key. A cell whose load failed is unloaded.
 5. **No unloaded cell at the base level.** One is refused as `SourceContract`.
@@ -2649,7 +2861,8 @@ pipeline, recorded once in step 0 and kept beside the budget it is held to after
    cells only of the columns its query names; `levelsNeeded` names no level outside the query's sorted, filtered
    and named columns.
 7. **Absent means loaded and whole.** A source that never produces `Unloaded`, columns with no `level`, a query
-   without `columns` and `keys`, and a `Page` without `unloadedRows`, `undecided`, `awaiting` and `failed` are a
+   without `columns`, `keys` and `retain`, and a `Page` without `unloadedRows`, `undecided`, `awaiting`, `failed`
+   and `unmatched` are a
    fully loaded table of every column: no cell is unloaded, no row is undecided, and every result is the one
    [`engine.md`](engine.md) specifies.
 8. **A window's totals come from page replies only**, and a window never shows a row at a view row the server did
@@ -2691,24 +2904,30 @@ pipeline, recorded once in step 0 and kept beside the budget it is held to after
 24. **A group filter is its definition.** For every row with no unloaded cell, a `Columns` filter passes exactly
     when the count of satisfying columns meets `match`, and a `Together` filter exactly when an assignment of
     entries to distinct columns exists; `{columns, combine, include}` alone is the `any` case.
-25. **A prefilter only narrows.** The rows of a prefilter plan contain every row of the view, and the answer is
-    `apply`'s over them. A model that did not ask for a prefilter never receives one.
-26. **Units do not change an amount.** Two `Measure` cells of one dimension order and compare as their amounts in
+25. **Units do not change an amount.** Two `Measure` cells of one dimension order and compare as their amounts in
     the base unit do, exactly; two of different dimensions are never equal and never ordered by amount. A unit's
     numeric id means the same unit in every registry of one lineage.
-27. **A stored arrangement never breaks a table.** Whatever a store holds, the table shows at least one
+26. **A stored arrangement never breaks a table.** Whatever a store holds, the table shows at least one
     column and applies only keys and filters on columns it has.
-28. **State before rows.** A table with a store shows its first rows only after its stored state is applied or
+27. **State before rows.** A table with a store shows its first rows only after its stored state is applied or
     its load has timed out or failed; a table whose load completes in time sends exactly one first query.
-29. **One store.** Every table's arrangement is read and written through the injected `ITableStateStore` and
+28. **One store.** Every table's arrangement is read and written through the injected `ITableStateStore` and
     nowhere else, no key it is given names a person, and no layer shortens what it is given.
-30. **A cached view is the view.** A reply built from a view cache entry equals the reply `apply` would build
+29. **A cached view is the view.** A reply built from a view cache entry equals the reply `apply` would build
     from the same source snapshot and level snapshots.
-31. **A shift is seen.** After a keyed reply is patched, either every held row is at the view row the server
+30. **A shift is seen.** After a keyed reply is patched, either every held row is at the view row the server
     has it at and the window's totals are the server's, or the window is invalidated.
-32. **A refusal is shown.** Every refusal of a user's gesture (a ninth sort key, a set too large, a range or a
-    copy too long, a save refused) appears in the status line or, where a document hides it, in the session's
-    notifications.
+31. **A refusal is shown.** Every refusal of a user's gesture (a sort key past the bound, a set too large, a
+    range or a copy too long, a save refused, a select-all while rows are undecided, a gesture on a disabled
+    header) appears in the status line or, where a document hides it, in the session's notifications.
+32. **Text never orders.** A column's display (places, rounding, labels, empty text) changes what a cell shows
+    and nothing a sort, a filter, a distinct value or a selection uses.
+33. **A selection of the view is the view.** Under `Exact`, `resolve` returns exactly the rows of the view the
+    user selected, less `except`, or refuses; under either policy it returns no row outside the caller's scope.
+34. **A revision that holds means rows that held.** Two page replies with the same `viewRevision` describe views
+    of the same rows.
+35. **Retaining adds, never removes.** A view with `retain` holds every row it holds without it, and the retained
+    rows the caller may see; `unmatched` names exactly the retained rows the filter rejects.
 
 ## API surface
 
@@ -2720,21 +2939,24 @@ Headers marked (new) do not exist before the step that lands them ([Delivery ord
 | `table/sort.hpp` | `CellState::Unloaded`; `KeyColumn::read` maps `Unloaded`; `compareKeys` ranks valid, then empty and invalid, then unloaded. |
 | `table/filter.hpp` | `enum class Match { No, Yes, Unknown }`; `CompiledFilter::evaluate(Column const&, KeyColumn const&, std::uint32_t) -> Match`; `passes` is `evaluate == Yes`; `FilterRun::takeUndecided() &&`; `FilterEntry::oneOf`; `GroupMode`, `ColumnCount`; `GroupFilter::group`, `mode`, `match`, `exclude`; matching for `Together`. |
 | `table/engine.hpp` | `detail::JobInput::previousUndecided`, `detail::JobResult::undecided`; `Engine::undecidedRowCount()`, `undecidedRows()` (source rows), `onUndecidedChange(std::function<void(std::size_t)>)`; `Engine::distinctValues`; `ColumnLayout::setWidth`, `widths`, `setPinned`, `pinned`, `value`, `apply`, and `rebuild` placing a column by the fitting rule. |
-| `table/query.hpp` | `TableQuery::columns`, `keys`, `distinct`, `retry`; `QueryLimits::maxColumns`, `maxKeys`, `maxSetValues`, `maxQuerySetValues`, `maxQuerySetBytes`, `maxCandidates`; `ColumnLevel` and the row type's `columnLevels()`; `LevelLoaded<Row>` as a trailing parameter of `RowsSource` and the typed `apply`; `LevelsNeeded`, `levelsNeeded`; `PageRows::totalKind`, `undecided`, `awaiting`, `failed`, `indices`; `UnloadedRow`, `UnloadedLevels`; `Page::unloadedRows`, `undecided`, `awaiting`, `failed`, `indices`, `distinct`; `DistinctRequest`, `DistinctValue`, `DistinctValues`, `DateBucket`, `distinctValues`; `FilterOp::OneOf`, `PlannedCondition::values`, `dimension`, `PlannedGroup::mode`, `match`, `exclude`; `PlanUse::Keys`, `Distinct`, `FilterSet`, `GroupCount`, `Measure`; `QueryPlan::keys`, `prefilter`; `Residual`, `finishPlan` over a `DataSource` and its typed overload; `changeKeys`, `rowIdOf`; `PageFetch::columns`, `revision`; `RowsFetch`, `Refresh`, `RefreshPlan`; `PageWindow`'s key function, `maxKeys` and `maxColumns`; `PageWindow::visible` with columns, `superseded`, `cancelled`, `refresh`, `owed`, `invalidate`, `patch`, `unloadedLevels`, `undecided`, `awaiting`, `failed`; the specialisation `PageWindow<GenericRow>`. |
-| `table/plan_conformance.hpp` | `ModelPage::undecided`, `unloadedRows`, `indices`; `standardCorpus` takes no operand from an unloaded cell and has keyed, `oneOf`, group, measure and distinct queries; `conformanceFailures` compares `undecided`, unloaded levels and keyed replies, and holds totals to the two-cause `AtLeast` rule; `ConformanceOptions::candidates` (row keys); the pushed-down and finished-in-C++ counts. |
+| `table/query.hpp` | `TableQuery::columns`, `keys`, `distinct`, `retry`; `QueryLimits::maxColumns`, `maxKeys`, `maxSetValues`, `maxQuerySetValues`, `maxQuerySetBytes`; `ColumnLevel` and the row type's `columnLevels()`; `LevelLoaded<Row>` as a trailing parameter of `RowsSource` and the typed `apply`; `LevelsNeeded`, `levelsNeeded`; `PageRows::totalKind`, `undecided`, `awaiting`, `failed`, `indices`; `UnloadedRow`, `UnloadedLevels`; `Page::unloadedRows`, `undecided`, `awaiting`, `failed`, `indices`, `distinct`; `DistinctRequest`, `DistinctValue`, `DistinctValues`, `DateBucket`, `distinctValues`; `changeKeys`, `rowIdOf`; `PageFetch::columns`, `revision`; `RowsFetch`, `Refresh`, `RefreshPlan`; `PageWindow`'s key function, `maxKeys` and `maxColumns`; `PageWindow::visible` with columns, `superseded`, `cancelled`, `refresh`, `owed`, `invalidate`, `patch`, `unloadedLevels`, `undecided`, `awaiting`, `failed`; the specialisation `PageWindow<GenericRow>`. |
 | `table/edits.hpp` | `CellEdits::commit` refuses an unloaded cell. |
-| `table/description.hpp` (new) | `TableColumn`, `ColumnGroupInfo`, `TableCapabilities`, `TableDescription`, `TableContext`, `PlannedTable`, `PlanRows`, `ServedTable`, `GenericRow`, `GenericPage`, `ChangedRow`, `ChangedRows<fn>`, `TableOf<fn>`, `table::typed<Row>`, `table::scoped`, `table::rowScoped`, `table::derivedFrom`; the generic page's writer and reader. |
+| `table/description.hpp` (new) | `TableColumn`, `ColumnGroupInfo`, `TableCapabilities`, `TableDescription`, `TableContext`, `ServedTable`, `GenericRow`, `GenericPage`, `ChangedRow`, `ChangedRows<fn>`, `TableOf<fn>`, `table::typed<Row>`, `table::scoped`, `table::rowScoped`, `table::derivedFrom`; the generic page's writer and reader. `ColumnDisplay`, `Rounding`, `ValueLabel`; `TableColumn::display`, `tone`, `tooltip`, `edit` and `EditInfo` ([`editing.md`](editing.md)); `TableDescription::rowTone`, `rowLock`, `bands` and `BandInfo`; `TableCapabilities::maxSortKeys`; `ResolveRequest` and the `Table.<id>.resolve` action; `ChangedRow::from`, `FailedRow`, `ChangedRows::failed`. |
+| `table/row_selection.hpp` (new) | `RowSelection<fn>` and its schema's `x-selectionOf`, `SelectionPolicy`, `SelectedRows`, `resolve`, `ResolveRequest`; `RowRef<fn>` and its schema's `x-rowOf`. |
+| `table/data_source.hpp`, `table/query.hpp`, `table/engine.hpp` (additions) | `TableErrorCode::ViewChanged`; the view cache entry's membership digest; `QueryLimits::maxSelectedRows`, `maxRetained`; `TableQuery::retain`, `Page::unmatched`, `Page::viewRevision` and their generic-page members; `Engine::retain`. |
+| `table/query.hpp`, `table/filter.hpp` (removals) | `QueryPlan` and the planned types, `PlanUse`, `planQuery`, and `plan_conformance.hpp` whole: no table is paged in a database. |
+| `ui/cell_format.hpp` (new) | `ui::formatCell`, the one formatter of a cell's text from its column's display and the session's locale. |
 | `table/level_cache.hpp` (new) | `LevelRead`, `LevelUse`, `LevelSnapshot`, `LevelSource`, `LevelCacheOptions`, `LevelCacheStats`, `LevelCache<Value>`, `CellLevelCache`. |
 | `table/view_cache.hpp` (new) | `ViewCacheOptions`, `ViewCacheStats`, `ViewCache`. |
-| `table/state_store.hpp` (new) | `TableStateKey`, `StoredTableState`, `SaveOutcome`, `SaveResult`, `ITableStateStore`, `MemoryTableStateStore`; the state's and the views' readers, writers, version migration and fitting. |
+| `table/state_store.hpp` (new) | `TableStateKey`, `StoredTableState`, `SaveOutcome`, `SaveResult`, `ITableStateStore` with `shares()`, `MemoryTableStateStore`; the state's and the views' readers, writers, version migration and fitting. |
 | `forms/views.hpp`, `forms/engine/collection.hpp` | The schema carries `x-level` from `columnLevels()` and `x-group` from `columnGroups()`; `deriveColumns` copies them; `CollectionColumn::level`. |
 | `core/change_types.hpp` | `effects::IChangeObserver` (`changed(Changes const&)`, `bind(AnnounceSink)`); `effects::AnnounceSink`. |
 | `core/remote.hpp` | `RemoteServer::announce`, `RemoteServer::attach(std::shared_ptr<effects::IChangeObserver>)`; `RemoteServerOptions::tableWork`, `views`. |
-| `core/registry.hpp`, `core/effects.hpp` | `BRIDGE_REGISTER_TABLE` and its options; the actions `Table.<id>` and `Table.<id>.describe`; the table's record; `effects::updatesTable<fn>`, `effects::changesTable<fn>`; the result walk's slot for `ChangedRows<fn>`, and its record of a holder's `openMembers()` and `partialMember()`; `ActionRecordInfo::open`, `partial`, `opaque`. `Page<Row>` declares both members. |
-| `ui/table_rows.hpp` (new) | `SortChain`, `TableTotal`, `TableRowRef`, `TableCountsView`, `TableRows`, `EngineRows`, `WindowRows`, `ValueRowsSource`; `ui::parseMeasure`. |
-| `ui/interpreter.hpp` | `Session::read`, `Session::watchRecord`, `WatchHolder`; the query cache's rules for open, partial and opaque entries; `SessionOptions::tableState`, `tableStateTimeout`, `tableStateDebounce`, `tableSettle`, `tableAwaitedRefetch`, `maxRangeRows`, `maxCopyRows`; the lowering of every table node onto `TableRows`; a table node's `status`, `persist`, a column's `kind` and `locked`. |
+| `core/registry.hpp`, `core/effects.hpp` | `BRIDGE_REGISTER_TABLE` and its options; the actions `Table.<id>` and `Table.<id>.describe`; the table's record; `effects::updatesTable<fn>`, `effects::changesTable<fn>`; the result walk's slot for `ChangedRows<fn>`, collecting each row's `key` and `from` and no `failed` key, and its record of a holder's `openMembers()` and `partialMember()`; `ActionRecordInfo::open`, `partial`, `opaque`. `Page<Row>` declares both members. |
+| `ui/table_rows.hpp` (new) | `SortChain`, `TableTotal`, `TableRowRef`, `TableCountsView`, `TableRows`, `EngineRows`, `WindowRows`, `ValueRowsSource`; `ui::parseMeasure`; a selection of the view, retained, busy, failed and locked rows, and key moves by `from`, in both `TableRows`; `TableCountsView::retained`, `busy`; `SessionOptions::retainHold`; the element value `selectedCountKind`. |
+| `ui/interpreter.hpp` | `Session::read`, `Session::watchRecord`, `WatchHolder`; the query cache's rules for open, partial and opaque entries; `SessionOptions::tableState`, `tableStateTimeout`, `tableStateDebounce`, `tableSettle`, `tableAwaitedRefetch`, `maxRangeRows`, `maxCopyRows`; the lowering of every table node onto `TableRows`; a table node's `cellMenu`, `headerMenu`, `retainChanged`, `headerEnabled` and element values `selectionSet`, `busyCount`; a column's display parts, `tone` and `tooltip`; a table node's `status`, `persist`, a column's `kind` and `locked`. |
 | `ui/view.hpp`, `ui/mount.hpp`, `ui/backend.hpp` | `Virtualization::columnThreshold`, `cellThreshold`, `columnOverscan`, `realizePerFrame`; `ColumnExtents`; the column window, cell pools and the frame budget; `Table::status`; `Backend::copyText`; the range-selection report by view rows. |
-| `ui/table_state.hpp` (new), `ui/table_state_model.hpp` (new) | `PreferencesTableStateStore`; `TableStateModel` (`morph.tableState`), `TableStateOptions`. |
+| `ui/table_state.hpp` (new), `ui/table_state_model.hpp` (new) | `PreferencesTableStateStore`; `TableStateModel` (`morph.tableState`) with its `publish` action for shared views, `TableStateOptions`. |
 | `qt_quick` and the terminal backend | Cells and header cells for columns in the window only; pinned columns; header menus, drag, resize, the sort dialog, the column chooser, the filter menu, the status line. |
 
 A caller that passes nothing new gets what it gets without this design, with one exception, stated where it
@@ -2757,7 +2979,6 @@ Each case names the mutation it was seen to fail on, as the module's other tests
 | Invalidation faster than a round trip | Invalidate, fetch, invalidate again, then accept the first reply: the page shows the reply's rows and is still stale; `visible` returns one fetch, not two. Mutation: `accept` ignoring every older revision. | `test_table_server.cpp` |
 | `announce` | A derived record is included; more than `kMaxChangeKeys` keys become whole-type; an unregistered record is refused. `changeKeys` and `rowIdOf` round-trip both key kinds and agree with the record's key member. | `tests/net/test_push_unloaded_rows.cpp`, `test_table_query.cpp` |
 | `TableQuery` on the wire | `columns` and `keys`, integer and text, round-trip through glaze; a query without them reads with both absent. An unknown column in `columns` is `UnknownColumn` and an unreadable one `ColumnNotReadable`; an empty `columns` gives a page of keys. | `test_table_query.cpp` |
-| Translation of a plan keeps the semantics | The in-memory reference model handles unloaded cells and keyed plans; `conformanceFailures` runs over a table with unloaded cells in each kind and reports a model that calls an undecided total `Exact`. lims's two store-backed models refuse `PlanUse::Keys`, and their conformance runs skip the keyed query. | `test_table_database_pages.cpp`; `examples/lims/tests` |
 | A value is loaded once | Two queries, then two clients over a socket, need the same 200 rows' level: `LevelCacheStats::loadedKeys` is 200 and the loader's own call log lists each key once. Mutation: `want` not checking the cache, which makes it 400 and 800. | `tests/table/test_table_level_cache.cpp`; `test_push_unloaded_rows.cpp` |
 | Concurrent queries share a load | Eight threads call `want` for the same keys while the loader is held on a latch: one loader call. Mutation: no in-flight set. | `test_table_level_cache.cpp` |
 | Reloaded once after invalidation | After `invalidate` of 10 keys the view lacks them; the next two queries load exactly those 10, once. An action declaring `updates` on the record does the same through the server with no call to `invalidate`. Mutation: `changed` ignoring the record, which leaves the old values served and the loader uncalled. | `test_table_level_cache.cpp`; `test_push_unloaded_rows.cpp` |
@@ -2772,12 +2993,11 @@ Each case names the mutation it was seen to fail on, as the module's other tests
 | Columns by session | Two principals get different descriptions of one table; a page's `columns` are the caller's; a changed `revision` makes the client fetch the description again. | `tests/net/test_push_tables.cpp` |
 | The generic page | Every kind of cell round-trips: empty, unloaded, a quantity with a factor and with none, a measure; a typed table served through `table::typed` writes the same page as the generic source of the same rows. | `test_table_description.cpp` |
 | Column layout | A stored layout with unknown ids, a new column and every column hidden yields the fitted layout; hiding and moving create no cell widgets (gate D8). Mutation: `apply` ignoring `hidden`. | `tests/table/test_table_columns.cpp`; `tests/qt_quick` |
-| Sort chains | `Shift`+click adds a key and flips one in the chain; a plain click replaces; a ninth key is refused. Mutation: `Shift` ignored. | `tests/test_ui_table_model.cpp`; `tests/qt_quick` |
+| Sort chains | `Shift`+click adds a key and flips one in the chain; a plain click replaces; a key past the table's `maxSortKeys` is refused. Mutation: `Shift` ignored. | `tests/test_ui_table_model.cpp`; `tests/qt_quick` |
 | `oneOf` | It matches exactly the rows the OR of its `eq` entries matches, in include and exclude, with blanks beside it; an unloaded cell is undecided. Mutation: a `oneOf` that matches nothing. | `test_table_filter.cpp` |
 | Distinct values | Counts are those of the rows the other filters leave; the column's own filter is ignored; counts, `blanks` and `invalid` sum to those rows when `partial` is false; a group's "(Blanks)" count is the rows its `isEmpty` entry admits; unloaded rows set `partial`. Mutation: counting over the view. | `tests/table/test_table_distinct.cpp` |
 | Column groups | The truth table of [Column groups](#column-groups) row by row, including the row that tells `together` from `atLeast 2`; each quantifier with unloaded cells against its three-valued rule; an exclude. Mutation: `together` evaluated as `atLeast`. | `test_table_filter.cpp` |
 | Values with units | 300 g sorts between 0.2 kg and 0.5 kg in both directions; `gt "250 g"` drops 0.3 % rows; 0.3 % and 0.3 kg are not equal; 0.3 kg and 300 g are one distinct value; an operand with no unit is a ratio. Mutation: a key that ignores the unit's factor. | `tests/table/test_table_measure.cpp` |
-| A store's remainder | A model on `Residual::Refuse` never receives a prefilter plan; with `Allow`, `finishPlan` over the candidates equals `apply` over all rows; a prefilter returned as the answer is reported; more than `maxCandidates` rows is refused. | `test_table_database_pages.cpp` |
 | Persisted state before the first query | A table mounts with a stored sort and filter in a `MemoryTableStateStore` whose load is held: no query is sent; released, one query goes out carrying the stored sort and filter. Mutation: a table that ignores its store sends the default query. | `tests/test_ui_table_model.cpp` |
 | Stale state is fitted | A stored state naming a removed column, a removed group, an unknown unit, a filter that no longer compiles and every column hidden: the table shows, with one column at least, the rest applied, each drop reported once; what a session's description lacks is written back unchanged. Mutation: applying the state unfitted. | `tests/table/test_table_state.cpp` |
 | Saves are coalesced | Fifty changes inside the debounce are one save holding the last arrangement; a change during a save in flight is one more; unmounting saves at once. Mutation: no debounce. | `tests/test_ui_table_model.cpp` |
@@ -2809,6 +3029,21 @@ Each case names the mutation it was seen to fail on, as the module's other tests
 | State of any size | A state with a 20,000-value filter saves through `PreferencesTableStateStore` and reads back equal, as segments each within `segmentBytes`; a save stopped after its segments leaves the previous state readable; a missing segment is a failed load. Mutation: the store calling the preferences model, which refuses the value. | `tests/test_ui_table_state.cpp` |
 | Views are not lost between windows | Two windows each add a view from the same loaded revision: the second save answers `Conflict`, reloads, and both views are stored. A `state` save overwrites. | `tests/test_ui_table_state.cpp` |
 | Unit numbers across registries | A successor registry keeps every number and tombstones a removed unit; a level cache keeps its values under a successor and invalidates under another lineage; a unit id with a space is refused. | `tests/table/test_table_measure.cpp` |
+| A column's display | 0.125 at two places shows "0.12" under `HalfEven` and "0.13" under `HalfUp`; `eq 0.13` matches neither; an empty cell shows `empty`, an unloaded one its placeholder; a `Bool` with labels orders false first; `decimals` on a `Measure` column is `SourceContract`; copy writes the formatted text. Mutation: a sort over the formatted text, which orders "10.00" before "9.00". | `tests/test_ui_cell_format.cpp`; `test_table_description.cpp` |
+| Companion columns travel with their column | A page naming a column names its `tone` and `tooltip` companions and the `rowTone` one; a column out of the window fetches neither; a document `tone` expression stops the companion being fetched. Mutation: companions fetched for every column. | `test_table_description.cpp`; `tests/test_ui_table_model.cpp` |
+| A selection of the view | `Ctrl+A` on a model-backed table fetches no row; `resolve` under `Exact` returns the view's keys less `except` and refuses `ViewChanged` after an edit that moves a row into the view; under `Current` it returns the new view; a principal's resolution holds no row outside its scope; select-all is refused while rows are undecided. Mutation: `viewRevision` that ignores the source snapshot, which resolves the edited view under `Exact`. | `tests/table/test_table_selection.cpp`; `tests/net/test_push_tables.cpp` |
+| Retained rows | After an action changes three rows so that the filter rejects them, they stay in the view, listed in `unmatched` and counted; a change of the filter clears them; an action over `maxRetained` retains none and says so; a client-mode engine does the same. Mutation: the merged view written into the shared view cache entry, which serves one session's retained rows to another. | `test_table_selection.cpp`; `tests/test_ui_table_model.cpp` |
+| A key that changes | A `ChangedRow` with `from` moves the selection, the focus and a failed mark to the new key and fetches both. Mutation: the walk ignoring `from`, which leaves the old row's watchers untold. | `tests/test_ui_table_model.cpp`; `test_push_tables.cpp` |
+| Busy and failed rows | While an action over a selection runs, its rows draw busy and refuse an edit; a `failed` entry draws `err` with its message until the row's next change; "Select them" selects exactly the failed keys. Mutation: busy state cleared only on success. | `tests/test_ui_table_model.cpp` |
+| The application's menu entries | `cellMenu` entries read `row`, `column` and `value`; a right-click on an unselected row selects it alone; "Filter by this value" sets a one-member `oneOf` and on an empty cell `isEmpty`; a `visible` on `column` shows an entry on one header only. Mutation: the cell menu read in the table's scope. | `tests/test_ui_table_model.cpp`; `tests/qt_quick` |
+| Resolving from elsewhere | `Table.<id>.resolve` from another model's action returns the caller's keys and counts unseen keys in `dropped`; a view over `maxSelectedRows` is `LimitExceeded`; after `ViewChanged` the client offers the view as it is and resends on confirmation; a change of the filter ends a view selection. Mutation: `resolve` run under the server's principal, which returns rows outside the caller's scope. | `tests/net/test_push_tables.cpp`; `tests/test_ui_table_model.cpp` |
+| The view revision is membership | An edit that changes a cell of a row in the view without moving it in or out leaves `viewRevision` as it was; one that brings a row in changes it. Mutation: the revision taken from the snapshot's version, which refuses the first case. | `test_table_selection.cpp` |
+| Retained rows and the event | With `retainChanged`, an event that precedes its action's reply causes no refetch until the reply or `retainHold`. Mutation: no hold, under which a retained row leaves the view and comes back. | `tests/test_ui_table_model.cpp` |
+| Locked rows and companions | A row whose `rowLock` companion holds text draws locked with that tooltip and refuses a cell edit; companion columns are absent from the column chooser and the header menus; an unknown tone is reported once. Mutation: the chooser listing every column of the description. | `tests/test_ui_table_model.cpp` |
+| A raised sort bound | A table whose `limits` set 32 accepts a 32-key chain from the header and refuses the 33rd; the description carries the bound; `limits` above 32 is `SourceContract`. Mutation: the client holding 8 whatever the description says. | `tests/test_ui_table_model.cpp`; `test_table_description.cpp` |
+| Shared views | A view published through `morph.tableState.publish` is read by a second principal and copied by "Save as my view"; a principal the authoriser refuses `publish` is refused; a store whose `shares()` is false offers no publishing; `defaultOnMount` applies the default view's sort and filters over the stored state at mount. Mutation: the shared part saved through `save`, which an authoriser cannot tell from a user's own state. | `tests/test_ui_table_state.cpp`; `tests/net/test_push_tables.cpp` |
+| Copy of a selection of the view | A copy of a view selection less two keys writes the view's rows in order without them, fetched as pages; over `maxCopyRows` it is refused. | `tests/test_ui_table_model.cpp` |
+| A disabled header | With `headerEnabled` false a header click, a filter menu and a column drag change nothing and each is refused in the status line; selection and copy still work. Mutation: `headerEnabled` read once at mount, which leaves the header enabled after the condition turns false. | `tests/test_ui_table_model.cpp` |
 
 The arrival path on a screen (a model-backed `table`, its repaint and its frame cost) is tested and measured
 with the lowering, as cases U6, F6 and F7 of [Performance](#performance).
@@ -2824,25 +3059,28 @@ with the lowering, as cases U6, F6 and F7 of [Performance](#performance).
   wants exact row updates on arrival uses a `VectorSource`.
 - It does not page a forms collection or make its rows unloaded: a collection's rows arrive whole, and a
   collection whose `v-query` takes a query is a design for the forms specs.
-- **It does not edit cells generically.** There is no edit action per table, no `editable` column and no editor
-  chosen by a column's kind. A row is changed by an action of the application that declares `updatesTable`,
-  called from a column's `cell` template or from the screen; `CellEdits` stays the client-mode helper a
-  collection uses. A description-driven inline edit needs its own client vocabulary, validation path and
-  delivery step, and is a spec of its own beside this one.
+- **It does not edit cells.** Editing a cell in place, the grid that lays out a fixed form as rows and columns,
+  spans, header bands and summary rows are [`editing.md`](editing.md)'s, which builds on this pipeline. A row
+  of a model's table is changed by an action of the application that declares `updatesTable`.
+- It does not format a value on the server for a client: the client formats from the exact value
+  ([How a column shows its cells](#how-a-column-shows-its-cells)).
 - **It does not export.** Copy puts selected rows on the clipboard ([Copy](#copy)); writing a view to a file is
   an application action over the query.
 - It does not group rows, aggregate, or total a model-backed table: `group` and `rowSpans` are a `rows` table's.
-  Aggregate reports over a store are [`database_pages.md`](database_pages.md#aggregate-reports)'s.
-- It does not offer top-N or ranking filters, or colour and icon filters.
+- It does not page, sort or filter a table in a database. A model with rows in a database reads them into a
+  `DataSource`; a report that aggregates over a database is the application's.
+- It does not offer top-N or ranking filters, or colour and icon filters. A tone is shown, never filtered on;
+  a filter on what decides it is a filter on that column.
 - It does not keep loaded values across a server restart ([Caching layers](#a-persistent-tier)).
 - It does not repair a cached view when a level's generation changes: the view is computed again, once for all
   its watchers ([The view cache](#the-view-cache)).
-- It does not cache a view for a table served through `planned`, or cache distinct values on the server.
+- It does not cache distinct values on the server.
 - It does not invalidate a level cache in local mode, where no server derives changes: the application calls
   `invalidate` itself.
 - It does not lower a collection's or a wizard's chrome.
 - It does not turn a `rows` table bound to a page into a model-backed one.
-- It does not give a model-backed table a client-side select-all, grouping or row spans; the node refuses them.
+- It does not give a model-backed table grouping or row spans; the node refuses them. Its select-all is not
+  a client-side one: it is a selection of the view, resolved on the server.
 - It does not sort or filter held rows on the client in server mode
   ([Where sort and filter run](#where-sort-and-filter-run)).
 - It does not change `forEach` or `grid`.
@@ -2938,15 +3176,14 @@ with the lowering, as cases U6, F6 and F7 of [Performance](#performance).
   `together`, since a cell has one value; for conditions it is two `any` groups, which AND already.
 - **Trying every assignment for `together`.** Sixteen entries over sixteen columns are 16! assignments; a matching
   is found in a few hundred steps.
-- **Translating `together` for a store.** Without a matching it is a count per subset of the entries, which
-  doubles with each entry, so a translation is practical for about six entries. In C++ the bound is the
-  group's size.
-- **Refusing whatever a store cannot express.** The feature a user sees would depend on the table's storage. A
-  prefilter keeps every feature and bounds its cost.
-- **Streaming the store's rows through the remainder in order.** The store must then sort, so an unsortable
-  column refuses again, and paging and counting are written twice. One `apply` over the candidates is the
-  oracle itself.
-- **A prefilter by default.** A model written for whole plans would return the superset as its answer.
+- **Paging in the database**, the model translating each query into the database's own query and the server
+  answering only what the database cannot say. The table's order would then be the database's collation
+  wherever the query was pushed down and the engine's where it was not, so two tables, or one table before and
+  after a filter, would order the same text differently. Every feature (column groups, `together`, values with
+  units, unloaded cells and undecided rows, distinct values by fold) would depend on what each store can
+  translate, and every model would need a translator and a conformance run to show it agrees with `apply`.
+  A `DataSource` read from the database and `apply` over it give one order and every feature, at the cost of
+  holding a column's keys on the server while it is sorted or filtered, which the 100,000-row budget allows.
 - **A quantifier on the existing `combine`.** `combine` says how entries meet in one cell; the quantifier counts
   columns. One name for both leaves the fourth example unsayable.
 - **Groups as a merged virtual column.** Sorting and showing the columns one by one would be lost, and "exactly
@@ -2977,6 +3214,20 @@ with the lowering, as cases U6, F6 and F7 of [Performance](#performance).
 - **The person in the key.** A client could ask for another person's state.
 - **Merging concurrent saves.** See [Persisted state](#persisted-state).
 - **Waiting for the state however long it takes.** A slow store would hold every table blank.
+- **Text formatted on the server.** It cannot follow the user's locale or display unit without a request per
+  change, and a column sorted by its text orders "10.00" before "9.00". The exact value crosses; the client
+  formats it.
+- **A rule language for tones in the description** (ranges, thresholds, colours). It would be a second expression
+  language beside the document's, evaluated on a client that may lack the values a rule needs. A companion
+  column computed by the model, or a document expression, says the same with what exists.
+- **Select-all as a list of keys in server mode.** It fetches every key of up to 100,000 rows before the user
+  has done anything with them, and is stale by the time the action runs. The view's filter and revision are
+  what the user selected.
+- **Retained rows frozen at their place.** A retained row that the sort would move is a row whose edit the
+  user cannot see take effect; retaining exempts it from the filter and leaves the order truthful. Holding a row
+  still is `ReorderPolicy::Deferred`'s, for the time an edit is in flight.
+- **A rename as a removal and an insertion.** The selection, the focus and a failed mark would be lost on the
+  row the user is looking at.
 - **One `TableRows` implementation that holds either an engine or a window.** The two differ in whether a row can
   be absent, which every reader would then test; two implementations of one interface keep that in one place.
 
@@ -3017,7 +3268,8 @@ with the lowering, as cases U6, F6 and F7 of [Performance](#performance).
 | A description with two columns of one id, a key that is no column, a level or group naming no column | The table's action answers `SourceContract`; nothing is shown. |
 | A principal may run a table's action but read none of its columns | A page with no columns; the table shows its empty state. |
 | A stored layout names a column the table lacks, or hides every column | The id is dropped; the first declared column is shown. |
-| A ninth sort key | Refused, with a message in the table's status line. |
+| A sort key past the table's `maxSortKeys` | Refused, with a message in the table's status line. |
+| A table whose `limits` set `maxSortKeys` above 32 | `SourceContract` when the table is first served. |
 | A `oneOf` over `maxSetValues` | `LimitExceeded`; the menu sends the smaller side, and disables the list when both exceed it. |
 | A distinct request to a model that does not translate it | `Unavailable`; the menu offers conditions only. |
 | A values list while the column's level loads | The loaded values with `partial`; the list refreshes on each arrival. |
@@ -3040,10 +3292,6 @@ with the lowering, as cases U6, F6 and F7 of [Performance](#performance).
 | A group filter naming a group the table lacks | `UnknownColumn`, naming the group. |
 | `together` with fewer than 2 entries, or more entries than the group has columns | `InvalidSpec`. |
 | `atLeast` or `exactly` with n below 0 or above the group's column count | `InvalidSpec`. |
-| A part of a query the store cannot express, with `Residual::Allow` | A prefilter plan; `finishPlan` answers it. |
-| The same with `Residual::Refuse` | `Unavailable`; the menu does not offer that part for the table. |
-| A prefilter that returns more than `maxCandidates` rows | `Unavailable`, asking for a narrower filter. |
-| A prefilter plan whose rows are returned as the answer | The model's conformance run reports rows the oracle lacks. |
 | A user-formed group loses a column | The column leaves the group; under two columns the group and its filter are dropped. |
 | A query's `columns` names a column the table lacks, or one the caller may not read | `UnknownColumn` or `ColumnNotReadable`; the client fetches the description again and asks once more. |
 | A column fetch whose keys are not the held page's | The rows moved between the two fetches; the window invalidates. |
@@ -3061,12 +3309,24 @@ with the lowering, as cases U6, F6 and F7 of [Performance](#performance).
 | A level cache read under a registry of another lineage | The level is invalidated: its unit numbers mean nothing there. |
 | A `rows` table that sets `persist` and has no `id` | Refused when the document loads. Without `persist` it shows, and persists nothing. |
 | A refusal on a table whose document sets `status: false` | Shown through the session's notifications. |
+| A companion column that names no column, or is not `Text`; `decimals` or `unit` on a `Measure` column | `SourceContract` when the description is built. |
+| A companion's tone that is not a tone name | No tone; reported once for the column. |
+| `resolve` under `Exact` after the view's membership changed | `ViewChanged`; the client keeps the selection and asks the user to confirm on the view as it is. |
+| A selection of the view larger than `maxSelectedRows` | `LimitExceeded`. |
+| Select-all while rows are undecided or a level is awaited | Refused, with a message in the status line. |
+| An action that retains more rows than `maxRetained` | None of its rows are retained; the status line says so. |
+| A `ChangedRow::from` the client does not hold | The new key is fetched as any changed key; nothing moves. |
+| A gesture on a header while `headerEnabled` is false | Refused, with a message in the status line. |
+| A `publish` the authoriser refuses, or a store whose `shares()` is false | Refused with a message; over a store that does not share, publishing is not offered. |
+| A user's own `save` of the `shared` part | Refused. |
+| A `rowLock` companion that names no column, or is not `Text` | `SourceContract` when the description is built. |
 
 ## Open questions
 
-- **Grouping text in a store.** Distinct values and group filters on text compare by the collator's fold. A store
-  that cannot group by the same fold answers through a prefilter or refuses; what a given store can express is
-  found by that model's conformance run.
+- **Retaining the rows of an action over a whole view.** `retain` carries keys, so an action that changes more
+  than `maxRetained` rows (a replacement over every visible design) retains none of them. Carrying a set the
+  server holds for the session, named in the query, would lift the bound; whether that is needed is settled by
+  the first application that meets it.
 - **A level cache in local mode.** With no server deriving changes, the application invalidates a cache itself.
   A hook for it belongs with local mode's effects.
 - **Frame timing in CI.** Whether `QQuickRenderControl` with the software backend gives stable step times on the
@@ -3086,12 +3346,13 @@ section that does not exist yet.
 | [`../core/backend.md`](../core/backend.md), "Fan-out" | `RemoteServerOptions::tableWork`; `RemoteServer::announce`, `attach`, `IChangeObserver`; the view cache | 1, 2c |
 | [`../ui/interpreter.md`](../ui/interpreter.md), "Queries and the cache" | The rules for open, partial and opaque entries; `Session::read` and `watchRecord` | 2d |
 | [`../ui/interpreter.md`](../ui/interpreter.md), "Not yet lowered" and the rows' pipeline | The entry for a model-backed `table` goes; the lowering onto `TableRows` is described; the "Rows' pipeline" and "Groups" rules keep what the lowering does around the engine's order | 4, 6 |
-| [`../ui/document.md`](../ui/document.md), the `table` kind | `table`, `status`, `persist`, `layout`, `configurable`, a column's `kind` and `locked`; `filters` on every table; the element values this design names | 4, 6, 7 |
+| [`../ui/document.md`](../ui/document.md), the `table` kind | `table`, `status`, `persist`, `layout`, `configurable`, a column's `kind` and `locked`; `filters` on every table; `cellMenu`, `headerMenu`, `retainChanged`, `headerEnabled`; a column's display parts, `tone` and `tooltip`; the element values this design names | 4, 6, 7, 9a, 9b |
 | [`../ui/preferences.md`](../ui/preferences.md) | That table state has its own model and is not bounded by `maxValueBytes`; the `columns` and `saved` points | 4 |
 | [`../qt_quick/backend.md`](../qt_quick/backend.md) | The column window, cell pools, pinned columns, the status line; the menus and dialogs | 5, 7 |
 | [`../forms/views.md`](../forms/views.md) | `x-level` and `x-group` on a schema property | 2a, 3 |
 | [`engine.md`](engine.md) | Its "Not here yet" entries for the model-backed table and the single-threaded steps; `ColumnLayout`'s fitting rule | 4, 6, 7 |
-| [`database_pages.md`](database_pages.md) | `PlannedTable`, prefilter plans and `finishPlan` | 1, 3 |
+| [`engine.md`](engine.md), `database_pages.md` | `planQuery`, `QueryPlan` and the conformance helper leave `engine.md`; `database_pages.md` is removed | 0a |
+| [`editing.md`](editing.md) | Editing cells in place, grids, spans, header bands and summary rows, on this pipeline | its own order |
 
 ## Delivery order
 
@@ -3101,16 +3362,20 @@ gate runs as an ordinary test; a timing is recorded in [Performance](#performanc
 | Step | Lands | Gates and records |
 |---|---|---|
 | 0 | The fixture's rows, with nothing that does not exist yet: the column-store `DataSource` and its generator (`bench::WideTableSource`), and a baseline of what the code does today. The table tests are built for WebAssembly and run under Node. | Gate: S3. Recorded: S1 and S2 with every cell loaded; S7 as ten `apply` calls; S8; B1 at 10,000, 20,000 and 100,000 rows; B2; B5; U1 to U5; W7 as a typed page; F2 to F5 on a `rows` table of 2,000 × 300, the size a mount without a column window holds |
-| 1 | The generic table contract: `TableDescription`, `ServedTable` with `source` and `planned`, `BRIDGE_REGISTER_TABLE`, its options and its two actions, the table's record with `updatesTable`, `changesTable` and `ChangedRows`, the generic page with every cell encoding, `TableQuery::columns`, `table::typed<Row>`, requests answered on `tableWork`. The fixture becomes the registered model `bench::WideTableModel` with its three tables and no slow level. | W1, W2, W5, W7; W6's bytes and codec |
+| 0a | Store paging goes: `QueryPlan`, `planQuery`, `PlanUse` and `plan_conformance.hpp`, their tests, and the example models that page in SQLite, which serve their rows as a `DataSource` instead. | The table, net and example suites green without them |
+| 1 | The generic table contract: `TableDescription`, `ServedTable` over a `source`, `BRIDGE_REGISTER_TABLE`, its options and its two actions, the table's record with `updatesTable`, `changesTable` and `ChangedRows`, the generic page with every cell encoding, `TableQuery::columns`, `table::typed<Row>`, requests answered on `tableWork`. The fixture becomes the registered model `bench::WideTableModel` with its three tables and no slow level. | W1, W2, W5, W7; W6's bytes and codec |
 | 2a | The engine's part of slow columns: the `Unloaded` cell and its rank, the three-valued filter and the undecided set, `ColumnInfo::level`, `levelsNeeded`, `LevelLoaded`, `unloadedRows` on `PageRows` and the typed `Page`. | S1 to S6 |
-| 2b | The wire's part: `unloadedRows`, `undecided`, `awaiting`, `failed` and `indices` on the generic page; `TableQuery::keys` and the keyed reply with its totals; `PlanUse::Keys` and the conformance corpus. | W3, W4 |
+| 2b | The wire's part: `unloadedRows`, `undecided`, `awaiting`, `failed` and `indices` on the generic page; `TableQuery::keys` and the keyed reply with its totals. | W3, W4 |
 | 2c | The server's caches and the push: `LevelSource`, `LevelCache` with leases, failures and immutable snapshots; `RemoteServer::announce` and `attach`; the view cache. The fixture gains its slow level. | L1 to L8, S7, S9, C1 to C3 |
 | 2d | The client's part: `PageWindow` under changes, with columns, probes and `superseded`; `Session::read` and `watchRecord`; the query cache's rules for open, partial and opaque entries. A table served over `apply` and read through a `PageWindow` then shows a first page before a slow level loads, shows its cells as unloaded, loads a level only when a named column needs it, and updates exactly the rows that arrived. | K1 to K4, K6, K7, E1 to E4 |
-| 3 | The engine's configuring additions: `oneOf`, `distinctValues`, column groups with quantifiers and `together`, `Measure` and the unit registry, `ColumnLayout`'s widths, pinning, fitting rule and stored shape, `Residual` and `finishPlan`. | D1 to D6, G1 to G7, M1 to M5, X1 to X3 |
+| 3 | The engine's configuring additions: `oneOf`, `distinctValues`, column groups with quantifiers and `together`, `Measure` and the unit registry, `ColumnLayout`'s widths, pinning, fitting rule and stored shape. | D1 to D6, G1 to G7, M1 to M5 |
 | 4 | `TableRows` and the lowering of a model-backed `table` onto `PageWindow`, from the description, with the status line's counts. The four behaviours of 2d then hold on a screen. `ITableStateStore`, the framework's stores and the load before the first rows land here, for sort and filters, so the rule is built into the first lowering. | U6 (E1 to E3 on a screen), K5, K8, F6, F7, T1, T3 to T5; W6's one request; F1 recorded |
 | 5 | The column window in the mount and in both backends: extents, pinned columns, cell pools, the frame budget, focus, keys and counts under windowing. **Exit criterion:** U8, the same scrolls in the WebAssembly build in a browser, within F3's and F4's frame budgets. | F1 to F5, F8 to F10, U7, U8, D8 |
 | 6 | `rows` tables on the engine through `ValueRowsSource`; the interpreter's own sort and page go. | U1 to U4; B1's 20,000-row step bound |
 | 7 | The configuration interface: header and table menus, column order, visibility, pinning and width, persisted with the rest of the table's state; sort chains; the filter menu with values, conditions, groups and units; copy; range selection in server mode. Screenshots of existing screens change here, as intended. | D7, D9, B3, B4 |
 | 8 | Collections through the same lowering. | U5 |
-| 9 | Saved views, as the `views` part of the persisted state, with the conflict rule. | T2 |
+| 9 | Saved views, as the `views` part of the persisted state, with the conflict rule; shared views and the default first. | T2 |
+| 9a | A column's display and `ui::formatCell`; companion columns for tone and tooltip; header units. It may land before step 4; if it lands after, step 4's lowering formats through a stand-in that 9a replaces. | The display and companion tests of [Tests](#tests) |
+| 9b | Acting on rows: `RowSelection`, `resolve` and `Table.<id>.resolve`, `viewRevision`, retained rows, `ChangedRow::from`, busy, failed and locked rows, the application's menu entries, `headerEnabled`. Needs step 4. | The selection, store selection, retained, key-change, busy, locked, menu and disabled-header tests of [Tests](#tests) |
+| 9c | `maxSortKeys` configurable up to 32, carried in the description. | "A raised sort bound" |
 | 10 | As measured: repairing a cached view in place of computing it again, local work when a window holds the whole view, a persistent tier under the level cache. | The figures that justify each |
