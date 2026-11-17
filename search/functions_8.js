@@ -32,7 +32,7 @@ var searchData=
   ['inspectfocused_29',['inspectFocused',['../d9/d90/classmorph_1_1ui_1_1MountedShell.html#a28752287fc9967690fdf37d50ec7753a',1,'morph::ui::MountedShell']]],
   ['inspector_30',['inspector',['../d9/d53/classmorph_1_1ui_1_1DocumentScreenHost.html#a844e396fdd2abf685b93e9ea0b29822b',1,'morph::ui::DocumentScreenHost']]],
   ['inspectorwindow_31',['InspectorWindow',['../dd/d77/classmorph_1_1qt__quick_1_1InspectorWindow.html#a95a47110d6e958ba5a221714129936c9',1,'morph::qt_quick::InspectorWindow']]],
-  ['instance_32',['instance',['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#a1542ecdd46c0ef020869b29e816720b2',1,'morph::bridge::ActionExecuteRegistry::instance()'],['../db/d4f/classmorph_1_1views_1_1ViewRegistry.html#ab0babebfdea864fa9660957bd530194d',1,'morph::views::ViewRegistry::instance()']]],
+  ['instance_32',['instance',['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#ac3d3c5742210d1562cdeae4cf3a48c6c',1,'morph::bridge::ActionExecuteRegistry::instance()'],['../db/d4f/classmorph_1_1views_1_1ViewRegistry.html#a059323e1cf2568c60455e1ccc6776681',1,'morph::views::ViewRegistry::instance()']]],
   ['instanceid_33',['instanceId',['../d8/d3a/classmorph_1_1bridge_1_1RawHandler.html#ae60ed3c06a564c61f04503959f66cf07',1,'morph::bridge::RawHandler']]],
   ['instancekeytext_34',['instanceKeyText',['../db/d42/interpreter_8hpp.html#a32fa88476b8b46e3283ec1e2522be475',1,'morph::ui::detail']]],
   ['instances_35',['instances',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a30fc608c0c73cee91e8a1481cacd4b00',1,'morph::bridge::BridgeHandler::instances()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a538a814bdd796e082a35ba5ebe0b2e34',1,'morph::qt::QtWebSocketBackend::instances()']]],

@@ -12,7 +12,7 @@ var records_8hpp =
     [ "morph::record::detail::memberKeyName", "da/d6a/records_8hpp.html#a060df48a174449c0740d12be6428c6a3", null ],
     [ "morph::record::detail::idIndex", "da/d6a/records_8hpp.html#a7998bf4b0de0c27d758b6f54185eaa84", null ],
     [ "morph::record::detail::applyKey", "da/d6a/records_8hpp.html#a2e2265c366bf6810a7576d6f7d1ce7e6", null ],
-    [ "morph::record::detail::mutableRecordRegistry", "da/d6a/records_8hpp.html#ad2ed44a885c815b1e9391631403d7bfe", null ],
+    [ "morph::record::detail::mutableRecordRegistry", "da/d6a/records_8hpp.html#ab6196702fb6020fb1670bbea5dfbd709", null ],
     [ "morph::record::detail::recordRegistry", "da/d6a/records_8hpp.html#a090439d44e04c1bf913032f128974d6f", null ],
     [ "morph::record::detail::registerRecordOnce", "da/d6a/records_8hpp.html#ac86457e76a79f8c1bdf14989469778aa", null ]
 ];

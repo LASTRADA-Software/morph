@@ -410,7 +410,7 @@ var author_8hpp =
     [ "morph::ui::author::checkAccessibility", "d1/dc0/author_8hpp.html#a627ec0d99a753bf37dfe8004117530bc", null ],
     [ "morph::ui::author::screen", "d1/dc0/author_8hpp.html#a2e1cb09bc3d7c742207a232250e9d9d4", null ],
     [ "morph::ui::author::screen", "d1/dc0/author_8hpp.html#a82c18c54feda511b8bb2402bf9a2e1c0", null ],
-    [ "morph::ui::author::screenRegistry", "d1/dc0/author_8hpp.html#ab1662767f7547574c5f616b34154282b", null ],
+    [ "morph::ui::author::screenRegistry", "d1/dc0/author_8hpp.html#a2528a92f1f0a16ef249ba87bedf9f515", null ],
     [ "morph::ui::author::enrollScreen", "d1/dc0/author_8hpp.html#a45697032040d625f96390dfced787014", null ],
     [ "morph::ui::author::self", "d1/dc0/author_8hpp.html#ae069ff7eb6323663ed2d0ca9ffc0f2bc", null ]
 ];

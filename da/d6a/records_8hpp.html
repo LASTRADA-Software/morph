@@ -124,6 +124,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('da/d6a/records
 <code>#include &lt;cstddef&gt;</code><br />
 <code>#include &lt;glaze/glaze.hpp&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
+<code>#include &lt;morph/export.hpp&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
@@ -173,8 +174,8 @@ Functions</h2></td></tr>
 <tr class="memitem:a2e2265c366bf6810a7576d6f7d1ce7e6" id="r_a2e2265c366bf6810a7576d6f7d1ce7e6"><td class="memTemplParams" colspan="2">template&lt;typename T, typename... Opts&gt; </td></tr>
 <tr class="memitem:a2e2265c366bf6810a7576d6f7d1ce7e6 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2e2265c366bf6810a7576d6f7d1ce7e6">morph::record::detail::applyKey</a> (<a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">RecordInfo</a> &amp;info)</td></tr>
 <tr class="memdesc:a2e2265c366bf6810a7576d6f7d1ce7e6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Fills the key fields of <code class="param">info</code> from the options.  <br /></td></tr>
-<tr class="memitem:ad2ed44a885c815b1e9391631403d7bfe" id="r_ad2ed44a885c815b1e9391631403d7bfe"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">RecordInfo</a> &gt; &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ad2ed44a885c815b1e9391631403d7bfe">morph::record::detail::mutableRecordRegistry</a> ()</td></tr>
-<tr class="memdesc:ad2ed44a885c815b1e9391631403d7bfe"><td class="mdescLeft">&#160;</td><td class="mdescRight">The process-level record list, appended to by static registrars.  <br /></td></tr>
+<tr class="memitem:ab6196702fb6020fb1670bbea5dfbd709" id="r_ab6196702fb6020fb1670bbea5dfbd709"><td class="memItemLeft">MORPH_API std::vector&lt; <a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">RecordInfo</a> &gt; &amp;&#160;</td><td class="memItemRight"><a class="el" href="#ab6196702fb6020fb1670bbea5dfbd709">morph::record::detail::mutableRecordRegistry</a> ()</td></tr>
+<tr class="memdesc:ab6196702fb6020fb1670bbea5dfbd709"><td class="mdescLeft">&#160;</td><td class="mdescRight">The process-level record list, appended to by static registrars.  <br /></td></tr>
 <tr class="memitem:a090439d44e04c1bf913032f128974d6f" id="r_a090439d44e04c1bf913032f128974d6f"><td class="memItemLeft">std::vector&lt; <a class="el" href="../../d9/dfd/structmorph_1_1record_1_1RecordInfo.html">RecordInfo</a> &gt; const &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a090439d44e04c1bf913032f128974d6f">morph::record::detail::recordRegistry</a> ()</td></tr>
 <tr class="memdesc:a090439d44e04c1bf913032f128974d6f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The records declared so far, raw and unvalidated.  <br /></td></tr>
 <tr class="memitem:ac86457e76a79f8c1bdf14989469778aa" id="r_ac86457e76a79f8c1bdf14989469778aa"><td class="memTemplParams" colspan="2">template&lt;typename T, typename... Opts&gt; </td></tr>
@@ -225,7 +226,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
 
 </div>
 </div>
@@ -264,7 +265,7 @@ template&lt;typename K&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>True when the raw key type is <span class="tt">std::string</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
 
 </div>
 </div>
@@ -309,7 +310,7 @@ template&lt;typename Class, typename Member&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The glaze JSON key of the member, or empty when glaze does not reflect it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
 
 </div>
 </div>
@@ -347,7 +348,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The index, or <span class="tt">glz::reflect&lt;T&gt;::keys.size()</span> when no member is named <span class="tt">id</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
 
 </div>
 </div>
@@ -383,37 +384,27 @@ template&lt;typename T, typename... Opts&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ad2ed44a885c815b1e9391631403d7bfe" name="ad2ed44a885c815b1e9391631403d7bfe"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad2ed44a885c815b1e9391631403d7bfe">&#9670;&#160;</a></span>mutableRecordRegistry()</h2>
+<a id="ab6196702fb6020fb1670bbea5dfbd709" name="ab6196702fb6020fb1670bbea5dfbd709"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab6196702fb6020fb1670bbea5dfbd709">&#9670;&#160;</a></span>mutableRecordRegistry()</h2>
 
 <div class="memitem">
 <div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::vector&lt; RecordInfo &gt; &amp; morph::record::detail::mutableRecordRegistry </td>
+          <td class="memname">MORPH_API std::vector&lt; RecordInfo &gt; &amp; morph::record::detail::mutableRecordRegistry </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
 </div><div class="memdoc">
 
 <p>The process-level record list, appended to by static registrars. </p>
 <dl class="section return"><dt>Returns</dt><dd>The mutable list. </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00184">184</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
 
 </div>
 </div>
@@ -443,7 +434,7 @@ template&lt;typename T, typename... Opts&gt; </div>
 <p>The records declared so far, raw and unvalidated. </p>
 <dl class="section return"><dt>Returns</dt><dd>The entries in registration order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00189">189</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
 
 </div>
 </div>
@@ -488,7 +479,7 @@ template&lt;typename T, typename... Opts&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Always true, so the result can initialise a namespace-scope variable. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d6a/records_8hpp_source.html#l00197">197</a> of file <a class="el" href="../../da/d6a/records_8hpp_source.html">records.hpp</a>.</p>
 
 </div>
 </div>

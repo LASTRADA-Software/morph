@@ -29,7 +29,7 @@ var searchData=
   ['screenclosed_26',['screenClosed',['../d6/d77/classmorph_1_1ui_1_1Workspace.html#a743f6e9f8c00082f7da4847f32be84f9',1,'morph::ui::Workspace']]],
   ['screencore_27',['ScreenCore',['../d8/da5/classmorph_1_1ui_1_1detail_1_1ScreenCore.html#ad210f952c0974f91c563de5224ad8ffa',1,'morph::ui::detail::ScreenCore']]],
   ['screenid_28',['screenId',['../dd/db3/classmorph_1_1ui_1_1Inspector.html#ac3e631df53aec7271591db2b191a0325',1,'morph::ui::Inspector']]],
-  ['screenregistry_29',['screenRegistry',['../d1/dc0/author_8hpp.html#ab1662767f7547574c5f616b34154282b',1,'morph::ui::author']]],
+  ['screenregistry_29',['screenRegistry',['../d1/dc0/author_8hpp.html#a2528a92f1f0a16ef249ba87bedf9f515',1,'morph::ui::author']]],
   ['screens_30',['screens',['../d3/de2/classmorph_1_1client_1_1Source.html#a64e644faf02bfc4007ca5af0e4f581c0',1,'morph::client::Source']]],
   ['screentools_31',['screenTools',['../d2/dc2/screen__tools_8hpp.html#a2d455b7da3ea9cc1655f52e626c8ced7',1,'morph::ui::chat']]],
   ['script_32',['script',['../d0/d45/classmorph_1_1ui_1_1chat_1_1testing_1_1FakeChatProvider.html#a34684102566d76e8af1bf0fd5762127f',1,'morph::ui::chat::testing::FakeChatProvider']]],
